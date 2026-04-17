@@ -7,7 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { MessageCircle } from "lucide-react";
-import { fetchEstateBySlug, fetchFaqs } from "@/lib/queries";
+import { fetchEstateBySlug, fetchFaqs, type FaqItem } from "@/lib/queries";
 
 export const Route = createFileRoute("/estate/$slug")({
   loader: async ({ params }) => {
