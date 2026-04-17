@@ -38,6 +38,12 @@ export const Route = createRootRoute({
       { property: "og:locale", content: "zh_HK" },
       { name: "twitter:card", content: "summary_large_image" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" } as never,
+      { property: "og:title", content: "晉誠地產 Earnest Property｜深井．青山公路物業專家" },
+      { name: "twitter:title", content: "晉誠地產 Earnest Property｜深井．青山公路物業專家" },
+      { property: "og:description", content: "深井買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園真盤源，即時 WhatsApp 查詢。Licence C-018613。" },
+      { name: "twitter:description", content: "深井買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園真盤源，即時 WhatsApp 查詢。Licence C-018613。" },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2761dc31-661d-4a46-bb12-3c2f0797ef48/id-preview-8d7c8c57--2094438b-b830-479d-91e0-66e31f716366.lovable.app-1776455449297.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2761dc31-661d-4a46-bb12-3c2f0797ef48/id-preview-8d7c8c57--2094438b-b830-479d-91e0-66e31f716366.lovable.app-1776455449297.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
