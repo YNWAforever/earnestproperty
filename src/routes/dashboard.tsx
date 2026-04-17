@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { Plus, LogOut, Pencil, Trash2 } from "lucide-react";
+import { Plus, LogOut, Pencil, Trash2, Inbox } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useRoles } from "@/hooks/use-roles";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Property = Tables<"properties">;
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/dashboard")({
 
 function DashboardPage() {
   const { user, loading } = useAuth();
+  const { isAdmin } = useRoles(user?.id);
   const navigate = useNavigate();
   const router = useRouter();
   const [properties, setProperties] = useState<Property[] | null>(null);
@@ -78,7 +80,15 @@ function DashboardPage() {
           <h1 className="text-2xl font-bold">我的放盤</h1>
           <p className="text-sm text-muted-foreground">{user.email}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <Button asChild variant="outline">
+              <Link to="/dashboard/inquiries">
+                <Inbox className="mr-2 h-4 w-4" />
+                查詢收件匣
+              </Link>
+            </Button>
+          )}
           <Button asChild>
             <Link to="/dashboard/property/new">
               <Plus className="mr-2 h-4 w-4" />
