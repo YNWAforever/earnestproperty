@@ -88,11 +88,11 @@ function HomePage() {
   const [searchEstate, setSearchEstate] = useState("");
   const [searchType, setSearchType] = useState("sale");
 
-  const totalUnits = estates.reduce((s, e) => s + (e.total_units ?? 0), 0);
+  const totalUnits = estates.reduce((s: number, e: EstateSummary) => s + (e.total_units ?? 0), 0);
   const avgPsf =
     estates.length > 0
       ? Math.round(
-          estates.reduce((s, e) => s + Number(e.avg_saleable_psf ?? 0), 0) / estates.length
+          estates.reduce((s: number, e: EstateSummary) => s + Number(e.avg_saleable_psf ?? 0), 0) / estates.length
         )
       : 0;
 
@@ -144,7 +144,7 @@ function HomePage() {
                   <SelectValue placeholder="選擇屋苑" />
                 </SelectTrigger>
                 <SelectContent>
-                  {estates.map((e) => (
+                  {estates.map((e: EstateSummary) => (
                     <SelectItem key={e.slug} value={e.slug}>
                       {e.name_zh}
                     </SelectItem>
@@ -178,7 +178,7 @@ function HomePage() {
           desc="紮根深井十多年，每個屋苑我哋都熟到尾。"
         />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {estates.map((estate) => {
+          {estates.map((estate: EstateSummary) => {
             // counts is keyed by estate_id; we don't have id in this select, fall back to 0
             const listingCount = 0;
             return (
@@ -209,7 +209,7 @@ function HomePage() {
                   <div>
                     <p className="text-[11px] text-muted-foreground">最新放盤</p>
                     <p className="text-base font-semibold text-primary">
-                      {featured.filter((p) => p.estates?.slug === estate.slug).length} 個
+                      {featured.filter((p: FeaturedProperty) => p.estates?.slug === estate.slug).length} 個
                     </p>
                   </div>
                   <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
@@ -244,7 +244,7 @@ function HomePage() {
             <p className="mt-8 text-center text-muted-foreground">暫時未有精選放盤，請稍後再試。</p>
           ) : (
             <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {featured.map((p) => (
+              {featured.map((p: FeaturedProperty) => (
                 <PropertyCard key={p.id} property={p} />
               ))}
             </div>
@@ -269,7 +269,7 @@ function HomePage() {
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="深井買樓租樓 FAQ" />
             <Accordion type="single" collapsible className="mt-8">
-              {faqs.map((f, i) => (
+              {faqs.map((f: FaqItem, i: number) => (
                 <AccordionItem key={i} value={`faq-${i}`}>
                   <AccordionTrigger className="text-left text-base font-medium">{f.question}</AccordionTrigger>
                   <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
@@ -284,7 +284,7 @@ function HomePage() {
                 __html: JSON.stringify({
                   "@context": "https://schema.org",
                   "@type": "FAQPage",
-                  mainEntity: faqs.map((f) => ({
+                  mainEntity: faqs.map((f: FaqItem) => ({
                     "@type": "Question",
                     name: f.question,
                     acceptedAnswer: { "@type": "Answer", text: f.answer },

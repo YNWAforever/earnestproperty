@@ -73,7 +73,7 @@ function EstatePage() {
         <section className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-primary">常見問題</h2>
           <Accordion type="single" collapsible className="mt-6">
-            {faqs.map((f, i) => (
+            {faqs.map((f: FaqItem, i: number) => (
               <AccordionItem key={i} value={`faq-${i}`}>
                 <AccordionTrigger className="text-left text-base font-medium">
                   {f.question}
