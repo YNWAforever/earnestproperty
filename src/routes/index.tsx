@@ -34,6 +34,9 @@ import {
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
+  type EstateSummary,
+  type FeaturedProperty,
+  type FaqItem,
 } from "@/lib/queries";
 
 export const Route = createFileRoute("/")({
