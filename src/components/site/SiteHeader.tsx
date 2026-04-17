@@ -11,6 +11,7 @@ import {
 const WHATSAPP_URL = "https://wa.me/852XXXXXXXX?text=你好，我想查詢深井物業";
 
 const navItems = [
+  { to: "/listings", label: "搜尋放盤" },
   { to: "/district/sham-tseng", label: "深井" },
   { to: "/estate/belvedere-garden", label: "屋苑" },
   { to: "/agents", label: "代理" },
