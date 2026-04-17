@@ -1,0 +1,268 @@
+import { useEffect, useState } from "react";
+import { z } from "zod";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+
+type Property = Tables<"properties">;
+type Estate = Pick<Tables<"estates">, "id" | "name_zh" | "district_slug">;
+
+const schema = z.object({
+  listing_no: z.string().trim().min(1, "請輸入編號").max(40),
+  title_zh: z.string().trim().min(1, "請輸入標題").max(200),
+  deal_type: z.enum(["sale", "rent"]),
+  estate_id: z.string().uuid().optional().or(z.literal("")),
+  district_slug: z.string().trim().min(1).max(60),
+  address: z.string().trim().max(300).optional().or(z.literal("")),
+  price: z.coerce.number().nonnegative().optional().or(z.nan()),
+  rent: z.coerce.number().nonnegative().optional().or(z.nan()),
+  saleable_area: z.coerce.number().int().nonnegative().optional().or(z.nan()),
+  bedrooms: z.coerce.number().int().min(0).max(20).optional().or(z.nan()),
+  bathrooms: z.coerce.number().int().min(0).max(20).optional().or(z.nan()),
+  floor: z.string().trim().max(40).optional().or(z.literal("")),
+  description: z.string().trim().max(4000).optional().or(z.literal("")),
+  status: z.enum(["draft", "active", "sold", "rented", "offline"]),
+  featured: z.boolean(),
+  images: z.string().max(2000).optional().or(z.literal("")),
+});
+
+type Props = {
+  property?: Property;
+  agentId: string;
+  onSaved: (id: string) => void;
+};
+
+export function PropertyForm({ property, agentId, onSaved }: Props) {
+  const [estates, setEstates] = useState<Estate[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    listing_no: property?.listing_no ?? "",
+    title_zh: property?.title_zh ?? "",
+    deal_type: (property?.deal_type ?? "sale") as "sale" | "rent",
+    estate_id: property?.estate_id ?? "",
+    district_slug: property?.district_slug ?? "sham-tseng",
+    address: property?.address ?? "",
+    price: property?.price?.toString() ?? "",
+    rent: property?.rent?.toString() ?? "",
+    saleable_area: property?.saleable_area?.toString() ?? "",
+    bedrooms: property?.bedrooms?.toString() ?? "",
+    bathrooms: property?.bathrooms?.toString() ?? "",
+    floor: property?.floor ?? "",
+    description: property?.description ?? "",
+    status: (property?.status ?? "draft") as
+      | "draft" | "active" | "sold" | "rented" | "offline",
+    featured: property?.featured ?? false,
+    images: property?.images?.join("\n") ?? "",
+  });
+
+  useEffect(() => {
+    supabase
+      .from("estates")
+      .select("id, name_zh, district_slug")
+      .order("name_zh")
+      .then(({ data }) => setEstates(data ?? []));
+  }, []);
+
+  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
+    setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const parsed = schema.safeParse(form);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "請檢查輸入");
+      return;
+    }
+    const d = parsed.data;
+    const num = (v: number | undefined) => (v === undefined || isNaN(v) ? null : v);
+    const images = form.images
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    const payload: TablesInsert<"properties"> = {
+      listing_no: d.listing_no,
+      title_zh: d.title_zh,
+      deal_type: d.deal_type,
+      estate_id: d.estate_id || null,
+      district_slug: d.district_slug,
+      address: d.address || null,
+      price: num(d.price as number),
+      rent: num(d.rent as number),
+      saleable_area: num(d.saleable_area as number),
+      bedrooms: num(d.bedrooms as number),
+      bathrooms: num(d.bathrooms as number),
+      floor: d.floor || null,
+      description: d.description || null,
+      status: d.status,
+      featured: d.featured,
+      images,
+      agent_id: agentId,
+    };
+
+    setSubmitting(true);
+    const { data: row, error } = property
+      ? await supabase
+          .from("properties")
+          .update(payload)
+          .eq("id", property.id)
+          .select("id")
+          .single()
+      : await supabase.from("properties").insert(payload).select("id").single();
+    setSubmitting(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success(property ? "已更新" : "已新增");
+    if (row) onSaved(row.id);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <Section title="基本資料">
+        <Field label="放盤編號 *">
+          <Input value={form.listing_no} onChange={(e) => set("listing_no", e.target.value)} required maxLength={40} />
+        </Field>
+        <Field label="標題 *">
+          <Input value={form.title_zh} onChange={(e) => set("title_zh", e.target.value)} required maxLength={200} />
+        </Field>
+        <Field label="類型 *">
+          <Select value={form.deal_type} onValueChange={(v) => set("deal_type", v as "sale" | "rent")}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="sale">售盤</SelectItem>
+              <SelectItem value="rent">租盤</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="狀態">
+          <Select value={form.status} onValueChange={(v) => set("status", v as typeof form.status)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="draft">草稿</SelectItem>
+              <SelectItem value="active">在售/在租</SelectItem>
+              <SelectItem value="sold">已售出</SelectItem>
+              <SelectItem value="rented">已租出</SelectItem>
+              <SelectItem value="offline">下架</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      </Section>
+
+      <Section title="位置">
+        <Field label="屋苑">
+          <Select
+            value={form.estate_id || "none"}
+            onValueChange={(v) => {
+              const id = v === "none" ? "" : v;
+              const est = estates.find((e) => e.id === id);
+              set("estate_id", id);
+              if (est) set("district_slug", est.district_slug);
+            }}
+          >
+            <SelectTrigger><SelectValue placeholder="選擇屋苑" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— 無 —</SelectItem>
+              {estates.map((e) => (
+                <SelectItem key={e.id} value={e.id}>{e.name_zh}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="地區 slug *">
+          <Input value={form.district_slug} onChange={(e) => set("district_slug", e.target.value)} required maxLength={60} />
+        </Field>
+        <Field label="地址" full>
+          <Input value={form.address} onChange={(e) => set("address", e.target.value)} maxLength={300} />
+        </Field>
+      </Section>
+
+      <Section title="價格 / 規格">
+        <Field label="售價（HKD）">
+          <Input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} />
+        </Field>
+        <Field label="月租（HKD）">
+          <Input type="number" min="0" value={form.rent} onChange={(e) => set("rent", e.target.value)} />
+        </Field>
+        <Field label="實用面積（呎）">
+          <Input type="number" min="0" value={form.saleable_area} onChange={(e) => set("saleable_area", e.target.value)} />
+        </Field>
+        <Field label="樓層">
+          <Input value={form.floor} onChange={(e) => set("floor", e.target.value)} maxLength={40} />
+        </Field>
+        <Field label="房">
+          <Input type="number" min="0" max="20" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} />
+        </Field>
+        <Field label="廁">
+          <Input type="number" min="0" max="20" value={form.bathrooms} onChange={(e) => set("bathrooms", e.target.value)} />
+        </Field>
+      </Section>
+
+      <Section title="內容">
+        <Field label="描述" full>
+          <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} maxLength={4000} />
+        </Field>
+        <Field label="圖片 URL（每行一個）" full>
+          <Textarea
+            rows={3}
+            value={form.images}
+            onChange={(e) => set("images", e.target.value)}
+            placeholder="https://..."
+          />
+        </Field>
+        <Field label="精選">
+          <div className="flex h-10 items-center">
+            <Switch checked={form.featured} onCheckedChange={(v) => set("featured", v)} />
+          </div>
+        </Field>
+      </Section>
+
+      <div className="flex justify-end gap-2 border-t pt-4">
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "儲存中…" : property ? "更新放盤" : "建立放盤"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{title}</h2>
+      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+  full,
+}: {
+  label: string;
+  children: React.ReactNode;
+  full?: boolean;
+}) {
+  return (
+    <div className={full ? "sm:col-span-2" : ""}>
+      <Label className="mb-1.5 block">{label}</Label>
+      {children}
+    </div>
+  );
+}
