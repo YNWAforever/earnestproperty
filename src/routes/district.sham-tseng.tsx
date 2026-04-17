@@ -117,7 +117,7 @@ function aggregateByMonth(rows: DistrictTransaction[]) {
 }
 
 function ShamTsengPage() {
-  const { estates, faqs, transactions } = Route.useLoaderData();
+  const { estates, faqs, transactions } = Route.useLoaderData() as LoaderData;
   const chartData = aggregateByMonth(transactions);
   const latestPsf = chartData.length ? chartData[chartData.length - 1].psf : 0;
   const firstPsf = chartData.length ? chartData[0].psf : 0;
