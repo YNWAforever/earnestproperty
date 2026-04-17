@@ -2,7 +2,22 @@ import { useState } from "react";
 import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Phone, MessageCircle, MapPin, Bed, Bath, Maximize, Calendar, Building2 } from "lucide-react";
+import {
+  Phone,
+  MessageCircle,
+  MapPin,
+  Bed,
+  Bath,
+  Maximize,
+  Calendar,
+  Building2,
+  Share2,
+  Image as ImageIcon,
+  Video,
+  Box,
+  Map as MapIcon,
+  LayoutGrid,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,17 +25,40 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchPropertyByListingNo } from "@/lib/queries";
+import {
+  fetchPropertyByListingNo,
+  fetchSimilarListings,
+  fetchEstateTransactions,
+  type SimilarListing,
+  type EstateTransaction,
+} from "@/lib/queries";
 
 export const Route = createFileRoute("/property/$listingNo")({
   loader: async ({ params }) => {
     const property = await fetchPropertyByListingNo(params.listingNo);
     if (!property) throw notFound();
-    return property;
+    const [similar, txns] = await Promise.all([
+      property.estate_id
+        ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4)
+        : Promise.resolve([] as SimilarListing[]),
+      property.estate_id
+        ? fetchEstateTransactions(property.estate_id, 8)
+        : Promise.resolve([] as EstateTransaction[]),
+    ]);
+    return { property, similar, txns };
   },
   head: ({ loaderData }) => {
-    const p = loaderData as any;
+    const p = (loaderData as any)?.property;
     if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
     const priceStr =
       p.deal_type === "rent"
@@ -86,8 +124,24 @@ const inquirySchema = z.object({
   message: z.string().trim().max(1000, "訊息過長").optional(),
 });
 
+function isVrUrl(u?: string | null) {
+  if (!u) return false;
+  return /vr|kuula|matterport|panor|360|my\.matterport/i.test(u);
+}
+
+function toEmbed(u: string) {
+  // YouTube
+  const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  return u;
+}
+
 function PropertyPage() {
-  const property = Route.useLoaderData() as any;
+  const { property, similar, txns } = Route.useLoaderData() as {
+    property: any;
+    similar: SimilarListing[];
+    txns: EstateTransaction[];
+  };
   const images: string[] = property.images?.length
     ? property.images
     : ["https://placehold.co/1200x800/e5e7eb/64748b?text=No+Image"];
@@ -106,9 +160,32 @@ function PropertyPage() {
     property.price && property.saleable_area
       ? Math.round(Number(property.price) / property.saleable_area)
       : null;
+  const grossPsf =
+    property.price && property.gross_area
+      ? Math.round(Number(property.price) / property.gross_area)
+      : null;
 
   const agent = property.profiles;
   const estate = property.estates;
+
+  const hasVideo = !!property.video_url && !isVrUrl(property.video_url);
+  const hasVR = isVrUrl(property.video_url);
+  const hasFloorplan = !!property.floorplan_url;
+  const hasMap = !!(estate?.lat && estate?.lng) || !!property.address;
+
+  async function handleShare() {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: property.title_zh, url });
+      } catch {
+        /* user cancelled */
+      }
+    } else {
+      await navigator.clipboard.writeText(url);
+      toast.success("已複製連結");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -170,62 +247,179 @@ function PropertyPage() {
     },
   };
 
+  const updatedAt = property.updated_at
+    ? new Date(property.updated_at).toLocaleDateString("zh-HK")
+    : null;
+
+  const mapSrc =
+    estate?.lat && estate?.lng
+      ? `https://www.google.com/maps?q=${estate.lat},${estate.lng}&z=16&output=embed`
+      : property.address
+        ? `https://www.google.com/maps?q=${encodeURIComponent(property.address)}&z=16&output=embed`
+        : null;
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      {/* Breadcrumb */}
-      <nav className="mb-4 text-sm text-muted-foreground">
-        <Link to="/" className="hover:text-foreground">
-          首頁
-        </Link>
-        <span className="mx-2">›</span>
-        {estate ? (
-          <>
-            <Link
-              to="/estate/$slug"
-              params={{ slug: estate.slug }}
-              className="hover:text-foreground"
-            >
-              {estate.name_zh}
-            </Link>
-            <span className="mx-2">›</span>
-          </>
-        ) : null}
-        <span>編號 {property.listing_no}</span>
-      </nav>
+      {/* Breadcrumb + actions */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <nav className="text-sm text-muted-foreground">
+          <Link to="/" className="hover:text-foreground">
+            首頁
+          </Link>
+          <span className="mx-2">›</span>
+          <Link to="/listings" className="hover:text-foreground">
+            搜尋放盤
+          </Link>
+          <span className="mx-2">›</span>
+          {estate ? (
+            <>
+              <Link
+                to="/estate/$slug"
+                params={{ slug: estate.slug }}
+                className="hover:text-foreground"
+              >
+                {estate.name_zh}
+              </Link>
+              <span className="mx-2">›</span>
+            </>
+          ) : null}
+          <span>編號 {property.listing_no}</span>
+        </nav>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {updatedAt && <span>最後更新：{updatedAt}</span>}
+          <Button variant="outline" size="sm" onClick={handleShare}>
+            <Share2 className="mr-1.5 h-3.5 w-3.5" />
+            分享
+          </Button>
+        </div>
+      </div>
 
       <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-        {/* Left: gallery + content */}
+        {/* Left: media tabs + content */}
         <div>
-          {/* Gallery */}
-          <div className="overflow-hidden rounded-lg border bg-muted">
-            <img
-              src={images[activeImg]}
-              alt={property.title_zh}
-              className="aspect-[4/3] w-full object-cover"
-              loading="eager"
-            />
-          </div>
-          {images.length > 1 && (
-            <div className="mt-3 grid grid-cols-5 gap-2">
-              {images.slice(0, 5).map((src, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => setActiveImg(i)}
-                  className={`aspect-[4/3] overflow-hidden rounded-md border-2 ${
-                    i === activeImg ? "border-primary" : "border-transparent"
-                  }`}
-                >
+          {/* Media tabs */}
+          <Tabs defaultValue="photos">
+            <TabsList className="flex h-auto flex-wrap justify-start">
+              <TabsTrigger value="photos">
+                <ImageIcon className="mr-1.5 h-4 w-4" />
+                相片
+              </TabsTrigger>
+              {hasVideo && (
+                <TabsTrigger value="video">
+                  <Video className="mr-1.5 h-4 w-4" />
+                  影片
+                </TabsTrigger>
+              )}
+              {hasVR && (
+                <TabsTrigger value="vr">
+                  <Box className="mr-1.5 h-4 w-4" />
+                  VR睇樓
+                </TabsTrigger>
+              )}
+              {hasFloorplan && (
+                <TabsTrigger value="floorplan">
+                  <LayoutGrid className="mr-1.5 h-4 w-4" />
+                  平面圖
+                </TabsTrigger>
+              )}
+              {hasMap && (
+                <TabsTrigger value="map">
+                  <MapIcon className="mr-1.5 h-4 w-4" />
+                  地圖
+                </TabsTrigger>
+              )}
+            </TabsList>
+
+            <TabsContent value="photos">
+              <div className="overflow-hidden rounded-lg border bg-muted">
+                <img
+                  src={images[activeImg]}
+                  alt={property.title_zh}
+                  className="aspect-[4/3] w-full object-cover"
+                  loading="eager"
+                />
+              </div>
+              {images.length > 1 && (
+                <div className="mt-3 grid grid-cols-5 gap-2">
+                  {images.slice(0, 5).map((src, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setActiveImg(i)}
+                      className={`aspect-[4/3] overflow-hidden rounded-md border-2 ${
+                        i === activeImg ? "border-primary" : "border-transparent"
+                      }`}
+                    >
+                      <img
+                        src={src}
+                        alt={`${property.title_zh} ${i + 1}`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            {hasVideo && (
+              <TabsContent value="video">
+                <div className="aspect-video overflow-hidden rounded-lg border bg-muted">
+                  <iframe
+                    src={toEmbed(property.video_url)}
+                    title="物業影片"
+                    className="h-full w-full"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                </div>
+              </TabsContent>
+            )}
+
+            {hasVR && (
+              <TabsContent value="vr">
+                <div className="aspect-video overflow-hidden rounded-lg border bg-muted">
+                  <iframe
+                    src={property.video_url}
+                    title="VR睇樓"
+                    className="h-full w-full"
+                    allow="xr-spatial-tracking; gyroscope; accelerometer; fullscreen"
+                    allowFullScreen
+                  />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  滑動或拖曳以360°觀看單位內部。
+                </p>
+              </TabsContent>
+            )}
+
+            {hasFloorplan && (
+              <TabsContent value="floorplan">
+                <div className="overflow-hidden rounded-lg border bg-muted">
                   <img
-                    src={src}
-                    alt={`${property.title_zh} ${i + 1}`}
-                    className="h-full w-full object-cover"
+                    src={property.floorplan_url}
+                    alt={`${property.title_zh} 平面圖`}
+                    className="w-full object-contain"
                     loading="lazy"
                   />
-                </button>
-              ))}
-            </div>
-          )}
+                </div>
+              </TabsContent>
+            )}
+
+            {hasMap && mapSrc && (
+              <TabsContent value="map">
+                <div className="aspect-video overflow-hidden rounded-lg border bg-muted">
+                  <iframe
+                    src={mapSrc}
+                    title="位置地圖"
+                    className="h-full w-full"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+              </TabsContent>
+            )}
+          </Tabs>
 
           {/* Title */}
           <div className="mt-6">
@@ -252,12 +446,20 @@ function PropertyPage() {
                   實呎 ${psf.toLocaleString()}
                 </span>
               )}
+              {grossPsf && !isRent && (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  · 建呎 ${grossPsf.toLocaleString()}
+                </span>
+              )}
             </p>
           </div>
 
           {/* Specs */}
           <Card className="mt-6">
-            <CardContent className="grid grid-cols-2 gap-4 pt-6 sm:grid-cols-4">
+            <CardHeader>
+              <CardTitle className="text-base">物業資料</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <Spec icon={<Maximize className="h-4 w-4" />} label="實用面積" value={property.saleable_area ? `${property.saleable_area} 呎` : "—"} />
               <Spec icon={<Bed className="h-4 w-4" />} label="房間" value={property.bedrooms ?? "—"} />
               <Spec icon={<Bath className="h-4 w-4" />} label="浴室" value={property.bathrooms ?? "—"} />
@@ -282,7 +484,7 @@ function PropertyPage() {
           {/* Features */}
           {property.features?.length > 0 && (
             <section className="mt-6">
-              <h2 className="text-xl font-semibold">特色</h2>
+              <h2 className="text-xl font-semibold">物業特點</h2>
               <div className="mt-3 flex flex-wrap gap-2">
                 {property.features.map((f: string) => (
                   <Badge key={f} variant="secondary">
@@ -292,11 +494,98 @@ function PropertyPage() {
               </div>
             </section>
           )}
+
+          {/* Estate info */}
+          {estate && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">屋苑資料</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <Spec label="屋苑" value={estate.name_zh} />
+                  <Spec label="發展商" value={estate.developer ?? "—"} />
+                  <Spec label="入伙年份" value={estate.year_completed ?? "—"} />
+                  <Spec label="總單位" value={estate.total_units ?? "—"} />
+                </div>
+                <div className="mt-4">
+                  <Link
+                    to="/estate/$slug"
+                    params={{ slug: estate.slug }}
+                    className="text-sm text-primary underline"
+                  >
+                    查看屋苑詳情 →
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Recent transactions */}
+          {txns.length > 0 && (
+            <section className="mt-6">
+              <h2 className="text-xl font-semibold">屋苑近期成交</h2>
+              <div className="mt-3 overflow-hidden rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>成交日期</TableHead>
+                      <TableHead>單位</TableHead>
+                      <TableHead className="text-right">實用面積</TableHead>
+                      <TableHead className="text-right">成交價</TableHead>
+                      <TableHead className="text-right">實呎</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {txns.map((t, i) => (
+                      <TableRow key={i}>
+                        <TableCell>
+                          {t.deal_date
+                            ? new Date(t.deal_date).toLocaleDateString("zh-HK")
+                            : "—"}
+                        </TableCell>
+                        <TableCell>{t.unit ?? "—"}</TableCell>
+                        <TableCell className="text-right">
+                          {t.saleable_area ? `${t.saleable_area} 呎` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {t.price
+                            ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {t.saleable_psf
+                            ? `$${Math.round(Number(t.saleable_psf)).toLocaleString()}`
+                            : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </section>
+          )}
+
+          {/* Similar listings */}
+          {similar.length > 0 && (
+            <section className="mt-6">
+              <h2 className="text-xl font-semibold">同類放盤</h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                {similar.map((s) => (
+                  <SimilarCard key={s.id} listing={s} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Disclaimer */}
+          <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+            免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
+          </p>
         </div>
 
         {/* Right: agent + inquiry (sticky) */}
         <aside className="lg:sticky lg:top-6 lg:h-fit">
-          {/* Agent card */}
           {agent && (
             <Card>
               <CardHeader>
@@ -346,7 +635,6 @@ function PropertyPage() {
             </Card>
           )}
 
-          {/* Inquiry form */}
           <Card className="mt-4">
             <CardHeader>
               <CardTitle className="text-base">查詢此盤</CardTitle>
@@ -394,7 +682,6 @@ function PropertyPage() {
         </aside>
       </div>
 
-      {/* JSON-LD */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -420,5 +707,42 @@ function Spec({
       </p>
       <p className="mt-1 font-medium">{value}</p>
     </div>
+  );
+}
+
+function SimilarCard({ listing }: { listing: SimilarListing }) {
+  const img =
+    listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
+  const isRent = listing.deal_type === "rent";
+  const price = isRent
+    ? listing.rent
+      ? `$${Number(listing.rent).toLocaleString()} / 月`
+      : "—"
+    : listing.price
+      ? `$${(Number(listing.price) / 1_000_000).toFixed(2)}M`
+      : "—";
+  return (
+    <Link
+      to="/property/$listingNo"
+      params={{ listingNo: listing.listing_no }}
+      className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
+    >
+      <div className="aspect-[4/3] overflow-hidden bg-muted">
+        <img
+          src={img}
+          alt={listing.title_zh}
+          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          loading="lazy"
+        />
+      </div>
+      <div className="p-3">
+        <p className="line-clamp-1 text-sm font-medium">{listing.title_zh}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {listing.bedrooms ? `${listing.bedrooms}房 · ` : ""}
+          {listing.saleable_area ? `${listing.saleable_area} 呎` : ""}
+        </p>
+        <p className="mt-1 font-semibold text-primary">{price}</p>
+      </div>
+    </Link>
   );
 }

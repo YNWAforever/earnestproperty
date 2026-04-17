@@ -196,6 +196,61 @@ export async function searchListings(f: ListingFilters): Promise<{
   return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
 }
 
+export type SimilarListing = {
+  id: string;
+  listing_no: string;
+  title_zh: string;
+  deal_type: "sale" | "rent";
+  price: number | null;
+  rent: number | null;
+  saleable_area: number | null;
+  bedrooms: number | null;
+  images: string[] | null;
+};
+
+export async function fetchSimilarListings(
+  estateId: string,
+  dealType: "sale" | "rent",
+  excludeId: string,
+  limit = 4
+): Promise<SimilarListing[]> {
+  const { data, error } = await supabase
+    .from("properties")
+    .select("id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, images")
+    .eq("status", "active")
+    .eq("estate_id", estateId)
+    .eq("deal_type", dealType)
+    .neq("id", excludeId)
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as SimilarListing[];
+}
+
+export type EstateTransaction = {
+  deal_date: string | null;
+  unit: string | null;
+  saleable_area: number | null;
+  saleable_psf: number | null;
+  price: number | null;
+};
+
+export async function fetchEstateTransactions(
+  estateId: string,
+  limit = 8
+): Promise<EstateTransaction[]> {
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("deal_date, unit, saleable_area, saleable_psf, price")
+    .eq("estate_id", estateId)
+    .eq("deal_type", "sale")
+    .order("deal_date", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as EstateTransaction[];
+}
+
 export async function fetchEstateOptions() {
   const { data, error } = await supabase
     .from("estates")
