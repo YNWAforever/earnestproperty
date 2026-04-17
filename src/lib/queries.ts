@@ -68,6 +68,34 @@ export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
   return data ?? [];
 }
 
+export type DistrictTransaction = {
+  deal_date: string | null;
+  saleable_psf: number | null;
+  price: number | null;
+  saleable_area: number | null;
+  unit: string | null;
+  estates: { name_zh: string; slug: string } | null;
+};
+
+export async function fetchDistrictTransactions(
+  districtSlug: string,
+  monthsBack = 12
+): Promise<DistrictTransaction[]> {
+  const since = new Date();
+  since.setMonth(since.getMonth() - monthsBack);
+  const { data, error } = await supabase
+    .from("transactions")
+    .select(
+      "deal_date, saleable_psf, price, saleable_area, unit, estates!inner(name_zh, slug, district_slug)"
+    )
+    .eq("estates.district_slug", districtSlug)
+    .eq("deal_type", "sale")
+    .gte("deal_date", since.toISOString().slice(0, 10))
+    .order("deal_date", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as unknown as DistrictTransaction[];
+}
+
 export async function fetchListingCountsByEstate() {
   const { data, error } = await supabase
     .from("properties")
