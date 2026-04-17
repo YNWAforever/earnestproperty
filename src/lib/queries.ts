@@ -1,6 +1,31 @@
 import { supabase } from "@/integrations/supabase/client";
 
-export async function fetchEstates() {
+export type EstateSummary = {
+  slug: string;
+  name_zh: string;
+  total_units: number | null;
+  avg_saleable_psf: number | null;
+  hero_image: string | null;
+};
+
+export type FeaturedProperty = {
+  id: string;
+  listing_no: string;
+  title_zh: string;
+  deal_type: string;
+  price: number | null;
+  rent: number | null;
+  saleable_area: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  features: string[] | null;
+  images: string[] | null;
+  estates: { name_zh: string; slug: string } | null;
+};
+
+export type FaqItem = { question: string; answer: string };
+
+export async function fetchEstates(): Promise<EstateSummary[]> {
   const { data, error } = await supabase
     .from("estates")
     .select("slug, name_zh, total_units, avg_saleable_psf, hero_image")
@@ -20,7 +45,7 @@ export async function fetchEstateBySlug(slug: string) {
   return data;
 }
 
-export async function fetchFeaturedProperties() {
+export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
   const { data, error } = await supabase
     .from("properties")
     .select(
@@ -30,10 +55,10 @@ export async function fetchFeaturedProperties() {
     .eq("featured", true)
     .limit(6);
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as unknown as FeaturedProperty[];
 }
 
-export async function fetchFaqs(scope: string) {
+export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
   const { data, error } = await supabase
     .from("faqs")
     .select("question, answer")
