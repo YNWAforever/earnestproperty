@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ListingsRouteImport } from './routes/listings'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as BlogRouteImport } from './routes/blog'
@@ -23,6 +24,11 @@ import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
 
+const ListingsRoute = ListingsRouteImport.update({
+  id: '/listings',
+  path: '/listings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/blog': typeof BlogRoute
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/listings': typeof ListingsRoute
   '/auth/login': typeof AuthLoginRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/blog': typeof BlogRoute
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/listings': typeof ListingsRoute
   '/auth/login': typeof AuthLoginRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/blog': typeof BlogRoute
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/listings': typeof ListingsRoute
   '/auth/login': typeof AuthLoginRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/blog'
     | '/contact'
     | '/dashboard'
+    | '/listings'
     | '/auth/login'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/blog'
     | '/contact'
     | '/dashboard'
+    | '/listings'
     | '/auth/login'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/blog'
     | '/contact'
     | '/dashboard'
+    | '/listings'
     | '/auth/login'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
@@ -190,6 +202,7 @@ export interface RootRouteChildren {
   BlogRoute: typeof BlogRoute
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  ListingsRoute: typeof ListingsRoute
   AuthLoginRoute: typeof AuthLoginRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
@@ -199,6 +212,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/listings': {
+      id: '/listings'
+      path: '/listings'
+      fullPath: '/listings'
+      preLoaderRoute: typeof ListingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
@@ -314,6 +334,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlogRoute: BlogRoute,
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  ListingsRoute: ListingsRoute,
   AuthLoginRoute: AuthLoginRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,

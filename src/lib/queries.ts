@@ -124,3 +124,84 @@ export async function fetchListingCountsByEstate() {
   });
   return counts;
 }
+
+export type ListingFilters = {
+  deal: "sale" | "rent" | "all";
+  minPrice?: number;
+  maxPrice?: number;
+  bedrooms?: number; // 0 = studio, 4 = 4+
+  estateSlug?: string;
+  page: number;
+  pageSize: number;
+};
+
+export type ListingRow = {
+  id: string;
+  listing_no: string;
+  title_zh: string;
+  deal_type: "sale" | "rent";
+  price: number | null;
+  rent: number | null;
+  saleable_area: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  floor: string | null;
+  images: string[] | null;
+  estates: { name_zh: string; slug: string } | null;
+};
+
+export async function searchListings(f: ListingFilters): Promise<{
+  rows: ListingRow[];
+  total: number;
+}> {
+  const from = (f.page - 1) * f.pageSize;
+  const to = from + f.pageSize - 1;
+
+  let q = supabase
+    .from("properties")
+    .select(
+      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)",
+      { count: "exact" }
+    )
+    .eq("status", "active");
+
+  if (f.deal !== "all") q = q.eq("deal_type", f.deal);
+
+  const priceCol = f.deal === "rent" ? "rent" : "price";
+  if (f.minPrice !== undefined) q = q.gte(priceCol, f.minPrice);
+  if (f.maxPrice !== undefined) q = q.lte(priceCol, f.maxPrice);
+
+  if (f.bedrooms !== undefined) {
+    if (f.bedrooms >= 4) q = q.gte("bedrooms", 4);
+    else q = q.eq("bedrooms", f.bedrooms);
+  }
+
+  if (f.estateSlug) {
+    const { data: est } = await supabase
+      .from("estates")
+      .select("id")
+      .eq("slug", f.estateSlug)
+      .maybeSingle();
+    if (est?.id) q = q.eq("estate_id", est.id);
+    else return { rows: [], total: 0 };
+  }
+
+  q = q
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  const { data, error, count } = await q;
+  if (error) throw error;
+  return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
+}
+
+export async function fetchEstateOptions() {
+  const { data, error } = await supabase
+    .from("estates")
+    .select("slug, name_zh")
+    .order("name_zh");
+  if (error) throw error;
+  return data ?? [];
+}
+
