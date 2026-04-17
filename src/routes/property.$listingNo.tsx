@@ -682,6 +682,45 @@ function PropertyPage() {
         </aside>
       </div>
 
+      {/* Mobile sticky contact bar */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 py-2 shadow-lg backdrop-blur lg:hidden">
+        <div className="mx-auto flex max-w-6xl items-center gap-2">
+          {agent?.phone && (
+            <Button asChild variant="outline" size="sm" className="flex-1">
+              <a href={`tel:${agent.phone}`}>
+                <Phone className="mr-1 h-4 w-4" />
+                致電
+              </a>
+            </Button>
+          )}
+          {agent?.whatsapp && (
+            <Button asChild size="sm" className="flex-1 bg-[#25D366] text-white hover:bg-[#1ebe57]">
+              <a
+                href={`https://wa.me/${agent.whatsapp.replace(/[^\d]/g, "")}?text=${encodeURIComponent(`你好，我想查詢編號 ${property.listing_no} ${property.title_zh}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <MessageCircle className="mr-1 h-4 w-4" />
+                WhatsApp
+              </a>
+            </Button>
+          )}
+          <Button
+            size="sm"
+            className="flex-1"
+            onClick={() => {
+              const el = document.getElementById("name");
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+              setTimeout(() => el?.focus(), 400);
+            }}
+          >
+            查詢
+          </Button>
+        </div>
+      </div>
+      {/* Spacer so the bar never covers content */}
+      <div className="h-16 lg:hidden" aria-hidden />
+
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
