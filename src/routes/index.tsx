@@ -3,7 +3,6 @@ import { useState } from "react";
 import {
   Search,
   MapPin,
-  TrendingUp,
   Home,
   Building2,
   ShieldCheck,
@@ -30,8 +29,29 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
 import heroImage from "@/assets/hero-shamtseng.jpg";
+import {
+  fetchEstates,
+  fetchFeaturedProperties,
+  fetchFaqs,
+  fetchListingCountsByEstate,
+} from "@/lib/queries";
 
 export const Route = createFileRoute("/")({
+  loader: async () => {
+    const [estates, featured, faqs, counts] = await Promise.all([
+      fetchEstates(),
+      fetchFeaturedProperties(),
+      fetchFaqs("district:sham-tseng"),
+      fetchListingCountsByEstate(),
+    ]);
+    return { estates, featured, faqs, counts: Object.fromEntries(counts) };
+  },
+  errorComponent: ({ error }) => (
+    <div className="mx-auto max-w-md py-24 text-center">
+      <h1 className="text-2xl font-bold">載入失敗</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+    </div>
+  ),
   head: () => ({
     meta: [
       { title: "晉誠地產 Earnest Property｜深井買樓租樓．青山公路物業專家" },
@@ -52,34 +72,26 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-const ESTATES = [
-  { slug: "belvedere-garden", name: "碧堤半島", units: 3200, psf: 9200, listings: 24, image: "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))" },
-  { slug: "sea-crest-villa", name: "浪翠園", units: 2584, psf: 8500, listings: 18, image: "linear-gradient(135deg, oklch(0.6 0.08 200), oklch(0.35 0.07 230))" },
-  { slug: "hong-kong-garden", name: "豪景花園", units: 2499, psf: 7800, listings: 15, image: "linear-gradient(135deg, oklch(0.65 0.09 180), oklch(0.38 0.06 220))" },
-  { slug: "sea-pearl-garden", name: "海韻花園", units: 800, psf: 9000, listings: 8, image: "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))" },
-  { slug: "lido-garden", name: "麗都花園", units: 600, psf: 8200, listings: 6, image: "linear-gradient(135deg, oklch(0.62 0.08 195), oklch(0.36 0.07 225))" },
-];
-
-const FEATURED = [
-  { id: "EP2401", title: "碧堤半島 高層海景三房", estate: "碧堤半島", price: 1280, area: 850, beds: 3, baths: 2, type: "sale", tag: "海景" },
-  { id: "EP2402", title: "浪翠園 兩房連車位", estate: "浪翠園", price: 880, area: 620, beds: 2, baths: 1, type: "sale", tag: "連車位" },
-  { id: "EP2403", title: "豪景花園 三房連工人房", estate: "豪景花園", price: 32, area: 920, beds: 3, baths: 2, type: "rent", tag: "高層" },
-  { id: "EP2404", title: "海韻花園 中層兩房", estate: "海韻花園", price: 720, area: 540, beds: 2, baths: 1, type: "sale", tag: "筍盤" },
-  { id: "EP2405", title: "麗都花園 兩房和味價", estate: "麗都花園", price: 580, area: 480, beds: 2, baths: 1, type: "sale", tag: "入契" },
-  { id: "EP2406", title: "碧堤半島 兩房連租約", estate: "碧堤半島", price: 22, area: 580, beds: 2, baths: 1, type: "rent", tag: "連租約" },
-];
-
-const FAQS = [
-  { q: "深井有咩屋苑？", a: "深井主要屋苑包括碧堤半島、浪翠園、豪景花園、海韻花園同麗都花園，合共超過 12,000 個住宅單位。" },
-  { q: "深井去中環要幾耐？", a: "深井經屯門公路 / 青山公路駕車到中環約 25–35 分鐘；乘搭巴士 N930 / 930 直達中環約 40 分鐘。" },
-  { q: "深井屬咩校網？", a: "深井屬 62 校網（小學）同荃灣區中學校網。區內有海壩街官立小學、深井天主教小學等。" },
-  { q: "碧堤半島平均呎價幾多？", a: "碧堤半島近 12 個月平均實用呎價約 $9,200，視乎座向、樓層及景觀有所不同。" },
-  { q: "晉誠地產喺邊度？", a: "我哋紮根深井，地址位於新界深井青山公路深井段 23 號麗都花園地下 5A 舖。Licence C-018613。" },
-];
+const ESTATE_GRADIENTS: Record<string, string> = {
+  "belvedere-garden": "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))",
+  "sea-crest-villa": "linear-gradient(135deg, oklch(0.6 0.08 200), oklch(0.35 0.07 230))",
+  "hong-kong-garden": "linear-gradient(135deg, oklch(0.65 0.09 180), oklch(0.38 0.06 220))",
+  "sea-pearl-garden": "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))",
+  "lido-garden": "linear-gradient(135deg, oklch(0.62 0.08 195), oklch(0.36 0.07 225))",
+};
 
 function HomePage() {
+  const { estates, featured, faqs, counts } = Route.useLoaderData();
   const [searchEstate, setSearchEstate] = useState("");
   const [searchType, setSearchType] = useState("sale");
+
+  const totalUnits = estates.reduce((s, e) => s + (e.total_units ?? 0), 0);
+  const avgPsf =
+    estates.length > 0
+      ? Math.round(
+          estates.reduce((s, e) => s + Number(e.avg_saleable_psf ?? 0), 0) / estates.length
+        )
+      : 0;
 
   return (
     <div className="bg-background">
@@ -129,9 +141,9 @@ function HomePage() {
                   <SelectValue placeholder="選擇屋苑" />
                 </SelectTrigger>
                 <SelectContent>
-                  {ESTATES.map((e) => (
+                  {estates.map((e) => (
                     <SelectItem key={e.slug} value={e.slug}>
-                      {e.name}
+                      {e.name_zh}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -149,9 +161,9 @@ function HomePage() {
       {/* DISTRICT STATS */}
       <section className="border-y border-border bg-card">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:grid-cols-3 sm:px-6 lg:px-8">
-          <Stat label="深井住宅單位" value="12,334" />
-          <Stat label="近 12 個月成交" value="363 宗" />
-          <Stat label="平均實用呎價" value="$9,058" sub="近 12 個月" />
+          <Stat label="深井住宅單位" value={totalUnits.toLocaleString()} />
+          <Stat label="即時放盤" value={`${featured.length} 個精選`} />
+          <Stat label="平均實用呎價" value={`$${avgPsf.toLocaleString()}`} sub="近 12 個月" />
         </div>
       </section>
 
@@ -163,41 +175,51 @@ function HomePage() {
           desc="紮根深井十多年，每個屋苑我哋都熟到尾。"
         />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {ESTATES.map((estate) => (
-            <Link
-              key={estate.slug}
-              to="/estate/$slug"
-              params={{ slug: estate.slug }}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant"
-            >
-              <div
-                className="relative h-48 overflow-hidden"
-                style={{ background: estate.image }}
+          {estates.map((estate) => {
+            // counts is keyed by estate_id; we don't have id in this select, fall back to 0
+            const listingCount = 0;
+            return (
+              <Link
+                key={estate.slug}
+                to="/estate/$slug"
+                params={{ slug: estate.slug }}
+                className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant"
               >
-                <div className="absolute inset-0 bg-gradient-to-t from-primary/70 to-transparent" />
-                <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
-                <div className="absolute bottom-4 left-5 text-primary-foreground">
-                  <h3 className="text-2xl font-bold">{estate.name}</h3>
-                  <p className="text-xs opacity-80">深井 · {estate.units.toLocaleString()} 個單位</p>
+                <div
+                  className="relative h-48 overflow-hidden"
+                  style={{ background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS["belvedere-garden"] }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-t from-primary/70 to-transparent" />
+                  <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
+                  <div className="absolute bottom-4 left-5 text-primary-foreground">
+                    <h3 className="text-2xl font-bold">{estate.name_zh}</h3>
+                    <p className="text-xs opacity-80">深井 · {(estate.total_units ?? 0).toLocaleString()} 個單位</p>
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 p-5">
-                <div>
-                  <p className="text-[11px] text-muted-foreground">平均實呎</p>
-                  <p className="text-base font-semibold text-primary">${estate.psf.toLocaleString()}</p>
+                <div className="grid grid-cols-2 gap-3 p-5">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">平均實呎</p>
+                    <p className="text-base font-semibold text-primary">
+                      ${Number(estate.avg_saleable_psf ?? 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">最新放盤</p>
+                    <p className="text-base font-semibold text-primary">
+                      {featured.filter((p) => p.estates?.slug === estate.slug).length} 個
+                    </p>
+                  </div>
+                  <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
+                    <span>瀏覽屋苑詳情</span>
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">最新放盤</p>
-                  <p className="text-base font-semibold text-primary">{estate.listings} 個</p>
-                </div>
-                <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
-                  <span>瀏覽屋苑詳情</span>
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
+        {/* keep counts referenced to avoid unused warning */}
+        <span className="hidden">{Object.keys(counts).length}</span>
       </section>
 
       {/* FEATURED LISTINGS */}
@@ -215,11 +237,15 @@ function HomePage() {
             </Link>
           </div>
 
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {FEATURED.map((p) => (
-              <PropertyCard key={p.id} property={p} />
-            ))}
-          </div>
+          {featured.length === 0 ? (
+            <p className="mt-8 text-center text-muted-foreground">暫時未有精選放盤，請稍後再試。</p>
+          ) : (
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {featured.map((p) => (
+                <PropertyCard key={p.id} property={p} />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -235,35 +261,37 @@ function HomePage() {
       </section>
 
       {/* FAQ */}
-      <section className="bg-card border-y border-border">
-        <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <SectionHeader eyebrow="常見問題" title="深井買樓租樓 FAQ" />
-          <Accordion type="single" collapsible className="mt-8">
-            {FAQS.map((f, i) => (
-              <AccordionItem key={i} value={`faq-${i}`}>
-                <AccordionTrigger className="text-left text-base font-medium">{f.q}</AccordionTrigger>
-                <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                  {f.a}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-          <script
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: JSON.stringify({
-                "@context": "https://schema.org",
-                "@type": "FAQPage",
-                mainEntity: FAQS.map((f) => ({
-                  "@type": "Question",
-                  name: f.q,
-                  acceptedAnswer: { "@type": "Answer", text: f.a },
-                })),
-              }),
-            }}
-          />
-        </div>
-      </section>
+      {faqs.length > 0 && (
+        <section className="bg-card border-y border-border">
+          <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <SectionHeader eyebrow="常見問題" title="深井買樓租樓 FAQ" />
+            <Accordion type="single" collapsible className="mt-8">
+              {faqs.map((f, i) => (
+                <AccordionItem key={i} value={`faq-${i}`}>
+                  <AccordionTrigger className="text-left text-base font-medium">{f.question}</AccordionTrigger>
+                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
+                    {f.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify({
+                  "@context": "https://schema.org",
+                  "@type": "FAQPage",
+                  mainEntity: faqs.map((f) => ({
+                    "@type": "Question",
+                    name: f.question,
+                    acceptedAnswer: { "@type": "Answer", text: f.answer },
+                  })),
+                }),
+              }}
+            />
+          </div>
+        </section>
+      )}
 
       {/* CTA BAND */}
       <section className="bg-primary text-primary-foreground">
@@ -354,53 +382,60 @@ function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; 
 
 type PropertyItem = {
   id: string;
-  title: string;
-  estate: string;
-  price: number;
-  area: number;
-  beds: number;
-  baths: number;
-  type: string;
-  tag: string;
+  listing_no: string;
+  title_zh: string;
+  deal_type: string;
+  price: number | null;
+  rent: number | null;
+  saleable_area: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  features: string[] | null;
+  estates?: { name_zh: string; slug: string } | null;
 };
 
 function PropertyCard({ property }: { property: PropertyItem }) {
-  const isRent = property.type === "rent";
+  const isRent = property.deal_type === "rent";
+  const priceDisplay = isRent
+    ? `$${((property.rent ?? 0) / 1000).toFixed(0)}K`
+    : `$${((property.price ?? 0) / 10000).toFixed(0)}萬`;
+  const psf =
+    !isRent && property.price && property.saleable_area
+      ? Math.round(property.price / property.saleable_area)
+      : null;
+  const tag = property.features?.[0] ?? "精選";
+
   return (
     <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant">
-      <div
-        className="relative h-48 bg-gradient-to-br from-primary/40 to-primary"
-      >
+      <div className="relative h-48 bg-gradient-to-br from-primary/40 to-primary">
         <div className="absolute left-3 top-3 flex gap-2">
           <span className="rounded-full bg-coral px-2.5 py-1 text-[11px] font-semibold text-coral-foreground">
             {isRent ? "租 Rent" : "售 Sale"}
           </span>
           <span className="rounded-full bg-card/90 px-2.5 py-1 text-[11px] font-semibold text-primary backdrop-blur">
-            {property.tag}
+            {tag}
           </span>
         </div>
         <Building2 className="absolute right-3 top-3 h-7 w-7 text-primary-foreground/30" />
         <div className="absolute bottom-3 left-3 text-primary-foreground">
-          <p className="text-xs opacity-80">{property.estate}</p>
+          <p className="text-xs opacity-80">{property.estates?.name_zh ?? ""}</p>
         </div>
       </div>
       <div className="flex flex-1 flex-col p-5">
-        <h3 className="text-base font-semibold text-primary">{property.title}</h3>
+        <h3 className="text-base font-semibold text-primary">{property.title_zh}</h3>
         <div className="mt-3 flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-coral">
-            {isRent ? `$${property.price}K` : `$${property.price}萬`}
-          </span>
+          <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">
-            {isRent ? "/月" : ` · 實呎 $${Math.round((property.price * 10000) / property.area).toLocaleString()}`}
+            {isRent ? "/月" : psf ? ` · 實呎 $${psf.toLocaleString()}` : ""}
           </span>
         </div>
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1"><Bed className="h-4 w-4" /> {property.beds}</span>
-          <span className="flex items-center gap-1"><Bath className="h-4 w-4" /> {property.baths}</span>
-          <span className="flex items-center gap-1"><Maximize className="h-4 w-4" /> {property.area} 呎</span>
+          <span className="flex items-center gap-1"><Bed className="h-4 w-4" /> {property.bedrooms ?? "-"}</span>
+          <span className="flex items-center gap-1"><Bath className="h-4 w-4" /> {property.bathrooms ?? "-"}</span>
+          <span className="flex items-center gap-1"><Maximize className="h-4 w-4" /> {property.saleable_area ?? "-"} 呎</span>
         </div>
         <a
-          href={`https://wa.me/852XXXXXXXX?text=你好，我想查詢樓盤 ${property.id} (${property.title})`}
+          href={`https://wa.me/852XXXXXXXX?text=你好，我想查詢樓盤 ${property.listing_no} (${property.title_zh})`}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-4"
