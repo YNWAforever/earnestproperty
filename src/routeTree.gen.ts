@@ -14,6 +14,7 @@ import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PropertyListingNoRouteImport } from './routes/property.$listingNo'
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
@@ -43,6 +44,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PropertyListingNoRoute = PropertyListingNoRouteImport.update({
+  id: '/property/$listingNo',
+  path: '/property/$listingNo',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EstateSlugRoute = EstateSlugRouteImport.update({
   id: '/estate/$slug',
   path: '/estate/$slug',
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
+  '/property/$listingNo': typeof PropertyListingNoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByTo {
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
+  '/property/$listingNo': typeof PropertyListingNoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
+  '/property/$listingNo': typeof PropertyListingNoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -101,6 +110,7 @@ export interface FileRouteTypes {
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
     | '/estate/$slug'
+    | '/property/$listingNo'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
     | '/estate/$slug'
+    | '/property/$listingNo'
   id:
     | '__root__'
     | '/'
@@ -121,6 +132,7 @@ export interface FileRouteTypes {
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
     | '/estate/$slug'
+    | '/property/$listingNo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -132,6 +144,7 @@ export interface RootRouteChildren {
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
   EstateSlugRoute: typeof EstateSlugRoute
+  PropertyListingNoRoute: typeof PropertyListingNoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -171,6 +184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/property/$listingNo': {
+      id: '/property/$listingNo'
+      path: '/property/$listingNo'
+      fullPath: '/property/$listingNo'
+      preLoaderRoute: typeof PropertyListingNoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/estate/$slug': {
       id: '/estate/$slug'
       path: '/estate/$slug'
@@ -204,6 +224,7 @@ const rootRouteChildren: RootRouteChildren = {
   DistrictShamTsengRoute: DistrictShamTsengRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
   EstateSlugRoute: EstateSlugRoute,
+  PropertyListingNoRoute: PropertyListingNoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
