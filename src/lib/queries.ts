@@ -53,6 +53,7 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
     )
     .eq("status", "active")
     .eq("featured", true)
+    .order("created_at", { ascending: false })
     .limit(6);
   if (error) throw error;
   return (data ?? []) as unknown as FeaturedProperty[];
