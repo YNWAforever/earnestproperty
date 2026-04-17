@@ -15,6 +15,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import { ImageUploader } from "./ImageUploader";
 
 type Property = Tables<"properties">;
 type Estate = Pick<Tables<"estates">, "id" | "name_zh" | "district_slug">;
@@ -35,7 +36,6 @@ const schema = z.object({
   description: z.string().trim().max(4000).optional().or(z.literal("")),
   status: z.enum(["draft", "active", "sold", "rented", "offline"]),
   featured: z.boolean(),
-  images: z.string().max(2000).optional().or(z.literal("")),
 });
 
 type Props = {
@@ -64,8 +64,8 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
     status: (property?.status ?? "draft") as
       | "draft" | "active" | "sold" | "rented" | "offline",
     featured: property?.featured ?? false,
-    images: property?.images?.join("\n") ?? "",
   });
+  const [images, setImages] = useState<string[]>(property?.images ?? []);
 
   useEffect(() => {
     supabase
@@ -88,10 +88,6 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
     }
     const d = parsed.data;
     const num = (v: number | undefined) => (v === undefined || isNaN(v) ? null : v);
-    const images = form.images
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
 
     const payload: TablesInsert<"properties"> = {
       listing_no: d.listing_no,
@@ -217,13 +213,8 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
         <Field label="描述" full>
           <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} maxLength={4000} />
         </Field>
-        <Field label="圖片 URL（每行一個）" full>
-          <Textarea
-            rows={3}
-            value={form.images}
-            onChange={(e) => set("images", e.target.value)}
-            placeholder="https://..."
-          />
+        <Field label="相片" full>
+          <ImageUploader agentId={agentId} value={images} onChange={setImages} />
         </Field>
         <Field label="精選">
           <div className="flex h-10 items-center">
