@@ -96,6 +96,21 @@ export async function fetchDistrictTransactions(
   return (data ?? []) as unknown as DistrictTransaction[];
 }
 
+export async function fetchPropertyByListingNo(listingNo: string) {
+  const { data, error } = await supabase
+    .from("properties")
+    .select(
+      `*,
+       estates(slug, name_zh, district_slug, year_completed, developer),
+       profiles:agent_id(id, name_zh, name_en, phone, whatsapp, licence_no, avatar_url, branch, bio)`
+    )
+    .eq("listing_no", listingNo)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 export async function fetchListingCountsByEstate() {
   const { data, error } = await supabase
     .from("properties")
