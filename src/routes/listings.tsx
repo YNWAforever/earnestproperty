@@ -104,7 +104,7 @@ function ListingsPage() {
             </div>
           ) : (
             <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {rows.map((p) => (
+              {rows.map((p: ListingRow) => (
                 <ListingCard key={p.id} p={p} />
               ))}
             </ul>
@@ -371,7 +371,7 @@ function PageLink({
   return (
     <Link
       to="/listings"
-      search={(prev) => ({ ...prev, page })}
+      search={(prev: Record<string, unknown>) => ({ ...prev, page })}
       className={`inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition ${
         active
           ? "border-primary bg-primary text-primary-foreground"
