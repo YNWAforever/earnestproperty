@@ -20,6 +20,7 @@ import { Route as PropertyListingNoRouteImport } from './routes/property.$listin
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
+import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
@@ -79,6 +80,11 @@ const DistrictShamTsengRoute = DistrictShamTsengRouteImport.update({
   path: '/district/sham-tseng',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardInquiriesRoute = DashboardInquiriesRouteImport.update({
+  id: '/inquiries',
+  path: '/inquiries',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
   path: '/auth/login',
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/listings'
     | '/auth/login'
+    | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
     | '/estate/$slug'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/listings'
     | '/auth/login'
+    | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
     | '/estate/$slug'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/listings'
     | '/auth/login'
+    | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
     | '/estate/$slug'
@@ -289,6 +301,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DistrictShamTsengRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/inquiries': {
+      id: '/dashboard/inquiries'
+      path: '/inquiries'
+      fullPath: '/dashboard/inquiries'
+      preLoaderRoute: typeof DashboardInquiriesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/auth/login': {
       id: '/auth/login'
       path: '/auth/login'
@@ -314,11 +333,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardRouteChildren {
+  DashboardInquiriesRoute: typeof DashboardInquiriesRoute
   DashboardPropertyIdRoute: typeof DashboardPropertyIdRoute
   DashboardPropertyNewRoute: typeof DashboardPropertyNewRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardInquiriesRoute: DashboardInquiriesRoute,
   DashboardPropertyIdRoute: DashboardPropertyIdRoute,
   DashboardPropertyNewRoute: DashboardPropertyNewRoute,
 }
