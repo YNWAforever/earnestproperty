@@ -9,38 +9,161 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as BlogRouteImport } from './routes/blog'
+import { Route as AgentsRouteImport } from './routes/agents'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
+import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
+import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BlogRoute = BlogRouteImport.update({
+  id: '/blog',
+  path: '/blog',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsRoute = AgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EstateSlugRoute = EstateSlugRouteImport.update({
+  id: '/estate/$slug',
+  path: '/estate/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistrictTsuenWanRoute = DistrictTsuenWanRouteImport.update({
+  id: '/district/tsuen-wan',
+  path: '/district/tsuen-wan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistrictShamTsengRoute = DistrictShamTsengRouteImport.update({
+  id: '/district/sham-tseng',
+  path: '/district/sham-tseng',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/agents': typeof AgentsRoute
+  '/blog': typeof BlogRoute
+  '/contact': typeof ContactRoute
+  '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/tsuen-wan': typeof DistrictTsuenWanRoute
+  '/estate/$slug': typeof EstateSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/agents': typeof AgentsRoute
+  '/blog': typeof BlogRoute
+  '/contact': typeof ContactRoute
+  '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/tsuen-wan': typeof DistrictTsuenWanRoute
+  '/estate/$slug': typeof EstateSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/agents': typeof AgentsRoute
+  '/blog': typeof BlogRoute
+  '/contact': typeof ContactRoute
+  '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/tsuen-wan': typeof DistrictTsuenWanRoute
+  '/estate/$slug': typeof EstateSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/agents'
+    | '/blog'
+    | '/contact'
+    | '/district/sham-tseng'
+    | '/district/tsuen-wan'
+    | '/estate/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/about'
+    | '/agents'
+    | '/blog'
+    | '/contact'
+    | '/district/sham-tseng'
+    | '/district/tsuen-wan'
+    | '/estate/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/agents'
+    | '/blog'
+    | '/contact'
+    | '/district/sham-tseng'
+    | '/district/tsuen-wan'
+    | '/estate/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
+  AgentsRoute: typeof AgentsRoute
+  BlogRoute: typeof BlogRoute
+  ContactRoute: typeof ContactRoute
+  DistrictShamTsengRoute: typeof DistrictShamTsengRoute
+  DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
+  EstateSlugRoute: typeof EstateSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/blog': {
+      id: '/blog'
+      path: '/blog'
+      fullPath: '/blog'
+      preLoaderRoute: typeof BlogRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents': {
+      id: '/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AgentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +171,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/estate/$slug': {
+      id: '/estate/$slug'
+      path: '/estate/$slug'
+      fullPath: '/estate/$slug'
+      preLoaderRoute: typeof EstateSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/district/tsuen-wan': {
+      id: '/district/tsuen-wan'
+      path: '/district/tsuen-wan'
+      fullPath: '/district/tsuen-wan'
+      preLoaderRoute: typeof DistrictTsuenWanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/district/sham-tseng': {
+      id: '/district/sham-tseng'
+      path: '/district/sham-tseng'
+      fullPath: '/district/sham-tseng'
+      preLoaderRoute: typeof DistrictShamTsengRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
+  AgentsRoute: AgentsRoute,
+  BlogRoute: BlogRoute,
+  ContactRoute: ContactRoute,
+  DistrictShamTsengRoute: DistrictShamTsengRoute,
+  DistrictTsuenWanRoute: DistrictTsuenWanRoute,
+  EstateSlugRoute: EstateSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
