@@ -283,12 +283,18 @@ export type Database = {
           gross_area: number | null
           id: string
           images: string[] | null
+          last_scraped_at: string | null
+          legacy_detail_id: string | null
+          legacy_property_no: string | null
+          legacy_source_indexes: string[]
+          legacy_url: string | null
           listing_no: string
           management_fee: number | null
           orientation: string | null
           price: number | null
           rent: number | null
           saleable_area: number | null
+          source_site: string | null
           status: Database["public"]["Enums"]["property_status"]
           title_en: string | null
           title_zh: string
@@ -312,12 +318,18 @@ export type Database = {
           gross_area?: number | null
           id?: string
           images?: string[] | null
+          last_scraped_at?: string | null
+          legacy_detail_id?: string | null
+          legacy_property_no?: string | null
+          legacy_source_indexes?: string[]
+          legacy_url?: string | null
           listing_no: string
           management_fee?: number | null
           orientation?: string | null
           price?: number | null
           rent?: number | null
           saleable_area?: number | null
+          source_site?: string | null
           status?: Database["public"]["Enums"]["property_status"]
           title_en?: string | null
           title_zh: string
@@ -341,12 +353,18 @@ export type Database = {
           gross_area?: number | null
           id?: string
           images?: string[] | null
+          last_scraped_at?: string | null
+          legacy_detail_id?: string | null
+          legacy_property_no?: string | null
+          legacy_source_indexes?: string[]
+          legacy_url?: string | null
           listing_no?: string
           management_fee?: number | null
           orientation?: string | null
           price?: number | null
           rent?: number | null
           saleable_area?: number | null
+          source_site?: string | null
           status?: Database["public"]["Enums"]["property_status"]
           title_en?: string | null
           title_zh?: string

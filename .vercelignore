@@ -1,0 +1,5 @@
+.env
+.env.*
+.superpowers/
+artifacts/
+supabase/.temp/

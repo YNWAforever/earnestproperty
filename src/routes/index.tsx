@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
 import heroImage from "@/assets/hero-shamtseng.jpg";
+import { whatsappUrl } from "@/config/site";
 import {
   fetchEstates,
   fetchFeaturedProperties,
@@ -92,7 +93,8 @@ function HomePage() {
   const avgPsf =
     estates.length > 0
       ? Math.round(
-          estates.reduce((s: number, e: EstateSummary) => s + Number(e.avg_saleable_psf ?? 0), 0) / estates.length
+          estates.reduce((s: number, e: EstateSummary) => s + Number(e.avg_saleable_psf ?? 0), 0) /
+            estates.length,
         )
       : 0;
 
@@ -118,11 +120,13 @@ function HomePage() {
               深井 · 青山公路 · 荃灣
             </span>
             <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
-              深井買樓租樓<br />
+              深井買樓租樓
+              <br />
               <span className="text-gold">晉誠地產</span>．真盤源
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
-              深井．青山公路．我哋比你更熟。<br />
+              深井．青山公路．我哋比你更熟。
+              <br />
               碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式真盤源平台。
             </p>
           </div>
@@ -190,13 +194,18 @@ function HomePage() {
               >
                 <div
                   className="relative h-48 overflow-hidden"
-                  style={{ background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS["belvedere-garden"] }}
+                  style={{
+                    background:
+                      ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS["belvedere-garden"],
+                  }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-primary/70 to-transparent" />
                   <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
                   <div className="absolute bottom-4 left-5 text-primary-foreground">
                     <h3 className="text-2xl font-bold">{estate.name_zh}</h3>
-                    <p className="text-xs opacity-80">深井 · {(estate.total_units ?? 0).toLocaleString()} 個單位</p>
+                    <p className="text-xs opacity-80">
+                      深井 · {(estate.total_units ?? 0).toLocaleString()} 個單位
+                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 p-5">
@@ -209,7 +218,11 @@ function HomePage() {
                   <div>
                     <p className="text-[11px] text-muted-foreground">最新放盤</p>
                     <p className="text-base font-semibold text-primary">
-                      {featured.filter((p: FeaturedProperty) => p.estates?.slug === estate.slug).length} 個
+                      {
+                        featured.filter((p: FeaturedProperty) => p.estates?.slug === estate.slug)
+                          .length
+                      }{" "}
+                      個
                     </p>
                   </div>
                   <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
@@ -235,7 +248,10 @@ function HomePage() {
               desc="即日新放盤，隨時 WhatsApp 查詢及預約睇樓。"
               className="text-left"
             />
-            <Link to="/district/sham-tseng" className="text-sm font-medium text-primary hover:underline">
+            <Link
+              to="/district/sham-tseng"
+              className="text-sm font-medium text-primary hover:underline"
+            >
               所有放盤 →
             </Link>
           </div>
@@ -256,10 +272,26 @@ function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader eyebrow="為何選晉誠" title="Why Earnest Property" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          <Feature icon={<MapPin className="h-5 w-5" />} title="紮根深井" desc="十多年深耕深井 · 青山公路，每條街每幢樓都熟。" />
-          <Feature icon={<ShieldCheck className="h-5 w-5" />} title="持牌代理" desc="全公司持牌營業，Licence C-018613，合規可靠。" />
-          <Feature icon={<Home className="h-5 w-5" />} title="真盤源" desc="所有放盤親身核實，無虛假廣告，無釣魚盤。" />
-          <Feature icon={<MessageCircle className="h-5 w-5" />} title="即時 WhatsApp" desc="一 click 直達負責代理，平均 5 分鐘內回覆。" />
+          <Feature
+            icon={<MapPin className="h-5 w-5" />}
+            title="紮根深井"
+            desc="十多年深耕深井 · 青山公路，每條街每幢樓都熟。"
+          />
+          <Feature
+            icon={<ShieldCheck className="h-5 w-5" />}
+            title="持牌代理"
+            desc="全公司持牌營業，Licence C-018613，合規可靠。"
+          />
+          <Feature
+            icon={<Home className="h-5 w-5" />}
+            title="真盤源"
+            desc="所有放盤親身核實，無虛假廣告，無釣魚盤。"
+          />
+          <Feature
+            icon={<MessageCircle className="h-5 w-5" />}
+            title="即時 WhatsApp"
+            desc="一 click 直達負責代理，平均 5 分鐘內回覆。"
+          />
         </div>
       </section>
 
@@ -271,7 +303,9 @@ function HomePage() {
             <Accordion type="single" collapsible className="mt-8">
               {faqs.map((f: FaqItem, i: number) => (
                 <AccordionItem key={i} value={`faq-${i}`}>
-                  <AccordionTrigger className="text-left text-base font-medium">{f.question}</AccordionTrigger>
+                  <AccordionTrigger className="text-left text-base font-medium">
+                    {f.question}
+                  </AccordionTrigger>
                   <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
                     {f.answer}
                   </AccordionContent>
@@ -301,13 +335,11 @@ function HomePage() {
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
           <div>
             <h2 className="text-2xl font-bold sm:text-3xl">準備搵深井筍盤？</h2>
-            <p className="mt-2 text-sm opacity-85">即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。</p>
+            <p className="mt-2 text-sm opacity-85">
+              即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
+            </p>
           </div>
-          <a
-            href="https://wa.me/852XXXXXXXX?text=你好，我想查詢深井物業"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={whatsappUrl("你好，我想查詢深井物業")} target="_blank" rel="noopener noreferrer">
             <Button size="lg" className="bg-coral text-coral-foreground hover:bg-coral/90">
               <MessageCircle className="h-4 w-4" />
               WhatsApp 即時查詢
@@ -433,12 +465,18 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           </span>
         </div>
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-4 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1"><Bed className="h-4 w-4" /> {property.bedrooms ?? "-"}</span>
-          <span className="flex items-center gap-1"><Bath className="h-4 w-4" /> {property.bathrooms ?? "-"}</span>
-          <span className="flex items-center gap-1"><Maximize className="h-4 w-4" /> {property.saleable_area ?? "-"} 呎</span>
+          <span className="flex items-center gap-1">
+            <Bed className="h-4 w-4" /> {property.bedrooms ?? "-"}
+          </span>
+          <span className="flex items-center gap-1">
+            <Bath className="h-4 w-4" /> {property.bathrooms ?? "-"}
+          </span>
+          <span className="flex items-center gap-1">
+            <Maximize className="h-4 w-4" /> {property.saleable_area ?? "-"} 呎
+          </span>
         </div>
         <a
-          href={`https://wa.me/852XXXXXXXX?text=你好，我想查詢樓盤 ${property.listing_no} (${property.title_zh})`}
+          href={whatsappUrl(`你好，我想查詢樓盤 ${property.listing_no} (${property.title_zh})`)}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-4"
