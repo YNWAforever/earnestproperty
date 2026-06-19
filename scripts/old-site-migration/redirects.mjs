@@ -10,22 +10,15 @@ if (!runDir) {
 const parsed = JSON.parse(await readFile(`${runDir}/parsed-listings.json`, "utf8"));
 const redirects = parsed
   .filter((listing) => listing.legacyDetailId && (listing.legacyPropertyNo || listing.legacyDetailId))
-  .flatMap((listing) => {
+  .map((listing) => {
     const listingNo = listing.legacyPropertyNo || `OLD-${listing.legacyDetailId}`;
     const destination = `/property/${encodeURIComponent(listingNo)}`;
 
-    return [
-      {
-        source: `/property-detail/${listing.legacyDetailId}.html`,
-        destination,
-        permanent: true,
-      },
-      {
-        source: `/eng/property-detail/${listing.legacyDetailId}.html`,
-        destination,
-        permanent: true,
-      },
-    ];
+    return {
+      source: `/property-detail/${listing.legacyDetailId}.html`,
+      destination,
+      permanent: true,
+    };
   });
 
 await mkdir("src/generated", { recursive: true });

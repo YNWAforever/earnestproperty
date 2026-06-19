@@ -12,7 +12,9 @@ export const config: VercelConfig = {
   redirects: [
     ...detailRedirects,
     routes.redirect("/property-detail/:oldId.html", "/listings", { permanent: true }),
-    routes.redirect("/eng/property-detail/:oldId.html", "/listings", { permanent: true }),
+    routes.redirect("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", {
+      permanent: true,
+    }),
     routes.redirect("/eng", "/", { permanent: true }),
     routes.redirect("/eng/", "/", { permanent: true }),
     routes.redirect("/profile.php", "/about", { permanent: true }),
