@@ -9,7 +9,9 @@ if (!runDir) {
 
 const parsed = JSON.parse(await readFile(`${runDir}/parsed-listings.json`, "utf8"));
 const redirects = parsed
-  .filter((listing) => listing.legacyDetailId && (listing.legacyPropertyNo || listing.legacyDetailId))
+  .filter(
+    (listing) => listing.legacyDetailId && (listing.legacyPropertyNo || listing.legacyDetailId),
+  )
   .map((listing) => {
     const listingNo = listing.legacyPropertyNo || `OLD-${listing.legacyDetailId}`;
     const destination = `/property/${encodeURIComponent(listingNo)}`;

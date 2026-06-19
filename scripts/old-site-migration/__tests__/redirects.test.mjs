@@ -24,7 +24,10 @@ test("redirect generator emits one static rule per parsed listing", () => {
 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(redirects.length, 2);
-  assert.equal(redirects.some((redirect) => redirect.source.startsWith("/eng/")), false);
+  assert.equal(
+    redirects.some((redirect) => redirect.source.startsWith("/eng/")),
+    false,
+  );
   assert.deepEqual(redirects[0], {
     source: "/property-detail/6470722.html",
     destination: "/property/B059390",

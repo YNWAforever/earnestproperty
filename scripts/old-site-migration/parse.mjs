@@ -1,7 +1,9 @@
 import { load } from "cheerio";
 
 export function normalizeWhitespace(value) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function parseMoney(value) {
@@ -29,10 +31,7 @@ function extractLegacyDetailId(url) {
 
 function extractTitleParts($) {
   const rawTitle = normalizeWhitespace($("title").first().text());
-  const withoutBrand = rawTitle.replace(
-    /\s*-\s*(晉誠地產|Earnest Property Agency)\s*$/i,
-    "",
-  );
+  const withoutBrand = rawTitle.replace(/\s*-\s*(晉誠地產|Earnest Property Agency)\s*$/i, "");
   const parts = withoutBrand.split(",").map(normalizeWhitespace).filter(Boolean);
   const titleZh = parts[0] ?? "";
   const districtZh = parts[1] ?? "";
@@ -85,12 +84,12 @@ export function parseLegacyDetail(html, url) {
   const $ = load(html);
   const { titleZh, districtZh, numberFromTitle } = extractTitleParts($);
   const metaDescription =
-    metaContent($, "meta[name='description']") ||
-    metaContent($, "meta[property='og:description']");
+    metaContent($, "meta[name='description']") || metaContent($, "meta[property='og:description']");
 
   const legacyPropertyNo =
-    $("body").text().match(/物業編號\s*:\s*([A-Z0-9-]+)/i)?.[1] ??
-    numberFromTitle;
+    $("body")
+      .text()
+      .match(/物業編號\s*:\s*([A-Z0-9-]+)/i)?.[1] ?? numberFromTitle;
 
   const saleText = tableValue($, "售價") ?? metaDescription.match(/售\$?[^,\s]+/)?.[0] ?? "";
   const rentText = tableValue($, "出租價") ?? metaDescription.match(/租\$?[^,\s]+/)?.[0] ?? "";
@@ -106,9 +105,7 @@ export function parseLegacyDetail(html, url) {
     dealType: price ? "sale" : "rent",
     price,
     rent,
-    saleableArea: parseArea(
-      tableValue($, "實用面積") ?? metaDescription.match(/實用\d+呎/)?.[0],
-    ),
+    saleableArea: parseArea(tableValue($, "實用面積") ?? metaDescription.match(/實用\d+呎/)?.[0]),
     grossArea: parseArea(tableValue($, "建築面積")),
     orientation: normalizeWhitespace(tableValue($, "座向")),
     features: parseFeatures(tableValue($, "間隔")),

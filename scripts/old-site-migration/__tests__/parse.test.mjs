@@ -4,11 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import {
-  parseArea,
-  parseLegacyDetail,
-  parseMoney,
-} from "../parse.mjs";
+import { parseArea, parseLegacyDetail, parseMoney } from "../parse.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturePath = join(__dirname, "../__fixtures__/property-detail-6470722.html");

@@ -4,11 +4,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-import {
-  buildPagedUrl,
-  extractDetailUrls,
-  extractMaxPage,
-} from "../discover.mjs";
+import { buildPagedUrl, extractDetailUrls, extractMaxPage } from "../discover.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(__dirname, "../__fixtures__/property-index-page.html"), "utf8");

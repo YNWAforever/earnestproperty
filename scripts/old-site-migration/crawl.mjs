@@ -52,9 +52,15 @@ for (const record of discovered) {
   await new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
-await writeFile(join(outputDir, "discovered-detail-urls.json"), JSON.stringify(discovered, null, 2));
+await writeFile(
+  join(outputDir, "discovered-detail-urls.json"),
+  JSON.stringify(discovered, null, 2),
+);
 await writeFile(join(outputDir, "parsed-listings.json"), JSON.stringify(parsed, null, 2));
 await writeFile(join(outputDir, "failed-parses.json"), JSON.stringify(failures, null, 2));
-await writeFile(join(outputDir, "summary.json"), JSON.stringify(summarize(parsed, failures), null, 2));
+await writeFile(
+  join(outputDir, "summary.json"),
+  JSON.stringify(summarize(parsed, failures), null, 2),
+);
 
 console.log(JSON.stringify({ runId, outputDir, ...summarize(parsed, failures) }, null, 2));

@@ -41,14 +41,26 @@ export const Route = createFileRoute("/contact")({
   ),
 });
 
-function Row({ icon, label, value, href }: { icon: React.ReactNode; label: string; value: string; href?: string }) {
+function Row({
+  icon,
+  label,
+  value,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  href?: string;
+}) {
   return (
     <div className="flex items-start gap-4 rounded-lg border border-border bg-card p-4">
       <div className="text-coral">{icon}</div>
       <div>
         <p className="text-xs uppercase tracking-wider text-muted-foreground">{label}</p>
         {href ? (
-          <a href={href} className="text-base font-medium text-primary hover:underline">{value}</a>
+          <a href={href} className="text-base font-medium text-primary hover:underline">
+            {value}
+          </a>
         ) : (
           <p className="text-base font-medium text-primary">{value}</p>
         )}

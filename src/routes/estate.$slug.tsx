@@ -30,13 +30,17 @@ export const Route = createFileRoute("/estate/$slug")({
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">載入失敗</h1>
       <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
-      <Link to="/" className="mt-4 inline-block text-primary underline">回首頁</Link>
+      <Link to="/" className="mt-4 inline-block text-primary underline">
+        回首頁
+      </Link>
     </div>
   ),
   notFoundComponent: () => (
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">屋苑未找到</h1>
-      <Link to="/" className="mt-4 inline-block text-primary underline">回首頁</Link>
+      <Link to="/" className="mt-4 inline-block text-primary underline">
+        回首頁
+      </Link>
     </div>
   ),
   component: EstatePage,
@@ -58,7 +62,10 @@ function EstatePage() {
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-6 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
-        <Stat label="平均實呎" value={`$${Number(estate.avg_saleable_psf ?? 0).toLocaleString()}`} />
+        <Stat
+          label="平均實呎"
+          value={`$${Number(estate.avg_saleable_psf ?? 0).toLocaleString()}`}
+        />
         <Stat label="單位總數" value={(estate.total_units ?? 0).toLocaleString()} />
         <Stat label="期數" value={`${estate.phases ?? "-"} 期`} />
         <Stat label="落成年份" value={String(estate.year_completed ?? "-")} />
