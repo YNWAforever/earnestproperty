@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "test:contact": "node --test src/config/site.test.mjs",
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",

@@ -7,8 +7,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-
-const WHATSAPP_URL = "https://wa.me/852XXXXXXXX?text=你好，我想查詢深井物業";
+import { whatsappUrl } from "@/config/site";
 
 const navItems = [
   { to: "/listings", label: "搜尋放盤" },
@@ -22,6 +21,7 @@ const navItems = [
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const WHATSAPP_URL = whatsappUrl("你好，我想查詢深井物業");
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">

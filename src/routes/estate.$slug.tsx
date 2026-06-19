@@ -7,6 +7,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { MessageCircle } from "lucide-react";
+import { whatsappUrl } from "@/config/site";
 import { fetchEstateBySlug, fetchFaqs, type FaqItem } from "@/lib/queries";
 
 export const Route = createFileRoute("/estate/$slug")({
@@ -90,7 +91,7 @@ function EstatePage() {
       <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
         <p className="text-muted-foreground">完整放盤、近期成交、平面圖即將推出。</p>
         <a
-          href={`https://wa.me/852XXXXXXXX?text=你好，我想查詢${estate.name_zh}物業`}
+          href={whatsappUrl(`你好，我想查詢${estate.name_zh}物業`)}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-6 inline-block"

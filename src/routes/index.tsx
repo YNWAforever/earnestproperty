@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
 import heroImage from "@/assets/hero-shamtseng.jpg";
+import { whatsappUrl } from "@/config/site";
 import {
   fetchEstates,
   fetchFeaturedProperties,
@@ -304,7 +305,7 @@ function HomePage() {
             <p className="mt-2 text-sm opacity-85">即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。</p>
           </div>
           <a
-            href="https://wa.me/852XXXXXXXX?text=你好，我想查詢深井物業"
+            href={whatsappUrl("你好，我想查詢深井物業")}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -438,7 +439,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           <span className="flex items-center gap-1"><Maximize className="h-4 w-4" /> {property.saleable_area ?? "-"} 呎</span>
         </div>
         <a
-          href={`https://wa.me/852XXXXXXXX?text=你好，我想查詢樓盤 ${property.listing_no} (${property.title_zh})`}
+          href={whatsappUrl(`你好，我想查詢樓盤 ${property.listing_no} (${property.title_zh})`)}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-4"

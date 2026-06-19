@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { MapPin, Phone, Mail, Facebook, Instagram } from "lucide-react";
+import { SITE_CONTACT } from "@/config/site";
 
 export function SiteFooter() {
   return (
@@ -52,15 +53,17 @@ export function SiteFooter() {
             <ul className="mt-4 space-y-3 text-sm">
               <li className="flex items-start gap-2 opacity-80">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-                <span>新界深井青山公路深井段 23 號麗都花園地下 5A 舖</span>
+                <span>{SITE_CONTACT.address}</span>
               </li>
               <li className="flex items-center gap-2 opacity-80">
                 <Phone className="h-4 w-4 text-gold" />
-                <a href="tel:+85200000000">+852 0000 0000</a>
+                <a href={SITE_CONTACT.phoneTel ? `tel:${SITE_CONTACT.phoneTel}` : "/contact"}>
+                  {SITE_CONTACT.phoneDisplay || "聯絡我們"}
+                </a>
               </li>
               <li className="flex items-center gap-2 opacity-80">
                 <Mail className="h-4 w-4 text-gold" />
-                <a href="mailto:info@earnestproperty.com">info@earnestproperty.com</a>
+                <a href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a>
               </li>
             </ul>
             <div className="mt-5 flex gap-3">
@@ -76,8 +79,8 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-primary-foreground/15 pt-6 text-xs opacity-70 md:flex-row">
           <p>© {new Date().getFullYear()} Earnest Property 晉誠地產. All rights reserved.</p>
-          <p>Licence C-018613 · Estate Agents Authority HK</p>
-        </div>
+            <p>Licence {SITE_CONTACT.licenceNo} · Estate Agents Authority HK</p>
+          </div>
       </div>
     </footer>
   );
