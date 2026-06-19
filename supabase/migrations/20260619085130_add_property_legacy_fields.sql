@@ -10,7 +10,10 @@ ALTER TABLE public.properties
   DROP CONSTRAINT IF EXISTS properties_legacy_detail_id_key;
 
 ALTER TABLE public.properties
-  ADD CONSTRAINT properties_legacy_detail_id_key UNIQUE (legacy_detail_id);
+  DROP CONSTRAINT IF EXISTS properties_legacy_detail_deal_type_key;
+
+ALTER TABLE public.properties
+  ADD CONSTRAINT properties_legacy_detail_deal_type_key UNIQUE (legacy_detail_id, deal_type);
 
 CREATE INDEX IF NOT EXISTS idx_properties_legacy_property_no
   ON public.properties (legacy_property_no);

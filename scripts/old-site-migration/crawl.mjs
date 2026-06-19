@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { discoverAllSources, INDEX_SOURCES } from "./discover.mjs";
+import { buildMigrationDataset } from "./normalize.mjs";
 import { parseLegacyDetail } from "./parse.mjs";
 
 async function fetchText(url) {
@@ -14,11 +15,14 @@ async function fetchText(url) {
 }
 
 function summarize(records, failures) {
+  const migration = buildMigrationDataset(records);
+
   return {
     indexSources: INDEX_SOURCES.length,
     uniqueDetailUrls: records.length + failures.length,
     parsedListings: records.length,
     failedParses: failures.length,
+    migrationPreview: migration.summary,
     missingOptionalFields: {
       saleableArea: records.filter((record) => !record.saleableArea).length,
       grossArea: records.filter((record) => !record.grossArea).length,

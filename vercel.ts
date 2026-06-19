@@ -1,4 +1,4 @@
-import { routes, type VercelConfig } from "@vercel/config/v1";
+import { matchers, routes, type VercelConfig } from "@vercel/config/v1";
 import importedRedirects from "./src/generated/old-site-redirects.json" with { type: "json" };
 
 const detailRedirects = importedRedirects.map((redirect) =>
@@ -11,6 +11,10 @@ export const config: VercelConfig = {
   buildCommand: "npm run build",
   redirects: [
     ...detailRedirects,
+    routes.redirect("/", "/", {
+      permanent: true,
+      has: [matchers.query("ln", { inc: ["sc", "tc"] })],
+    }),
     routes.redirect("/property-detail/:oldId.html", "/listings", { permanent: true }),
     routes.redirect("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", {
       permanent: true,
