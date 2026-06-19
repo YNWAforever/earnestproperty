@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 .output
+artifacts/old-site-migration/
 .vinxi
 .tanstack/**
 .nitro
