@@ -22,6 +22,8 @@ import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wa
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
+import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
+import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
 
@@ -90,6 +92,16 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
   path: '/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthPathnameRoute = AuthPathnameRouteImport.update({
+  id: '/auth/$pathname',
+  path: '/auth/$pathname',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountPathnameRoute = AccountPathnameRouteImport.update({
+  id: '/account/$pathname',
+  path: '/account/$pathname',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardPropertyNewRoute = DashboardPropertyNewRouteImport.update({
   id: '/property/new',
   path: '/property/new',
@@ -109,6 +121,8 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
+  '/account/$pathname': typeof AccountPathnameRoute
+  '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
@@ -126,6 +140,8 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
+  '/account/$pathname': typeof AccountPathnameRoute
+  '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
@@ -144,6 +160,8 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
+  '/account/$pathname': typeof AccountPathnameRoute
+  '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
@@ -163,6 +181,8 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/listings'
+    | '/account/$pathname'
+    | '/auth/$pathname'
     | '/auth/login'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
@@ -180,6 +200,8 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/listings'
+    | '/account/$pathname'
+    | '/auth/$pathname'
     | '/auth/login'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
@@ -197,6 +219,8 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dashboard'
     | '/listings'
+    | '/account/$pathname'
+    | '/auth/$pathname'
     | '/auth/login'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
@@ -215,6 +239,8 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   ListingsRoute: typeof ListingsRoute
+  AccountPathnameRoute: typeof AccountPathnameRoute
+  AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
@@ -315,6 +341,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/$pathname': {
+      id: '/auth/$pathname'
+      path: '/auth/$pathname'
+      fullPath: '/auth/$pathname'
+      preLoaderRoute: typeof AuthPathnameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account/$pathname': {
+      id: '/account/$pathname'
+      path: '/account/$pathname'
+      fullPath: '/account/$pathname'
+      preLoaderRoute: typeof AccountPathnameRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard/property/new': {
       id: '/dashboard/property/new'
       path: '/property/new'
@@ -356,6 +396,8 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRouteWithChildren,
   ListingsRoute: ListingsRoute,
+  AccountPathnameRoute: AccountPathnameRoute,
+  AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
