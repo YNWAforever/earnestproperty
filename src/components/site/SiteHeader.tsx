@@ -8,7 +8,7 @@ import { whatsappUrl } from "@/config/site";
 const navItems = [
   { to: "/listings", label: "搜尋放盤" },
   { to: "/district/sham-tseng", label: "深井" },
-  { to: "/estate/belvedere-garden", label: "屋苑" },
+  { to: "/estate/bellagio", label: "屋苑" },
   { to: "/agents", label: "代理" },
   { to: "/blog", label: "市場分析" },
   { to: "/about", label: "關於" },

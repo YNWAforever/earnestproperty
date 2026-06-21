@@ -15,6 +15,8 @@ export const config: VercelConfig = {
       permanent: true,
       has: [matchers.query("ln", { inc: ["sc", "tc"] })],
     }),
+    routes.redirect("/estate/belvedere-garden", "/estate/bellagio", { permanent: true }),
+    routes.redirect("/estate/sea-pearl-garden", "/estate/rhine-garden", { permanent: true }),
     routes.redirect("/property-detail/:oldId.html", "/listings", { permanent: true }),
     routes.redirect("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", {
       permanent: true,

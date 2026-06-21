@@ -50,7 +50,7 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/estate/belvedere-garden" className="opacity-80 hover:opacity-100">
+                <Link to="/estate/bellagio" className="opacity-80 hover:opacity-100">
                   碧堤半島
                 </Link>
               </li>
@@ -62,6 +62,16 @@ export function SiteFooter() {
               <li>
                 <Link to="/estate/hong-kong-garden" className="opacity-80 hover:opacity-100">
                   豪景花園
+                </Link>
+              </li>
+              <li>
+                <Link to="/estate/rhine-garden" className="opacity-80 hover:opacity-100">
+                  海韻花園
+                </Link>
+              </li>
+              <li>
+                <Link to="/estate/lido-garden" className="opacity-80 hover:opacity-100">
+                  麗都花園
                 </Link>
               </li>
             </ul>

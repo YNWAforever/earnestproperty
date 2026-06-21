@@ -77,10 +77,10 @@ export const Route = createFileRoute("/")({
 });
 
 const ESTATE_GRADIENTS: Record<string, string> = {
-  "belvedere-garden": "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))",
+  bellagio: "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))",
   "sea-crest-villa": "linear-gradient(135deg, oklch(0.6 0.08 200), oklch(0.35 0.07 230))",
   "hong-kong-garden": "linear-gradient(135deg, oklch(0.65 0.09 180), oklch(0.38 0.06 220))",
-  "sea-pearl-garden": "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))",
+  "rhine-garden": "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))",
   "lido-garden": "linear-gradient(135deg, oklch(0.62 0.08 195), oklch(0.36 0.07 225))",
 };
 
@@ -195,8 +195,7 @@ function HomePage() {
                 <div
                   className="relative h-48 overflow-hidden"
                   style={{
-                    background:
-                      ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS["belvedere-garden"],
+                    background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio,
                   }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-primary/70 to-transparent" />

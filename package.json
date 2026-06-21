@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
+    "test:seo": "node --test src/content/seo-source.test.mjs",
     "test:contact": "node --test src/config/site.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs",
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
