@@ -98,7 +98,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <NeonAuthUIProvider authClient={authClient}>
+    <NeonAuthUIProvider authClient={authClient} defaultTheme="light">
       <div className="flex min-h-screen flex-col">
         <SiteHeader />
         <main className="flex-1">
