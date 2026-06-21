@@ -30,6 +30,7 @@ test("Neon Auth TanStack Router integration is wired", () => {
   assert.match(rootRoute, /NeonAuthUIProvider/);
   assert.match(rootRoute, /authClient/);
   assert.match(rootRoute, /from ["']@neondatabase\/auth-ui["']/);
+  assert.match(rootRoute, /defaultTheme=["']light["']/);
 
   const authRoute = read("src/routes/auth.$pathname.tsx");
   assert.match(authRoute, /createFileRoute\(["']\/auth\/\$pathname["']\)/);
