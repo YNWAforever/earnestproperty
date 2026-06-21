@@ -44,3 +44,15 @@ test("seo content registry contains required full-content routes", () => {
     assert.match(source, new RegExp(slug));
   }
 });
+
+test("blog routes render real indexed articles", () => {
+  const blog = read("src/routes/blog.tsx");
+  const detail = read("src/routes/blog.$slug.tsx");
+  const queries = read("src/lib/queries.ts");
+
+  assert.match(queries, /fetchPublishedArticles/);
+  assert.match(queries, /fetchArticleBySlug/);
+  assert.match(blog, /深井買樓全攻略 2026/);
+  assert.match(detail, /Article/);
+  assert.match(detail, /BreadcrumbList/);
+});

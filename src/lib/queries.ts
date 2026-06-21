@@ -36,11 +36,7 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
 }
 
 export async function fetchEstateBySlug(slug: string) {
-  const { data, error } = await supabase
-    .from("estates")
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
+  const { data, error } = await supabase.from("estates").select("*").eq("slug", slug).maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -49,7 +45,7 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
   const { data, error } = await supabase
     .from("properties")
     .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, features, images, estates(name_zh, slug)"
+      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, features, images, estates(name_zh, slug)",
     )
     .eq("status", "active")
     .eq("featured", true)
@@ -80,14 +76,14 @@ export type DistrictTransaction = {
 
 export async function fetchDistrictTransactions(
   districtSlug: string,
-  monthsBack = 12
+  monthsBack = 12,
 ): Promise<DistrictTransaction[]> {
   const since = new Date();
   since.setMonth(since.getMonth() - monthsBack);
   const { data, error } = await supabase
     .from("transactions")
     .select(
-      "deal_date, saleable_psf, price, saleable_area, unit, estates!inner(name_zh, slug, district_slug)"
+      "deal_date, saleable_psf, price, saleable_area, unit, estates!inner(name_zh, slug, district_slug)",
     )
     .eq("estates.district_slug", districtSlug)
     .eq("deal_type", "sale")
@@ -103,7 +99,7 @@ export async function fetchPropertyByListingNo(listingNo: string) {
     .select(
       `*,
        estates(slug, name_zh, district_slug, year_completed, developer),
-       profiles:agent_id(id, name_zh, name_en, phone, whatsapp, licence_no, avatar_url, branch, bio)`
+       profiles:agent_id(id, name_zh, name_en, phone, whatsapp, licence_no, avatar_url, branch, bio)`,
     )
     .eq("listing_no", listingNo)
     .eq("status", "active")
@@ -161,7 +157,7 @@ export async function searchListings(f: ListingFilters): Promise<{
     .from("properties")
     .select(
       "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)",
-      { count: "exact" }
+      { count: "exact" },
     )
     .eq("status", "active");
 
@@ -212,7 +208,7 @@ export async function fetchSimilarListings(
   estateId: string,
   dealType: "sale" | "rent",
   excludeId: string,
-  limit = 4
+  limit = 4,
 ): Promise<SimilarListing[]> {
   const { data, error } = await supabase
     .from("properties")
@@ -238,7 +234,7 @@ export type EstateTransaction = {
 
 export async function fetchEstateTransactions(
   estateId: string,
-  limit = 8
+  limit = 8,
 ): Promise<EstateTransaction[]> {
   const { data, error } = await supabase
     .from("transactions")
@@ -252,11 +248,38 @@ export async function fetchEstateTransactions(
 }
 
 export async function fetchEstateOptions() {
-  const { data, error } = await supabase
-    .from("estates")
-    .select("slug, name_zh")
-    .order("name_zh");
+  const { data, error } = await supabase.from("estates").select("slug, name_zh").order("name_zh");
   if (error) throw error;
   return data ?? [];
 }
 
+export type ArticleSummary = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  cover_image: string | null;
+  category: string | null;
+  reading_minutes: number | null;
+  published_at: string;
+};
+
+export async function fetchPublishedArticles(): Promise<ArticleSummary[]> {
+  const { data, error } = await supabase
+    .from("articles")
+    .select("slug, title, excerpt, cover_image, category, reading_minutes, published_at")
+    .eq("published", true)
+    .order("published_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function fetchArticleBySlug(slug: string) {
+  const { data, error } = await supabase
+    .from("articles")
+    .select("slug, title, excerpt, content, cover_image, category, reading_minutes, published_at")
+    .eq("slug", slug)
+    .eq("published", true)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}

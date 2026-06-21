@@ -21,6 +21,7 @@ import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
+import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
@@ -88,6 +89,11 @@ const DashboardInquiriesRoute = DashboardInquiriesRouteImport.update({
   path: '/inquiries',
   getParentRoute: () => DashboardRoute,
 } as any)
+const BlogSlugRoute = BlogSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => BlogRoute,
+} as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
   path: '/auth/login',
@@ -123,7 +129,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
-  '/blog': typeof BlogRoute
+  '/blog': typeof BlogRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -143,7 +150,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
-  '/blog': typeof BlogRoute
+  '/blog': typeof BlogRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -164,7 +172,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
-  '/blog': typeof BlogRoute
+  '/blog': typeof BlogRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
@@ -172,6 +180,7 @@ export interface FileRoutesById {
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
+    | '/blog/$slug'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
+    | '/blog/$slug'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
@@ -234,6 +245,7 @@ export interface FileRouteTypes {
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
+    | '/blog/$slug'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/tsuen-wan'
@@ -247,7 +259,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AgentsRoute: typeof AgentsRoute
-  BlogRoute: typeof BlogRoute
+  BlogRoute: typeof BlogRouteWithChildren
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   ListingsRoute: typeof ListingsRoute
@@ -347,6 +359,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardInquiriesRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/blog/$slug': {
+      id: '/blog/$slug'
+      path: '/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof BlogSlugRouteImport
+      parentRoute: typeof BlogRoute
+    }
     '/auth/login': {
       id: '/auth/login'
       path: '/auth/login'
@@ -392,6 +411,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface BlogRouteChildren {
+  BlogSlugRoute: typeof BlogSlugRoute
+}
+
+const BlogRouteChildren: BlogRouteChildren = {
+  BlogSlugRoute: BlogSlugRoute,
+}
+
+const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
+
 interface DashboardRouteChildren {
   DashboardInquiriesRoute: typeof DashboardInquiriesRoute
   DashboardPropertyIdRoute: typeof DashboardPropertyIdRoute
@@ -412,7 +441,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AgentsRoute: AgentsRoute,
-  BlogRoute: BlogRoute,
+  BlogRoute: BlogRouteWithChildren,
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRouteWithChildren,
   ListingsRoute: ListingsRoute,

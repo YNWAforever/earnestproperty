@@ -52,3 +52,36 @@ ALTER TABLE public.properties
 
 CREATE INDEX IF NOT EXISTS idx_properties_last_seen_at
   ON public.properties (last_seen_at);
+
+INSERT INTO public.articles
+  (slug, title, excerpt, content, category, reading_minutes, published)
+VALUES
+  (
+    'sham-tseng-buying-guide-2026',
+    '深井買樓全攻略 2026：5 大屋苑、呎價、校網、交通一次睇晒',
+    '深井買樓睇呢篇就夠：碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園逐個分析，連呎價、62 校網、去中環交通全攻略。',
+    '想喺深井買樓，但唔知五大屋苑點揀、呎價幾多、校網又屬邊個網？呢篇由深井 hyperlocal 專家整理嘅 2026 全攻略，一次過幫你睇通深井樓市。' || E'\n\n' ||
+    '深井位於新界荃灣西、青山公路沿線，背靠大欖郊野公園，面向汀九橋同青馬大橋海峽。佢最大賣點係同價海景，平過半山。' || E'\n\n' ||
+    '碧堤半島適合預算充足、想要海景同會所嘅家庭；浪翠園適合上車及換樓；豪景花園適合想用上車價買三房；海韻花園適合海景行先；麗都花園適合入門上車同租住。',
+    '買樓攻略',
+    8,
+    true
+  ),
+  (
+    'bellagio-vs-sea-crest-villa-vs-hong-kong-garden',
+    '碧堤半島 vs 浪翠園 vs 豪景花園：深井三大屋苑點揀好？',
+    '碧堤半島、浪翠園、豪景花園三大深井屋苑點揀？由呎價、樓齡、海景、會所到適合人群逐項對比。',
+    '深井三大屋苑成日令買家揀到頭痛。三個都係海景大社區，但定位差好遠。' || E'\n\n' ||
+    '碧堤半島最新，會所同園林維護到位，俾人度假式感覺；浪翠園和豪景花園樓齡較長，勝在社區成熟、實用和入場門檻較低。' || E'\n\n' ||
+    '想要最新、最強會所同海景，預算充足就睇碧堤半島；想要海景但預算有限就睇浪翠園；想用最抵價錢買到實用三房就睇豪景花園。',
+    '屋苑比較',
+    6,
+    true
+  )
+ON CONFLICT (slug) DO UPDATE SET
+  title = EXCLUDED.title,
+  excerpt = EXCLUDED.excerpt,
+  content = EXCLUDED.content,
+  category = EXCLUDED.category,
+  reading_minutes = EXCLUDED.reading_minutes,
+  published = EXCLUDED.published;
