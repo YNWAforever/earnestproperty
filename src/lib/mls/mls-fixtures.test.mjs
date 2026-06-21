@@ -8,6 +8,11 @@ import {
   parseMoneyToHkd,
   parseRoomCounts,
 } from "./parse-old-site.mjs";
+import {
+  inferDistrictSlug,
+  normalizeListingDetail,
+  resolveEstateSlug,
+} from "./normalize-old-site.mjs";
 
 function fixture(name) {
   return readFileSync(
@@ -59,4 +64,55 @@ test("primitive parsers handle Hong Kong listing text", () => {
   assert.equal(parseAreaFeet("570 呎"), 570);
   assert.deepEqual(parseRoomCounts("2房2廳"), { bedrooms: 2, livingRooms: 2 });
   assert.deepEqual(parseRoomCounts("開放式"), { bedrooms: 0, livingRooms: null });
+});
+
+test("resolveEstateSlug maps corrected estate aliases", () => {
+  assert.equal(
+    resolveEstateSlug({ buildingZh: "麗都花園 第03座", buildingEn: "LIDO GDN BLK 03" }),
+    "lido-garden",
+  );
+  assert.equal(
+    resolveEstateSlug({ buildingZh: "海韻花園", buildingEn: "RHINE GARDEN" }),
+    "rhine-garden",
+  );
+  assert.equal(resolveEstateSlug({ buildingZh: "碧堤半島", buildingEn: "BELLAGIO" }), "bellagio");
+});
+
+test("inferDistrictSlug separates Sham Tseng, Ting Kau, and Tsuen Wan", () => {
+  assert.equal(
+    inferDistrictSlug({ streetZh: "青山公路41-63號深井段", buildingZh: "麗都花園 第03座" }),
+    "sham-tseng",
+  );
+  assert.equal(
+    inferDistrictSlug({ streetZh: "青山公路汀九段386號", buildingZh: "觀海別墅" }),
+    "ting-kau",
+  );
+  assert.equal(inferDistrictSlug({ streetZh: "荃灣西", buildingZh: "海雲軒" }), "tsuen-wan");
+});
+
+test("normalizeListingDetail creates a sale property row", () => {
+  const parsed = parseListingDetail(
+    fixture("property-detail-6709182.html"),
+    "https://www.earnestproperty.com/property-detail/6709182.html",
+  );
+  const rows = normalizeListingDetail(parsed, {
+    estateIdsBySlug: new Map([["lido-garden", "estate-lido"]]),
+    nowIso: "2026-06-22T00:00:00.000Z",
+  });
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].legacy_detail_id, "6709182");
+  assert.equal(rows[0].legacy_property_no, "B054805");
+  assert.equal(rows[0].deal_type, "sale");
+  assert.equal(rows[0].estate_id, "estate-lido");
+  assert.equal(rows[0].district_slug, "sham-tseng");
+  assert.equal(rows[0].price, 5_900_000);
+  assert.equal(rows[0].rent, null);
+  assert.equal(rows[0].saleable_area, 570);
+  assert.equal(rows[0].gross_area, 683);
+  assert.equal(rows[0].bedrooms, 2);
+  assert.equal(rows[0].source_site, "earnestproperty-old-site");
+  assert.equal(rows[0].source_url, "https://www.earnestproperty.com/property-detail/6709182.html");
+  assert.equal(rows[0].last_seen_at, "2026-06-22T00:00:00.000Z");
+  assert.equal(rows[0].status, "active");
 });
