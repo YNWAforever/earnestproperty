@@ -11,10 +11,7 @@ import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/dashboard/property/$id")({
   head: () => ({
-    meta: [
-      { title: "編輯放盤｜晉誠地產" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "編輯放盤｜晉誠地產" }, { name: "robots", content: "noindex" }],
   }),
   component: EditPropertyPage,
 });
@@ -56,7 +53,9 @@ function EditPropertyPage() {
     return (
       <div className="mx-auto max-w-3xl px-6 py-12 text-center">
         <p className="text-muted-foreground">找不到放盤或無權限編輯。</p>
-        <Button asChild variant="link"><Link to="/dashboard">返回工作台</Link></Button>
+        <Button asChild variant="link">
+          <Link to="/dashboard">返回工作台</Link>
+        </Button>
       </div>
     );
   }

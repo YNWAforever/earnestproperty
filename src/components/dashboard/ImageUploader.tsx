@@ -90,9 +90,7 @@ export function ImageUploader({ agentId, value, onChange }: Props) {
           ) : (
             <Upload className="mr-2 h-4 w-4" />
           )}
-          {uploading
-            ? `上載中 ${progress?.done ?? 0}/${progress?.total ?? 0}`
-            : "上載相片"}
+          {uploading ? `上載中 ${progress?.done ?? 0}/${progress?.total ?? 0}` : "上載相片"}
         </Button>
         <Input
           ref={inputRef}

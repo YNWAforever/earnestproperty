@@ -15,10 +15,7 @@ type Property = Tables<"properties">;
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
-    meta: [
-      { title: "經紀工作台｜晉誠地產" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "經紀工作台｜晉誠地產" }, { name: "robots", content: "noindex" }],
   }),
   component: DashboardPage,
 });
@@ -143,11 +140,7 @@ function DashboardPage() {
                         編輯
                       </Link>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDelete(p.id)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => handleDelete(p.id)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

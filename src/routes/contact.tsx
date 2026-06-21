@@ -7,7 +7,7 @@ export const Route = createFileRoute("/contact")({
   head: () => ({ meta: [{ title: "聯絡晉誠地產｜深井物業專家" }] }),
   component: () => (
     <div className="mx-auto max-w-3xl px-6 py-20">
-      <h1 className="text-3xl font-bold text-primary">聯絡我們</h1>
+      <h1 className="text-3xl font-bold text-primary">聯絡晉誠地產</h1>
       <p className="mt-3 text-muted-foreground">深井．青山公路．我哋比你更熟。</p>
 
       <div className="mt-8 grid gap-4">

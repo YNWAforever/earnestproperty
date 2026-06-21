@@ -61,8 +61,7 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
     bathrooms: property?.bathrooms?.toString() ?? "",
     floor: property?.floor ?? "",
     description: property?.description ?? "",
-    status: (property?.status ?? "draft") as
-      | "draft" | "active" | "sold" | "rented" | "offline",
+    status: (property?.status ?? "draft") as "draft" | "active" | "sold" | "rented" | "offline",
     featured: property?.featured ?? false,
   });
   const [images, setImages] = useState<string[]>(property?.images ?? []);
@@ -132,14 +131,29 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
     <form onSubmit={handleSubmit} className="space-y-6">
       <Section title="基本資料">
         <Field label="放盤編號 *">
-          <Input value={form.listing_no} onChange={(e) => set("listing_no", e.target.value)} required maxLength={40} />
+          <Input
+            value={form.listing_no}
+            onChange={(e) => set("listing_no", e.target.value)}
+            required
+            maxLength={40}
+          />
         </Field>
         <Field label="標題 *">
-          <Input value={form.title_zh} onChange={(e) => set("title_zh", e.target.value)} required maxLength={200} />
+          <Input
+            value={form.title_zh}
+            onChange={(e) => set("title_zh", e.target.value)}
+            required
+            maxLength={200}
+          />
         </Field>
         <Field label="類型 *">
-          <Select value={form.deal_type} onValueChange={(v) => set("deal_type", v as "sale" | "rent")}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            value={form.deal_type}
+            onValueChange={(v) => set("deal_type", v as "sale" | "rent")}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="sale">售盤</SelectItem>
               <SelectItem value="rent">租盤</SelectItem>
@@ -148,7 +162,9 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
         </Field>
         <Field label="狀態">
           <Select value={form.status} onValueChange={(v) => set("status", v as typeof form.status)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="draft">草稿</SelectItem>
               <SelectItem value="active">在售/在租</SelectItem>
@@ -171,47 +187,92 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
               if (est) set("district_slug", est.district_slug);
             }}
           >
-            <SelectTrigger><SelectValue placeholder="選擇屋苑" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="選擇屋苑" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">— 無 —</SelectItem>
               {estates.map((e) => (
-                <SelectItem key={e.id} value={e.id}>{e.name_zh}</SelectItem>
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name_zh}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
         <Field label="地區 slug *">
-          <Input value={form.district_slug} onChange={(e) => set("district_slug", e.target.value)} required maxLength={60} />
+          <Input
+            value={form.district_slug}
+            onChange={(e) => set("district_slug", e.target.value)}
+            required
+            maxLength={60}
+          />
         </Field>
         <Field label="地址" full>
-          <Input value={form.address} onChange={(e) => set("address", e.target.value)} maxLength={300} />
+          <Input
+            value={form.address}
+            onChange={(e) => set("address", e.target.value)}
+            maxLength={300}
+          />
         </Field>
       </Section>
 
       <Section title="價格 / 規格">
         <Field label="售價（HKD）">
-          <Input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} />
+          <Input
+            type="number"
+            min="0"
+            value={form.price}
+            onChange={(e) => set("price", e.target.value)}
+          />
         </Field>
         <Field label="月租（HKD）">
-          <Input type="number" min="0" value={form.rent} onChange={(e) => set("rent", e.target.value)} />
+          <Input
+            type="number"
+            min="0"
+            value={form.rent}
+            onChange={(e) => set("rent", e.target.value)}
+          />
         </Field>
         <Field label="實用面積（呎）">
-          <Input type="number" min="0" value={form.saleable_area} onChange={(e) => set("saleable_area", e.target.value)} />
+          <Input
+            type="number"
+            min="0"
+            value={form.saleable_area}
+            onChange={(e) => set("saleable_area", e.target.value)}
+          />
         </Field>
         <Field label="樓層">
           <Input value={form.floor} onChange={(e) => set("floor", e.target.value)} maxLength={40} />
         </Field>
         <Field label="房">
-          <Input type="number" min="0" max="20" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} />
+          <Input
+            type="number"
+            min="0"
+            max="20"
+            value={form.bedrooms}
+            onChange={(e) => set("bedrooms", e.target.value)}
+          />
         </Field>
         <Field label="廁">
-          <Input type="number" min="0" max="20" value={form.bathrooms} onChange={(e) => set("bathrooms", e.target.value)} />
+          <Input
+            type="number"
+            min="0"
+            max="20"
+            value={form.bathrooms}
+            onChange={(e) => set("bathrooms", e.target.value)}
+          />
         </Field>
       </Section>
 
       <Section title="內容">
         <Field label="描述" full>
-          <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} maxLength={4000} />
+          <Textarea
+            rows={4}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            maxLength={4000}
+          />
         </Field>
         <Field label="相片" full>
           <ImageUploader agentId={agentId} value={images} onChange={setImages} />

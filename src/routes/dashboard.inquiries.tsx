@@ -42,10 +42,7 @@ const STATUS_LABEL: Record<InquiryStatus, string> = {
   closed_lost: "已流失",
 };
 
-const STATUS_VARIANT: Record<
-  InquiryStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
+const STATUS_VARIANT: Record<InquiryStatus, "default" | "secondary" | "outline" | "destructive"> = {
   new: "default",
   contacted: "secondary",
   viewing: "secondary",
@@ -63,10 +60,7 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export const Route = createFileRoute("/dashboard/inquiries")({
   head: () => ({
-    meta: [
-      { title: "查詢管理｜經紀工作台" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "查詢管理｜經紀工作台" }, { name: "robots", content: "noindex" }],
   }),
   component: InquiriesInbox,
 });
@@ -93,7 +87,7 @@ function InquiriesInbox() {
       .select(
         `*,
          properties:property_id ( listing_no, title_zh ),
-         assignee:assigned_agent_id ( name_zh, name_en )`
+         assignee:assigned_agent_id ( name_zh, name_en )`,
       )
       .order("created_at", { ascending: false });
     setRefreshing(false);
@@ -111,18 +105,13 @@ function InquiriesInbox() {
 
   async function updateStatus(id: string, status: InquiryStatus) {
     setUpdatingId(id);
-    const { error } = await supabase
-      .from("inquiries")
-      .update({ status })
-      .eq("id", id);
+    const { error } = await supabase.from("inquiries").update({ status }).eq("id", id);
     setUpdatingId(null);
     if (error) {
       toast.error(error.message);
       return;
     }
-    setRows((r) =>
-      r ? r.map((x) => (x.id === id ? { ...x, status } : x)) : r
-    );
+    setRows((r) => (r ? r.map((x) => (x.id === id ? { ...x, status } : x)) : r));
     toast.success(`已更新為「${STATUS_LABEL[status]}」`);
   }
 
@@ -137,7 +126,7 @@ function InquiriesInbox() {
 
   const filtered = useMemo(
     () => (filter === "all" ? rows : rows?.filter((r) => r.status === filter)),
-    [rows, filter]
+    [rows, filter],
   );
 
   if (authLoading || !user || roleLoading) {
@@ -181,9 +170,7 @@ function InquiriesInbox() {
           </p>
         </div>
         <Button variant="outline" onClick={load} disabled={refreshing}>
-          <RefreshCw
-            className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
-          />
+          <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
           重新整理
         </Button>
       </header>
@@ -267,17 +254,14 @@ function InquiryCard({
     dateStyle: "short",
     timeStyle: "short",
   });
-  const isClosed =
-    inquiry.status === "closed_won" || inquiry.status === "closed_lost";
+  const isClosed = inquiry.status === "closed_won" || inquiry.status === "closed_lost";
 
   return (
     <Card>
       <CardContent className="grid gap-4 py-4 md:grid-cols-[1fr_auto]">
         <div className="min-w-0 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={STATUS_VARIANT[inquiry.status]}>
-              {STATUS_LABEL[inquiry.status]}
-            </Badge>
+            <Badge variant={STATUS_VARIANT[inquiry.status]}>{STATUS_LABEL[inquiry.status]}</Badge>
             <Badge variant="outline" className="font-normal">
               {SOURCE_LABEL[inquiry.source] ?? inquiry.source}
             </Badge>
@@ -344,17 +328,13 @@ function InquiryCard({
           {inquiry.assignee && (
             <p className="text-xs text-muted-foreground">
               指派代理：
-              {inquiry.assignee.name_zh ||
-                inquiry.assignee.name_en ||
-                "未命名"}
+              {inquiry.assignee.name_zh || inquiry.assignee.name_en || "未命名"}
             </p>
           )}
         </div>
 
         <div className="flex flex-col items-stretch gap-2 md:w-44">
-          <label className="text-xs font-medium text-muted-foreground">
-            更新狀態
-          </label>
+          <label className="text-xs font-medium text-muted-foreground">更新狀態</label>
           <Select
             value={inquiry.status}
             onValueChange={(v) => onStatusChange(v as InquiryStatus)}
@@ -372,11 +352,7 @@ function InquiryCard({
             </SelectContent>
           </Select>
           {!isClosed && (
-            <NextStepButtons
-              current={inquiry.status}
-              disabled={updating}
-              onPick={onStatusChange}
-            />
+            <NextStepButtons current={inquiry.status} disabled={updating} onPick={onStatusChange} />
           )}
         </div>
       </CardContent>
@@ -398,20 +374,10 @@ function NextStepButtons({
   if (!next) return null;
   return (
     <div className="grid grid-cols-2 gap-1.5">
-      <Button
-        size="sm"
-        variant="secondary"
-        disabled={disabled}
-        onClick={() => onPick(next)}
-      >
+      <Button size="sm" variant="secondary" disabled={disabled} onClick={() => onPick(next)}>
         → {STATUS_LABEL[next]}
       </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        onClick={() => onPick("closed_lost")}
-      >
+      <Button size="sm" variant="outline" disabled={disabled} onClick={() => onPick("closed_lost")}>
         流失
       </Button>
     </div>

@@ -102,3 +102,16 @@ test("property detail pages expose real estate schema and legacy support", () =>
   assert.match(queries, /fetchPropertyByLegacyDetailId/);
   assert.match(vercel, /property-detail\/:oldId\.html/);
 });
+
+test("root and public trust pages use localized first-party metadata", () => {
+  const root = read("src/routes/__root.tsx");
+  const home = read("src/routes/index.tsx");
+  const contact = read("src/routes/contact.tsx");
+  const agents = read("src/routes/agents.tsx");
+
+  assert.match(root, /<html lang=["']zh-HK["']/);
+  assert.match(root, /SITE_OG_IMAGE/);
+  assert.match(home, /RealEstateAgent/);
+  assert.match(contact, /聯絡晉誠地產/);
+  assert.match(agents, /持牌/);
+});

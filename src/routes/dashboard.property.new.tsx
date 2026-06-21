@@ -8,10 +8,7 @@ import { PropertyForm } from "@/components/dashboard/PropertyForm";
 
 export const Route = createFileRoute("/dashboard/property/new")({
   head: () => ({
-    meta: [
-      { title: "新增放盤｜晉誠地產" },
-      { name: "robots", content: "noindex" },
-    ],
+    meta: [{ title: "新增放盤｜晉誠地產" }, { name: "robots", content: "noindex" }],
   }),
   component: NewPropertyPage,
 });
@@ -41,10 +38,7 @@ function NewPropertyPage() {
         </Link>
       </Button>
       <h1 className="mb-6 text-2xl font-bold">新增放盤</h1>
-      <PropertyForm
-        agentId={user.id}
-        onSaved={() => navigate({ to: "/dashboard" })}
-      />
+      <PropertyForm agentId={user.id} onSaved={() => navigate({ to: "/dashboard" })} />
     </div>
   );
 }
