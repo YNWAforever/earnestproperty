@@ -11,6 +11,18 @@ export const Route = createFileRoute("/api/mls-sync")({
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
 
+        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          return Response.json(
+            {
+              ok: false,
+              error: "Missing SUPABASE_SERVICE_ROLE_KEY",
+              action:
+                "Add the Supabase service-role key to Vercel and redeploy to enable MLS writes.",
+            },
+            { status: 503 },
+          );
+        }
+
         const [{ supabaseAdmin }, { createMlsImporter, createSupabaseMlsDb, defaultFetchText }] =
           await Promise.all([
             import("@/integrations/supabase/client.server"),
