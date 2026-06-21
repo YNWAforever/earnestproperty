@@ -23,6 +23,7 @@ import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-ts
 import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
+import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
@@ -97,6 +98,11 @@ const AuthPathnameRoute = AuthPathnameRouteImport.update({
   path: '/auth/$pathname',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMlsSyncRoute = ApiMlsSyncRouteImport.update({
+  id: '/api/mls-sync',
+  path: '/api/mls-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountPathnameRoute = AccountPathnameRouteImport.update({
   id: '/account/$pathname',
   path: '/account/$pathname',
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
@@ -141,6 +148,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
@@ -161,6 +169,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
@@ -182,6 +191,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/listings'
     | '/account/$pathname'
+    | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/dashboard/inquiries'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/listings'
     | '/account/$pathname'
+    | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/dashboard/inquiries'
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/listings'
     | '/account/$pathname'
+    | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/dashboard/inquiries'
@@ -240,6 +252,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   ListingsRoute: typeof ListingsRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
+  ApiMlsSyncRoute: typeof ApiMlsSyncRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
@@ -348,6 +361,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthPathnameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mls-sync': {
+      id: '/api/mls-sync'
+      path: '/api/mls-sync'
+      fullPath: '/api/mls-sync'
+      preLoaderRoute: typeof ApiMlsSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/account/$pathname': {
       id: '/account/$pathname'
       path: '/account/$pathname'
@@ -397,6 +417,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   ListingsRoute: ListingsRoute,
   AccountPathnameRoute: AccountPathnameRoute,
+  ApiMlsSyncRoute: ApiMlsSyncRoute,
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,

@@ -9,6 +9,7 @@ const detailRedirects = importedRedirects.map((redirect) =>
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
+  crons: [{ path: "/api/mls-sync", schedule: "0 20 * * *" }],
   redirects: [
     ...detailRedirects,
     routes.redirect("/", "/", {

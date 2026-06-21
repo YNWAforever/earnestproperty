@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "test:seo": "node --test src/content/seo-source.test.mjs",
     "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs",
+    "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
     "test:contact": "node --test src/config/site.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs",
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
