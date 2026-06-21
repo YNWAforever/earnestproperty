@@ -104,6 +104,7 @@ test("normalizeListingDetail creates a sale property row", () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0].legacy_detail_id, "6709182");
   assert.equal(rows[0].legacy_property_no, "B054805");
+  assert.equal(rows[0].listing_no, "B054805-6709182-S");
   assert.equal(rows[0].deal_type, "sale");
   assert.equal(rows[0].estate_id, "estate-lido");
   assert.equal(rows[0].district_slug, "sham-tseng");
@@ -145,5 +146,5 @@ test("createMlsImporter dry run reports discovered, parsed, and upsertable rows"
   assert.equal(result.parsed, 1);
   assert.equal(result.upserted, 0);
   assert.equal(result.dryRunRows.length, 1);
-  assert.equal(result.dryRunRows[0].listing_no, "B054805-S");
+  assert.equal(result.dryRunRows[0].listing_no, "B054805-6709182-S");
 });

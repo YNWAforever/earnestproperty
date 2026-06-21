@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 
@@ -7,6 +8,7 @@ import {
   defaultFetchText,
   DEFAULT_SEED_URLS,
 } from "../../src/lib/mls/importer.mjs";
+import { createNeonMlsDb, createNeonSqlFromEnv } from "../../src/lib/mls/neon-db.mjs";
 import { buildMigrationDataset } from "./normalize.mjs";
 
 const args = process.argv.slice(2);
@@ -16,6 +18,18 @@ const maxPagesArg = args.find((arg) => arg.startsWith("--max-pages="));
 const maxDetails = maxArg ? Number(maxArg.slice("--max=".length)) : 200;
 const maxPages = maxPagesArg ? Number(maxPagesArg.slice("--max-pages=".length)) : dryRun ? 2 : 50;
 const legacyRunDir = args.find((arg) => !arg.startsWith("--"));
+
+function loadEnvFile(path) {
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, "utf8").split(/\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match || process.env[match[1]]) continue;
+    process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, "");
+  }
+}
+
+loadEnvFile(".env");
+loadEnvFile(".env.local");
 
 function createSupabaseClientFromEnv() {
   const supabaseUrl = process.env.SUPABASE_URL;
@@ -62,9 +76,20 @@ function dryRunDb() {
 
 async function liveSync() {
   const hasSupabaseEnv = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const db = hasSupabaseEnv ? createSupabaseMlsDb(createSupabaseClientFromEnv()) : dryRunDb();
+  const hasNeonEnv = process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED;
+  const target = process.env.MLS_DB ?? (hasNeonEnv ? "neon" : "supabase");
+  const db =
+    target === "neon" && hasNeonEnv
+      ? createNeonMlsDb(createNeonSqlFromEnv())
+      : hasSupabaseEnv
+        ? createSupabaseMlsDb(createSupabaseClientFromEnv())
+        : dryRunDb();
 
-  if (!hasSupabaseEnv && !dryRun) {
+  if (target === "neon" && !hasNeonEnv && !dryRun) {
+    throw new Error("DATABASE_URL or DATABASE_URL_UNPOOLED is required for Neon MLS sync.");
+  }
+
+  if (target !== "neon" && !hasSupabaseEnv && !dryRun) {
     throw new Error(
       "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for non-dry-run sync.",
     );

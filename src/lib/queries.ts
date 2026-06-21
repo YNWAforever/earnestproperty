@@ -1,4 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  fetchNeonEstateOptions,
+  fetchNeonFeaturedProperties,
+  fetchNeonListingCountsByEstate,
+  fetchNeonListingsForEstate,
+  fetchNeonPropertyByLegacyDetailId,
+  fetchNeonPropertyByListingNo,
+  fetchNeonSimilarListings,
+  searchNeonListings,
+} from "@/lib/neon/public-data";
 
 const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
   bellagio: "belvedere-garden",
@@ -53,6 +63,17 @@ async function retryWithoutMlsColumns(
   const fallback = await withoutMls();
   if (fallback.error) return fallback;
   return { ...fallback, data: withEmptyMlsFields(fallback.data) };
+}
+
+async function runWithSupabaseFallback<T>(
+  neonRead: () => Promise<T>,
+  supabaseRead: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await neonRead();
+  } catch {
+    return supabaseRead();
+  }
 }
 
 function canonicalEstateSlug(dbSlug: string) {
@@ -121,7 +142,7 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
     .eq("district_slug", "sham-tseng")
     .order("total_units", { ascending: false });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((estate) => ({ ...estate, slug: canonicalEstateSlug(estate.slug) }));
 }
 
 export async function fetchEstateBySlug(slug: string) {
@@ -147,17 +168,25 @@ async function fetchFaqsByScope(scope: string): Promise<FaqItem[]> {
 }
 
 export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
-  const { data, error } = await supabase
-    .from("properties")
-    .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, features, images, estates(name_zh, slug)",
-    )
-    .eq("status", "active")
-    .eq("featured", true)
-    .order("created_at", { ascending: false })
-    .limit(6);
-  if (error) throw error;
-  return (data ?? []) as unknown as FeaturedProperty[];
+  return runWithSupabaseFallback(
+    async () => {
+      const rows = await fetchNeonFeaturedProperties({ data: { limit: 6 } });
+      return rows as FeaturedProperty[];
+    },
+    async () => {
+      const { data, error } = await supabase
+        .from("properties")
+        .select(
+          "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, features, images, estates(name_zh, slug)",
+        )
+        .eq("status", "active")
+        .eq("featured", true)
+        .order("created_at", { ascending: false })
+        .limit(6);
+      if (error) throw error;
+      return (data ?? []) as unknown as FeaturedProperty[];
+    },
+  );
 }
 
 export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
@@ -197,7 +226,7 @@ export async function fetchDistrictTransactions(
   return (data ?? []) as unknown as DistrictTransaction[];
 }
 
-export async function fetchPropertyByListingNo(listingNo: string) {
+async function fetchPropertyByListingNoFromSupabase(listingNo: string) {
   const { data, error } = await supabase
     .from("properties")
     .select(
@@ -212,17 +241,39 @@ export async function fetchPropertyByListingNo(listingNo: string) {
   return data;
 }
 
+export async function fetchPropertyByListingNo(listingNo: string) {
+  return runWithSupabaseFallback(
+    async () => {
+      const property = await fetchNeonPropertyByListingNo({ data: { listingNo } });
+      return property ?? fetchPropertyByListingNoFromSupabase(listingNo);
+    },
+    () => fetchPropertyByListingNoFromSupabase(listingNo),
+  );
+}
+
 export async function fetchListingCountsByEstate() {
-  const { data, error } = await supabase
-    .from("properties")
-    .select("estate_id")
-    .eq("status", "active");
-  if (error) throw error;
-  const counts = new Map<string, number>();
-  (data ?? []).forEach((r) => {
-    if (r.estate_id) counts.set(r.estate_id, (counts.get(r.estate_id) ?? 0) + 1);
-  });
-  return counts;
+  return runWithSupabaseFallback(
+    async () => new Map(Object.entries(await fetchNeonListingCountsByEstate())),
+    async () => {
+      const { data, error } = await supabase
+        .from("properties")
+        .select("estate_id, estates(slug)")
+        .eq("status", "active");
+      if (error) throw error;
+
+      const counts = new Map<string, number>();
+      (data ?? []).forEach((row) => {
+        const record = row as {
+          estate_id?: string | null;
+          estates?: { slug?: string | null } | { slug?: string | null }[] | null;
+        };
+        const estate = Array.isArray(record.estates) ? record.estates[0] : record.estates;
+        const key = estate?.slug ? canonicalEstateSlug(estate.slug) : record.estate_id;
+        if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+      });
+      return counts;
+    },
+  );
 }
 
 export type ListingFilters = {
@@ -293,21 +344,32 @@ export async function searchListings(f: ListingFilters): Promise<{
   rows: ListingRow[];
   total: number;
 }> {
-  const from = (f.page - 1) * f.pageSize;
-  const to = from + f.pageSize - 1;
+  return runWithSupabaseFallback(
+    async () => {
+      const result = await searchNeonListings({ data: f });
+      return { rows: result.rows as ListingRow[], total: result.total };
+    },
+    async () => {
+      const from = (f.page - 1) * f.pageSize;
+      const to = from + f.pageSize - 1;
 
-  const estateId = f.estateSlug ? await resolveEstateId(f.estateSlug) : null;
-  if (f.estateSlug && !estateId) return { rows: [], total: 0 };
+      const estateId = f.estateSlug ? await resolveEstateId(f.estateSlug) : null;
+      if (f.estateSlug && !estateId) return { rows: [], total: 0 };
 
-  const { data, error, count } = await retryWithoutMlsColumns(
-    () => runListingSearch(f, from, to, estateId, true),
-    () => runListingSearch(f, from, to, estateId, false),
+      const { data, error, count } = await retryWithoutMlsColumns(
+        () => runListingSearch(f, from, to, estateId, true),
+        () => runListingSearch(f, from, to, estateId, false),
+      );
+      if (error) throw error;
+      return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
+    },
   );
-  if (error) throw error;
-  return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
 }
 
-export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
+async function fetchListingsForEstateFromSupabase(
+  estateSlug: string,
+  limit = 6,
+): Promise<ListingRow[]> {
   const estateId = await resolveEstateId(estateSlug);
   if (!estateId) return [];
 
@@ -334,7 +396,19 @@ export async function fetchListingsForEstate(estateSlug: string, limit = 6): Pro
   return (data ?? []) as unknown as ListingRow[];
 }
 
-export async function fetchPropertyByLegacyDetailId(oldId: string) {
+export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
+  return runWithSupabaseFallback(
+    async () => {
+      const rows = (await fetchNeonListingsForEstate({
+        data: { estateSlug, limit },
+      })) as ListingRow[];
+      return rows.length > 0 ? rows : fetchListingsForEstateFromSupabase(estateSlug, limit);
+    },
+    () => fetchListingsForEstateFromSupabase(estateSlug, limit),
+  );
+}
+
+async function fetchPropertyByLegacyDetailIdFromSupabase(oldId: string) {
   const { data, error } = await supabase
     .from("properties")
     .select("listing_no")
@@ -346,6 +420,16 @@ export async function fetchPropertyByLegacyDetailId(oldId: string) {
   if (isMissingMlsColumns(error)) return null;
   if (error) throw error;
   return data;
+}
+
+export async function fetchPropertyByLegacyDetailId(oldId: string) {
+  return runWithSupabaseFallback(
+    async () => {
+      const match = await fetchNeonPropertyByLegacyDetailId({ data: { oldId } });
+      return match ?? fetchPropertyByLegacyDetailIdFromSupabase(oldId);
+    },
+    () => fetchPropertyByLegacyDetailIdFromSupabase(oldId),
+  );
 }
 
 export type SimilarListing = {
@@ -360,7 +444,7 @@ export type SimilarListing = {
   images: string[] | null;
 };
 
-export async function fetchSimilarListings(
+async function fetchSimilarListingsFromSupabase(
   estateId: string,
   dealType: "sale" | "rent",
   excludeId: string,
@@ -378,6 +462,25 @@ export async function fetchSimilarListings(
     .limit(limit);
   if (error) throw error;
   return (data ?? []) as SimilarListing[];
+}
+
+export async function fetchSimilarListings(
+  estateId: string,
+  dealType: "sale" | "rent",
+  excludeId: string,
+  limit = 4,
+): Promise<SimilarListing[]> {
+  return runWithSupabaseFallback(
+    async () => {
+      const rows = (await fetchNeonSimilarListings({
+        data: { estateId, dealType, excludeId, limit },
+      })) as SimilarListing[];
+      return rows.length > 0
+        ? rows
+        : fetchSimilarListingsFromSupabase(estateId, dealType, excludeId, limit);
+    },
+    () => fetchSimilarListingsFromSupabase(estateId, dealType, excludeId, limit),
+  );
 }
 
 export type EstateTransaction = {
@@ -403,10 +506,17 @@ export async function fetchEstateTransactions(
   return (data ?? []) as EstateTransaction[];
 }
 
-export async function fetchEstateOptions() {
+async function fetchEstateOptionsFromSupabase() {
   const { data, error } = await supabase.from("estates").select("slug, name_zh").order("name_zh");
   if (error) throw error;
   return (data ?? []).map((estate) => ({ ...estate, slug: canonicalEstateSlug(estate.slug) }));
+}
+
+export async function fetchEstateOptions() {
+  return runWithSupabaseFallback(async () => {
+    const estates = await fetchNeonEstateOptions();
+    return estates.length > 0 ? estates : fetchEstateOptionsFromSupabase();
+  }, fetchEstateOptionsFromSupabase);
 }
 
 export type ArticleSummary = {

@@ -27,6 +27,20 @@ test("public navigation and homepage use corrected estate slugs", () => {
   assert.match(vercel, /\/estate\/rhine-garden/);
 });
 
+test("estate summary queries canonicalize legacy database slugs", () => {
+  const queries = read("src/lib/queries.ts");
+  const fetchEstatesBody = queries.slice(
+    queries.indexOf("export async function fetchEstates"),
+    queries.indexOf("export async function fetchEstateBySlug"),
+  );
+
+  assert.match(queries, /function canonicalEstateSlug/);
+  assert.match(
+    fetchEstatesBody,
+    /return \(data \?\? \[\]\)\.map\(\(estate\) => \(\{ \.\.\.estate, slug: canonicalEstateSlug\(estate\.slug\) \}\)\)/,
+  );
+});
+
 test("root metadata no longer references lovable preview assets", () => {
   const root = read("src/routes/__root.tsx");
   assert.equal(root.includes("lovable.app"), false);
@@ -96,6 +110,24 @@ test("listing queries tolerate databases before mls columns are migrated", () =>
 
   assert.match(queries, /retryWithoutMlsColumns/);
   assert.match(queries, /legacy_detail_id|last_seen_at|source_site/);
+});
+
+test("public listing queries use Neon server functions with Supabase fallback", () => {
+  const queries = read("src/lib/queries.ts");
+  const neonClient = read("src/lib/neon/public-data.ts");
+  const neonServer = read("src/lib/neon/public-data.server.ts");
+
+  assert.match(neonServer, /@tanstack\/react-start\/server-only/);
+  assert.match(neonServer, /@neondatabase\/serverless/);
+  assert.match(neonServer, /DATABASE_URL/);
+
+  assert.match(neonClient, /createServerFn/);
+  assert.match(neonClient, /searchNeonListings/);
+  assert.match(neonClient, /fetchNeonPropertyByListingNo/);
+
+  assert.match(queries, /searchNeonListings/);
+  assert.match(queries, /fetchNeonFeaturedProperties/);
+  assert.match(queries, /runWithSupabaseFallback/);
 });
 
 test("property detail pages expose real estate schema and legacy support", () => {

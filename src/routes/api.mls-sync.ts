@@ -11,27 +11,38 @@ export const Route = createFileRoute("/api/mls-sync")({
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
 
-        if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const hasNeon = Boolean(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED);
+        const hasSupabase = Boolean(
+          process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
+        );
+
+        if (!hasNeon && !hasSupabase) {
           return Response.json(
             {
               ok: false,
-              error: "Missing SUPABASE_SERVICE_ROLE_KEY",
+              error: "Missing MLS database credentials",
               action:
-                "Add the Supabase service-role key to Vercel and redeploy to enable MLS writes.",
+                "Add DATABASE_URL for Neon or SUPABASE_SERVICE_ROLE_KEY for Supabase, then redeploy to enable MLS writes.",
             },
             { status: 503 },
           );
         }
 
-        const [{ supabaseAdmin }, { createMlsImporter, createSupabaseMlsDb, defaultFetchText }] =
+        const [{ createMlsImporter, createSupabaseMlsDb, defaultFetchText }, neonDb] =
           await Promise.all([
-            import("@/integrations/supabase/client.server"),
             import("@/lib/mls/importer.mjs"),
+            hasNeon ? import("@/lib/mls/neon-db.mjs") : Promise.resolve(null),
           ]);
+
+        const db = neonDb
+          ? neonDb.createNeonMlsDb(neonDb.createNeonSqlFromEnv())
+          : createSupabaseMlsDb(
+              (await import("@/integrations/supabase/client.server")).supabaseAdmin,
+            );
 
         const importer = createMlsImporter({
           fetchText: defaultFetchText,
-          db: createSupabaseMlsDb(supabaseAdmin),
+          db,
           now: () => new Date(),
         });
 

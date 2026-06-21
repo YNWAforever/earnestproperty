@@ -183,8 +183,7 @@ function HomePage() {
         />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {estates.map((estate: EstateSummary) => {
-            // counts is keyed by estate_id; we don't have id in this select, fall back to 0
-            const listingCount = 0;
+            const listingCount = counts[estate.slug] ?? 0;
             return (
               <Link
                 key={estate.slug}
@@ -216,13 +215,7 @@ function HomePage() {
                   </div>
                   <div>
                     <p className="text-[11px] text-muted-foreground">最新放盤</p>
-                    <p className="text-base font-semibold text-primary">
-                      {
-                        featured.filter((p: FeaturedProperty) => p.estates?.slug === estate.slug)
-                          .length
-                      }{" "}
-                      個
-                    </p>
+                    <p className="text-base font-semibold text-primary">{listingCount} 個</p>
                   </div>
                   <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
                     <span>瀏覽屋苑詳情</span>
@@ -233,8 +226,6 @@ function HomePage() {
             );
           })}
         </div>
-        {/* keep counts referenced to avoid unused warning */}
-        <span className="hidden">{Object.keys(counts).length}</span>
       </section>
 
       {/* FEATURED LISTINGS */}

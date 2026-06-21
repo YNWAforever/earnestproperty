@@ -37,7 +37,7 @@ function baseListingNo(detail) {
 }
 
 function listingNo(detail, dealType) {
-  return `${baseListingNo(detail)}-${dealType === "rent" ? "R" : "S"}`;
+  return `${baseListingNo(detail)}-${detail.legacyDetailId}-${dealType === "rent" ? "R" : "S"}`;
 }
 
 function titleFor(detail, dealType) {

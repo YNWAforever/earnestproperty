@@ -20,6 +20,7 @@
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",
     "migration:import": "node scripts/old-site-migration/import.mjs",
     "migration:redirects": "node scripts/old-site-migration/redirects.mjs",
+    "neon:migrate": "node scripts/neon/apply-migrations.mjs",
     "mls:import": "node scripts/old-site-migration/import.mjs",
     "mls:sync": "node scripts/old-site-migration/import.mjs --max=200",
     "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2"
