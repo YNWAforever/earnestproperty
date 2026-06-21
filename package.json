@@ -18,7 +18,10 @@
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",
     "migration:import": "node scripts/old-site-migration/import.mjs",
-    "migration:redirects": "node scripts/old-site-migration/redirects.mjs"
+    "migration:redirects": "node scripts/old-site-migration/redirects.mjs",
+    "mls:import": "node scripts/old-site-migration/import.mjs",
+    "mls:sync": "node scripts/old-site-migration/import.mjs --max=200",
+    "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

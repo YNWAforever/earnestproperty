@@ -22,6 +22,18 @@ export function parseListingIndex(html, baseUrl) {
   return [...new Set(links)];
 }
 
+export function parseMaxListingPage(html) {
+  const matches = [...String(html ?? "").matchAll(/findForm_submit\(["']page["']\s*,\s*(\d+)\)/g)];
+  const pages = matches.map((match) => Number(match[1])).filter(Number.isFinite);
+  return pages.length ? Math.max(...pages) : 1;
+}
+
+export function buildPagedListingUrl(sourceUrl, page) {
+  const url = new URL(sourceUrl);
+  if (page > 1) url.searchParams.set("page", String(page));
+  return url.toString();
+}
+
 export function parseMoneyToHkd(text) {
   const raw = normalizeText(text).replace(/,/g, "");
   if (!raw || raw === "--") return null;
@@ -101,10 +113,51 @@ function extractImageUrls($) {
   return [...new Set(urls)];
 }
 
+function extractLegacyImageUrls($) {
+  const urls = [];
+
+  $("img[src]").each((_, node) => {
+    const raw = $(node).attr("src");
+    if (!raw || !/imgs\.property\.hk|midPhotos|bigPhotos/i.test(raw)) return;
+    urls.push(raw.startsWith("//") ? `https:${raw}` : raw);
+  });
+
+  return [...new Set(urls)];
+}
+
+function splitFeatureText(text) {
+  return normalizeText(text)
+    .split(/[,，、]/)
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+function extractTitleParts(title) {
+  const withoutBrand = normalizeText(title).replace(
+    /\s*-\s*(晉誠地產|Earnest Property Agency)\s*$/i,
+    "",
+  );
+  const parts = withoutBrand.split(",").map(normalizeText).filter(Boolean);
+
+  return {
+    titleZh: parts[0] ?? "",
+    districtZh: parts[1] ?? "",
+    propertyNo: parts.join(",").match(/#([A-Z0-9-]+)/i)?.[1] ?? null,
+  };
+}
+
+function extractWhatsappPhone($) {
+  const href = $("a[href*='whatsapp.com/send'], a[href*='api.whatsapp.com/send']")
+    .first()
+    .attr("href");
+  return href?.match(/[?&]phone=(\d+)/)?.[1] ?? null;
+}
+
 export function parseListingDetail(html, sourceUrl) {
   const $ = load(html);
   const fields = parseDetailTable($);
-  const roomCounts = parseRoomCounts(fields["間格"]);
+  const roomText = fields["間格"] || fields["間隔"] || null;
+  const roomCounts = parseRoomCounts(roomText);
 
   return {
     sourceUrl,
@@ -135,7 +188,7 @@ export function parseListingDetail(html, sourceUrl) {
     contactPhone: fields["聯絡電話"] || null,
     bedrooms: roomCounts.bedrooms,
     livingRooms: roomCounts.livingRooms,
-    roomText: fields["間格"] || null,
+    roomText,
     images: extractImageUrls($),
   };
 }
@@ -144,25 +197,28 @@ export const parseMoney = parseMoneyToHkd;
 export const parseArea = parseAreaFeet;
 
 export function parseLegacyDetail(html, url) {
+  const $ = load(html);
   const detail = parseListingDetail(html, url);
-  const titleZh =
-    detail.buildingZh || detail.title.replace(/\s*-\s*晉誠地產\s*$/i, "").split(",")[0];
+  const titleParts = extractTitleParts(detail.title);
+  const legacyPropertyNo = detail.legacyPropertyNo ?? titleParts.propertyNo;
+  const titleZh = detail.buildingZh || titleParts.titleZh;
 
   return {
     legacyDetailId: detail.legacyDetailId,
     legacyUrl: detail.sourceUrl,
-    legacyPropertyNo: detail.legacyPropertyNo,
+    legacyPropertyNo,
     titleZh,
-    districtZh: detail.districtName,
+    districtZh: detail.districtName || titleParts.districtZh,
     dealType: detail.salePriceHkd ? "sale" : "rent",
     price: detail.salePriceHkd,
     rent: detail.rentHkd,
     saleableArea: detail.saleableArea,
     grossArea: detail.grossArea,
     orientation: detail.orientation,
-    features: detail.roomText ? [detail.roomText] : [],
+    features: splitFeatureText(detail.roomText),
     description: detail.metaDescription,
-    images: detail.images,
+    images: extractLegacyImageUrls($),
+    whatsappPhone: extractWhatsappPhone($),
     sourceUpdatedAt: detail.sourceUpdatedAt,
     sourceLanguage: url.includes("/eng/") ? "en" : "tc",
   };

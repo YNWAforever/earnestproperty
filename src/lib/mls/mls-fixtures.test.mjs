@@ -13,6 +13,7 @@ import {
   normalizeListingDetail,
   resolveEstateSlug,
 } from "./normalize-old-site.mjs";
+import { createMlsImporter } from "./importer.mjs";
 
 function fixture(name) {
   return readFileSync(
@@ -115,4 +116,34 @@ test("normalizeListingDetail creates a sale property row", () => {
   assert.equal(rows[0].source_url, "https://www.earnestproperty.com/property-detail/6709182.html");
   assert.equal(rows[0].last_seen_at, "2026-06-22T00:00:00.000Z");
   assert.equal(rows[0].status, "active");
+});
+
+test("createMlsImporter dry run reports discovered, parsed, and upsertable rows", async () => {
+  const indexHtml = fixture("property-index-c1.html");
+  const detailHtml = fixture("property-detail-6709182.html");
+  const fetched = new Map([
+    ["https://www.earnestproperty.com/property/c1", indexHtml],
+    ["https://www.earnestproperty.com/property-detail/6709182.html", detailHtml],
+  ]);
+  const importer = createMlsImporter({
+    fetchText: async (url) => fetched.get(url) ?? "",
+    db: {
+      listEstateIdsBySlug: async () => new Map([["lido-garden", "estate-lido"]]),
+      upsertProperties: async (rows) => ({ count: rows.length }),
+      deactivateMissing: async () => ({ count: 0 }),
+    },
+    now: () => new Date("2026-06-22T00:00:00.000Z"),
+  });
+
+  const result = await importer.sync({
+    seedUrls: ["https://www.earnestproperty.com/property/c1"],
+    maxDetails: 1,
+    dryRun: true,
+  });
+
+  assert.equal(result.discovered, 10);
+  assert.equal(result.parsed, 1);
+  assert.equal(result.upserted, 0);
+  assert.equal(result.dryRunRows.length, 1);
+  assert.equal(result.dryRunRows[0].listing_no, "B054805-S");
 });
