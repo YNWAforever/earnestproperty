@@ -1,5 +1,94 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
+  bellagio: "belvedere-garden",
+  "rhine-garden": "sea-pearl-garden",
+};
+
+const MLS_PROPERTY_COLUMNS = [
+  "legacy_detail_id",
+  "last_seen_at",
+  "source_site",
+  "source_url",
+  "source_updated_at",
+];
+
+const LISTING_SELECT_WITH_MLS =
+  "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, last_seen_at, source_site, images, estates(name_zh, slug)";
+const LISTING_SELECT_LEGACY =
+  "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)";
+
+type SupabaseColumnError = {
+  code?: string;
+  message?: string;
+};
+
+type ListingQueryResponse = {
+  data: unknown[] | null;
+  error: SupabaseColumnError | null;
+  count?: number | null;
+};
+
+function isMissingMlsColumns(error: SupabaseColumnError | null) {
+  if (!error) return false;
+  const message = error.message ?? "";
+  return error.code === "42703" && MLS_PROPERTY_COLUMNS.some((column) => message.includes(column));
+}
+
+function withEmptyMlsFields(rows: unknown[] | null) {
+  return (rows ?? []).map((row) => ({
+    ...(row as Record<string, unknown>),
+    last_seen_at: null,
+    source_site: null,
+  }));
+}
+
+async function retryWithoutMlsColumns(
+  withMls: () => Promise<ListingQueryResponse>,
+  withoutMls: () => Promise<ListingQueryResponse>,
+) {
+  const result = await withMls();
+  if (!isMissingMlsColumns(result.error)) return result;
+
+  const fallback = await withoutMls();
+  if (fallback.error) return fallback;
+  return { ...fallback, data: withEmptyMlsFields(fallback.data) };
+}
+
+function canonicalEstateSlug(dbSlug: string) {
+  for (const [canonical, legacy] of Object.entries(ESTATE_DB_SLUG_FALLBACKS)) {
+    if (legacy === dbSlug) return canonical;
+  }
+  return dbSlug;
+}
+
+async function fetchEstateByDbSlug(slug: string) {
+  const { data, error } = await supabase.from("estates").select("*").eq("slug", slug).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+async function resolveEstateId(slug: string) {
+  const { data, error } = await supabase
+    .from("estates")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.id) return data.id;
+
+  const fallback = ESTATE_DB_SLUG_FALLBACKS[slug];
+  if (!fallback) return null;
+
+  const { data: legacyData, error: legacyError } = await supabase
+    .from("estates")
+    .select("id")
+    .eq("slug", fallback)
+    .maybeSingle();
+  if (legacyError) throw legacyError;
+  return legacyData?.id ?? null;
+}
+
 export type EstateSummary = {
   slug: string;
   name_zh: string;
@@ -36,9 +125,25 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
 }
 
 export async function fetchEstateBySlug(slug: string) {
-  const { data, error } = await supabase.from("estates").select("*").eq("slug", slug).maybeSingle();
+  const data = await fetchEstateByDbSlug(slug);
+  if (data) return { ...data, slug };
+
+  const fallback = ESTATE_DB_SLUG_FALLBACKS[slug];
+  if (!fallback) return null;
+
+  const legacyData = await fetchEstateByDbSlug(fallback);
+  if (legacyData) return { ...legacyData, slug };
+  return null;
+}
+
+async function fetchFaqsByScope(scope: string): Promise<FaqItem[]> {
+  const { data, error } = await supabase
+    .from("faqs")
+    .select("question, answer")
+    .eq("scope", scope)
+    .order("sort_order", { ascending: true });
   if (error) throw error;
-  return data;
+  return data ?? [];
 }
 
 export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
@@ -56,13 +161,12 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
 }
 
 export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
-  const { data, error } = await supabase
-    .from("faqs")
-    .select("question, answer")
-    .eq("scope", scope)
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
+  const data = await fetchFaqsByScope(scope);
+  if (data.length > 0 || !scope.startsWith("estate:")) return data;
+
+  const slug = scope.replace("estate:", "");
+  const fallback = ESTATE_DB_SLUG_FALLBACKS[slug];
+  return fallback ? fetchFaqsByScope(`estate:${fallback}`) : data;
 }
 
 export type DistrictTransaction = {
@@ -149,19 +253,18 @@ export type ListingRow = {
   estates: { name_zh: string; slug: string } | null;
 };
 
-export async function searchListings(f: ListingFilters): Promise<{
-  rows: ListingRow[];
-  total: number;
-}> {
-  const from = (f.page - 1) * f.pageSize;
-  const to = from + f.pageSize - 1;
-
+async function runListingSearch(
+  f: ListingFilters,
+  from: number,
+  to: number,
+  estateId: string | null,
+  includeMlsColumns: boolean,
+): Promise<ListingQueryResponse> {
   let q = supabase
     .from("properties")
-    .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, last_seen_at, source_site, images, estates(name_zh, slug)",
-      { count: "exact" },
-    )
+    .select(includeMlsColumns ? LISTING_SELECT_WITH_MLS : LISTING_SELECT_LEGACY, {
+      count: "exact",
+    })
     .eq("status", "active");
 
   if (f.deal !== "all") q = q.eq("deal_type", f.deal);
@@ -176,47 +279,57 @@ export async function searchListings(f: ListingFilters): Promise<{
     else q = q.eq("bedrooms", f.bedrooms);
   }
 
-  if (f.estateSlug) {
-    const { data: est } = await supabase
-      .from("estates")
-      .select("id")
-      .eq("slug", f.estateSlug)
-      .maybeSingle();
-    if (est?.id) q = q.eq("estate_id", est.id);
-    else return { rows: [], total: 0 };
-  }
+  if (estateId) q = q.eq("estate_id", estateId);
 
-  q = q
-    .order("featured", { ascending: false })
-    .order("last_seen_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  q = q.order("featured", { ascending: false });
+  if (includeMlsColumns) q = q.order("last_seen_at", { ascending: false, nullsFirst: false });
+  q = q.order("created_at", { ascending: false }).range(from, to);
 
   const { data, error, count } = await q;
+  return { data, error, count };
+}
+
+export async function searchListings(f: ListingFilters): Promise<{
+  rows: ListingRow[];
+  total: number;
+}> {
+  const from = (f.page - 1) * f.pageSize;
+  const to = from + f.pageSize - 1;
+
+  const estateId = f.estateSlug ? await resolveEstateId(f.estateSlug) : null;
+  if (f.estateSlug && !estateId) return { rows: [], total: 0 };
+
+  const { data, error, count } = await retryWithoutMlsColumns(
+    () => runListingSearch(f, from, to, estateId, true),
+    () => runListingSearch(f, from, to, estateId, false),
+  );
   if (error) throw error;
   return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
 }
 
 export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
-  const { data: estate, error: estateError } = await supabase
-    .from("estates")
-    .select("id")
-    .eq("slug", estateSlug)
-    .maybeSingle();
-  if (estateError) throw estateError;
-  if (!estate?.id) return [];
+  const estateId = await resolveEstateId(estateSlug);
+  if (!estateId) return [];
 
-  const { data, error } = await supabase
-    .from("properties")
-    .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, last_seen_at, source_site, images, estates(name_zh, slug)",
-    )
-    .eq("status", "active")
-    .eq("estate_id", estate.id)
-    .order("featured", { ascending: false })
-    .order("last_seen_at", { ascending: false, nullsFirst: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const runEstateListings = async (includeMlsColumns: boolean): Promise<ListingQueryResponse> => {
+    let q = supabase
+      .from("properties")
+      .select(includeMlsColumns ? LISTING_SELECT_WITH_MLS : LISTING_SELECT_LEGACY)
+      .eq("status", "active")
+      .eq("estate_id", estateId)
+      .order("featured", { ascending: false });
+
+    if (includeMlsColumns) q = q.order("last_seen_at", { ascending: false, nullsFirst: false });
+    q = q.order("created_at", { ascending: false }).limit(limit);
+
+    const { data, error } = await q;
+    return { data, error };
+  };
+
+  const { data, error } = await retryWithoutMlsColumns(
+    () => runEstateListings(true),
+    () => runEstateListings(false),
+  );
   if (error) throw error;
   return (data ?? []) as unknown as ListingRow[];
 }
@@ -230,6 +343,7 @@ export async function fetchPropertyByLegacyDetailId(oldId: string) {
     .order("deal_type", { ascending: true })
     .limit(1)
     .maybeSingle();
+  if (isMissingMlsColumns(error)) return null;
   if (error) throw error;
   return data;
 }
@@ -292,7 +406,7 @@ export async function fetchEstateTransactions(
 export async function fetchEstateOptions() {
   const { data, error } = await supabase.from("estates").select("slug, name_zh").order("name_zh");
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []).map((estate) => ({ ...estate, slug: canonicalEstateSlug(estate.slug) }));
 }
 
 export type ArticleSummary = {

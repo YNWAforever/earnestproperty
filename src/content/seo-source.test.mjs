@@ -91,6 +91,13 @@ test("listings page supports district and imported listing freshness", () => {
   assert.match(queries, /last_seen_at/);
 });
 
+test("listing queries tolerate databases before mls columns are migrated", () => {
+  const queries = read("src/lib/queries.ts");
+
+  assert.match(queries, /retryWithoutMlsColumns/);
+  assert.match(queries, /legacy_detail_id|last_seen_at|source_site/);
+});
+
 test("property detail pages expose real estate schema and legacy support", () => {
   const property = read("src/routes/property.$listingNo.tsx");
   const queries = read("src/lib/queries.ts");
