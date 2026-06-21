@@ -37,8 +37,7 @@ export const Route = createFileRoute("/district/sham-tseng")({
       { title: "深井 Sham Tseng 物業｜屋苑、交通、校網 62、12 個月成交" },
       {
         name: "description",
-        content:
-          "深井屋苑一覽、交通時間、小學校網 62、近 12 個月實呎成交走勢及最常見問題。",
+        content: "深井屋苑一覽、交通時間、小學校網 62、近 12 個月實呎成交走勢及最常見問題。",
       },
       { property: "og:title", content: "深井 Sham Tseng 地區專頁" },
       {
@@ -55,21 +54,7 @@ export const Route = createFileRoute("/district/sham-tseng")({
     ]);
     return { estates: allEstates, faqs, transactions };
   },
-  errorComponent: ({ error }) => {
-    const router = useRouter();
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-24 text-center">
-        <h1 className="text-2xl font-bold">載入失敗</h1>
-        <p className="mt-2 text-muted-foreground">{error.message}</p>
-        <button
-          className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground"
-          onClick={() => router.invalidate()}
-        >
-          重試
-        </button>
-      </div>
-    );
-  },
+  errorComponent: DistrictErrorComponent,
   notFoundComponent: () => (
     <div className="mx-auto max-w-2xl px-6 py-24 text-center">
       <h1 className="text-2xl font-bold">找不到地區</h1>
@@ -80,6 +65,22 @@ export const Route = createFileRoute("/district/sham-tseng")({
   ),
   component: ShamTsengPage,
 });
+
+function DistrictErrorComponent({ error }: { error: Error }) {
+  const router = useRouter();
+  return (
+    <div className="mx-auto max-w-2xl px-6 py-24 text-center">
+      <h1 className="text-2xl font-bold">載入失敗</h1>
+      <p className="mt-2 text-muted-foreground">{error.message}</p>
+      <button
+        className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground"
+        onClick={() => router.invalidate()}
+      >
+        重試
+      </button>
+    </div>
+  );
+}
 
 const TRANSIT = [
   { to: "荃灣站", mode: "小巴 96M", minutes: 12 },
@@ -121,9 +122,7 @@ function ShamTsengPage() {
   const chartData = aggregateByMonth(transactions);
   const latestPsf = chartData.length ? chartData[chartData.length - 1].psf : 0;
   const firstPsf = chartData.length ? chartData[0].psf : 0;
-  const yoyDelta = firstPsf
-    ? Math.round(((latestPsf - firstPsf) / firstPsf) * 1000) / 10
-    : 0;
+  const yoyDelta = firstPsf ? Math.round(((latestPsf - firstPsf) / firstPsf) * 1000) / 10 : 0;
   const totalUnits = estates.reduce((sum, e) => sum + (e.total_units ?? 0), 0);
 
   return (
@@ -133,9 +132,7 @@ function ShamTsengPage() {
         <Badge variant="secondary" className="mb-3">
           地區專頁
         </Badge>
-        <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
-          深井 Sham Tseng
-        </h1>
+        <h1 className="text-4xl font-bold tracking-tight md:text-5xl">深井 Sham Tseng</h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
           毗鄰青馬大橋、坐擁無敵海景的傳統西半山豪宅區。共 {estates.length} 個主要屋苑、約{" "}
           {totalUnits.toLocaleString()} 個單位，校網 62。
@@ -151,6 +148,20 @@ function ShamTsengPage() {
           />
         </div>
       </header>
+
+      <section className="mt-10 rounded-lg border bg-muted/30 p-6">
+        <h2 className="text-2xl font-semibold">西半山平民海景區</h2>
+        <div className="mt-4 space-y-4 text-sm leading-7 text-muted-foreground">
+          <p>
+            深井常被本地買家形容為「西半山平民海景區」：同樣有開揚海景、青馬橋景同低密度生活感，但入場門檻比港島傳統海景地段親民得多。
+            碧堤半島、浪翠園、海韻花園、麗都花園沿青山公路排開，生活圈集中，睇樓時可以一程比較屋苑樓齡、會所、景觀同交通。
+          </p>
+          <p>
+            對自住客而言，深井最大優勢係環境安靜、實用率高、屋苑規模成熟；對投資者而言，機場、荃灣、港島通勤需求令租務保持穩定。
+            晉誠地產門市就在麗都花園，熟悉每個屋苑座向、樓層景觀同近期放盤叫價。
+          </p>
+        </div>
+      </section>
 
       {/* Price chart */}
       <section className="mt-12">
@@ -278,9 +289,7 @@ function ShamTsengPage() {
             {faqs.map((f, i) => (
               <AccordionItem key={i} value={`q-${i}`}>
                 <AccordionTrigger className="text-left">{f.question}</AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  {f.answer}
-                </AccordionContent>
+                <AccordionContent className="text-muted-foreground">{f.answer}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
@@ -308,15 +317,7 @@ function ShamTsengPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "up" | "down";
-}) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
   return (
     <div className="rounded-lg border bg-card p-4">
       <p className="text-xs text-muted-foreground">{label}</p>

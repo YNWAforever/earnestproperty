@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PropertyListingNoRouteImport } from './routes/property.$listingNo'
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
+import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
@@ -77,6 +78,11 @@ const EstateSlugRoute = EstateSlugRouteImport.update({
 const DistrictTsuenWanRoute = DistrictTsuenWanRouteImport.update({
   id: '/district/tsuen-wan',
   path: '/district/tsuen-wan',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DistrictTingKauRoute = DistrictTingKauRouteImport.update({
+  id: '/district/ting-kau',
+  path: '/district/ting-kau',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DistrictShamTsengRoute = DistrictShamTsengRouteImport.update({
@@ -140,6 +146,7 @@ export interface FileRoutesByFullPath {
   '/blog/$slug': typeof BlogSlugRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
@@ -161,6 +168,7 @@ export interface FileRoutesByTo {
   '/blog/$slug': typeof BlogSlugRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
@@ -183,6 +191,7 @@ export interface FileRoutesById {
   '/blog/$slug': typeof BlogSlugRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
@@ -206,6 +215,7 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
+    | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
@@ -227,6 +237,7 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
+    | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
@@ -248,6 +259,7 @@ export interface FileRouteTypes {
     | '/blog/$slug'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
+    | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
@@ -268,6 +280,7 @@ export interface RootRouteChildren {
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
+  DistrictTingKauRoute: typeof DistrictTingKauRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
   EstateSlugRoute: typeof EstateSlugRoute
   PropertyListingNoRoute: typeof PropertyListingNoRoute
@@ -343,6 +356,13 @@ declare module '@tanstack/react-router' {
       path: '/district/tsuen-wan'
       fullPath: '/district/tsuen-wan'
       preLoaderRoute: typeof DistrictTsuenWanRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/district/ting-kau': {
+      id: '/district/ting-kau'
+      path: '/district/ting-kau'
+      fullPath: '/district/ting-kau'
+      preLoaderRoute: typeof DistrictTingKauRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/district/sham-tseng': {
@@ -450,6 +470,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
+  DistrictTingKauRoute: DistrictTingKauRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
   EstateSlugRoute: EstateSlugRoute,
   PropertyListingNoRoute: PropertyListingNoRoute,
