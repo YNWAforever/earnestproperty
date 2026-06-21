@@ -127,6 +127,7 @@ export type ListingFilters = {
   maxPrice?: number;
   bedrooms?: number; // 0 = studio, 4 = 4+
   estateSlug?: string;
+  districtSlug?: string;
   page: number;
   pageSize: number;
 };
@@ -142,6 +143,8 @@ export type ListingRow = {
   bedrooms: number | null;
   bathrooms: number | null;
   floor: string | null;
+  last_seen_at: string | null;
+  source_site: string | null;
   images: string[] | null;
   estates: { name_zh: string; slug: string } | null;
 };
@@ -156,12 +159,13 @@ export async function searchListings(f: ListingFilters): Promise<{
   let q = supabase
     .from("properties")
     .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)",
+      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, last_seen_at, source_site, images, estates(name_zh, slug)",
       { count: "exact" },
     )
     .eq("status", "active");
 
   if (f.deal !== "all") q = q.eq("deal_type", f.deal);
+  if (f.districtSlug) q = q.eq("district_slug", f.districtSlug);
 
   const priceCol = f.deal === "rent" ? "rent" : "price";
   if (f.minPrice !== undefined) q = q.gte(priceCol, f.minPrice);
@@ -184,12 +188,50 @@ export async function searchListings(f: ListingFilters): Promise<{
 
   q = q
     .order("featured", { ascending: false })
+    .order("last_seen_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false })
     .range(from, to);
 
   const { data, error, count } = await q;
   if (error) throw error;
   return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
+}
+
+export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
+  const { data: estate, error: estateError } = await supabase
+    .from("estates")
+    .select("id")
+    .eq("slug", estateSlug)
+    .maybeSingle();
+  if (estateError) throw estateError;
+  if (!estate?.id) return [];
+
+  const { data, error } = await supabase
+    .from("properties")
+    .select(
+      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, last_seen_at, source_site, images, estates(name_zh, slug)",
+    )
+    .eq("status", "active")
+    .eq("estate_id", estate.id)
+    .order("featured", { ascending: false })
+    .order("last_seen_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as unknown as ListingRow[];
+}
+
+export async function fetchPropertyByLegacyDetailId(oldId: string) {
+  const { data, error } = await supabase
+    .from("properties")
+    .select("listing_no")
+    .eq("legacy_detail_id", oldId)
+    .eq("status", "active")
+    .order("deal_type", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 export type SimilarListing = {

@@ -13,16 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  searchListings,
-  fetchEstateOptions,
-  type ListingRow,
-} from "@/lib/queries";
+import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 
 const PAGE_SIZE = 12;
 
 const searchSchema = z.object({
   deal: fallback(z.enum(["all", "sale", "rent"]), "all").default("all"),
+  district: fallback(z.string().optional(), undefined),
   minPrice: fallback(z.number().int().min(0).optional(), undefined),
   maxPrice: fallback(z.number().int().min(0).optional(), undefined),
   bedrooms: fallback(z.number().int().min(0).max(4).optional(), undefined),
@@ -37,6 +34,7 @@ export const Route = createFileRoute("/listings")({
     const [result, estates] = await Promise.all([
       searchListings({
         deal: deps.deal,
+        districtSlug: deps.district === "all" ? undefined : deps.district,
         minPrice: deps.minPrice,
         maxPrice: deps.maxPrice,
         bedrooms: deps.bedrooms,
@@ -53,8 +51,7 @@ export const Route = createFileRoute("/listings")({
       { title: "搜尋放盤｜深井買樓租樓 — 晉誠地產" },
       {
         name: "description",
-        content:
-          "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢真盤源。",
+        content: "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢真盤源。",
       },
       { property: "og:title", content: "搜尋放盤｜晉誠地產" },
       {
@@ -84,10 +81,7 @@ function ListingsPage() {
 
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[280px_1fr] lg:px-8">
         <aside className="lg:sticky lg:top-20 lg:self-start">
-          <FiltersPanel
-            estates={estates}
-            initial={search}
-          />
+          <FiltersPanel estates={estates} initial={search} />
         </aside>
 
         <section>
@@ -110,9 +104,7 @@ function ListingsPage() {
             </ul>
           )}
 
-          {totalPages > 1 && (
-            <Pagination current={search.page} total={totalPages} />
-          )}
+          {totalPages > 1 && <Pagination current={search.page} total={totalPages} />}
         </section>
       </div>
     </div>
@@ -130,26 +122,36 @@ function FiltersPanel({
 }) {
   const navigate = useNavigate({ from: "/listings" });
   const [deal, setDeal] = useState<"all" | "sale" | "rent">(initial.deal);
+  const [district, setDistrict] = useState<string>(initial.district ?? "all");
   const [minPrice, setMinPrice] = useState(initial.minPrice?.toString() ?? "");
   const [maxPrice, setMaxPrice] = useState(initial.maxPrice?.toString() ?? "");
   const [bedrooms, setBedrooms] = useState<string>(
-    initial.bedrooms !== undefined ? initial.bedrooms.toString() : "any"
+    initial.bedrooms !== undefined ? initial.bedrooms.toString() : "any",
   );
   const [estate, setEstate] = useState<string>(initial.estate ?? "any");
 
   // Resync if user navigates via Pagination/Link
   useEffect(() => {
     setDeal(initial.deal);
+    setDistrict(initial.district ?? "all");
     setMinPrice(initial.minPrice?.toString() ?? "");
     setMaxPrice(initial.maxPrice?.toString() ?? "");
     setBedrooms(initial.bedrooms !== undefined ? initial.bedrooms.toString() : "any");
     setEstate(initial.estate ?? "any");
-  }, [initial.deal, initial.minPrice, initial.maxPrice, initial.bedrooms, initial.estate]);
+  }, [
+    initial.deal,
+    initial.district,
+    initial.minPrice,
+    initial.maxPrice,
+    initial.bedrooms,
+    initial.estate,
+  ]);
 
   function apply() {
     navigate({
       search: {
         deal,
+        district: district === "all" ? undefined : district,
         minPrice: minPrice ? Number(minPrice) : undefined,
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
         bedrooms: bedrooms === "any" ? undefined : Number(bedrooms),
@@ -232,6 +234,22 @@ function FiltersPanel({
         </div>
 
         <div>
+          <Label className="mb-2 block text-xs">地區</Label>
+          <Select value={district} onValueChange={setDistrict}>
+            <SelectTrigger className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有地區</SelectItem>
+              <SelectItem value="sham-tseng">深井</SelectItem>
+              <SelectItem value="ting-kau">汀九</SelectItem>
+              <SelectItem value="tsuen-wan">荃灣</SelectItem>
+              <SelectItem value="castle-peak-road">青山公路</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
           <Label className="mb-2 block text-xs">屋苑</Label>
           <Select value={estate} onValueChange={setEstate}>
             <SelectTrigger className="h-9">
@@ -262,9 +280,7 @@ function FiltersPanel({
 }
 
 function ListingCard({ p }: { p: ListingRow }) {
-  const cover =
-    p.images?.[0] ??
-    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
+  const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
   const price =
     p.deal_type === "rent"
       ? p.rent
@@ -273,6 +289,7 @@ function ListingCard({ p }: { p: ListingRow }) {
       : p.price
         ? `HK$${(p.price / 1_000_000).toFixed(2)}M`
         : "—";
+  const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).toLocaleDateString("zh-HK") : null;
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
@@ -291,6 +308,9 @@ function ListingCard({ p }: { p: ListingRow }) {
         <div className="p-4">
           <p className="text-lg font-bold text-primary">{price}</p>
           <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{p.title_zh}</h3>
+          {p.source_site && lastSeen && (
+            <p className="mt-1 text-xs text-muted-foreground">最後更新：{lastSeen}</p>
+          )}
           {p.estates && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
@@ -339,7 +359,7 @@ function Pagination({ current, total }: { current: number; total: number }) {
           <PageLink key={p} page={p} active={p === current}>
             {p}
           </PageLink>
-        )
+        ),
       )}
       <PageLink page={current + 1} disabled={current === total} aria-label="下一頁">
         <ChevronRight className="h-4 w-4" />

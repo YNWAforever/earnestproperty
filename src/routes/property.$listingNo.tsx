@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
+import { SITE_URL } from "@/content/seo";
 import {
   fetchPropertyByListingNo,
   fetchSimilarListings,
@@ -42,6 +43,14 @@ import {
   type SimilarListing,
   type EstateTransaction,
 } from "@/lib/queries";
+
+type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
+type PropertyHeadData = {
+  property?: Pick<
+    PropertyDetail,
+    "title_zh" | "deal_type" | "rent" | "price" | "description" | "images"
+  >;
+};
 
 export const Route = createFileRoute("/property/$listingNo")({
   loader: async ({ params }) => {
@@ -58,7 +67,7 @@ export const Route = createFileRoute("/property/$listingNo")({
     return { property, similar, txns };
   },
   head: ({ loaderData }) => {
-    const p = (loaderData as any)?.property;
+    const p = (loaderData as PropertyHeadData | undefined)?.property;
     if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
     const priceStr =
       p.deal_type === "rent"
@@ -82,18 +91,7 @@ export const Route = createFileRoute("/property/$listingNo")({
       ],
     };
   },
-  errorComponent: ({ error }) => {
-    const router = useRouter();
-    return (
-      <div className="mx-auto max-w-md py-24 text-center">
-        <h1 className="text-2xl font-bold">載入失敗</h1>
-        <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
-        <Button className="mt-6" onClick={() => router.invalidate()}>
-          重試
-        </Button>
-      </div>
-    );
-  },
+  errorComponent: PropertyErrorComponent,
   notFoundComponent: () => (
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">放盤未找到</h1>
@@ -106,6 +104,19 @@ export const Route = createFileRoute("/property/$listingNo")({
   component: PropertyPage,
 });
 
+function PropertyErrorComponent({ error }: { error: Error }) {
+  const router = useRouter();
+  return (
+    <div className="mx-auto max-w-md py-24 text-center">
+      <h1 className="text-2xl font-bold">載入失敗</h1>
+      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <Button className="mt-6" onClick={() => router.invalidate()}>
+        重試
+      </Button>
+    </div>
+  );
+}
+
 const inquirySchema = z.object({
   name: z.string().trim().min(1, "請輸入姓名").max(120, "姓名過長"),
   phone: z
@@ -114,13 +125,7 @@ const inquirySchema = z.object({
     .min(8, "請輸入有效電話")
     .max(30, "電話過長")
     .regex(/^[\d+\-\s()]+$/, "電話格式不正確"),
-  email: z
-    .string()
-    .trim()
-    .max(255)
-    .email("電郵格式不正確")
-    .optional()
-    .or(z.literal("")),
+  email: z.string().trim().max(255).email("電郵格式不正確").optional().or(z.literal("")),
   message: z.string().trim().max(1000, "訊息過長").optional(),
 });
 
@@ -138,7 +143,7 @@ function toEmbed(u: string) {
 
 function PropertyPage() {
   const { property, similar, txns } = Route.useLoaderData() as {
-    property: any;
+    property: PropertyDetail;
     similar: SimilarListing[];
     txns: EstateTransaction[];
   };
@@ -222,29 +227,60 @@ function PropertyPage() {
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "RealEstateListing",
-    name: property.title_zh,
-    description: property.description ?? undefined,
-    url: typeof window !== "undefined" ? window.location.href : undefined,
-    image: images,
-    datePosted: property.created_at,
-    address: {
-      "@type": "PostalAddress",
-      streetAddress: property.address ?? undefined,
-      addressLocality: estate?.name_zh ?? undefined,
-      addressRegion: "Hong Kong",
-    },
-    floorSize: property.saleable_area
-      ? { "@type": "QuantitativeValue", value: property.saleable_area, unitCode: "FTK" }
-      : undefined,
-    numberOfRooms: property.bedrooms ?? undefined,
-    numberOfBathroomsTotal: property.bathrooms ?? undefined,
-    offers: {
-      "@type": "Offer",
-      price: isRent ? property.rent : property.price,
-      priceCurrency: "HKD",
-      availability: "https://schema.org/InStock",
-    },
+    "@graph": [
+      {
+        "@type": "RealEstateListing",
+        name: property.title_zh,
+        description: property.description ?? undefined,
+        url: `${SITE_URL}/property/${property.listing_no}`,
+        image: images,
+        datePosted: property.created_at,
+        offers: {
+          "@type": "Offer",
+          price: isRent ? property.rent : property.price,
+          priceCurrency: "HKD",
+          availability: "https://schema.org/InStock",
+        },
+      },
+      {
+        "@type": "Residence",
+        name: property.title_zh,
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: property.address ?? undefined,
+          addressLocality: estate?.name_zh ?? undefined,
+          addressRegion: "Hong Kong",
+        },
+        floorSize: property.saleable_area
+          ? { "@type": "QuantitativeValue", value: property.saleable_area, unitCode: "FTK" }
+          : undefined,
+        numberOfRooms: property.bedrooms ?? undefined,
+        numberOfBathroomsTotal: property.bathrooms ?? undefined,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "搜尋放盤", item: `${SITE_URL}/listings` },
+          ...(estate
+            ? [
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  name: estate.name_zh,
+                  item: `${SITE_URL}/estate/${estate.slug}`,
+                },
+              ]
+            : []),
+          {
+            "@type": "ListItem",
+            position: estate ? 4 : 3,
+            name: property.title_zh,
+            item: `${SITE_URL}/property/${property.listing_no}`,
+          },
+        ],
+      },
+    ],
   };
 
   const updatedAt = property.updated_at
@@ -387,9 +423,7 @@ function PropertyPage() {
                     allowFullScreen
                   />
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  滑動或拖曳以360°觀看單位內部。
-                </p>
+                <p className="mt-2 text-xs text-muted-foreground">滑動或拖曳以360°觀看單位內部。</p>
               </TabsContent>
             )}
 
@@ -424,13 +458,9 @@ function PropertyPage() {
           {/* Title */}
           <div className="mt-6">
             <div className="flex items-center gap-2">
-              <Badge variant={isRent ? "secondary" : "default"}>
-                {isRent ? "租盤" : "售盤"}
-              </Badge>
+              <Badge variant={isRent ? "secondary" : "default"}>{isRent ? "租盤" : "售盤"}</Badge>
               {property.featured && <Badge variant="outline">精選</Badge>}
-              <span className="text-xs text-muted-foreground">
-                編號 {property.listing_no}
-              </span>
+              <span className="text-xs text-muted-foreground">編號 {property.listing_no}</span>
             </div>
             <h1 className="mt-3 text-3xl font-bold tracking-tight">{property.title_zh}</h1>
             {property.address && (
@@ -460,14 +490,44 @@ function PropertyPage() {
               <CardTitle className="text-base">物業資料</CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Spec icon={<Maximize className="h-4 w-4" />} label="實用面積" value={property.saleable_area ? `${property.saleable_area} 呎` : "—"} />
-              <Spec icon={<Bed className="h-4 w-4" />} label="房間" value={property.bedrooms ?? "—"} />
-              <Spec icon={<Bath className="h-4 w-4" />} label="浴室" value={property.bathrooms ?? "—"} />
-              <Spec icon={<Building2 className="h-4 w-4" />} label="樓層" value={property.floor ?? "—"} />
-              <Spec label="建築面積" value={property.gross_area ? `${property.gross_area} 呎` : "—"} />
+              <Spec
+                icon={<Maximize className="h-4 w-4" />}
+                label="實用面積"
+                value={property.saleable_area ? `${property.saleable_area} 呎` : "—"}
+              />
+              <Spec
+                icon={<Bed className="h-4 w-4" />}
+                label="房間"
+                value={property.bedrooms ?? "—"}
+              />
+              <Spec
+                icon={<Bath className="h-4 w-4" />}
+                label="浴室"
+                value={property.bathrooms ?? "—"}
+              />
+              <Spec
+                icon={<Building2 className="h-4 w-4" />}
+                label="樓層"
+                value={property.floor ?? "—"}
+              />
+              <Spec
+                label="建築面積"
+                value={property.gross_area ? `${property.gross_area} 呎` : "—"}
+              />
               <Spec label="座向" value={property.orientation ?? "—"} />
-              <Spec label="管理費" value={property.management_fee ? `$${Number(property.management_fee).toLocaleString()}` : "—"} />
-              <Spec icon={<Calendar className="h-4 w-4" />} label="入伙年份" value={estate?.year_completed ?? "—"} />
+              <Spec
+                label="管理費"
+                value={
+                  property.management_fee
+                    ? `$${Number(property.management_fee).toLocaleString()}`
+                    : "—"
+                }
+              />
+              <Spec
+                icon={<Calendar className="h-4 w-4" />}
+                label="入伙年份"
+                value={estate?.year_completed ?? "—"}
+              />
             </CardContent>
           </Card>
 
@@ -540,18 +600,14 @@ function PropertyPage() {
                     {txns.map((t, i) => (
                       <TableRow key={i}>
                         <TableCell>
-                          {t.deal_date
-                            ? new Date(t.deal_date).toLocaleDateString("zh-HK")
-                            : "—"}
+                          {t.deal_date ? new Date(t.deal_date).toLocaleDateString("zh-HK") : "—"}
                         </TableCell>
                         <TableCell>{t.unit ?? "—"}</TableCell>
                         <TableCell className="text-right">
                           {t.saleable_area ? `${t.saleable_area} 呎` : "—"}
                         </TableCell>
                         <TableCell className="text-right">
-                          {t.price
-                            ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M`
-                            : "—"}
+                          {t.price ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M` : "—"}
                         </TableCell>
                         <TableCell className="text-right">
                           {t.saleable_psf
@@ -595,9 +651,7 @@ function PropertyPage() {
                 <div className="flex items-center gap-3">
                   <Avatar className="h-14 w-14">
                     <AvatarImage src={agent.avatar_url ?? undefined} alt={agent.name_zh ?? ""} />
-                    <AvatarFallback>
-                      {(agent.name_zh ?? "經").slice(0, 1)}
-                    </AvatarFallback>
+                    <AvatarFallback>{(agent.name_zh ?? "經").slice(0, 1)}</AvatarFallback>
                   </Avatar>
                   <div>
                     <p className="font-semibold">{agent.name_zh ?? agent.name_en}</p>
@@ -750,8 +804,7 @@ function Spec({
 }
 
 function SimilarCard({ listing }: { listing: SimilarListing }) {
-  const img =
-    listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
+  const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
   const isRent = listing.deal_type === "rent";
   const price = isRent
     ? listing.rent

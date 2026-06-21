@@ -69,3 +69,36 @@ test("district and about pages contain full local seo content", () => {
   assert.match(about, /真盤源/);
   assert.match(about, /C-018613/);
 });
+
+test("estate pages use seo registry and latest listing sections", () => {
+  const estate = read("src/routes/estate.$slug.tsx");
+  const queries = read("src/lib/queries.ts");
+
+  assert.match(estate, /estateSeo/);
+  assert.match(estate, /BreadcrumbList/);
+  assert.match(estate, /FAQPage/);
+  assert.match(estate, /最新放盤/);
+  assert.match(queries, /fetchListingsForEstate/);
+});
+
+test("listings page supports district and imported listing freshness", () => {
+  const listings = read("src/routes/listings.tsx");
+  const queries = read("src/lib/queries.ts");
+
+  assert.match(listings, /district/);
+  assert.match(listings, /最後更新/);
+  assert.match(queries, /districtSlug/);
+  assert.match(queries, /last_seen_at/);
+});
+
+test("property detail pages expose real estate schema and legacy support", () => {
+  const property = read("src/routes/property.$listingNo.tsx");
+  const queries = read("src/lib/queries.ts");
+  const vercel = read("vercel.ts");
+
+  assert.match(property, /RealEstateListing/);
+  assert.match(property, /Residence/);
+  assert.match(property, /BreadcrumbList/);
+  assert.match(queries, /fetchPropertyByLegacyDetailId/);
+  assert.match(vercel, /property-detail\/:oldId\.html/);
+});
