@@ -189,3 +189,19 @@ test("estate route renders conversion seo sections", () => {
   assert.match(route, /優點/);
   assert.match(route, /要留意/);
 });
+
+test("public search and homepage expose lead capture paths", () => {
+  const listings = read("src/routes/listings.tsx");
+  const home = read("src/routes/index.tsx");
+  const header = read("src/components/site/SiteHeader.tsx");
+  const footer = read("src/components/site/SiteFooter.tsx");
+
+  assert.match(listings, /SearchFallbackCTA/);
+  assert.match(listings, /describeListingSearch/);
+  assert.match(home, /useNavigate/);
+  assert.match(home, /OwnerValuationPanel/);
+  assert.match(home, /IntentWhatsAppCTA/);
+  assert.match(header, /業主放盤 \/ 免費估價/);
+  assert.match(footer, /業主放盤/);
+  assert.match(footer, /28Hse/);
+});

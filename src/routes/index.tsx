@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Search,
@@ -28,6 +28,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
+import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
+import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import heroImage from "@/assets/hero-shamtseng.jpg";
 import { whatsappUrl } from "@/config/site";
 import {
@@ -86,8 +88,10 @@ const ESTATE_GRADIENTS: Record<string, string> = {
 
 function HomePage() {
   const { estates, featured, faqs, counts } = Route.useLoaderData();
+  const navigate = useNavigate({ from: "/" });
   const [searchEstate, setSearchEstate] = useState("");
   const [searchType, setSearchType] = useState("sale");
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const totalUnits = estates.reduce((s: number, e: EstateSummary) => s + (e.total_units ?? 0), 0);
   const avgPsf =
@@ -97,6 +101,17 @@ function HomePage() {
             estates.length,
         )
       : 0;
+
+  function submitHeroSearch() {
+    navigate({
+      to: "/listings",
+      search: {
+        deal: searchType as "sale" | "rent",
+        estate: searchEstate || undefined,
+        page: 1,
+      },
+    });
+  }
 
   return (
     <div className="bg-background">
@@ -155,13 +170,26 @@ function HomePage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Input className="h-11" placeholder="價錢 / 房數 / 關鍵字" />
-              <Button size="lg" className="h-11 bg-coral text-coral-foreground hover:bg-coral/90">
+              <Input
+                className="h-11"
+                placeholder="價錢 / 房數 / 關鍵字"
+                value={searchKeyword}
+                onChange={(event) => setSearchKeyword(event.target.value)}
+              />
+              <Button
+                type="button"
+                size="lg"
+                onClick={submitHeroSearch}
+                className="h-11 bg-coral text-coral-foreground hover:bg-coral/90"
+              >
                 <Search className="h-4 w-4" />
                 搜尋
               </Button>
             </CardContent>
           </Card>
+          <p className="mt-3 text-sm text-primary-foreground/85">
+            搵唔到心水盤？搜尋後可直接 WhatsApp 講低預算，代理幫你配盤。
+          </p>
         </div>
       </section>
 
@@ -320,6 +348,14 @@ function HomePage() {
         </section>
       )}
 
+      <OwnerValuationPanel
+        id="owner-valuation"
+        context={{
+          districtName: "深井 / 青山公路",
+          source: "homepage-owner-valuation",
+        }}
+      />
+
       {/* CTA BAND */}
       <section className="bg-primary text-primary-foreground">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
@@ -329,12 +365,15 @@ function HomePage() {
               即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
             </p>
           </div>
-          <a href={whatsappUrl("你好，我想查詢深井物業")} target="_blank" rel="noopener noreferrer">
-            <Button size="lg" className="bg-coral text-coral-foreground hover:bg-coral/90">
-              <MessageCircle className="h-4 w-4" />
-              WhatsApp 即時查詢
-            </Button>
-          </a>
+          <div className="w-full max-w-xl">
+            <IntentWhatsAppCTA
+              context={{
+                districtName: "深井 / 青山公路",
+                searchSummary: searchKeyword || undefined,
+                source: "homepage-final-cta",
+              }}
+            />
+          </div>
         </div>
       </section>
 

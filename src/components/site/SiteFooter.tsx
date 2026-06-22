@@ -32,6 +32,17 @@ export function SiteFooter() {
               Your Sham Tseng Property Expert.
             </p>
             <p className="mt-4 text-xs opacity-60">牌照號 Licence No.: C-018613</p>
+            <p className="mt-3 text-xs opacity-60">
+              公開代理資料：
+              <a
+                href="https://www.28hse.com/agent/540"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                28Hse
+              </a>
+            </p>
           </div>
 
           <div>
@@ -111,6 +122,11 @@ export function SiteFooter() {
                 <Link to="/blog" className="opacity-80 hover:opacity-100">
                   市場分析
                 </Link>
+              </li>
+              <li>
+                <a href="/#owner-valuation" className="opacity-80 hover:opacity-100">
+                  業主放盤 / 免費估價
+                </a>
               </li>
               <li>
                 <Link to="/contact" className="opacity-80 hover:opacity-100">

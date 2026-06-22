@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 
 const PAGE_SIZE = 12;
@@ -63,10 +64,28 @@ export const Route = createFileRoute("/listings")({
   component: ListingsPage,
 });
 
+function describeListingSearch(
+  search: ReturnType<typeof Route.useSearch>,
+  estates: Array<{ slug: string; name_zh: string }>,
+) {
+  const parts = [
+    search.deal === "sale" ? "售盤" : search.deal === "rent" ? "租盤" : "全部租售",
+    search.estate ? estates.find((estate) => estate.slug === search.estate)?.name_zh : undefined,
+    search.district,
+    search.minPrice ? `最低 $${search.minPrice.toLocaleString()}` : undefined,
+    search.maxPrice ? `最高 $${search.maxPrice.toLocaleString()}` : undefined,
+    search.bedrooms !== undefined
+      ? `${search.bedrooms === 4 ? "4+" : search.bedrooms} 房`
+      : undefined,
+  ].filter(Boolean);
+  return parts.join(" / ") || "未指定條件";
+}
+
 function ListingsPage() {
   const search = Route.useSearch();
   const { rows, total, estates } = Route.useLoaderData();
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const searchSummary = describeListingSearch(search, estates);
 
   return (
     <div className="bg-background">
@@ -86,15 +105,23 @@ function ListingsPage() {
 
         <section>
           {rows.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-12 text-center">
-              <p className="text-muted-foreground">沒有符合條件的放盤</p>
-              <Link
-                to="/listings"
-                search={{ deal: "all", page: 1 }}
-                className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
-              >
-                清除篩選
-              </Link>
+            <div className="space-y-5">
+              <div className="rounded-lg border border-dashed p-8 text-center">
+                <p className="text-muted-foreground">沒有符合條件的放盤</p>
+                <Link
+                  to="/listings"
+                  search={{ deal: "all", page: 1 }}
+                  className="mt-3 inline-block text-sm font-medium text-primary hover:underline"
+                >
+                  清除篩選
+                </Link>
+              </div>
+              <SearchFallbackCTA
+                context={{
+                  searchSummary,
+                  source: "listings-zero-results",
+                }}
+              />
             </div>
           ) : (
             <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -102,6 +129,18 @@ function ListingsPage() {
                 <ListingCard key={p.id} p={p} />
               ))}
             </ul>
+          )}
+
+          {rows.length > 0 && (
+            <div className="mt-8">
+              <SearchFallbackCTA
+                compact
+                context={{
+                  searchSummary,
+                  source: "listings-end-of-results",
+                }}
+              />
+            </div>
           )}
 
           {totalPages > 1 && <Pagination current={search.page} total={totalPages} />}
