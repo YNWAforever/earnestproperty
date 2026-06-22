@@ -82,7 +82,7 @@ test("district and about pages contain full local seo content", () => {
   assert.match(tsuenWan, /港鐵荃灣綫總站/);
   assert.match(tingKauRedirect, /\/castle-peak-road\/\$segment/);
   assert.match(corridorContent, /低密度別墅/);
-  assert.match(about, /真盤源/);
+  assert.match(about, /堅盤源/);
   assert.match(about, /C-018613/);
 });
 

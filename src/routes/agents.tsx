@@ -65,7 +65,7 @@ function AgentsPage() {
         <div className="mx-auto grid max-w-5xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-[1fr_auto] lg:px-8">
           <div>
             <BadgeCheck className="h-8 w-8 text-primary" />
-            <h2 className="mt-4 text-xl font-semibold">想搵區內真盤源？</h2>
+            <h2 className="mt-4 text-xl font-semibold">想搵區內堅盤源？</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">
               可直接 WhatsApp
               或到深井麗都花園地舖門市，講低預算、屋苑、租買用途及睇樓時間，我哋會按最新盤源跟進。

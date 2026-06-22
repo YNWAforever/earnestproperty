@@ -62,12 +62,12 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園真盤源。即時 WhatsApp 查詢。Licence C-018613。",
+          "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園堅盤源。即時 WhatsApp 查詢。Licence C-018613。",
       },
       { property: "og:title", content: "晉誠地產 Earnest Property｜深井物業專家" },
       {
         property: "og:description",
-        content: "深井．青山公路．我哋比你更熟。即時搜尋深井真盤源。",
+        content: "深井．青山公路．我哋比你更熟。即時搜尋深井堅盤源。",
       },
       { property: "og:image", content: heroImage },
       { name: "twitter:image", content: heroImage },
@@ -122,12 +122,12 @@ function HomePage() {
             <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
               深井買樓租樓
               <br />
-              <span className="text-gold">晉誠地產</span>．真盤源
+              <span className="text-gold">晉誠地產</span>．堅盤源
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
               深井．青山公路．我哋比你更熟。
               <br />
-              碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式真盤源平台。
+              碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式堅盤源平台。
             </p>
           </div>
 
@@ -274,7 +274,7 @@ function HomePage() {
           />
           <Feature
             icon={<Home className="h-5 w-5" />}
-            title="真盤源"
+            title="堅盤源"
             desc="所有放盤親身核實，無虛假廣告，無釣魚盤。"
           />
           <Feature

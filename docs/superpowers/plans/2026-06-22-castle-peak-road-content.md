@@ -166,7 +166,7 @@ export const castlePeakRoadHub = {
   launchName: "Core Corridor Launch",
   title: "青山公路 Castle Peak Road 樓盤｜荃灣、汀九、深井、青龍頭、黃金海岸",
   description:
-    "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，結合晉誠地產 C-018613 真盤源。",
+    "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，結合晉誠地產 C-018613 堅盤源。",
   h1: "青山公路 Castle Peak Road · 海景住宅走廊",
   intro: [
     "青山公路由荃灣西、油柑頭伸延至汀九、深井、青龍頭、掃管笏及黃金海岸，住宅選擇橫跨鐵路生活圈、低密度海景屋、成熟大型屋苑及臨海新式屋苑。",
@@ -300,7 +300,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     eyebrow: "青山公路深井段",
     title: "深井 Sham Tseng 樓盤｜青山公路海景大型屋苑",
     description:
-      "深井 Sham Tseng 青山公路樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與香港花園，配合即時真盤源。",
+      "深井 Sham Tseng 青山公路樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與香港花園，配合即時堅盤源。",
     h1: "深井 Sham Tseng · 青山公路海景大型屋苑",
     intro: [
       "深井是青山公路最成熟的海景住宅生活圈，屋苑規模、巴士小巴、餐飲和日常配套都比汀九集中。",
@@ -340,7 +340,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     eyebrow: "青山公路青龍頭段",
     title: "青龍頭 Tsing Lung Tau 樓盤｜豪景花園、香港花園、海景住宅",
     description:
-      "青龍頭及豪景一帶樓盤指南，涵蓋豪景花園、香港花園和青山公路青龍頭段海景住宅，即時真盤源查詢。",
+      "青龍頭及豪景一帶樓盤指南，涵蓋豪景花園、香港花園和青山公路青龍頭段海景住宅，即時堅盤源查詢。",
     h1: "青龍頭 Tsing Lung Tau · 空間型海景住宅",
     intro: [
       "青龍頭位於深井以西，住宅選擇以較大面積、海景和山海環境為賣點。",
@@ -1450,7 +1450,7 @@ castlePeakRoad: {
   path: "/castle-peak-road",
   title: "青山公路 Castle Peak Road 樓盤｜荃灣、汀九、深井、青龍頭",
   description:
-    "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，即時真盤源查詢。晉誠地產 C-018613。",
+    "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，即時堅盤源查詢。晉誠地產 C-018613。",
 },
 ```
 

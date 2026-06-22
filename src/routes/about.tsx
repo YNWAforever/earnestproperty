@@ -29,7 +29,7 @@ function AboutPage() {
         <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">關於晉誠地產</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            深井物業專家，真盤源、即時回覆、持牌可靠
+            深井物業專家，堅盤源、即時回覆、持牌可靠
           </h1>
           <p className="mt-5 max-w-3xl text-muted-foreground">
             晉誠地產 Earnest Property（牌照號
@@ -52,7 +52,7 @@ function AboutPage() {
           <MessageCircle className="h-8 w-8 text-primary" />
           <h2 className="mt-4 text-xl font-semibold">我哋點解唔同</h2>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            晉誠地產重視真盤源和即時回覆。買家可以直接問到單位狀態，業主可以得到貼近市場的放盤策略，租客亦可以快速預約合適睇樓時段。
+            晉誠地產重視堅盤源和即時回覆。買家可以直接問到單位狀態，業主可以得到貼近市場的放盤策略，租客亦可以快速預約合適睇樓時段。
           </p>
         </article>
       </section>

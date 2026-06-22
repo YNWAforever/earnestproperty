@@ -13,11 +13,11 @@ export const pageSeo = {
     path: "/",
     title: "晉誠地產 Earnest Property｜深井買樓租樓．青山公路物業專家",
     description:
-      "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園真盤源，即時 WhatsApp 查詢。持牌代理 C-018613。",
+      "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園堅盤源，即時 WhatsApp 查詢。持牌代理 C-018613。",
   },
   listings: {
     path: "/listings",
-    title: "深井放盤搜尋｜買樓租樓真盤源 — 晉誠地產",
+    title: "深井放盤搜尋｜買樓租樓堅盤源 — 晉誠地產",
     description:
       "一站搜尋深井、汀九及青山公路在售及放租盤。海景、連車位、連租約收租盤齊全，WhatsApp 即時預約睇樓。C-018613。",
   },
@@ -25,7 +25,7 @@ export const pageSeo = {
     path: "/castle-peak-road",
     title: "青山公路 Castle Peak Road 樓盤｜荃灣、汀九、深井、青龍頭",
     description:
-      "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，即時真盤源查詢。晉誠地產 C-018613。",
+      "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，即時堅盤源查詢。晉誠地產 C-018613。",
   },
   shamTseng: {
     path: "/district/sham-tseng",
@@ -37,7 +37,7 @@ export const pageSeo = {
     path: "/district/tsuen-wan",
     title: "荃灣 Tsuen Wan 物業｜屋苑、港鐵、學校、樓價走勢",
     description:
-      "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產真盤源 C-018613。",
+      "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產堅盤源 C-018613。",
   },
   tingKau: {
     path: "/castle-peak-road/ting-kau",
@@ -55,7 +55,7 @@ export const pageSeo = {
     path: "/about",
     title: "關於晉誠地產 Earnest Property｜深井物業專家",
     description:
-      "晉誠地產（C-018613）紮根深井，專營碧堤半島、浪翠園、豪景花園等核心屋苑。真盤源、即時回覆、持牌可靠。",
+      "晉誠地產（C-018613）紮根深井，專營碧堤半島、浪翠園、豪景花園等核心屋苑。堅盤源、即時回覆、持牌可靠。",
   },
   contact: {
     path: "/contact",
