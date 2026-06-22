@@ -219,7 +219,8 @@ export const estatePageContent = {
 } satisfies Record<string, EstatePageContent>;
 
 export function getEstatePageContent(slug: string): EstatePageContent | null {
-  return estatePageContent[slug as keyof typeof estatePageContent] ?? null;
+  if (!Object.prototype.hasOwnProperty.call(estatePageContent, slug)) return null;
+  return estatePageContent[slug as keyof typeof estatePageContent];
 }
 
 export const coreEstatePageSlugs = Object.keys(estatePageContent);

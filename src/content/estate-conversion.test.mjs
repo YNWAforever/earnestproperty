@@ -70,12 +70,22 @@ test("estate conversion registry covers the five approved core estates", () => {
 
 test("estate conversion lookup contract is explicit for unknown slugs", () => {
   const source = read("src/content/estate-pages.ts");
+  const inheritedObjectSlugs = ["toString", "constructor"];
+  const usesOwnPropertyGuard =
+    /Object\.hasOwn\(estatePageContent, slug\)/.test(source) ||
+    /Object\.prototype\.hasOwnProperty\.call\(estatePageContent, slug\)/.test(source);
 
   assert.match(
     source,
     /export function getEstatePageContent\(slug: string\): EstatePageContent \| null/,
   );
-  assert.match(source, /estatePageContent\[slug as keyof typeof estatePageContent\] \?\? null/);
+  assert.equal(
+    usesOwnPropertyGuard,
+    true,
+    `lookup should reject inherited object keys such as ${inheritedObjectSlugs.join(", ")}`,
+  );
+  assert.match(source, /return null/);
+  assert.match(source, /return estatePageContent\[slug as keyof typeof estatePageContent\]/);
 });
 
 test("each estate block carries the required conversion content fields", () => {
