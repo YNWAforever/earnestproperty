@@ -135,3 +135,22 @@ test("estate conversion source avoids the older disallowed listing wording", () 
   const source = read("src/content/estate-pages.ts");
   assert.equal(source.includes(forbidden), false);
 });
+
+test("conversion components use intent helpers and factual proof", () => {
+  const intent = read("src/components/site/IntentWhatsAppCTA.tsx");
+  const fallback = read("src/components/site/SearchFallbackCTA.tsx");
+  const owner = read("src/components/site/OwnerValuationPanel.tsx");
+  const trust = read("src/components/site/TrustProofPanel.tsx");
+  const snapshot = read("src/components/site/EstateMarketSnapshot.tsx");
+
+  assert.match(intent, /whatsappIntentUrl/);
+  assert.match(intent, /我要買樓/);
+  assert.match(intent, /我要租樓/);
+  assert.match(intent, /我要放盤估價/);
+  assert.match(fallback, /搵唔到心水盤/);
+  assert.match(owner, /深井業主估價報告/);
+  assert.match(trust, /earnestPublicTrust/);
+  assert.match(trust, /C-018613/);
+  assert.match(snapshot, /成交資料/);
+  assert.match(snapshot, /fetchEstateTransactions|EstateTransaction/);
+});
