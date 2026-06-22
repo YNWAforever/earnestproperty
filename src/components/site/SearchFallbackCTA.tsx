@@ -22,19 +22,19 @@ export function SearchFallbackCTA({
             WhatsApp 講低預算、屋苑、房數同睇樓時間，晉誠代理幫你配盤。
           </p>
         </div>
-        <a
-          href={whatsappIntentUrl("buy", {
-            ...context,
-            source: context?.source ?? "listing-search-fallback",
-          })}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Button className="bg-coral text-coral-foreground hover:bg-coral/90">
+        <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
+          <a
+            href={whatsappIntentUrl("buy", {
+              ...context,
+              source: context?.source ?? "listing-search-fallback",
+            })}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             <MessageCircle className="h-4 w-4" />
             WhatsApp 講低預算
-          </Button>
-        </a>
+          </a>
+        </Button>
       </div>
     </div>
   );

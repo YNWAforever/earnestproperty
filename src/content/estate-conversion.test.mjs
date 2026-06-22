@@ -150,7 +150,28 @@ test("conversion components use intent helpers and factual proof", () => {
   assert.match(fallback, /搵唔到心水盤/);
   assert.match(owner, /深井業主估價報告/);
   assert.match(trust, /earnestPublicTrust/);
-  assert.match(trust, /C-018613/);
+  assert.match(trust, /earnestPublicTrust\.licenceNo/);
   assert.match(snapshot, /成交資料/);
   assert.match(snapshot, /fetchEstateTransactions|EstateTransaction/);
+});
+
+test("conversion components avoid nested anchors and handle unknown market data", () => {
+  const intent = read("src/components/site/IntentWhatsAppCTA.tsx");
+  const fallback = read("src/components/site/SearchFallbackCTA.tsx");
+  const owner = read("src/components/site/OwnerValuationPanel.tsx");
+  const trust = read("src/components/site/TrustProofPanel.tsx");
+  const snapshot = read("src/components/site/EstateMarketSnapshot.tsx");
+
+  for (const source of [intent, fallback, owner]) {
+    assert.match(source, /<Button[^>]*asChild/);
+    assert.doesNotMatch(source, /<a[\s\S]*?<Button/);
+  }
+
+  assert.match(intent, /compact \? "grid-cols-1" : "sm:grid-cols-3"/);
+  assert.doesNotMatch(trust, /publicLicenceNo/);
+  assert.doesNotMatch(trust, /C-018613/);
+  assert.doesNotMatch(snapshot, /totalUnits \?\? 0/);
+  assert.match(snapshot, /待查/);
+  assert.match(snapshot, /overflow-x-auto/);
+  assert.match(snapshot, /min-w-\[/);
 });

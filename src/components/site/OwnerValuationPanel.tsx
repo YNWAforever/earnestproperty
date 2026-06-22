@@ -30,20 +30,19 @@ export function OwnerValuationPanel({
               </p>
             </div>
           </div>
-          <a
-            href={whatsappIntentUrl("valuation", {
-              ...context,
-              source: context?.source ?? "owner-valuation-panel",
-            })}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 block"
-          >
-            <Button className="w-full bg-coral text-coral-foreground hover:bg-coral/90">
+          <Button asChild className="mt-5 w-full bg-coral text-coral-foreground hover:bg-coral/90">
+            <a
+              href={whatsappIntentUrl("valuation", {
+                ...context,
+                source: context?.source ?? "owner-valuation-panel",
+              })}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <MessageCircle className="h-4 w-4" />
               我要放盤估價
-            </Button>
-          </a>
+            </a>
+          </Button>
         </div>
       </div>
     </section>

@@ -17,6 +17,8 @@ export function EstateMarketSnapshot({
 }) {
   const saleCount = listings.filter((listing) => listing.deal_type === "sale").length;
   const rentCount = listings.filter((listing) => listing.deal_type === "rent").length;
+  const totalUnitsLabel = totalUnits === null ? "待查" : totalUnits.toLocaleString();
+  const phasesLabel = phases === null ? "待查" : phases;
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -25,10 +27,7 @@ export function EstateMarketSnapshot({
           <Stat label="平均實呎" value={avgPsf ? `$${avgPsf.toLocaleString()}` : "查詢"} />
           <Stat label="公開售盤" value={`${saleCount} 個`} />
           <Stat label="公開租盤" value={`${rentCount} 個`} />
-          <Stat
-            label="單位 / 期數"
-            value={`${(totalUnits ?? 0).toLocaleString()} / ${phases ?? "-"} 期`}
-          />
+          <Stat label="單位 / 期數" value={`${totalUnitsLabel} / ${phasesLabel} 期`} />
         </div>
         <div className="rounded-lg border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
@@ -47,8 +46,8 @@ export function EstateMarketSnapshot({
               暫未有足夠近期成交資料顯示。業主或買家可提供座數、樓層和面積，代理會按同類放盤和成交補充估值。
             </p>
           ) : (
-            <div className="mt-4 overflow-hidden rounded-md border">
-              <table className="w-full text-left text-sm">
+            <div className="mt-4 overflow-x-auto rounded-md border">
+              <table className="min-w-[520px] w-full text-left text-sm">
                 <thead className="bg-muted text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">日期</th>

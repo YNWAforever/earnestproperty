@@ -3,8 +3,6 @@ import { BadgeCheck, ExternalLink, MapPin, Phone } from "lucide-react";
 
 import { earnestPublicTrust } from "@/content/estate-pages";
 
-const publicLicenceNo = "C-018613";
-
 export function TrustProofPanel() {
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
@@ -21,7 +19,7 @@ export function TrustProofPanel() {
             <Proof
               icon={<BadgeCheck className="h-4 w-4" />}
               label="公司牌照"
-              value={publicLicenceNo}
+              value={earnestPublicTrust.licenceNo}
             />
             <Proof
               icon={<Phone className="h-4 w-4" />}

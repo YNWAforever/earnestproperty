@@ -37,21 +37,25 @@ export function IntentWhatsAppCTA({
   compact?: boolean;
 }) {
   return (
-    <div className={`grid gap-2 ${compact ? "sm:grid-cols-3" : "sm:grid-cols-3"}`}>
+    <div className={`grid gap-2 ${compact ? "grid-cols-1" : "sm:grid-cols-3"}`}>
       {intentItems.map((item) => {
         const Icon = item.icon;
         return (
-          <a
+          <Button
             key={item.intent}
-            href={whatsappIntentUrl(item.intent, context)}
-            target="_blank"
-            rel="noopener noreferrer"
+            asChild
+            size={compact ? "sm" : "lg"}
+            className={`w-full ${item.className}`}
           >
-            <Button size={compact ? "sm" : "lg"} className={`w-full ${item.className}`}>
+            <a
+              href={whatsappIntentUrl(item.intent, context)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <Icon className="h-4 w-4" />
               {item.label}
-            </Button>
-          </a>
+            </a>
+          </Button>
         );
       })}
     </div>
