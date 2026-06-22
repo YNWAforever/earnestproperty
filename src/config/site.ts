@@ -61,6 +61,7 @@ export function whatsappIntentMessage(intent: WhatsAppIntent, context: WhatsAppI
     "你好，我要放盤估價，想索取深井業主估價報告。",
     contextLine("屋苑/大廈", context.estateName),
     contextLine("地區", context.districtName),
+    contextLine("搜尋條件", context.searchSummary),
     "\n實用面積：",
     "\n樓層/景觀：",
     "\n打算放售或放租：",
