@@ -74,12 +74,14 @@ test("blog routes render real indexed articles", () => {
 test("district and about pages contain full local seo content", () => {
   const shamTseng = read("src/routes/district.sham-tseng.tsx");
   const tsuenWan = read("src/routes/district.tsuen-wan.tsx");
-  const tingKau = read("src/routes/district.ting-kau.tsx");
+  const tingKauRedirect = read("src/routes/district.ting-kau.tsx");
+  const corridorContent = read("src/content/castle-peak-road.ts");
   const about = read("src/routes/about.tsx");
 
   assert.match(shamTseng, /西半山平民海景區/);
   assert.match(tsuenWan, /港鐵荃灣綫總站/);
-  assert.match(tingKau, /低密度別墅/);
+  assert.match(tingKauRedirect, /\/castle-peak-road\/\$segment/);
+  assert.match(corridorContent, /低密度別墅/);
   assert.match(about, /真盤源/);
   assert.match(about, /C-018613/);
 });
