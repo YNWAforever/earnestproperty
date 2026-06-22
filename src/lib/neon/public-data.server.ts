@@ -1,7 +1,5 @@
 import "@tanstack/react-start/server-only";
 
-import { neon } from "@neondatabase/serverless";
-
 import type {
   NeonCorridorInventoryInput,
   NeonCorridorInventoryResult,
@@ -12,6 +10,7 @@ import type {
   NeonPropertyRow,
   NeonSimilarListingsInput,
 } from "./public-data.types";
+import { getSql } from "./db.server";
 
 type DbRow = Record<string, unknown>;
 
@@ -49,6 +48,15 @@ const listingColumns = `
   p.last_scraped_at,
   p.created_at,
   p.updated_at,
+  s.id AS agent_id,
+  s.name_zh AS agent_name_zh,
+  s.name_en AS agent_name_en,
+  s.phone AS agent_phone,
+  s.whatsapp AS agent_whatsapp,
+  s.licence_no AS agent_licence_no,
+  s.avatar_url AS agent_avatar_url,
+  s.branch AS agent_branch,
+  s.bio AS agent_bio,
   e.name_zh AS estate_name_zh,
   e.slug AS estate_slug,
   e.district_slug AS estate_district_slug,
@@ -59,9 +67,7 @@ const listingColumns = `
 `;
 
 function sql() {
-  const databaseUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
-  if (!databaseUrl) throw new Error("DATABASE_URL or DATABASE_URL_UNPOOLED is required.");
-  return neon(databaseUrl);
+  return getSql();
 }
 
 function stringOrNull(value: unknown) {
@@ -112,6 +118,21 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
       }
     : null;
 
+  const agentId = stringOrNull(row.agent_id);
+  const profile = agentId
+    ? {
+        id: agentId,
+        name_zh: stringOrNull(row.agent_name_zh),
+        name_en: stringOrNull(row.agent_name_en),
+        phone: stringOrNull(row.agent_phone),
+        whatsapp: stringOrNull(row.agent_whatsapp),
+        licence_no: stringOrNull(row.agent_licence_no),
+        avatar_url: stringOrNull(row.agent_avatar_url),
+        branch: stringOrNull(row.agent_branch),
+        bio: stringOrNull(row.agent_bio),
+      }
+    : null;
+
   return {
     id: stringOrEmpty(row.id),
     listing_no: stringOrEmpty(row.listing_no),
@@ -147,7 +168,7 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
     created_at: dateOrNull(row.created_at),
     updated_at: dateOrNull(row.updated_at),
     estates: estate,
-    profiles: null,
+    profiles: profile,
   };
 }
 
@@ -267,6 +288,7 @@ async function fetchCorridorRows(
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
+    LEFT JOIN staff_users s ON s.id = p.agent_id
     WHERE ${where} AND p.deal_type = ${dealParam}::deal_type
     ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
     LIMIT ${limitParam}
@@ -298,6 +320,7 @@ export async function searchListings(
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
+    LEFT JOIN staff_users s ON s.id = p.agent_id
     WHERE ${where}
     ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
     LIMIT ${limitParam} OFFSET ${offsetParam}
@@ -370,6 +393,7 @@ export async function fetchPropertyByListingNo(input: {
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
+    LEFT JOIN staff_users s ON s.id = p.agent_id
     WHERE p.status = 'active' AND p.listing_no = $1
     LIMIT 1
     `,
@@ -402,6 +426,7 @@ export async function fetchSimilarListings(
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
+    LEFT JOIN staff_users s ON s.id = p.agent_id
     WHERE p.status = 'active'
       AND p.estate_id = $1
       AND p.deal_type = $2::deal_type
@@ -433,4 +458,139 @@ export async function fetchEstateOptions(): Promise<NeonEstateOption[]> {
     slug: stringOrEmpty(row.slug),
     name_zh: stringOrEmpty(row.name_zh),
   }));
+}
+
+export async function fetchEstates(input: { districtSlug?: string } = {}) {
+  const districtSlug = input.districtSlug ?? "sham-tseng";
+  const rows = await sql().query(
+    `
+    SELECT *
+    FROM estates
+    WHERE district_slug = $1
+    ORDER BY total_units DESC NULLS LAST, name_zh ASC
+    `,
+    [districtSlug],
+  );
+  return rows;
+}
+
+export async function fetchEstateBySlug(input: { slug: string }) {
+  const rows = await sql().query("SELECT * FROM estates WHERE slug = $1 LIMIT 1", [input.slug]);
+  return rows[0] ?? null;
+}
+
+export async function fetchFaqs(input: { scope: string }) {
+  const rows = await sql().query(
+    `
+    SELECT question, answer
+    FROM faqs
+    WHERE scope = $1
+    ORDER BY sort_order ASC, created_at ASC
+    `,
+    [input.scope],
+  );
+  return rows.map((row) => ({
+    question: stringOrEmpty(row.question),
+    answer: stringOrEmpty(row.answer),
+  }));
+}
+
+export async function fetchDistrictTransactions(input: {
+  districtSlug: string;
+  monthsBack: number;
+}) {
+  const rows = await sql().query(
+    `
+    SELECT
+      t.deal_date,
+      t.saleable_psf,
+      t.price,
+      t.saleable_area,
+      t.unit,
+      e.name_zh AS estate_name_zh,
+      e.slug AS estate_slug
+    FROM transactions t
+    INNER JOIN estates e ON e.id = t.estate_id
+    WHERE e.district_slug = $1
+      AND t.deal_type = 'sale'
+      AND t.deal_date >= (CURRENT_DATE - ($2::int * INTERVAL '1 month'))::date
+    ORDER BY t.deal_date ASC
+    `,
+    [input.districtSlug, input.monthsBack],
+  );
+  return rows.map((row) => ({
+    deal_date: dateOrNull(row.deal_date),
+    saleable_psf: numberOrNull(row.saleable_psf),
+    price: numberOrNull(row.price),
+    saleable_area: numberOrNull(row.saleable_area),
+    unit: stringOrNull(row.unit),
+    estates: {
+      name_zh: stringOrEmpty(row.estate_name_zh),
+      slug: stringOrEmpty(row.estate_slug),
+    },
+  }));
+}
+
+export async function fetchEstateTransactions(input: { estateId: string; limit: number }) {
+  const rows = await sql().query(
+    `
+    SELECT deal_date, unit, saleable_area, saleable_psf, price
+    FROM transactions
+    WHERE estate_id = $1 AND deal_type = 'sale'
+    ORDER BY deal_date DESC NULLS LAST
+    LIMIT $2
+    `,
+    [input.estateId, input.limit],
+  );
+  return rows.map((row) => ({
+    deal_date: dateOrNull(row.deal_date),
+    unit: stringOrNull(row.unit),
+    saleable_area: numberOrNull(row.saleable_area),
+    saleable_psf: numberOrNull(row.saleable_psf),
+    price: numberOrNull(row.price),
+  }));
+}
+
+export async function fetchPublishedArticles() {
+  const rows = await sql().query(
+    `
+    SELECT slug, title, excerpt, cover_image, category, reading_minutes, published_at
+    FROM articles
+    WHERE published = true
+    ORDER BY published_at DESC NULLS LAST, created_at DESC
+    `,
+  );
+  return rows.map((row) => ({
+    slug: stringOrEmpty(row.slug),
+    title: stringOrEmpty(row.title),
+    excerpt: stringOrNull(row.excerpt),
+    cover_image: stringOrNull(row.cover_image),
+    category: stringOrNull(row.category),
+    reading_minutes: numberOrNull(row.reading_minutes),
+    published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+  }));
+}
+
+export async function fetchArticleBySlug(input: { slug: string }) {
+  const rows = await sql().query(
+    `
+    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at
+    FROM articles
+    WHERE slug = $1 AND published = true
+    LIMIT 1
+    `,
+    [input.slug],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    slug: stringOrEmpty(row.slug),
+    title: stringOrEmpty(row.title),
+    excerpt: stringOrNull(row.excerpt),
+    content: stringOrNull(row.content),
+    cover_image: stringOrNull(row.cover_image),
+    category: stringOrNull(row.category),
+    reading_minutes: numberOrNull(row.reading_minutes),
+    published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+  };
 }

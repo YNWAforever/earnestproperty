@@ -13,12 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { ImageUploader } from "./ImageUploader";
+import { fetchAdminEstateOptions, saveAdminProperty } from "@/lib/neon/admin-data";
+import type { AdminPropertyInput } from "@/lib/neon/admin-data.types";
 
-type Property = Tables<"properties">;
-type Estate = Pick<Tables<"estates">, "id" | "name_zh" | "district_slug">;
+type Property = Partial<AdminPropertyInput> & { id?: string };
+type Estate = { id: string; name_zh: string; district_slug: string };
 
 const schema = z.object({
   listing_no: z.string().trim().min(1, "請輸入編號").max(40),
@@ -40,11 +40,10 @@ const schema = z.object({
 
 type Props = {
   property?: Property;
-  agentId: string;
   onSaved: (id: string) => void;
 };
 
-export function PropertyForm({ property, agentId, onSaved }: Props) {
+export function PropertyForm({ property, onSaved }: Props) {
   const [estates, setEstates] = useState<Estate[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
@@ -67,11 +66,9 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
   const [images, setImages] = useState<string[]>(property?.images ?? []);
 
   useEffect(() => {
-    supabase
-      .from("estates")
-      .select("id, name_zh, district_slug")
-      .order("name_zh")
-      .then(({ data }) => setEstates(data ?? []));
+    fetchAdminEstateOptions()
+      .then((data) => setEstates(data as Estate[]))
+      .catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
   }, []);
 
   function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
@@ -88,7 +85,8 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
     const d = parsed.data;
     const num = (v: number | undefined) => (v === undefined || isNaN(v) ? null : v);
 
-    const payload: TablesInsert<"properties"> = {
+    const payload: AdminPropertyInput = {
+      id: property?.id,
       listing_no: d.listing_no,
       title_zh: d.title_zh,
       deal_type: d.deal_type,
@@ -105,26 +103,22 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
       status: d.status,
       featured: d.featured,
       images,
-      agent_id: agentId,
+      agent_id: null,
     };
 
     setSubmitting(true);
-    const { data: row, error } = property
-      ? await supabase
-          .from("properties")
-          .update(payload)
-          .eq("id", property.id)
-          .select("id")
-          .single()
-      : await supabase.from("properties").insert(payload).select("id").single();
+    const result = await saveAdminProperty({ data: payload }).catch((err) => ({
+      error: err instanceof Error ? err.message : String(err),
+      id: null,
+    }));
     setSubmitting(false);
 
-    if (error) {
-      toast.error(error.message);
+    if ("error" in result && result.error) {
+      toast.error(result.error);
       return;
     }
     toast.success(property ? "已更新" : "已新增");
-    if (row) onSaved(row.id);
+    if (result.id) onSaved(result.id);
   }
 
   return (
@@ -275,7 +269,7 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
           />
         </Field>
         <Field label="相片" full>
-          <ImageUploader agentId={agentId} value={images} onChange={setImages} />
+          <ImageUploader ownerType="property" value={images} onChange={setImages} />
         </Field>
         <Field label="精選">
           <div className="flex h-10 items-center">

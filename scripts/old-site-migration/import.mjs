@@ -1,10 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { createClient } from "@supabase/supabase-js";
 
 import {
   createMlsImporter,
-  createSupabaseMlsDb,
   defaultFetchText,
   DEFAULT_SEED_URLS,
 } from "../../src/lib/mls/importer.mjs";
@@ -31,41 +29,6 @@ function loadEnvFile(path) {
 loadEnvFile(".env");
 loadEnvFile(".env.local");
 
-function createSupabaseClientFromEnv() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required.");
-  }
-
-  return createClient(supabaseUrl, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-async function importLegacyRunDir(runDir) {
-  const parsed = JSON.parse(await readFile(`${runDir}/parsed-listings.json`, "utf8"));
-  const dataset = buildMigrationDataset(parsed);
-
-  await writeFile(`${runDir}/migration-dataset.json`, `${JSON.stringify(dataset, null, 2)}\n`);
-
-  const supabase = createSupabaseClientFromEnv();
-  const { error } = await supabase
-    .from("properties")
-    .upsert(dataset.rows, { onConflict: "listing_no" });
-
-  if (error) throw error;
-
-  await writeFile(
-    `${runDir}/redirect-aliases.json`,
-    `${JSON.stringify(dataset.aliases, null, 2)}\n`,
-  );
-  await writeFile(`${runDir}/import-summary.json`, `${JSON.stringify(dataset.summary, null, 2)}\n`);
-
-  return { imported: dataset.rows.length, runDir, ...dataset.summary };
-}
-
 function dryRunDb() {
   return {
     listEstateIdsBySlug: async () => new Map(),
@@ -74,25 +37,29 @@ function dryRunDb() {
   };
 }
 
+async function importLegacyRunDir(runDir) {
+  const parsed = JSON.parse(await readFile(`${runDir}/parsed-listings.json`, "utf8"));
+  const dataset = buildMigrationDataset(parsed);
+  await writeFile(`${runDir}/migration-dataset.json`, `${JSON.stringify(dataset, null, 2)}\n`);
+
+  const db = dryRun ? dryRunDb() : createNeonMlsDb(createNeonSqlFromEnv());
+  const result = await db.upsertProperties(dataset.rows);
+
+  await writeFile(
+    `${runDir}/redirect-aliases.json`,
+    `${JSON.stringify(dataset.aliases, null, 2)}\n`,
+  );
+  await writeFile(`${runDir}/import-summary.json`, `${JSON.stringify(dataset.summary, null, 2)}\n`);
+
+  return { imported: result.count, runDir, ...dataset.summary };
+}
+
 async function liveSync() {
-  const hasSupabaseEnv = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY;
   const hasNeonEnv = process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED;
-  const target = process.env.MLS_DB ?? (hasNeonEnv ? "neon" : "supabase");
-  const db =
-    target === "neon" && hasNeonEnv
-      ? createNeonMlsDb(createNeonSqlFromEnv())
-      : hasSupabaseEnv
-        ? createSupabaseMlsDb(createSupabaseClientFromEnv())
-        : dryRunDb();
+  const db = dryRun ? dryRunDb() : createNeonMlsDb(createNeonSqlFromEnv());
 
-  if (target === "neon" && !hasNeonEnv && !dryRun) {
+  if (!hasNeonEnv && !dryRun) {
     throw new Error("DATABASE_URL or DATABASE_URL_UNPOOLED is required for Neon MLS sync.");
-  }
-
-  if (target !== "neon" && !hasSupabaseEnv && !dryRun) {
-    throw new Error(
-      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required for non-dry-run sync.",
-    );
   }
 
   const importer = createMlsImporter({

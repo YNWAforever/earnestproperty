@@ -16,10 +16,6 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function quotePostgrestText(value) {
-  return `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
 export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
   return {
     async discover(seedUrls = DEFAULT_SEED_URLS, { maxPages = 50 } = {}) {
@@ -92,39 +88,6 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
         errors,
         dryRunRows: [],
       };
-    },
-  };
-}
-
-export function createSupabaseMlsDb(supabase) {
-  return {
-    async listEstateIdsBySlug() {
-      const { data, error } = await supabase.from("estates").select("id, slug");
-      if (error) throw error;
-      return new Map((data ?? []).map((row) => [row.slug, row.id]));
-    },
-
-    async upsertProperties(rows) {
-      const { error } = await supabase
-        .from("properties")
-        .upsert(rows, { onConflict: "legacy_detail_id,deal_type" });
-      if (error) throw error;
-      return { count: rows.length };
-    },
-
-    async deactivateMissing({ sourceSite, seenLegacyIds, nowIso }) {
-      if (!seenLegacyIds.length) return { count: 0 };
-
-      const legacyIdList = `(${seenLegacyIds.map(quotePostgrestText).join(",")})`;
-      const { data, error } = await supabase
-        .from("properties")
-        .update({ status: "inactive", updated_at: nowIso })
-        .eq("source_site", sourceSite)
-        .not("legacy_detail_id", "in", legacyIdList)
-        .select("id");
-
-      if (error) throw error;
-      return { count: data?.length ?? 0 };
     },
   };
 }

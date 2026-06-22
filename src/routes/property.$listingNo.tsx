@@ -34,7 +34,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { supabase } from "@/integrations/supabase/client";
 import { SITE_URL } from "@/content/seo";
 import {
   fetchPropertyByListingNo,
@@ -43,6 +42,7 @@ import {
   type SimilarListing,
   type EstateTransaction,
 } from "@/lib/queries";
+import { createWebsiteInquiry } from "@/lib/neon/admin-data";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
@@ -207,18 +207,19 @@ function PropertyPage() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.from("inquiries").insert({
-      name: parsed.data.name,
-      phone: parsed.data.phone,
-      email: parsed.data.email || null,
-      message: parsed.data.message || null,
-      property_id: property.id,
-      assigned_agent_id: agent?.id ?? null,
-      source: "website",
-    });
+    const result = await createWebsiteInquiry({
+      data: {
+        name: parsed.data.name,
+        phone: parsed.data.phone,
+        email: parsed.data.email || null,
+        message: parsed.data.message || null,
+        property_id: property.id,
+        assigned_agent_id: agent?.id ?? null,
+      },
+    }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
     setSubmitting(false);
-    if (error) {
-      toast.error("提交失敗：" + error.message);
+    if ("error" in result && result.error) {
+      toast.error("提交失敗：" + result.error);
       return;
     }
     toast.success("已收到查詢，經紀會盡快與你聯絡。");

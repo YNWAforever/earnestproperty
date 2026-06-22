@@ -66,3 +66,50 @@ export const fetchNeonEstateOptions = createServerFn({ method: "GET" }).handler(
   const neonData = await import("./public-data.server");
   return neonData.fetchEstateOptions();
 });
+
+export const fetchNeonEstates = createServerFn({ method: "GET" })
+  .inputValidator((data: { districtSlug?: string }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchEstates(data);
+  });
+
+export const fetchNeonEstateBySlug = createServerFn({ method: "GET" })
+  .inputValidator((data: { slug: string }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchEstateBySlug(data);
+  });
+
+export const fetchNeonFaqs = createServerFn({ method: "GET" })
+  .inputValidator((data: { scope: string }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchFaqs(data);
+  });
+
+export const fetchNeonDistrictTransactions = createServerFn({ method: "GET" })
+  .inputValidator((data: { districtSlug: string; monthsBack: number }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchDistrictTransactions(data);
+  });
+
+export const fetchNeonEstateTransactions = createServerFn({ method: "GET" })
+  .inputValidator((data: { estateId: string; limit: number }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchEstateTransactions(data);
+  });
+
+export const fetchNeonPublishedArticles = createServerFn({ method: "GET" }).handler(async () => {
+  const neonData = await import("./public-data.server");
+  return neonData.fetchPublishedArticles();
+});
+
+export const fetchNeonArticleBySlug = createServerFn({ method: "GET" })
+  .inputValidator((data: { slug: string }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchArticleBySlug(data);
+  });

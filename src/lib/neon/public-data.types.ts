@@ -26,6 +26,18 @@ export type NeonEstateSnapshot = {
   lng: number | null;
 };
 
+export type NeonStaffProfile = {
+  id: string;
+  name_zh: string | null;
+  name_en: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  licence_no: string | null;
+  avatar_url: string | null;
+  branch: string | null;
+  bio: string | null;
+};
+
 export type NeonPropertyRow = {
   id: string;
   listing_no: string;
@@ -61,7 +73,7 @@ export type NeonPropertyRow = {
   created_at: string | null;
   updated_at: string | null;
   estates: NeonEstateSnapshot | null;
-  profiles: null;
+  profiles: NeonStaffProfile | null;
 };
 
 export type NeonListingSearchResult = {

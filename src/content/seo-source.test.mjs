@@ -35,10 +35,8 @@ test("estate summary queries canonicalize legacy database slugs", () => {
   );
 
   assert.match(queries, /function canonicalEstateSlug/);
-  assert.match(
-    fetchEstatesBody,
-    /return \(data \?\? \[\]\)\.map\(\(estate\) => \(\{ \.\.\.estate, slug: canonicalEstateSlug\(estate\.slug\) \}\)\)/,
-  );
+  assert.match(fetchEstatesBody, /withCanonicalSlug/);
+  assert.match(fetchEstatesBody, /fetchNeonEstates/);
 });
 
 test("root metadata no longer references lovable preview assets", () => {
@@ -107,21 +105,22 @@ test("listings page supports district and imported listing freshness", () => {
   assert.match(queries, /last_seen_at/);
 });
 
-test("listing queries tolerate databases before mls columns are migrated", () => {
+test("listing queries require the Neon MLS schema", () => {
   const queries = read("src/lib/queries.ts");
 
-  assert.match(queries, /retryWithoutMlsColumns/);
+  assert.doesNotMatch(queries, /retryWithoutMlsColumns/);
   assert.match(queries, /legacy_detail_id|last_seen_at|source_site/);
 });
 
-test("public listing queries use Neon server functions with Supabase fallback", () => {
+test("public listing queries use Neon server functions only", () => {
   const queries = read("src/lib/queries.ts");
   const neonClient = read("src/lib/neon/public-data.ts");
   const neonServer = read("src/lib/neon/public-data.server.ts");
+  const neonDb = read("src/lib/neon/db.server.ts");
 
   assert.match(neonServer, /@tanstack\/react-start\/server-only/);
-  assert.match(neonServer, /@neondatabase\/serverless/);
-  assert.match(neonServer, /DATABASE_URL/);
+  assert.match(neonDb, /@neondatabase\/serverless/);
+  assert.match(neonDb, /DATABASE_URL/);
 
   assert.match(neonClient, /createServerFn/);
   assert.match(neonClient, /searchNeonListings/);
@@ -129,10 +128,8 @@ test("public listing queries use Neon server functions with Supabase fallback", 
 
   assert.match(queries, /searchNeonListings/);
   assert.match(queries, /fetchNeonFeaturedProperties/);
-  assert.match(queries, /runWithSupabaseFallback/);
-  assert.match(queries, /NEON_READ_TIMEOUT_MS/);
-  assert.match(queries, /runNeonReadWithTimeout/);
-  assert.match(queries, /Promise\.race/);
+  assert.doesNotMatch(queries, /Supabase/i);
+  assert.doesNotMatch(queries, /Promise\.race/);
 });
 
 test("property detail pages expose real estate schema and legacy support", () => {

@@ -12,33 +12,24 @@ export const Route = createFileRoute("/api/mls-sync")({
         }
 
         const hasNeon = Boolean(process.env.DATABASE_URL || process.env.DATABASE_URL_UNPOOLED);
-        const hasSupabase = Boolean(
-          process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY,
-        );
 
-        if (!hasNeon && !hasSupabase) {
+        if (!hasNeon) {
           return Response.json(
             {
               ok: false,
               error: "Missing MLS database credentials",
-              action:
-                "Add DATABASE_URL for Neon or SUPABASE_SERVICE_ROLE_KEY for Supabase, then redeploy to enable MLS writes.",
+              action: "Add DATABASE_URL for Neon, then redeploy to enable MLS writes.",
             },
             { status: 503 },
           );
         }
 
-        const [{ createMlsImporter, createSupabaseMlsDb, defaultFetchText }, neonDb] =
-          await Promise.all([
-            import("@/lib/mls/importer.mjs"),
-            hasNeon ? import("@/lib/mls/neon-db.mjs") : Promise.resolve(null),
-          ]);
+        const [{ createMlsImporter, defaultFetchText }, neonDb] = await Promise.all([
+          import("@/lib/mls/importer.mjs"),
+          import("@/lib/mls/neon-db.mjs"),
+        ]);
 
-        const db = neonDb
-          ? neonDb.createNeonMlsDb(neonDb.createNeonSqlFromEnv())
-          : createSupabaseMlsDb(
-              (await import("@/integrations/supabase/client.server")).supabaseAdmin,
-            );
+        const db = neonDb.createNeonMlsDb(neonDb.createNeonSqlFromEnv());
 
         const importer = createMlsImporter({
           fetchText: defaultFetchText,

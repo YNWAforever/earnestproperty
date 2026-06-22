@@ -11,7 +11,7 @@ test("mls sync route protects cron endpoint", () => {
   assert.match(source, /CRON_SECRET/);
   assert.match(source, /status:\s*401/);
   assert.match(source, /DATABASE_URL/);
-  assert.match(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(source, /status:\s*503/);
   assert.match(source, /createNeonMlsDb/);
   assert.match(source, /createMlsImporter/);
