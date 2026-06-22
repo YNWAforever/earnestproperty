@@ -1,6 +1,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { load } from "cheerio";
+
+import {
+  buildPagedListingUrl,
+  parseListingIndex,
+  parseMaxListingPage,
+} from "../../src/lib/mls/parse-old-site.mjs";
 
 export const INDEX_SOURCES = [
   "https://www.earnestproperty.com/property/",
@@ -10,30 +15,15 @@ export const INDEX_SOURCES = [
 ];
 
 export function extractDetailUrls(html, baseUrl) {
-  const $ = load(html);
-  const urls = [];
-
-  $("a[href*='/property-detail/']").each((_, element) => {
-    const href = $(element).attr("href");
-    if (!href) return;
-
-    const absolute = new URL(href, baseUrl).toString();
-    if (/\/property-detail\/\d+\.html$/i.test(absolute)) urls.push(absolute);
-  });
-
-  return [...new Set(urls)];
+  return parseListingIndex(html, baseUrl);
 }
 
 export function extractMaxPage(html) {
-  const matches = [...html.matchAll(/findForm_submit\(["']page["']\s*,\s*(\d+)\)/g)];
-  const pages = matches.map((match) => Number(match[1])).filter(Number.isFinite);
-  return pages.length ? Math.max(...pages) : 1;
+  return parseMaxListingPage(html);
 }
 
 export function buildPagedUrl(sourceUrl, page) {
-  const url = new URL(sourceUrl);
-  if (page > 1) url.searchParams.set("page", String(page));
-  return url.toString();
+  return buildPagedListingUrl(sourceUrl, page);
 }
 
 async function fetchText(url) {

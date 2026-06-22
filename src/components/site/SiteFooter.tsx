@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { MapPin, Phone, Mail, Facebook, Instagram } from "lucide-react";
+import { MapPin, Phone, Mail } from "lucide-react";
 import { SITE_CONTACT } from "@/config/site";
 
 export function SiteFooter() {
@@ -32,6 +32,17 @@ export function SiteFooter() {
               Your Sham Tseng Property Expert.
             </p>
             <p className="mt-4 text-xs opacity-60">牌照號 Licence No.: C-018613</p>
+            <p className="mt-3 text-xs opacity-60">
+              公開代理資料：
+              <a
+                href="https://www.28hse.com/agent/540"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2"
+              >
+                28Hse
+              </a>
+            </p>
           </div>
 
           <div>
@@ -50,7 +61,22 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/estate/belvedere-garden" className="opacity-80 hover:opacity-100">
+                <Link to="/castle-peak-road" className="opacity-80 hover:opacity-100">
+                  青山公路 Castle Peak Road
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/castle-peak-road/$segment"
+                  params={{ segment: "ting-kau" }}
+                  data-canonical-path="/castle-peak-road/ting-kau"
+                  className="opacity-80 hover:opacity-100"
+                >
+                  汀九 Ting Kau
+                </Link>
+              </li>
+              <li>
+                <Link to="/estate/bellagio" className="opacity-80 hover:opacity-100">
                   碧堤半島
                 </Link>
               </li>
@@ -62,6 +88,16 @@ export function SiteFooter() {
               <li>
                 <Link to="/estate/hong-kong-garden" className="opacity-80 hover:opacity-100">
                   豪景花園
+                </Link>
+              </li>
+              <li>
+                <Link to="/estate/rhine-garden" className="opacity-80 hover:opacity-100">
+                  海韻花園
+                </Link>
+              </li>
+              <li>
+                <Link to="/estate/lido-garden" className="opacity-80 hover:opacity-100">
+                  麗都花園
                 </Link>
               </li>
             </ul>
@@ -86,6 +122,11 @@ export function SiteFooter() {
                 <Link to="/blog" className="opacity-80 hover:opacity-100">
                   市場分析
                 </Link>
+              </li>
+              <li>
+                <a href="/#owner-valuation" className="opacity-80 hover:opacity-100">
+                  業主放盤 / 免費估價
+                </a>
               </li>
               <li>
                 <Link to="/contact" className="opacity-80 hover:opacity-100">
@@ -115,20 +156,6 @@ export function SiteFooter() {
                 <a href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a>
               </li>
             </ul>
-            <div className="mt-5 flex gap-3">
-              <a
-                href="#"
-                className="rounded-full bg-primary-foreground/10 p-2 hover:bg-primary-foreground/20"
-              >
-                <Facebook className="h-4 w-4" />
-              </a>
-              <a
-                href="#"
-                className="rounded-full bg-primary-foreground/10 p-2 hover:bg-primary-foreground/20"
-              >
-                <Instagram className="h-4 w-4" />
-              </a>
-            </div>
           </div>
         </div>
 

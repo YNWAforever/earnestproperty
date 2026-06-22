@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   Search,
@@ -28,6 +28,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Card, CardContent } from "@/components/ui/card";
+import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
+import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import heroImage from "@/assets/hero-shamtseng.jpg";
 import { whatsappUrl } from "@/config/site";
 import {
@@ -62,12 +64,12 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園真盤源。即時 WhatsApp 查詢。Licence C-018613。",
+          "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園堅盤源。即時 WhatsApp 查詢。Licence C-018613。",
       },
       { property: "og:title", content: "晉誠地產 Earnest Property｜深井物業專家" },
       {
         property: "og:description",
-        content: "深井．青山公路．我哋比你更熟。即時搜尋深井真盤源。",
+        content: "深井．青山公路．我哋比你更熟。即時搜尋深井堅盤源。",
       },
       { property: "og:image", content: heroImage },
       { name: "twitter:image", content: heroImage },
@@ -77,17 +79,19 @@ export const Route = createFileRoute("/")({
 });
 
 const ESTATE_GRADIENTS: Record<string, string> = {
-  "belvedere-garden": "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))",
+  bellagio: "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))",
   "sea-crest-villa": "linear-gradient(135deg, oklch(0.6 0.08 200), oklch(0.35 0.07 230))",
   "hong-kong-garden": "linear-gradient(135deg, oklch(0.65 0.09 180), oklch(0.38 0.06 220))",
-  "sea-pearl-garden": "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))",
+  "rhine-garden": "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))",
   "lido-garden": "linear-gradient(135deg, oklch(0.62 0.08 195), oklch(0.36 0.07 225))",
 };
 
 function HomePage() {
   const { estates, featured, faqs, counts } = Route.useLoaderData();
+  const navigate = useNavigate({ from: "/" });
   const [searchEstate, setSearchEstate] = useState("");
   const [searchType, setSearchType] = useState("sale");
+  const [searchKeyword, setSearchKeyword] = useState("");
 
   const totalUnits = estates.reduce((s: number, e: EstateSummary) => s + (e.total_units ?? 0), 0);
   const avgPsf =
@@ -97,6 +101,18 @@ function HomePage() {
             estates.length,
         )
       : 0;
+
+  function submitHeroSearch() {
+    navigate({
+      to: "/listings",
+      search: {
+        deal: searchType as "sale" | "rent",
+        estate: searchEstate || undefined,
+        keyword: searchKeyword.trim() || undefined,
+        page: 1,
+      },
+    });
+  }
 
   return (
     <div className="bg-background">
@@ -122,12 +138,12 @@ function HomePage() {
             <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
               深井買樓租樓
               <br />
-              <span className="text-gold">晉誠地產</span>．真盤源
+              <span className="text-gold">晉誠地產</span>．堅盤源
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
               深井．青山公路．我哋比你更熟。
               <br />
-              碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式真盤源平台。
+              碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式堅盤源平台。
             </p>
           </div>
 
@@ -135,7 +151,7 @@ function HomePage() {
           <Card className="mt-10 border-0 bg-card/95 shadow-elegant backdrop-blur">
             <CardContent className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
               <Select value={searchType} onValueChange={setSearchType}>
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11" aria-label="買樓或租樓">
                   <SelectValue placeholder="買 / 租" />
                 </SelectTrigger>
                 <SelectContent>
@@ -144,7 +160,7 @@ function HomePage() {
                 </SelectContent>
               </Select>
               <Select value={searchEstate} onValueChange={setSearchEstate}>
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11" aria-label="選擇屋苑">
                   <SelectValue placeholder="選擇屋苑" />
                 </SelectTrigger>
                 <SelectContent>
@@ -155,13 +171,27 @@ function HomePage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Input className="h-11" placeholder="價錢 / 房數 / 關鍵字" />
-              <Button size="lg" className="h-11 bg-coral text-coral-foreground hover:bg-coral/90">
+              <Input
+                className="h-11"
+                aria-label="預算、房數或關鍵字"
+                placeholder="預算 / 房數 / 關鍵字（配盤用）"
+                value={searchKeyword}
+                onChange={(event) => setSearchKeyword(event.target.value)}
+              />
+              <Button
+                type="button"
+                size="lg"
+                onClick={submitHeroSearch}
+                className="h-11 bg-coral text-coral-foreground hover:bg-coral/90"
+              >
                 <Search className="h-4 w-4" />
                 搜尋
               </Button>
             </CardContent>
           </Card>
+          <p className="mt-3 text-sm text-primary-foreground/85">
+            搵唔到心水盤？搜尋後可直接 WhatsApp 講低預算，代理幫你配盤。
+          </p>
         </div>
       </section>
 
@@ -183,8 +213,7 @@ function HomePage() {
         />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {estates.map((estate: EstateSummary) => {
-            // counts is keyed by estate_id; we don't have id in this select, fall back to 0
-            const listingCount = 0;
+            const listingCount = counts[estate.slug] ?? 0;
             return (
               <Link
                 key={estate.slug}
@@ -195,8 +224,7 @@ function HomePage() {
                 <div
                   className="relative h-48 overflow-hidden"
                   style={{
-                    background:
-                      ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS["belvedere-garden"],
+                    background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio,
                   }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-t from-primary/70 to-transparent" />
@@ -217,13 +245,7 @@ function HomePage() {
                   </div>
                   <div>
                     <p className="text-[11px] text-muted-foreground">最新放盤</p>
-                    <p className="text-base font-semibold text-primary">
-                      {
-                        featured.filter((p: FeaturedProperty) => p.estates?.slug === estate.slug)
-                          .length
-                      }{" "}
-                      個
-                    </p>
+                    <p className="text-base font-semibold text-primary">{listingCount} 個</p>
                   </div>
                   <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
                     <span>瀏覽屋苑詳情</span>
@@ -234,8 +256,6 @@ function HomePage() {
             );
           })}
         </div>
-        {/* keep counts referenced to avoid unused warning */}
-        <span className="hidden">{Object.keys(counts).length}</span>
       </section>
 
       {/* FEATURED LISTINGS */}
@@ -284,7 +304,7 @@ function HomePage() {
           />
           <Feature
             icon={<Home className="h-5 w-5" />}
-            title="真盤源"
+            title="堅盤源"
             desc="所有放盤親身核實，無虛假廣告，無釣魚盤。"
           />
           <Feature
@@ -330,6 +350,14 @@ function HomePage() {
         </section>
       )}
 
+      <OwnerValuationPanel
+        id="owner-valuation"
+        context={{
+          districtName: "深井 / 青山公路",
+          source: "homepage-owner-valuation",
+        }}
+      />
+
       {/* CTA BAND */}
       <section className="bg-primary text-primary-foreground">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
@@ -339,12 +367,15 @@ function HomePage() {
               即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
             </p>
           </div>
-          <a href={whatsappUrl("你好，我想查詢深井物業")} target="_blank" rel="noopener noreferrer">
-            <Button size="lg" className="bg-coral text-coral-foreground hover:bg-coral/90">
-              <MessageCircle className="h-4 w-4" />
-              WhatsApp 即時查詢
-            </Button>
-          </a>
+          <div className="w-full max-w-xl">
+            <IntentWhatsAppCTA
+              context={{
+                districtName: "深井 / 青山公路",
+                searchSummary: searchKeyword || undefined,
+                source: "homepage-final-cta",
+              }}
+            />
+          </div>
         </div>
       </section>
 

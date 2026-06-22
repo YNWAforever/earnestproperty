@@ -9,12 +9,17 @@ const detailRedirects = importedRedirects.map((redirect) =>
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
+  crons: [{ path: "/api/mls-sync", schedule: "0 20 * * *" }],
   redirects: [
     ...detailRedirects,
     routes.redirect("/", "/", {
       permanent: true,
       has: [matchers.query("ln", { inc: ["sc", "tc"] })],
     }),
+    routes.redirect("/district/ting-kau", "/castle-peak-road/ting-kau", { permanent: true }),
+    routes.redirect("/district/ting-kau/", "/castle-peak-road/ting-kau", { permanent: true }),
+    routes.redirect("/estate/belvedere-garden", "/estate/bellagio", { permanent: true }),
+    routes.redirect("/estate/sea-pearl-garden", "/estate/rhine-garden", { permanent: true }),
     routes.redirect("/property-detail/:oldId.html", "/listings", { permanent: true }),
     routes.redirect("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", {
       permanent: true,

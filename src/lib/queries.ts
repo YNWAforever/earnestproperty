@@ -1,4 +1,45 @@
-import { supabase } from "@/integrations/supabase/client";
+import {
+  fetchNeonArticleBySlug,
+  fetchNeonCorridorInventory,
+  fetchNeonDistrictTransactions,
+  fetchNeonEstateBySlug,
+  fetchNeonEstateOptions,
+  fetchNeonEstateTransactions,
+  fetchNeonEstates,
+  fetchNeonFaqs,
+  fetchNeonFeaturedProperties,
+  fetchNeonListingCountsByEstate,
+  fetchNeonListingsForEstate,
+  fetchNeonPropertyByLegacyDetailId,
+  fetchNeonPropertyByListingNo,
+  fetchNeonPublishedArticles,
+  fetchNeonSimilarListings,
+  searchNeonListings,
+} from "@/lib/neon/public-data";
+import type { NeonPropertyRow } from "@/lib/neon/public-data.types";
+
+const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
+  bellagio: "belvedere-garden",
+  "rhine-garden": "sea-pearl-garden",
+};
+
+function canonicalEstateSlug(dbSlug: string) {
+  for (const [canonical, legacy] of Object.entries(ESTATE_DB_SLUG_FALLBACKS)) {
+    if (legacy === dbSlug) return canonical;
+  }
+  return dbSlug;
+}
+
+function dbEstateSlug(slug: string) {
+  return ESTATE_DB_SLUG_FALLBACKS[slug] ?? slug;
+}
+
+function withCanonicalSlug<T extends { slug?: string }>(estate: T, requestedSlug?: string): T {
+  return {
+    ...estate,
+    slug: requestedSlug ?? canonicalEstateSlug(estate.slug ?? ""),
+  };
+}
 
 export type EstateSummary = {
   slug: string;
@@ -26,47 +67,32 @@ export type FeaturedProperty = {
 export type FaqItem = { question: string; answer: string };
 
 export async function fetchEstates(): Promise<EstateSummary[]> {
-  const { data, error } = await supabase
-    .from("estates")
-    .select("slug, name_zh, total_units, avg_saleable_psf, hero_image")
-    .eq("district_slug", "sham-tseng")
-    .order("total_units", { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  const rows = await fetchNeonEstates({ data: { districtSlug: "sham-tseng" } });
+  return (rows as EstateSummary[]).map((estate) => withCanonicalSlug(estate));
 }
 
 export async function fetchEstateBySlug(slug: string) {
-  const { data, error } = await supabase
-    .from("estates")
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  const estate = await fetchNeonEstateBySlug({ data: { slug: dbEstateSlug(slug) } });
+  return estate
+    ? withCanonicalSlug(estate as Record<string, unknown> & { slug: string }, slug)
+    : null;
 }
 
-export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
-  const { data, error } = await supabase
-    .from("properties")
-    .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, features, images, estates(name_zh, slug)"
-    )
-    .eq("status", "active")
-    .eq("featured", true)
-    .order("created_at", { ascending: false })
-    .limit(6);
-  if (error) throw error;
-  return (data ?? []) as unknown as FeaturedProperty[];
+async function fetchFaqsByScope(scope: string): Promise<FaqItem[]> {
+  return (await fetchNeonFaqs({ data: { scope } })) as FaqItem[];
 }
 
 export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
-  const { data, error } = await supabase
-    .from("faqs")
-    .select("question, answer")
-    .eq("scope", scope)
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
-  return data ?? [];
+  const rows = await fetchFaqsByScope(scope);
+  if (rows.length > 0 || !scope.startsWith("estate:")) return rows;
+
+  const slug = scope.replace("estate:", "");
+  const fallback = ESTATE_DB_SLUG_FALLBACKS[slug];
+  return fallback ? fetchFaqsByScope(`estate:${fallback}`) : rows;
+}
+
+export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
+  return (await fetchNeonFeaturedProperties({ data: { limit: 6 } })) as FeaturedProperty[];
 }
 
 export type DistrictTransaction = {
@@ -80,120 +106,131 @@ export type DistrictTransaction = {
 
 export async function fetchDistrictTransactions(
   districtSlug: string,
-  monthsBack = 12
+  monthsBack = 12,
 ): Promise<DistrictTransaction[]> {
-  const since = new Date();
-  since.setMonth(since.getMonth() - monthsBack);
-  const { data, error } = await supabase
-    .from("transactions")
-    .select(
-      "deal_date, saleable_psf, price, saleable_area, unit, estates!inner(name_zh, slug, district_slug)"
-    )
-    .eq("estates.district_slug", districtSlug)
-    .eq("deal_type", "sale")
-    .gte("deal_date", since.toISOString().slice(0, 10))
-    .order("deal_date", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as unknown as DistrictTransaction[];
+  return (await fetchNeonDistrictTransactions({
+    data: { districtSlug, monthsBack },
+  })) as DistrictTransaction[];
 }
 
 export async function fetchPropertyByListingNo(listingNo: string) {
-  const { data, error } = await supabase
-    .from("properties")
-    .select(
-      `*,
-       estates(slug, name_zh, district_slug, year_completed, developer),
-       profiles:agent_id(id, name_zh, name_en, phone, whatsapp, licence_no, avatar_url, branch, bio)`
-    )
-    .eq("listing_no", listingNo)
-    .eq("status", "active")
-    .maybeSingle();
-  if (error) throw error;
-  return data;
+  return (await fetchNeonPropertyByListingNo({ data: { listingNo } })) as NeonPropertyRow | null;
 }
 
 export async function fetchListingCountsByEstate() {
-  const { data, error } = await supabase
-    .from("properties")
-    .select("estate_id")
-    .eq("status", "active");
-  if (error) throw error;
-  const counts = new Map<string, number>();
-  (data ?? []).forEach((r) => {
-    if (r.estate_id) counts.set(r.estate_id, (counts.get(r.estate_id) ?? 0) + 1);
-  });
-  return counts;
+  return new Map(Object.entries(await fetchNeonListingCountsByEstate()));
 }
 
 export type ListingFilters = {
   deal: "sale" | "rent" | "all";
   minPrice?: number;
   maxPrice?: number;
-  bedrooms?: number; // 0 = studio, 4 = 4+
+  bedrooms?: number;
   estateSlug?: string;
+  districtSlug?: string;
   page: number;
   pageSize: number;
 };
 
-export type ListingRow = {
-  id: string;
-  listing_no: string;
-  title_zh: string;
-  deal_type: "sale" | "rent";
-  price: number | null;
-  rent: number | null;
-  saleable_area: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  floor: string | null;
-  images: string[] | null;
-  estates: { name_zh: string; slug: string } | null;
+export type ListingRow = Pick<
+  NeonPropertyRow,
+  | "id"
+  | "listing_no"
+  | "title_zh"
+  | "deal_type"
+  | "price"
+  | "rent"
+  | "saleable_area"
+  | "bedrooms"
+  | "bathrooms"
+  | "floor"
+  | "last_seen_at"
+  | "source_site"
+  | "images"
+  | "estates"
+>;
+
+export type CorridorInventoryAliasInput = {
+  districtSlugs: string[];
+  estateSlugs: string[];
+  textAliases: string[];
+  limit?: number;
 };
+
+export type CorridorInventory = {
+  saleTotal: number;
+  rentTotal: number;
+  saleRows: ListingRow[];
+  rentRows: ListingRow[];
+};
+
+function cleanCorridorTerms(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function clampCorridorLimit(value: number | undefined) {
+  const limit = typeof value === "number" && Number.isFinite(value) ? value : 6;
+  return Math.min(Math.max(1, limit), 24);
+}
+
+function normalizeCorridorInventoryInput(
+  input: CorridorInventoryAliasInput,
+): Required<CorridorInventoryAliasInput> {
+  return {
+    districtSlugs: cleanCorridorTerms(input.districtSlugs),
+    estateSlugs: cleanCorridorTerms(input.estateSlugs).map(dbEstateSlug),
+    textAliases: cleanCorridorTerms(input.textAliases),
+    limit: clampCorridorLimit(input.limit),
+  };
+}
+
+function hasCorridorAliases(input: Required<CorridorInventoryAliasInput>) {
+  return (
+    input.districtSlugs.length > 0 || input.estateSlugs.length > 0 || input.textAliases.length > 0
+  );
+}
+
+function emptyCorridorInventory(): CorridorInventory {
+  return {
+    saleTotal: 0,
+    rentTotal: 0,
+    saleRows: [],
+    rentRows: [],
+  };
+}
+
+export async function fetchCorridorInventoryForAliases(
+  input: CorridorInventoryAliasInput,
+): Promise<CorridorInventory> {
+  const normalized = normalizeCorridorInventoryInput(input);
+  if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
+  const result = await fetchNeonCorridorInventory({ data: normalized });
+  return {
+    saleTotal: result.saleTotal,
+    rentTotal: result.rentTotal,
+    saleRows: result.saleRows as ListingRow[],
+    rentRows: result.rentRows as ListingRow[],
+  };
+}
 
 export async function searchListings(f: ListingFilters): Promise<{
   rows: ListingRow[];
   total: number;
 }> {
-  const from = (f.page - 1) * f.pageSize;
-  const to = from + f.pageSize - 1;
+  const result = await searchNeonListings({
+    data: { ...f, estateSlug: f.estateSlug ? dbEstateSlug(f.estateSlug) : undefined },
+  });
+  return { rows: result.rows as ListingRow[], total: result.total };
+}
 
-  let q = supabase
-    .from("properties")
-    .select(
-      "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)",
-      { count: "exact" }
-    )
-    .eq("status", "active");
+export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
+  return (await fetchNeonListingsForEstate({
+    data: { estateSlug: dbEstateSlug(estateSlug), limit },
+  })) as ListingRow[];
+}
 
-  if (f.deal !== "all") q = q.eq("deal_type", f.deal);
-
-  const priceCol = f.deal === "rent" ? "rent" : "price";
-  if (f.minPrice !== undefined) q = q.gte(priceCol, f.minPrice);
-  if (f.maxPrice !== undefined) q = q.lte(priceCol, f.maxPrice);
-
-  if (f.bedrooms !== undefined) {
-    if (f.bedrooms >= 4) q = q.gte("bedrooms", 4);
-    else q = q.eq("bedrooms", f.bedrooms);
-  }
-
-  if (f.estateSlug) {
-    const { data: est } = await supabase
-      .from("estates")
-      .select("id")
-      .eq("slug", f.estateSlug)
-      .maybeSingle();
-    if (est?.id) q = q.eq("estate_id", est.id);
-    else return { rows: [], total: 0 };
-  }
-
-  q = q
-    .order("featured", { ascending: false })
-    .order("created_at", { ascending: false })
-    .range(from, to);
-
-  const { data, error, count } = await q;
-  if (error) throw error;
-  return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
+export async function fetchPropertyByLegacyDetailId(oldId: string) {
+  return fetchNeonPropertyByLegacyDetailId({ data: { oldId } });
 }
 
 export type SimilarListing = {
@@ -212,20 +249,11 @@ export async function fetchSimilarListings(
   estateId: string,
   dealType: "sale" | "rent",
   excludeId: string,
-  limit = 4
+  limit = 4,
 ): Promise<SimilarListing[]> {
-  const { data, error } = await supabase
-    .from("properties")
-    .select("id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, images")
-    .eq("status", "active")
-    .eq("estate_id", estateId)
-    .eq("deal_type", dealType)
-    .neq("id", excludeId)
-    .order("featured", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return (data ?? []) as SimilarListing[];
+  return (await fetchNeonSimilarListings({
+    data: { estateId, dealType, excludeId, limit },
+  })) as SimilarListing[];
 }
 
 export type EstateTransaction = {
@@ -238,25 +266,30 @@ export type EstateTransaction = {
 
 export async function fetchEstateTransactions(
   estateId: string,
-  limit = 8
+  limit = 8,
 ): Promise<EstateTransaction[]> {
-  const { data, error } = await supabase
-    .from("transactions")
-    .select("deal_date, unit, saleable_area, saleable_psf, price")
-    .eq("estate_id", estateId)
-    .eq("deal_type", "sale")
-    .order("deal_date", { ascending: false })
-    .limit(limit);
-  if (error) throw error;
-  return (data ?? []) as EstateTransaction[];
+  return (await fetchNeonEstateTransactions({ data: { estateId, limit } })) as EstateTransaction[];
 }
 
 export async function fetchEstateOptions() {
-  const { data, error } = await supabase
-    .from("estates")
-    .select("slug, name_zh")
-    .order("name_zh");
-  if (error) throw error;
-  return data ?? [];
+  const estates = await fetchNeonEstateOptions();
+  return estates.map((estate) => withCanonicalSlug(estate));
 }
 
+export type ArticleSummary = {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  cover_image: string | null;
+  category: string | null;
+  reading_minutes: number | null;
+  published_at: string;
+};
+
+export async function fetchPublishedArticles(): Promise<ArticleSummary[]> {
+  return (await fetchNeonPublishedArticles()) as ArticleSummary[];
+}
+
+export async function fetchArticleBySlug(slug: string) {
+  return fetchNeonArticleBySlug({ data: { slug } });
+}

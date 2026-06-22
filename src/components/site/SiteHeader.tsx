@@ -7,8 +7,10 @@ import { whatsappUrl } from "@/config/site";
 
 const navItems = [
   { to: "/listings", label: "搜尋放盤" },
+  { to: "/castle-peak-road", label: "青山公路" },
   { to: "/district/sham-tseng", label: "深井" },
-  { to: "/estate/belvedere-garden", label: "屋苑" },
+  { to: "/estate/bellagio", label: "屋苑" },
+  { href: "/#owner-valuation", label: "業主放盤 / 免費估價" },
   { to: "/agents", label: "代理" },
   { to: "/blog", label: "市場分析" },
   { to: "/about", label: "關於" },
@@ -50,18 +52,28 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-              activeProps={{
-                className: "rounded-md px-3 py-2 text-sm font-semibold text-primary bg-accent",
-              }}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {navItems.map((item) =>
+            "href" in item ? (
+              <a
+                key={item.href}
+                href={item.href}
+                className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+              >
+                {item.label}
+              </a>
+            ) : (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+                activeProps={{
+                  className: "rounded-md px-3 py-2 text-sm font-semibold text-primary bg-accent",
+                }}
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -79,22 +91,33 @@ export function SiteHeader() {
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="lg:hidden">
+              <Button variant="ghost" size="icon" className="lg:hidden" aria-label="開啟主選單">
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-72">
               <div className="mt-8 flex flex-col gap-1">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setOpen(false)}
-                    className="rounded-md px-3 py-2.5 text-base font-medium text-foreground/85 hover:bg-accent"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
+                {navItems.map((item) =>
+                  "href" in item ? (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setOpen(false)}
+                      className="rounded-md px-3 py-2.5 text-base font-medium text-foreground/85 hover:bg-accent"
+                    >
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setOpen(false)}
+                      className="rounded-md px-3 py-2.5 text-base font-medium text-foreground/85 hover:bg-accent"
+                    >
+                      {item.label}
+                    </Link>
+                  ),
+                )}
                 <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="mt-4">
                   <Button className="w-full bg-coral text-coral-foreground hover:bg-coral/90">
                     <MessageCircle className="h-4 w-4" />

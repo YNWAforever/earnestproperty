@@ -2,11 +2,10 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Upload, X, GripVertical } from "lucide-react";
 
 type Props = {
-  agentId: string;
+  ownerType?: string;
   value: string[];
   onChange: (urls: string[]) => void;
 };
@@ -14,7 +13,7 @@ type Props = {
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-export function ImageUploader({ agentId, value, onChange }: Props) {
+export function ImageUploader({ ownerType = "property", value, onChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -41,16 +40,15 @@ export function ImageUploader({ agentId, value, onChange }: Props) {
     const uploaded: string[] = [];
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i];
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${agentId}/${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage
-        .from("property-images")
-        .upload(path, file, { contentType: file.type, upsert: false });
-      if (error) {
-        toast.error(`上載失敗：${file.name} — ${error.message}`);
+      const body = new FormData();
+      body.set("file", file);
+      body.set("ownerType", ownerType);
+      const res = await fetch("/api/admin/media/upload", { method: "POST", body });
+      const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+      if (!res.ok || !data?.url) {
+        toast.error(`上載失敗：${file.name} — ${data?.error ?? res.statusText}`);
       } else {
-        const { data } = supabase.storage.from("property-images").getPublicUrl(path);
-        uploaded.push(data.publicUrl);
+        uploaded.push(data.url);
       }
       setProgress({ done: i + 1, total: valid.length });
     }
@@ -90,9 +88,7 @@ export function ImageUploader({ agentId, value, onChange }: Props) {
           ) : (
             <Upload className="mr-2 h-4 w-4" />
           )}
-          {uploading
-            ? `上載中 ${progress?.done ?? 0}/${progress?.total ?? 0}`
-            : "上載相片"}
+          {uploading ? `上載中 ${progress?.done ?? 0}/${progress?.total ?? 0}` : "上載相片"}
         </Button>
         <Input
           ref={inputRef}

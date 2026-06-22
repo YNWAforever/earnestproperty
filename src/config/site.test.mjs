@@ -16,3 +16,41 @@ test("public source files do not contain placeholder contact values", () => {
   assert.equal(combined.includes("+852 0000 0000"), false);
   assert.equal(combined.includes("tel:+85200000000"), false);
 });
+
+test("site config exposes segmented whatsapp intent helpers", () => {
+  const source = readFileSync("src/config/site.ts", "utf8");
+
+  assert.match(source, /export type WhatsAppIntent = "buy" \| "rent" \| "valuation"/);
+  assert.match(source, /export function whatsappIntentMessage/);
+  assert.match(source, /export function whatsappIntentUrl/);
+  assert.match(source, /我要買樓/);
+  assert.match(source, /我要租樓/);
+  assert.match(source, /我要放盤估價/);
+  assert.match(source, /深井業主估價報告/);
+});
+
+test("valuation whatsapp intent includes search summary context", () => {
+  const source = readFileSync("src/config/site.ts", "utf8");
+  const valuationStart = source.indexOf('"你好，我要放盤估價');
+  const valuationEnd = source.indexOf("].join", valuationStart);
+  const valuationMessage = source.slice(valuationStart, valuationEnd);
+
+  assert.notEqual(valuationStart, -1);
+  assert.notEqual(valuationEnd, -1);
+  assert.match(valuationMessage, /contextLine\("搜尋條件", context\.searchSummary\)/);
+});
+
+test("source files avoid the older disallowed listing wording", () => {
+  const forbidden = String.fromCharCode(30495, 30436, 28304);
+  const files = [
+    "src/config/site.ts",
+    "src/content/seo.ts",
+    "src/routes/index.tsx",
+    "src/routes/listings.tsx",
+    "src/routes/estate.$slug.tsx",
+    "src/components/site/SiteHeader.tsx",
+    "src/components/site/SiteFooter.tsx",
+  ];
+  const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
+  assert.equal(combined.includes(forbidden), false);
+});
