@@ -176,14 +176,12 @@ function EstatePage() {
           <div className="rounded-lg border bg-card p-5">
             <h3 className="text-lg font-bold text-primary">適合邊類買家 / 租客？</h3>
             <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              {(content?.buyerFit ?? [seo?.fit ?? "適合想比較深井核心屋苑的買家。"]).map(
-                (item) => (
-                  <li key={item} className="flex gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-                    <span>{item}</span>
-                  </li>
-                ),
-              )}
+              {(content?.buyerFit ?? [seo?.fit ?? "適合想比較深井核心屋苑的買家。"]).map((item) => (
+                <li key={item} className="flex gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                  <span>{item}</span>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
