@@ -21,10 +21,19 @@ function uniquePaths(paths: string[]) {
   return Array.from(new Set(paths)).filter((path) => path !== "/district/ting-kau");
 }
 
+function escapeXml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 function urlXml(path: string) {
   return [
     "  <url>",
-    `    <loc>${SITE_URL}${path}</loc>`,
+    `    <loc>${escapeXml(`${SITE_URL}${path}`)}</loc>`,
     "    <changefreq>weekly</changefreq>",
     "    <priority>0.7</priority>",
     "  </url>",

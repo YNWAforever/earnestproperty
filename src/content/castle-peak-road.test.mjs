@@ -175,6 +175,8 @@ test("castle peak road links and media use route-aware safeguards", () => {
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
   const seo = read("src/content/seo.ts");
   const vercel = read("vercel.ts");
+  const hubRoute = read("src/routes/castle-peak-road.tsx");
+  const segmentRoute = read("src/routes/castle-peak-road.$segment.tsx");
   const tingKauRoute = read("src/routes/district.ting-kau.tsx");
   const tsuenWanRoute = read("src/routes/district.tsuen-wan.tsx");
   const shamTsengRoute = read("src/routes/district.sham-tseng.tsx");
@@ -185,13 +187,27 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(seo, /castlePeakRoad/);
   assert.match(seo, /path:\s*"\/castle-peak-road\/ting-kau"/);
   assert.match(vercel, /\/district\/ting-kau/);
+  assert.match(vercel, /\/district\/ting-kau\//);
   assert.match(vercel, /\/castle-peak-road\/ting-kau/);
+  assert.match(hubRoute, /rel:\s*["']canonical["']/);
+  assert.match(hubRoute, /SITE_URL/);
+  assert.match(hubRoute, /castlePeakRoadHub\.path/);
+  assert.match(segmentRoute, /rel:\s*["']canonical["']/);
+  assert.match(segmentRoute, /loaderData\?\.segment\.path/);
+  assert.match(segmentRoute, /castlePeakRoadHub\.path/);
   assert.match(tingKauRoute, /redirect/);
   assert.match(tingKauRoute, /\/castle-peak-road\/\$segment/);
+  assert.match(tingKauRoute, /statusCode:\s*(301|308)/);
+  assert.match(tsuenWanRoute, /rel:\s*["']canonical["']/);
+  assert.match(tsuenWanRoute, /pageSeo\.tsuenWan\.path/);
   assert.match(tsuenWanRoute, /\/castle-peak-road/);
+  assert.match(shamTsengRoute, /rel:\s*["']canonical["']/);
+  assert.match(shamTsengRoute, /pageSeo\.shamTseng\.path/);
   assert.match(shamTsengRoute, /\/castle-peak-road/);
   assert.match(header, /青山公路/);
   assert.match(footer, /\/castle-peak-road\/ting-kau/);
   assert.match(sitemap, /sitemap\.xml/);
   assert.match(sitemap, /castlePeakRoadSitemapPaths/);
+  assert.match(sitemap, /function escapeXml/);
+  assert.match(sitemap, /escapeXml\(\`\$\{SITE_URL\}\$\{path\}\`\)/);
 });

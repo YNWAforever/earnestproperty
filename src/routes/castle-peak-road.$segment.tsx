@@ -50,6 +50,12 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
         content: loaderData?.segment.description ?? castlePeakRoadHub.description,
       },
     ],
+    links: [
+      {
+        rel: "canonical",
+        href: `${SITE_URL}${loaderData?.segment.path ?? castlePeakRoadHub.path}`,
+      },
+    ],
   }),
   errorComponent: CastlePeakRoadSegmentError,
   component: CastlePeakRoadSegmentPage,

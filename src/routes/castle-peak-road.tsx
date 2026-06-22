@@ -38,6 +38,7 @@ export const Route = createFileRoute("/castle-peak-road")({
       { property: "og:title", content: castlePeakRoadHub.title },
       { property: "og:description", content: castlePeakRoadHub.description },
     ],
+    links: [{ rel: "canonical", href: `${SITE_URL}${castlePeakRoadHub.path}` }],
   }),
   errorComponent: CastlePeakRoadRouteError,
   component: CastlePeakRoadHubPage,

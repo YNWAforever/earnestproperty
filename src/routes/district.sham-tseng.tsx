@@ -24,6 +24,7 @@ import {
   type FaqItem,
   type DistrictTransaction,
 } from "@/lib/queries";
+import { SITE_URL, pageSeo } from "@/content/seo";
 
 type LoaderData = {
   estates: EstateSummary[];
@@ -45,6 +46,7 @@ export const Route = createFileRoute("/district/sham-tseng")({
         content: "深井屋苑、交通、校網 62、近 12 個月成交數據及在售放盤一覽。",
       },
     ],
+    links: [{ rel: "canonical", href: `${SITE_URL}${pageSeo.shamTseng.path}` }],
   }),
   loader: async (): Promise<LoaderData> => {
     const [allEstates, faqs, transactions] = await Promise.all([

@@ -5,6 +5,7 @@ export const Route = createFileRoute("/district/ting-kau")({
     throw redirect({
       to: "/castle-peak-road/$segment",
       params: { segment: "ting-kau" },
+      statusCode: 301,
     });
   },
 });

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, TrainFront, MapPinned } from "lucide-react";
 
-import { pageSeo } from "@/content/seo";
+import { SITE_URL, pageSeo } from "@/content/seo";
 
 const AREAS = [
   {
@@ -24,6 +24,7 @@ export const Route = createFileRoute("/district/tsuen-wan")({
       { title: pageSeo.tsuenWan.title },
       { name: "description", content: pageSeo.tsuenWan.description },
     ],
+    links: [{ rel: "canonical", href: `${SITE_URL}${pageSeo.tsuenWan.path}` }],
   }),
   component: TsuenWanPage,
 });
