@@ -50,6 +50,21 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link to="/castle-peak-road" className="opacity-80 hover:opacity-100">
+                  青山公路 Castle Peak Road
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/castle-peak-road/$segment"
+                  params={{ segment: "ting-kau" }}
+                  data-canonical-path="/castle-peak-road/ting-kau"
+                  className="opacity-80 hover:opacity-100"
+                >
+                  汀九 Ting Kau
+                </Link>
+              </li>
+              <li>
                 <Link to="/estate/bellagio" className="opacity-80 hover:opacity-100">
                   碧堤半島
                 </Link>

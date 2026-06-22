@@ -279,6 +279,28 @@ function ShamTsengPage() {
         </div>
       </section>
 
+      <section className="mt-12 rounded-lg border bg-muted/30 p-6">
+        <h2 className="text-2xl font-semibold">青山公路沿線比較</h2>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+          深井是青山公路成熟海景屋苑核心，如想比較低密度汀九、青龍頭空間型屋苑或黃金海岸新式臨海住宅，可由青山公路總覽開始。
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link
+            to="/castle-peak-road"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+          >
+            青山公路總覽
+          </Link>
+          <Link
+            to="/castle-peak-road/$segment"
+            params={{ segment: "ting-kau" }}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-semibold"
+          >
+            比較汀九
+          </Link>
+        </div>
+      </section>
+
       {/* FAQ */}
       <section className="mt-12">
         <h2 className="text-2xl font-semibold">常見問題</h2>

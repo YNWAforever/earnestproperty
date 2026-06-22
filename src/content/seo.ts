@@ -21,6 +21,12 @@ export const pageSeo = {
     description:
       "一站搜尋深井、汀九及青山公路在售及放租盤。海景、連車位、連租約收租盤齊全，WhatsApp 即時預約睇樓。C-018613。",
   },
+  castlePeakRoad: {
+    path: "/castle-peak-road",
+    title: "青山公路 Castle Peak Road 樓盤｜荃灣、汀九、深井、青龍頭",
+    description:
+      "青山公路沿線買樓租樓指南：荃灣西、油柑頭、汀九、深井、青龍頭、掃管笏及黃金海岸，即時真盤源查詢。晉誠地產 C-018613。",
+  },
   shamTseng: {
     path: "/district/sham-tseng",
     title: "深井 Sham Tseng 物業｜屋苑、交通、62 校網、12 個月成交",
@@ -34,7 +40,7 @@ export const pageSeo = {
       "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產真盤源 C-018613。",
   },
   tingKau: {
-    path: "/district/ting-kau",
+    path: "/castle-peak-road/ting-kau",
     title: "汀九 Ting Kau 樓盤｜青山公路低密度海景別墅、洋房",
     description:
       "青山公路汀九段樓盤一覽：觀海別墅、嘉御龍庭、汀九別墅等低密度海景別墅洋房，介乎荃灣與深井，62 校網。晉誠地產 C-018613。",

@@ -171,3 +171,27 @@ test("castle peak road links and media use route-aware safeguards", () => {
   assert.match(inventory, /loading="lazy"/);
   assert.match(inventory, /decoding="async"/);
 });
+
+test("canonical links, redirects, and sitemap use castle peak road routes", () => {
+  const seo = read("src/content/seo.ts");
+  const vercel = read("vercel.ts");
+  const tingKauRoute = read("src/routes/district.ting-kau.tsx");
+  const tsuenWanRoute = read("src/routes/district.tsuen-wan.tsx");
+  const shamTsengRoute = read("src/routes/district.sham-tseng.tsx");
+  const header = read("src/components/site/SiteHeader.tsx");
+  const footer = read("src/components/site/SiteFooter.tsx");
+  const sitemap = read("src/routes/sitemap[.]xml.ts");
+
+  assert.match(seo, /castlePeakRoad/);
+  assert.match(seo, /path:\s*"\/castle-peak-road\/ting-kau"/);
+  assert.match(vercel, /\/district\/ting-kau/);
+  assert.match(vercel, /\/castle-peak-road\/ting-kau/);
+  assert.match(tingKauRoute, /redirect/);
+  assert.match(tingKauRoute, /\/castle-peak-road\/\$segment/);
+  assert.match(tsuenWanRoute, /\/castle-peak-road/);
+  assert.match(shamTsengRoute, /\/castle-peak-road/);
+  assert.match(header, /青山公路/);
+  assert.match(footer, /\/castle-peak-road\/ting-kau/);
+  assert.match(sitemap, /sitemap\.xml/);
+  assert.match(sitemap, /castlePeakRoadSitemapPaths/);
+});

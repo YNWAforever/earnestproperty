@@ -80,10 +80,17 @@ function TsuenWanPage() {
             深井地區攻略
           </Link>
           <Link
-            to="/district/ting-kau"
+            to="/castle-peak-road/$segment"
+            params={{ segment: "ting-kau" }}
             className="rounded-md border bg-background px-4 py-2 text-sm font-semibold"
           >
             汀九低密度住宅
+          </Link>
+          <Link
+            to="/castle-peak-road"
+            className="rounded-md border bg-background px-4 py-2 text-sm font-semibold"
+          >
+            青山公路沿線總覽
           </Link>
           <Link
             to="/listings"
