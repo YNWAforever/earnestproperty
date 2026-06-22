@@ -151,7 +151,7 @@ function HomePage() {
           <Card className="mt-10 border-0 bg-card/95 shadow-elegant backdrop-blur">
             <CardContent className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
               <Select value={searchType} onValueChange={setSearchType}>
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11" aria-label="買樓或租樓">
                   <SelectValue placeholder="買 / 租" />
                 </SelectTrigger>
                 <SelectContent>
@@ -160,7 +160,7 @@ function HomePage() {
                 </SelectContent>
               </Select>
               <Select value={searchEstate} onValueChange={setSearchEstate}>
-                <SelectTrigger className="h-11">
+                <SelectTrigger className="h-11" aria-label="選擇屋苑">
                   <SelectValue placeholder="選擇屋苑" />
                 </SelectTrigger>
                 <SelectContent>
@@ -173,6 +173,7 @@ function HomePage() {
               </Select>
               <Input
                 className="h-11"
+                aria-label="預算、房數或關鍵字"
                 placeholder="預算 / 房數 / 關鍵字（配盤用）"
                 value={searchKeyword}
                 onChange={(event) => setSearchKeyword(event.target.value)}

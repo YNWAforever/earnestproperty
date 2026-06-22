@@ -226,7 +226,7 @@ function FiltersPanel({
                 key={v}
                 type="button"
                 onClick={() => setDeal(v)}
-                className={`rounded-md border px-2 py-1.5 text-xs font-medium transition ${
+                className={`min-h-11 rounded-md border px-2 py-2 text-sm font-medium transition ${
                   deal === v
                     ? "border-primary bg-primary text-primary-foreground"
                     : "border-input hover:bg-accent"
@@ -247,7 +247,7 @@ function FiltersPanel({
               placeholder="最低"
               value={minPrice}
               onChange={(e) => setMinPrice(e.target.value)}
-              className="h-9"
+              className="h-11"
             />
             <span className="text-muted-foreground">—</span>
             <Input
@@ -256,7 +256,7 @@ function FiltersPanel({
               placeholder="最高"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
-              className="h-9"
+              className="h-11"
             />
           </div>
         </div>
@@ -264,7 +264,7 @@ function FiltersPanel({
         <div>
           <Label className="mb-2 block text-xs">房數</Label>
           <Select value={bedrooms} onValueChange={setBedrooms}>
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-11" aria-label="房數">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -281,7 +281,7 @@ function FiltersPanel({
         <div>
           <Label className="mb-2 block text-xs">地區</Label>
           <Select value={district} onValueChange={setDistrict}>
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-11" aria-label="地區">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -297,7 +297,7 @@ function FiltersPanel({
         <div>
           <Label className="mb-2 block text-xs">屋苑</Label>
           <Select value={estate} onValueChange={setEstate}>
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-11" aria-label="屋苑">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -428,7 +428,7 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-input px-3 text-sm text-muted-foreground opacity-40">
+      <span className="inline-flex h-11 min-w-11 items-center justify-center rounded-md border border-input px-3 text-sm text-muted-foreground opacity-40">
         {children}
       </span>
     );
@@ -437,7 +437,7 @@ function PageLink({
     <Link
       to="/listings"
       search={(prev: Record<string, unknown>) => ({ ...prev, page })}
-      className={`inline-flex h-9 min-w-9 items-center justify-center rounded-md border px-3 text-sm font-medium transition ${
+      className={`inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-3 text-sm font-medium transition ${
         active
           ? "border-primary bg-primary text-primary-foreground"
           : "border-input hover:bg-accent"

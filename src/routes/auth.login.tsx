@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
@@ -84,7 +84,7 @@ function LoginPage() {
     <div className="mx-auto flex min-h-[80vh] max-w-md items-center px-6">
       <Card className="w-full">
         <CardHeader>
-          <CardTitle>經紀工作台</CardTitle>
+          <h1 className="font-semibold leading-none tracking-tight">經紀工作台</h1>
           <p className="text-sm text-muted-foreground">登入以管理放盤及查詢</p>
         </CardHeader>
         <CardContent>

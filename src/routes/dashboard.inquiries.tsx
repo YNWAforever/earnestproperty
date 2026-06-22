@@ -340,7 +340,7 @@ function InquiryCard({
             onValueChange={(v) => onStatusChange(v as InquiryStatus)}
             disabled={updating}
           >
-            <SelectTrigger className="h-9">
+            <SelectTrigger className="h-11" aria-label="更新查詢狀態">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

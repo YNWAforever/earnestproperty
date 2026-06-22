@@ -22,14 +22,14 @@ export function EstateMarketSnapshot({
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-        <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Stat label="平均實呎" value={avgPsf ? `$${avgPsf.toLocaleString()}` : "查詢"} />
           <Stat label="最新顯示售盤" value={`${saleCount} 個`} />
           <Stat label="最新顯示租盤" value={`${rentCount} 個`} />
           <Stat label="單位 / 期數" value={`${totalUnitsLabel} / ${phasesLabel} 期`} />
         </div>
-        <div className="rounded-lg border bg-card p-5">
+        <div className="min-w-0 rounded-lg border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-primary">成交及呎價快照</h2>
@@ -46,8 +46,8 @@ export function EstateMarketSnapshot({
               暫未有足夠近期成交資料顯示。業主或買家可提供座數、樓層和面積，代理會按同類放盤和成交補充估值。
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-md border">
-              <table className="min-w-[520px] w-full text-left text-sm">
+            <div className="mt-4 max-w-full overflow-x-auto rounded-md border">
+              <table className="w-full min-w-[520px] text-left text-sm">
                 <thead className="bg-muted text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-2">日期</th>

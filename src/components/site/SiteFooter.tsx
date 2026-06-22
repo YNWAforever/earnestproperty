@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { MapPin, Phone, Mail, Facebook, Instagram } from "lucide-react";
+import { MapPin, Phone, Mail } from "lucide-react";
 import { SITE_CONTACT } from "@/config/site";
 
 export function SiteFooter() {
@@ -156,20 +156,6 @@ export function SiteFooter() {
                 <a href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a>
               </li>
             </ul>
-            <div className="mt-5 flex gap-3">
-              <a
-                href="#"
-                className="rounded-full bg-primary-foreground/10 p-2 hover:bg-primary-foreground/20"
-              >
-                <Facebook className="h-4 w-4" />
-              </a>
-              <a
-                href="#"
-                className="rounded-full bg-primary-foreground/10 p-2 hover:bg-primary-foreground/20"
-              >
-                <Instagram className="h-4 w-4" />
-              </a>
-            </div>
           </div>
         </div>
 
