@@ -122,3 +122,21 @@ test("corridor inventory fallback totals dedupe across alias buckets", () => {
   assert.match(fallbackSource, /total: dedupeListingKeys/);
   assert.doesNotMatch(fallbackSource, /reduce\(\(sum, result\) => sum \+ result\.total/);
 });
+
+test("castle peak road hub and segment routes render content, inventory, and schema", () => {
+  const hub = read("src/routes/castle-peak-road.tsx");
+  const segment = read("src/routes/castle-peak-road.$segment.tsx");
+  const inventory = read("src/components/site/CorridorInventory.tsx");
+
+  assert.match(hub, /createFileRoute\(["']\/castle-peak-road["']\)/);
+  assert.match(segment, /createFileRoute\(["']\/castle-peak-road\/\$segment["']\)/);
+  assert.match(hub, /castlePeakRoadHub/);
+  assert.match(segment, /getCastlePeakRoadSegment/);
+  assert.match(hub, /fetchCorridorInventoryForAliases/);
+  assert.match(segment, /fetchCorridorInventoryForAliases/);
+  assert.match(inventory, /saleTotal/);
+  assert.match(inventory, /rentTotal/);
+  assert.match(segment, /BreadcrumbList/);
+  assert.match(segment, /FAQPage/);
+  assert.match(segment, /ItemList/);
+});
