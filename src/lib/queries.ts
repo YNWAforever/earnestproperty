@@ -319,6 +319,41 @@ export type CorridorInventory = {
   rentRows: ListingRow[];
 };
 
+function cleanCorridorTerms(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function clampCorridorLimit(value: number | undefined) {
+  const limit = typeof value === "number" && Number.isFinite(value) ? value : 6;
+  return Math.min(Math.max(1, limit), 24);
+}
+
+function normalizeCorridorInventoryInput(
+  input: CorridorInventoryAliasInput,
+): Required<CorridorInventoryAliasInput> {
+  return {
+    districtSlugs: cleanCorridorTerms(input.districtSlugs),
+    estateSlugs: cleanCorridorTerms(input.estateSlugs),
+    textAliases: cleanCorridorTerms(input.textAliases),
+    limit: clampCorridorLimit(input.limit),
+  };
+}
+
+function hasCorridorAliases(input: Required<CorridorInventoryAliasInput>) {
+  return (
+    input.districtSlugs.length > 0 || input.estateSlugs.length > 0 || input.textAliases.length > 0
+  );
+}
+
+function emptyCorridorInventory(): CorridorInventory {
+  return {
+    saleTotal: 0,
+    rentTotal: 0,
+    saleRows: [],
+    rentRows: [],
+  };
+}
+
 function dedupeListingRows(rows: ListingRow[]) {
   const seen = new Set<string>();
   return rows.filter((row) => {
@@ -332,37 +367,120 @@ function dedupeListingRows(rows: ListingRow[]) {
 async function fetchCorridorInventoryFromSupabaseFallback(
   input: Required<CorridorInventoryAliasInput>,
 ): Promise<CorridorInventory> {
-  const rowSets = await Promise.all([
-    ...input.districtSlugs.map((districtSlug) =>
-      searchListings({ deal: "all", districtSlug, page: 1, pageSize: input.limit }),
-    ),
-    ...input.estateSlugs.map(async (estateSlug) => ({
-      rows: await fetchListingsForEstate(estateSlug, input.limit),
-      total: 0,
-    })),
+  if (!hasCorridorAliases(input)) return emptyCorridorInventory();
+
+  const [saleInventory, rentInventory] = await Promise.all([
+    fetchCorridorDealFromSupabase(input, "sale"),
+    fetchCorridorDealFromSupabase(input, "rent"),
   ]);
 
-  const allRows = dedupeListingRows(rowSets.flatMap((result) => result.rows));
-  const saleRows = allRows.filter((row) => row.deal_type === "sale").slice(0, input.limit);
-  const rentRows = allRows.filter((row) => row.deal_type === "rent").slice(0, input.limit);
+  return {
+    saleTotal: saleInventory.total,
+    rentTotal: rentInventory.total,
+    saleRows: saleInventory.rows,
+    rentRows: rentInventory.rows,
+  };
+}
+
+async function fetchCorridorDealFromSupabase(
+  input: Required<CorridorInventoryAliasInput>,
+  dealType: "sale" | "rent",
+): Promise<{ rows: ListingRow[]; total: number }> {
+  const estateIds = Array.from(
+    new Set((await Promise.all(input.estateSlugs.map(resolveEstateId))).filter(Boolean)),
+  ) as string[];
+
+  const rowSets = await Promise.all([
+    ...input.districtSlugs.map((districtSlug) =>
+      fetchCorridorListingPageFromSupabase({
+        deal: dealType,
+        districtSlug,
+        page: 1,
+        pageSize: input.limit,
+      }),
+    ),
+    ...estateIds.map((estateId) =>
+      fetchCorridorListingPageFromSupabase(
+        { deal: dealType, page: 1, pageSize: input.limit },
+        estateId,
+      ),
+    ),
+    ...input.textAliases.map((textAlias) =>
+      fetchCorridorTextAliasPageFromSupabase(textAlias, dealType, input.limit),
+    ),
+  ]);
 
   return {
-    saleTotal: allRows.filter((row) => row.deal_type === "sale").length,
-    rentTotal: allRows.filter((row) => row.deal_type === "rent").length,
-    saleRows,
-    rentRows,
+    rows: dedupeListingRows(rowSets.flatMap((result) => result.rows)).slice(0, input.limit),
+    total: rowSets.reduce((sum, result) => sum + result.total, 0),
   };
+}
+
+async function fetchCorridorListingPageFromSupabase(
+  filters: ListingFilters,
+  estateId: string | null = null,
+): Promise<{ rows: ListingRow[]; total: number }> {
+  const { data, error, count } = await retryWithoutMlsColumns(
+    () => runListingSearch(filters, 0, filters.pageSize - 1, estateId, true),
+    () => runListingSearch(filters, 0, filters.pageSize - 1, estateId, false),
+  );
+  if (error) throw error;
+  return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
+}
+
+function escapeSupabaseLikeTerm(value: string) {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+async function runCorridorTextAliasSearch(
+  textAlias: string,
+  dealType: "sale" | "rent",
+  limit: number,
+  includeMlsColumns: boolean,
+): Promise<ListingQueryResponse> {
+  const pattern = `%${escapeSupabaseLikeTerm(textAlias)}%`;
+  let q = supabase
+    .from("properties")
+    .select(includeMlsColumns ? LISTING_SELECT_WITH_MLS : LISTING_SELECT_LEGACY, {
+      count: "exact",
+    })
+    .eq("status", "active")
+    .eq("deal_type", dealType)
+    .or(
+      [
+        `title_zh.ilike.${pattern}`,
+        `title_en.ilike.${pattern}`,
+        `address.ilike.${pattern}`,
+        `district_slug.ilike.${pattern}`,
+      ].join(","),
+    )
+    .order("featured", { ascending: false });
+
+  if (includeMlsColumns) q = q.order("last_seen_at", { ascending: false, nullsFirst: false });
+  q = q.order("created_at", { ascending: false }).limit(limit);
+
+  const { data, error, count } = await q;
+  return { data, error, count };
+}
+
+async function fetchCorridorTextAliasPageFromSupabase(
+  textAlias: string,
+  dealType: "sale" | "rent",
+  limit: number,
+): Promise<{ rows: ListingRow[]; total: number }> {
+  const { data, error, count } = await retryWithoutMlsColumns(
+    () => runCorridorTextAliasSearch(textAlias, dealType, limit, true),
+    () => runCorridorTextAliasSearch(textAlias, dealType, limit, false),
+  );
+  if (error) throw error;
+  return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
 }
 
 export async function fetchCorridorInventoryForAliases(
   input: CorridorInventoryAliasInput,
 ): Promise<CorridorInventory> {
-  const normalized = {
-    districtSlugs: input.districtSlugs,
-    estateSlugs: input.estateSlugs,
-    textAliases: input.textAliases,
-    limit: input.limit ?? 6,
-  };
+  const normalized = normalizeCorridorInventoryInput(input);
+  if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
 
   return runWithSupabaseFallback(
     async () => {

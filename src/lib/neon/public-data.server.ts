@@ -186,25 +186,57 @@ function cleanTerms(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
+function escapeLikeTerm(value: string) {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+function clampCorridorLimit(value: number) {
+  const limit = Number.isFinite(value) ? value : 6;
+  return Math.min(Math.max(1, limit), 24);
+}
+
+function normalizeCorridorInventoryInput(
+  input: NeonCorridorInventoryInput,
+): NeonCorridorInventoryInput {
+  return {
+    districtSlugs: cleanTerms(input.districtSlugs),
+    estateSlugs: cleanTerms(input.estateSlugs),
+    textAliases: cleanTerms(input.textAliases).map(escapeLikeTerm),
+    limit: clampCorridorLimit(input.limit),
+  };
+}
+
+function hasCorridorAliases(input: NeonCorridorInventoryInput) {
+  return (
+    input.districtSlugs.length > 0 || input.estateSlugs.length > 0 || input.textAliases.length > 0
+  );
+}
+
+function emptyCorridorInventory(): NeonCorridorInventoryResult {
+  return {
+    saleTotal: 0,
+    rentTotal: 0,
+    saleRows: [],
+    rentRows: [],
+  };
+}
+
 function corridorWhere(input: NeonCorridorInventoryInput, params: unknown[]) {
-  const districtSlugs = cleanTerms(input.districtSlugs);
-  const estateSlugs = cleanTerms(input.estateSlugs);
-  const textAliases = cleanTerms(input.textAliases);
   const parts: string[] = [];
 
-  if (districtSlugs.length > 0) {
-    parts.push(`p.district_slug = ANY(${addParam(params, districtSlugs)}::text[])`);
+  if (input.districtSlugs.length > 0) {
+    parts.push(`p.district_slug = ANY(${addParam(params, input.districtSlugs)}::text[])`);
   }
 
-  if (estateSlugs.length > 0) {
-    parts.push(`e.slug = ANY(${addParam(params, estateSlugs)}::text[])`);
+  if (input.estateSlugs.length > 0) {
+    parts.push(`e.slug = ANY(${addParam(params, input.estateSlugs)}::text[])`);
   }
 
-  if (textAliases.length > 0) {
+  if (input.textAliases.length > 0) {
     parts.push(`
       EXISTS (
         SELECT 1
-        FROM unnest(${addParam(params, textAliases)}::text[]) AS term(value)
+        FROM unnest(${addParam(params, input.textAliases)}::text[]) AS term(value)
         WHERE lower(
           concat_ws(' ',
             p.title_zh,
@@ -214,12 +246,12 @@ function corridorWhere(input: NeonCorridorInventoryInput, params: unknown[]) {
             e.name_zh,
             e.slug
           )
-        ) LIKE '%' || lower(term.value) || '%'
+        ) LIKE '%' || lower(term.value) || '%' ESCAPE '\\'
       )
     `);
   }
 
-  return parts.length > 0 ? `p.status = 'active' AND (${parts.join(" OR ")})` : "p.status = 'active'";
+  return parts.length > 0 ? `p.status = 'active' AND (${parts.join(" OR ")})` : "FALSE";
 }
 
 async function fetchCorridorRows(
@@ -229,7 +261,7 @@ async function fetchCorridorRows(
   const params: unknown[] = [];
   const where = corridorWhere(input, params);
   const dealParam = addParam(params, dealType);
-  const limitParam = addParam(params, Math.min(Math.max(1, input.limit), 24));
+  const limitParam = addParam(params, input.limit);
   const rows = await sql().query(
     `
     SELECT ${listingColumns}
@@ -282,8 +314,11 @@ export async function searchListings(
 export async function fetchCorridorInventory(
   input: NeonCorridorInventoryInput,
 ): Promise<NeonCorridorInventoryResult> {
+  const normalized = normalizeCorridorInventoryInput(input);
+  if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
+
   const params: unknown[] = [];
-  const where = corridorWhere(input, params);
+  const where = corridorWhere(normalized, params);
   const countRows = await sql().query(
     `
     SELECT p.deal_type, count(*)::int AS total
@@ -297,8 +332,8 @@ export async function fetchCorridorInventory(
 
   const totals = new Map(countRows.map((row) => [stringOrEmpty(row.deal_type), Number(row.total)]));
   const [saleRows, rentRows] = await Promise.all([
-    fetchCorridorRows(input, "sale"),
-    fetchCorridorRows(input, "rent"),
+    fetchCorridorRows(normalized, "sale"),
+    fetchCorridorRows(normalized, "rent"),
   ]);
 
   return {

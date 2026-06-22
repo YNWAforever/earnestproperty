@@ -77,3 +77,34 @@ test("corridor inventory uses Neon alias query with public query wrapper", () =>
   assert.match(queries, /fetchCorridorInventoryForAliases/);
   assert.match(queries, /runWithSupabaseFallback/);
 });
+
+test("corridor inventory guards empty aliases and SQL wildcard matching", () => {
+  const server = read("src/lib/neon/public-data.server.ts");
+  const queries = read("src/lib/queries.ts");
+
+  assert.match(server, /emptyCorridorInventory/);
+  assert.match(server, /escapeLikeTerm/);
+  assert.match(server, /ESCAPE/);
+  assert.match(server, /hasCorridorAliases/);
+
+  assert.match(queries, /emptyCorridorInventory/);
+  assert.match(queries, /normalizeCorridorInventoryInput/);
+  assert.match(queries, /Math\.min\(Math\.max\(1, .*?\), 24\)/);
+  assert.match(queries, /hasCorridorAliases/);
+});
+
+test("corridor inventory fallback stays on pure Supabase reads", () => {
+  const queries = read("src/lib/queries.ts");
+  const fallbackStart = queries.indexOf(
+    "async function fetchCorridorInventoryFromSupabaseFallback",
+  );
+  const fallbackEnd = queries.indexOf("export async function fetchCorridorInventoryForAliases");
+  const fallbackSource = queries.slice(fallbackStart, fallbackEnd);
+
+  assert.ok(fallbackStart >= 0);
+  assert.ok(fallbackEnd > fallbackStart);
+  assert.doesNotMatch(fallbackSource, /\bsearchListings\(/);
+  assert.doesNotMatch(fallbackSource, /\bfetchListingsForEstate\(/);
+  assert.match(fallbackSource, /fetchCorridorDealFromSupabase/);
+  assert.match(fallbackSource, /dealType: "sale" \| "rent"/);
+});
