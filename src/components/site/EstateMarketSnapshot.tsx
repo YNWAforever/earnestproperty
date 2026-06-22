@@ -25,8 +25,8 @@ export function EstateMarketSnapshot({
       <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
         <div className="grid gap-4 sm:grid-cols-2">
           <Stat label="平均實呎" value={avgPsf ? `$${avgPsf.toLocaleString()}` : "查詢"} />
-          <Stat label="公開售盤" value={`${saleCount} 個`} />
-          <Stat label="公開租盤" value={`${rentCount} 個`} />
+          <Stat label="最新顯示售盤" value={`${saleCount} 個`} />
+          <Stat label="最新顯示租盤" value={`${rentCount} 個`} />
           <Stat label="單位 / 期數" value={`${totalUnitsLabel} / ${phasesLabel} 期`} />
         </div>
         <div className="rounded-lg border bg-card p-5">

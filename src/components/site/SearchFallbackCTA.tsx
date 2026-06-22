@@ -1,14 +1,16 @@
 import { MessageCircle, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { whatsappIntentUrl, type WhatsAppIntentContext } from "@/config/site";
+import { whatsappIntentUrl, type WhatsAppIntent, type WhatsAppIntentContext } from "@/config/site";
 
 export function SearchFallbackCTA({
   context,
   compact = false,
+  intent = "buy",
 }: {
   context?: WhatsAppIntentContext;
   compact?: boolean;
+  intent?: Exclude<WhatsAppIntent, "valuation">;
 }) {
   return (
     <div className={`rounded-lg border border-dashed bg-card p-6 ${compact ? "" : "text-center"}`}>
@@ -24,7 +26,7 @@ export function SearchFallbackCTA({
         </div>
         <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
           <a
-            href={whatsappIntentUrl("buy", {
+            href={whatsappIntentUrl(intent, {
               ...context,
               source: context?.source ?? "listing-search-fallback",
             })}

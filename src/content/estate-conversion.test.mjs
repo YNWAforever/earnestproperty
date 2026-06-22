@@ -148,11 +148,18 @@ test("conversion components use intent helpers and factual proof", () => {
   assert.match(intent, /我要租樓/);
   assert.match(intent, /我要放盤估價/);
   assert.match(fallback, /搵唔到心水盤/);
+  assert.match(fallback, /type WhatsAppIntent/);
+  assert.match(fallback, /intent\?: Exclude<WhatsAppIntent, "valuation">/);
+  assert.match(fallback, /whatsappIntentUrl\(intent/);
   assert.match(owner, /深井業主估價報告/);
   assert.match(trust, /earnestPublicTrust/);
   assert.match(trust, /earnestPublicTrust\.licenceNo/);
   assert.match(snapshot, /成交資料/);
   assert.match(snapshot, /fetchEstateTransactions|EstateTransaction/);
+  assert.match(snapshot, /最新顯示售盤/);
+  assert.match(snapshot, /最新顯示租盤/);
+  assert.doesNotMatch(snapshot, /公開售盤/);
+  assert.doesNotMatch(snapshot, /公開租盤/);
 });
 
 test("conversion components avoid nested anchors and handle unknown market data", () => {
@@ -199,6 +206,8 @@ test("public search and homepage expose lead capture paths", () => {
   assert.match(listings, /SearchFallbackCTA/);
   assert.match(listings, /describeListingSearch/);
   assert.match(listings, /keyword/);
+  assert.match(listings, /fallbackIntent = search\.deal === "rent" \? "rent" : "buy"/);
+  assert.match(listings, /intent={fallbackIntent}/);
   assert.match(home, /useNavigate/);
   assert.match(home, /OwnerValuationPanel/);
   assert.match(home, /IntentWhatsAppCTA/);

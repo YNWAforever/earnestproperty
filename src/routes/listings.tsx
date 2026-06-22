@@ -88,6 +88,7 @@ function ListingsPage() {
   const { rows, total, estates } = Route.useLoaderData();
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const searchSummary = describeListingSearch(search, estates);
+  const fallbackIntent = search.deal === "rent" ? "rent" : "buy";
 
   return (
     <div className="bg-background">
@@ -119,6 +120,7 @@ function ListingsPage() {
                 </Link>
               </div>
               <SearchFallbackCTA
+                intent={fallbackIntent}
                 context={{
                   searchSummary,
                   source: "listings-zero-results",
@@ -137,6 +139,7 @@ function ListingsPage() {
             <div className="mt-8">
               <SearchFallbackCTA
                 compact
+                intent={fallbackIntent}
                 context={{
                   searchSummary,
                   source: "listings-end-of-results",
