@@ -8,6 +8,18 @@ export type CorridorLink = {
   label: string;
 };
 
+export type CorridorHub = {
+  slug: string;
+  path: string;
+  label: string;
+  launchName: string;
+  title: string;
+  description: string;
+  h1: string;
+  intro: string[];
+  faqs: CorridorFaq[];
+};
+
 export type CorridorSegment = {
   slug: string;
   path: string;
@@ -60,7 +72,7 @@ export const castlePeakRoadHub = {
         "頁面會讀取網站已接入的 Neon-backed 公開真盤資料。實際可睇盤源、業主最新叫價和未公開放盤，建議直接 WhatsApp 晉誠地產查詢。",
     },
   ],
-};
+} satisfies CorridorHub;
 
 export const castlePeakRoadSegments: CorridorSegment[] = [
   {
@@ -82,7 +94,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     schoolNet: "荃灣區小學校網，實際校網以教育局最新公布為準。",
     housingProfile: "鐵路上蓋及鄰近大型住宅為主，向西逐步過渡至低密度及海景住宅。",
     featuredEstates: ["海雲軒", "縉皇居", "油柑頭海景住宅"],
-    districtSlugs: ["tsuen-wan", "castle-peak-road"],
+    districtSlugs: ["tsuen-wan", "yau-kom-tau", "castle-peak-road"],
     estateSlugs: [],
     textAliases: ["荃灣西", "油柑頭", "青山公路荃灣段", "海雲軒", "縉皇居", "Yau Kom Tau"],
     faqs: [
@@ -220,7 +232,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     schoolNet: "校網需按實際地址核實，以教育局最新公布為準。",
     housingProfile: "大型屋苑、山海景分層住宅及部分低密度單位。",
     featuredEstates: ["Hong Kong Garden 豪景花園", "香港花園", "青龍頭海景住宅"],
-    districtSlugs: ["castle-peak-road"],
+    districtSlugs: ["tsing-lung-tau", "castle-peak-road"],
     estateSlugs: ["hong-kong-garden"],
     textAliases: ["青龍頭", "Tsing Lung Tau", "豪景花園", "Hong Kong Garden", "香港花園"],
     faqs: [
@@ -259,7 +271,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     schoolNet: "校網需按實際地址核實，以教育局最新公布為準。",
     housingProfile: "新式大型屋苑、臨海住宅、會所屋苑和部分低密度選擇。",
     featuredEstates: ["Aegean Coast 愛琴海岸", "Gold Coast 黃金海岸", "帝濤灣", "滿名山", "星堤", "NAPA", "OMA by the Sea", "瑜翠園"],
-    districtSlugs: ["castle-peak-road"],
+    districtSlugs: ["so-kwun-wat", "gold-coast", "castle-peak-road"],
     estateSlugs: [],
     textAliases: [
       "掃管笏",
@@ -295,7 +307,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
   },
 ];
 
-export function getCastlePeakRoadSegment(slug: string) {
+export function getCastlePeakRoadSegment(slug: string): CorridorSegment | null {
   return castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null;
 }
 

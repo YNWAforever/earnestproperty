@@ -27,6 +27,9 @@ test("castle peak road content registry defines the approved core corridor launc
   assert.match(source, /Vista Del Mar|觀海別墅/);
   assert.match(source, /Royal Dragon Villa|嘉御龍庭/);
   assert.match(source, /Ting Kau Villa|汀九別墅/);
+  assert.match(source, /export type CorridorHub/);
+  assert.match(source, /satisfies CorridorHub/);
+  assert.match(source, /getCastlePeakRoadSegment\(slug: string\): CorridorSegment \| null/);
 });
 
 test("segment registry carries live listing aliases and FAQ content", () => {
@@ -53,4 +56,8 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   ]) {
     assert.match(source, new RegExp(alias));
   }
+
+  assert.match(source, /districtSlugs: \["tsuen-wan", "yau-kom-tau", "castle-peak-road"\]/);
+  assert.match(source, /districtSlugs: \["tsing-lung-tau", "castle-peak-road"\]/);
+  assert.match(source, /districtSlugs: \["so-kwun-wat", "gold-coast", "castle-peak-road"\]/);
 });
