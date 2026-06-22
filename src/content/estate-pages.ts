@@ -218,8 +218,8 @@ export const estatePageContent = {
   },
 } satisfies Record<string, EstatePageContent>;
 
-export function getEstatePageContent(slug: string) {
-  return estatePageContent[slug as keyof typeof estatePageContent];
+export function getEstatePageContent(slug: string): EstatePageContent | null {
+  return estatePageContent[slug as keyof typeof estatePageContent] ?? null;
 }
 
 export const coreEstatePageSlugs = Object.keys(estatePageContent);
