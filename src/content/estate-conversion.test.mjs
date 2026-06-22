@@ -175,3 +175,17 @@ test("conversion components avoid nested anchors and handle unknown market data"
   assert.match(snapshot, /overflow-x-auto/);
   assert.match(snapshot, /min-w-\[/);
 });
+
+test("estate route renders conversion seo sections", () => {
+  const route = read("src/routes/estate.$slug.tsx");
+
+  assert.match(route, /fetchEstateTransactions/);
+  assert.match(route, /getEstatePageContent/);
+  assert.match(route, /EstateMarketSnapshot/);
+  assert.match(route, /IntentWhatsAppCTA/);
+  assert.match(route, /OwnerValuationPanel/);
+  assert.match(route, /SearchFallbackCTA/);
+  assert.match(route, /TrustProofPanel/);
+  assert.match(route, /優點/);
+  assert.match(route, /要留意/);
+});

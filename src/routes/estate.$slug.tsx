@@ -1,18 +1,25 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { MessageCircle } from "lucide-react";
-import { whatsappUrl } from "@/config/site";
+import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
+import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
+import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
+import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
+import { TrustProofPanel } from "@/components/site/TrustProofPanel";
+import { whatsappIntentUrl } from "@/config/site";
+import { getEstatePageContent } from "@/content/estate-pages";
 import { SITE_URL, estateSeo } from "@/content/seo";
 import {
   fetchEstateBySlug,
+  fetchEstateTransactions,
   fetchFaqs,
   fetchListingsForEstate,
+  type EstateTransaction,
   type FaqItem,
   type ListingRow,
 } from "@/lib/queries";
@@ -23,11 +30,12 @@ export const Route = createFileRoute("/estate/$slug")({
   loader: async ({ params }) => {
     const estate = await fetchEstateBySlug(params.slug);
     if (!estate) throw notFound();
-    const [faqs, latestListings] = await Promise.all([
+    const [faqs, latestListings, transactions] = await Promise.all([
       fetchFaqs(`estate:${params.slug}`),
       fetchListingsForEstate(params.slug, 6),
+      fetchEstateTransactions(estate.id, 8),
     ]);
-    return { estate, faqs, latestListings };
+    return { estate, faqs, latestListings, transactions };
   },
   head: ({ loaderData }) => {
     const slug = loaderData?.estate.slug as keyof typeof estateSeo | undefined;
@@ -65,12 +73,30 @@ export const Route = createFileRoute("/estate/$slug")({
 });
 
 function EstatePage() {
-  const { estate, faqs, latestListings } = Route.useLoaderData() as {
+  const { estate, faqs, latestListings, transactions } = Route.useLoaderData() as {
     estate: EstateDetail;
     faqs: FaqItem[];
     latestListings: ListingRow[];
+    transactions: EstateTransaction[];
   };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
+  const content = getEstatePageContent(estate.slug);
+  type VisibleFaq = { question: string; answer: string };
+  const visibleFaqs: VisibleFaq[] = [
+    ...(content?.faqs ?? []),
+    ...faqs.filter((faq) => !(content?.faqs ?? []).some((item) => item.question === faq.question)),
+  ];
+  const ctaContext = {
+    estateName: seo?.nameZh ?? estate.name_zh,
+    districtName: "深井 / 青山公路",
+    source: `estate-${estate.slug}`,
+  };
+  const estateFacts = [
+    seo?.nameEn ?? estate.name_en ?? "",
+    estate.developer ?? "",
+    estate.year_completed ? `${estate.year_completed} 年落成` : "",
+    estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "單位數待查",
+  ].filter(Boolean);
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -88,7 +114,7 @@ function EstatePage() {
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: faqs.map((f) => ({
+    mainEntity: visibleFaqs.map((f) => ({
       "@type": "Question",
       name: f.question,
       acceptedAnswer: { "@type": "Answer", text: f.answer },
@@ -100,7 +126,7 @@ function EstatePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      {faqs.length > 0 && (
+      {visibleFaqs.length > 0 && (
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
@@ -108,36 +134,87 @@ function EstatePage() {
       )}
       <section className="bg-gradient-to-br from-primary to-primary/70 py-16 text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <p className="text-sm opacity-80">深井屋苑</p>
+          <p className="text-sm opacity-80">深井屋苑獨立 SEO 頁</p>
           <h1 className="mt-2 text-4xl font-bold sm:text-5xl">{seo?.nameZh ?? estate.name_zh}</h1>
-          <p className="mt-3 text-base opacity-85">
-            {seo?.nameEn ?? estate.name_en ?? ""} · {estate.developer ?? ""} ·{" "}
-            {estate.year_completed ?? ""} 年落成 · 共 {(estate.total_units ?? 0).toLocaleString()}{" "}
-            個單位
+          {estateFacts.length > 0 && (
+            <p className="mt-3 text-base opacity-85">{estateFacts.join(" · ")}</p>
+          )}
+          <p className="mt-5 max-w-3xl text-base leading-relaxed opacity-90">
+            {content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
           </p>
+          <div className="mt-6 max-w-3xl">
+            <IntentWhatsAppCTA context={ctaContext} />
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
-        <Stat
-          label="平均實呎"
-          value={`$${Number(estate.avg_saleable_psf ?? 0).toLocaleString()}`}
-        />
-        <Stat label="單位總數" value={(estate.total_units ?? 0).toLocaleString()} />
-        <Stat label="期數" value={`${estate.phases ?? "-"} 期`} />
-        <Stat label="落成年份" value={String(estate.year_completed ?? "-")} />
-      </section>
+      <EstateMarketSnapshot
+        avgPsf={Number(estate.avg_saleable_psf ?? 0) || null}
+        totalUnits={estate.total_units ?? null}
+        phases={estate.phases ?? null}
+        year={estate.year_completed ?? null}
+        listings={latestListings}
+        transactions={transactions}
+      />
 
-      {estate.description && (
-        <section className="mx-auto max-w-7xl px-4 pb-8 sm:px-6 lg:px-8">
-          <p className="text-base leading-relaxed text-muted-foreground">
-            {seo?.intro ?? estate.description}
-          </p>
-          {seo?.fit && (
-            <p className="mt-4 text-base leading-relaxed text-muted-foreground">{seo.fit}</p>
-          )}
-        </section>
-      )}
+      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div>
+            <p className="text-sm font-semibold text-coral">屋苑介紹</p>
+            <h2 className="mt-2 text-2xl font-bold text-primary">
+              {seo?.nameZh ?? estate.name_zh} 值得點睇？
+            </h2>
+            <div className="mt-4 space-y-4 text-base leading-relaxed text-muted-foreground">
+              {(content?.overview ?? [seo?.intro ?? estate.description ?? ""])
+                .filter(Boolean)
+                .map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              {content?.transportLifestyle && <p>{content.transportLifestyle}</p>}
+            </div>
+          </div>
+          <div className="rounded-lg border bg-card p-5">
+            <h3 className="text-lg font-bold text-primary">適合邊類買家 / 租客？</h3>
+            <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+              {(content?.buyerFit ?? [seo?.fit ?? "適合想比較深井核心屋苑的買家。"]).map(
+                (item) => (
+                  <li key={item} className="flex gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                    <span>{item}</span>
+                  </li>
+                ),
+              )}
+            </ul>
+          </div>
+        </div>
+
+        {content && (
+          <div className="mt-8 grid gap-5 lg:grid-cols-2">
+            <div className="rounded-lg border bg-card p-5">
+              <h3 className="text-lg font-bold text-primary">優點</h3>
+              <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+                {content.pros.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="rounded-lg border bg-card p-5">
+              <h3 className="text-lg font-bold text-primary">要留意</h3>
+              <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+                {content.watchouts.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-coral" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">
@@ -156,23 +233,81 @@ function EstatePage() {
           </Link>
         </div>
         {latestListings.length === 0 ? (
-          <p className="mt-5 rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            暫時未有公開放盤，歡迎 WhatsApp 查詢最新業主盤。
-          </p>
-        ) : (
-          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {latestListings.map((listing) => (
-              <EstateListingCard key={listing.id} listing={listing} />
-            ))}
+          <div className="mt-5">
+            <SearchFallbackCTA
+              context={{
+                ...ctaContext,
+                searchSummary: `${seo?.nameZh ?? estate.name_zh} 暫未有公開匹配放盤`,
+                source: `estate-${estate.slug}-empty-listings`,
+              }}
+            />
           </div>
+        ) : (
+          <>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {latestListings.map((listing) => (
+                <EstateListingCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+            <div className="mt-6">
+              <SearchFallbackCTA
+                compact
+                context={{
+                  ...ctaContext,
+                  searchSummary: `${seo?.nameZh ?? estate.name_zh} 最新放盤後備配盤`,
+                  source: `estate-${estate.slug}-listing-backup`,
+                }}
+              />
+            </div>
+          </>
         )}
       </section>
 
-      {faqs.length > 0 && (
+      {content && (
+        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="rounded-lg border bg-card p-5">
+            <h2 className="text-xl font-bold text-primary">下一步</h2>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <a
+                href={whatsappIntentUrl("buy", ctaContext)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-28 flex-col justify-between rounded-md border bg-background p-4 text-sm transition hover:border-primary hover:shadow-card"
+              >
+                <span className="font-semibold text-primary">{content.saleCta}</span>
+                <ArrowRight className="mt-3 h-4 w-4 text-coral" />
+              </a>
+              <a
+                href={whatsappIntentUrl("rent", ctaContext)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-28 flex-col justify-between rounded-md border bg-background p-4 text-sm transition hover:border-primary hover:shadow-card"
+              >
+                <span className="font-semibold text-primary">{content.rentCta}</span>
+                <ArrowRight className="mt-3 h-4 w-4 text-coral" />
+              </a>
+              <a
+                href={whatsappIntentUrl("valuation", ctaContext)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex min-h-28 flex-col justify-between rounded-md border bg-background p-4 text-sm transition hover:border-primary hover:shadow-card"
+              >
+                <span className="font-semibold text-primary">{content.valuationCta}</span>
+                <ArrowRight className="mt-3 h-4 w-4 text-coral" />
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <OwnerValuationPanel context={ctaContext} />
+      <TrustProofPanel />
+
+      {visibleFaqs.length > 0 && (
         <section className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-primary">常見問題</h2>
           <Accordion type="single" collapsible className="mt-6">
-            {faqs.map((f: FaqItem, i: number) => (
+            {visibleFaqs.map((f: VisibleFaq, i: number) => (
               <AccordionItem key={i} value={`faq-${i}`}>
                 <AccordionTrigger className="text-left text-base font-medium">
                   {f.question}
@@ -185,30 +320,6 @@ function EstatePage() {
           </Accordion>
         </section>
       )}
-
-      <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
-        <p className="text-muted-foreground">完整放盤、近期成交、平面圖即將推出。</p>
-        <a
-          href={whatsappUrl(`你好，我想查詢${estate.name_zh}物業`)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-6 inline-block"
-        >
-          <Button className="bg-coral text-coral-foreground hover:bg-coral/90">
-            <MessageCircle className="h-4 w-4" />
-            WhatsApp 查詢 {estate.name_zh}
-          </Button>
-        </a>
-      </section>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-5 shadow-card">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-primary">{value}</p>
     </div>
   );
 }
