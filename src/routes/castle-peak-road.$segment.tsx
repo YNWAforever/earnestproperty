@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { ArrowRight, Building2, MapPinned, School, TrainFront } from "lucide-react";
 
 import { CorridorInventory } from "@/components/site/CorridorInventory";
@@ -20,6 +20,8 @@ type SegmentLoaderData = {
   segment: CorridorSegment;
   inventory: CorridorInventoryData;
 };
+
+type ListingsDeal = "all" | "sale" | "rent";
 
 export const Route = createFileRoute("/castle-peak-road/$segment")({
   loader: async ({ params }): Promise<SegmentLoaderData> => {
@@ -49,8 +51,144 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
       },
     ],
   }),
+  errorComponent: CastlePeakRoadSegmentError,
   component: CastlePeakRoadSegmentPage,
 });
+
+const supportedListingDistrictSlugs = new Set([
+  "sham-tseng",
+  "ting-kau",
+  "tsuen-wan",
+  "castle-peak-road",
+]);
+
+function getSegmentListingsHref(segment: CorridorSegment) {
+  const districtSlug = segment.districtSlugs.find(
+    (slug) => slug !== "castle-peak-road" && supportedListingDistrictSlugs.has(slug),
+  );
+  if (districtSlug) return `/listings?deal=all&district=${districtSlug}&page=1`;
+
+  const estateSlug = segment.estateSlugs[0];
+  if (estateSlug) return `/listings?deal=all&estate=${estateSlug}&page=1`;
+
+  return "/listings?deal=all&district=castle-peak-road&page=1";
+}
+
+function parseListingsSearch(href: string) {
+  const [, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  const dealParam = params.get("deal");
+  const deal: ListingsDeal = dealParam === "sale" || dealParam === "rent" ? dealParam : "all";
+  const pageParam = Number(params.get("page") ?? 1);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+  const district = params.get("district") ?? undefined;
+  const estate = params.get("estate") ?? undefined;
+
+  return {
+    deal,
+    page,
+    ...(district ? { district } : {}),
+    ...(estate ? { estate } : {}),
+  };
+}
+
+function CorridorRelatedLink({
+  href,
+  children,
+  className,
+}: {
+  href: string;
+  children: ReactNode;
+  className: string;
+}) {
+  const corridorMatch = href.match(/^\/castle-peak-road\/([^/?#]+)$/);
+  if (href === "/castle-peak-road") {
+    return (
+      <Link to="/castle-peak-road" className={className}>
+        {children}
+      </Link>
+    );
+  }
+  if (corridorMatch) {
+    return (
+      <Link
+        to="/castle-peak-road/$segment"
+        params={{ segment: corridorMatch[1] }}
+        className={className}
+      >
+        {children}
+      </Link>
+    );
+  }
+
+  if (href === "/district/sham-tseng") {
+    return (
+      <Link to="/district/sham-tseng" className={className}>
+        {children}
+      </Link>
+    );
+  }
+  if (href === "/district/ting-kau") {
+    return (
+      <Link to="/district/ting-kau" className={className}>
+        {children}
+      </Link>
+    );
+  }
+  if (href === "/district/tsuen-wan") {
+    return (
+      <Link to="/district/tsuen-wan" className={className}>
+        {children}
+      </Link>
+    );
+  }
+
+  const estateMatch = href.match(/^\/estate\/([^/?#]+)$/);
+  if (estateMatch) {
+    return (
+      <Link to="/estate/$slug" params={{ slug: estateMatch[1] }} className={className}>
+        {children}
+      </Link>
+    );
+  }
+
+  if (href.startsWith("/listings?")) {
+    return (
+      <Link to="/listings" search={parseListingsSearch(href)} className={className}>
+        {children}
+      </Link>
+    );
+  }
+
+  return (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  );
+}
+
+function CastlePeakRoadSegmentError({ error }: { error: Error }) {
+  const router = useRouter();
+
+  return (
+    <div className="bg-background px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-2xl rounded-lg border bg-card p-6 text-center shadow-card">
+        <p className="text-sm font-semibold text-coral">青山公路 Castle Peak Road</p>
+        <h1 className="mt-2 text-2xl font-bold text-primary">載入青山公路分段時遇到問題</h1>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+          這個分段的即時放盤或內容暫時未能載入。可先返回青山公路總覽，或重新整理資料再試一次。
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Button onClick={() => router.invalidate()}>重新載入</Button>
+          <Button asChild variant="outline">
+            <Link to="/castle-peak-road">返回青山公路總覽</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function InfoCard({ icon, title, text }: { icon: ReactNode; title: string; text: string }) {
   return (
@@ -107,7 +245,7 @@ function CastlePeakRoadSegmentPage() {
   };
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
@@ -141,7 +279,13 @@ function CastlePeakRoadSegmentPage() {
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
-              <a href={whatsappUrl(`你好，我想查詢${segment.nameZh}樓盤`)}>WhatsApp 查詢</a>
+              <a
+                href={whatsappUrl(`你好，我想查詢${segment.nameZh}樓盤`)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                WhatsApp 查詢
+              </a>
             </Button>
             <Button asChild variant="outline">
               <Link to="/castle-peak-road">
@@ -196,7 +340,7 @@ function CastlePeakRoadSegmentPage() {
         <CorridorInventory
           inventory={inventory}
           inquiryText={`你好，我想查詢${segment.nameZh}樓盤`}
-          listingsHref={`/listings?deal=all&district=${segment.districtSlugs[0] ?? "castle-peak-road"}&page=1`}
+          listingsHref={getSegmentListingsHref(segment)}
         />
       </section>
 
@@ -217,19 +361,19 @@ function CastlePeakRoadSegmentPage() {
             <h2 className="text-2xl font-bold text-primary">相關連結</h2>
             <div className="mt-5 grid gap-3">
               {segment.links.map((link) => (
-                <a
+                <CorridorRelatedLink
                   key={link.href}
                   href={link.href}
                   className="flex items-center justify-between rounded-lg border bg-background px-4 py-3 text-sm font-semibold text-primary hover:border-primary"
                 >
                   {link.label}
                   <ArrowRight className="h-4 w-4" />
-                </a>
+                </CorridorRelatedLink>
               ))}
             </div>
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

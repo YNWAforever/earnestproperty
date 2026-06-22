@@ -1,9 +1,12 @@
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import type { CorridorInventory as CorridorInventoryData, ListingRow } from "@/lib/queries";
+
+type ListingsDeal = "all" | "sale" | "rent";
 
 function formatPrice(row: ListingRow) {
   if (row.deal_type === "rent") {
@@ -24,7 +27,13 @@ function ListingMiniCard({ listing }: { listing: ListingRow }) {
     >
       <div className="aspect-[4/3] bg-muted">
         {cover ? (
-          <img src={cover} alt={listing.title_zh} className="h-full w-full object-cover" />
+          <img
+            src={cover}
+            alt={listing.title_zh}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover"
+          />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             晉誠地產
@@ -98,6 +107,42 @@ function ListingColumn({
   );
 }
 
+function parseListingsHref(href: string) {
+  const [path, query = ""] = href.split("?");
+  if (path !== "/listings") return { deal: "all" as const, page: 1 };
+
+  const params = new URLSearchParams(query);
+  const dealParam = params.get("deal");
+  const deal: ListingsDeal = dealParam === "sale" || dealParam === "rent" ? dealParam : "all";
+  const pageParam = Number(params.get("page") ?? 1);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+  const district = params.get("district") ?? undefined;
+  const estate = params.get("estate") ?? undefined;
+
+  return {
+    deal,
+    page,
+    ...(district ? { district } : {}),
+    ...(estate ? { estate } : {}),
+  };
+}
+
+function ListingHrefLink({
+  href,
+  className,
+  children,
+}: {
+  href: string;
+  className: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link to="/listings" search={parseListingsHref(href)} className={className}>
+      {children}
+    </Link>
+  );
+}
+
 export function CorridorInventory({
   inventory,
   inquiryText,
@@ -148,9 +193,12 @@ export function CorridorInventory({
       </div>
 
       <div className="mt-6 border-t pt-4">
-        <a href={listingsHref} className="text-sm font-semibold text-primary hover:underline">
+        <ListingHrefLink
+          href={listingsHref}
+          className="text-sm font-semibold text-primary hover:underline"
+        >
           用完整篩選搜尋更多放盤
-        </a>
+        </ListingHrefLink>
       </div>
     </section>
   );

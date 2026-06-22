@@ -1,6 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowRight, MapPin, Waves } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import {
   castlePeakRoadHub,
   castlePeakRoadSegments,
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/castle-peak-road")({
       { property: "og:description", content: castlePeakRoadHub.description },
     ],
   }),
+  errorComponent: CastlePeakRoadRouteError,
   component: CastlePeakRoadHubPage,
 });
 
@@ -72,6 +74,29 @@ function SegmentCard({
   );
 }
 
+function CastlePeakRoadRouteError({ error }: { error: Error }) {
+  const router = useRouter();
+
+  return (
+    <div className="bg-background px-4 py-20 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-2xl rounded-lg border bg-card p-6 text-center shadow-card">
+        <p className="text-sm font-semibold text-coral">青山公路 Castle Peak Road</p>
+        <h1 className="mt-2 text-2xl font-bold text-primary">載入青山公路總覽時遇到問題</h1>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+          晉誠地產的即時放盤資料暫時未能載入。你可以重新整理資料，或稍後再回來查看青山公路沿線真盤。
+        </p>
+        <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <Button onClick={() => router.invalidate()}>重新載入</Button>
+          <Button asChild variant="outline">
+            <Link to="/castle-peak-road">返回青山公路總覽</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CastlePeakRoadHubPage() {
   const { inventories } = Route.useLoaderData() as HubLoaderData;
   const breadcrumbJsonLd = {
@@ -98,7 +123,7 @@ function CastlePeakRoadHubPage() {
   };
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
@@ -154,6 +179,6 @@ function CastlePeakRoadHubPage() {
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

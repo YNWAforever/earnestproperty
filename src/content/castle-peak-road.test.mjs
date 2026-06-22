@@ -140,3 +140,34 @@ test("castle peak road hub and segment routes render content, inventory, and sch
   assert.match(segment, /FAQPage/);
   assert.match(segment, /ItemList/);
 });
+
+test("castle peak road routes avoid nested main landmarks and define route errors", () => {
+  const hub = read("src/routes/castle-peak-road.tsx");
+  const segment = read("src/routes/castle-peak-road.$segment.tsx");
+
+  assert.doesNotMatch(hub, /<main className="bg-background">/);
+  assert.doesNotMatch(segment, /<main className="bg-background">/);
+  assert.match(hub, /errorComponent:\s*CastlePeakRoadRouteError/);
+  assert.match(segment, /errorComponent:\s*CastlePeakRoadSegmentError/);
+  assert.match(hub, /useRouter\(\)/);
+  assert.match(segment, /useRouter\(\)/);
+  assert.match(hub, /載入青山公路總覽時遇到問題/);
+  assert.match(segment, /載入青山公路分段時遇到問題/);
+});
+
+test("castle peak road links and media use route-aware safeguards", () => {
+  const segment = read("src/routes/castle-peak-road.$segment.tsx");
+  const inventory = read("src/components/site/CorridorInventory.tsx");
+
+  assert.doesNotMatch(segment, /district=\$\{segment\.districtSlugs\[0\]/);
+  assert.match(segment, /function getSegmentListingsHref/);
+  assert.match(segment, /const supportedListingDistrictSlugs/);
+  assert.match(segment, /function CorridorRelatedLink/);
+  assert.doesNotMatch(segment, /<a\s+key=\{link\.href\}/);
+  assert.match(inventory, /function ListingHrefLink/);
+  assert.doesNotMatch(inventory, /<a href=\{listingsHref\}/);
+  assert.match(segment, /target="_blank"/);
+  assert.match(segment, /rel="noopener noreferrer"/);
+  assert.match(inventory, /loading="lazy"/);
+  assert.match(inventory, /decoding="async"/);
+});
