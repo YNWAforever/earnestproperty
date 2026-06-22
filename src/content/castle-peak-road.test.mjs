@@ -61,3 +61,19 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   assert.match(source, /districtSlugs: \["tsing-lung-tau", "castle-peak-road"\]/);
   assert.match(source, /districtSlugs: \["so-kwun-wat", "gold-coast", "castle-peak-road"\]/);
 });
+
+test("corridor inventory uses Neon alias query with public query wrapper", () => {
+  const server = read("src/lib/neon/public-data.server.ts");
+  const client = read("src/lib/neon/public-data.ts");
+  const types = read("src/lib/neon/public-data.types.ts");
+  const queries = read("src/lib/queries.ts");
+
+  assert.match(types, /NeonCorridorInventoryInput/);
+  assert.match(types, /NeonCorridorInventoryResult/);
+  assert.match(server, /export async function fetchCorridorInventory/);
+  assert.match(server, /unnest/);
+  assert.match(server, /ILIKE|lower/);
+  assert.match(client, /fetchNeonCorridorInventory/);
+  assert.match(queries, /fetchCorridorInventoryForAliases/);
+  assert.match(queries, /runWithSupabaseFallback/);
+});

@@ -3,6 +3,8 @@ import "@tanstack/react-start/server-only";
 import { neon } from "@neondatabase/serverless";
 
 import type {
+  NeonCorridorInventoryInput,
+  NeonCorridorInventoryResult,
   NeonEstateOption,
   NeonLegacyPropertyMatch,
   NeonListingFiltersInput,
@@ -180,6 +182,68 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   return where.join(" AND ");
 }
 
+function cleanTerms(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function corridorWhere(input: NeonCorridorInventoryInput, params: unknown[]) {
+  const districtSlugs = cleanTerms(input.districtSlugs);
+  const estateSlugs = cleanTerms(input.estateSlugs);
+  const textAliases = cleanTerms(input.textAliases);
+  const parts: string[] = [];
+
+  if (districtSlugs.length > 0) {
+    parts.push(`p.district_slug = ANY(${addParam(params, districtSlugs)}::text[])`);
+  }
+
+  if (estateSlugs.length > 0) {
+    parts.push(`e.slug = ANY(${addParam(params, estateSlugs)}::text[])`);
+  }
+
+  if (textAliases.length > 0) {
+    parts.push(`
+      EXISTS (
+        SELECT 1
+        FROM unnest(${addParam(params, textAliases)}::text[]) AS term(value)
+        WHERE lower(
+          concat_ws(' ',
+            p.title_zh,
+            p.title_en,
+            p.address,
+            p.district_slug,
+            e.name_zh,
+            e.slug
+          )
+        ) LIKE '%' || lower(term.value) || '%'
+      )
+    `);
+  }
+
+  return parts.length > 0 ? `p.status = 'active' AND (${parts.join(" OR ")})` : "p.status = 'active'";
+}
+
+async function fetchCorridorRows(
+  input: NeonCorridorInventoryInput,
+  dealType: "sale" | "rent",
+): Promise<NeonPropertyRow[]> {
+  const params: unknown[] = [];
+  const where = corridorWhere(input, params);
+  const dealParam = addParam(params, dealType);
+  const limitParam = addParam(params, Math.min(Math.max(1, input.limit), 24));
+  const rows = await sql().query(
+    `
+    SELECT ${listingColumns}
+    FROM properties p
+    LEFT JOIN estates e ON e.id = p.estate_id
+    WHERE ${where} AND p.deal_type = ${dealParam}::deal_type
+    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    LIMIT ${limitParam}
+    `,
+    params,
+  );
+  return rows.map(mapListingRow);
+}
+
 export async function searchListings(
   input: NeonListingFiltersInput,
 ): Promise<NeonListingSearchResult> {
@@ -212,6 +276,36 @@ export async function searchListings(
   return {
     rows: rows.map(mapListingRow),
     total: Number(countRows[0]?.total ?? 0),
+  };
+}
+
+export async function fetchCorridorInventory(
+  input: NeonCorridorInventoryInput,
+): Promise<NeonCorridorInventoryResult> {
+  const params: unknown[] = [];
+  const where = corridorWhere(input, params);
+  const countRows = await sql().query(
+    `
+    SELECT p.deal_type, count(*)::int AS total
+    FROM properties p
+    LEFT JOIN estates e ON e.id = p.estate_id
+    WHERE ${where}
+    GROUP BY p.deal_type
+    `,
+    params,
+  );
+
+  const totals = new Map(countRows.map((row) => [stringOrEmpty(row.deal_type), Number(row.total)]));
+  const [saleRows, rentRows] = await Promise.all([
+    fetchCorridorRows(input, "sale"),
+    fetchCorridorRows(input, "rent"),
+  ]);
+
+  return {
+    saleTotal: totals.get("sale") ?? 0,
+    rentTotal: totals.get("rent") ?? 0,
+    saleRows,
+    rentRows,
   };
 }
 

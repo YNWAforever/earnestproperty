@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
+  fetchNeonCorridorInventory,
   fetchNeonEstateOptions,
   fetchNeonFeaturedProperties,
   fetchNeonListingCountsByEstate,
@@ -303,6 +304,79 @@ export type ListingRow = {
   images: string[] | null;
   estates: { name_zh: string; slug: string } | null;
 };
+
+export type CorridorInventoryAliasInput = {
+  districtSlugs: string[];
+  estateSlugs: string[];
+  textAliases: string[];
+  limit?: number;
+};
+
+export type CorridorInventory = {
+  saleTotal: number;
+  rentTotal: number;
+  saleRows: ListingRow[];
+  rentRows: ListingRow[];
+};
+
+function dedupeListingRows(rows: ListingRow[]) {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const key = row.listing_no || row.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+async function fetchCorridorInventoryFromSupabaseFallback(
+  input: Required<CorridorInventoryAliasInput>,
+): Promise<CorridorInventory> {
+  const rowSets = await Promise.all([
+    ...input.districtSlugs.map((districtSlug) =>
+      searchListings({ deal: "all", districtSlug, page: 1, pageSize: input.limit }),
+    ),
+    ...input.estateSlugs.map(async (estateSlug) => ({
+      rows: await fetchListingsForEstate(estateSlug, input.limit),
+      total: 0,
+    })),
+  ]);
+
+  const allRows = dedupeListingRows(rowSets.flatMap((result) => result.rows));
+  const saleRows = allRows.filter((row) => row.deal_type === "sale").slice(0, input.limit);
+  const rentRows = allRows.filter((row) => row.deal_type === "rent").slice(0, input.limit);
+
+  return {
+    saleTotal: allRows.filter((row) => row.deal_type === "sale").length,
+    rentTotal: allRows.filter((row) => row.deal_type === "rent").length,
+    saleRows,
+    rentRows,
+  };
+}
+
+export async function fetchCorridorInventoryForAliases(
+  input: CorridorInventoryAliasInput,
+): Promise<CorridorInventory> {
+  const normalized = {
+    districtSlugs: input.districtSlugs,
+    estateSlugs: input.estateSlugs,
+    textAliases: input.textAliases,
+    limit: input.limit ?? 6,
+  };
+
+  return runWithSupabaseFallback(
+    async () => {
+      const result = await fetchNeonCorridorInventory({ data: normalized });
+      return {
+        saleTotal: result.saleTotal,
+        rentTotal: result.rentTotal,
+        saleRows: result.saleRows as ListingRow[],
+        rentRows: result.rentRows as ListingRow[],
+      };
+    },
+    () => fetchCorridorInventoryFromSupabaseFallback(normalized),
+  );
+}
 
 async function runListingSearch(
   f: ListingFilters,

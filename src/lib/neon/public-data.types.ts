@@ -69,6 +69,20 @@ export type NeonListingSearchResult = {
   total: number;
 };
 
+export type NeonCorridorInventoryInput = {
+  districtSlugs: string[];
+  estateSlugs: string[];
+  textAliases: string[];
+  limit: number;
+};
+
+export type NeonCorridorInventoryResult = {
+  saleTotal: number;
+  rentTotal: number;
+  saleRows: NeonPropertyRow[];
+  rentRows: NeonPropertyRow[];
+};
+
 export type NeonLegacyPropertyMatch = {
   listing_no: string;
 } | null;

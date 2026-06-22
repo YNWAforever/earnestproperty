@@ -1,12 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
 
-import type { NeonListingFiltersInput, NeonSimilarListingsInput } from "./public-data.types";
+import type {
+  NeonCorridorInventoryInput,
+  NeonListingFiltersInput,
+  NeonSimilarListingsInput,
+} from "./public-data.types";
 
 export const searchNeonListings = createServerFn({ method: "GET" })
   .inputValidator((data: NeonListingFiltersInput) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
     return neonData.searchListings(data);
+  });
+
+export const fetchNeonCorridorInventory = createServerFn({ method: "GET" })
+  .inputValidator((data: NeonCorridorInventoryInput) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchCorridorInventory(data);
   });
 
 export const fetchNeonFeaturedProperties = createServerFn({ method: "GET" })
