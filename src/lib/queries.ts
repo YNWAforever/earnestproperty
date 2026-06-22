@@ -28,6 +28,7 @@ const LISTING_SELECT_WITH_MLS =
   "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, last_seen_at, source_site, images, estates(name_zh, slug)";
 const LISTING_SELECT_LEGACY =
   "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)";
+const CORRIDOR_COUNT_PAGE_SIZE = 1000;
 
 type SupabaseColumnError = {
   code?: string;
@@ -305,6 +306,8 @@ export type ListingRow = {
   estates: { name_zh: string; slug: string } | null;
 };
 
+type ListingIdentityRow = Pick<ListingRow, "id" | "listing_no">;
+
 export type CorridorInventoryAliasInput = {
   districtSlugs: string[];
   estateSlugs: string[];
@@ -354,10 +357,23 @@ function emptyCorridorInventory(): CorridorInventory {
   };
 }
 
+function listingKey(row: ListingIdentityRow) {
+  return row.listing_no || row.id;
+}
+
+function dedupeListingKeys(rows: ListingIdentityRow[]) {
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    const key = listingKey(row);
+    if (key) keys.add(key);
+  });
+  return keys;
+}
+
 function dedupeListingRows(rows: ListingRow[]) {
   const seen = new Set<string>();
   return rows.filter((row) => {
-    const key = row.listing_no || row.id;
+    const key = listingKey(row);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -390,30 +406,92 @@ async function fetchCorridorDealFromSupabase(
     new Set((await Promise.all(input.estateSlugs.map(resolveEstateId))).filter(Boolean)),
   ) as string[];
 
-  const rowSets = await Promise.all([
-    ...input.districtSlugs.map((districtSlug) =>
-      fetchCorridorListingPageFromSupabase({
-        deal: dealType,
-        districtSlug,
-        page: 1,
-        pageSize: input.limit,
-      }),
-    ),
-    ...estateIds.map((estateId) =>
-      fetchCorridorListingPageFromSupabase(
-        { deal: dealType, page: 1, pageSize: input.limit },
-        estateId,
+  const [rowSets, countRows] = await Promise.all([
+    Promise.all([
+      ...input.districtSlugs.map((districtSlug) =>
+        fetchCorridorListingPageFromSupabase({
+          deal: dealType,
+          districtSlug,
+          page: 1,
+          pageSize: input.limit,
+        }),
       ),
-    ),
-    ...input.textAliases.map((textAlias) =>
-      fetchCorridorTextAliasPageFromSupabase(textAlias, dealType, input.limit),
-    ),
+      ...estateIds.map((estateId) =>
+        fetchCorridorListingPageFromSupabase(
+          { deal: dealType, page: 1, pageSize: input.limit },
+          estateId,
+        ),
+      ),
+      ...input.textAliases.map((textAlias) =>
+        fetchCorridorTextAliasPageFromSupabase(textAlias, dealType, input.limit),
+      ),
+    ]),
+    fetchCorridorCountRowsFromSupabase(input, dealType, estateIds),
   ]);
 
   return {
     rows: dedupeListingRows(rowSets.flatMap((result) => result.rows)).slice(0, input.limit),
-    total: rowSets.reduce((sum, result) => sum + result.total, 0),
+    total: dedupeListingKeys(countRows).size,
   };
+}
+
+async function fetchCorridorCountRowsFromSupabase(
+  input: Required<CorridorInventoryAliasInput>,
+  dealType: "sale" | "rent",
+  estateIds: string[],
+): Promise<ListingIdentityRow[]> {
+  const rowSets = await Promise.all([
+    ...input.districtSlugs.map((districtSlug) =>
+      fetchCorridorListingIdentityRowsFromSupabase({ dealType, districtSlug }),
+    ),
+    ...estateIds.map((estateId) =>
+      fetchCorridorListingIdentityRowsFromSupabase({ dealType, estateId }),
+    ),
+    ...input.textAliases.map((textAlias) =>
+      fetchCorridorTextAliasIdentityRowsFromSupabase(textAlias, dealType),
+    ),
+  ]);
+
+  return rowSets.flat();
+}
+
+async function fetchAllCorridorIdentityRows(
+  runPage: (from: number, to: number) => Promise<ListingQueryResponse>,
+): Promise<ListingIdentityRow[]> {
+  const rows: ListingIdentityRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await runPage(from, from + CORRIDOR_COUNT_PAGE_SIZE - 1);
+    if (error) throw error;
+
+    const page = (data ?? []) as unknown as ListingIdentityRow[];
+    rows.push(...page);
+    if (page.length < CORRIDOR_COUNT_PAGE_SIZE) break;
+    from += CORRIDOR_COUNT_PAGE_SIZE;
+  }
+
+  return rows;
+}
+
+async function fetchCorridorListingIdentityRowsFromSupabase(input: {
+  dealType: "sale" | "rent";
+  districtSlug?: string;
+  estateId?: string;
+}) {
+  return fetchAllCorridorIdentityRows(async (from, to) => {
+    let q = supabase
+      .from("properties")
+      .select("id, listing_no")
+      .eq("status", "active")
+      .eq("deal_type", input.dealType);
+
+    if (input.districtSlug) q = q.eq("district_slug", input.districtSlug);
+    if (input.estateId) q = q.eq("estate_id", input.estateId);
+
+    const { data, error } = await q.order("created_at", { ascending: false }).range(from, to);
+    return { data, error };
+  });
 }
 
 async function fetchCorridorListingPageFromSupabase(
@@ -474,6 +552,31 @@ async function fetchCorridorTextAliasPageFromSupabase(
   );
   if (error) throw error;
   return { rows: (data ?? []) as unknown as ListingRow[], total: count ?? 0 };
+}
+
+async function fetchCorridorTextAliasIdentityRowsFromSupabase(
+  textAlias: string,
+  dealType: "sale" | "rent",
+) {
+  const pattern = `%${escapeSupabaseLikeTerm(textAlias)}%`;
+  return fetchAllCorridorIdentityRows(async (from, to) => {
+    const { data, error } = await supabase
+      .from("properties")
+      .select("id, listing_no")
+      .eq("status", "active")
+      .eq("deal_type", dealType)
+      .or(
+        [
+          `title_zh.ilike.${pattern}`,
+          `title_en.ilike.${pattern}`,
+          `address.ilike.${pattern}`,
+          `district_slug.ilike.${pattern}`,
+        ].join(","),
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to);
+    return { data, error };
+  });
 }
 
 export async function fetchCorridorInventoryForAliases(

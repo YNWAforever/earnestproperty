@@ -108,3 +108,17 @@ test("corridor inventory fallback stays on pure Supabase reads", () => {
   assert.match(fallbackSource, /fetchCorridorDealFromSupabase/);
   assert.match(fallbackSource, /dealType: "sale" \| "rent"/);
 });
+
+test("corridor inventory fallback totals dedupe across alias buckets", () => {
+  const queries = read("src/lib/queries.ts");
+  const fallbackStart = queries.indexOf("async function fetchCorridorDealFromSupabase");
+  const fallbackEnd = queries.indexOf("export async function fetchCorridorInventoryForAliases");
+  const fallbackSource = queries.slice(fallbackStart, fallbackEnd);
+
+  assert.ok(fallbackStart >= 0);
+  assert.ok(fallbackEnd > fallbackStart);
+  assert.match(fallbackSource, /fetchCorridorCountRowsFromSupabase/);
+  assert.match(fallbackSource, /dedupeListingKeys/);
+  assert.match(fallbackSource, /total: dedupeListingKeys/);
+  assert.doesNotMatch(fallbackSource, /reduce\(\(sum, result\) => sum \+ result\.total/);
+});
