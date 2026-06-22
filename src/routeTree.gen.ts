@@ -18,6 +18,7 @@ import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CastlePeakRoadIndexRouteImport } from './routes/castle-peak-road.index'
 import { Route as PropertyListingNoRouteImport } from './routes/property.$listingNo'
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
@@ -77,6 +78,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const CastlePeakRoadIndexRoute = CastlePeakRoadIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CastlePeakRoadRoute,
 } as any)
 const PropertyListingNoRoute = PropertyListingNoRouteImport.update({
   id: '/property/$listingNo',
@@ -171,6 +177,7 @@ export interface FileRoutesByFullPath {
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
+  '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
 }
@@ -179,7 +186,6 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
-  '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
@@ -196,6 +202,7 @@ export interface FileRoutesByTo {
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
+  '/castle-peak-road': typeof CastlePeakRoadIndexRoute
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
 }
@@ -222,6 +229,7 @@ export interface FileRoutesById {
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
+  '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
 }
@@ -249,6 +257,7 @@ export interface FileRouteTypes {
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
+    | '/castle-peak-road/'
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
   fileRoutesByTo: FileRoutesByTo
@@ -257,7 +266,6 @@ export interface FileRouteTypes {
     | '/about'
     | '/agents'
     | '/blog'
-    | '/castle-peak-road'
     | '/contact'
     | '/dashboard'
     | '/listings'
@@ -274,6 +282,7 @@ export interface FileRouteTypes {
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
+    | '/castle-peak-road'
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
   id:
@@ -299,6 +308,7 @@ export interface FileRouteTypes {
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
+    | '/castle-peak-road/'
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
   fileRoutesById: FileRoutesById
@@ -388,6 +398,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/castle-peak-road/': {
+      id: '/castle-peak-road/'
+      path: '/'
+      fullPath: '/castle-peak-road/'
+      preLoaderRoute: typeof CastlePeakRoadIndexRouteImport
+      parentRoute: typeof CastlePeakRoadRoute
     }
     '/property/$listingNo': {
       id: '/property/$listingNo'
@@ -502,10 +519,12 @@ const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
 
 interface CastlePeakRoadRouteChildren {
   CastlePeakRoadSegmentRoute: typeof CastlePeakRoadSegmentRoute
+  CastlePeakRoadIndexRoute: typeof CastlePeakRoadIndexRoute
 }
 
 const CastlePeakRoadRouteChildren: CastlePeakRoadRouteChildren = {
   CastlePeakRoadSegmentRoute: CastlePeakRoadSegmentRoute,
+  CastlePeakRoadIndexRoute: CastlePeakRoadIndexRoute,
 }
 
 const CastlePeakRoadRouteWithChildren = CastlePeakRoadRoute._addFileChildren(

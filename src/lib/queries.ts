@@ -29,6 +29,7 @@ const LISTING_SELECT_WITH_MLS =
 const LISTING_SELECT_LEGACY =
   "id, listing_no, title_zh, deal_type, price, rent, saleable_area, bedrooms, bathrooms, floor, images, estates(name_zh, slug)";
 const CORRIDOR_COUNT_PAGE_SIZE = 1000;
+const NEON_READ_TIMEOUT_MS = 5000;
 
 type SupabaseColumnError = {
   code?: string;
@@ -72,9 +73,30 @@ async function runWithSupabaseFallback<T>(
   supabaseRead: () => Promise<T>,
 ): Promise<T> {
   try {
-    return await neonRead();
+    return await runNeonReadWithTimeout(neonRead);
   } catch {
     return supabaseRead();
+  }
+}
+
+async function runNeonReadWithTimeout<T>(
+  neonRead: () => Promise<T>,
+  timeoutMs = NEON_READ_TIMEOUT_MS,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      neonRead(),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Neon read timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 

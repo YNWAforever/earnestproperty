@@ -124,11 +124,14 @@ test("corridor inventory fallback totals dedupe across alias buckets", () => {
 });
 
 test("castle peak road hub and segment routes render content, inventory, and schema", () => {
-  const hub = read("src/routes/castle-peak-road.tsx");
+  const layout = read("src/routes/castle-peak-road.tsx");
+  const hub = read("src/routes/castle-peak-road.index.tsx");
   const segment = read("src/routes/castle-peak-road.$segment.tsx");
   const inventory = read("src/components/site/CorridorInventory.tsx");
 
-  assert.match(hub, /createFileRoute\(["']\/castle-peak-road["']\)/);
+  assert.match(layout, /createFileRoute\(["']\/castle-peak-road["']\)/);
+  assert.match(layout, /<Outlet \/>/);
+  assert.match(hub, /createFileRoute\(["']\/castle-peak-road\/["']\)/);
   assert.match(segment, /createFileRoute\(["']\/castle-peak-road\/\$segment["']\)/);
   assert.match(hub, /castlePeakRoadHub/);
   assert.match(segment, /getCastlePeakRoadSegment/);
@@ -142,7 +145,7 @@ test("castle peak road hub and segment routes render content, inventory, and sch
 });
 
 test("castle peak road routes avoid nested main landmarks and define route errors", () => {
-  const hub = read("src/routes/castle-peak-road.tsx");
+  const hub = read("src/routes/castle-peak-road.index.tsx");
   const segment = read("src/routes/castle-peak-road.$segment.tsx");
 
   assert.doesNotMatch(hub, /<main className="bg-background">/);
@@ -175,7 +178,8 @@ test("castle peak road links and media use route-aware safeguards", () => {
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
   const seo = read("src/content/seo.ts");
   const vercel = read("vercel.ts");
-  const hubRoute = read("src/routes/castle-peak-road.tsx");
+  const layoutRoute = read("src/routes/castle-peak-road.tsx");
+  const hubRoute = read("src/routes/castle-peak-road.index.tsx");
   const segmentRoute = read("src/routes/castle-peak-road.$segment.tsx");
   const tingKauRoute = read("src/routes/district.ting-kau.tsx");
   const tsuenWanRoute = read("src/routes/district.tsuen-wan.tsx");
@@ -192,6 +196,8 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(hubRoute, /rel:\s*["']canonical["']/);
   assert.match(hubRoute, /SITE_URL/);
   assert.match(hubRoute, /castlePeakRoadHub\.path/);
+  assert.match(layoutRoute, /<Outlet \/>/);
+  assert.doesNotMatch(layoutRoute, /rel:\s*["']canonical["']/);
   assert.match(segmentRoute, /rel:\s*["']canonical["']/);
   assert.match(segmentRoute, /loaderData\?\.segment\.path/);
   assert.match(segmentRoute, /castlePeakRoadHub\.path/);

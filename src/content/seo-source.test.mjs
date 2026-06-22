@@ -130,6 +130,9 @@ test("public listing queries use Neon server functions with Supabase fallback", 
   assert.match(queries, /searchNeonListings/);
   assert.match(queries, /fetchNeonFeaturedProperties/);
   assert.match(queries, /runWithSupabaseFallback/);
+  assert.match(queries, /NEON_READ_TIMEOUT_MS/);
+  assert.match(queries, /runNeonReadWithTimeout/);
+  assert.match(queries, /Promise\.race/);
 });
 
 test("property detail pages expose real estate schema and legacy support", () => {
