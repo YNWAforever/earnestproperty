@@ -198,9 +198,11 @@ test("public search and homepage expose lead capture paths", () => {
 
   assert.match(listings, /SearchFallbackCTA/);
   assert.match(listings, /describeListingSearch/);
+  assert.match(listings, /keyword/);
   assert.match(home, /useNavigate/);
   assert.match(home, /OwnerValuationPanel/);
   assert.match(home, /IntentWhatsAppCTA/);
+  assert.match(home, /keyword/);
   assert.match(header, /業主放盤 \/ 免費估價/);
   assert.match(footer, /業主放盤/);
   assert.match(footer, /28Hse/);

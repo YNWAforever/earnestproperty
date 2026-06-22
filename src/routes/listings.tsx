@@ -25,6 +25,7 @@ const searchSchema = z.object({
   maxPrice: fallback(z.number().int().min(0).optional(), undefined),
   bedrooms: fallback(z.number().int().min(0).max(4).optional(), undefined),
   estate: fallback(z.string().optional(), undefined),
+  keyword: fallback(z.string().optional(), undefined),
   page: fallback(z.number().int().min(1), 1).default(1),
 });
 
@@ -77,6 +78,7 @@ function describeListingSearch(
     search.bedrooms !== undefined
       ? `${search.bedrooms === 4 ? "4+" : search.bedrooms} 房`
       : undefined,
+    search.keyword ? `補充：${search.keyword}` : undefined,
   ].filter(Boolean);
   return parts.join(" / ") || "未指定條件";
 }
@@ -195,6 +197,7 @@ function FiltersPanel({
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
         bedrooms: bedrooms === "any" ? undefined : Number(bedrooms),
         estate: estate === "any" ? undefined : estate,
+        keyword: initial.keyword,
         page: 1,
       },
     });

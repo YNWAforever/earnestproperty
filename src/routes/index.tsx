@@ -108,6 +108,7 @@ function HomePage() {
       search: {
         deal: searchType as "sale" | "rent",
         estate: searchEstate || undefined,
+        keyword: searchKeyword.trim() || undefined,
         page: 1,
       },
     });
@@ -172,7 +173,7 @@ function HomePage() {
               </Select>
               <Input
                 className="h-11"
-                placeholder="價錢 / 房數 / 關鍵字"
+                placeholder="預算 / 房數 / 關鍵字（配盤用）"
                 value={searchKeyword}
                 onChange={(event) => setSearchKeyword(event.target.value)}
               />
