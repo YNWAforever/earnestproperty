@@ -105,8 +105,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       },
       {
         question: "這段適合自住定投資？",
-        answer:
-          "兩者都適合。鐵路及商場支撐租務需求，而海景或較大單位則吸引換樓家庭。",
+        answer: "兩者都適合。鐵路及商場支撐租務需求，而海景或較大單位則吸引換樓家庭。",
       },
     ],
     links: [
@@ -133,7 +132,11 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     transport: "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
     housingProfile: "低密度別墅、洋房、海景住宅和少量分層單位，流通量較低。",
-    featuredEstates: ["Vista Del Mar 觀海別墅", "Royal Dragon Villa 嘉御龍庭", "Ting Kau Villa 汀九別墅"],
+    featuredEstates: [
+      "Vista Del Mar 觀海別墅",
+      "Royal Dragon Villa 嘉御龍庭",
+      "Ting Kau Villa 汀九別墅",
+    ],
     districtSlugs: ["ting-kau", "castle-peak-road"],
     estateSlugs: [],
     textAliases: [
@@ -182,7 +185,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     nameEn: "Sham Tseng",
     eyebrow: "青山公路深井段",
     title: "深井 Sham Tseng 樓盤｜青山公路海景大型屋苑",
-    description: "深井 Sham Tseng 青山公路樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與香港花園，配合即時真盤源。",
+    description:
+      "深井 Sham Tseng 青山公路樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與香港花園，配合即時真盤源。",
     h1: "深井 Sham Tseng · 青山公路海景大型屋苑",
     intro: [
       "深井是青山公路最成熟的海景住宅生活圈，屋苑規模、巴士小巴、餐飲和日常配套都比汀九集中。",
@@ -192,20 +196,24 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     transport: "小巴接駁荃灣站，巴士往九龍、港島、機場及青衣方向成熟。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
     housingProfile: "大型海景屋苑、成熟分層住宅和部分低密度臨海單位。",
-    featuredEstates: ["Bellagio 碧堤半島", "Sea Crest Villa 浪翠園", "Lido Garden 麗都花園", "Rhine Garden 海韻花園", "Hong Kong Garden 豪景花園"],
+    featuredEstates: [
+      "Bellagio 碧堤半島",
+      "Sea Crest Villa 浪翠園",
+      "Lido Garden 麗都花園",
+      "Rhine Garden 海韻花園",
+      "Hong Kong Garden 豪景花園",
+    ],
     districtSlugs: ["sham-tseng", "castle-peak-road"],
     estateSlugs: ["bellagio", "sea-crest-villa", "lido-garden", "rhine-garden", "hong-kong-garden"],
     textAliases: ["深井", "Sham Tseng", "碧堤半島", "浪翠園", "麗都花園", "海韻花園", "豪景花園"],
     faqs: [
       {
         question: "深井在青山公路沿線有咩優勢？",
-        answer:
-          "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
+        answer: "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
       },
       {
         question: "深井同汀九有咩分別？",
-        answer:
-          "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
+        answer: "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
       },
     ],
     links: [
@@ -221,7 +229,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     nameEn: "Tsing Lung Tau / Hong Kong Garden",
     eyebrow: "青山公路青龍頭段",
     title: "青龍頭 Tsing Lung Tau 樓盤｜豪景花園、香港花園、海景住宅",
-    description: "青龍頭及豪景一帶樓盤指南，涵蓋豪景花園、香港花園和青山公路青龍頭段海景住宅，即時真盤源查詢。",
+    description:
+      "青龍頭及豪景一帶樓盤指南，涵蓋豪景花園、香港花園和青山公路青龍頭段海景住宅，即時真盤源查詢。",
     h1: "青龍頭 Tsing Lung Tau · 空間型海景住宅",
     intro: [
       "青龍頭位於深井以西，住宅選擇以較大面積、海景和山海環境為賣點。",
@@ -238,13 +247,11 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     faqs: [
       {
         question: "青龍頭適合上車客嗎？",
-        answer:
-          "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
+        answer: "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
       },
       {
         question: "青龍頭交通會否太遠？",
-        answer:
-          "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
+        answer: "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
       },
     ],
     links: [
@@ -260,7 +267,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     nameEn: "So Kwun Wat / Gold Coast",
     eyebrow: "青山公路西段",
     title: "掃管笏・黃金海岸樓盤｜青山公路西段臨海住宅",
-    description: "掃管笏及黃金海岸樓盤指南，涵蓋 Aegean Coast、Gold Coast、NAPA、OMA by the Sea、滿名山等青山公路西段住宅。",
+    description:
+      "掃管笏及黃金海岸樓盤指南，涵蓋 Aegean Coast、Gold Coast、NAPA、OMA by the Sea、滿名山等青山公路西段住宅。",
     h1: "掃管笏 / 黃金海岸 · 青山公路西段臨海生活",
     intro: [
       "掃管笏與黃金海岸屬青山公路西段，近年新式屋苑供應較多，兼具臨海生活、會所和較完整家庭配套。",
@@ -270,7 +278,16 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     transport: "主要靠巴士、小巴和自駕往屯門、荃灣、九龍及港島，實際車程受繁忙時間影響。",
     schoolNet: "校網需按實際地址核實，以教育局最新公布為準。",
     housingProfile: "新式大型屋苑、臨海住宅、會所屋苑和部分低密度選擇。",
-    featuredEstates: ["Aegean Coast 愛琴海岸", "Gold Coast 黃金海岸", "帝濤灣", "滿名山", "星堤", "NAPA", "OMA by the Sea", "瑜翠園"],
+    featuredEstates: [
+      "Aegean Coast 愛琴海岸",
+      "Gold Coast 黃金海岸",
+      "帝濤灣",
+      "滿名山",
+      "星堤",
+      "NAPA",
+      "OMA by the Sea",
+      "瑜翠園",
+    ],
     districtSlugs: ["so-kwun-wat", "gold-coast", "castle-peak-road"],
     estateSlugs: [],
     textAliases: [
@@ -290,13 +307,11 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     faqs: [
       {
         question: "掃管笏同黃金海岸適合邊類家庭？",
-        answer:
-          "適合想要新式屋苑、會所、臨海生活和較大居住空間，並能接受巴士或自駕通勤的家庭。",
+        answer: "適合想要新式屋苑、會所、臨海生活和較大居住空間，並能接受巴士或自駕通勤的家庭。",
       },
       {
         question: "這段同深井有咩分別？",
-        answer:
-          "深井較接近荃灣和成熟生活圈，掃管笏 / 黃金海岸新式屋苑較多，生活節奏更偏度假式。",
+        answer: "深井較接近荃灣和成熟生活圈，掃管笏 / 黃金海岸新式屋苑較多，生活節奏更偏度假式。",
       },
     ],
     links: [

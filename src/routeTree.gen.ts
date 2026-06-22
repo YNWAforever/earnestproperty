@@ -9,9 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ListingsRouteImport } from './routes/listings'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
+import { Route as CastlePeakRoadRouteImport } from './routes/castle-peak-road'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AgentsRouteImport } from './routes/agents'
 import { Route as AboutRouteImport } from './routes/about'
@@ -22,6 +24,7 @@ import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wa
 import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
+import { Route as CastlePeakRoadSegmentRouteImport } from './routes/castle-peak-road.$segment'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
@@ -30,6 +33,11 @@ import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ListingsRoute = ListingsRouteImport.update({
   id: '/listings',
   path: '/listings',
@@ -43,6 +51,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const ContactRoute = ContactRouteImport.update({
   id: '/contact',
   path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CastlePeakRoadRoute = CastlePeakRoadRouteImport.update({
+  id: '/castle-peak-road',
+  path: '/castle-peak-road',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -95,6 +108,11 @@ const DashboardInquiriesRoute = DashboardInquiriesRouteImport.update({
   path: '/inquiries',
   getParentRoute: () => DashboardRoute,
 } as any)
+const CastlePeakRoadSegmentRoute = CastlePeakRoadSegmentRouteImport.update({
+  id: '/$segment',
+  path: '/$segment',
+  getParentRoute: () => CastlePeakRoadRoute,
+} as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
   id: '/$slug',
   path: '/$slug',
@@ -136,14 +154,17 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
+  '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -158,14 +179,17 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
+  '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -181,14 +205,17 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
+  '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/listings': typeof ListingsRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -205,14 +232,17 @@ export interface FileRouteTypes {
     | '/about'
     | '/agents'
     | '/blog'
+    | '/castle-peak-road'
     | '/contact'
     | '/dashboard'
     | '/listings'
+    | '/sitemap.xml'
     | '/account/$pathname'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/castle-peak-road/$segment'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -227,14 +257,17 @@ export interface FileRouteTypes {
     | '/about'
     | '/agents'
     | '/blog'
+    | '/castle-peak-road'
     | '/contact'
     | '/dashboard'
     | '/listings'
+    | '/sitemap.xml'
     | '/account/$pathname'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/castle-peak-road/$segment'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -249,14 +282,17 @@ export interface FileRouteTypes {
     | '/about'
     | '/agents'
     | '/blog'
+    | '/castle-peak-road'
     | '/contact'
     | '/dashboard'
     | '/listings'
+    | '/sitemap.xml'
     | '/account/$pathname'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/castle-peak-road/$segment'
     | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -272,9 +308,11 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AgentsRoute: typeof AgentsRoute
   BlogRoute: typeof BlogRouteWithChildren
+  CastlePeakRoadRoute: typeof CastlePeakRoadRouteWithChildren
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   ListingsRoute: typeof ListingsRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
   ApiMlsSyncRoute: typeof ApiMlsSyncRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
@@ -288,6 +326,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/listings': {
       id: '/listings'
       path: '/listings'
@@ -307,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/contact'
       fullPath: '/contact'
       preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/castle-peak-road': {
+      id: '/castle-peak-road'
+      path: '/castle-peak-road'
+      fullPath: '/castle-peak-road'
+      preLoaderRoute: typeof CastlePeakRoadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -379,6 +431,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardInquiriesRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/castle-peak-road/$segment': {
+      id: '/castle-peak-road/$segment'
+      path: '/$segment'
+      fullPath: '/castle-peak-road/$segment'
+      preLoaderRoute: typeof CastlePeakRoadSegmentRouteImport
+      parentRoute: typeof CastlePeakRoadRoute
+    }
     '/blog/$slug': {
       id: '/blog/$slug'
       path: '/$slug'
@@ -441,6 +500,18 @@ const BlogRouteChildren: BlogRouteChildren = {
 
 const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
 
+interface CastlePeakRoadRouteChildren {
+  CastlePeakRoadSegmentRoute: typeof CastlePeakRoadSegmentRoute
+}
+
+const CastlePeakRoadRouteChildren: CastlePeakRoadRouteChildren = {
+  CastlePeakRoadSegmentRoute: CastlePeakRoadSegmentRoute,
+}
+
+const CastlePeakRoadRouteWithChildren = CastlePeakRoadRoute._addFileChildren(
+  CastlePeakRoadRouteChildren,
+)
+
 interface DashboardRouteChildren {
   DashboardInquiriesRoute: typeof DashboardInquiriesRoute
   DashboardPropertyIdRoute: typeof DashboardPropertyIdRoute
@@ -462,9 +533,11 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AgentsRoute: AgentsRoute,
   BlogRoute: BlogRouteWithChildren,
+  CastlePeakRoadRoute: CastlePeakRoadRouteWithChildren,
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRouteWithChildren,
   ListingsRoute: ListingsRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   AccountPathnameRoute: AccountPathnameRoute,
   ApiMlsSyncRoute: ApiMlsSyncRoute,
   AuthPathnameRoute: AuthPathnameRoute,
