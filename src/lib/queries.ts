@@ -30,8 +30,11 @@ function canonicalEstateSlug(dbSlug: string) {
   return dbSlug;
 }
 
-function dbEstateSlug(slug: string) {
-  return ESTATE_DB_SLUG_FALLBACKS[slug] ?? slug;
+function estateSlugCandidates(slug: string) {
+  const canonical = canonicalEstateSlug(slug);
+  return Array.from(
+    new Set([slug, canonical, ESTATE_DB_SLUG_FALLBACKS[canonical]].filter(Boolean)),
+  );
 }
 
 function withCanonicalSlug<T extends { slug?: string }>(estate: T, requestedSlug?: string): T {
@@ -72,10 +75,16 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
 }
 
 export async function fetchEstateBySlug(slug: string) {
-  const estate = await fetchNeonEstateBySlug({ data: { slug: dbEstateSlug(slug) } });
-  return estate
-    ? withCanonicalSlug(estate as Record<string, unknown> & { slug: string }, slug)
-    : null;
+  for (const candidate of estateSlugCandidates(slug)) {
+    const estate = await fetchNeonEstateBySlug({ data: { slug: candidate } });
+    if (estate) {
+      return withCanonicalSlug(
+        estate as Record<string, unknown> & { slug: string },
+        canonicalEstateSlug(slug),
+      );
+    }
+  }
+  return null;
 }
 
 async function fetchFaqsByScope(scope: string): Promise<FaqItem[]> {
@@ -178,7 +187,7 @@ function normalizeCorridorInventoryInput(
 ): Required<CorridorInventoryAliasInput> {
   return {
     districtSlugs: cleanCorridorTerms(input.districtSlugs),
-    estateSlugs: cleanCorridorTerms(input.estateSlugs).map(dbEstateSlug),
+    estateSlugs: cleanCorridorTerms(input.estateSlugs).flatMap(estateSlugCandidates),
     textAliases: cleanCorridorTerms(input.textAliases),
     limit: clampCorridorLimit(input.limit),
   };
@@ -217,16 +226,33 @@ export async function searchListings(f: ListingFilters): Promise<{
   rows: ListingRow[];
   total: number;
 }> {
-  const result = await searchNeonListings({
-    data: { ...f, estateSlug: f.estateSlug ? dbEstateSlug(f.estateSlug) : undefined },
-  });
-  return { rows: result.rows as ListingRow[], total: result.total };
+  const candidates = f.estateSlug ? estateSlugCandidates(f.estateSlug) : [undefined];
+  let lastResult: Awaited<ReturnType<typeof searchNeonListings>> | null = null;
+
+  for (const estateSlug of candidates) {
+    const result = await searchNeonListings({
+      data: { ...f, estateSlug },
+    });
+    if (!f.estateSlug || result.total > 0) {
+      return { rows: result.rows as ListingRow[], total: result.total };
+    }
+    lastResult = result;
+  }
+
+  return {
+    rows: (lastResult?.rows ?? []) as ListingRow[],
+    total: lastResult?.total ?? 0,
+  };
 }
 
 export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
-  return (await fetchNeonListingsForEstate({
-    data: { estateSlug: dbEstateSlug(estateSlug), limit },
-  })) as ListingRow[];
+  for (const candidate of estateSlugCandidates(estateSlug)) {
+    const rows = (await fetchNeonListingsForEstate({
+      data: { estateSlug: candidate, limit },
+    })) as ListingRow[];
+    if (rows.length > 0) return rows;
+  }
+  return [];
 }
 
 export async function fetchPropertyByLegacyDetailId(oldId: string) {
