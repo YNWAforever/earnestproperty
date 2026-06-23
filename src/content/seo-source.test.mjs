@@ -33,10 +33,17 @@ test("estate summary queries canonicalize legacy database slugs", () => {
     queries.indexOf("export async function fetchEstates"),
     queries.indexOf("export async function fetchEstateBySlug"),
   );
+  const fetchEstateBySlugBody = queries.slice(
+    queries.indexOf("export async function fetchEstateBySlug"),
+    queries.indexOf("async function fetchFaqsByScope"),
+  );
 
   assert.match(queries, /function canonicalEstateSlug/);
+  assert.match(queries, /function estateSlugCandidates/);
   assert.match(fetchEstatesBody, /withCanonicalSlug/);
   assert.match(fetchEstatesBody, /fetchNeonEstates/);
+  assert.match(fetchEstateBySlugBody, /estateSlugCandidates\(slug\)/);
+  assert.doesNotMatch(fetchEstateBySlugBody, /ESTATE_DB_SLUG_FALLBACKS\[slug\]/);
 });
 
 test("root metadata no longer references lovable preview assets", () => {
