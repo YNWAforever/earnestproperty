@@ -130,4 +130,9 @@ test("shared admin workflow components include accessible labels and description
   const detailPanel = read("src/components/admin/AdminDetailPanel.tsx");
   assert.match(detailPanel, /SheetDescription/);
   assert.match(detailPanel, /description: string/);
+
+  const confirmDialog = read("src/components/admin/AdminConfirmDialog.tsx");
+  assert.match(confirmDialog, /Button/);
+  assert.doesNotMatch(confirmDialog, /AlertDialogAction/);
+  assert.match(confirmDialog, /處理中…/);
 });
