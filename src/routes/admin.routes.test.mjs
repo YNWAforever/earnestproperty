@@ -94,8 +94,20 @@ test("Blob upload SDK is loaded lazily to keep SSR boot clean", () => {
 });
 
 test("admin routes expose functional workflows, not only read-only tables", () => {
+  for (const text of [
+    "屋苑 SEO",
+    "文章編輯",
+    "FAQ 編輯",
+    "媒體庫",
+    "saveAdminEstate",
+    "saveAdminArticle",
+    "saveAdminFaq",
+    "updateAdminMediaAsset",
+  ]) {
+    assert.match(read("src/routes/admin.cms.tsx"), new RegExp(text));
+  }
+
   const expectations = [
-    ["src/routes/admin.cms.tsx", ["saveAdminEstate", "saveAdminArticle", "saveAdminFaq"]],
     ["src/routes/admin.listings.tsx", ["updateAdminPropertyStatus", "fetchAdminAgents"]],
     ["src/routes/admin.leads.tsx", ["fetchAdminLead", "updateAdminLead", "createAdminLeadActivity"]],
     ["src/routes/admin.whatsapp.tsx", ["fetchAdminConversation", "sendAdminConversationReply"]],

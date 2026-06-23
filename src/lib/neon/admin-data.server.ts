@@ -383,21 +383,79 @@ export async function fetchAdminAgents() {
 }
 
 export async function listAdminCms() {
-  const [estates, articles, faqs] = await Promise.all([
+  const [estates, articles, faqGroups, faqs] = await Promise.all([
     queryRows(
-      "SELECT id, slug, name_zh, district_slug, total_units, updated_at FROM estates ORDER BY updated_at DESC LIMIT 40",
+      `SELECT id, slug, name_zh, name_en, district_slug, developer, year_completed, phases,
+        total_units, area_min, area_max, description, hero_image, facilities,
+        seo_title, seo_description, updated_at
+       FROM estates
+       ORDER BY updated_at DESC
+       LIMIT 40`,
     ),
     queryRows(
-      "SELECT id, slug, title, category, published, published_at, updated_at FROM articles ORDER BY updated_at DESC LIMIT 40",
+      `SELECT id, slug, title, excerpt, content, cover_image, category, reading_minutes,
+        published, published_at, seo_title, seo_description, updated_at
+       FROM articles
+       ORDER BY updated_at DESC
+       LIMIT 40`,
     ),
     queryRows(
       "SELECT scope, count(*)::int AS total FROM faqs GROUP BY scope ORDER BY scope ASC LIMIT 80",
     ),
+    queryRows(
+      `SELECT id, scope, question, answer, sort_order, created_at
+       FROM faqs
+       ORDER BY scope ASC, sort_order ASC, created_at ASC
+       LIMIT 120`,
+    ),
   ]);
   return {
-    estates,
-    articles,
-    faqGroups: faqs,
+    estates: estates.map((row) => ({
+      id: stringOrEmpty(row.id),
+      slug: stringOrEmpty(row.slug),
+      name_zh: stringOrEmpty(row.name_zh),
+      name_en: stringOrNull(row.name_en),
+      district_slug: stringOrEmpty(row.district_slug),
+      developer: stringOrNull(row.developer),
+      year_completed: numberOrNull(row.year_completed),
+      phases: numberOrNull(row.phases),
+      total_units: numberOrNull(row.total_units),
+      area_min: numberOrNull(row.area_min),
+      area_max: numberOrNull(row.area_max),
+      description: stringOrNull(row.description),
+      hero_image: stringOrNull(row.hero_image),
+      facilities: Array.isArray(row.facilities) ? row.facilities.map(String) : [],
+      seo_title: stringOrNull(row.seo_title),
+      seo_description: stringOrNull(row.seo_description),
+      updated_at: rowDate(row.updated_at),
+    })),
+    articles: articles.map((row) => ({
+      id: stringOrEmpty(row.id),
+      slug: stringOrEmpty(row.slug),
+      title: stringOrEmpty(row.title),
+      excerpt: stringOrNull(row.excerpt),
+      content: stringOrNull(row.content),
+      cover_image: stringOrNull(row.cover_image),
+      category: stringOrNull(row.category),
+      reading_minutes: numberOrNull(row.reading_minutes),
+      published: row.published === true,
+      published_at: dateOrNull(row.published_at),
+      seo_title: stringOrNull(row.seo_title),
+      seo_description: stringOrNull(row.seo_description),
+      updated_at: rowDate(row.updated_at),
+    })),
+    faqGroups: faqGroups.map((row) => ({
+      scope: stringOrEmpty(row.scope),
+      total: numberOrNull(row.total) ?? 0,
+    })),
+    faqs: faqs.map((row) => ({
+      id: stringOrEmpty(row.id),
+      scope: stringOrEmpty(row.scope),
+      question: stringOrEmpty(row.question),
+      answer: stringOrEmpty(row.answer),
+      sort_order: numberOrNull(row.sort_order) ?? 0,
+      created_at: dateOrNull(row.created_at),
+    })),
   };
 }
 

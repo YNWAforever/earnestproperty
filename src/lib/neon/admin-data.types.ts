@@ -39,22 +39,13 @@ export type AdminListingRow = {
   agent_name: string | null;
 };
 
-export type AdminEstateCmsRow = {
+export type AdminEstateCmsRow = AdminEstateInput & {
   id: string;
-  slug: string;
-  name_zh: string;
-  district_slug: string;
-  total_units: number | null;
   updated_at: string | null;
 };
 
-export type AdminArticleCmsRow = {
+export type AdminArticleCmsRow = AdminArticleInput & {
   id: string;
-  slug: string;
-  title: string;
-  category: string | null;
-  published: boolean;
-  published_at: string | null;
   updated_at: string | null;
 };
 
@@ -63,10 +54,16 @@ export type AdminFaqGroupRow = {
   total: number;
 };
 
+export type AdminFaqCmsRow = AdminFaqInput & {
+  id: string;
+  created_at: string | null;
+};
+
 export type AdminCmsData = {
   estates: AdminEstateCmsRow[];
   articles: AdminArticleCmsRow[];
   faqGroups: AdminFaqGroupRow[];
+  faqs: AdminFaqCmsRow[];
 };
 
 export type AdminLeadRow = {
