@@ -92,3 +92,20 @@ test("Blob upload SDK is loaded lazily to keep SSR boot clean", () => {
   assert.doesNotMatch(mediaUpload, /import\s+\{\s*put\s*\}\s+from\s+["']@vercel\/blob["']/);
   assert.match(mediaUpload, /await import\(["']@vercel\/blob["']\)/);
 });
+
+test("admin routes expose functional workflows, not only read-only tables", () => {
+  const expectations = [
+    ["src/routes/admin.cms.tsx", ["saveAdminEstate", "saveAdminArticle", "saveAdminFaq"]],
+    ["src/routes/admin.listings.tsx", ["updateAdminPropertyStatus", "fetchAdminAgents"]],
+    ["src/routes/admin.leads.tsx", ["fetchAdminLead", "updateAdminLead", "createAdminLeadActivity"]],
+    ["src/routes/admin.whatsapp.tsx", ["fetchAdminConversation", "sendAdminConversationReply"]],
+    ["src/routes/admin.blasts.tsx", ["saveAdminCampaign", "previewAdminAudience", "queueAdminCampaign"]],
+  ];
+
+  for (const [file, requiredNames] of expectations) {
+    const source = read(file);
+    for (const name of requiredNames) {
+      assert.match(source, new RegExp(name), `${file} should use ${name}`);
+    }
+  }
+});
