@@ -58,5 +58,7 @@ test("admin server functions forward Neon Auth JWTs and verify them on the serve
   assert.match(serverAuth, /Ed25519/);
   assert.match(serverAuth, /getBearerToken/);
   assert.match(serverAuth, /neon_auth\.jwks/);
+  assert.match(serverAuth, /neon_auth\.session/);
+  assert.match(serverAuth, /expiresAt/);
   assert.match(serverAuth, /neon_auth\."user"/);
 });

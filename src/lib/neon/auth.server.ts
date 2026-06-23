@@ -107,9 +107,36 @@ async function findNeonAuthUser(authUserId: string) {
   return rows[0] ?? null;
 }
 
+async function findNeonAuthSession(token: string) {
+  const rows = await queryRows(
+    `
+    SELECT u.id::text AS id, u.email, u.name
+    FROM neon_auth.session s
+    INNER JOIN neon_auth."user" u ON u.id = s."userId"
+    WHERE s.token = $1
+      AND s."expiresAt" > now()
+    LIMIT 1
+    `,
+    [token],
+  ).catch(() => []);
+  return rows[0] ?? null;
+}
+
 async function getNeonSessionFromBearerToken(token: string) {
   const payload = await verifyNeonJwt(token).catch(() => null);
-  if (!payload) return null;
+  if (!payload) {
+    const authSession = await findNeonAuthSession(token);
+    if (!authSession?.id) return null;
+
+    return {
+      user: {
+        id: stringOrEmpty(authSession.id),
+        email: stringOrNull(authSession.email),
+        name: stringOrNull(authSession.name),
+      },
+      session: { token },
+    };
+  }
 
   const authUserId = claimAsString(payload, ["sub", "userId", "user_id", "id"]);
   if (!authUserId) return null;
