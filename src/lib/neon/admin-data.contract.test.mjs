@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
-const read = (path) => readFileSync(path, "utf8");
+const root = process.cwd();
+const read = (path) => readFileSync(join(root, path), "utf8");
 
 test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations", () => {
   const client = read("src/lib/neon/admin-data.ts");
@@ -34,8 +36,9 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
   ];
 
   for (const name of exports) {
-    assert.match(client, new RegExp(`export async function ${name}|export const ${name}`));
-    assert.match(server, new RegExp(`export async function ${name}`));
+    const exportPattern = new RegExp(`export\\s+(?:async\\s+function|const)\\s+${name}\\b`);
+    assert.match(client, exportPattern, `admin-data.ts should export ${name}`);
+    assert.match(server, exportPattern, `admin-data.server.ts should export ${name}`);
   }
 
   for (const typeName of [
@@ -47,6 +50,6 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "AdminAudiencePreview",
     "AdminCampaignInput",
   ]) {
-    assert.match(types, new RegExp(`export type ${typeName}`));
+    assert.match(types, new RegExp(`export\\s+type\\s+${typeName}\\b`));
   }
 });

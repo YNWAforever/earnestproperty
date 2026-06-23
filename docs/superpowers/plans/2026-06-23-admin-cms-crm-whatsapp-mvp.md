@@ -18,7 +18,8 @@ This plan covers several admin modules, but they are not independent products: l
 
 - Modify `src/lib/neon/admin-data.types.ts`: shared admin row/input types.
 - Modify `src/lib/neon/admin-data.ts`: browser-safe server-function wrappers.
-- Modify `src/lib/neon/admin-data.server.ts`: Neon SQL reads/writes and audit logging.
+- Modify `src/lib/neon/admin-data.server.ts`: Neon SQL reads/writes, audit logging, and reuse of pure workflow helpers.
+- Create `src/lib/neon/admin-workflow.ts`: pure admin workflow helper guards reused by server writes and API routes.
 - Modify `src/lib/woztell/woztell.server.ts`: reply and blast guards.
 - Modify `src/routes/admin.routes.test.mjs`: static route/workflow coverage.
 - Create `src/lib/neon/admin-data.contract.test.mjs`: static data-contract coverage.
@@ -68,7 +69,7 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   for (const [file, requiredNames] of expectations) {
     const source = read(file);
     for (const name of requiredNames) {
-      assert.match(source, new RegExp(name), `${file} should use ${name}`);
+      assert.match(source, new RegExp(`\\b${name}\\b`), `${file} should use ${name}`);
     }
   }
 });
@@ -81,9 +82,11 @@ Create `src/lib/neon/admin-data.contract.test.mjs`:
 ```js
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
-const read = (path) => readFileSync(path, "utf8");
+const root = process.cwd();
+const read = (path) => readFileSync(join(root, path), "utf8");
 
 test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations", () => {
   const client = read("src/lib/neon/admin-data.ts");
@@ -115,8 +118,9 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
   ];
 
   for (const name of exports) {
-    assert.match(client, new RegExp(`export async function ${name}|export const ${name}`));
-    assert.match(server, new RegExp(`export async function ${name}`));
+    const exportPattern = new RegExp(`export\\s+(?:async\\s+function|const)\\s+${name}\\b`);
+    assert.match(client, exportPattern, `admin-data.ts should export ${name}`);
+    assert.match(server, exportPattern, `admin-data.server.ts should export ${name}`);
   }
 
   for (const typeName of [
@@ -128,7 +132,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "AdminAudiencePreview",
     "AdminCampaignInput",
   ]) {
-    assert.match(types, new RegExp(`export type ${typeName}`));
+    assert.match(types, new RegExp(`export\\s+type\\s+${typeName}\\b`));
   }
 });
 ```
@@ -145,7 +149,7 @@ import {
   canQueueAdminCampaign,
   canReplyToConversation,
   normalizeAdminPhone,
-} from "./admin-data.server.ts";
+} from "./admin-workflow.ts";
 
 test("normalizeAdminPhone keeps digits only", () => {
   assert.equal(normalizeAdminPhone("+852 6090 3521"), "85260903521");
@@ -594,13 +598,14 @@ git commit -m "feat: add admin MVP data contracts"
 ### Task 3: Server Implementations, Guards, and Audit Writes
 
 **Files:**
+- Create: `src/lib/neon/admin-workflow.ts`
 - Modify: `src/lib/neon/admin-data.server.ts`
 - Test: `src/lib/neon/admin-data.contract.test.mjs`
 - Test: `src/lib/neon/admin-workflow.test.mjs`
 
-- [ ] **Step 1: Add pure workflow helpers**
+- [ ] **Step 1: Create pure workflow helpers**
 
-Add these exported helpers near the top of `src/lib/neon/admin-data.server.ts`:
+Create `src/lib/neon/admin-workflow.ts` with these exported helpers:
 
 ```ts
 export function normalizeAdminPhone(value: unknown) {
@@ -647,6 +652,8 @@ export function canQueueAdminCampaign(input: {
   return { ok: true as const };
 }
 ```
+
+Import and reuse these helpers from `src/lib/neon/admin-data.server.ts` where server implementations normalize phones or enforce conversation/campaign gates; do not duplicate helper logic in the server data module.
 
 - [ ] **Step 2: Implement CMS and media server functions**
 
@@ -798,7 +805,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit server implementations**
 
 ```bash
-git add src/lib/neon/admin-data.server.ts src/lib/neon/admin-data.types.ts
+git add src/lib/neon/admin-workflow.ts src/lib/neon/admin-data.server.ts src/lib/neon/admin-data.types.ts
 git commit -m "feat: implement admin MVP Neon workflows"
 ```
 

@@ -105,7 +105,7 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   for (const [file, requiredNames] of expectations) {
     const source = read(file);
     for (const name of requiredNames) {
-      assert.match(source, new RegExp(name), `${file} should use ${name}`);
+      assert.match(source, new RegExp(`\\b${name}\\b`), `${file} should use ${name}`);
     }
   }
 });
