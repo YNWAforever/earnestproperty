@@ -12,6 +12,7 @@ function read(path) {
 test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   const routeFiles = [
     "src/routes/admin.tsx",
+    "src/routes/admin.index.tsx",
     "src/routes/admin.cms.tsx",
     "src/routes/admin.listings.tsx",
     "src/routes/admin.leads.tsx",
@@ -23,11 +24,16 @@ test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
     assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
   }
 
-  const admin = read("src/routes/admin.tsx");
-  assert.match(admin, /Neon/);
-  assert.match(admin, /WhatsApp/);
-  assert.match(admin, /CMS/);
-  assert.doesNotMatch(admin, /supabase/i);
+  const adminLayout = read("src/routes/admin.tsx");
+  assert.match(adminLayout, /Outlet/);
+  assert.match(adminLayout, /<Outlet\s*\/>/);
+  assert.doesNotMatch(adminLayout, /fetchAdminOverview/);
+
+  const adminOverview = read("src/routes/admin.index.tsx");
+  assert.match(adminOverview, /Neon/);
+  assert.match(adminOverview, /WhatsApp/);
+  assert.match(adminOverview, /CMS/);
+  assert.doesNotMatch(adminOverview, /supabase/i);
 });
 
 test("admin child routes are present in the generated route tree", () => {
@@ -43,6 +49,12 @@ test("admin child routes are present in the generated route tree", () => {
   for (const path of adminPaths) {
     assert.match(routeTree, new RegExp(`['"]${path}['"]`), `${path} should be routable`);
   }
+
+  assert.match(routeTree, /['"]\/admin\/['"]/);
+  assert.match(routeTree, /['"]\/admin\/listings\/new['"]/);
+  assert.match(routeTree, /['"]\/admin\/listings\/\$id['"]/);
+  assert.doesNotMatch(routeTree, /AdminListingsRouteWithChildren/);
+  assert.doesNotMatch(routeTree, /parentRoute: typeof AdminListingsRoute/);
 });
 
 test("admin server functions recover from stale deployed hashes", () => {
@@ -139,9 +151,32 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     assert.match(read("src/routes/admin.listings.tsx"), new RegExp(text));
   }
 
-  for (const file of ["src/routes/admin.listings.new.tsx", "src/routes/admin.listings.$id.tsx"]) {
+  for (const file of ["src/routes/admin.listings_.new.tsx", "src/routes/admin.listings_.$id.tsx"]) {
     assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
   }
+
+  for (const file of ["src/routes/admin.listings.new.tsx", "src/routes/admin.listings.$id.tsx"]) {
+    assert.equal(existsSync(join(root, file)), false, `${file} should not define nested routes`);
+  }
+
+  const propertyForm = read("src/components/dashboard/PropertyForm.tsx");
+  assert.match(propertyForm, /optionalNumber/);
+  assert.match(propertyForm, /optionalInteger/);
+  assert.doesNotMatch(
+    propertyForm,
+    /z\.coerce\.number\(\)\.nonnegative\(\)\.optional\(\)\.or\(z\.nan\(\)\)/,
+  );
+
+  const listingEditRoute = read("src/routes/admin.listings_.$id.tsx");
+  assert.match(listingEditRoute, /let cancelled = false/);
+  assert.match(listingEditRoute, /setProperty\(null\)/);
+  assert.match(listingEditRoute, /if \(cancelled\) return/);
+  assert.match(listingEditRoute, /cancelled = true/);
+
+  const listingRoute = read("src/routes/admin.listings.tsx");
+  assert.match(listingRoute, /useRef/);
+  assert.match(listingRoute, /requestIdRef/);
+  assert.match(listingRoute, /overflow-x-auto/);
 });
 
 test("shared admin workflow components exist", () => {

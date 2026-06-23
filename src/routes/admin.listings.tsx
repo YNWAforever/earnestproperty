@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ExternalLink, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -82,19 +82,24 @@ function AdminListings() {
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const refreshListings = useCallback(async () => {
     if (!user) return;
 
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setLoadingRows(true);
     try {
       const data = await fetchAdminListingsFiltered({ data: filters as AdminListingFiltersInput });
+      if (requestId !== requestIdRef.current) return;
       setRows(data as AdminListingRow[]);
       setError(null);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       setError(errorText(err));
     } finally {
-      setLoadingRows(false);
+      if (requestId === requestIdRef.current) setLoadingRows(false);
     }
   }, [filters, user]);
 
@@ -253,29 +258,31 @@ function AdminListings() {
       {rows && rows.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <Table className="min-w-[920px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[28%]">放盤</TableHead>
-                  <TableHead>類型</TableHead>
-                  <TableHead>屋苑</TableHead>
-                  <TableHead>代理</TableHead>
-                  <TableHead className="text-right">價格</TableHead>
-                  <TableHead>狀態</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((listing) => (
-                  <ListingRow
-                    key={listing.id}
-                    listing={listing}
-                    mutatingId={mutatingId}
-                    onStatusChange={handleStatusChange}
-                  />
-                ))}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table className="min-w-[920px]">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[28%]">放盤</TableHead>
+                    <TableHead>類型</TableHead>
+                    <TableHead>屋苑</TableHead>
+                    <TableHead>代理</TableHead>
+                    <TableHead className="text-right">價格</TableHead>
+                    <TableHead>狀態</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((listing) => (
+                    <ListingRow
+                      key={listing.id}
+                      listing={listing}
+                      mutatingId={mutatingId}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       ) : null}

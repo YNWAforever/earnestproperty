@@ -5,7 +5,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { PropertyForm } from "@/components/dashboard/PropertyForm";
 import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute("/admin/listings/new")({
+export const Route = createFileRoute("/admin/listings_/new")({
   head: () => ({
     meta: [{ title: "新增放盤｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),

@@ -288,7 +288,7 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.images,
     input.seo_title ?? null,
     input.seo_description ?? null,
-    input.agent_id || actor.staffId,
+    input.agent_id ?? null,
   ];
 
   const rows = input.id

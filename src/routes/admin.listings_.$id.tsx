@@ -13,7 +13,7 @@ import type { AdminPropertyInput } from "@/lib/neon/admin-data.types";
 
 type EditableProperty = Partial<AdminPropertyInput> & { id: string };
 
-export const Route = createFileRoute("/admin/listings/$id")({
+export const Route = createFileRoute("/admin/listings_/$id")({
   head: () => ({
     meta: [{ title: "編輯放盤｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
@@ -28,17 +28,39 @@ function EditAdminListingPage() {
   const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
-    if (loading) return;
+    let cancelled = false;
+    setProperty(null);
+
+    if (loading)
+      return () => {
+        cancelled = true;
+      };
     if (!user) {
       setFetching(false);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     setFetching(true);
     fetchAdminProperty({ data: { id } })
-      .then((data) => setProperty(data as EditableProperty | null))
-      .catch((err) => toast.error(err instanceof Error ? err.message : String(err)))
-      .finally(() => setFetching(false));
+      .then((data) => {
+        if (cancelled) return;
+        setProperty(data as EditableProperty | null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toast.error(err instanceof Error ? err.message : String(err));
+        setProperty(null);
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setFetching(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id, loading, user]);
 
   return (

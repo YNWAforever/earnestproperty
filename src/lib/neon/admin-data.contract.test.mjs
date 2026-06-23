@@ -52,4 +52,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
   ]) {
     assert.match(types, new RegExp(`export\\s+type\\s+${typeName}\\b`));
   }
+
+  assert.doesNotMatch(server, /input\.agent_id\s*\|\|\s*actor\.staffId/);
+  assert.match(server, /input\.agent_id\s*\?\?\s*null/);
 });
