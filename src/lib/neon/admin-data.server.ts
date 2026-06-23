@@ -641,6 +641,7 @@ export async function listAdminLeads() {
       l.source,
       l.note,
       l.created_at,
+      l.assigned_agent_id,
       c.name,
       c.phone,
       c.email,
@@ -669,6 +670,7 @@ export async function fetchAdminLead(id: string) {
       l.source,
       l.note,
       l.created_at,
+      l.contact_id,
       l.assigned_agent_id,
       l.preferred_estates,
       c.name,
@@ -719,9 +721,10 @@ export async function fetchAdminLead(id: string) {
     phone: stringOrNull(lead.phone),
     email: stringOrNull(lead.email),
     opt_in_whatsapp: lead.opt_in_whatsapp === true,
+    assigned_agent_id: stringOrNull(lead.assigned_agent_id),
     listing_no: stringOrNull(lead.listing_no),
     property_title: stringOrNull(lead.property_title),
-    assigned_agent_id: stringOrNull(lead.assigned_agent_id),
+    contact_id: stringOrNull(lead.contact_id),
     preferred_estates: Array.isArray(lead.preferred_estates)
       ? lead.preferred_estates.map(String)
       : [],

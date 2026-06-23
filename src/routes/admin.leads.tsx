@@ -46,7 +46,6 @@ import type {
 
 type LeadStage = "new" | "contacted" | "viewing" | "negotiating" | "closed_won" | "closed_lost";
 type OptInFilter = "all" | "yes" | "no";
-type LeadAssignment = string | null | undefined;
 
 type LeadFilters = {
   stage: string;
@@ -115,10 +114,8 @@ function AdminLeads() {
   const [rows, setRows] = useState<AdminLeadRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const [filters, setFilters] = useState<LeadFilters>(defaultFilters);
-  const [leadAssignments, setLeadAssignments] = useState<Record<string, string | null>>({});
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
-  const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminLeadDetail | null>(null);
@@ -129,6 +126,12 @@ function AdminLeads() {
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
+  const selectedIdRef = useRef<string | null>(null);
+  const panelOpenRef = useRef(false);
+
+  const canApplyLeadDetail = useCallback((id: string) => {
+    return panelOpenRef.current && selectedIdRef.current === id;
+  }, []);
 
   const refreshLeads = useCallback(async () => {
     if (!user) return;
@@ -158,37 +161,50 @@ function AdminLeads() {
 
       try {
         const data = await fetchAdminLead({ data: { id } });
-        if (requestId !== detailRequestRef.current) return null;
+        if (requestId !== detailRequestRef.current || !canApplyLeadDetail(id)) return null;
         if (!data) throw new Error("找不到 Lead");
 
         const lead = data as AdminLeadDetail;
         setDetail(lead);
         setDraft(leadToDraft(lead));
-        setLeadAssignments((current) => ({ ...current, [lead.id]: lead.assigned_agent_id }));
         if (options.resetNote) setNoteBody("");
         return lead;
       } catch (err) {
-        if (requestId !== detailRequestRef.current) return null;
+        if (requestId !== detailRequestRef.current || !canApplyLeadDetail(id)) return null;
 
         const message = errorText(err);
         setDetail(null);
         setDraft(null);
         setDetailError(message);
-        setSelectedId(null);
-        if (options.closeOnError !== false) setPanelOpen(false);
+        if (options.closeOnError !== false) {
+          selectedIdRef.current = null;
+          panelOpenRef.current = false;
+          setSelectedId(null);
+          setPanelOpen(false);
+        }
         toast.error(message);
         return null;
       } finally {
-        if (requestId === detailRequestRef.current) setDetailLoading(false);
+        if (requestId === detailRequestRef.current && canApplyLeadDetail(id)) {
+          setDetailLoading(false);
+        }
       }
     },
-    [],
+    [canApplyLeadDetail],
   );
 
   useEffect(() => {
     if (!user) return;
     refreshLeads();
   }, [refreshLeads, user]);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
+    panelOpenRef.current = panelOpen;
+  }, [panelOpen]);
 
   useEffect(() => {
     if (!user) return;
@@ -212,66 +228,27 @@ function AdminLeads() {
     loadLeadDetail(selectedId, { resetNote: true });
   }, [loadLeadDetail, panelOpen, selectedId]);
 
-  useEffect(() => {
-    if (filters.agent_id === "all") {
-      setLoadingAssignments(false);
-      return;
-    }
-    if (!user || !rows) return;
-
-    const missingRows = rows.filter(
-      (lead) => getLeadAssignment(lead, leadAssignments) === undefined,
-    );
-    if (missingRows.length === 0) return;
-
-    let cancelled = false;
-    setLoadingAssignments(true);
-
-    Promise.allSettled(missingRows.map((lead) => fetchAdminLead({ data: { id: lead.id } }))).then(
-      (results) => {
-        if (cancelled) return;
-
-        setLeadAssignments((current) => {
-          const next = { ...current };
-          results.forEach((result, index) => {
-            if (result.status === "fulfilled" && result.value) {
-              const lead = result.value as AdminLeadDetail;
-              next[lead.id] = lead.assigned_agent_id;
-            } else if (result.status === "fulfilled") {
-              next[missingRows[index].id] = null;
-            }
-          });
-          return next;
-        });
-        setLoadingAssignments(false);
-      },
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [filters.agent_id, leadAssignments, rows, user]);
-
   const intentOptions = useMemo(() => uniqueValues(rows, "intent"), [rows]);
   const sourceOptions = useMemo(() => uniqueValues(rows, "source"), [rows]);
-  const filteredRows = useMemo(
-    () => filterLeads(rows ?? [], filters, leadAssignments),
-    [filters, leadAssignments, rows],
-  );
+  const filteredRows = useMemo(() => filterLeads(rows ?? [], filters), [filters, rows]);
 
   function setFilter<K extends keyof LeadFilters>(key: K, value: LeadFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
   }
 
   function openLead(id: string) {
+    selectedIdRef.current = id;
+    panelOpenRef.current = true;
     setSelectedId(id);
     setPanelOpen(true);
   }
 
   function handlePanelOpenChange(open: boolean) {
+    panelOpenRef.current = open;
     setPanelOpen(open);
     if (!open) {
       detailRequestRef.current += 1;
+      selectedIdRef.current = null;
       setSelectedId(null);
       setDetail(null);
       setDraft(null);
@@ -287,20 +264,18 @@ function AdminLeads() {
   async function saveLead(nextDraft = draft, successMessage = "Lead 已更新") {
     if (!detail || !nextDraft) return;
 
+    const targetLeadId = detail.id;
     setMutatingAction("save");
     try {
-      const result = await updateAdminLead({ data: draftToInput(detail.id, nextDraft) });
+      const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
       assertNoMutationError(result);
-      setDraft(nextDraft);
-      setLeadAssignments((current) => ({
-        ...current,
-        [detail.id]: nextDraft.assigned_agent_id,
-      }));
       await refreshLeads();
-      const refreshed = await loadLeadDetail(detail.id);
-      if (refreshed) toast.success(successMessage);
+      if (!canApplyLeadDetail(targetLeadId)) return;
+
+      const refreshed = await loadLeadDetail(targetLeadId);
+      if (refreshed && canApplyLeadDetail(targetLeadId)) toast.success(successMessage);
     } catch (err) {
-      toast.error(errorText(err));
+      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
     } finally {
       setMutatingAction(null);
     }
@@ -314,12 +289,13 @@ function AdminLeads() {
       return;
     }
 
+    const targetLeadId = detail.id;
     setMutatingAction("note");
     try {
       await createAdminLeadActivity({
         data: {
-          lead_id: detail.id,
-          contact_id: null,
+          lead_id: targetLeadId,
+          contact_id: detail.contact_id,
           activity_type: "note",
           body,
           due_at: null,
@@ -327,10 +303,12 @@ function AdminLeads() {
         },
       });
       await refreshLeads();
-      const refreshed = await loadLeadDetail(detail.id, { resetNote: true });
-      if (refreshed) toast.success("跟進紀錄已新增");
+      if (!canApplyLeadDetail(targetLeadId)) return;
+
+      const refreshed = await loadLeadDetail(targetLeadId, { resetNote: true });
+      if (refreshed && canApplyLeadDetail(targetLeadId)) toast.success("跟進紀錄已新增");
     } catch (err) {
-      toast.error(errorText(err));
+      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
     } finally {
       setMutatingAction(null);
     }
@@ -452,15 +430,9 @@ function AdminLeads() {
           </>
         }
         actions={
-          loadingAssignments ? (
-            <Badge variant="outline" className="h-9 rounded-md px-3">
-              載入代理
-            </Badge>
-          ) : (
-            <Badge variant="secondary" className="h-9 rounded-md px-3">
-              {filteredRows.length} Leads
-            </Badge>
-          )
+          <Badge variant="secondary" className="h-9 rounded-md px-3">
+            {filteredRows.length} Leads
+          </Badge>
         }
       />
 
@@ -558,7 +530,7 @@ function LeadRow({ lead, onOpen }: { lead: AdminLeadRow; onOpen: (id: string) =>
     <TableRow
       role="button"
       tabIndex={0}
-      className="cursor-pointer"
+      className="cursor-pointer focus-visible:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       aria-label={`開啟 ${lead.name ?? lead.phone ?? "Lead"} 詳情`}
       onClick={() => onOpen(lead.id)}
       onKeyDown={(event) => {
@@ -747,6 +719,7 @@ function LeadDetailEditor({
 
         <div className="mt-4 grid gap-3">
           <Textarea
+            aria-label="新增跟進 note"
             value={noteBody}
             rows={3}
             disabled={disabled}
@@ -838,11 +811,7 @@ function uniqueValues(rows: AdminLeadRow[] | null, key: "intent" | "source") {
   );
 }
 
-function filterLeads(
-  rows: AdminLeadRow[],
-  filters: LeadFilters,
-  assignments: Record<string, string | null>,
-) {
+function filterLeads(rows: AdminLeadRow[], filters: LeadFilters) {
   const query = filters.query.trim().toLowerCase();
 
   return rows.filter((lead) => {
@@ -853,10 +822,9 @@ function filterLeads(
     if (filters.optIn === "no" && lead.opt_in_whatsapp === true) return false;
 
     if (filters.agent_id !== "all") {
-      const assignment = getLeadAssignment(lead, assignments);
       if (filters.agent_id === "unassigned") {
-        if (assignment !== null) return false;
-      } else if (assignment !== filters.agent_id) {
+        if (lead.assigned_agent_id !== null) return false;
+      } else if (lead.assigned_agent_id !== filters.agent_id) {
         return false;
       }
     }
@@ -879,14 +847,6 @@ function filterLeads(
       .toLowerCase()
       .includes(query);
   });
-}
-
-function getLeadAssignment(
-  lead: AdminLeadRow,
-  assignments: Record<string, string | null>,
-): LeadAssignment {
-  if (Object.prototype.hasOwnProperty.call(assignments, lead.id)) return assignments[lead.id];
-  return (lead as AdminLeadRow & { assigned_agent_id?: string | null }).assigned_agent_id;
 }
 
 function leadToDraft(lead: AdminLeadDetail): LeadDraft {

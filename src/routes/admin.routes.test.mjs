@@ -105,6 +105,44 @@ test("Blob upload SDK is loaded lazily to keep SSR boot clean", () => {
   assert.match(mediaUpload, /await import\(["']@vercel\/blob["']\)/);
 });
 
+test("admin lead CRM workflow guards async detail state and uses list assignment data", () => {
+  const leadRoute = read("src/routes/admin.leads.tsx");
+  const adminDataTypes = read("src/lib/neon/admin-data.types.ts");
+  const adminDataServer = read("src/lib/neon/admin-data.server.ts");
+
+  for (const text of [
+    "selectedIdRef",
+    "panelOpenRef",
+    "canApplyLeadDetail",
+    "contact_id: detail.contact_id",
+    'aria-label="新增跟進 note"',
+    "focus-visible:ring",
+  ]) {
+    assert.match(leadRoute, new RegExp(text));
+  }
+
+  assert.doesNotMatch(leadRoute, /Promise\.allSettled\(missingRows\.map/);
+  assert.doesNotMatch(leadRoute, /loadingAssignments/);
+
+  assert.match(
+    adminDataTypes,
+    /export type AdminLeadRow = \{[\s\S]*assigned_agent_id: string \| null;/,
+  );
+  assert.match(
+    adminDataTypes,
+    /export type AdminLeadDetail = AdminLeadRow & \{[\s\S]*contact_id: string \| null;/,
+  );
+  assert.match(
+    adminDataServer,
+    /export async function listAdminLeads\(\)[\s\S]*l\.assigned_agent_id,/,
+  );
+  assert.match(
+    adminDataServer,
+    /export async function fetchAdminLead\(id: string\)[\s\S]*l\.contact_id,/,
+  );
+  assert.match(adminDataServer, /contact_id: stringOrNull\(lead\.contact_id\)/);
+});
+
 test("admin routes expose functional workflows, not only read-only tables", () => {
   for (const text of [
     "屋苑 SEO",

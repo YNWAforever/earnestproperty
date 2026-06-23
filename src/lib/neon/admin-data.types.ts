@@ -79,6 +79,7 @@ export type AdminLeadRow = {
   phone: string | null;
   email: string | null;
   opt_in_whatsapp: boolean | null;
+  assigned_agent_id: string | null;
   listing_no: string | null;
   property_title: string | null;
 };
@@ -179,7 +180,7 @@ export type AdminListingFiltersInput = {
 };
 
 export type AdminLeadDetail = AdminLeadRow & {
-  assigned_agent_id: string | null;
+  contact_id: string | null;
   preferred_estates: string[];
   activities: AdminLeadActivityRow[];
 };
