@@ -74,6 +74,7 @@ export const Route = createFileRoute("/api/admin/jobs/send-queue")({
 });
 
 async function claimQueuedCampaignRecipients() {
+  // queued_at doubles as the send lease timestamp; stale sending rows can be reclaimed.
   return queryRows<{
     id: string;
     campaign_id: string;
@@ -88,14 +89,20 @@ async function claimQueuedCampaignRecipients() {
       SELECT r.id
       FROM whatsapp_campaign_recipients r
       INNER JOIN whatsapp_campaigns campaign ON campaign.id = r.campaign_id
-      WHERE r.status = 'queued'
+      WHERE (
+          r.status = 'queued'
+          OR (
+            r.status = 'sending'
+            AND COALESCE(r.queued_at, 'epoch'::timestamptz) < now() - interval '15 minutes'
+          )
+        )
         AND campaign.status IN ('queued', 'sending')
       ORDER BY r.queued_at ASC NULLS FIRST, r.id ASC
       FOR UPDATE SKIP LOCKED
       LIMIT 20
     )
     UPDATE whatsapp_campaign_recipients r
-    SET status = 'sending', error = NULL
+    SET status = 'sending', queued_at = now(), error = NULL
     FROM claimed, whatsapp_campaigns campaign, whatsapp_templates t, crm_contacts c
     WHERE r.id = claimed.id
       AND campaign.id = r.campaign_id

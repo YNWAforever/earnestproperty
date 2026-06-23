@@ -31,6 +31,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "previewAdminAudience",
     "saveAdminCampaign",
     "materializeCampaignRecipients",
+    "sendAdminCampaignQueue",
     "queueAdminCampaign",
     "cancelAdminCampaign",
   ];

@@ -530,6 +530,29 @@ export async function materializeCampaignRecipients(options: { data: { campaign_
   );
 }
 
+export async function sendAdminCampaignQueue(options: { data: { id: string } }) {
+  const request = await withStaffAuthHeaders({
+    headers: { "Content-Type": "application/json" },
+  });
+  const response = await fetch(`/api/admin/campaigns/${options.data.id}/queue`, {
+    method: "POST",
+    headers: request.headers,
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (payload && typeof payload === "object") {
+    return payload as {
+      ok: boolean;
+      error?: string;
+      materialization?: { eligible?: number };
+    };
+  }
+  return {
+    ok: false,
+    error: response.statusText || "Campaign queue failed",
+  };
+}
+
 const queueAdminCampaignServer = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {

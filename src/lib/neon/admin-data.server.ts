@@ -1035,6 +1035,9 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
 }
 
 export async function materializeCampaignRecipients(campaignId: string, actor: StaffAccess) {
+  const validation = await validateAdminCampaignQueueability(campaignId);
+  if (!validation.ok) return validation;
+
   const campaigns = await queryRows(
     `
     SELECT c.id, a.filters
@@ -1114,6 +1117,17 @@ export async function validateAdminCampaignQueueability(id: string) {
   });
   if (!check.ok) return { ok: false, error: check.reason };
   return { ok: true };
+}
+
+export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
+  const validation = await validateAdminCampaignQueueability(id);
+  if (!validation.ok) return validation;
+
+  const materialization = await materializeCampaignRecipients(id, actor);
+  if (!materialization.ok) return { ok: false, error: materialization.error, materialization };
+
+  const result = await queueAdminCampaign(id, actor);
+  return { ...result, materialization };
 }
 
 export async function queueAdminCampaign(id: string, actor: StaffAccess) {

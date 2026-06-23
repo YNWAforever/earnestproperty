@@ -48,9 +48,8 @@ import {
   cancelAdminCampaign,
   fetchAdminBlastOptions,
   fetchAdminCampaigns,
-  materializeCampaignRecipients,
   previewAdminAudience,
-  queueAdminCampaign,
+  sendAdminCampaignQueue,
   saveAdminAudience,
   saveAdminCampaign,
 } from "@/lib/neon/admin-data";
@@ -323,17 +322,16 @@ function AdminBlasts() {
     const action = `queue:${campaignId}`;
     setMutatingAction(action);
     try {
-      const materialization = (await materializeCampaignRecipients({
-        data: { campaign_id: campaignId },
-      })) as MutationResult & Partial<AdminAudiencePreview>;
-      assertNoServerError(materialization);
-
-      const result = (await queueAdminCampaign({ data: { id: campaignId } })) as MutationResult;
+      const result = (await sendAdminCampaignQueue({
+        data: { id: campaignId },
+      })) as MutationResult & {
+        materialization?: Partial<AdminAudiencePreview>;
+      };
       assertNoServerError(result);
 
       await refreshAdminData({ clearRowPreviews: true });
       setCampaignDraft(null);
-      toast.success(`已排隊 ${materialization.eligible ?? eligibleCount} 位合資格收件人`);
+      toast.success(`已排隊 ${result.materialization?.eligible ?? eligibleCount} 位合資格收件人`);
     } catch (err) {
       toast.error(errorText(err));
     } finally {

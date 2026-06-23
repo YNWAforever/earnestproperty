@@ -183,7 +183,7 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     ["src/routes/admin.whatsapp.tsx", ["fetchAdminConversation", "sendAdminConversationReply"]],
     [
       "src/routes/admin.blasts.tsx",
-      ["saveAdminCampaign", "previewAdminAudience", "queueAdminCampaign"],
+      ["saveAdminCampaign", "previewAdminAudience", "sendAdminCampaignQueue"],
     ],
   ];
 
@@ -236,8 +236,7 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "saveAdminAudience",
     "previewAdminAudience",
     "saveAdminCampaign",
-    "materializeCampaignRecipients",
-    "queueAdminCampaign",
+    "sendAdminCampaignQueue",
     "cancelAdminCampaign",
     "合資格",
     "Opt-out",
@@ -250,11 +249,16 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   ]) {
     assert.match(read("src/routes/admin.blasts.tsx"), new RegExp(text));
   }
+  assert.doesNotMatch(
+    read("src/routes/admin.blasts.tsx"),
+    /materializeCampaignRecipients\(\{[\s\S]*queueAdminCampaign\(\{/,
+  );
 
   const queueApi = read("src/routes/api.admin.campaigns.$id.queue.ts");
-  assert.match(queueApi, /validateAdminCampaignQueueability/);
+  assert.match(queueApi, /sendAdminCampaignQueue/);
+  const adminDataServer = read("src/lib/neon/admin-data.server.ts");
   assert.match(
-    queueApi,
+    adminDataServer,
     /validateAdminCampaignQueueability[\s\S]*materializeCampaignRecipients[\s\S]*queueAdminCampaign/,
   );
 
@@ -264,12 +268,20 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "FOR UPDATE SKIP LOCKED",
     "RETURNING",
     "status = 'sending'",
+    "queued_at = now()",
+    "interval '15 minutes'",
+    "r.status = 'sending'",
     "catch \\(err\\)",
     "refreshTouchedCampaignStatuses",
     "blocked, failed",
   ]) {
     assert.match(sendQueueJob, new RegExp(text));
   }
+
+  assert.match(
+    adminDataServer,
+    /export async function materializeCampaignRecipients[\s\S]*validateAdminCampaignQueueability[\s\S]*fetchAudienceRecipientRows/,
+  );
 
   for (const file of ["src/routes/admin.listings_.new.tsx", "src/routes/admin.listings_.$id.tsx"]) {
     assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
