@@ -109,3 +109,15 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     }
   }
 });
+
+test("shared admin workflow components exist", () => {
+  for (const file of [
+    "src/components/admin/AdminToolbar.tsx",
+    "src/components/admin/AdminEmptyState.tsx",
+    "src/components/admin/AdminConfirmDialog.tsx",
+    "src/components/admin/AdminDetailPanel.tsx",
+    "src/components/admin/AdminStatusSelect.tsx",
+  ]) {
+    assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
+  }
+});
