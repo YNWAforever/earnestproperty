@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   canQueueAdminCampaign,
   canReplyToConversation,
+  classifyCampaignDeliveryStatus,
   normalizeAdminPhone,
 } from "./admin-workflow.ts";
 
@@ -85,5 +86,44 @@ test("canQueueAdminCampaign enforces campaign gates", () => {
       eligibleRecipients: 0,
     }).reason,
     "NO_ELIGIBLE_RECIPIENTS",
+  );
+});
+
+test("classifyCampaignDeliveryStatus updates only materialized active campaigns", () => {
+  assert.equal(
+    classifyCampaignDeliveryStatus({
+      queuedRecipients: 2,
+      totalRecipients: 5,
+      failedRecipients: 1,
+      blockedRecipients: 0,
+    }),
+    "sending",
+  );
+  assert.equal(
+    classifyCampaignDeliveryStatus({
+      queuedRecipients: 0,
+      totalRecipients: 5,
+      failedRecipients: 1,
+      blockedRecipients: 1,
+    }),
+    "completed",
+  );
+  assert.equal(
+    classifyCampaignDeliveryStatus({
+      queuedRecipients: 0,
+      totalRecipients: 3,
+      failedRecipients: 2,
+      blockedRecipients: 1,
+    }),
+    "failed",
+  );
+  assert.equal(
+    classifyCampaignDeliveryStatus({
+      queuedRecipients: 0,
+      totalRecipients: 0,
+      failedRecipients: 0,
+      blockedRecipients: 0,
+    }),
+    null,
   );
 });

@@ -102,8 +102,11 @@ export type AdminCampaignRow = {
   status: string;
   scheduled_at: string | null;
   created_at: string;
+  template_id: string | null;
+  audience_id: string | null;
   element_name: string | null;
   language_code: string | null;
+  template_status: string | null;
   audience_name: string | null;
   recipients: number;
 };

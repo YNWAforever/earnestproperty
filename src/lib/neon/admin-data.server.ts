@@ -924,15 +924,18 @@ export async function listAdminCampaigns() {
       c.status,
       c.scheduled_at,
       c.created_at,
+      c.template_id,
+      c.audience_id,
       t.element_name,
       t.language_code,
+      t.status AS template_status,
       a.name AS audience_name,
       count(r.id)::int AS recipients
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
     LEFT JOIN whatsapp_campaign_recipients r ON r.campaign_id = c.id
-    GROUP BY c.id, t.element_name, t.language_code, a.name
+    GROUP BY c.id, t.element_name, t.language_code, t.status, a.name
     ORDER BY c.updated_at DESC, c.created_at DESC
     LIMIT 100
     `,

@@ -41,3 +41,15 @@ export function canQueueAdminCampaign(input: {
   }
   return { ok: true as const };
 }
+
+export function classifyCampaignDeliveryStatus(input: {
+  queuedRecipients: number;
+  totalRecipients: number;
+  failedRecipients: number;
+  blockedRecipients: number;
+}) {
+  if (input.totalRecipients <= 0) return null;
+  if (input.failedRecipients + input.blockedRecipients >= input.totalRecipients) return "failed";
+  if (input.queuedRecipients > 0) return "sending";
+  return "completed";
+}

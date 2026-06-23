@@ -231,6 +231,20 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     assert.match(read("src/routes/admin.whatsapp.tsx"), new RegExp(text));
   }
 
+  for (const text of [
+    "fetchAdminBlastOptions",
+    "saveAdminAudience",
+    "previewAdminAudience",
+    "saveAdminCampaign",
+    "materializeCampaignRecipients",
+    "queueAdminCampaign",
+    "cancelAdminCampaign",
+    "合資格",
+    "Opt-out",
+  ]) {
+    assert.match(read("src/routes/admin.blasts.tsx"), new RegExp(text));
+  }
+
   for (const file of ["src/routes/admin.listings_.new.tsx", "src/routes/admin.listings_.$id.tsx"]) {
     assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
   }

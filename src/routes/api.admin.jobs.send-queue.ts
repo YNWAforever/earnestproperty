@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
+import { classifyCampaignDeliveryStatus } from "@/lib/neon/admin-workflow";
 import { queryRows } from "@/lib/neon/db.server";
 import {
   isBlastRecipientAllowed,
@@ -19,13 +20,21 @@ export const Route = createFileRoute("/api/admin/jobs/send-queue")({
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
         if (!woztellEnabled()) {
-          return Response.json({ ok: true, sent: 0, skipped: "Woztell disabled" });
+          return Response.json({
+            ok: true,
+            sent: 0,
+            checked: 0,
+            blocked: 0,
+            failed: 0,
+            skipped: "Woztell disabled",
+          });
         }
 
         const recipients = await queryRows(
           `
           SELECT
             r.id,
+            r.campaign_id,
             c.normalized_phone,
             c.opt_in_whatsapp,
             c.opted_out_whatsapp,
@@ -43,7 +52,13 @@ export const Route = createFileRoute("/api/admin/jobs/send-queue")({
         );
 
         let sent = 0;
+        let blocked = 0;
+        let failed = 0;
+        const campaignIds = new Set<string>();
+
         for (const recipient of recipients) {
+          campaignIds.add(String(recipient.campaign_id));
+
           if (
             !isBlastRecipientAllowed({
               optedIn: recipient.opt_in_whatsapp === true,
@@ -54,6 +69,7 @@ export const Route = createFileRoute("/api/admin/jobs/send-queue")({
               "UPDATE whatsapp_campaign_recipients SET status = 'blocked', error = 'Recipient not opted in' WHERE id = $1",
               [recipient.id],
             );
+            blocked += 1;
             continue;
           }
 
@@ -73,10 +89,52 @@ export const Route = createFileRoute("/api/admin/jobs/send-queue")({
             [result.ok ? "sent" : "failed", result.ok ? null : result.error, recipient.id],
           );
           if (result.ok) sent += 1;
+          else failed += 1;
         }
 
-        return Response.json({ ok: true, sent, checked: recipients.length });
+        await refreshTouchedCampaignStatuses(Array.from(campaignIds));
+
+        return Response.json({ ok: true, sent, checked: recipients.length, blocked, failed });
       },
     },
   },
 });
+
+async function refreshTouchedCampaignStatuses(campaignIds: string[]) {
+  if (!campaignIds.length) return;
+
+  const stats = await queryRows(
+    `
+    SELECT
+      campaign_id,
+      count(*)::int AS total_recipients,
+      count(*) FILTER (WHERE status = 'queued')::int AS queued_recipients,
+      count(*) FILTER (WHERE status = 'failed')::int AS failed_recipients,
+      count(*) FILTER (WHERE status = 'blocked')::int AS blocked_recipients
+    FROM whatsapp_campaign_recipients
+    WHERE campaign_id = ANY($1::uuid[])
+    GROUP BY campaign_id
+    `,
+    [campaignIds],
+  );
+
+  for (const stat of stats) {
+    const nextStatus = classifyCampaignDeliveryStatus({
+      queuedRecipients: Number(stat.queued_recipients ?? 0),
+      totalRecipients: Number(stat.total_recipients ?? 0),
+      failedRecipients: Number(stat.failed_recipients ?? 0),
+      blockedRecipients: Number(stat.blocked_recipients ?? 0),
+    });
+    if (!nextStatus) continue;
+
+    await queryRows(
+      `
+      UPDATE whatsapp_campaigns
+      SET status = $1::whatsapp_campaign_status, updated_at = now()
+      WHERE id = $2
+        AND status IN ('queued', 'sending')
+      `,
+      [nextStatus, stat.campaign_id],
+    );
+  }
+}
