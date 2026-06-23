@@ -30,6 +30,49 @@ test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   assert.doesNotMatch(admin, /supabase/i);
 });
 
+test("admin child routes are present in the generated route tree", () => {
+  const routeTree = read("src/routeTree.gen.ts");
+  const adminPaths = [
+    "/admin/cms",
+    "/admin/listings",
+    "/admin/leads",
+    "/admin/whatsapp",
+    "/admin/blasts",
+  ];
+
+  for (const path of adminPaths) {
+    assert.match(routeTree, new RegExp(`['"]${path}['"]`), `${path} should be routable`);
+  }
+});
+
+test("admin server functions recover from stale deployed hashes", () => {
+  const adminData = read("src/lib/neon/admin-data.ts");
+
+  assert.match(adminData, /STALE_SERVER_FN_RELOAD_KEY/);
+  assert.match(adminData, /isStaleServerFunctionError/);
+  assert.match(adminData, /window\.location\.reload\(\)/);
+  assert.match(adminData, /callStaffServerFn/);
+
+  const protectedFetches = [
+    "fetchAdminOverview",
+    "fetchAdminListings",
+    "fetchAdminEstateOptions",
+    "fetchAdminProperty",
+    "saveAdminProperty",
+    "deleteAdminProperty",
+    "fetchAdminCms",
+    "fetchAdminLeads",
+    "fetchAdminConversations",
+    "fetchAdminCampaigns",
+    "updateAdminInquiryStatus",
+  ];
+
+  for (const name of protectedFetches) {
+    const pattern = new RegExp(`export async function ${name}[\\s\\S]*?return callStaffServerFn`);
+    assert.match(adminData, pattern, `${name} should use stale server-function recovery`);
+  }
+});
+
 test("Woztell API routes are present and server-only", () => {
   const files = [
     "src/routes/api.woztell.webhook.ts",
