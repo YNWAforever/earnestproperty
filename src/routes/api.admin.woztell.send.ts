@@ -16,6 +16,8 @@ type SendConversationRow = {
   opted_out_whatsapp: unknown;
 };
 
+type WoztellSendResult = Awaited<ReturnType<typeof sendWoztellResponse>>;
+
 export const Route = createFileRoute("/api/admin/woztell/send")({
   server: {
     handlers: {
@@ -62,7 +64,7 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
         if (!conversationRecipientId) {
           return Response.json({ ok: false, error: "MISSING_WOZTELL_MEMBER_ID" }, { status: 400 });
         }
-        if (recipientId !== conversation.woztell_member_id) {
+        if (recipientId !== conversationRecipientId) {
           return Response.json({ ok: false, error: "RECIPIENT_MISMATCH" }, { status: 400 });
         }
 
@@ -75,10 +77,15 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
           return Response.json({ ok: false, error: replyGuard.reason }, { status: 400 });
         }
 
-        const result = await sendWoztellResponse({
-          recipientId: conversationRecipientId,
-          response: [{ type: "TEXT", text }],
-        });
+        let result: WoztellSendResult;
+        try {
+          result = await sendWoztellResponse({
+            recipientId: conversationRecipientId,
+            response: [{ type: "TEXT", text }],
+          });
+        } catch (sendError) {
+          result = { ok: false, error: errorMessage(sendError) };
+        }
 
         await queryRows(
           `
@@ -111,3 +118,9 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
     },
   },
 });
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return String(error);
+}

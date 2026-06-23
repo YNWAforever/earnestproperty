@@ -143,6 +143,23 @@ test("admin lead CRM workflow guards async detail state and uses list assignment
   assert.match(adminDataServer, /contact_id: stringOrNull\(lead\.contact_id\)/);
 });
 
+test("admin WhatsApp inbox guards stale selected conversation actions", () => {
+  const whatsappRoute = read("src/routes/admin.whatsapp.tsx");
+
+  for (const text of [
+    "fetchAdminConversation",
+    "updateAdminConversation",
+    "sendAdminConversationReply",
+    "clearConversationDetail",
+    "detail.id !== selectedIdRef.current",
+    "24 小時",
+    "WOZTELL_ENABLED",
+    "回覆",
+  ]) {
+    assert.match(whatsappRoute, new RegExp(text));
+  }
+});
+
 test("admin routes expose functional workflows, not only read-only tables", () => {
   for (const text of [
     "屋苑 SEO",
@@ -205,6 +222,8 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "fetchAdminConversation",
     "updateAdminConversation",
     "sendAdminConversationReply",
+    "clearConversationDetail",
+    "detail.id !== selectedIdRef.current",
     "24 小時",
     "WOZTELL_ENABLED",
     "回覆",

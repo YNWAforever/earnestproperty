@@ -191,18 +191,27 @@ function AdminWhatsapp() {
   }, [isDesktop]);
 
   function openConversation(id: string) {
-    selectedIdRef.current = id;
-    setSelectedId(id);
+    if (selectedIdRef.current !== id) {
+      selectedIdRef.current = id;
+      clearConversationDetail(true);
+      setSelectedId(id);
+    }
     if (!isDesktop) setPanelOpen(true);
   }
 
-  function clearSelectedConversation() {
+  function clearConversationDetail(loading = false) {
     detailRequestRef.current += 1;
-    selectedIdRef.current = null;
-    setSelectedId(null);
     setDetail(null);
     setDetailError(null);
+    setDetailLoading(loading);
     setReplyBody("");
+    setMutatingAction(null);
+  }
+
+  function clearSelectedConversation() {
+    selectedIdRef.current = null;
+    setSelectedId(null);
+    clearConversationDetail();
   }
 
   function handlePanelOpenChange(open: boolean) {
@@ -214,7 +223,7 @@ function AdminWhatsapp() {
     status: string;
     assigned_agent_id: string | null;
   }) {
-    if (!detail) return;
+    if (!detail || detail.id !== selectedIdRef.current) return;
 
     const targetId = detail.id;
     setMutatingAction("conversation");
@@ -235,12 +244,12 @@ function AdminWhatsapp() {
     } catch (err) {
       if (canApplyConversationDetail(targetId)) toast.error(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
     }
   }
 
   async function sendReply() {
-    if (!detail) {
+    if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
     }
@@ -277,7 +286,7 @@ function AdminWhatsapp() {
     } catch (err) {
       if (canApplyConversationDetail(targetId)) toast.error(formatReplyError(errorText(err)));
     } finally {
-      setMutatingAction(null);
+      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
     }
   }
 

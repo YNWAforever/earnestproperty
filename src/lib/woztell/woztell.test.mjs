@@ -105,12 +105,18 @@ test("admin send route gates replies through a fetched conversation", () => {
     "last_inbound_at",
     "opted_out_whatsapp",
     "woztell_member_id",
-    "recipientId !== conversation.woztell_member_id",
+    "recipientId !== conversationRecipientId",
+    "let result",
+    "try",
+    "catch",
+    "sendError",
   ]) {
     assert.match(sendRoute, new RegExp(text));
   }
 
   assert.match(sendRoute, /SELECT[\s\S]+FROM whatsapp_conversations/);
+  assert.match(sendRoute, /try\s*\{[\s\S]*sendWoztellResponse[\s\S]*\}\s*catch/);
+  assert.match(sendRoute, /catch\s*\([^)]*\)\s*\{[\s\S]*ok:\s*false[\s\S]*error:/);
   assert.match(sendRoute, /status,\s*payload/);
   assert.match(sendRoute, /result\.ok \? "sent" : "failed"/);
 });
