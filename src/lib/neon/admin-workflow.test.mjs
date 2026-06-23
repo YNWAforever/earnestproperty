@@ -5,7 +5,7 @@ import {
   canQueueAdminCampaign,
   canReplyToConversation,
   normalizeAdminPhone,
-} from "./admin-data.server.ts";
+} from "./admin-workflow.ts";
 
 test("normalizeAdminPhone keeps digits only", () => {
   assert.equal(normalizeAdminPhone("+852 6090 3521"), "85260903521");
