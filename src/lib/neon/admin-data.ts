@@ -337,7 +337,7 @@ const fetchAdminListingsFilteredServer = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.fetchAdminListingsFiltered(data);
+    return adminData.listAdminListings(data);
   });
 
 export async function fetchAdminListingsFiltered(options: { data: AdminListingFiltersInput }) {
