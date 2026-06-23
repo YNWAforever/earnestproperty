@@ -43,3 +43,9 @@ test("Woztell API routes are present and server-only", () => {
     assert.match(read(file), /server-only|@tanstack\/react-start\/server-only/);
   }
 });
+
+test("Blob upload SDK is loaded lazily to keep SSR boot clean", () => {
+  const mediaUpload = read("src/routes/api.admin.media.upload.ts");
+  assert.doesNotMatch(mediaUpload, /import\s+\{\s*put\s*\}\s+from\s+["']@vercel\/blob["']/);
+  assert.match(mediaUpload, /await import\(["']@vercel\/blob["']\)/);
+});

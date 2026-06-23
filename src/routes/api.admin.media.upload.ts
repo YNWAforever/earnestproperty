@@ -1,6 +1,5 @@
 import "@tanstack/react-start/server-only";
 
-import { put } from "@vercel/blob";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { requireStaffAccess } from "@/lib/neon/auth.server";
@@ -19,6 +18,7 @@ export const Route = createFileRoute("/api/admin/media/upload")({
         }
 
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+        const { put } = await import("@vercel/blob");
         const blob = await put(
           `${ownerType}/${staff.staffId}/${crypto.randomUUID()}-${safeName}`,
           file,
