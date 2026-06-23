@@ -109,9 +109,15 @@ test("admin routes expose functional workflows, not only read-only tables", () =
 
   const expectations = [
     ["src/routes/admin.listings.tsx", ["updateAdminPropertyStatus", "fetchAdminAgents"]],
-    ["src/routes/admin.leads.tsx", ["fetchAdminLead", "updateAdminLead", "createAdminLeadActivity"]],
+    [
+      "src/routes/admin.leads.tsx",
+      ["fetchAdminLead", "updateAdminLead", "createAdminLeadActivity"],
+    ],
     ["src/routes/admin.whatsapp.tsx", ["fetchAdminConversation", "sendAdminConversationReply"]],
-    ["src/routes/admin.blasts.tsx", ["saveAdminCampaign", "previewAdminAudience", "queueAdminCampaign"]],
+    [
+      "src/routes/admin.blasts.tsx",
+      ["saveAdminCampaign", "previewAdminAudience", "queueAdminCampaign"],
+    ],
   ];
 
   for (const [file, requiredNames] of expectations) {

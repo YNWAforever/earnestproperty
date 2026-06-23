@@ -871,7 +871,7 @@ function MediaDialog({
                 href={media.url}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium hover:underline"
+                className="break-all font-medium hover:underline"
               >
                 {media.url}
               </a>
