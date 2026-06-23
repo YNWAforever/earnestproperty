@@ -108,6 +108,7 @@ function AdminBlasts() {
   const [saving, setSaving] = useState(false);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [campaignDraft, setCampaignDraft] = useState<AdminCampaignInput | null>(null);
+  const [savedCampaignDraft, setSavedCampaignDraft] = useState<AdminCampaignInput | null>(null);
   const [audienceDraft, setAudienceDraft] = useState<AdminAudienceInput | null>(null);
   const [selectedPreviewAudienceId, setSelectedPreviewAudienceId] = useState("");
   const [preview, setPreview] = useState<AdminAudiencePreview | null>(null);
@@ -216,6 +217,7 @@ function AdminBlasts() {
     const template =
       options?.templates.find((item) => item.status.startsWith("active")) ?? options?.templates[0];
     const audienceId = selectedPreviewAudienceId || options?.audiences[0]?.id || null;
+    setSavedCampaignDraft(null);
     setCampaignDraft({
       name: "",
       template_id: template?.id ?? null,
@@ -223,6 +225,11 @@ function AdminBlasts() {
       status: "draft",
       scheduled_at: null,
     });
+  }
+
+  function closeCampaignDialog() {
+    setCampaignDraft(null);
+    setSavedCampaignDraft(null);
   }
 
   async function handleSaveAudience(event: FormEvent<HTMLFormElement>) {
@@ -272,7 +279,9 @@ function AdminBlasts() {
       const result = (await saveAdminCampaign({ data: payload })) as MutationResult;
       assertNoServerError(result);
       const id = result.id || campaignDraft.id;
-      setCampaignDraft({ ...payload, id });
+      const savedDraft = { ...payload, id };
+      setCampaignDraft(savedDraft);
+      setSavedCampaignDraft(savedDraft);
       await refreshAdminData({ clearRowPreviews: true });
       toast.success(id ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
@@ -339,7 +348,7 @@ function AdminBlasts() {
       const result = (await cancelAdminCampaign({ data: { id: campaignId } })) as MutationResult;
       assertNoServerError(result);
       await refreshAdminData({ clearRowPreviews: true });
-      if (campaignDraft?.id === campaignId) setCampaignDraft(null);
+      if (campaignDraft?.id === campaignId) closeCampaignDialog();
       toast.success("Campaign 已取消");
     } catch (err) {
       toast.error(errorText(err));
@@ -351,7 +360,14 @@ function AdminBlasts() {
   const campaignRows = rows ?? [];
   const canSubmitCampaign =
     Boolean(campaignDraft?.id) && isQueueableStatus(campaignDraft?.status ?? "");
-  const canQueueDraft = canSubmitCampaign && (preview?.eligible ?? 0) > 0;
+  const hasUnsavedCampaignChanges = Boolean(
+    campaignDraft &&
+    (!savedCampaignDraft ||
+      campaignDraftSignature(campaignDraft) !== campaignDraftSignature(savedCampaignDraft)),
+  );
+  const queueBlockReason = hasUnsavedCampaignChanges ? "Save changes before queueing" : null;
+  const canQueueDraft =
+    canSubmitCampaign && !hasUnsavedCampaignChanges && (preview?.eligible ?? 0) > 0;
 
   return (
     <AdminShell title="WhatsApp 群發" description="Template-only、opt-in-only、審核後排程發送。">
@@ -548,8 +564,9 @@ function AdminBlasts() {
         saving={saving}
         mutating={!!mutatingAction}
         canQueue={canQueueDraft}
+        queueBlockReason={queueBlockReason}
         onChange={setCampaignDraft}
-        onClose={() => setCampaignDraft(null)}
+        onClose={closeCampaignDialog}
         onSubmit={handleSaveCampaign}
         onQueue={() => {
           if (!campaignDraft?.id) return;
@@ -581,6 +598,7 @@ function CampaignDialog({
   saving,
   mutating,
   canQueue,
+  queueBlockReason,
   onChange,
   onClose,
   onSubmit,
@@ -594,6 +612,7 @@ function CampaignDialog({
   saving: boolean;
   mutating: boolean;
   canQueue: boolean;
+  queueBlockReason: string | null;
   onChange: (campaign: AdminCampaignInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -625,7 +644,7 @@ function CampaignDialog({
                     onChange({ ...campaign, template_id: value === "none" ? null : value })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Campaign template">
                     <SelectValue placeholder="Template" />
                   </SelectTrigger>
                   <SelectContent>
@@ -645,7 +664,7 @@ function CampaignDialog({
                     onChange({ ...campaign, audience_id: value === "none" ? null : value })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Campaign audience">
                     <SelectValue placeholder="Audience" />
                   </SelectTrigger>
                   <SelectContent>
@@ -665,7 +684,7 @@ function CampaignDialog({
                     onChange({ ...campaign, status: value as AdminCampaignInput["status"] })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Campaign status">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -699,6 +718,9 @@ function CampaignDialog({
             </div>
 
             <DialogFooter className="gap-2">
+              {queueBlockReason ? (
+                <p className="text-sm text-muted-foreground sm:mr-auto">{queueBlockReason}</p>
+              ) : null}
               <Button type="button" variant="outline" onClick={onClose}>
                 Close
               </Button>
@@ -780,7 +802,7 @@ function AudienceDialog({
                     })
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Audience intent">
                     <SelectValue placeholder="Intent" />
                   </SelectTrigger>
                   <SelectContent>
@@ -938,6 +960,7 @@ function TextField({
       <Input
         type={type}
         value={value}
+        aria-label={label}
         onChange={(event) => onChange(event.target.value)}
         required={required}
       />
@@ -951,6 +974,17 @@ function isQueueableStatus(status: string) {
 
 function audienceLabel(options: AdminBlastOptions | null, id: string) {
   return options?.audiences.find((audience) => audience.id === id)?.name ?? null;
+}
+
+function campaignDraftSignature(campaign: AdminCampaignInput) {
+  return JSON.stringify({
+    id: campaign.id ?? "",
+    name: campaign.name,
+    template_id: campaign.template_id ?? "",
+    audience_id: campaign.audience_id ?? "",
+    status: campaign.status,
+    scheduled_at: campaign.scheduled_at ?? "",
+  });
 }
 
 function normalizeAudienceFilters(filters: AdminAudienceInput["filters"]) {

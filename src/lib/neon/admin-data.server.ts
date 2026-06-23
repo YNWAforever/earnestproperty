@@ -21,7 +21,11 @@ import type {
   AdminListingFiltersInput,
   AdminAudiencePreview,
 } from "./admin-data.types";
-import { canQueueAdminCampaign, normalizeAdminPhone } from "./admin-workflow";
+import {
+  canPrepareAdminCampaignQueue,
+  canQueueAdminCampaign,
+  normalizeAdminPhone,
+} from "./admin-workflow";
 
 export type AdminPropertyInput = {
   id?: string;
@@ -1085,6 +1089,31 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
   const summary = summarizeAudienceRows(rows);
   await writeAudit(actor.staffId, "campaign.recipients", "campaign", campaignId, summary);
   return { ok: true, ...summary };
+}
+
+export async function validateAdminCampaignQueueability(id: string) {
+  const rows = await queryRows(
+    `
+    SELECT
+      c.id,
+      c.status,
+      t.status AS template_status
+    FROM whatsapp_campaigns c
+    LEFT JOIN whatsapp_templates t ON t.id = c.template_id
+    WHERE c.id = $1
+    LIMIT 1
+    `,
+    [id],
+  );
+  const row = rows[0];
+  if (!row) return { ok: false, error: "Campaign not found" };
+
+  const check = canPrepareAdminCampaignQueue({
+    campaignStatus: stringOrEmpty(row.status),
+    templateStatus: stringOrNull(row.template_status),
+  });
+  if (!check.ok) return { ok: false, error: check.reason };
+  return { ok: true };
 }
 
 export async function queueAdminCampaign(id: string, actor: StaffAccess) {

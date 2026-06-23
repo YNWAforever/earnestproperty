@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  canPrepareAdminCampaignQueue,
   canQueueAdminCampaign,
   canReplyToConversation,
   classifyCampaignDeliveryStatus,
@@ -89,10 +90,35 @@ test("canQueueAdminCampaign enforces campaign gates", () => {
   );
 });
 
+test("canPrepareAdminCampaignQueue validates non-mutating queue preflight gates", () => {
+  assert.deepEqual(
+    canPrepareAdminCampaignQueue({
+      campaignStatus: "scheduled",
+      templateStatus: "active",
+    }),
+    { ok: true },
+  );
+  assert.equal(
+    canPrepareAdminCampaignQueue({
+      campaignStatus: "queued",
+      templateStatus: "active",
+    }).reason,
+    "INVALID_CAMPAIGN_STATUS",
+  );
+  assert.equal(
+    canPrepareAdminCampaignQueue({
+      campaignStatus: "review",
+      templateStatus: "rejected",
+    }).reason,
+    "TEMPLATE_NOT_ACTIVE",
+  );
+});
+
 test("classifyCampaignDeliveryStatus updates only materialized active campaigns", () => {
   assert.equal(
     classifyCampaignDeliveryStatus({
       queuedRecipients: 2,
+      sendingRecipients: 0,
       totalRecipients: 5,
       failedRecipients: 1,
       blockedRecipients: 0,
@@ -102,6 +128,17 @@ test("classifyCampaignDeliveryStatus updates only materialized active campaigns"
   assert.equal(
     classifyCampaignDeliveryStatus({
       queuedRecipients: 0,
+      sendingRecipients: 1,
+      totalRecipients: 5,
+      failedRecipients: 1,
+      blockedRecipients: 0,
+    }),
+    "sending",
+  );
+  assert.equal(
+    classifyCampaignDeliveryStatus({
+      queuedRecipients: 0,
+      sendingRecipients: 0,
       totalRecipients: 5,
       failedRecipients: 1,
       blockedRecipients: 1,
@@ -111,6 +148,7 @@ test("classifyCampaignDeliveryStatus updates only materialized active campaigns"
   assert.equal(
     classifyCampaignDeliveryStatus({
       queuedRecipients: 0,
+      sendingRecipients: 0,
       totalRecipients: 3,
       failedRecipients: 2,
       blockedRecipients: 1,
@@ -120,6 +158,7 @@ test("classifyCampaignDeliveryStatus updates only materialized active campaigns"
   assert.equal(
     classifyCampaignDeliveryStatus({
       queuedRecipients: 0,
+      sendingRecipients: 0,
       totalRecipients: 0,
       failedRecipients: 0,
       blockedRecipients: 0,

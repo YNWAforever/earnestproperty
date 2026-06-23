@@ -241,8 +241,34 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "cancelAdminCampaign",
     "合資格",
     "Opt-out",
+    "savedCampaignDraft",
+    "hasUnsavedCampaignChanges",
+    "Save changes before queueing",
+    'aria-label="Campaign template"',
+    'aria-label="Campaign audience"',
+    'aria-label="Campaign status"',
   ]) {
     assert.match(read("src/routes/admin.blasts.tsx"), new RegExp(text));
+  }
+
+  const queueApi = read("src/routes/api.admin.campaigns.$id.queue.ts");
+  assert.match(queueApi, /validateAdminCampaignQueueability/);
+  assert.match(
+    queueApi,
+    /validateAdminCampaignQueueability[\s\S]*materializeCampaignRecipients[\s\S]*queueAdminCampaign/,
+  );
+
+  const sendQueueJob = read("src/routes/api.admin.jobs.send-queue.ts");
+  for (const text of [
+    "claimQueuedCampaignRecipients",
+    "FOR UPDATE SKIP LOCKED",
+    "RETURNING",
+    "status = 'sending'",
+    "catch \\(err\\)",
+    "refreshTouchedCampaignStatuses",
+    "blocked, failed",
+  ]) {
+    assert.match(sendQueueJob, new RegExp(text));
   }
 
   for (const file of ["src/routes/admin.listings_.new.tsx", "src/routes/admin.listings_.$id.tsx"]) {

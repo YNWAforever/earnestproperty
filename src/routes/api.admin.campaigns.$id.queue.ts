@@ -10,6 +10,11 @@ export const Route = createFileRoute("/api/admin/campaigns/$id/queue")({
       POST: async ({ request, params }) => {
         const staff = await requireStaffAccess(request, ["admin", "manager"]);
         const adminData = await import("@/lib/neon/admin-data.server");
+        const validation = await adminData.validateAdminCampaignQueueability(params.id);
+        if (!validation.ok) {
+          return Response.json(validation, { status: 400 });
+        }
+
         const materialization = await adminData.materializeCampaignRecipients(params.id, staff);
         if (!materialization.ok) {
           return Response.json(
