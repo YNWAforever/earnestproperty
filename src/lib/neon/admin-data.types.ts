@@ -19,6 +19,8 @@ export type AdminPropertyInput = {
   featured: boolean;
   images: string[];
   agent_id: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
 };
 
 export type AdminListingRow = {
