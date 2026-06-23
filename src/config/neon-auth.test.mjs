@@ -27,6 +27,9 @@ test("Neon Auth TanStack Router integration is wired", () => {
   assert.match(authClient, /VITE_NEON_AUTH_URL/);
   assert.match(authClient, /withStaffAuthHeaders/);
   assert.match(authClient, /getJWTToken/);
+  assert.match(authClient, /getSession/);
+  assert.match(authClient, /sessionTokenFromValue/);
+  assert.match(authClient, /readStaffAuthToken/);
   assert.match(authClient, /authorization/);
 
   const rootRoute = read("src/routes/__root.tsx");
@@ -44,6 +47,15 @@ test("Neon Auth TanStack Router integration is wired", () => {
   assert.match(accountRoute, /createFileRoute\(["']\/account\/\$pathname["']\)/);
   assert.match(accountRoute, /AccountView/);
   assert.match(accountRoute, /from ["']@neondatabase\/auth-ui["']/);
+});
+
+test("admin auth headers fall back when Neon JWT endpoint is unavailable", () => {
+  const authClient = read("src/auth.ts");
+
+  assert.match(authClient, /getJWTToken\?\.\(\)\.catch/);
+  assert.match(authClient, /getSession\?\.\(\)\.catch/);
+  assert.match(authClient, /sessionTokenFromValue\(session\)/);
+  assert.match(authClient, /headers\.set\("authorization", `Bearer \$\{token\}`\)/);
 });
 
 test("admin server functions forward Neon Auth JWTs and verify them on the server", () => {
