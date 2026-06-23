@@ -37,6 +37,22 @@ function claimAsString(payload: AnyRecord, keys: string[]) {
   return null;
 }
 
+function staffRolesFromValue(value: unknown): StaffRole[] {
+  if (Array.isArray(value)) return value.map(String) as StaffRole[];
+  if (typeof value !== "string") return [];
+  if (value.startsWith("[") && value.endsWith("]")) {
+    return JSON.parse(value).map(String) as StaffRole[];
+  }
+  if (value.startsWith("{") && value.endsWith("}")) {
+    return value
+      .slice(1, -1)
+      .split(",")
+      .map((role) => role.replace(/^"|"$/g, "").trim())
+      .filter(Boolean) as StaffRole[];
+  }
+  return [];
+}
+
 function base64UrlToBytes(value: string) {
   const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
@@ -202,7 +218,7 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
       s.auth_user_id,
       s.email,
       COALESCE(s.name_zh, s.name_en) AS name,
-      COALESCE(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL), '{}'::staff_role[]) AS roles
+      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
     FROM staff_users s
     LEFT JOIN staff_roles r ON r.staff_user_id = s.id
     WHERE s.active = true
@@ -230,7 +246,7 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
     authUserId,
     email: stringOrNull(row.email),
     name: stringOrNull(row.name),
-    roles: Array.isArray(row.roles) ? (row.roles.map(String) as StaffRole[]) : [],
+    roles: staffRolesFromValue(row.roles),
     bootstrap: false,
   };
 }
