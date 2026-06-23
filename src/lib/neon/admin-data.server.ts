@@ -998,6 +998,16 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
       [campaignId, uniqueEligibleContactIds],
     );
   }
+  await queryRows(
+    `
+    UPDATE whatsapp_campaign_recipients r
+    SET status = 'blocked', error = 'No longer eligible for audience'
+    WHERE r.campaign_id = $1
+      AND r.status = 'queued'
+      AND r.contact_id <> ALL($2::uuid[])
+    `,
+    [campaignId, uniqueEligibleContactIds],
+  );
 
   const summary = summarizeAudienceRows(rows);
   await writeAudit(actor.staffId, "campaign.recipients", "campaign", campaignId, summary);
@@ -1011,10 +1021,15 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
       c.id,
       c.status,
       t.status AS template_status,
-      count(r.id)::int AS eligible_recipients
+      count(r.id) FILTER (
+        WHERE NULLIF(contact.normalized_phone, '') IS NOT NULL
+          AND contact.opt_in_whatsapp = true
+          AND contact.opted_out_whatsapp = false
+      )::int AS eligible_recipients
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_campaign_recipients r ON r.campaign_id = c.id AND r.status = 'queued'
+    LEFT JOIN crm_contacts contact ON contact.id = r.contact_id
     WHERE c.id = $1
     GROUP BY c.id, t.status
     LIMIT 1
