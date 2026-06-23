@@ -14,6 +14,9 @@ export function AdminConfirmDialog({
   title,
   description,
   confirmLabel,
+  confirmVariant = "default",
+  disabled,
+  isPending,
   onOpenChange,
   onConfirm,
 }: {
@@ -21,6 +24,9 @@ export function AdminConfirmDialog({
   title: string;
   description: string;
   confirmLabel: string;
+  confirmVariant?: "default" | "destructive";
+  disabled?: boolean;
+  isPending?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
@@ -33,7 +39,17 @@ export function AdminConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>取消</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+          <AlertDialogAction
+            className={
+              confirmVariant === "destructive"
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : undefined
+            }
+            disabled={disabled || isPending}
+            onClick={onConfirm}
+          >
+            {isPending ? "處理中..." : confirmLabel}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

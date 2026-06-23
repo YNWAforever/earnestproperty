@@ -19,7 +19,7 @@ export function AdminDetailPanel({
 }: {
   open: boolean;
   title: string;
-  description?: string;
+  description: string;
   children: ReactNode;
   footer?: ReactNode;
   onOpenChange: (open: boolean) => void;
@@ -29,7 +29,7 @@ export function AdminDetailPanel({
       <SheetContent className="flex w-full flex-col gap-4 overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>{title}</SheetTitle>
-          {description ? <SheetDescription>{description}</SheetDescription> : null}
+          <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1">{children}</div>
         {footer ? <SheetFooter>{footer}</SheetFooter> : null}

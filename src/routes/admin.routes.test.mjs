@@ -121,3 +121,13 @@ test("shared admin workflow components exist", () => {
     assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
   }
 });
+
+test("shared admin workflow components include accessible labels and descriptions", () => {
+  const statusSelect = read("src/components/admin/AdminStatusSelect.tsx");
+  assert.match(statusSelect, /ariaLabel/);
+  assert.match(statusSelect, /aria-label/);
+
+  const detailPanel = read("src/components/admin/AdminDetailPanel.tsx");
+  assert.match(detailPanel, /SheetDescription/);
+  assert.match(detailPanel, /description: string/);
+});
