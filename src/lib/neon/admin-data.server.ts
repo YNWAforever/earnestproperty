@@ -57,12 +57,16 @@ type AudienceSummary = {
 };
 
 const RECIPIENT_ELIGIBILITY_SQL = `
-SELECT c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp
+SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp
 FROM crm_contacts c
 LEFT JOIN crm_leads l ON l.contact_id = c.id
+LEFT JOIN properties p ON p.id = l.property_id
+LEFT JOIN estates estate ON estate.id = p.estate_id
 WHERE ($1::text IS NULL OR l.intent = $1)
   AND ($2::text IS NULL OR c.source = $2)
   AND ($3::uuid IS NULL OR c.assigned_agent_id = $3::uuid OR l.assigned_agent_id = $3::uuid)
+  AND ($4::text IS NULL OR $4::text = ANY(l.preferred_estates) OR estate.slug = $4::text)
+ORDER BY c.id, l.updated_at DESC NULLS LAST, l.created_at DESC NULLS LAST
 `;
 
 function rowDate(value: unknown) {
@@ -116,6 +120,7 @@ function audienceFilterParams(filters: AudienceFilters) {
     normalized.intent ?? null,
     normalized.source ?? null,
     normalized.assigned_agent_id ?? null,
+    normalized.estate ?? null,
   ];
 }
 
@@ -201,7 +206,9 @@ export async function listAdminListings(input: AdminListingInput = {}) {
     where.push(`p.agent_id = ${addParam(params, input.agent_id)}::uuid`);
   }
 
-  const limitParam = addParam(params, input.limit ?? 80);
+  const requestedLimit = Number(input.limit ?? 80);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 80;
+  const limitParam = addParam(params, limit);
   const rows = await queryRows(
     `
     SELECT
@@ -336,16 +343,18 @@ export async function updateAdminPropertyStatus(
   status: AdminPropertyInput["status"],
   actor: StaffAccess,
 ) {
-  await queryRows(
-    "UPDATE properties SET status = $1::property_status, updated_at = now() WHERE id = $2",
+  const rows = await queryRows(
+    "UPDATE properties SET status = $1::property_status, updated_at = now() WHERE id = $2 RETURNING id",
     [status, id],
   );
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "property.status", "property", id, { status });
   return { ok: true };
 }
 
 export async function deleteAdminProperty(id: string, actor: StaffAccess) {
-  await queryRows("DELETE FROM properties WHERE id = $1", [id]);
+  const rows = await queryRows("DELETE FROM properties WHERE id = $1 RETURNING id", [id]);
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "property.delete", "property", id);
   return { ok: true };
 }
@@ -548,10 +557,11 @@ export async function updateAdminMediaAsset(
   input: { id: string; alt_text: string | null; owner_type: string; owner_id: string | null },
   actor: StaffAccess,
 ) {
-  await queryRows(
-    "UPDATE media_assets SET alt_text = $1, owner_type = $2, owner_id = $3 WHERE id = $4",
+  const rows = await queryRows(
+    "UPDATE media_assets SET alt_text = $1, owner_type = $2, owner_id = $3 WHERE id = $4 RETURNING id",
     [input.alt_text, input.owner_type, input.owner_id, input.id],
   );
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "media.update", "media", input.id);
   return { ok: true };
 }
@@ -825,10 +835,11 @@ export async function updateAdminConversation(
   input: AdminConversationUpdateInput,
   actor: StaffAccess,
 ) {
-  await queryRows(
-    "UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3",
+  const rows = await queryRows(
+    "UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3 RETURNING id",
     [input.status, input.assigned_agent_id, input.id],
   );
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "conversation.update", "conversation", input.id, {
     status: input.status,
     assigned_agent_id: input.assigned_agent_id,
@@ -966,16 +977,25 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
     .filter(isEligibleAudienceRow)
     .map((row) => stringOrEmpty(row.id))
     .filter(Boolean);
+  const uniqueEligibleContactIds = Array.from(new Set(eligibleContactIds));
 
-  await queryRows("DELETE FROM whatsapp_campaign_recipients WHERE campaign_id = $1", [campaignId]);
-  if (eligibleContactIds.length > 0) {
+  if (uniqueEligibleContactIds.length > 0) {
     await queryRows(
       `
       INSERT INTO whatsapp_campaign_recipients (campaign_id, contact_id, status)
       SELECT $1::uuid, contact_id, 'queued'
       FROM unnest($2::uuid[]) AS contact_ids(contact_id)
+      ON CONFLICT (campaign_id, contact_id) DO UPDATE SET
+        status = CASE
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending') THEN whatsapp_campaign_recipients.status
+          ELSE EXCLUDED.status
+        END,
+        error = CASE
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending') THEN whatsapp_campaign_recipients.error
+          ELSE NULL
+        END
       `,
-      [campaignId, eligibleContactIds],
+      [campaignId, uniqueEligibleContactIds],
     );
   }
 
@@ -1026,10 +1046,11 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
 }
 
 export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
-  await queryRows(
-    "UPDATE whatsapp_campaigns SET status = 'cancelled', updated_at = now() WHERE id = $1",
+  const rows = await queryRows(
+    "UPDATE whatsapp_campaigns SET status = 'cancelled', updated_at = now() WHERE id = $1 RETURNING id",
     [id],
   );
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await queryRows(
     "UPDATE whatsapp_campaign_recipients SET status = 'cancelled' WHERE campaign_id = $1 AND status = 'queued'",
     [id],
