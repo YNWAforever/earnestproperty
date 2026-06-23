@@ -333,6 +333,7 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
         params,
       );
 
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "property.update" : "property.create", "property", id);
   return { id };
@@ -451,6 +452,7 @@ export async function saveAdminEstate(input: AdminEstateInput, actor: StaffAcces
           input.seo_description,
         ],
       );
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "estate.update" : "estate.create", "estate", id);
   return { id };
@@ -492,6 +494,7 @@ export async function saveAdminArticle(input: AdminArticleInput, actor: StaffAcc
         params,
       );
 
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "article.update" : "article.create", "article", id);
   return { id };
@@ -515,13 +518,15 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
         [input.scope, input.question, input.answer, input.sort_order],
       );
 
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "faq.update" : "faq.create", "faq", id);
   return { id };
 }
 
 export async function deleteAdminFaq(id: string, actor: StaffAccess) {
-  await queryRows("DELETE FROM faqs WHERE id = $1", [id]);
+  const rows = await queryRows("DELETE FROM faqs WHERE id = $1 RETURNING id", [id]);
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "faq.delete", "faq", id);
   return { ok: true };
 }
@@ -675,7 +680,7 @@ export async function fetchAdminLead(id: string) {
 }
 
 export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {
-  await queryRows(
+  const rows = await queryRows(
     `UPDATE crm_leads SET
       stage = $1::crm_lead_stage,
       intent = $2,
@@ -685,7 +690,8 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
       assigned_agent_id = $6,
       note = $7,
       updated_at = now()
-     WHERE id = $8`,
+     WHERE id = $8
+     RETURNING id`,
     [
       input.stage,
       input.intent,
@@ -697,6 +703,7 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
       input.id,
     ],
   );
+  if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "lead.update", "lead", input.id, {
     stage: input.stage,
     intent: input.intent,
@@ -914,6 +921,7 @@ export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffA
         [...params, actor.staffId],
       );
 
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "audience.update" : "audience.create", "audience", id);
   return { id };
@@ -952,6 +960,7 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
         [...params, actor.staffId],
       );
 
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "campaign.update" : "campaign.create", "campaign", id);
   return { id };
