@@ -201,6 +201,17 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     assert.match(read("src/routes/admin.leads.tsx"), new RegExp(text));
   }
 
+  for (const text of [
+    "fetchAdminConversation",
+    "updateAdminConversation",
+    "sendAdminConversationReply",
+    "24 小時",
+    "WOZTELL_ENABLED",
+    "回覆",
+  ]) {
+    assert.match(read("src/routes/admin.whatsapp.tsx"), new RegExp(text));
+  }
+
   for (const file of ["src/routes/admin.listings_.new.tsx", "src/routes/admin.listings_.$id.tsx"]) {
     assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
   }

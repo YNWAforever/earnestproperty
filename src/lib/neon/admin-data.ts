@@ -243,6 +243,18 @@ export async function fetchAdminAgents() {
   return callStaffServerFn(async () => fetchAdminAgentsServer(await withStaffAuthHeaders()));
 }
 
+const fetchAdminWoztellStatusServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager", "agent"]);
+  const woztell = await import("../woztell/woztell.server");
+  return { woztellEnabled: woztell.woztellEnabled() };
+});
+
+export async function fetchAdminWoztellStatus() {
+  return callStaffServerFn(async () =>
+    fetchAdminWoztellStatusServer(await withStaffAuthHeaders({})),
+  );
+}
+
 const saveAdminEstateServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminEstateInput) => data)
   .handler(async ({ data }) => {
@@ -426,6 +438,28 @@ export async function updateAdminConversation(options: { data: AdminConversation
   return callStaffServerFn(async () =>
     updateAdminConversationServer(await withStaffAuthHeaders(options)),
   );
+}
+
+export async function sendAdminConversationReply(options: {
+  data: { conversationId: string; recipientId: string; text: string };
+}) {
+  const request = await withStaffAuthHeaders({
+    headers: { "Content-Type": "application/json" },
+  });
+  const response = await fetch("/api/admin/woztell/send", {
+    method: "POST",
+    headers: request.headers,
+    body: JSON.stringify(options.data),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (payload && typeof payload === "object") {
+    return payload as { ok: boolean; error?: string };
+  }
+  return {
+    ok: false,
+    error: response.statusText || "WhatsApp reply failed",
+  };
 }
 
 const fetchAdminBlastOptionsServer = createServerFn({ method: "GET" }).handler(async () => {
