@@ -40,6 +40,8 @@ import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
 import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webhook'
+import { Route as AdminListingsNewRouteImport } from './routes/admin.listings.new'
+import { Route as AdminListingsIdRouteImport } from './routes/admin.listings.$id'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
@@ -200,6 +202,16 @@ const ApiWoztellWebhookRoute = ApiWoztellWebhookRouteImport.update({
   path: '/api/woztell/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminListingsNewRoute = AdminListingsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AdminListingsRoute,
+} as any)
+const AdminListingsIdRoute = AdminListingsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminListingsRoute,
+} as any)
 const ApiAdminWoztellSendRoute = ApiAdminWoztellSendRouteImport.update({
   id: '/api/admin/woztell/send',
   path: '/api/admin/woztell/send',
@@ -237,7 +249,7 @@ export interface FileRoutesByFullPath {
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
-  '/admin/listings': typeof AdminListingsRoute
+  '/admin/listings': typeof AdminListingsRouteWithChildren
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
@@ -251,6 +263,8 @@ export interface FileRoutesByFullPath {
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/listings/$id': typeof AdminListingsIdRoute
+  '/admin/listings/new': typeof AdminListingsNewRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
@@ -273,7 +287,7 @@ export interface FileRoutesByTo {
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
-  '/admin/listings': typeof AdminListingsRoute
+  '/admin/listings': typeof AdminListingsRouteWithChildren
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
@@ -287,6 +301,8 @@ export interface FileRoutesByTo {
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
+  '/admin/listings/$id': typeof AdminListingsIdRoute
+  '/admin/listings/new': typeof AdminListingsNewRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
@@ -311,7 +327,7 @@ export interface FileRoutesById {
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
-  '/admin/listings': typeof AdminListingsRoute
+  '/admin/listings': typeof AdminListingsRouteWithChildren
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
@@ -325,6 +341,8 @@ export interface FileRoutesById {
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/listings/$id': typeof AdminListingsIdRoute
+  '/admin/listings/new': typeof AdminListingsNewRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
@@ -364,6 +382,8 @@ export interface FileRouteTypes {
     | '/estate/$slug'
     | '/property/$listingNo'
     | '/castle-peak-road/'
+    | '/admin/listings/$id'
+    | '/admin/listings/new'
     | '/api/woztell/webhook'
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
@@ -400,6 +420,8 @@ export interface FileRouteTypes {
     | '/estate/$slug'
     | '/property/$listingNo'
     | '/castle-peak-road'
+    | '/admin/listings/$id'
+    | '/admin/listings/new'
     | '/api/woztell/webhook'
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
@@ -437,6 +459,8 @@ export interface FileRouteTypes {
     | '/estate/$slug'
     | '/property/$listingNo'
     | '/castle-peak-road/'
+    | '/admin/listings/$id'
+    | '/admin/listings/new'
     | '/api/woztell/webhook'
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
@@ -692,6 +716,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWoztellWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/listings/new': {
+      id: '/admin/listings/new'
+      path: '/new'
+      fullPath: '/admin/listings/new'
+      preLoaderRoute: typeof AdminListingsNewRouteImport
+      parentRoute: typeof AdminListingsRoute
+    }
+    '/admin/listings/$id': {
+      id: '/admin/listings/$id'
+      path: '/$id'
+      fullPath: '/admin/listings/$id'
+      preLoaderRoute: typeof AdminListingsIdRouteImport
+      parentRoute: typeof AdminListingsRoute
+    }
     '/api/admin/woztell/send': {
       id: '/api/admin/woztell/send'
       path: '/api/admin/woztell/send'
@@ -723,11 +761,25 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminListingsRouteChildren {
+  AdminListingsIdRoute: typeof AdminListingsIdRoute
+  AdminListingsNewRoute: typeof AdminListingsNewRoute
+}
+
+const AdminListingsRouteChildren: AdminListingsRouteChildren = {
+  AdminListingsIdRoute: AdminListingsIdRoute,
+  AdminListingsNewRoute: AdminListingsNewRoute,
+}
+
+const AdminListingsRouteWithChildren = AdminListingsRoute._addFileChildren(
+  AdminListingsRouteChildren,
+)
+
 interface AdminRouteChildren {
   AdminBlastsRoute: typeof AdminBlastsRoute
   AdminCmsRoute: typeof AdminCmsRoute
   AdminLeadsRoute: typeof AdminLeadsRoute
-  AdminListingsRoute: typeof AdminListingsRoute
+  AdminListingsRoute: typeof AdminListingsRouteWithChildren
   AdminWhatsappRoute: typeof AdminWhatsappRoute
 }
 
@@ -735,7 +787,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminBlastsRoute: AdminBlastsRoute,
   AdminCmsRoute: AdminCmsRoute,
   AdminLeadsRoute: AdminLeadsRoute,
-  AdminListingsRoute: AdminListingsRoute,
+  AdminListingsRoute: AdminListingsRouteWithChildren,
   AdminWhatsappRoute: AdminWhatsappRoute,
 }
 

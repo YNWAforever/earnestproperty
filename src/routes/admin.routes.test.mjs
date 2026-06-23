@@ -126,6 +126,22 @@ test("admin routes expose functional workflows, not only read-only tables", () =
       assert.match(source, new RegExp(`\\b${name}\\b`), `${file} should use ${name}`);
     }
   }
+
+  for (const text of [
+    "fetchAdminListingsFiltered",
+    "updateAdminPropertyStatus",
+    "fetchAdminAgents",
+    "公開預覽",
+    "下架",
+    "已售",
+    "已租",
+  ]) {
+    assert.match(read("src/routes/admin.listings.tsx"), new RegExp(text));
+  }
+
+  for (const file of ["src/routes/admin.listings.new.tsx", "src/routes/admin.listings.$id.tsx"]) {
+    assert.equal(existsSync(join(root, file)), true, `${file} should exist`);
+  }
 });
 
 test("shared admin workflow components exist", () => {
