@@ -9,6 +9,7 @@ import {
   LogOut,
   MessageCircle,
   Send,
+  Users,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ const navItems = [
   { to: "/admin/cms", label: "CMS", icon: BookOpen },
   { to: "/admin/listings", label: "放盤", icon: Building2 },
   { to: "/admin/leads", label: "CRM", icon: ContactRound },
+  { to: "/admin/segments", label: "Segments", icon: Users },
   { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { to: "/admin/blasts", label: "群發", icon: Send },
 ] as const;

@@ -23,10 +23,19 @@ import type {
   AdminAudiencePreview,
   AdminAiKnowledgeRebuildResult,
   AdminAiKnowledgeStatus,
+  AdminCrmSegmentPreview,
+  AdminCrmSegmentRow,
 } from "./admin-data.types";
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
 import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
+import type { CrmSegmentFilters } from "../ai/ai-types";
+import {
+  listCrmSegments,
+  materializeCrmSegment,
+  previewCrmSegment,
+  saveCrmSegment,
+} from "../ai/segments.server.ts";
 import {
   canPrepareAdminCampaignQueue,
   canQueueAdminCampaign,
@@ -427,6 +436,49 @@ export async function rebuildAdminAiKnowledge(
 ): Promise<AdminAiKnowledgeRebuildResult> {
   const result = await rebuildAiKnowledgeIndex();
   await writeAudit(actor.staffId, "ai.knowledge.rebuild", "ai_knowledge", undefined, result);
+  return result;
+}
+
+export async function fetchAdminCrmSegments(actor: StaffAccess): Promise<AdminCrmSegmentRow[]> {
+  void actor;
+  return listCrmSegments();
+}
+
+export async function previewAdminCrmSegment(
+  input: { prompt: string },
+  actor: StaffAccess,
+): Promise<AdminCrmSegmentPreview> {
+  void actor;
+  return previewCrmSegment({ prompt: input.prompt });
+}
+
+export async function saveAdminCrmSegment(
+  input: {
+    id?: string;
+    name: string;
+    description: string | null;
+    natural_language_prompt: string;
+    structured_filters: CrmSegmentFilters;
+    status: "draft" | "active" | "archived";
+  },
+  actor: StaffAccess,
+) {
+  const id = await saveCrmSegment({
+    ...input,
+    staffId: actor.staffId,
+  });
+  await writeAudit(
+    actor.staffId,
+    input.id ? "ai.segment.update" : "ai.segment.create",
+    "crm_segment",
+    id,
+  );
+  return id;
+}
+
+export async function materializeAdminCrmSegment(input: { segmentId: string }, actor: StaffAccess) {
+  const result = await materializeCrmSegment({ segmentId: input.segmentId });
+  await writeAudit(actor.staffId, "ai.segment.materialize", "crm_segment", input.segmentId, result);
   return result;
 }
 

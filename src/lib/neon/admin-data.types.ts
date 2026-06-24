@@ -1,4 +1,10 @@
-import type { CrmAiProfile, CrmAiTag } from "@/lib/ai/ai-types";
+import type {
+  CrmAiProfile,
+  CrmAiTag,
+  CrmSegment,
+  CrmSegmentEligibility,
+  CrmSegmentFilters,
+} from "@/lib/ai/ai-types";
 
 export type StaffRole = "admin" | "manager" | "agent";
 
@@ -294,4 +300,24 @@ export type AdminAiKnowledgeRebuildResult = {
 export type AdminLeadAiProfile = {
   profile: CrmAiProfile | null;
   tags: CrmAiTag[];
+};
+
+export type AdminCrmSegmentPreview = {
+  filters: CrmSegmentFilters;
+  total: number;
+  eligible: number;
+  contacts: Array<{
+    contact_id: string;
+    lead_id: string | null;
+    name: string | null;
+    phone: string | null;
+    eligibility_status: CrmSegmentEligibility;
+    confidence: number;
+    reason: string;
+  }>;
+};
+
+export type AdminCrmSegmentRow = CrmSegment & {
+  members: number;
+  eligible_members: number;
 };

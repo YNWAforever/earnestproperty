@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { Eye, Plus, RefreshCw, Save, Send, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -374,23 +374,33 @@ function AdminBlasts() {
       <AdminToolbar
         filters={
           <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(220px,320px)_auto]">
-            <Select
-              value={selectedPreviewAudienceId || "none"}
-              onValueChange={(value) => setSelectedPreviewAudienceId(value === "none" ? "" : value)}
-              disabled={!options?.audiences.length}
-            >
-              <SelectTrigger aria-label="選擇 audience preview">
-                <SelectValue placeholder="Audience preview" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No audience</SelectItem>
-                {options?.audiences.map((audience) => (
-                  <SelectItem key={audience.id} value={audience.id}>
-                    {audience.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+              <Select
+                value={selectedPreviewAudienceId || "none"}
+                onValueChange={(value) =>
+                  setSelectedPreviewAudienceId(value === "none" ? "" : value)
+                }
+                disabled={!options?.audiences.length}
+              >
+                <SelectTrigger aria-label="選擇 audience preview">
+                  <SelectValue placeholder="Audience preview" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No audience</SelectItem>
+                  {options?.audiences.map((audience) => (
+                    <SelectItem key={audience.id} value={audience.id}>
+                      {audience.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Link
+                to="/admin/segments"
+                className="text-sm text-primary underline-offset-4 hover:underline"
+              >
+                Build AI segment
+              </Link>
+            </div>
             <Button
               type="button"
               variant="outline"

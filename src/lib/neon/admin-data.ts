@@ -7,6 +7,7 @@ import type {
   AdminAudienceInput,
   AdminCampaignInput,
   AdminConversationUpdateInput,
+  AdminCrmSegmentPreview,
   AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
@@ -193,6 +194,73 @@ const rebuildAdminAiKnowledgeServer = createServerFn({ method: "POST" }).handler
 
 export const rebuildAdminAiKnowledge = async function rebuildAdminAiKnowledge() {
   return callStaffServerFn(async () => rebuildAdminAiKnowledgeServer(await withStaffAuthHeaders()));
+};
+
+const fetchAdminCrmSegmentsServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminCrmSegments(staff);
+});
+
+export const fetchAdminCrmSegments = async function fetchAdminCrmSegments() {
+  return callStaffServerFn(async () => fetchAdminCrmSegmentsServer(await withStaffAuthHeaders()));
+};
+
+const previewAdminCrmSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { prompt: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.previewAdminCrmSegment(data, staff);
+  });
+
+export const previewAdminCrmSegment = async function previewAdminCrmSegment(options: {
+  data: { prompt: string };
+}) {
+  return callStaffServerFn(async () =>
+    previewAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+type AdminCrmSegmentSaveInput = {
+  id?: string;
+  name: string;
+  description: string | null;
+  natural_language_prompt: string;
+  structured_filters: AdminCrmSegmentPreview["filters"];
+  status: "draft" | "active" | "archived";
+};
+
+const saveAdminCrmSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminCrmSegmentSaveInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminCrmSegment(data, staff);
+  });
+
+export const saveAdminCrmSegment = async function saveAdminCrmSegment(options: {
+  data: AdminCrmSegmentSaveInput;
+}) {
+  return callStaffServerFn(async () =>
+    saveAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const materializeAdminCrmSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { segmentId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.materializeAdminCrmSegment(data, staff);
+  });
+
+export const materializeAdminCrmSegment = async function materializeAdminCrmSegment(options: {
+  data: { segmentId: string };
+}) {
+  return callStaffServerFn(async () =>
+    materializeAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
+  );
 };
 
 const fetchAdminLeadsServer = createServerFn({ method: "GET" }).handler(async () => {
