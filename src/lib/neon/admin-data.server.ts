@@ -10,6 +10,7 @@ import {
 } from "./db.server";
 import type { StaffAccess } from "./auth.server";
 import type {
+  AdminLeadAiProfile,
   AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
@@ -24,6 +25,7 @@ import type {
   AdminAiKnowledgeStatus,
 } from "./admin-data.types";
 import { getAiServerConfig } from "../ai/config.server.ts";
+import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
 import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import {
   canPrepareAdminCampaignQueue,
@@ -784,6 +786,43 @@ export async function fetchAdminLead(id: string) {
       staff_name: stringOrNull(activity.staff_name),
     })),
   };
+}
+
+export async function fetchAdminLeadAiProfile(
+  input: { leadId: string },
+  actor: StaffAccess,
+): Promise<AdminLeadAiProfile> {
+  void actor;
+  return fetchCrmAiProfile({ leadId: input.leadId });
+}
+
+export async function analyzeAdminLeadAiProfile(
+  input: { leadId: string },
+  actor: StaffAccess,
+): Promise<AdminLeadAiProfile> {
+  const result = await analyzeCrmLead(input.leadId);
+  await writeAudit(actor.staffId, "ai.lead.analyze", "lead", input.leadId);
+  return result;
+}
+
+export async function approveAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
+  const result = await approveCrmAiTag({
+    tagId: input.tagId,
+    staffId: actor.staffId,
+    approve: true,
+  });
+  await writeAudit(actor.staffId, "ai.tag.approve", "ai_tag", input.tagId);
+  return result;
+}
+
+export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
+  const result = await approveCrmAiTag({
+    tagId: input.tagId,
+    staffId: actor.staffId,
+    approve: false,
+  });
+  await writeAudit(actor.staffId, "ai.tag.reject", "ai_tag", input.tagId);
+  return result;
 }
 
 export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {

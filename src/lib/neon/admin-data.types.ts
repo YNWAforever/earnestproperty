@@ -1,3 +1,5 @@
+import type { CrmAiProfile, CrmAiTag } from "@/lib/ai/ai-types";
+
 export type StaffRole = "admin" | "manager" | "agent";
 
 export type AdminPropertyInput = {
@@ -287,4 +289,9 @@ export type AdminAiKnowledgeStatus = {
 export type AdminAiKnowledgeRebuildResult = {
   indexedSources: number;
   indexedChunks: number;
+};
+
+export type AdminLeadAiProfile = {
+  profile: CrmAiProfile | null;
+  tags: CrmAiTag[];
 };

@@ -1,6 +1,15 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { CheckCircle2, RotateCcw, Save, Search, StickyNote, Trophy, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  RotateCcw,
+  Save,
+  Search,
+  Sparkles,
+  StickyNote,
+  Trophy,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
@@ -31,14 +40,19 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
+  analyzeAdminLeadAiProfile,
+  approveAdminAiTag,
   createAdminLeadActivity,
   fetchAdminAgents,
   fetchAdminLead,
+  fetchAdminLeadAiProfile,
   fetchAdminLeads,
+  rejectAdminAiTag,
   updateAdminLead,
 } from "@/lib/neon/admin-data";
 import type {
   AdminAgentRow,
+  AdminLeadAiProfile,
   AdminLeadDetail,
   AdminLeadRow,
   AdminLeadUpdateInput,
@@ -124,14 +138,25 @@ function AdminLeads() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [noteBody, setNoteBody] = useState("");
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
+  const [aiProfile, setAiProfile] = useState<AdminLeadAiProfile | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMutatingTagId, setAiMutatingTagId] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
+  const aiRequestRef = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
   const panelOpenRef = useRef(false);
 
   const canApplyLeadDetail = useCallback((id: string) => {
     return panelOpenRef.current && selectedIdRef.current === id;
   }, []);
+
+  function resetAiProfileState() {
+    aiRequestRef.current += 1;
+    setAiProfile(null);
+    setAiLoading(false);
+    setAiMutatingTagId(null);
+  }
 
   const refreshLeads = useCallback(async () => {
     if (!user) return;
@@ -152,6 +177,27 @@ function AdminLeads() {
     }
   }, [user]);
 
+  const loadLeadAiProfile = useCallback(
+    async (id: string) => {
+      const requestId = aiRequestRef.current + 1;
+      aiRequestRef.current = requestId;
+      setAiLoading(true);
+
+      try {
+        const profile = await fetchAdminLeadAiProfile({ data: { leadId: id } });
+        if (requestId !== aiRequestRef.current || !canApplyLeadDetail(id)) return null;
+        setAiProfile(profile as AdminLeadAiProfile);
+        return profile as AdminLeadAiProfile;
+      } catch {
+        if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) setAiProfile(null);
+        return null;
+      } finally {
+        if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) setAiLoading(false);
+      }
+    },
+    [canApplyLeadDetail],
+  );
+
   const loadLeadDetail = useCallback(
     async (id: string, options: { resetNote?: boolean; closeOnError?: boolean } = {}) => {
       const requestId = detailRequestRef.current + 1;
@@ -168,6 +214,7 @@ function AdminLeads() {
         setDetail(lead);
         setDraft(leadToDraft(lead));
         if (options.resetNote) setNoteBody("");
+        void loadLeadAiProfile(id);
         return lead;
       } catch (err) {
         if (requestId !== detailRequestRef.current || !canApplyLeadDetail(id)) return null;
@@ -175,6 +222,9 @@ function AdminLeads() {
         const message = errorText(err);
         setDetail(null);
         setDraft(null);
+        aiRequestRef.current += 1;
+        setAiProfile(null);
+        setAiLoading(false);
         setDetailError(message);
         if (options.closeOnError !== false) {
           selectedIdRef.current = null;
@@ -190,7 +240,7 @@ function AdminLeads() {
         }
       }
     },
-    [canApplyLeadDetail],
+    [canApplyLeadDetail, loadLeadAiProfile],
   );
 
   useEffect(() => {
@@ -237,6 +287,7 @@ function AdminLeads() {
   }
 
   function openLead(id: string) {
+    resetAiProfileState();
     selectedIdRef.current = id;
     panelOpenRef.current = true;
     setSelectedId(id);
@@ -254,6 +305,7 @@ function AdminLeads() {
       setDraft(null);
       setDetailError(null);
       setNoteBody("");
+      resetAiProfileState();
     }
   }
 
@@ -317,6 +369,58 @@ function AdminLeads() {
   async function markStage(stage: LeadStage, label: string) {
     if (!draft) return;
     await saveLead({ ...draft, stage }, `Lead 已標記為${label}`);
+  }
+
+  async function refreshAiProfile() {
+    if (!detail) return;
+
+    const targetLeadId = detail.id;
+    const requestId = aiRequestRef.current + 1;
+    aiRequestRef.current = requestId;
+    setAiLoading(true);
+    try {
+      const profile = await analyzeAdminLeadAiProfile({ data: { leadId: targetLeadId } });
+      if (requestId !== aiRequestRef.current || !canApplyLeadDetail(targetLeadId)) return;
+      setAiProfile(profile as AdminLeadAiProfile);
+      toast.success("AI profile 已更新");
+    } catch (err) {
+      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
+    } finally {
+      if (requestId === aiRequestRef.current && canApplyLeadDetail(targetLeadId)) {
+        setAiLoading(false);
+      }
+    }
+  }
+
+  async function decideAiTag(tagId: string, approve: boolean) {
+    if (!detail) return;
+
+    const targetLeadId = detail.id;
+    setAiMutatingTagId(tagId);
+    try {
+      const tag = approve
+        ? await approveAdminAiTag({ data: { tagId } })
+        : await rejectAdminAiTag({ data: { tagId } });
+      if (!canApplyLeadDetail(targetLeadId)) return;
+
+      if (tag) {
+        setAiProfile((current) =>
+          current
+            ? {
+                ...current,
+                tags: current.tags.map((item) =>
+                  item.id === tagId ? (tag as AdminLeadAiProfile["tags"][number]) : item,
+                ),
+              }
+            : current,
+        );
+      }
+      toast.success(approve ? "AI tag 已批准" : "AI tag 已拒絕");
+    } catch (err) {
+      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
+    } finally {
+      if (canApplyLeadDetail(targetLeadId)) setAiMutatingTagId(null);
+    }
   }
 
   const isMutating = mutatingAction !== null;
@@ -513,10 +617,15 @@ function AdminLeads() {
             draft={draft}
             agents={agents}
             noteBody={noteBody}
+            aiProfile={aiProfile}
+            aiLoading={aiLoading}
+            aiMutatingTagId={aiMutatingTagId}
             disabled={isMutating}
             onDraftChange={updateDraft}
             onNoteChange={setNoteBody}
             onAddNote={addNote}
+            onRefreshAiProfile={refreshAiProfile}
+            onAiTagDecision={decideAiTag}
             noteSaving={mutatingAction === "note"}
           />
         ) : null}
@@ -577,21 +686,31 @@ function LeadDetailEditor({
   draft,
   agents,
   noteBody,
+  aiProfile,
+  aiLoading,
+  aiMutatingTagId,
   disabled,
   noteSaving,
   onDraftChange,
   onNoteChange,
   onAddNote,
+  onRefreshAiProfile,
+  onAiTagDecision,
 }: {
   lead: AdminLeadDetail;
   draft: LeadDraft;
   agents: AdminAgentRow[];
   noteBody: string;
+  aiProfile: AdminLeadAiProfile | null;
+  aiLoading: boolean;
+  aiMutatingTagId: string | null;
   disabled: boolean;
   noteSaving: boolean;
   onDraftChange: <K extends keyof LeadDraft>(key: K, value: LeadDraft[K]) => void;
   onNoteChange: (value: string) => void;
   onAddNote: () => void;
+  onRefreshAiProfile: () => void;
+  onAiTagDecision: (tagId: string, approve: boolean) => void;
 }) {
   return (
     <div className="space-y-6">
@@ -709,6 +828,113 @@ function LeadDetailEditor({
             />
           </Field>
         </div>
+      </section>
+
+      <section className="rounded-lg border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles className="h-4 w-4" />
+              AI Profile
+            </h3>
+            {aiProfile?.profile?.last_analyzed_at ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                最後分析 {formatDate(aiProfile.profile.last_analyzed_at)}
+              </p>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled || aiLoading}
+            onClick={onRefreshAiProfile}
+          >
+            <Sparkles className="h-4 w-4" />
+            {aiLoading ? "分析中…" : "AI 分析"}
+          </Button>
+        </div>
+
+        {aiLoading && !aiProfile ? (
+          <div className="mt-4 space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+          </div>
+        ) : null}
+
+        {aiProfile?.profile ? (
+          <div className="mt-4 grid gap-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="default">Score {aiProfile.profile.lead_score}</Badge>
+              {aiProfile.profile.urgency ? (
+                <Badge variant="outline">{formatAiUrgency(aiProfile.profile.urgency)}</Badge>
+              ) : null}
+              {aiProfile.profile.timeline ? (
+                <Badge variant="outline">{formatAiTimeline(aiProfile.profile.timeline)}</Badge>
+              ) : null}
+            </div>
+            {aiProfile.profile.summary ? (
+              <p className="whitespace-pre-wrap">{aiProfile.profile.summary}</p>
+            ) : null}
+            {aiProfile.profile.next_best_action ? (
+              <p className="rounded-md bg-muted/40 px-3 py-2 text-muted-foreground">
+                {aiProfile.profile.next_best_action}
+              </p>
+            ) : null}
+          </div>
+        ) : !aiLoading ? (
+          <p className="mt-4 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+            未有 AI profile
+          </p>
+        ) : null}
+
+        {aiProfile?.tags.length ? (
+          <div className="mt-4 space-y-2">
+            {aiProfile.tags.map((tag) => (
+              <div
+                key={tag.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={aiTagVariant(tag.status)}>{tag.tag}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {formatAiTagStatus(tag.status)} · {Math.round(tag.confidence * 100)}%
+                    </span>
+                  </div>
+                  {tag.reason ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{tag.reason}</p>
+                  ) : null}
+                </div>
+                {tag.status === "suggested" ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={disabled || aiMutatingTagId === tag.id}
+                      onClick={() => onAiTagDecision(tag.id, true)}
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      批准
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={disabled || aiMutatingTagId === tag.id}
+                      onClick={() => onAiTagDecision(tag.id, false)}
+                    >
+                      <XCircle className="h-4 w-4" />
+                      拒絕
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="rounded-lg border p-4">
@@ -938,6 +1164,40 @@ function formatActivityType(type: string) {
     follow_up: "跟進",
   };
   return labels[type] ?? type;
+}
+
+function formatAiUrgency(value: string) {
+  const labels: Record<string, string> = {
+    recent: "近期互動",
+    normal: "一般",
+    urgent: "高優先",
+  };
+  return labels[value] ?? value;
+}
+
+function formatAiTimeline(value: string) {
+  const labels: Record<string, string> = {
+    "30_days": "30日內",
+    "90_days": "90日內",
+    later: "稍後",
+  };
+  return labels[value] ?? value;
+}
+
+function formatAiTagStatus(status: AdminLeadAiProfile["tags"][number]["status"]) {
+  const labels: Record<AdminLeadAiProfile["tags"][number]["status"], string> = {
+    suggested: "建議",
+    approved: "已批准",
+    rejected: "已拒絕",
+    auto_applied: "自動套用",
+  };
+  return labels[status] ?? status;
+}
+
+function aiTagVariant(status: AdminLeadAiProfile["tags"][number]["status"]) {
+  if (status === "approved" || status === "auto_applied") return "secondary";
+  if (status === "rejected") return "outline";
+  return "default";
 }
 
 function agentLabel(agent: AdminAgentRow) {

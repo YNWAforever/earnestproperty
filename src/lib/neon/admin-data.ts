@@ -408,6 +408,68 @@ export async function fetchAdminLead(options: { data: { id: string } }) {
   return callStaffServerFn(async () => fetchAdminLeadServer(await withStaffAuthHeaders(options)));
 }
 
+const fetchAdminLeadAiProfileServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminLeadAiProfile(data, staff);
+  });
+
+export const fetchAdminLeadAiProfile = async function fetchAdminLeadAiProfile(options: {
+  data: { leadId: string };
+}) {
+  return callStaffServerFn(async () =>
+    fetchAdminLeadAiProfileServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const analyzeAdminLeadAiProfileServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.analyzeAdminLeadAiProfile(data, staff);
+  });
+
+export const analyzeAdminLeadAiProfile = async function analyzeAdminLeadAiProfile(options: {
+  data: { leadId: string };
+}) {
+  return callStaffServerFn(async () =>
+    analyzeAdminLeadAiProfileServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const approveAdminAiTagServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { tagId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.approveAdminAiTag(data, staff);
+  });
+
+export const approveAdminAiTag = async function approveAdminAiTag(options: {
+  data: { tagId: string };
+}) {
+  return callStaffServerFn(async () =>
+    approveAdminAiTagServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const rejectAdminAiTagServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { tagId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.rejectAdminAiTag(data, staff);
+  });
+
+export const rejectAdminAiTag = async function rejectAdminAiTag(options: {
+  data: { tagId: string };
+}) {
+  return callStaffServerFn(async () => rejectAdminAiTagServer(await withStaffAuthHeaders(options)));
+};
+
 const updateAdminLeadServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminLeadUpdateInput) => data)
   .handler(async ({ data }) => {
