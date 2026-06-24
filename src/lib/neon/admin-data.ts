@@ -2,7 +2,21 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 
 import { withStaffAuthHeaders } from "@/auth";
-import type { AdminPropertyInput, StaffRole } from "./admin-data.types";
+import type {
+  AdminArticleInput,
+  AdminAudienceInput,
+  AdminCampaignInput,
+  AdminConversationAiAssist,
+  AdminConversationUpdateInput,
+  AdminCrmSegmentPreview,
+  AdminEstateInput,
+  AdminFaqInput,
+  AdminLeadActivityInput,
+  AdminLeadUpdateInput,
+  AdminListingFiltersInput,
+  AdminPropertyInput,
+  StaffRole,
+} from "./admin-data.types";
 
 async function requireStaff(roles: StaffRole[] = ["admin"]) {
   const { requireStaffAccess } = await import("./auth.server");
@@ -161,6 +175,95 @@ export async function fetchAdminCms() {
   return callStaffServerFn(async () => fetchAdminCmsServer(await withStaffAuthHeaders()));
 }
 
+const fetchAdminAiKnowledgeStatusServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminAiKnowledgeStatus(staff);
+});
+
+export const fetchAdminAiKnowledgeStatus = async function fetchAdminAiKnowledgeStatus() {
+  return callStaffServerFn(async () =>
+    fetchAdminAiKnowledgeStatusServer(await withStaffAuthHeaders()),
+  );
+};
+
+const rebuildAdminAiKnowledgeServer = createServerFn({ method: "POST" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.rebuildAdminAiKnowledge(staff);
+});
+
+export const rebuildAdminAiKnowledge = async function rebuildAdminAiKnowledge() {
+  return callStaffServerFn(async () => rebuildAdminAiKnowledgeServer(await withStaffAuthHeaders()));
+};
+
+const fetchAdminCrmSegmentsServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminCrmSegments(staff);
+});
+
+export const fetchAdminCrmSegments = async function fetchAdminCrmSegments() {
+  return callStaffServerFn(async () => fetchAdminCrmSegmentsServer(await withStaffAuthHeaders()));
+};
+
+const previewAdminCrmSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { prompt: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.previewAdminCrmSegment(data, staff);
+  });
+
+export const previewAdminCrmSegment = async function previewAdminCrmSegment(options: {
+  data: { prompt: string };
+}) {
+  return callStaffServerFn(async () =>
+    previewAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+type AdminCrmSegmentSaveInput = {
+  id?: string;
+  name: string;
+  description: string | null;
+  natural_language_prompt: string;
+  structured_filters: AdminCrmSegmentPreview["filters"];
+  status: "draft" | "active" | "archived";
+};
+
+const saveAdminCrmSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminCrmSegmentSaveInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminCrmSegment(data, staff);
+  });
+
+export const saveAdminCrmSegment = async function saveAdminCrmSegment(options: {
+  data: AdminCrmSegmentSaveInput;
+}) {
+  return callStaffServerFn(async () =>
+    saveAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const materializeAdminCrmSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { segmentId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.materializeAdminCrmSegment(data, staff);
+  });
+
+export const materializeAdminCrmSegment = async function materializeAdminCrmSegment(options: {
+  data: { segmentId: string };
+}) {
+  return callStaffServerFn(async () =>
+    materializeAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
+  );
+};
+
 const fetchAdminLeadsServer = createServerFn({ method: "GET" }).handler(async () => {
   await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
@@ -218,5 +321,432 @@ const updateAdminInquiryStatusServer = createServerFn({ method: "POST" })
 export async function updateAdminInquiryStatus(options: { data: { id: string; status: string } }) {
   return callStaffServerFn(async () =>
     updateAdminInquiryStatusServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminAgentsServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager", "agent"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminAgents();
+});
+
+export async function fetchAdminAgents() {
+  return callStaffServerFn(async () => fetchAdminAgentsServer(await withStaffAuthHeaders()));
+}
+
+const fetchAdminWoztellStatusServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager", "agent"]);
+  const woztell = await import("../woztell/woztell.server");
+  return { woztellEnabled: woztell.woztellEnabled() };
+});
+
+export async function fetchAdminWoztellStatus() {
+  return callStaffServerFn(async () =>
+    fetchAdminWoztellStatusServer(await withStaffAuthHeaders({})),
+  );
+}
+
+const saveAdminEstateServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminEstateInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminEstate(data, staff);
+  });
+
+export async function saveAdminEstate(options: { data: AdminEstateInput }) {
+  return callStaffServerFn(async () => saveAdminEstateServer(await withStaffAuthHeaders(options)));
+}
+
+const saveAdminArticleServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminArticleInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminArticle(data, staff);
+  });
+
+export async function saveAdminArticle(options: { data: AdminArticleInput }) {
+  return callStaffServerFn(async () => saveAdminArticleServer(await withStaffAuthHeaders(options)));
+}
+
+const saveAdminFaqServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminFaqInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminFaq(data, staff);
+  });
+
+export async function saveAdminFaq(options: { data: AdminFaqInput }) {
+  return callStaffServerFn(async () => saveAdminFaqServer(await withStaffAuthHeaders(options)));
+}
+
+const deleteAdminFaqServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.deleteAdminFaq(data.id, staff);
+  });
+
+export async function deleteAdminFaq(options: { data: { id: string } }) {
+  return callStaffServerFn(async () => deleteAdminFaqServer(await withStaffAuthHeaders(options)));
+}
+
+const reorderAdminFaqsServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { orderedIds: string[] }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.reorderAdminFaqs(data.orderedIds, staff);
+  });
+
+export async function reorderAdminFaqs(options: { data: { orderedIds: string[] } }) {
+  return callStaffServerFn(async () => reorderAdminFaqsServer(await withStaffAuthHeaders(options)));
+}
+
+const fetchAdminMediaAssetsServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminMediaAssets();
+});
+
+export async function fetchAdminMediaAssets() {
+  return callStaffServerFn(async () => fetchAdminMediaAssetsServer(await withStaffAuthHeaders()));
+}
+
+const updateAdminMediaAssetServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { id: string; alt_text: string | null; owner_type: string; owner_id: string | null }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.updateAdminMediaAsset(data, staff);
+  });
+
+export async function updateAdminMediaAsset(options: {
+  data: { id: string; alt_text: string | null; owner_type: string; owner_id: string | null };
+}) {
+  return callStaffServerFn(async () =>
+    updateAdminMediaAssetServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminListingsFilteredServer = createServerFn({ method: "GET" })
+  .inputValidator((data: AdminListingFiltersInput) => data)
+  .handler(async ({ data }) => {
+    await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.listAdminListings(data);
+  });
+
+export async function fetchAdminListingsFiltered(options: { data: AdminListingFiltersInput }) {
+  return callStaffServerFn(async () =>
+    fetchAdminListingsFilteredServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const updateAdminPropertyStatusServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string; status: AdminPropertyInput["status"] }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.updateAdminPropertyStatus(data.id, data.status, staff);
+  });
+
+export async function updateAdminPropertyStatus(options: {
+  data: { id: string; status: AdminPropertyInput["status"] };
+}) {
+  return callStaffServerFn(async () =>
+    updateAdminPropertyStatusServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminLeadServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminLead(data.id);
+  });
+
+export async function fetchAdminLead(options: { data: { id: string } }) {
+  return callStaffServerFn(async () => fetchAdminLeadServer(await withStaffAuthHeaders(options)));
+}
+
+const fetchAdminLeadAiProfileServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminLeadAiProfile(data, staff);
+  });
+
+export const fetchAdminLeadAiProfile = async function fetchAdminLeadAiProfile(options: {
+  data: { leadId: string };
+}) {
+  return callStaffServerFn(async () =>
+    fetchAdminLeadAiProfileServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const analyzeAdminLeadAiProfileServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { leadId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.analyzeAdminLeadAiProfile(data, staff);
+  });
+
+export const analyzeAdminLeadAiProfile = async function analyzeAdminLeadAiProfile(options: {
+  data: { leadId: string };
+}) {
+  return callStaffServerFn(async () =>
+    analyzeAdminLeadAiProfileServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const approveAdminAiTagServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { tagId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.approveAdminAiTag(data, staff);
+  });
+
+export const approveAdminAiTag = async function approveAdminAiTag(options: {
+  data: { tagId: string };
+}) {
+  return callStaffServerFn(async () =>
+    approveAdminAiTagServer(await withStaffAuthHeaders(options)),
+  );
+};
+
+const rejectAdminAiTagServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { tagId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.rejectAdminAiTag(data, staff);
+  });
+
+export const rejectAdminAiTag = async function rejectAdminAiTag(options: {
+  data: { tagId: string };
+}) {
+  return callStaffServerFn(async () => rejectAdminAiTagServer(await withStaffAuthHeaders(options)));
+};
+
+const updateAdminLeadServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminLeadUpdateInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.updateAdminLead(data, staff);
+  });
+
+export async function updateAdminLead(options: { data: AdminLeadUpdateInput }) {
+  return callStaffServerFn(async () => updateAdminLeadServer(await withStaffAuthHeaders(options)));
+}
+
+const createAdminLeadActivityServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminLeadActivityInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.createAdminLeadActivity(data, staff);
+  });
+
+export async function createAdminLeadActivity(options: { data: AdminLeadActivityInput }) {
+  return callStaffServerFn(async () =>
+    createAdminLeadActivityServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminConversationServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminConversation(data.id);
+  });
+
+export async function fetchAdminConversation(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    fetchAdminConversationServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminConversationAiAssistServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { conversationId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminConversationAiAssist(data, staff);
+  });
+
+export const fetchAdminConversationAiAssist =
+  async function fetchAdminConversationAiAssist(options: {
+    data: { conversationId: string };
+  }): Promise<AdminConversationAiAssist> {
+    return callStaffServerFn(async () =>
+      fetchAdminConversationAiAssistServer(await withStaffAuthHeaders(options)),
+    );
+  };
+
+const updateAdminConversationServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminConversationUpdateInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.updateAdminConversation(data, staff);
+  });
+
+export async function updateAdminConversation(options: { data: AdminConversationUpdateInput }) {
+  return callStaffServerFn(async () =>
+    updateAdminConversationServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+export async function sendAdminConversationReply(options: {
+  data: { conversationId: string; recipientId: string; text: string };
+}) {
+  const request = await withStaffAuthHeaders({
+    headers: { "Content-Type": "application/json" },
+  });
+  const response = await fetch("/api/admin/woztell/send", {
+    method: "POST",
+    headers: request.headers,
+    body: JSON.stringify(options.data),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (payload && typeof payload === "object") {
+    return payload as { ok: boolean; error?: string };
+  }
+  return {
+    ok: false,
+    error: response.statusText || "WhatsApp reply failed",
+  };
+}
+
+const fetchAdminBlastOptionsServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminBlastOptions();
+});
+
+export async function fetchAdminBlastOptions() {
+  return callStaffServerFn(async () => fetchAdminBlastOptionsServer(await withStaffAuthHeaders()));
+}
+
+const saveAdminAudienceServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminAudienceInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminAudience(data, staff);
+  });
+
+export async function saveAdminAudience(options: { data: AdminAudienceInput }) {
+  return callStaffServerFn(async () =>
+    saveAdminAudienceServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const previewAdminAudienceServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { audience_id?: string; filters?: AdminAudienceInput["filters"] }) => data)
+  .handler(async ({ data }) => {
+    await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.previewAdminAudience(data);
+  });
+
+export async function previewAdminAudience(options: {
+  data: { audience_id?: string; filters?: AdminAudienceInput["filters"] };
+}) {
+  return callStaffServerFn(async () =>
+    previewAdminAudienceServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const saveAdminCampaignServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminCampaignInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminCampaign(data, staff);
+  });
+
+export async function saveAdminCampaign(options: { data: AdminCampaignInput }) {
+  return callStaffServerFn(async () =>
+    saveAdminCampaignServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const materializeCampaignRecipientsServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { campaign_id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.materializeCampaignRecipients(data.campaign_id, staff);
+  });
+
+export async function materializeCampaignRecipients(options: { data: { campaign_id: string } }) {
+  return callStaffServerFn(async () =>
+    materializeCampaignRecipientsServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+export async function sendAdminCampaignQueue(options: { data: { id: string } }) {
+  const request = await withStaffAuthHeaders({
+    headers: { "Content-Type": "application/json" },
+  });
+  const response = await fetch(`/api/admin/campaigns/${options.data.id}/queue`, {
+    method: "POST",
+    headers: request.headers,
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (payload && typeof payload === "object") {
+    return payload as {
+      ok: boolean;
+      error?: string;
+      materialization?: { eligible?: number };
+    };
+  }
+  return {
+    ok: false,
+    error: response.statusText || "Campaign queue failed",
+  };
+}
+
+const queueAdminCampaignServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.queueAdminCampaign(data.id, staff);
+  });
+
+export async function queueAdminCampaign(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    queueAdminCampaignServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const cancelAdminCampaignServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.cancelAdminCampaign(data.id, staff);
+  });
+
+export async function cancelAdminCampaign(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    cancelAdminCampaignServer(await withStaffAuthHeaders(options)),
   );
 }

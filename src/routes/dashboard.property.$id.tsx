@@ -78,6 +78,13 @@ function EditPropertyPage() {
         </Link>
       </Button>
       <h1 className="mb-6 text-2xl font-bold">編輯放盤</h1>
+      <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+        <Button asChild variant="secondary">
+          <Link to="/admin/listings/$id" params={{ id }}>
+            前往新版後台編輯放盤
+          </Link>
+        </Button>
+      </div>
       <PropertyForm property={property} onSaved={() => navigate({ to: "/admin/listings" })} />
     </div>
   );

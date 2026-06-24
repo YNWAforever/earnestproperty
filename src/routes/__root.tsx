@@ -1,8 +1,16 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import {
+  Outlet,
+  Link,
+  createRootRoute,
+  HeadContent,
+  Scripts,
+  useLocation,
+} from "@tanstack/react-router";
 import { NeonAuthUIProvider } from "@neondatabase/auth-ui";
 
 import appCss from "../styles.css?url";
 import { authClient } from "@/auth";
+import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { pageSeo, SITE_NAME, SITE_OG_IMAGE } from "@/content/seo";
@@ -82,6 +90,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const location = useLocation();
+  const showLiveAgentWidget = isPublicWidgetPath(location.pathname);
+
   return (
     <NeonAuthUIProvider authClient={authClient} defaultTheme="light">
       <div className="flex min-h-screen flex-col">
@@ -91,6 +102,13 @@ function RootComponent() {
         </main>
         <SiteFooter />
       </div>
+      {showLiveAgentWidget ? <LiveAgentWidget /> : null}
     </NeonAuthUIProvider>
+  );
+}
+
+function isPublicWidgetPath(pathname: string) {
+  return !["/admin", "/auth", "/account"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }

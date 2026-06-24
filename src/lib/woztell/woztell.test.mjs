@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -9,6 +11,12 @@ import {
   normalizeWoztellEvent,
   verifyWoztellSignature,
 } from "./woztell.server.ts";
+
+const root = process.cwd();
+
+function read(path) {
+  return readFileSync(join(root, path), "utf8");
+}
 
 test("verifyWoztellSignature validates HMAC-SHA256 base64 signatures", () => {
   const secret = "channel-secret";
@@ -85,4 +93,30 @@ test("blast and service-window guards enforce WhatsApp safety defaults", () => {
   assert.equal(isBlastRecipientAllowed({ optedIn: true, optedOut: false }), true);
   assert.equal(isBlastRecipientAllowed({ optedIn: false, optedOut: false }), false);
   assert.equal(isBlastRecipientAllowed({ optedIn: true, optedOut: true }), false);
+});
+
+test("admin send route gates replies through a fetched conversation", () => {
+  const sendRoute = read("src/routes/api.admin.woztell.send.ts");
+
+  for (const text of [
+    "canReplyToConversation",
+    "woztellEnabled",
+    "conversationId",
+    "last_inbound_at",
+    "opted_out_whatsapp",
+    "woztell_member_id",
+    "recipientId !== conversationRecipientId",
+    "let result",
+    "try",
+    "catch",
+    "sendError",
+  ]) {
+    assert.match(sendRoute, new RegExp(text));
+  }
+
+  assert.match(sendRoute, /SELECT[\s\S]+FROM whatsapp_conversations/);
+  assert.match(sendRoute, /try\s*\{[\s\S]*sendWoztellResponse[\s\S]*\}\s*catch/);
+  assert.match(sendRoute, /catch\s*\([^)]*\)\s*\{[\s\S]*ok:\s*false[\s\S]*error:/);
+  assert.match(sendRoute, /status,\s*payload/);
+  assert.match(sendRoute, /result\.ok \? "sent" : "failed"/);
 });

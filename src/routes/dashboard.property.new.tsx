@@ -47,6 +47,11 @@ function NewPropertyPage() {
         </Link>
       </Button>
       <h1 className="mb-6 text-2xl font-bold">新增放盤</h1>
+      <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+        <Button asChild variant="secondary">
+          <Link to="/admin/listings/new">前往新版後台新增放盤</Link>
+        </Button>
+      </div>
       <PropertyForm onSaved={() => navigate({ to: "/admin/listings" })} />
     </div>
   );

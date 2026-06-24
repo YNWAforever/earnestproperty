@@ -14,11 +14,28 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ImageUploader } from "./ImageUploader";
-import { fetchAdminEstateOptions, saveAdminProperty } from "@/lib/neon/admin-data";
-import type { AdminPropertyInput } from "@/lib/neon/admin-data.types";
+import {
+  fetchAdminAgents,
+  fetchAdminEstateOptions,
+  saveAdminProperty,
+} from "@/lib/neon/admin-data";
+import type { AdminAgentRow, AdminPropertyInput } from "@/lib/neon/admin-data.types";
 
 type Property = Partial<AdminPropertyInput> & { id?: string };
 type Estate = { id: string; name_zh: string; district_slug: string };
+type Agent = AdminAgentRow;
+
+const blankToNull = (value: unknown) => {
+  if (typeof value === "string" && value.trim() === "") return null;
+  return value;
+};
+
+const optionalNumber = z.preprocess(blankToNull, z.coerce.number().nonnegative().nullable());
+
+function optionalInteger(max?: number) {
+  const base = z.coerce.number().int().min(0);
+  return z.preprocess(blankToNull, (max === undefined ? base : base.max(max)).nullable());
+}
 
 const schema = z.object({
   listing_no: z.string().trim().min(1, "請輸入編號").max(40),
@@ -27,13 +44,16 @@ const schema = z.object({
   estate_id: z.string().uuid().optional().or(z.literal("")),
   district_slug: z.string().trim().min(1).max(60),
   address: z.string().trim().max(300).optional().or(z.literal("")),
-  price: z.coerce.number().nonnegative().optional().or(z.nan()),
-  rent: z.coerce.number().nonnegative().optional().or(z.nan()),
-  saleable_area: z.coerce.number().int().nonnegative().optional().or(z.nan()),
-  bedrooms: z.coerce.number().int().min(0).max(20).optional().or(z.nan()),
-  bathrooms: z.coerce.number().int().min(0).max(20).optional().or(z.nan()),
+  price: optionalNumber,
+  rent: optionalNumber,
+  saleable_area: optionalInteger(),
+  bedrooms: optionalInteger(20),
+  bathrooms: optionalInteger(20),
   floor: z.string().trim().max(40).optional().or(z.literal("")),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
+  seo_title: z.string().trim().max(200).optional().or(z.literal("")),
+  seo_description: z.string().trim().max(300).optional().or(z.literal("")),
+  agent_id: z.string().uuid().optional().or(z.literal("")),
   status: z.enum(["draft", "active", "sold", "rented", "offline"]),
   featured: z.boolean(),
 });
@@ -45,6 +65,7 @@ type Props = {
 
 export function PropertyForm({ property, onSaved }: Props) {
   const [estates, setEstates] = useState<Estate[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     listing_no: property?.listing_no ?? "",
@@ -60,14 +81,20 @@ export function PropertyForm({ property, onSaved }: Props) {
     bathrooms: property?.bathrooms?.toString() ?? "",
     floor: property?.floor ?? "",
     description: property?.description ?? "",
+    seo_title: property?.seo_title ?? "",
+    seo_description: property?.seo_description ?? "",
+    agent_id: property?.agent_id ?? "",
     status: (property?.status ?? "draft") as "draft" | "active" | "sold" | "rented" | "offline",
     featured: property?.featured ?? false,
   });
   const [images, setImages] = useState<string[]>(property?.images ?? []);
 
   useEffect(() => {
-    fetchAdminEstateOptions()
-      .then((data) => setEstates(data as Estate[]))
+    Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
+      .then(([estateData, agentData]) => {
+        setEstates(estateData as Estate[]);
+        setAgents(agentData as Agent[]);
+      })
       .catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
   }, []);
 
@@ -83,7 +110,6 @@ export function PropertyForm({ property, onSaved }: Props) {
       return;
     }
     const d = parsed.data;
-    const num = (v: number | undefined) => (v === undefined || isNaN(v) ? null : v);
 
     const payload: AdminPropertyInput = {
       id: property?.id,
@@ -93,17 +119,19 @@ export function PropertyForm({ property, onSaved }: Props) {
       estate_id: d.estate_id || null,
       district_slug: d.district_slug,
       address: d.address || null,
-      price: num(d.price as number),
-      rent: num(d.rent as number),
-      saleable_area: num(d.saleable_area as number),
-      bedrooms: num(d.bedrooms as number),
-      bathrooms: num(d.bathrooms as number),
+      price: d.price,
+      rent: d.rent,
+      saleable_area: d.saleable_area,
+      bedrooms: d.bedrooms,
+      bathrooms: d.bathrooms,
       floor: d.floor || null,
       description: d.description || null,
       status: d.status,
       featured: d.featured,
       images,
-      agent_id: null,
+      agent_id: d.agent_id || null,
+      seo_title: d.seo_title || null,
+      seo_description: d.seo_description || null,
     };
 
     setSubmitting(true);
@@ -165,6 +193,25 @@ export function PropertyForm({ property, onSaved }: Props) {
               <SelectItem value="sold">已售出</SelectItem>
               <SelectItem value="rented">已租出</SelectItem>
               <SelectItem value="offline">下架</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="負責代理">
+          <Select
+            value={form.agent_id || "none"}
+            onValueChange={(v) => set("agent_id", v === "none" ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="選擇代理" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— 未指定 —</SelectItem>
+              {agents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name ?? agent.email ?? "未命名代理"}
+                  {agent.active ? "" : "（停用）"}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
@@ -266,6 +313,21 @@ export function PropertyForm({ property, onSaved }: Props) {
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             maxLength={4000}
+          />
+        </Field>
+        <Field label="SEO 標題" full>
+          <Input
+            value={form.seo_title}
+            onChange={(e) => set("seo_title", e.target.value)}
+            maxLength={200}
+          />
+        </Field>
+        <Field label="SEO 描述" full>
+          <Textarea
+            rows={3}
+            value={form.seo_description}
+            onChange={(e) => set("seo_description", e.target.value)}
+            maxLength={300}
           />
         </Field>
         <Field label="相片" full>

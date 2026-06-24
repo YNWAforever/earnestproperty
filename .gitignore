@@ -22,6 +22,7 @@ artifacts/old-site-migration/
 .dev.vars
 .vercel/
 supabase/.temp/
+.worktrees/
 
 # Editor directories and files
 .vscode/*
@@ -33,3 +34,4 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+.vercel
