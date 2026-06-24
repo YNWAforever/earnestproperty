@@ -46,6 +46,7 @@ import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$i
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
+import { Route as ApiAdminAiRebuildKnowledgeRouteImport } from './routes/api.admin.ai.rebuild-knowledge'
 import { Route as ApiAdminCampaignsIdQueueRouteImport } from './routes/api.admin.campaigns.$id.queue'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -233,6 +234,12 @@ const ApiAdminJobsSendQueueRoute = ApiAdminJobsSendQueueRouteImport.update({
   path: '/api/admin/jobs/send-queue',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminAiRebuildKnowledgeRoute =
+  ApiAdminAiRebuildKnowledgeRouteImport.update({
+    id: '/api/admin/ai/rebuild-knowledge',
+    path: '/api/admin/ai/rebuild-knowledge',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminCampaignsIdQueueRoute =
   ApiAdminCampaignsIdQueueRouteImport.update({
     id: '/api/admin/campaigns/$id/queue',
@@ -278,6 +285,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
 }
 export interface FileRoutesByTo {
@@ -316,6 +324,7 @@ export interface FileRoutesByTo {
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
 }
 export interface FileRoutesById {
@@ -357,6 +366,7 @@ export interface FileRoutesById {
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
 }
 export interface FileRouteTypes {
@@ -399,6 +409,7 @@ export interface FileRouteTypes {
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
+    | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/campaigns/$id/queue'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -437,6 +448,7 @@ export interface FileRouteTypes {
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
+    | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/campaigns/$id/queue'
   id:
     | '__root__'
@@ -477,6 +489,7 @@ export interface FileRouteTypes {
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
+    | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/campaigns/$id/queue'
   fileRoutesById: FileRoutesById
 }
@@ -504,6 +517,7 @@ export interface RootRouteChildren {
   ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
+  ApiAdminAiRebuildKnowledgeRoute: typeof ApiAdminAiRebuildKnowledgeRoute
   ApiAdminCampaignsIdQueueRoute: typeof ApiAdminCampaignsIdQueueRoute
 }
 
@@ -768,6 +782,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminJobsSendQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/ai/rebuild-knowledge': {
+      id: '/api/admin/ai/rebuild-knowledge'
+      path: '/api/admin/ai/rebuild-knowledge'
+      fullPath: '/api/admin/ai/rebuild-knowledge'
+      preLoaderRoute: typeof ApiAdminAiRebuildKnowledgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/campaigns/$id/queue': {
       id: '/api/admin/campaigns/$id/queue'
       path: '/api/admin/campaigns/$id/queue'
@@ -866,6 +887,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,
+  ApiAdminAiRebuildKnowledgeRoute: ApiAdminAiRebuildKnowledgeRoute,
   ApiAdminCampaignsIdQueueRoute: ApiAdminCampaignsIdQueueRoute,
 }
 export const routeTree = rootRouteImport
