@@ -1,10 +1,48 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
+const sourceFiles = (dir) => {
+  const entries = readdirSync(join(root, dir));
+  return entries.flatMap((entry) => {
+    const path = `${dir}/${entry}`;
+    const stat = statSync(join(root, path));
+    if (stat.isDirectory()) return sourceFiles(path);
+    return /\.(?:ts|tsx|mjs|js|jsx)$/.test(entry) ? [path] : [];
+  });
+};
+
+const functionSource = (source, name) => {
+  const start = source.search(new RegExp(`(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\b`));
+  assert.notEqual(start, -1, `Expected to find function ${name}`);
+  const paramsStart = source.indexOf("(", start);
+  assert.notEqual(paramsStart, -1, `Expected ${name} to have parameters`);
+  let paramsDepth = 0;
+  let paramsEnd = -1;
+  for (let index = paramsStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "(") paramsDepth += 1;
+    if (char === ")") paramsDepth -= 1;
+    if (paramsDepth === 0) {
+      paramsEnd = index;
+      break;
+    }
+  }
+  assert.notEqual(paramsEnd, -1, `Expected ${name} parameter list to close`);
+  const bodyStart = source.indexOf("{", paramsEnd);
+  assert.notEqual(bodyStart, -1, `Expected ${name} to have a body`);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+  throw new Error(`Could not read function body for ${name}`);
+};
 
 test("AI modules expose the expected public and server-only contracts", () => {
   const expectedExports = new Map([
@@ -80,6 +118,38 @@ test("server-only AI secrets stay out of browser-safe modules", () => {
   }
 });
 
+test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source", () => {
+  const secretPattern =
+    /\b(?:AI_GATEWAY_API_KEY|AI_GATEWAY_MODEL|AI_GATEWAY_EMBEDDING_MODEL|DATABASE_URL|DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|WOZTELL_BOT_ACCESS_TOKEN|WOZTELL_CHANNEL_SECRET|WOZTELL_CHANNEL_ID)\b/;
+  const allowedPattern = /(?:^|\/)(?:docs|scripts)\//;
+  const browserSafeFiles = sourceFiles("src").filter(
+    (file) =>
+      !allowedPattern.test(file) &&
+      !file.includes(".server.") &&
+      !file.includes(".test.") &&
+      !file.startsWith("src/routes/api.") &&
+      file !== "src/lib/mls/neon-db.mjs",
+  );
+
+  for (const file of browserSafeFiles) {
+    assert.doesNotMatch(read(file), secretPattern, `${file} should not reference server secrets`);
+  }
+});
+
+test("public AI answers are sourced only from public knowledge, not CRM or WhatsApp data", () => {
+  const source = read("src/lib/ai/knowledge.server.ts");
+  const search = functionSource(source, "searchPublicKnowledge");
+  const answer = functionSource(source, "answerFromPublicKnowledge");
+
+  assert.match(search, /c\.visibility = 'public'/);
+  assert.match(search, /s\.public_visibility = 'public'/);
+  assert.match(search, /s\.published = true/);
+  assert.match(search, /c\.stale = false/);
+  assert.doesNotMatch(search, /\b(?:crm_|whatsapp_)/i);
+  assert.match(answer, /searchPublicKnowledge\(\{ query: input\.question, limit: 6 \}\)/);
+  assert.doesNotMatch(answer, /\b(?:crm_|whatsapp_|fetchCrm|Conversation)/i);
+});
+
 test("public live-agent APIs validate sessions and expose only public session fields", () => {
   const server = read("src/lib/ai/live-agent.server.ts");
   const sessionRoute = read("src/routes/api.live-agent.session.ts");
@@ -141,6 +211,30 @@ test("CRM AI model suggestions stay suggested until staff review", () => {
   assert.notEqual(suggestedTagLoop, "", "crm-enrichment should persist AI suggested tags");
   assert.match(suggestedTagLoop, /status:\s*"suggested"/);
   assert.doesNotMatch(suggestedTagLoop, /canAutoApplyAiTag\(suggestion\.tag\)/);
+});
+
+test("AI suggestion flows cannot send WhatsApp, queue blasts, or publish CMS", () => {
+  const aiEnrichment = read("src/lib/ai/crm-enrichment.server.ts");
+  const liveAgent = read("src/lib/ai/live-agent.server.ts");
+  const adminData = read("src/lib/neon/admin-data.server.ts");
+  const adminSegments = read("src/routes/admin.segments.tsx");
+  const adminBlasts = read("src/routes/admin.blasts.tsx");
+  const forbiddenAutomation =
+    /sendWoztellResponse|sendAdminConversationReply|sendAdminCampaignQueue|queueAdminCampaign|saveAdminArticle|published:\s*true|status\s*=\s*'queued'/;
+
+  assert.doesNotMatch(functionSource(aiEnrichment, "analyzeCrmLead"), forbiddenAutomation);
+  assert.doesNotMatch(functionSource(liveAgent, "answerLiveAgentMessage"), forbiddenAutomation);
+  assert.doesNotMatch(
+    functionSource(adminData, "fetchAdminConversationAiAssist"),
+    forbiddenAutomation,
+  );
+  assert.doesNotMatch(
+    functionSource(adminData, "materializeAdminCrmSegment"),
+    /sendAdminCampaignQueue|queueAdminCampaign|status\s*=\s*'queued'/,
+  );
+  assert.doesNotMatch(adminSegments, /sendAdminCampaignQueue|queueAdminCampaign|saveAdminArticle/);
+  assert.match(adminSegments, /onClick=\{materializeSegment\}/);
+  assert.match(adminBlasts, /onClick=\{\(\) =>\s*handleQueueCampaign/);
 });
 
 test("admin data layer exposes staff-guarded AI functions", () => {
