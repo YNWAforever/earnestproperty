@@ -44,7 +44,8 @@ test("AI modules expose the expected public and server-only contracts", () => {
         new RegExp(
           `(?:` +
             `export\\s+(?:async\\s+function|function|class|interface|type|const|let|var)\\s+${exportName}\\b|` +
-            `export\\s+(?:type\\s+)?\\{[^}]*\\b${exportName}\\b[^}]*\\}`,
+            `export\\s+(?:type\\s+)?\\{[^}]*\\b${exportName}\\b[^}]*\\}`
+          + `)`,
           "m",
         ),
         `${file} should export ${exportName}`,
