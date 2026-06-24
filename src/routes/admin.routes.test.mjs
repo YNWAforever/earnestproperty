@@ -167,13 +167,30 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "屋苑 SEO",
     "文章編輯",
     "FAQ 編輯",
+    "FAQ / AI Agent 配置",
+    "上載 FAQ 檔案",
+    "貼上 FAQ",
+    "FaqImportDialog",
     "媒體庫",
     "saveAdminEstate",
     "saveAdminArticle",
     "saveAdminFaq",
+    "parseAdminFaqImport",
+    "匯入並訓練 AI",
     "updateAdminMediaAsset",
   ]) {
     assert.match(read("src/routes/admin.cms.tsx"), new RegExp(text));
+  }
+
+  const faqImport = read("src/lib/admin/faq-import.ts");
+  for (const text of [
+    "parseAdminFaqImport",
+    "問題",
+    "答案",
+    "parseMarkdownHeadings",
+    "parseDelimitedRows",
+  ]) {
+    assert.match(faqImport, new RegExp(text));
   }
 
   const expectations = [

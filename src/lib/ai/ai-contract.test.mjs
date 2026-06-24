@@ -145,6 +145,9 @@ test("public AI answers are sourced only from public knowledge, not CRM or Whats
   assert.match(search, /s\.public_visibility = 'public'/);
   assert.match(search, /s\.published = true/);
   assert.match(search, /c\.stale = false/);
+  assert.match(search, /fallbackSearchPublicKnowledge/);
+  assert.match(source, /knowledgeSearchTokens/);
+  assert.match(source, /\\u3400-\\u9fff/);
   assert.doesNotMatch(search, /\b(?:crm_|whatsapp_)/i);
   assert.match(answer, /searchPublicKnowledge\(\{ query: input\.question, limit: 6 \}\)/);
   assert.doesNotMatch(answer, /\b(?:crm_|whatsapp_|fetchCrm|Conversation)/i);

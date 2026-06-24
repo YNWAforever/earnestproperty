@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Brain, Pencil, Plus, RefreshCw, Save } from "lucide-react";
+import { Brain, FileText, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
@@ -31,6 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { parseAdminFaqImport } from "@/lib/admin/faq-import";
 import {
   fetchAdminCms,
   fetchAdminAiKnowledgeStatus,
@@ -116,6 +117,10 @@ function AdminCms() {
   const [editingEstate, setEditingEstate] = useState<AdminEstateInput | null>(null);
   const [editingArticle, setEditingArticle] = useState<AdminArticleInput | null>(null);
   const [editingFaq, setEditingFaq] = useState<AdminFaqInput | null>(null);
+  const [faqImportOpen, setFaqImportOpen] = useState(false);
+  const [faqImportText, setFaqImportText] = useState("");
+  const [faqImportScope, setFaqImportScope] = useState(emptyFaq.scope);
+  const [faqImportSaving, setFaqImportSaving] = useState(false);
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
 
   const refreshCmsData = useCallback(async () => {
@@ -150,6 +155,11 @@ function AdminCms() {
     }
     return Array.from(groups.entries());
   }, [data?.faqs]);
+
+  const parsedFaqImportRows = useMemo(
+    () => parseAdminFaqImport(faqImportText, faqImportScope),
+    [faqImportScope, faqImportText],
+  );
 
   async function handleSaveEstate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -218,6 +228,56 @@ function AdminCms() {
     }
   }
 
+  async function handleFaqFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const text = await file.text();
+      setFaqImportText(text);
+      setFaqImportOpen(true);
+      toast.success(`已讀取 ${file.name}`);
+    } catch {
+      toast.error("未能讀取 FAQ 檔案");
+    }
+  }
+
+  async function handleImportFaqs(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!parsedFaqImportRows.length) {
+      toast.error("未能從檔案內容解析 FAQ");
+      return;
+    }
+
+    setFaqImportSaving(true);
+    try {
+      for (const [index, row] of parsedFaqImportRows.entries()) {
+        assertNoServerError(
+          await saveAdminFaq({
+            data: {
+              scope: row.scope ?? faqImportScope,
+              question: row.question,
+              answer: row.answer,
+              sort_order: index + 1,
+            },
+          }),
+        );
+      }
+      await refreshCmsData();
+      const result = await rebuildAdminAiKnowledge();
+      await refreshKnowledgeStatus();
+      toast.success(
+        `已匯入 ${parsedFaqImportRows.length} 條 FAQ，AI 知識庫已重建 ${result.indexedChunks} 段內容`,
+      );
+      setFaqImportOpen(false);
+      setFaqImportText("");
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setFaqImportSaving(false);
+    }
+  }
+
   async function handleSaveMedia(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingMedia) return;
@@ -272,8 +332,10 @@ function AdminCms() {
                   <Brain className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <CardTitle className="text-base">AI Knowledge</CardTitle>
-                  <CardDescription>知識庫索引狀態及重建控制。</CardDescription>
+                  <CardTitle className="text-base">AI Agent FAQ Knowledge</CardTitle>
+                  <CardDescription>
+                    FAQ、屋苑、文章及放盤會被索引成前台 live agent 的回答來源。
+                  </CardDescription>
                 </div>
               </div>
               <Button
@@ -468,20 +530,40 @@ function AdminCms() {
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-base">FAQ 編輯</CardTitle>
-                    <CardDescription>按 scope 分組管理常見問題。</CardDescription>
+                    <CardTitle className="text-base">FAQ / AI Agent 配置</CardTitle>
+                    <CardDescription>
+                      上載或貼上 FAQ 檔案，儲存後會自動重建 AI live agent 知識庫。
+                    </CardDescription>
                   </div>
-                  <Button
-                    onClick={() =>
-                      setEditingFaq({
-                        ...emptyFaq,
-                        scope: data.faqGroups[0]?.scope ?? emptyFaq.scope,
-                      })
-                    }
-                  >
-                    <Plus className="h-4 w-4" />
-                    新增 FAQ
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button variant="outline" asChild>
+                      <label>
+                        <Upload className="h-4 w-4" />
+                        上載 FAQ 檔案
+                        <input
+                          className="sr-only"
+                          type="file"
+                          accept=".txt,.md,.csv,.tsv,text/plain,text/markdown,text/csv"
+                          onChange={handleFaqFileChange}
+                        />
+                      </label>
+                    </Button>
+                    <Button variant="outline" onClick={() => setFaqImportOpen(true)}>
+                      <FileText className="h-4 w-4" />
+                      貼上 FAQ
+                    </Button>
+                    <Button
+                      onClick={() =>
+                        setEditingFaq({
+                          ...emptyFaq,
+                          scope: data.faqGroups[0]?.scope ?? emptyFaq.scope,
+                        })
+                      }
+                    >
+                      <Plus className="h-4 w-4" />
+                      新增 FAQ
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {faqsByScope.length ? (
@@ -642,6 +724,17 @@ function AdminCms() {
             onChange={setEditingFaq}
             onClose={() => setEditingFaq(null)}
             onSubmit={handleSaveFaq}
+          />
+          <FaqImportDialog
+            open={faqImportOpen}
+            scope={faqImportScope}
+            text={faqImportText}
+            parsedCount={parsedFaqImportRows.length}
+            saving={faqImportSaving}
+            onScopeChange={setFaqImportScope}
+            onTextChange={setFaqImportText}
+            onClose={() => setFaqImportOpen(false)}
+            onSubmit={handleImportFaqs}
           />
           <MediaDialog
             media={editingMedia}
@@ -919,6 +1012,64 @@ function FaqDialog({
             <EditorFooter saving={saving} onClose={onClose} />
           </form>
         ) : null}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FaqImportDialog({
+  open,
+  scope,
+  text,
+  parsedCount,
+  saving,
+  onScopeChange,
+  onTextChange,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  scope: string;
+  text: string;
+  parsedCount: number;
+  saving: boolean;
+  onScopeChange: (scope: string) => void;
+  onTextChange: (text: string) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onClose() : undefined)}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>FAQ 檔案匯入 / AI Agent 訓練</DialogTitle>
+          <DialogDescription>
+            支援 Q:/A:、問題:/答案:、Markdown heading、CSV 或 TSV。匯入後會自動重建 AI 知識庫。
+          </DialogDescription>
+        </DialogHeader>
+        <form className="grid gap-4" onSubmit={onSubmit}>
+          <TextField label="預設 Scope" value={scope} onChange={onScopeChange} required />
+          <TextAreaField
+            label="FAQ 檔案內容"
+            value={text}
+            onChange={onTextChange}
+            rows={14}
+            required
+          />
+          <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+            已解析 <span className="font-medium text-foreground">{parsedCount}</span> 條 FAQ。
+            每條會儲存到 Neon，然後即時重建 live agent 知識庫。
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
+              取消
+            </Button>
+            <Button type="submit" disabled={saving || parsedCount === 0}>
+              <Upload className="h-4 w-4" />
+              {saving ? "匯入及訓練中…" : "匯入並訓練 AI"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

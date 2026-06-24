@@ -4,6 +4,7 @@ import {
   BookOpen,
   Building2,
   ContactRound,
+  FileQuestion,
   Home,
   ListChecks,
   LogOut,
@@ -18,7 +19,8 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 
 const navItems = [
   { to: "/admin", label: "總覽", icon: BarChart3 },
-  { to: "/admin/cms", label: "CMS", icon: BookOpen },
+  { to: "/admin/cms", label: "CMS / FAQ", icon: BookOpen },
+  { to: "/admin/cms", label: "AI Agent", icon: FileQuestion },
   { to: "/admin/listings", label: "放盤", icon: Building2 },
   { to: "/admin/leads", label: "CRM", icon: ContactRound },
   { to: "/admin/segments", label: "Segments", icon: Users },
@@ -88,7 +90,7 @@ export function AdminShell({
               const Icon = item.icon;
               return (
                 <Link
-                  key={item.to}
+                  key={`${item.to}-${item.label}`}
                   to={item.to}
                   className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
                   activeProps={{ className: "bg-primary/10 text-primary" }}

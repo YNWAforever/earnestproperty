@@ -200,26 +200,9 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
     [query, limit],
   );
 
-  return filterPublicKnowledgeChunks(
-    rows.map((row) => ({
-      id: stringOrEmpty(row.id),
-      source_id: stringOrEmpty(row.source_id),
-      source_type: stringOrEmpty(row.source_type) as AiKnowledgeSourceType,
-      title: stringOrEmpty(row.title),
-      url_path: stringOrNull(row.url_path),
-      sort_order: Number(row.sort_order ?? 1),
-      chunk_text: stringOrEmpty(row.chunk_text),
-      summary: stringOrNull(row.summary),
-      metadata: metadataRecord(row.metadata),
-      estate_slug: stringOrNull(row.estate_slug),
-      district_slug: stringOrNull(row.district_slug),
-      listing_id: stringOrNull(row.listing_id),
-      visibility: stringOrEmpty(row.visibility) as AiVisibility,
-      freshness_score: Number(row.freshness_score ?? 0),
-      stale: row.stale === true,
-      published: row.published === true,
-    })),
-  ) as AiKnowledgeChunk[];
+  if (rows.length) return mapKnowledgeChunkRows(rows);
+
+  return fallbackSearchPublicKnowledge({ query, limit });
 }
 
 export async function answerFromPublicKnowledge(input: { question: string }) {
@@ -518,6 +501,112 @@ function metadataRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function mapKnowledgeChunkRows(rows: KnowledgeChunkRow[]) {
+  return filterPublicKnowledgeChunks(
+    rows.map((row) => ({
+      id: stringOrEmpty(row.id),
+      source_id: stringOrEmpty(row.source_id),
+      source_type: stringOrEmpty(row.source_type) as AiKnowledgeSourceType,
+      title: stringOrEmpty(row.title),
+      url_path: stringOrNull(row.url_path),
+      sort_order: Number(row.sort_order ?? 1),
+      chunk_text: stringOrEmpty(row.chunk_text),
+      summary: stringOrNull(row.summary),
+      metadata: metadataRecord(row.metadata),
+      estate_slug: stringOrNull(row.estate_slug),
+      district_slug: stringOrNull(row.district_slug),
+      listing_id: stringOrNull(row.listing_id),
+      visibility: stringOrEmpty(row.visibility) as AiVisibility,
+      freshness_score: Number(row.freshness_score ?? 0),
+      stale: row.stale === true,
+      published: row.published === true,
+    })),
+  ) as AiKnowledgeChunk[];
+}
+
+async function fallbackSearchPublicKnowledge(input: { query: string; limit: number }) {
+  const tokens = knowledgeSearchTokens(input.query);
+  if (!tokens.length) return [] as AiKnowledgeChunk[];
+
+  const rows = await queryRows<KnowledgeChunkRow>(
+    `SELECT
+       c.id,
+       c.source_id,
+       s.source_type,
+       s.title,
+       s.url_path,
+       c.sort_order,
+       c.chunk_text,
+       c.summary,
+       c.metadata,
+       c.estate_slug,
+       c.district_slug,
+       c.listing_id,
+       c.visibility,
+       c.freshness_score::float AS freshness_score,
+       c.stale,
+       s.published
+     FROM ai_knowledge_chunks c
+     JOIN ai_knowledge_sources s ON s.id = c.source_id
+     WHERE c.visibility = 'public'
+       AND s.public_visibility = 'public'
+       AND s.published = true
+       AND c.stale = false
+     ORDER BY c.freshness_score DESC, c.created_at DESC
+     LIMIT 800`,
+  );
+
+  const scored = mapKnowledgeChunkRows(rows)
+    .map((chunk) => ({ chunk, score: scoreKnowledgeChunk(chunk, tokens) }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || b.chunk.freshness_score - a.chunk.freshness_score)
+    .slice(0, input.limit)
+    .map((item) => item.chunk);
+
+  return scored;
+}
+
+function knowledgeSearchTokens(query: string) {
+  const text = query.toLowerCase();
+  const tokens = new Set<string>();
+  for (const token of text.match(/[a-z0-9]+/g) ?? []) {
+    if (token.length >= 2) tokens.add(token);
+  }
+  for (const phrase of text.match(/[\u3400-\u9fff]{2,}/g) ?? []) {
+    for (let size = 2; size <= Math.min(4, phrase.length); size += 1) {
+      for (let index = 0; index <= phrase.length - size; index += 1) {
+        tokens.add(phrase.slice(index, index + size));
+      }
+    }
+  }
+  return Array.from(tokens);
+}
+
+function scoreKnowledgeChunk(chunk: AiKnowledgeChunk, tokens: string[]) {
+  const title = chunk.title.toLowerCase();
+  const body = chunk.chunk_text.toLowerCase();
+  const slug = [chunk.estate_slug, chunk.district_slug, chunk.metadata?.listing_no]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const sourceBoost =
+    chunk.source_type === "estate"
+      ? 24
+      : chunk.source_type === "faq"
+        ? 12
+        : chunk.source_type === "article"
+          ? 6
+          : 0;
+
+  const score = tokens.reduce((total, token) => {
+    if (title.includes(token)) return total + 8;
+    if (slug.includes(token)) return total + 5;
+    if (body.includes(token)) return total + 2;
+    return total;
+  }, 0);
+  return score > 0 ? score + sourceBoost : 0;
 }
 
 function publicFallbackAnswer() {
