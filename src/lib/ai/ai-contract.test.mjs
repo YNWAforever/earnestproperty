@@ -41,7 +41,12 @@ test("AI modules expose the expected public and server-only contracts", () => {
     for (const exportName of exports) {
       assert.match(
         source,
-        new RegExp(`export\\s+(?:async\\s+function|function|type|const)\\s+${exportName}\\b`),
+        new RegExp(
+          `(?:` +
+            `export\\s+(?:async\\s+function|function|class|interface|type|const|let|var)\\s+${exportName}\\b|` +
+            `export\\s*\\{[^}]*\\b${exportName}\\b[^}]*\\}`,
+          "m",
+        ),
         `${file} should export ${exportName}`,
       );
     }
@@ -60,7 +65,7 @@ test("server-only AI secrets stay out of browser-safe modules", () => {
     const source = read(file);
     assert.doesNotMatch(
       source,
-      /process\\.env|AI_GATEWAY_API_KEY|DATABASE_URL|WOZTELL_BOT_ACCESS_TOKEN|WOZTELL_CHANNEL_SECRET|BLOB_READ_WRITE_TOKEN/,
+      /process\.env|AI_GATEWAY_API_KEY|DATABASE_URL|WOZTELL_BOT_ACCESS_TOKEN|WOZTELL_CHANNEL_SECRET|BLOB_READ_WRITE_TOKEN/,
     );
   }
 });
