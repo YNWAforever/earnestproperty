@@ -18,6 +18,21 @@ test("chunkKnowledgeText creates stable public answer chunks", async () => {
   assert.equal(chunks[0].sort_order, 1);
 });
 
+test("chunkKnowledgeText hard-splits punctuation-light long text", async () => {
+  const { chunkKnowledgeText } = await loadKnowledge();
+  const chunks = chunkKnowledgeText({
+    text: "深井碧堤半島交通會所海景三房".repeat(40),
+    maxChars: 120,
+  });
+
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.text.length <= 120));
+  assert.deepEqual(
+    chunks.map((chunk) => chunk.sort_order),
+    chunks.map((_, index) => index + 1),
+  );
+});
+
 test("normalizeKnowledgeSource marks active listings public and stale offline listings private", async () => {
   const { normalizeKnowledgeSource } = await loadKnowledge();
   assert.equal(
@@ -62,6 +77,7 @@ test("CRM AI tags distinguish factual auto-apply from staff approval tags", asyn
   const { canAutoApplyAiTag, classifyAiTagSafety } = await loadCrmRules();
   assert.equal(classifyAiTagSafety("budget_8m_10m"), "factual");
   assert.equal(classifyAiTagSafety("bellagio_interest"), "factual");
+  assert.equal(classifyAiTagSafety("unknown-tower_interest"), "sensitive");
   assert.equal(classifyAiTagSafety("hot_lead"), "sensitive");
   assert.equal(classifyAiTagSafety("low_quality"), "judgmental");
   assert.equal(canAutoApplyAiTag("budget_8m_10m"), true);

@@ -1,7 +1,7 @@
 import type { AiKnowledgeSourceType, AiVisibility } from "./ai-types";
 
 export function chunkKnowledgeText(input: { text: string; maxChars?: number }) {
-  const maxChars = input.maxChars ?? 900;
+  const maxChars = Math.max(1, input.maxChars ?? 900);
   const normalized = input.text.replace(/\s+/g, " ").trim();
   if (!normalized) return [];
 
@@ -9,16 +9,34 @@ export function chunkKnowledgeText(input: { text: string; maxChars?: number }) {
   const chunks: Array<{ text: string; sort_order: number }> = [];
   let current = "";
 
+  const pushChunk = (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed) chunks.push({ text: trimmed, sort_order: chunks.length + 1 });
+  };
+
+  const pushHardSplit = (text: string) => {
+    for (let start = 0; start < text.length; start += maxChars) {
+      pushChunk(text.slice(start, start + maxChars));
+    }
+  };
+
   for (const sentence of sentences) {
+    if (sentence.length > maxChars) {
+      pushChunk(current);
+      current = "";
+      pushHardSplit(sentence);
+      continue;
+    }
+
     if (current && `${current} ${sentence}`.length > maxChars) {
-      chunks.push({ text: current.trim(), sort_order: chunks.length + 1 });
+      pushChunk(current);
       current = sentence;
     } else {
       current = current ? `${current} ${sentence}` : sentence;
     }
   }
 
-  if (current.trim()) chunks.push({ text: current.trim(), sort_order: chunks.length + 1 });
+  pushChunk(current);
   return chunks;
 }
 

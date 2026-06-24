@@ -1,3 +1,5 @@
+import "@tanstack/react-start/server-only";
+
 import { embedMany, generateText } from "ai";
 
 import { getAiServerConfig } from "./config.server.ts";
@@ -19,15 +21,19 @@ export async function generateAiText(input: {
     return { ok: false as const, text: "", error: "AI_DISABLED" };
   }
 
-  const result = await generateText({
-    model: config.textModel,
-    system: input.system,
-    prompt: input.prompt,
-    temperature: input.temperature ?? 0.2,
-    maxOutputTokens: input.maxOutputTokens ?? 700,
-  });
+  try {
+    const result = await generateText({
+      model: config.textModel,
+      system: input.system,
+      prompt: input.prompt,
+      temperature: input.temperature ?? 0.2,
+      maxOutputTokens: input.maxOutputTokens ?? 700,
+    });
 
-  return { ok: true as const, text: result.text, error: null };
+    return { ok: true as const, text: result.text, error: null };
+  } catch {
+    return { ok: false as const, text: "", error: "AI_GENERATION_FAILED" };
+  }
 }
 
 export async function generateAiJson<T>(input: {
@@ -57,12 +63,16 @@ export async function embedAiTexts(values: string[]) {
     return { ok: false as const, embeddings: [] as number[][], error: "AI_EMBEDDINGS_DISABLED" };
   }
 
-  const result = await embedMany({
-    model: config.embeddingModel,
-    values,
-  });
+  try {
+    const result = await embedMany({
+      model: config.embeddingModel,
+      values,
+    });
 
-  return { ok: true as const, embeddings: result.embeddings, error: null };
+    return { ok: true as const, embeddings: result.embeddings, error: null };
+  } catch {
+    return { ok: false as const, embeddings: [] as number[][], error: "AI_EMBEDDINGS_FAILED" };
+  }
 }
 
 function stripJsonFence(text: string) {

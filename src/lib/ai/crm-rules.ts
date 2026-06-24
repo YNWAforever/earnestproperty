@@ -1,7 +1,17 @@
 import type { AiTagSafetyLevel } from "./ai-types";
 
 const factualPrefixes = ["budget_", "estate_", "intent_", "source_", "lang_", "district_"];
-const factualSuffixes = ["_interest"];
+const knownEstateInterestTags = new Set([
+  "bellagio_interest",
+  "sea-crest-villa_interest",
+  "sea_crest_villa_interest",
+  "hong-kong-garden_interest",
+  "hong_kong_garden_interest",
+  "rhine-garden_interest",
+  "rhine_garden_interest",
+  "lido-garden_interest",
+  "lido_garden_interest",
+]);
 const sensitiveTags = new Set(["hot_lead", "ready_to_buy", "urgent_30_days", "needs_valuation"]);
 const judgmentalTags = new Set(["low_quality", "price_shopper", "unresponsive"]);
 
@@ -9,7 +19,7 @@ export function classifyAiTagSafety(tag: string): AiTagSafetyLevel {
   if (judgmentalTags.has(tag)) return "judgmental";
   if (sensitiveTags.has(tag)) return "sensitive";
   if (factualPrefixes.some((prefix) => tag.startsWith(prefix))) return "factual";
-  if (factualSuffixes.some((suffix) => tag.endsWith(suffix))) return "factual";
+  if (knownEstateInterestTags.has(tag)) return "factual";
   return "sensitive";
 }
 
