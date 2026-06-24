@@ -33,6 +33,18 @@ type LiveAgentMessageRow = {
   created_at: unknown;
 };
 
+type PublicLiveAgentSession = Pick<LiveAgentSession, "id" | "status">;
+
+export class LiveAgentPublicError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "LiveAgentPublicError";
+    this.status = status;
+  }
+}
+
 export async function createLiveAgentSession(input: {
   anonymousId?: string | null;
   sourcePath?: string | null;
@@ -67,12 +79,16 @@ export async function answerLiveAgentMessage(input: { sessionId: string; message
   const sessionId = input.sessionId.trim();
   const visitorMessage = input.message.trim().slice(0, 2000);
 
-  if (!sessionId || !visitorMessage) throw new Error("Invalid live-agent message.");
+  if (!isLiveAgentSessionId(sessionId) || !visitorMessage) {
+    throw new LiveAgentPublicError("Invalid live-agent message.", 400);
+  }
+
+  const session = await getLiveAgentSessionForMessage(sessionId);
 
   await queryRows(
     `INSERT INTO live_agent_messages (session_id, direction, message_text, shown_publicly)
      VALUES ($1,'visitor',$2,true)`,
-    [sessionId, visitorMessage],
+    [session.id, visitorMessage],
   );
 
   const answer = await answerFromPublicKnowledge({ question: visitorMessage });
@@ -93,14 +109,25 @@ export async function answerLiveAgentMessage(input: { sessionId: string; message
      )
      VALUES ($1,'assistant',$2,$3::jsonb,$4::text[],true)
      RETURNING *`,
-    [sessionId, assistantText, JSON.stringify(answer.citations), safetyFlags],
+    [session.id, assistantText, JSON.stringify(answer.citations), safetyFlags],
   );
 
-  await queryRows("UPDATE live_agent_sessions SET updated_at = now() WHERE id = $1", [sessionId]);
+  await queryRows("UPDATE live_agent_sessions SET updated_at = now() WHERE id = $1", [session.id]);
 
   return {
     message: mapMessage(requireRow(rows[0], "Unable to create live-agent reply.")),
     handoffSuggested,
+  };
+}
+
+export function isLiveAgentSessionId(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
+}
+
+export function toPublicLiveAgentSession(session: LiveAgentSession): PublicLiveAgentSession {
+  return {
+    id: session.id,
+    status: session.status,
   };
 }
 
@@ -117,6 +144,26 @@ export async function requestLiveAgentHandoff(input: {
 }): Promise<never> {
   void buildLiveAgentLeadInput(input);
   throw new Error("Live-agent handoff is implemented in Task 8.");
+}
+
+async function getLiveAgentSessionForMessage(sessionId: string) {
+  const rows = await queryRows<LiveAgentSessionRow>(
+    `SELECT *
+     FROM live_agent_sessions
+     WHERE id = $1
+       AND status IN ('open', 'qualified')
+     LIMIT 1`,
+    [sessionId],
+  );
+  if (rows[0]) return mapSession(rows[0]);
+
+  const existing = await queryRows<{ status: unknown }>(
+    "SELECT status FROM live_agent_sessions WHERE id = $1 LIMIT 1",
+    [sessionId],
+  );
+  if (!existing[0]) throw new LiveAgentPublicError("Live-agent session not found.", 404);
+
+  throw new LiveAgentPublicError("Live-agent session is not open.", 400);
 }
 
 function mapSession(row: LiveAgentSessionRow): LiveAgentSession {

@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
-import { createLiveAgentSession } from "@/lib/ai/live-agent.server";
+import { createLiveAgentSession, toPublicLiveAgentSession } from "@/lib/ai/live-agent.server";
 
 export const Route = createFileRoute("/api/live-agent/session")({
   server: {
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/api/live-agent/session")({
           sourcePath: typeof body.sourcePath === "string" ? body.sourcePath : null,
         });
 
-        return Response.json(session);
+        return Response.json(toPublicLiveAgentSession(session));
       },
     },
   },

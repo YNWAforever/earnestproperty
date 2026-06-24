@@ -2,7 +2,11 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
-import { answerLiveAgentMessage } from "@/lib/ai/live-agent.server";
+import {
+  LiveAgentPublicError,
+  answerLiveAgentMessage,
+  isLiveAgentSessionId,
+} from "@/lib/ai/live-agent.server";
 
 export const Route = createFileRoute("/api/live-agent/message")({
   server: {
@@ -13,17 +17,25 @@ export const Route = createFileRoute("/api/live-agent/message")({
           return Response.json({ error: "Invalid live-agent message" }, { status: 400 });
         }
 
+        const sessionId = body.sessionId.trim();
         const message = body.message.trim();
-        if (!message) {
+        if (!isLiveAgentSessionId(sessionId) || !message) {
           return Response.json({ error: "Invalid live-agent message" }, { status: 400 });
         }
 
-        const result = await answerLiveAgentMessage({
-          sessionId: body.sessionId,
-          message,
-        });
+        try {
+          const result = await answerLiveAgentMessage({
+            sessionId,
+            message,
+          });
 
-        return Response.json(result);
+          return Response.json(result);
+        } catch (err) {
+          if (err instanceof LiveAgentPublicError) {
+            return Response.json({ error: err.message }, { status: err.status });
+          }
+          return Response.json({ error: "Unable to answer live-agent message" }, { status: 500 });
+        }
       },
     },
   },
