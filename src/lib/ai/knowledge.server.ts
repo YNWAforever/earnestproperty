@@ -45,8 +45,28 @@ type KnowledgeChunkRow = {
   published: unknown;
 };
 
+type ObservedKnowledgeSource = {
+  source_type: AiKnowledgeSourceType;
+  source_id: string;
+};
+
+type PreparedKnowledgeChunk = {
+  sort_order: number;
+  chunk_text: string;
+  summary: string | null;
+  metadata: Record<string, unknown>;
+  estate_slug: string | null;
+  district_slug: string | null;
+  listing_id: string | null;
+  visibility: AiVisibility;
+  freshness_score: number;
+  embedding: string | null;
+  content_hash: string;
+};
+
 export async function rebuildAiKnowledgeIndex() {
   const sources = await fetchPublicKnowledgeSources();
+  const observedSources = new Map<string, ObservedKnowledgeSource>();
   let indexedSources = 0;
   let indexedChunks = 0;
 
@@ -59,6 +79,36 @@ export async function rebuildAiKnowledgeIndex() {
       title: source.title.trim() || "Earnest Property",
     });
     const contentHash = hashText(`${normalized.title}\n${normalizedText}`);
+    const chunks = chunkKnowledgeText({ text: normalizedText }).map((chunk) => ({
+      ...chunk,
+      content_hash: hashText(chunk.text),
+    }));
+    if (chunks.length === 0) continue;
+
+    const embeddings = await embedAiTexts(chunks.map((chunk) => chunk.text));
+    const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk, index) => ({
+      sort_order: chunk.sort_order,
+      chunk_text: chunk.text,
+      summary: null,
+      metadata: {
+        url_path: source.url_path,
+        source_type: source.source_type,
+        ...(source.metadata ?? {}),
+      },
+      estate_slug: source.estate_slug ?? null,
+      district_slug: source.district_slug ?? null,
+      listing_id: source.listing_id ?? null,
+      visibility: normalized.visibility,
+      freshness_score: freshnessScore(normalized.source_type),
+      embedding: embeddingVectorString(embeddings.ok ? embeddings.embeddings[index] : null),
+      content_hash: chunk.content_hash,
+    }));
+
+    observedSources.set(sourceKey(normalized), {
+      source_type: normalized.source_type,
+      source_id: normalized.source_id,
+    });
+
     const sourceRows = await queryRows(
       `INSERT INTO ai_knowledge_sources (
         source_type, source_id, title, url_path, public_visibility, published,
@@ -88,50 +138,13 @@ export async function rebuildAiKnowledgeIndex() {
     const sourceId = stringOrEmpty(sourceRows[0]?.id);
     if (!sourceId) continue;
 
-    await queryRows("UPDATE ai_knowledge_chunks SET stale = true WHERE source_id = $1", [sourceId]);
-
-    const chunks = chunkKnowledgeText({ text: normalizedText }).map((chunk) => ({
-      ...chunk,
-      content_hash: hashText(chunk.text),
-    }));
-    if (chunks.length === 0) continue;
-
-    const embeddings = await embedAiTexts(chunks.map((chunk) => chunk.text));
-
-    for (const [index, chunk] of chunks.entries()) {
-      const embedding = embeddingVectorString(embeddings.ok ? embeddings.embeddings[index] : null);
-      await queryRows(
-        `INSERT INTO ai_knowledge_chunks (
-          source_id, sort_order, chunk_text, summary, metadata, estate_slug, district_slug,
-          listing_id, visibility, freshness_score, embedding, content_hash, stale, updated_at
-        )
-        VALUES (
-          $1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9::ai_visibility,$10,$11::vector,$12,false,now()
-        )`,
-        [
-          sourceId,
-          chunk.sort_order,
-          chunk.text,
-          null,
-          JSON.stringify({
-            url_path: source.url_path,
-            source_type: source.source_type,
-            ...(source.metadata ?? {}),
-          }),
-          source.estate_slug ?? null,
-          source.district_slug ?? null,
-          source.listing_id ?? null,
-          normalized.visibility,
-          freshnessScore(normalized.source_type),
-          embedding,
-          chunk.content_hash,
-        ],
-      );
-      indexedChunks += 1;
-    }
+    await replaceKnowledgeChunks(sourceId, preparedChunks);
+    indexedChunks += preparedChunks.length;
 
     indexedSources += 1;
   }
+
+  await reconcileUnobservedKnowledgeSources(Array.from(observedSources.values()));
 
   return { indexedSources, indexedChunks };
 }
@@ -358,6 +371,83 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
       },
     })),
   ];
+}
+
+async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledgeChunk[]) {
+  await queryRows("DELETE FROM ai_knowledge_chunks WHERE source_id = $1", [sourceId]);
+  await queryRows(
+    `INSERT INTO ai_knowledge_chunks (
+      source_id, sort_order, chunk_text, summary, metadata, estate_slug, district_slug,
+      listing_id, visibility, freshness_score, embedding, content_hash, stale, updated_at
+    )
+    SELECT
+      $1::uuid,
+      chunk.sort_order,
+      chunk.chunk_text,
+      chunk.summary,
+      chunk.metadata,
+      chunk.estate_slug,
+      chunk.district_slug,
+      chunk.listing_id::uuid,
+      chunk.visibility::ai_visibility,
+      chunk.freshness_score,
+      chunk.embedding::vector,
+      chunk.content_hash,
+      false,
+      now()
+    FROM jsonb_to_recordset($2::jsonb) AS chunk(
+      sort_order integer,
+      chunk_text text,
+      summary text,
+      metadata jsonb,
+      estate_slug text,
+      district_slug text,
+      listing_id text,
+      visibility text,
+      freshness_score numeric,
+      embedding text,
+      content_hash text
+    )`,
+    [sourceId, JSON.stringify(chunks)],
+  );
+}
+
+async function reconcileUnobservedKnowledgeSources(observedSources: ObservedKnowledgeSource[]) {
+  if (observedSources.length === 0) {
+    await queryRows(
+      "UPDATE ai_knowledge_sources SET published = false, public_visibility = 'staff', updated_at = now()",
+    );
+    await queryRows("UPDATE ai_knowledge_chunks SET stale = true, updated_at = now()");
+    return;
+  }
+
+  await queryRows(
+    `WITH observed AS (
+       SELECT
+         source_type::ai_knowledge_source_type AS source_type,
+         source_id
+       FROM jsonb_to_recordset($1::jsonb) AS source(source_type text, source_id text)
+     ),
+     obsolete AS (
+       UPDATE ai_knowledge_sources s
+       SET published = false, public_visibility = 'staff', updated_at = now()
+       WHERE NOT EXISTS (
+         SELECT 1
+         FROM observed o
+         WHERE o.source_type = s.source_type
+           AND o.source_id = s.source_id
+       )
+       RETURNING s.id
+     )
+     UPDATE ai_knowledge_chunks c
+     SET stale = true, updated_at = now()
+     WHERE c.source_id IN (SELECT id FROM obsolete)`,
+    [JSON.stringify(observedSources)],
+  );
+}
+
+function sourceKey(source: ObservedKnowledgeSource) {
+  return `${source.source_type}:${source.source_id}`;
 }
 
 function normalizeSourceText(value: string) {
