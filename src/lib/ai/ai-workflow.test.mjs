@@ -1,0 +1,176 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  chunkKnowledgeText,
+  filterPublicKnowledgeChunks,
+  normalizeKnowledgeSource,
+} from "./knowledge.ts";
+import {
+  canAutoApplyAiTag,
+  classifyAiTagSafety,
+  scoreLeadProfile,
+  suggestFactualTags,
+} from "./crm-rules.ts";
+import {
+  classifySegmentEligibility,
+  parseSegmentPromptToFilters,
+} from "./segments.ts";
+import {
+  buildLiveAgentLeadInput,
+  canUseChunkForPublicAnswer,
+  shouldOfferHumanHandoff,
+} from "./live-agent.ts";
+
+test("chunkKnowledgeText creates stable public answer chunks", () => {
+  const chunks = chunkKnowledgeText({
+    text: "碧堤半島鄰近深井，屋苑有大型會所。".repeat(80),
+    maxChars: 180,
+  });
+
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.text.length <= 220));
+  assert.equal(chunks[0].sort_order, 1);
+});
+
+test("normalizeKnowledgeSource marks active listings public and stale offline listings private", () => {
+  assert.equal(
+    normalizeKnowledgeSource({
+      source_type: "listing",
+      source_id: "p1",
+      title: "碧堤半島三房",
+      status: "active",
+      url_path: "/property/EP001",
+    }).visibility,
+    "public",
+  );
+
+  assert.equal(
+    normalizeKnowledgeSource({
+      source_type: "listing",
+      source_id: "p2",
+      title: "已售盤",
+      status: "sold",
+      url_path: "/property/EP002",
+    }).visibility,
+    "staff",
+  );
+});
+
+test("filterPublicKnowledgeChunks excludes staff-only and stale chunks", () => {
+  const chunks = filterPublicKnowledgeChunks([
+    { id: "1", visibility: "public", published: true, stale: false, chunk_text: "可用" },
+    { id: "2", visibility: "staff", published: true, stale: false, chunk_text: "內部" },
+    { id: "3", visibility: "public", published: false, stale: false, chunk_text: "未發布" },
+    { id: "4", visibility: "public", published: true, stale: true, chunk_text: "過期" },
+  ]);
+
+  assert.deepEqual(chunks.map((chunk) => chunk.id), ["1"]);
+});
+
+test("CRM AI tags distinguish factual auto-apply from staff approval tags", () => {
+  assert.equal(classifyAiTagSafety("budget_8m_10m"), "factual");
+  assert.equal(classifyAiTagSafety("bellagio_interest"), "factual");
+  assert.equal(classifyAiTagSafety("hot_lead"), "sensitive");
+  assert.equal(classifyAiTagSafety("low_quality"), "judgmental");
+  assert.equal(canAutoApplyAiTag("budget_8m_10m"), true);
+  assert.equal(canAutoApplyAiTag("hot_lead"), false);
+});
+
+test("suggestFactualTags derives safe tags from explicit lead data", () => {
+  const tags = suggestFactualTags({
+    intent: "buyer",
+    budget_min: 8000000,
+    budget_max: 10000000,
+    preferred_estates: ["bellagio", "sea-crest-villa"],
+    source: "website",
+    language: "zh-HK",
+  });
+
+  assert.ok(tags.includes("intent_buyer"));
+  assert.ok(tags.includes("budget_8m_10m"));
+  assert.ok(tags.includes("estate_bellagio"));
+  assert.ok(tags.includes("source_website"));
+  assert.ok(tags.includes("lang_zh_hk"));
+});
+
+test("scoreLeadProfile gives higher score to opted-in urgent matched leads", () => {
+  const cold = scoreLeadProfile({
+    intent: "buyer",
+    budget_min: null,
+    budget_max: null,
+    preferred_estates: [],
+    timeline: null,
+    opt_in_whatsapp: false,
+    last_activity_days: 90,
+  });
+  const warm = scoreLeadProfile({
+    intent: "buyer",
+    budget_min: 8000000,
+    budget_max: 10000000,
+    preferred_estates: ["bellagio"],
+    timeline: "30_days",
+    opt_in_whatsapp: true,
+    last_activity_days: 1,
+  });
+
+  assert.ok(warm > cold);
+  assert.ok(warm <= 100);
+});
+
+test("parseSegmentPromptToFilters maps common Hong Kong property audience language", () => {
+  const result = parseSegmentPromptToFilters(
+    "深井買家，預算 800-1000 萬，對碧堤半島有興趣，最近 90 日查詢，有 WhatsApp opt-in",
+  );
+
+  assert.equal(result.intent, "buyer");
+  assert.equal(result.district_slug, "sham-tseng");
+  assert.deepEqual(result.budget, { min: 8000000, max: 10000000 });
+  assert.deepEqual(result.preferred_estates, ["bellagio"]);
+  assert.equal(result.last_activity_days, 90);
+  assert.equal(result.require_whatsapp_opt_in, true);
+});
+
+test("classifySegmentEligibility explains why contacts cannot receive blasts", () => {
+  assert.equal(
+    classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: true, opted_out_whatsapp: false }),
+    "eligible",
+  );
+  assert.equal(
+    classifySegmentEligibility({ normalized_phone: null, opt_in_whatsapp: true, opted_out_whatsapp: false }),
+    "missing_phone",
+  );
+  assert.equal(
+    classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: false, opted_out_whatsapp: false }),
+    "not_opted_in",
+  );
+  assert.equal(
+    classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: true, opted_out_whatsapp: true }),
+    "opted_out",
+  );
+});
+
+test("public live agent only uses public chunks and offers handoff for uncertain answers", () => {
+  assert.equal(canUseChunkForPublicAnswer({ visibility: "public", stale: false, published: true }), true);
+  assert.equal(canUseChunkForPublicAnswer({ visibility: "staff", stale: false, published: true }), false);
+  assert.equal(shouldOfferHumanHandoff({ confidence: 0.25, userAskedForHuman: false }), true);
+  assert.equal(shouldOfferHumanHandoff({ confidence: 0.9, userAskedForHuman: true }), true);
+});
+
+test("buildLiveAgentLeadInput creates CRM-safe lead payload", () => {
+  const input = buildLiveAgentLeadInput({
+    name: "Chan Tai Man",
+    phone: "+852 6123 4567",
+    intent: "buyer",
+    budget_min: 8000000,
+    budget_max: 10000000,
+    preferred_estates: ["bellagio"],
+    source_path: "/estate/bellagio",
+    opt_in_whatsapp: true,
+  });
+
+  assert.equal(input.normalized_phone, "85261234567");
+  assert.equal(input.intent, "buyer");
+  assert.equal(input.source, "live_agent");
+  assert.deepEqual(input.preferred_estates, ["bellagio"]);
+});
