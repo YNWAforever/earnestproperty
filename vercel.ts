@@ -1,10 +1,24 @@
-import { matchers, routes, type VercelConfig } from "@vercel/config/v1";
 import importedRedirects from "./src/generated/old-site-redirects.json" with { type: "json" };
 
+type VercelRedirect = {
+  source: string;
+  destination: string;
+  permanent: boolean;
+  has?: Array<{
+    type: "query";
+    key: string;
+    value: string;
+  }>;
+};
+
+type VercelConfig = {
+  buildCommand: string;
+  crons: Array<{ path: string; schedule: string }>;
+  redirects: VercelRedirect[];
+};
+
 const detailRedirects = importedRedirects.map((redirect) =>
-  routes.redirect(redirect.source, redirect.destination, {
-    permanent: redirect.permanent,
-  }),
+  redirectEntry(redirect.source, redirect.destination, redirect.permanent),
 );
 
 export const config: VercelConfig = {
@@ -12,38 +26,44 @@ export const config: VercelConfig = {
   crons: [{ path: "/api/mls-sync", schedule: "0 20 * * *" }],
   redirects: [
     ...detailRedirects,
-    routes.redirect("/", "/", {
-      permanent: true,
-      has: [matchers.query("ln", { inc: ["sc", "tc"] })],
+    redirectEntry("/", "/", true, {
+      has: [{ type: "query", key: "ln", value: "^(sc|tc)$" }],
     }),
-    routes.redirect("/district/ting-kau", "/castle-peak-road/ting-kau", { permanent: true }),
-    routes.redirect("/district/ting-kau/", "/castle-peak-road/ting-kau", { permanent: true }),
-    routes.redirect("/estate/belvedere-garden", "/estate/bellagio", { permanent: true }),
-    routes.redirect("/estate/sea-pearl-garden", "/estate/rhine-garden", { permanent: true }),
-    routes.redirect("/property-detail/:oldId.html", "/listings", { permanent: true }),
-    routes.redirect("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", {
-      permanent: true,
-    }),
-    routes.redirect("/eng", "/", { permanent: true }),
-    routes.redirect("/eng/", "/", { permanent: true }),
-    routes.redirect("/profile.php", "/about", { permanent: true }),
-    routes.redirect("/contactus.php", "/contact", { permanent: true }),
-    routes.redirect("/property", "/listings?deal=all&page=1", { permanent: true }),
-    routes.redirect("/property/", "/listings?deal=all&page=1", { permanent: true }),
-    routes.redirect("/property/c1", "/listings?deal=all&page=1", { permanent: true }),
-    routes.redirect("/property/c1/", "/listings?deal=all&page=1", { permanent: true }),
-    routes.redirect("/property/c2", "/listings?deal=all&page=1", { permanent: true }),
-    routes.redirect("/property/c2/", "/listings?deal=all&page=1", { permanent: true }),
-    routes.redirect("/property/c5", "/listings?deal=rent&page=1", { permanent: true }),
-    routes.redirect("/property/c5/", "/listings?deal=rent&page=1", { permanent: true }),
-    routes.redirect("/listprop.php", "/contact", { permanent: true }),
-    routes.redirect("/companynews.php", "/blog", { permanent: true }),
-    routes.redirect("/news_content.php", "/blog", { permanent: true }),
-    routes.redirect("/mortgage.php", "/contact", { permanent: true }),
-    routes.redirect("/mortgage_rate.php", "/contact", { permanent: true }),
-    routes.redirect("/school.php", "/blog", { permanent: true }),
-    routes.redirect("/bankval.php", "/contact", { permanent: true }),
-    routes.redirect("/unlucky.php", "/blog", { permanent: true }),
-    routes.redirect("/tran_trends.php", "/blog", { permanent: true }),
+    redirectEntry("/district/ting-kau", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/district/ting-kau/", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
+    redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
+    redirectEntry("/property-detail/:oldId.html", "/listings", true),
+    redirectEntry("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", true),
+    redirectEntry("/eng", "/", true),
+    redirectEntry("/eng/", "/", true),
+    redirectEntry("/profile.php", "/about", true),
+    redirectEntry("/contactus.php", "/contact", true),
+    redirectEntry("/property", "/listings?deal=all&page=1", true),
+    redirectEntry("/property/", "/listings?deal=all&page=1", true),
+    redirectEntry("/property/c1", "/listings?deal=all&page=1", true),
+    redirectEntry("/property/c1/", "/listings?deal=all&page=1", true),
+    redirectEntry("/property/c2", "/listings?deal=all&page=1", true),
+    redirectEntry("/property/c2/", "/listings?deal=all&page=1", true),
+    redirectEntry("/property/c5", "/listings?deal=rent&page=1", true),
+    redirectEntry("/property/c5/", "/listings?deal=rent&page=1", true),
+    redirectEntry("/listprop.php", "/contact", true),
+    redirectEntry("/companynews.php", "/blog", true),
+    redirectEntry("/news_content.php", "/blog", true),
+    redirectEntry("/mortgage.php", "/contact", true),
+    redirectEntry("/mortgage_rate.php", "/contact", true),
+    redirectEntry("/school.php", "/blog", true),
+    redirectEntry("/bankval.php", "/contact", true),
+    redirectEntry("/unlucky.php", "/blog", true),
+    redirectEntry("/tran_trends.php", "/blog", true),
   ],
 };
+
+function redirectEntry(
+  source: string,
+  destination: string,
+  permanent: boolean,
+  options: Pick<VercelRedirect, "has"> = {},
+): VercelRedirect {
+  return { source, destination, permanent, ...options };
+}

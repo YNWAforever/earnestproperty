@@ -1,16 +1,18 @@
 export type AiServerConfig = {
+  apiKey: string | null;
   enabled: boolean;
   textModel: string | null;
   embeddingModel: string | null;
 };
 
 export function getAiServerConfig(): AiServerConfig {
-  const hasGatewayKey = Boolean(process.env.AI_GATEWAY_API_KEY);
+  const apiKey = process.env.AI_GATEWAY_API_KEY || null;
   const textModel = process.env.AI_GATEWAY_MODEL || null;
   const embeddingModel = process.env.AI_GATEWAY_EMBEDDING_MODEL || null;
 
   return {
-    enabled: hasGatewayKey && Boolean(textModel),
+    apiKey,
+    enabled: Boolean(apiKey && textModel),
     textModel,
     embeddingModel,
   };

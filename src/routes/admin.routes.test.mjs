@@ -99,10 +99,12 @@ test("Woztell API routes are present and server-only", () => {
   }
 });
 
-test("Blob upload SDK is loaded lazily to keep SSR boot clean", () => {
+test("Blob upload route avoids SDK imports to keep SSR boot clean", () => {
   const mediaUpload = read("src/routes/api.admin.media.upload.ts");
   assert.doesNotMatch(mediaUpload, /import\s+\{\s*put\s*\}\s+from\s+["']@vercel\/blob["']/);
-  assert.match(mediaUpload, /await import\(["']@vercel\/blob["']\)/);
+  assert.doesNotMatch(mediaUpload, /@vercel\/blob/);
+  assert.match(mediaUpload, /https:\/\/vercel\.com\/api\/blob/);
+  assert.match(mediaUpload, /BLOB_READ_WRITE_TOKEN/);
 });
 
 test("admin lead CRM workflow guards async detail state and uses list assignment data", () => {
