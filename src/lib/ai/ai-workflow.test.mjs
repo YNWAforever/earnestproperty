@@ -52,7 +52,10 @@ test("filterPublicKnowledgeChunks excludes staff-only and stale chunks", async (
     { id: "4", visibility: "public", published: true, stale: true, chunk_text: "過期" },
   ]);
 
-  assert.deepEqual(chunks.map((chunk) => chunk.id), ["1"]);
+  assert.deepEqual(
+    chunks.map((chunk) => chunk.id),
+    ["1"],
+  );
 });
 
 test("CRM AI tags distinguish factual auto-apply from staff approval tags", async () => {
@@ -125,27 +128,49 @@ test("parseSegmentPromptToFilters maps common Hong Kong property audience langua
 test("classifySegmentEligibility explains why contacts cannot receive blasts", async () => {
   const { classifySegmentEligibility } = await loadSegments();
   assert.equal(
-    classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: true, opted_out_whatsapp: false }),
+    classifySegmentEligibility({
+      normalized_phone: "85260000000",
+      opt_in_whatsapp: true,
+      opted_out_whatsapp: false,
+    }),
     "eligible",
   );
   assert.equal(
-    classifySegmentEligibility({ normalized_phone: null, opt_in_whatsapp: true, opted_out_whatsapp: false }),
+    classifySegmentEligibility({
+      normalized_phone: null,
+      opt_in_whatsapp: true,
+      opted_out_whatsapp: false,
+    }),
     "missing_phone",
   );
   assert.equal(
-    classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: false, opted_out_whatsapp: false }),
+    classifySegmentEligibility({
+      normalized_phone: "85260000000",
+      opt_in_whatsapp: false,
+      opted_out_whatsapp: false,
+    }),
     "not_opted_in",
   );
   assert.equal(
-    classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: true, opted_out_whatsapp: true }),
+    classifySegmentEligibility({
+      normalized_phone: "85260000000",
+      opt_in_whatsapp: true,
+      opted_out_whatsapp: true,
+    }),
     "opted_out",
   );
 });
 
 test("public live agent only uses public chunks and offers handoff for uncertain answers", async () => {
   const { canUseChunkForPublicAnswer, shouldOfferHumanHandoff } = await loadLiveAgent();
-  assert.equal(canUseChunkForPublicAnswer({ visibility: "public", stale: false, published: true }), true);
-  assert.equal(canUseChunkForPublicAnswer({ visibility: "staff", stale: false, published: true }), false);
+  assert.equal(
+    canUseChunkForPublicAnswer({ visibility: "public", stale: false, published: true }),
+    true,
+  );
+  assert.equal(
+    canUseChunkForPublicAnswer({ visibility: "staff", stale: false, published: true }),
+    false,
+  );
   assert.equal(shouldOfferHumanHandoff({ confidence: 0.25, userAskedForHuman: false }), true);
   assert.equal(shouldOfferHumanHandoff({ confidence: 0.9, userAskedForHuman: true }), true);
 });

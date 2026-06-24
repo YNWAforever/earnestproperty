@@ -341,8 +341,14 @@ test("shared admin workflow components include accessible labels and description
 test("AI CRM, segment, and live-agent routes are wired", () => {
   const expectations = [
     ["src/routes/admin.cms.tsx", ["fetchAdminAiKnowledgeStatus", "rebuildAdminAiKnowledge"]],
-    ["src/routes/admin.leads.tsx", ["fetchAdminLeadAiProfile", "analyzeAdminLeadAiProfile", "approveAdminAiTag"]],
-    ["src/routes/admin.segments.tsx", ["previewAdminCrmSegment", "saveAdminCrmSegment", "materializeAdminCrmSegment"]],
+    [
+      "src/routes/admin.leads.tsx",
+      ["fetchAdminLeadAiProfile", "analyzeAdminLeadAiProfile", "approveAdminAiTag"],
+    ],
+    [
+      "src/routes/admin.segments.tsx",
+      ["previewAdminCrmSegment", "saveAdminCrmSegment", "materializeAdminCrmSegment"],
+    ],
     ["src/routes/admin.whatsapp.tsx", ["fetchAdminConversationAiAssist"]],
     [
       "src/components/live-agent/LiveAgentWidget.tsx",
@@ -357,7 +363,11 @@ test("AI CRM, segment, and live-agent routes are wired", () => {
   for (const [file, requiredNames] of expectations) {
     const source = read(file);
     for (const name of requiredNames) {
-      assert.match(source, new RegExp(name.replaceAll("/", "\\\\/")), `${file} should include ${name}`);
+      assert.match(
+        source,
+        new RegExp(name.replaceAll("/", "\\\\/")),
+        `${file} should include ${name}`,
+      );
     }
   }
 });
