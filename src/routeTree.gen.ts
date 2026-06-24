@@ -34,6 +34,7 @@ import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
 import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
+import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent.handoff'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
@@ -177,6 +178,11 @@ const ApiLiveAgentMessageRoute = ApiLiveAgentMessageRouteImport.update({
   path: '/api/live-agent/message',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLiveAgentHandoffRoute = ApiLiveAgentHandoffRouteImport.update({
+  id: '/api/live-agent/handoff',
+  path: '/api/live-agent/handoff',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
   id: '/whatsapp',
   path: '/whatsapp',
@@ -283,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -325,6 +332,7 @@ export interface FileRoutesByTo {
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -370,6 +378,7 @@ export interface FileRoutesById {
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -416,6 +425,7 @@ export interface FileRouteTypes {
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
+    | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/mls-sync'
@@ -458,6 +468,7 @@ export interface FileRouteTypes {
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
+    | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/mls-sync'
@@ -502,6 +513,7 @@ export interface FileRouteTypes {
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
+    | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/mls-sync'
@@ -541,6 +553,7 @@ export interface RootRouteChildren {
   ListingsRoute: typeof ListingsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
+  ApiLiveAgentHandoffRoute: typeof ApiLiveAgentHandoffRoute
   ApiLiveAgentMessageRoute: typeof ApiLiveAgentMessageRoute
   ApiLiveAgentSessionRoute: typeof ApiLiveAgentSessionRoute
   ApiMlsSyncRoute: typeof ApiMlsSyncRoute
@@ -720,6 +733,13 @@ declare module '@tanstack/react-router' {
       path: '/api/mls-sync'
       fullPath: '/api/mls-sync'
       preLoaderRoute: typeof ApiMlsSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/live-agent/handoff': {
+      id: '/api/live-agent/handoff'
+      path: '/api/live-agent/handoff'
+      fullPath: '/api/live-agent/handoff'
+      preLoaderRoute: typeof ApiLiveAgentHandoffRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/live-agent/session': {
@@ -936,6 +956,7 @@ const rootRouteChildren: RootRouteChildren = {
   ListingsRoute: ListingsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   AccountPathnameRoute: AccountPathnameRoute,
+  ApiLiveAgentHandoffRoute: ApiLiveAgentHandoffRoute,
   ApiLiveAgentMessageRoute: ApiLiveAgentMessageRoute,
   ApiLiveAgentSessionRoute: ApiLiveAgentSessionRoute,
   ApiMlsSyncRoute: ApiMlsSyncRoute,

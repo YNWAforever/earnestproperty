@@ -6,6 +6,7 @@ import type {
   AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
+  AdminConversationAiAssist,
   AdminConversationUpdateInput,
   AdminCrmSegmentPreview,
   AdminEstateInput,
@@ -577,6 +578,23 @@ export async function fetchAdminConversation(options: { data: { id: string } }) 
     fetchAdminConversationServer(await withStaffAuthHeaders(options)),
   );
 }
+
+const fetchAdminConversationAiAssistServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { conversationId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminConversationAiAssist(data, staff);
+  });
+
+export const fetchAdminConversationAiAssist =
+  async function fetchAdminConversationAiAssist(options: {
+    data: { conversationId: string };
+  }): Promise<AdminConversationAiAssist> {
+    return callStaffServerFn(async () =>
+      fetchAdminConversationAiAssistServer(await withStaffAuthHeaders(options)),
+    );
+  };
 
 const updateAdminConversationServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminConversationUpdateInput) => data)

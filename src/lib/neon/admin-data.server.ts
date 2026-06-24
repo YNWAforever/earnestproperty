@@ -14,6 +14,7 @@ import type {
   AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
+  AdminConversationAiAssist,
   AdminConversationUpdateInput,
   AdminEstateInput,
   AdminFaqInput,
@@ -1036,6 +1037,69 @@ export async function fetchAdminConversation(id: string) {
   };
 }
 
+export async function fetchAdminConversationAiAssist(
+  input: { conversationId: string },
+  actor: StaffAccess,
+): Promise<AdminConversationAiAssist> {
+  void actor;
+  const rows = await queryRows<{
+    id: unknown;
+    name: unknown;
+    opted_out_whatsapp: unknown;
+    messages: unknown;
+  }>(
+    `SELECT
+       wc.id,
+       c.name,
+       c.opted_out_whatsapp,
+       COALESCE(
+         json_agg(
+           json_build_object(
+             'direction', m.direction,
+             'text', m.text,
+             'created_at', m.created_at
+           )
+           ORDER BY m.created_at DESC
+         ) FILTER (WHERE m.id IS NOT NULL),
+         '[]'::json
+       ) AS messages
+     FROM whatsapp_conversations wc
+     LEFT JOIN crm_contacts c ON c.id = wc.contact_id
+     LEFT JOIN whatsapp_messages m ON m.conversation_id = wc.id
+     WHERE wc.id = $1
+     GROUP BY wc.id, c.name, c.opted_out_whatsapp
+     LIMIT 1`,
+    [input.conversationId],
+  );
+  const row = rows[0];
+  if (!row) throw new Error("Conversation not found");
+
+  const messages = parseConversationAiMessages(row.messages).slice(0, 10);
+  const latestInbound = messages.find((message) => message.direction === "inbound");
+  const latestInboundText = latestInbound?.text ?? "";
+  const detectedIntent = /租|rent/i.test(latestInboundText)
+    ? "renter"
+    : /估價|放盤|sell|valuation/i.test(latestInboundText)
+      ? "seller"
+      : latestInboundText
+        ? "buyer"
+        : null;
+  const optedOut = row.opted_out_whatsapp === true;
+
+  return {
+    summary: messages.length
+      ? `最近 ${messages.length} 則 WhatsApp 訊息，客戶需要跟進。`
+      : "未有足夠訊息。",
+    detectedIntent,
+    urgency: messages.length >= 3 ? "active" : "normal",
+    suggestedReply: optedOut ? null : "你好，多謝查詢。請問你想了解買樓、租樓，還是放盤估價？",
+    suggestedTemplate: optedOut ? null : "earnest_follow_up_zh_hk",
+    handoffNote: stringOrNull(row.name)
+      ? `${stringOrNull(row.name)} 由 WhatsApp 查詢，請查看最近訊息。`
+      : "WhatsApp 查詢，請查看最近訊息。",
+  };
+}
+
 export async function updateAdminConversation(
   input: AdminConversationUpdateInput,
   actor: StaffAccess,
@@ -1050,6 +1114,32 @@ export async function updateAdminConversation(
     assigned_agent_id: input.assigned_agent_id,
   });
   return { ok: true };
+}
+
+function parseConversationAiMessages(value: unknown) {
+  const parsed =
+    typeof value === "string"
+      ? (() => {
+          try {
+            return JSON.parse(value) as unknown;
+          } catch {
+            return [];
+          }
+        })()
+      : value;
+
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as Record<string, unknown>;
+    return [
+      {
+        direction: stringOrEmpty(row.direction),
+        text: stringOrNull(row.text),
+        created_at: dateOrNull(row.created_at),
+      },
+    ];
+  });
 }
 
 export async function listAdminCampaigns() {

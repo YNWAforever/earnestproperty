@@ -249,6 +249,15 @@ export type AdminConversationUpdateInput = {
   assigned_agent_id: string | null;
 };
 
+export type AdminConversationAiAssist = {
+  summary: string;
+  detectedIntent: string | null;
+  urgency: string | null;
+  suggestedReply: string | null;
+  suggestedTemplate: string | null;
+  handoffNote: string | null;
+};
+
 export type AdminAudienceInput = {
   id?: string;
   name: string;

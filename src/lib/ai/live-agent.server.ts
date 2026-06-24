@@ -141,9 +141,97 @@ export async function requestLiveAgentHandoff(input: {
   budget_max?: number | null;
   preferred_estates?: string[] | null;
   opt_in_whatsapp?: boolean | null;
-}): Promise<never> {
-  void buildLiveAgentLeadInput(input);
-  throw new Error("Live-agent handoff is implemented in Task 8.");
+}) {
+  const sessionId = input.sessionId.trim();
+  if (!isLiveAgentSessionId(sessionId)) {
+    throw new LiveAgentPublicError("Invalid handoff session.", 400);
+  }
+
+  const session = await getLiveAgentSessionForHandoff(sessionId);
+  const leadInput = buildLiveAgentLeadInput({
+    ...input,
+    source_path: session.source_path,
+  });
+  const name = cleanNullableText(leadInput.name, 160);
+  const phone = cleanNullableText(leadInput.phone, 80);
+  const email = cleanNullableText(leadInput.email, 200);
+  const intent = cleanNullableText(leadInput.intent, 80) ?? "buyer";
+  const preferredEstates = leadInput.preferred_estates.map((estate) => estate.slice(0, 120));
+  const note = `Live agent handoff from ${leadInput.source_path ?? "public site"}`;
+
+  const contactId = await upsertLiveAgentContact({
+    name,
+    phone,
+    normalizedPhone: leadInput.normalized_phone,
+    email,
+    optInWhatsapp: leadInput.opt_in_whatsapp,
+  });
+  const leadId = await upsertLiveAgentLead({
+    leadId: session.lead_id,
+    contactId,
+    intent,
+    budgetMin: leadInput.budget_min,
+    budgetMax: leadInput.budget_max,
+    preferredEstates,
+    note,
+  });
+  const conversationId = await upsertLiveAgentConversation({
+    conversationId: session.conversation_id,
+    contactId,
+  });
+
+  await queryRows(
+    `UPDATE live_agent_sessions
+     SET contact_id=$1,
+         lead_id=$2,
+         conversation_id=$3,
+         status='handoff_requested',
+         intent=$4,
+         budget_min=$5,
+         budget_max=$6,
+         preferred_estates=$7::text[],
+         opt_in_whatsapp=$8,
+         updated_at=now()
+     WHERE id=$9`,
+    [
+      contactId,
+      leadId,
+      conversationId,
+      intent,
+      leadInput.budget_min,
+      leadInput.budget_max,
+      preferredEstates,
+      leadInput.opt_in_whatsapp,
+      session.id,
+    ],
+  );
+
+  await queryRows(
+    `INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
+     VALUES ($1,$2,'follow_up',$3)`,
+    [leadId, contactId, note],
+  );
+  await queryRows(
+    `INSERT INTO live_agent_messages (session_id, direction, message_text, safety_flags, shown_publicly)
+     VALUES ($1,'system',$2,$3::text[],false)`,
+    [session.id, "Live-agent handoff requested for WhatsApp follow-up.", ["handoff_requested"]],
+  );
+  await queryRows(
+    `INSERT INTO ai_audit_logs (actor_type, action, subject_type, subject_id, metadata)
+     VALUES ('visitor','live_agent.handoff','live_agent_session',$1,$2::jsonb)`,
+    [
+      session.id,
+      JSON.stringify({
+        contactId,
+        leadId,
+        conversationId,
+        hasPhone: Boolean(phone),
+        sourcePath: leadInput.source_path,
+      }),
+    ],
+  );
+
+  return { ok: true, status: "handoff_requested" as const };
 }
 
 async function getLiveAgentSessionForMessage(sessionId: string) {
@@ -164,6 +252,159 @@ async function getLiveAgentSessionForMessage(sessionId: string) {
   if (!existing[0]) throw new LiveAgentPublicError("Live-agent session not found.", 404);
 
   throw new LiveAgentPublicError("Live-agent session is not open.", 400);
+}
+
+async function getLiveAgentSessionForHandoff(sessionId: string) {
+  const rows = await queryRows<LiveAgentSessionRow>(
+    `SELECT *
+     FROM live_agent_sessions
+     WHERE id = $1
+     LIMIT 1`,
+    [sessionId],
+  );
+  const session = rows[0] ? mapSession(rows[0]) : null;
+  if (!session) throw new LiveAgentPublicError("Live-agent session not found.", 404);
+  if (
+    session.status !== "open" &&
+    session.status !== "qualified" &&
+    session.status !== "handoff_requested"
+  ) {
+    throw new LiveAgentPublicError("Live-agent session is not open.", 400);
+  }
+  return session;
+}
+
+async function upsertLiveAgentContact(input: {
+  name: string | null;
+  phone: string | null;
+  normalizedPhone: string | null;
+  email: string | null;
+  optInWhatsapp: boolean;
+}) {
+  if (input.normalizedPhone) {
+    const rows = await queryRows<{ id: unknown }>(
+      `INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
+       VALUES ($1,$2,$3,$4,'live_agent',$5)
+       ON CONFLICT (normalized_phone) DO UPDATE SET
+         name = COALESCE(EXCLUDED.name, crm_contacts.name),
+         phone = COALESCE(EXCLUDED.phone, crm_contacts.phone),
+         email = COALESCE(EXCLUDED.email, crm_contacts.email),
+         opt_in_whatsapp = crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp,
+         updated_at = now()
+       RETURNING id`,
+      [input.name, input.phone, input.normalizedPhone, input.email, input.optInWhatsapp],
+    );
+    return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent contact.").id);
+  }
+
+  const rows = await queryRows<{ id: unknown }>(
+    `INSERT INTO crm_contacts (name, phone, email, source, opt_in_whatsapp)
+     VALUES ($1,$2,$3,'live_agent',$4)
+     RETURNING id`,
+    [input.name, input.phone, input.email, input.optInWhatsapp],
+  );
+  return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent contact.").id);
+}
+
+async function upsertLiveAgentLead(input: {
+  leadId: string | null;
+  contactId: string;
+  intent: string;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  preferredEstates: string[];
+  note: string;
+}) {
+  if (input.leadId) {
+    const rows = await queryRows<{ id: unknown }>(
+      `UPDATE crm_leads
+       SET contact_id=$1,
+           stage='contacted',
+           intent=$2,
+           budget_min=$3,
+           budget_max=$4,
+           preferred_estates=$5::text[],
+           source='live_agent',
+           note=COALESCE(NULLIF(note, ''), $6),
+           updated_at=now()
+       WHERE id=$7
+       RETURNING id`,
+      [
+        input.contactId,
+        input.intent,
+        input.budgetMin,
+        input.budgetMax,
+        input.preferredEstates,
+        input.note,
+        input.leadId,
+      ],
+    );
+    if (rows[0]) return stringOrEmpty(rows[0].id);
+  }
+
+  const rows = await queryRows<{ id: unknown }>(
+    `INSERT INTO crm_leads (
+       contact_id, stage, intent, budget_min, budget_max, preferred_estates, source, note
+     )
+     VALUES ($1,'contacted',$2,$3,$4,$5::text[],'live_agent',$6)
+     RETURNING id`,
+    [
+      input.contactId,
+      input.intent,
+      input.budgetMin,
+      input.budgetMax,
+      input.preferredEstates,
+      input.note,
+    ],
+  );
+  return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent lead.").id);
+}
+
+async function upsertLiveAgentConversation(input: {
+  conversationId: string | null;
+  contactId: string;
+}) {
+  if (input.conversationId) {
+    const rows = await queryRows<{ id: unknown }>(
+      `UPDATE whatsapp_conversations
+       SET contact_id=$1,
+           status='pending',
+           last_message_at=COALESCE(last_message_at, now()),
+           updated_at=now()
+       WHERE id=$2
+       RETURNING id`,
+      [input.contactId, input.conversationId],
+    );
+    if (rows[0]) return stringOrEmpty(rows[0].id);
+  }
+
+  const existing = await queryRows<{ id: unknown }>(
+    `SELECT id
+     FROM whatsapp_conversations
+     WHERE contact_id=$1
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+    [input.contactId],
+  );
+  if (existing[0]) {
+    await queryRows(
+      `UPDATE whatsapp_conversations
+       SET status='pending',
+           last_message_at=COALESCE(last_message_at, now()),
+           updated_at=now()
+       WHERE id=$1`,
+      [existing[0].id],
+    );
+    return stringOrEmpty(existing[0].id);
+  }
+
+  const rows = await queryRows<{ id: unknown }>(
+    `INSERT INTO whatsapp_conversations (contact_id, status, last_message_at)
+     VALUES ($1,'pending',now())
+     RETURNING id`,
+    [input.contactId],
+  );
+  return stringOrEmpty(requireRow(rows[0], "Unable to create handoff conversation.").id);
 }
 
 function mapSession(row: LiveAgentSessionRow): LiveAgentSession {

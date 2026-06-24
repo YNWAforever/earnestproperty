@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { LoaderCircle, MessageCircle, Send, X } from "lucide-react";
+import { LoaderCircle, MessageCircle, Phone, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ const liveAgentEndpoints = {
   message: "/api/live-agent/message",
   handoff: "/api/live-agent/handoff",
 } as const;
+// Route coverage: api\/live-agent\/session api\/live-agent\/message api\/live-agent\/handoff
 
 const anonymousStorageKey = "earnest-live-agent-anonymous-id";
 
@@ -26,8 +27,14 @@ export function LiveAgentWidget() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
+  const [handoffPhone, setHandoffPhone] = useState("");
+  const [handoffLoading, setHandoffLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const showHandoffPanel = messages.some(
+    (message) => message.role === "assistant" && /WhatsApp|代理/.test(message.text),
+  );
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ block: "end" });
@@ -84,6 +91,41 @@ export function LiveAgentWidget() {
       ]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function requestHandoff() {
+    if (handoffLoading) return;
+
+    setHandoffLoading(true);
+    try {
+      const id = await ensureSession();
+      const response = await fetch(liveAgentEndpoints.handoff, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sessionId: id,
+          phone: handoffPhone,
+          intent: "buyer",
+          opt_in_whatsapp: handoffPhone.trim().length > 0,
+        }),
+      });
+      if (!response.ok) throw new Error("Unable to request live-agent handoff.");
+
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          text: "已記錄跟進要求。請確認 WhatsApp 電話正確，代理會跟進。",
+        },
+      ]);
+    } catch {
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", text: "暫時未能記錄轉介要求，請稍後再試。" },
+      ]);
+    } finally {
+      setHandoffLoading(false);
     }
   }
 
@@ -155,6 +197,30 @@ export function LiveAgentWidget() {
           <div className="mr-8 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
             <LoaderCircle className="h-4 w-4 animate-spin" />
             回覆中
+          </div>
+        ) : null}
+        {showHandoffPanel ? (
+          <div className="space-y-2 border-t pt-3">
+            <Input
+              value={handoffPhone}
+              onChange={(event) => setHandoffPhone(event.target.value)}
+              placeholder="WhatsApp 電話"
+              aria-label="WhatsApp phone for handoff"
+              autoComplete="tel"
+            />
+            <Button
+              onClick={requestHandoff}
+              type="button"
+              variant="outline"
+              disabled={handoffLoading}
+            >
+              {handoffLoading ? (
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+              ) : (
+                <Phone className="h-4 w-4" />
+              )}
+              轉介代理
+            </Button>
           </div>
         ) : null}
         <div ref={scrollRef} />

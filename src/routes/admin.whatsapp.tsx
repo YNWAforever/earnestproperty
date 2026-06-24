@@ -24,6 +24,7 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
   fetchAdminAgents,
   fetchAdminConversation,
+  fetchAdminConversationAiAssist,
   fetchAdminConversations,
   fetchAdminWoztellStatus,
   sendAdminConversationReply,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/neon/admin-data";
 import type {
   AdminAgentRow,
+  AdminConversationAiAssist,
   AdminConversationDetail,
   AdminConversationMessageRow,
   AdminConversationRow,
@@ -74,6 +76,7 @@ function AdminWhatsapp() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminConversationDetail | null>(null);
+  const [aiAssist, setAiAssist] = useState<AdminConversationAiAssist | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -81,6 +84,7 @@ function AdminWhatsapp() {
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
+  const aiAssistRequestRef = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
 
   const selectedRow = useMemo(
@@ -111,6 +115,24 @@ function AdminWhatsapp() {
     }
   }, [user]);
 
+  const loadConversationAiAssist = useCallback(
+    async (id: string) => {
+      const requestId = aiAssistRequestRef.current + 1;
+      aiAssistRequestRef.current = requestId;
+      setAiAssist(null);
+
+      try {
+        const assist = await fetchAdminConversationAiAssist({ data: { conversationId: id } });
+        if (requestId !== aiAssistRequestRef.current || !canApplyConversationDetail(id)) return;
+        setAiAssist(assist as AdminConversationAiAssist);
+      } catch {
+        if (requestId !== aiAssistRequestRef.current || !canApplyConversationDetail(id)) return;
+        setAiAssist(null);
+      }
+    },
+    [canApplyConversationDetail],
+  );
+
   const loadConversationDetail = useCallback(
     async (id: string, options: { resetReply?: boolean } = {}) => {
       const requestId = detailRequestRef.current + 1;
@@ -125,6 +147,7 @@ function AdminWhatsapp() {
 
         const conversation = data as AdminConversationDetail;
         setDetail(conversation);
+        loadConversationAiAssist(id);
         if (options.resetReply) setReplyBody("");
         return conversation;
       } catch (err) {
@@ -141,7 +164,7 @@ function AdminWhatsapp() {
         }
       }
     },
-    [canApplyConversationDetail],
+    [canApplyConversationDetail, loadConversationAiAssist],
   );
 
   useEffect(() => {
@@ -201,7 +224,9 @@ function AdminWhatsapp() {
 
   function clearConversationDetail(loading = false) {
     detailRequestRef.current += 1;
+    aiAssistRequestRef.current += 1;
     setDetail(null);
+    setAiAssist(null);
     setDetailError(null);
     setDetailLoading(loading);
     setReplyBody("");
@@ -356,6 +381,7 @@ function AdminWhatsapp() {
               loading={detailLoading}
               error={detailError}
               replyBody={replyBody}
+              aiAssist={aiAssist}
               woztellEnabled={woztellEnabled}
               disabled={isMutating}
               savingConversation={mutatingAction === "conversation"}
@@ -395,6 +421,7 @@ function AdminWhatsapp() {
           loading={detailLoading}
           error={detailError}
           replyBody={replyBody}
+          aiAssist={aiAssist}
           woztellEnabled={woztellEnabled}
           disabled={isMutating}
           savingConversation={mutatingAction === "conversation"}
@@ -499,6 +526,7 @@ function ConversationWorkspace({
   loading,
   error,
   replyBody,
+  aiAssist,
   woztellEnabled,
   disabled,
   savingConversation,
@@ -513,6 +541,7 @@ function ConversationWorkspace({
   loading: boolean;
   error: string | null;
   replyBody: string;
+  aiAssist: AdminConversationAiAssist | null;
   woztellEnabled: boolean | null;
   disabled: boolean;
   savingConversation: boolean;
@@ -599,6 +628,7 @@ function ConversationWorkspace({
       <MessageTimeline messages={detail.messages} />
 
       <footer className="border-t p-4">
+        <AiAssistPanel aiAssist={aiAssist} onUseReply={onReplyBodyChange} />
         <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           回覆只可在客戶最後 inbound 後 24 小時內發送，且 WOZTELL_ENABLED 必須為 true。
           {availability.reason ? (
@@ -621,6 +651,45 @@ function ConversationWorkspace({
         </div>
       </footer>
     </div>
+  );
+}
+
+function AiAssistPanel({
+  aiAssist,
+  onUseReply,
+}: {
+  aiAssist: AdminConversationAiAssist | null;
+  onUseReply: (value: string) => void;
+}) {
+  return (
+    <Card className="mb-3">
+      <CardContent className="space-y-2 p-4">
+        <p className="font-medium">AI Assist</p>
+        {aiAssist ? (
+          <>
+            <p className="text-sm">{aiAssist.summary}</p>
+            <p className="text-xs text-muted-foreground">
+              Intent: {aiAssist.detectedIntent ?? "unknown"} · Urgency:{" "}
+              {aiAssist.urgency ?? "normal"}
+            </p>
+            {aiAssist.handoffNote ? (
+              <p className="text-xs text-muted-foreground">{aiAssist.handoffNote}</p>
+            ) : null}
+            {aiAssist.suggestedReply ? (
+              <Button
+                onClick={() => onUseReply(aiAssist.suggestedReply ?? "")}
+                type="button"
+                variant="outline"
+              >
+                Use suggested reply
+              </Button>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">未有 AI assist。</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
