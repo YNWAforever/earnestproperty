@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createHash } from "node:crypto";
 
-import { queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
+import { getSql, queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { AiKnowledgeChunk, AiKnowledgeSourceType, AiVisibility } from "./ai-types";
 import {
@@ -63,6 +63,13 @@ type PreparedKnowledgeChunk = {
   embedding: string | null;
   content_hash: string;
 };
+
+const MANAGED_REBUILD_SOURCE_TYPES: AiKnowledgeSourceType[] = [
+  "faq",
+  "estate",
+  "article",
+  "listing",
+];
 
 export async function rebuildAiKnowledgeIndex() {
   const sources = await fetchPublicKnowledgeSources();
@@ -374,50 +381,61 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
 }
 
 async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledgeChunk[]) {
-  await queryRows("DELETE FROM ai_knowledge_chunks WHERE source_id = $1", [sourceId]);
-  await queryRows(
-    `INSERT INTO ai_knowledge_chunks (
-      source_id, sort_order, chunk_text, summary, metadata, estate_slug, district_slug,
-      listing_id, visibility, freshness_score, embedding, content_hash, stale, updated_at
-    )
-    SELECT
-      $1::uuid,
-      chunk.sort_order,
-      chunk.chunk_text,
-      chunk.summary,
-      chunk.metadata,
-      chunk.estate_slug,
-      chunk.district_slug,
-      chunk.listing_id::uuid,
-      chunk.visibility::ai_visibility,
-      chunk.freshness_score,
-      chunk.embedding::vector,
-      chunk.content_hash,
-      false,
-      now()
-    FROM jsonb_to_recordset($2::jsonb) AS chunk(
-      sort_order integer,
-      chunk_text text,
-      summary text,
-      metadata jsonb,
-      estate_slug text,
-      district_slug text,
-      listing_id text,
-      visibility text,
-      freshness_score numeric,
-      embedding text,
-      content_hash text
-    )`,
-    [sourceId, JSON.stringify(chunks)],
-  );
+  const sql = getSql();
+  await sql.transaction((tx) => [
+    tx.query("DELETE FROM ai_knowledge_chunks WHERE source_id = $1", [sourceId]),
+    tx.query(
+      `INSERT INTO ai_knowledge_chunks (
+        source_id, sort_order, chunk_text, summary, metadata, estate_slug, district_slug,
+        listing_id, visibility, freshness_score, embedding, content_hash, stale, updated_at
+      )
+      SELECT
+        $1::uuid,
+        chunk.sort_order,
+        chunk.chunk_text,
+        chunk.summary,
+        chunk.metadata,
+        chunk.estate_slug,
+        chunk.district_slug,
+        chunk.listing_id::uuid,
+        chunk.visibility::ai_visibility,
+        chunk.freshness_score,
+        chunk.embedding::vector,
+        chunk.content_hash,
+        false,
+        now()
+      FROM jsonb_to_recordset($2::jsonb) AS chunk(
+        sort_order integer,
+        chunk_text text,
+        summary text,
+        metadata jsonb,
+        estate_slug text,
+        district_slug text,
+        listing_id text,
+        visibility text,
+        freshness_score numeric,
+        embedding text,
+        content_hash text
+      )`,
+      [sourceId, JSON.stringify(chunks)],
+    ),
+  ]);
 }
 
 async function reconcileUnobservedKnowledgeSources(observedSources: ObservedKnowledgeSource[]) {
   if (observedSources.length === 0) {
     await queryRows(
-      "UPDATE ai_knowledge_sources SET published = false, public_visibility = 'staff', updated_at = now()",
+      `WITH obsolete AS (
+         UPDATE ai_knowledge_sources
+         SET published = false, public_visibility = 'staff', updated_at = now()
+         WHERE source_type::text = ANY($1::text[])
+         RETURNING id
+       )
+       UPDATE ai_knowledge_chunks c
+       SET stale = true, updated_at = now()
+       WHERE c.source_id IN (SELECT id FROM obsolete)`,
+      [MANAGED_REBUILD_SOURCE_TYPES],
     );
-    await queryRows("UPDATE ai_knowledge_chunks SET stale = true, updated_at = now()");
     return;
   }
 
@@ -431,7 +449,8 @@ async function reconcileUnobservedKnowledgeSources(observedSources: ObservedKnow
      obsolete AS (
        UPDATE ai_knowledge_sources s
        SET published = false, public_visibility = 'staff', updated_at = now()
-       WHERE NOT EXISTS (
+       WHERE s.source_type::text = ANY($2::text[])
+         AND NOT EXISTS (
          SELECT 1
          FROM observed o
          WHERE o.source_type = s.source_type
@@ -442,7 +461,7 @@ async function reconcileUnobservedKnowledgeSources(observedSources: ObservedKnow
      UPDATE ai_knowledge_chunks c
      SET stale = true, updated_at = now()
      WHERE c.source_id IN (SELECT id FROM obsolete)`,
-    [JSON.stringify(observedSources)],
+    [JSON.stringify(observedSources), MANAGED_REBUILD_SOURCE_TYPES],
   );
 }
 
