@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Brain, RefreshCw, Save, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -42,6 +42,12 @@ type SegmentMutationResult = {
   eligible?: number;
 };
 
+type AdminCrmSegmentPreviewState = {
+  result: AdminCrmSegmentPreview;
+  prompt: string;
+  segmentId: string;
+};
+
 const defaultPrompt = "深井買家，預算 800-1000 萬，最近 90 日查詢，有 WhatsApp opt-in";
 
 export const Route = createFileRoute("/admin/segments")({
@@ -58,12 +64,20 @@ function AdminSegments() {
   const [name, setName] = useState("深井買家 WhatsApp Segment");
   const [status, setStatus] = useState<AdminCrmSegmentRow["status"]>("active");
   const [prompt, setPrompt] = useState(defaultPrompt);
-  const [preview, setPreview] = useState<AdminCrmSegmentPreview | null>(null);
+  const [previewState, setPreviewState] = useState<AdminCrmSegmentPreviewState | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [materializing, setMaterializing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const previewRequestRef = useRef(0);
+  const editorContextRef = useRef({ prompt: defaultPrompt, segmentId: "" });
+
+  const clearPreviewState = useCallback(() => {
+    previewRequestRef.current += 1;
+    setPreviewLoading(false);
+    setPreviewState(null);
+  }, []);
 
   const refreshSegments = useCallback(
     async (preferredSegmentId?: string) => {
@@ -71,14 +85,21 @@ function AdminSegments() {
       setLoading(true);
       try {
         const rows = (await fetchAdminCrmSegments()) as AdminCrmSegmentRow[];
+        const preferredSegment = preferredSegmentId
+          ? rows.find((segment) => segment.id === preferredSegmentId)
+          : null;
         setSegments(rows);
         setSelectedSegmentId((current) => {
-          if (preferredSegmentId && rows.some((segment) => segment.id === preferredSegmentId)) {
-            return preferredSegmentId;
-          }
+          if (preferredSegment) return preferredSegment.id;
           if (current && rows.some((segment) => segment.id === current)) return current;
-          return rows[0]?.id ?? "";
+          return "";
         });
+        if (preferredSegment) {
+          setName(preferredSegment.name);
+          setStatus(preferredSegment.status);
+          setPrompt(preferredSegment.natural_language_prompt);
+          clearPreviewState();
+        }
         setError(null);
       } catch (err) {
         setError(errorText(err));
@@ -86,17 +107,30 @@ function AdminSegments() {
         setLoading(false);
       }
     },
-    [user],
+    [clearPreviewState, user],
   );
 
   useEffect(() => {
     refreshSegments();
   }, [refreshSegments]);
 
+  useEffect(() => {
+    editorContextRef.current = { prompt: prompt.trim(), segmentId: selectedSegmentId };
+  }, [prompt, selectedSegmentId]);
+
   const selectedSegment = useMemo(
     () => segments?.find((segment) => segment.id === selectedSegmentId) ?? null,
     [segments, selectedSegmentId],
   );
+
+  const preview = previewState?.result ?? null;
+  const hasCurrentPreview =
+    previewState?.prompt === prompt.trim() && previewState.segmentId === selectedSegmentId;
+  const selectedSegmentPromptMatches = selectedSegment?.natural_language_prompt === prompt.trim();
+  const canSaveSegment = Boolean(
+    name.trim() && prompt.trim() && (hasCurrentPreview || selectedSegmentPromptMatches),
+  );
+  const canMaterializeSegment = Boolean(selectedSegmentId && selectedSegmentPromptMatches);
 
   const previewSummary = useMemo(() => {
     if (!preview) return "No preview";
@@ -109,7 +143,7 @@ function AdminSegments() {
       setName("深井買家 WhatsApp Segment");
       setStatus("active");
       setPrompt(defaultPrompt);
-      setPreview(null);
+      clearPreviewState();
       return;
     }
     const segment = segments?.find((item) => item.id === segmentId);
@@ -118,26 +152,45 @@ function AdminSegments() {
     setName(segment.name);
     setStatus(segment.status);
     setPrompt(segment.natural_language_prompt);
-    setPreview(null);
+    clearPreviewState();
+  }
+
+  function isCurrentPreview(requestId: number, previewPrompt: string, previewSegmentId: string) {
+    const current = editorContextRef.current;
+    return (
+      requestId === previewRequestRef.current &&
+      current.prompt === previewPrompt &&
+      current.segmentId === previewSegmentId
+    );
   }
 
   async function runPreview() {
-    if (!prompt.trim()) {
+    const previewPrompt = prompt.trim();
+    const previewSegmentId = selectedSegmentId;
+    if (!previewPrompt) {
       toast.error("請輸入 segment prompt");
       return;
     }
 
+    const requestId = previewRequestRef.current + 1;
+    previewRequestRef.current = requestId;
+    setPreviewState(null);
     setPreviewLoading(true);
     try {
       const result = (await previewAdminCrmSegment({
-        data: { prompt: prompt.trim() },
+        data: { prompt: previewPrompt },
       })) as AdminCrmSegmentPreview;
-      setPreview(result);
+      if (!isCurrentPreview(requestId, previewPrompt, previewSegmentId)) return;
+      setPreviewState({
+        result,
+        prompt: previewPrompt,
+        segmentId: previewSegmentId,
+      });
       toast.success("Segment preview ready");
     } catch (err) {
-      toast.error(errorText(err));
+      if (requestId === previewRequestRef.current) toast.error(errorText(err));
     } finally {
-      setPreviewLoading(false);
+      if (requestId === previewRequestRef.current) setPreviewLoading(false);
     }
   }
 
@@ -152,8 +205,9 @@ function AdminSegments() {
     }
 
     const trimmedPrompt = prompt.trim();
+    const currentPreview = hasCurrentPreview ? previewState?.result : null;
     const filters =
-      preview?.filters ??
+      currentPreview?.filters ??
       (selectedSegment?.natural_language_prompt === trimmedPrompt
         ? selectedSegment.structured_filters
         : null);
@@ -185,8 +239,8 @@ function AdminSegments() {
   }
 
   async function materializeSegment() {
-    if (!selectedSegmentId) {
-      toast.error("請先選擇已儲存 segment");
+    if (!canMaterializeSegment) {
+      toast.error("請先選擇並儲存 segment");
       return;
     }
 
@@ -239,7 +293,7 @@ function AdminSegments() {
               <Brain />
               Preview
             </Button>
-            <Button type="button" onClick={saveSegment} disabled={saving}>
+            <Button type="button" onClick={saveSegment} disabled={!canSaveSegment || saving}>
               <Save />
               Save
             </Button>
@@ -247,7 +301,7 @@ function AdminSegments() {
               type="button"
               variant="outline"
               onClick={materializeSegment}
-              disabled={!selectedSegmentId || materializing}
+              disabled={!canMaterializeSegment || materializing}
             >
               <Users />
               Materialize
@@ -302,7 +356,7 @@ function AdminSegments() {
                 value={prompt}
                 onChange={(event) => {
                   setPrompt(event.target.value);
-                  setPreview(null);
+                  clearPreviewState();
                 }}
                 aria-label="Segment prompt"
                 rows={4}

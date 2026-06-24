@@ -371,3 +371,18 @@ test("AI CRM, segment, and live-agent routes are wired", () => {
     }
   }
 });
+
+test("admin segment editor guards selected segment and preview context", () => {
+  const source = read("src/routes/admin.segments.tsx");
+
+  assert.doesNotMatch(source, /return rows\[0\]\?\.id \?\? ""/);
+  assert.match(source, /type AdminCrmSegmentPreviewState/);
+  assert.match(source, /previewRequestRef/);
+  assert.match(source, /isCurrentPreview/);
+  assert.match(source, /setPreviewState\(\{\s*result,/);
+  assert.match(source, /prompt: previewPrompt/);
+  assert.match(source, /segmentId: previewSegmentId/);
+  assert.match(source, /previewState\?\.result/);
+  assert.match(source, /disabled=\{!canSaveSegment \|\| saving\}/);
+  assert.match(source, /disabled=\{!canMaterializeSegment \|\| materializing\}/);
+});
