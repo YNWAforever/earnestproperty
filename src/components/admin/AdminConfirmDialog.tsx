@@ -47,12 +47,7 @@ export function AdminConfirmDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDisabled}>取消</AlertDialogCancel>
-          <Button
-            disabled={isDisabled}
-            onClick={onConfirm}
-            type="button"
-            variant={confirmVariant}
-          >
+          <Button disabled={isDisabled} onClick={onConfirm} type="button" variant={confirmVariant}>
             {isPending ? "處理中…" : confirmLabel}
           </Button>
         </AlertDialogFooter>
