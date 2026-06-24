@@ -66,6 +66,7 @@
     "@tanstack/router-plugin": "^1.167.10",
     "@tanstack/zod-adapter": "^1.166.9",
     "@vercel/blob": "^2.4.1",
+    "ai": "^6.0.209",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
