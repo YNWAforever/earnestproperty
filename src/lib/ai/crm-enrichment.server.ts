@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import {
   dateOrNull,
+  getSql,
   numberOrNull,
   queryRows,
   stringOrEmpty,
@@ -100,16 +101,11 @@ export async function analyzeCrmLead(leadId: string) {
     last_activity_days: lead.last_activity_days,
   });
 
-  await upsertProfile(lead, {
-    summary: value.summary,
-    urgency: value.urgency,
-    timeline: value.timeline,
-    next_best_action: value.next_best_action,
-    lead_score: leadScore,
-  });
+  const factualTagSet = new Set(factualTags);
+  const tags: TagValues[] = [];
 
   for (const tag of factualTags) {
-    await upsertTag({
+    tags.push({
       lead_id: lead.id,
       contact_id: lead.contact_id,
       tag,
@@ -120,15 +116,28 @@ export async function analyzeCrmLead(leadId: string) {
   }
 
   for (const suggestion of value.suggested_tags) {
-    await upsertTag({
+    if (factualTagSet.has(suggestion.tag)) continue;
+    tags.push({
       lead_id: lead.id,
       contact_id: lead.contact_id,
       tag: suggestion.tag,
       confidence: suggestion.confidence,
       reason: suggestion.reason,
-      status: canAutoApplyAiTag(suggestion.tag) ? "auto_applied" : "suggested",
+      status: "suggested",
     });
   }
+
+  await writeLeadAnalysis(
+    lead,
+    {
+      summary: value.summary,
+      urgency: value.urgency,
+      timeline: value.timeline,
+      next_best_action: value.next_best_action,
+      lead_score: leadScore,
+    },
+    mergeTagInputs(tags),
+  );
 
   return fetchCrmAiProfile({ leadId });
 }
@@ -146,10 +155,20 @@ export async function fetchCrmAiProfile(input: { leadId?: string; contactId?: st
     [input.leadId ?? null, input.contactId ?? null],
   );
   const tags = await queryRows(
-    `SELECT *
-     FROM crm_ai_tags
-     WHERE ($1::uuid IS NULL OR lead_id = $1::uuid)
-       AND ($2::uuid IS NULL OR contact_id = $2::uuid)
+    `WITH ranked AS (
+       SELECT
+         *,
+         row_number() OVER (
+           PARTITION BY tag
+           ORDER BY ${tagRankSql()}, confidence DESC, created_at DESC, id
+         ) AS tag_rank
+       FROM crm_ai_tags
+       WHERE ($1::uuid IS NULL OR lead_id = $1::uuid)
+         AND ($2::uuid IS NULL OR contact_id = $2::uuid)
+     )
+     SELECT *
+     FROM ranked
+     WHERE tag_rank = 1
      ORDER BY status ASC, confidence DESC, created_at DESC`,
     [input.leadId ?? null, input.contactId ?? null],
   );
@@ -215,83 +234,60 @@ async function fetchLeadInput(leadId: string): Promise<LeadInput | null> {
   };
 }
 
-async function upsertProfile(lead: LeadInput, values: ProfileValues) {
-  const params = profileParams(lead, values);
-  const updated = await queryRows(
-    `UPDATE crm_ai_profiles
-     SET intent = $3,
-         intent_confidence = $4,
-         budget_band = $5,
-         preferred_estates = $6::text[],
-         urgency = $7,
-         timeline = $8,
-         language = $9,
-         lead_score = $10,
-         next_best_action = $11,
-         summary = $12,
-         last_analyzed_at = now(),
-         updated_at = now()
-     WHERE ${profileIdentitySql()}
-     RETURNING *`,
-    params,
-  );
-  if (updated[0]) return mapProfile(updated[0]);
-
-  const inserted = await queryRows(
-    `INSERT INTO crm_ai_profiles (
-       contact_id, lead_id, intent, intent_confidence, budget_band, preferred_estates, urgency,
-       timeline, language, lead_score, next_best_action, summary, last_analyzed_at, updated_at
-     )
-     VALUES ($1,$2,$3,$4,$5,$6::text[],$7,$8,$9,$10,$11,$12,now(),now())
-     RETURNING *`,
-    params,
-  );
-  return inserted[0] ? mapProfile(inserted[0]) : null;
-}
-
-async function upsertTag(input: TagValues) {
-  const safety = classifyAiTagSafety(input.tag);
-  const params = [
-    input.contact_id,
-    input.lead_id,
-    input.tag,
-    tagCategory(input.tag),
-    safety,
-    input.status,
-    clampConfidence(input.confidence),
-    input.reason,
-  ];
-  const updated = await queryRows(
-    `UPDATE crm_ai_tags
-     SET category = $4,
-         safety_level = $5::crm_ai_tag_safety,
-         status = CASE
-           WHEN status IN ('approved', 'rejected') THEN status
-           ELSE $6::crm_ai_tag_status
-         END,
-         confidence = GREATEST(confidence, $7),
-         reason = $8
-     WHERE ${tagIdentitySql()}
-       AND tag = $3
-     RETURNING *`,
-    params,
-  );
-  if (updated[0]) return mapTag(updated[0]);
-
-  const inserted = await queryRows(
-    `INSERT INTO crm_ai_tags (
-       contact_id, lead_id, tag, category, safety_level, status, confidence, reason, created_by_ai
-     )
-     VALUES ($1,$2,$3,$4,$5::crm_ai_tag_safety,$6::crm_ai_tag_status,$7,$8,true)
-     RETURNING *`,
-    params,
-  );
-  return inserted[0] ? mapTag(inserted[0]) : null;
+async function writeLeadAnalysis(lead: LeadInput, values: ProfileValues, tags: TagValues[]) {
+  const sql = getSql();
+  await sql.transaction((tx) => [
+    tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`crm-ai-lead:${lead.id}`]),
+    tx.query(
+      `DELETE FROM crm_ai_profiles profile
+       USING (
+         SELECT
+           id,
+           row_number() OVER (
+             ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST, id
+           ) AS row_rank
+         FROM crm_ai_profiles
+         WHERE lead_id = $1::uuid
+       ) ranked
+       WHERE profile.id = ranked.id
+         AND ranked.row_rank > 1`,
+      [lead.id],
+    ),
+    tx.query(
+      `DELETE FROM crm_ai_tags tag
+       USING (
+         SELECT
+           id,
+           row_number() OVER (
+             PARTITION BY lead_id, tag
+             ORDER BY ${tagRankSql()}, confidence DESC, created_at DESC, id
+           ) AS row_rank
+         FROM crm_ai_tags
+         WHERE lead_id = $1::uuid
+       ) ranked
+       WHERE tag.id = ranked.id
+         AND ranked.row_rank > 1`,
+      [lead.id],
+    ),
+    tx.query(
+      `UPDATE crm_ai_profiles
+       SET contact_id = (SELECT contact_id FROM crm_leads WHERE id = $1::uuid)
+       WHERE lead_id = $1::uuid`,
+      [lead.id],
+    ),
+    tx.query(
+      `UPDATE crm_ai_tags
+       SET contact_id = (SELECT contact_id FROM crm_leads WHERE id = $1::uuid)
+       WHERE lead_id = $1::uuid`,
+      [lead.id],
+    ),
+    tx.query(profileUpsertSql(), profileParams(lead, values)),
+    tx.query(tagUpsertSql(), [lead.id, JSON.stringify(tags.map(tagRecord))]),
+  ]);
 }
 
 function profileParams(lead: LeadInput, values: ProfileValues) {
   return [
-    lead.contact_id,
     lead.id,
     lead.intent,
     lead.intent ? 0.8 : 0.2,
@@ -306,20 +302,167 @@ function profileParams(lead: LeadInput, values: ProfileValues) {
   ];
 }
 
-function profileIdentitySql() {
-  return `(
-    ($1::uuid IS NOT NULL AND $2::uuid IS NOT NULL AND contact_id = $1::uuid AND lead_id = $2::uuid)
-    OR ($1::uuid IS NULL AND $2::uuid IS NOT NULL AND contact_id IS NULL AND lead_id = $2::uuid)
-    OR ($1::uuid IS NOT NULL AND $2::uuid IS NULL AND contact_id = $1::uuid AND lead_id IS NULL)
-  )`;
+function profileUpsertSql() {
+  return `WITH current_lead AS (
+    SELECT contact_id
+    FROM crm_leads
+    WHERE id = $1::uuid
+  ),
+  updated AS (
+    UPDATE crm_ai_profiles
+    SET contact_id = (SELECT contact_id FROM current_lead),
+        intent = $2,
+        intent_confidence = $3,
+        budget_band = $4,
+        preferred_estates = $5::text[],
+        urgency = $6,
+        timeline = $7,
+        language = $8,
+        lead_score = $9,
+        next_best_action = $10,
+        summary = $11,
+        last_analyzed_at = now(),
+        updated_at = now()
+    WHERE lead_id = $1::uuid
+    RETURNING *
+  ),
+  inserted AS (
+    INSERT INTO crm_ai_profiles (
+      contact_id, lead_id, intent, intent_confidence, budget_band, preferred_estates, urgency,
+      timeline, language, lead_score, next_best_action, summary, last_analyzed_at, updated_at
+    )
+    SELECT
+      current_lead.contact_id,
+      $1::uuid,
+      $2,
+      $3,
+      $4,
+      $5::text[],
+      $6,
+      $7,
+      $8,
+      $9,
+      $10,
+      $11,
+      now(),
+      now()
+    FROM current_lead
+    WHERE NOT EXISTS (SELECT 1 FROM updated)
+    RETURNING *
+  )
+  SELECT * FROM updated
+  UNION ALL
+  SELECT * FROM inserted
+  LIMIT 1`;
 }
 
-function tagIdentitySql() {
-  return `(
-    ($1::uuid IS NOT NULL AND $2::uuid IS NOT NULL AND contact_id = $1::uuid AND lead_id = $2::uuid)
-    OR ($1::uuid IS NULL AND $2::uuid IS NOT NULL AND contact_id IS NULL AND lead_id = $2::uuid)
-    OR ($1::uuid IS NOT NULL AND $2::uuid IS NULL AND contact_id = $1::uuid AND lead_id IS NULL)
-  )`;
+function tagUpsertSql() {
+  return `WITH current_lead AS (
+    SELECT contact_id
+    FROM crm_leads
+    WHERE id = $1::uuid
+  ),
+  input AS (
+    SELECT
+      current_lead.contact_id,
+      $1::uuid AS lead_id,
+      input_tag.tag,
+      input_tag.category,
+      input_tag.safety_level,
+      input_tag.status,
+      input_tag.confidence,
+      input_tag.reason
+    FROM current_lead
+    CROSS JOIN jsonb_to_recordset($2::jsonb) AS input_tag(
+      tag text,
+      category text,
+      safety_level text,
+      status text,
+      confidence numeric,
+      reason text
+    )
+  ),
+  updated AS (
+    UPDATE crm_ai_tags existing
+    SET contact_id = input.contact_id,
+        category = input.category,
+        safety_level = input.safety_level::crm_ai_tag_safety,
+        status = CASE
+          WHEN existing.status IN ('approved', 'rejected') THEN existing.status
+          ELSE input.status::crm_ai_tag_status
+        END,
+        confidence = GREATEST(existing.confidence, input.confidence),
+        reason = input.reason
+    FROM input
+    WHERE existing.lead_id = input.lead_id
+      AND existing.tag = input.tag
+    RETURNING existing.*
+  ),
+  inserted AS (
+    INSERT INTO crm_ai_tags (
+      contact_id, lead_id, tag, category, safety_level, status, confidence, reason, created_by_ai
+    )
+    SELECT
+      input.contact_id,
+      input.lead_id,
+      input.tag,
+      input.category,
+      input.safety_level::crm_ai_tag_safety,
+      input.status::crm_ai_tag_status,
+      input.confidence,
+      input.reason,
+      true
+    FROM input
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM updated
+      WHERE updated.lead_id = input.lead_id
+        AND updated.tag = input.tag
+    )
+    RETURNING *
+  )
+  SELECT * FROM updated
+  UNION ALL
+  SELECT * FROM inserted`;
+}
+
+function mergeTagInputs(tags: TagValues[]) {
+  const byTag = new Map<string, TagValues>();
+  for (const tag of tags) {
+    const normalizedTag = tag.tag.trim();
+    if (!normalizedTag) continue;
+
+    const existing = byTag.get(normalizedTag);
+    if (!existing) {
+      byTag.set(normalizedTag, { ...tag, tag: normalizedTag });
+      continue;
+    }
+
+    existing.confidence = Math.max(existing.confidence, tag.confidence);
+    if (tag.status === "auto_applied") existing.status = "auto_applied";
+    if (tag.reason && tag.confidence >= existing.confidence) existing.reason = tag.reason;
+  }
+  return Array.from(byTag.values());
+}
+
+function tagRecord(input: TagValues) {
+  return {
+    tag: input.tag,
+    category: tagCategory(input.tag),
+    safety_level: classifyAiTagSafety(input.tag),
+    status: input.status,
+    confidence: clampConfidence(input.confidence),
+    reason: input.reason,
+  };
+}
+
+function tagRankSql() {
+  return `CASE status
+    WHEN 'approved' THEN 0
+    WHEN 'rejected' THEN 1
+    WHEN 'auto_applied' THEN 2
+    ELSE 3
+  END`;
 }
 
 function normalizeAiResponse(

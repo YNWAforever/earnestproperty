@@ -80,6 +80,18 @@ test("server-only AI secrets stay out of browser-safe modules", () => {
   }
 });
 
+test("CRM AI model suggestions stay suggested until staff review", () => {
+  const source = read("src/lib/ai/crm-enrichment.server.ts");
+  const suggestedTagLoop =
+    source.match(
+      /for \(const suggestion of value\.suggested_tags\) \{[\s\S]*?tags\.push\(\{[\s\S]*?\}\);\n  \}/,
+    )?.[0] ?? "";
+
+  assert.notEqual(suggestedTagLoop, "", "crm-enrichment should persist AI suggested tags");
+  assert.match(suggestedTagLoop, /status:\s*"suggested"/);
+  assert.doesNotMatch(suggestedTagLoop, /canAutoApplyAiTag\(suggestion\.tag\)/);
+});
+
 test("admin data layer exposes staff-guarded AI functions", () => {
   const client = read("src/lib/neon/admin-data.ts");
   const server = read("src/lib/neon/admin-data.server.ts");
