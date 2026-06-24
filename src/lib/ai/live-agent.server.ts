@@ -159,13 +159,21 @@ export async function requestLiveAgentHandoff(input: {
   const preferredEstates = leadInput.preferred_estates.map((estate) => estate.slice(0, 120));
   const note = `Live agent handoff from ${leadInput.source_path ?? "public site"}`;
 
-  const contactId = await upsertLiveAgentContact({
-    name,
-    phone,
-    normalizedPhone: leadInput.normalized_phone,
-    email,
-    optInWhatsapp: leadInput.opt_in_whatsapp,
-  });
+  const contactId = session.contact_id
+    ? await updateLiveAgentContact({
+        contactId: session.contact_id,
+        name,
+        phone,
+        email,
+        optInWhatsapp: leadInput.opt_in_whatsapp,
+      })
+    : await upsertLiveAgentContact({
+        name,
+        phone,
+        normalizedPhone: leadInput.normalized_phone,
+        email,
+        optInWhatsapp: leadInput.opt_in_whatsapp,
+      });
   const leadId = await upsertLiveAgentLead({
     leadId: session.lead_id,
     contactId,
@@ -175,10 +183,11 @@ export async function requestLiveAgentHandoff(input: {
     preferredEstates,
     note,
   });
-  const conversationId = await upsertLiveAgentConversation({
+  const conversationId = await resolveExistingWoztellConversation({
     conversationId: session.conversation_id,
     contactId,
   });
+  const transitioningToHandoff = session.status !== "handoff_requested";
 
   await queryRows(
     `UPDATE live_agent_sessions
@@ -206,30 +215,32 @@ export async function requestLiveAgentHandoff(input: {
     ],
   );
 
-  await queryRows(
-    `INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
-     VALUES ($1,$2,'follow_up',$3)`,
-    [leadId, contactId, note],
-  );
-  await queryRows(
-    `INSERT INTO live_agent_messages (session_id, direction, message_text, safety_flags, shown_publicly)
-     VALUES ($1,'system',$2,$3::text[],false)`,
-    [session.id, "Live-agent handoff requested for WhatsApp follow-up.", ["handoff_requested"]],
-  );
-  await queryRows(
-    `INSERT INTO ai_audit_logs (actor_type, action, subject_type, subject_id, metadata)
-     VALUES ('visitor','live_agent.handoff','live_agent_session',$1,$2::jsonb)`,
-    [
-      session.id,
-      JSON.stringify({
-        contactId,
-        leadId,
-        conversationId,
-        hasPhone: Boolean(phone),
-        sourcePath: leadInput.source_path,
-      }),
-    ],
-  );
+  if (transitioningToHandoff) {
+    await queryRows(
+      `INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
+       VALUES ($1,$2,'follow_up',$3)`,
+      [leadId, contactId, note],
+    );
+    await queryRows(
+      `INSERT INTO live_agent_messages (session_id, direction, message_text, safety_flags, shown_publicly)
+       VALUES ($1,'system',$2,$3::text[],false)`,
+      [session.id, "Live-agent handoff requested for WhatsApp follow-up.", ["handoff_requested"]],
+    );
+    await queryRows(
+      `INSERT INTO ai_audit_logs (actor_type, action, subject_type, subject_id, metadata)
+       VALUES ('visitor','live_agent.handoff','live_agent_session',$1,$2::jsonb)`,
+      [
+        session.id,
+        JSON.stringify({
+          contactId,
+          leadId,
+          conversationId,
+          hasPhone: Boolean(phone),
+          sourcePath: leadInput.source_path,
+        }),
+      ],
+    );
+  }
 
   return { ok: true, status: "handoff_requested" as const };
 }
@@ -289,7 +300,10 @@ async function upsertLiveAgentContact(input: {
          name = COALESCE(EXCLUDED.name, crm_contacts.name),
          phone = COALESCE(EXCLUDED.phone, crm_contacts.phone),
          email = COALESCE(EXCLUDED.email, crm_contacts.email),
-         opt_in_whatsapp = crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp,
+         opt_in_whatsapp = CASE
+           WHEN crm_contacts.opted_out_whatsapp THEN crm_contacts.opt_in_whatsapp
+           ELSE crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp
+         END,
          updated_at = now()
        RETURNING id`,
       [input.name, input.phone, input.normalizedPhone, input.email, input.optInWhatsapp],
@@ -304,6 +318,37 @@ async function upsertLiveAgentContact(input: {
     [input.name, input.phone, input.email, input.optInWhatsapp],
   );
   return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent contact.").id);
+}
+
+async function updateLiveAgentContact(input: {
+  contactId: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  optInWhatsapp: boolean;
+}) {
+  const rows = await queryRows<{ id: unknown }>(
+    `UPDATE crm_contacts
+     SET name = COALESCE($1, name),
+         phone = COALESCE($2, phone),
+         email = COALESCE($3, email),
+         opt_in_whatsapp = CASE
+           WHEN opted_out_whatsapp THEN opt_in_whatsapp
+           ELSE opt_in_whatsapp OR $4
+         END,
+         updated_at = now()
+     WHERE id=$5
+     RETURNING id`,
+    [input.name, input.phone, input.email, input.optInWhatsapp, input.contactId],
+  );
+  if (rows[0]) return stringOrEmpty(rows[0].id);
+  return upsertLiveAgentContact({
+    name: input.name,
+    phone: input.phone,
+    normalizedPhone: null,
+    email: input.email,
+    optInWhatsapp: input.optInWhatsapp,
+  });
 }
 
 async function upsertLiveAgentLead(input: {
@@ -360,7 +405,7 @@ async function upsertLiveAgentLead(input: {
   return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent lead.").id);
 }
 
-async function upsertLiveAgentConversation(input: {
+async function resolveExistingWoztellConversation(input: {
   conversationId: string | null;
   contactId: string;
 }) {
@@ -372,6 +417,8 @@ async function upsertLiveAgentConversation(input: {
            last_message_at=COALESCE(last_message_at, now()),
            updated_at=now()
        WHERE id=$2
+         AND channel_id IS NOT NULL
+         AND woztell_member_id IS NOT NULL
        RETURNING id`,
       [input.contactId, input.conversationId],
     );
@@ -382,6 +429,8 @@ async function upsertLiveAgentConversation(input: {
     `SELECT id
      FROM whatsapp_conversations
      WHERE contact_id=$1
+       AND channel_id IS NOT NULL
+       AND woztell_member_id IS NOT NULL
      ORDER BY updated_at DESC
      LIMIT 1`,
     [input.contactId],
@@ -398,13 +447,7 @@ async function upsertLiveAgentConversation(input: {
     return stringOrEmpty(existing[0].id);
   }
 
-  const rows = await queryRows<{ id: unknown }>(
-    `INSERT INTO whatsapp_conversations (contact_id, status, last_message_at)
-     VALUES ($1,'pending',now())
-     RETURNING id`,
-    [input.contactId],
-  );
-  return stringOrEmpty(requireRow(rows[0], "Unable to create handoff conversation.").id);
+  return null;
 }
 
 function mapSession(row: LiveAgentSessionRow): LiveAgentSession {

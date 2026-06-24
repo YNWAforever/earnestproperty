@@ -115,6 +115,22 @@ test("public live-agent APIs validate sessions and expose only public session fi
   assert.match(messageRoute, /status:\s*err\.status/);
 });
 
+test("live-agent handoff avoids fake Woztell conversations and implicit opt-in", () => {
+  const server = read("src/lib/ai/live-agent.server.ts");
+  const widget = read("src/components/live-agent/LiveAgentWidget.tsx");
+
+  assert.doesNotMatch(server, /INSERT\s+INTO\s+whatsapp_conversations/i);
+  assert.match(server, /channel_id\s+IS\s+NOT\s+NULL/);
+  assert.match(server, /woztell_member_id\s+IS\s+NOT\s+NULL/);
+  assert.match(server, /opted_out_whatsapp/);
+  assert.match(server, /session\.status\s+!==\s+"handoff_requested"/);
+
+  assert.match(widget, /<Checkbox/);
+  assert.match(widget, /handoffConsent/);
+  assert.doesNotMatch(widget, /opt_in_whatsapp:\s*handoffPhone\.trim\(\)\.length\s*>\s*0/);
+  assert.match(widget, /opt_in_whatsapp:\s*handoffConsent/);
+});
+
 test("CRM AI model suggestions stay suggested until staff review", () => {
   const source = read("src/lib/ai/crm-enrichment.server.ts");
   const suggestedTagLoop =

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, MessageCircle, Phone, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 
 const liveAgentEndpoints = {
@@ -28,6 +29,7 @@ export function LiveAgentWidget() {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [handoffPhone, setHandoffPhone] = useState("");
+  const [handoffConsent, setHandoffConsent] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -107,7 +109,7 @@ export function LiveAgentWidget() {
           sessionId: id,
           phone: handoffPhone,
           intent: "buyer",
-          opt_in_whatsapp: handoffPhone.trim().length > 0,
+          opt_in_whatsapp: handoffConsent,
         }),
       });
       if (!response.ok) throw new Error("Unable to request live-agent handoff.");
@@ -208,6 +210,14 @@ export function LiveAgentWidget() {
               aria-label="WhatsApp phone for handoff"
               autoComplete="tel"
             />
+            <label className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+              <Checkbox
+                checked={handoffConsent}
+                onCheckedChange={(checked) => setHandoffConsent(checked === true)}
+                aria-label="Consent to WhatsApp follow-up"
+              />
+              <span>我同意 Earnest Property 透過 WhatsApp 聯絡我跟進今次查詢。</span>
+            </label>
             <Button
               onClick={requestHandoff}
               type="button"
