@@ -173,6 +173,28 @@ export async function fetchAdminCms() {
   return callStaffServerFn(async () => fetchAdminCmsServer(await withStaffAuthHeaders()));
 }
 
+const fetchAdminAiKnowledgeStatusServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminAiKnowledgeStatus(staff);
+});
+
+export const fetchAdminAiKnowledgeStatus = async function fetchAdminAiKnowledgeStatus() {
+  return callStaffServerFn(async () =>
+    fetchAdminAiKnowledgeStatusServer(await withStaffAuthHeaders()),
+  );
+};
+
+const rebuildAdminAiKnowledgeServer = createServerFn({ method: "POST" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.rebuildAdminAiKnowledge(staff);
+});
+
+export const rebuildAdminAiKnowledge = async function rebuildAdminAiKnowledge() {
+  return callStaffServerFn(async () => rebuildAdminAiKnowledgeServer(await withStaffAuthHeaders()));
+};
+
 const fetchAdminLeadsServer = createServerFn({ method: "GET" }).handler(async () => {
   await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");

@@ -274,3 +274,17 @@ export type AdminBlastOptions = {
   templates: Array<{ id: string; element_name: string; language_code: string; status: string }>;
   audiences: Array<{ id: string; name: string; description: string | null }>;
 };
+
+export type AdminAiKnowledgeStatus = {
+  enabled: boolean;
+  sources: number;
+  chunks: number;
+  publicChunks: number;
+  staleChunks: number;
+  lastIndexedAt: string | null;
+};
+
+export type AdminAiKnowledgeRebuildResult = {
+  indexedSources: number;
+  indexedChunks: number;
+};

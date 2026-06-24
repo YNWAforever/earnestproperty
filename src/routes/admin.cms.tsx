@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Pencil, Plus, Save } from "lucide-react";
+import { Brain, Pencil, Plus, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
@@ -33,13 +33,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
   fetchAdminCms,
+  fetchAdminAiKnowledgeStatus,
   fetchAdminMediaAssets,
+  rebuildAdminAiKnowledge,
   saveAdminArticle,
   saveAdminEstate,
   saveAdminFaq,
   updateAdminMediaAsset,
 } from "@/lib/neon/admin-data";
 import type {
+  AdminAiKnowledgeStatus,
   AdminArticleCmsRow,
   AdminArticleInput,
   AdminCmsData,
@@ -105,6 +108,8 @@ function AdminCms() {
   const { user } = useNeonAuth();
   const [data, setData] = useState<AdminCmsData | null>(null);
   const [mediaAssets, setMediaAssets] = useState<AdminMediaAssetRow[] | null>(null);
+  const [knowledgeStatus, setKnowledgeStatus] = useState<AdminAiKnowledgeStatus | null>(null);
+  const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("estates");
   const [saving, setSaving] = useState(false);
@@ -120,10 +125,21 @@ function AdminCms() {
     setError(null);
   }, []);
 
+  const refreshKnowledgeStatus = useCallback(async () => {
+    if (!user) return;
+    setKnowledgeLoading(true);
+    try {
+      setKnowledgeStatus((await fetchAdminAiKnowledgeStatus()) as AdminAiKnowledgeStatus);
+    } finally {
+      setKnowledgeLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     refreshCmsData().catch((err) => setError(errorText(err)));
-  }, [refreshCmsData, user]);
+    refreshKnowledgeStatus().catch(() => undefined);
+  }, [refreshCmsData, refreshKnowledgeStatus, user]);
 
   const faqsByScope = useMemo(() => {
     const groups = new Map<string, AdminFaqCmsRow[]>();
@@ -228,12 +244,76 @@ function AdminCms() {
     }
   }
 
+  async function handleRebuildKnowledge() {
+    setKnowledgeLoading(true);
+    try {
+      const result = await rebuildAdminAiKnowledge();
+      toast.success(
+        `AI 知識庫已重建：${result.indexedSources} 個來源，${result.indexedChunks} 段內容`,
+      );
+      await refreshKnowledgeStatus();
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setKnowledgeLoading(false);
+    }
+  }
+
   return (
     <AdminShell title="CMS" description="管理屋苑內容、文章、FAQ 及 SEO 資料。">
       {error ? <AdminError message={error} /> : null}
       {!data && !error ? <Skeleton className="h-72 w-full" /> : null}
       {data ? (
         <>
+          <Card className="mb-4">
+            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
+                  <Brain className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">AI Knowledge</CardTitle>
+                  <CardDescription>知識庫索引狀態及重建控制。</CardDescription>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                onClick={handleRebuildKnowledge}
+                disabled={knowledgeLoading}
+              >
+                <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
+                {knowledgeLoading ? (knowledgeStatus ? "重建中…" : "載入中…") : "重建索引"}
+              </Button>
+            </CardHeader>
+            <CardContent className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-6">
+              <div className="flex items-center gap-2">
+                <Badge variant={knowledgeStatus?.enabled ? "default" : "secondary"}>
+                  {knowledgeStatus?.enabled ? "AI 已啟用" : "AI 未啟用"}
+                </Badge>
+              </div>
+              <KnowledgeMetric
+                label="來源"
+                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.sources}
+              />
+              <KnowledgeMetric
+                label="Chunks"
+                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.chunks}
+              />
+              <KnowledgeMetric
+                label="Public"
+                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.publicChunks}
+              />
+              <KnowledgeMetric
+                label="Stale"
+                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.staleChunks}
+              />
+              <KnowledgeMetric
+                label="Last indexed"
+                value={formatDateTime(knowledgeStatus?.lastIndexedAt)}
+              />
+            </CardContent>
+          </Card>
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4 grid h-auto w-full grid-cols-2 md:inline-flex md:w-auto">
               <TabsTrigger value="estates">屋苑 SEO</TabsTrigger>
@@ -908,6 +988,21 @@ function EditorFooter({ saving, onClose }: { saving: boolean; onClose: () => voi
   );
 }
 
+function KnowledgeMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number | string | null | undefined;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="truncate text-sm font-medium">{value ?? "—"}</p>
+    </div>
+  );
+}
+
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="grid gap-2 text-sm font-medium">
@@ -1055,6 +1150,16 @@ function parseNullableNumber(value: string) {
   if (!value.trim()) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("zh-HK", {
+    dateStyle: "short",
+    timeStyle: "short",
+  });
 }
 
 function formatBytes(value: number | null) {

@@ -20,7 +20,11 @@ import type {
   AdminLeadUpdateInput,
   AdminListingFiltersInput,
   AdminAudiencePreview,
+  AdminAiKnowledgeRebuildResult,
+  AdminAiKnowledgeStatus,
 } from "./admin-data.types";
+import { getAiServerConfig } from "../ai/config.server.ts";
+import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import {
   canPrepareAdminCampaignQueue,
   canQueueAdminCampaign,
@@ -384,6 +388,44 @@ export async function fetchAdminAgents() {
     active: row.active === true,
     roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
   }));
+}
+
+export async function fetchAdminAiKnowledgeStatus(
+  actor: StaffAccess,
+): Promise<AdminAiKnowledgeStatus> {
+  void actor;
+  const config = getAiServerConfig();
+  const rows = await queryRows(
+    `SELECT
+       (SELECT count(*)::int FROM ai_knowledge_sources) AS sources,
+       (SELECT count(*)::int FROM ai_knowledge_chunks) AS chunks,
+       (SELECT count(*)::int
+        FROM ai_knowledge_chunks c
+        JOIN ai_knowledge_sources s ON s.id = c.source_id
+        WHERE c.visibility = 'public'
+          AND s.public_visibility = 'public'
+          AND c.stale = false
+          AND s.published = true) AS public_chunks,
+       (SELECT count(*)::int FROM ai_knowledge_chunks WHERE stale = true) AS stale_chunks,
+       (SELECT max(last_indexed_at) FROM ai_knowledge_sources) AS last_indexed_at`,
+  );
+  const row = rows[0] ?? {};
+  return {
+    enabled: config.enabled,
+    sources: numberOrNull(row.sources) ?? 0,
+    chunks: numberOrNull(row.chunks) ?? 0,
+    publicChunks: numberOrNull(row.public_chunks) ?? 0,
+    staleChunks: numberOrNull(row.stale_chunks) ?? 0,
+    lastIndexedAt: dateOrNull(row.last_indexed_at),
+  };
+}
+
+export async function rebuildAdminAiKnowledge(
+  actor: StaffAccess,
+): Promise<AdminAiKnowledgeRebuildResult> {
+  const result = await rebuildAiKnowledgeIndex();
+  await writeAudit(actor.staffId, "ai.knowledge.rebuild", "ai_knowledge", undefined, result);
+  return result;
 }
 
 export async function listAdminCms() {
