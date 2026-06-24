@@ -8,7 +8,10 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 
 test("AI modules expose the expected public and server-only contracts", () => {
   const expectedExports = new Map([
-    ["src/lib/ai/ai-types.ts", ["AiKnowledgeChunk", "CrmAiProfile", "CrmSegment", "LiveAgentSession"]],
+    [
+      "src/lib/ai/ai-types.ts",
+      ["AiKnowledgeChunk", "CrmAiProfile", "CrmSegment", "LiveAgentSession"],
+    ],
     ["src/lib/ai/config.server.ts", ["getAiServerConfig", "isAiEnabled"]],
     ["src/lib/ai/provider.server.ts", ["generateAiText", "generateAiJson", "embedAiTexts"]],
     [
@@ -23,9 +26,15 @@ test("AI modules expose the expected public and server-only contracts", () => {
       "src/lib/ai/crm-rules.ts",
       ["classifyAiTagSafety", "canAutoApplyAiTag", "suggestFactualTags", "scoreLeadProfile"],
     ],
-    ["src/lib/ai/crm-enrichment.server.ts", ["analyzeCrmLead", "fetchCrmAiProfile", "approveCrmAiTag"]],
+    [
+      "src/lib/ai/crm-enrichment.server.ts",
+      ["analyzeCrmLead", "fetchCrmAiProfile", "approveCrmAiTag"],
+    ],
     ["src/lib/ai/segments.ts", ["parseSegmentPromptToFilters", "classifySegmentEligibility"]],
-    ["src/lib/ai/segments.server.ts", ["previewCrmSegment", "saveCrmSegment", "materializeCrmSegment"]],
+    [
+      "src/lib/ai/segments.server.ts",
+      ["previewCrmSegment", "saveCrmSegment", "materializeCrmSegment"],
+    ],
     [
       "src/lib/ai/live-agent.ts",
       ["canUseChunkForPublicAnswer", "buildLiveAgentLeadInput", "shouldOfferHumanHandoff"],
@@ -44,8 +53,8 @@ test("AI modules expose the expected public and server-only contracts", () => {
         new RegExp(
           `(?:` +
             `export\\s+(?:async\\s+function|function|class|interface|type|const|let|var)\\s+${exportName}\\b|` +
-            `export\\s+(?:type\\s+)?\\{[^}]*\\b${exportName}\\b[^}]*\\}`
-          + `)`,
+            `export\\s+(?:type\\s+)?\\{[^}]*\\b${exportName}\\b[^}]*\\}` +
+            `)`,
           "m",
         ),
         `${file} should export ${exportName}`,
@@ -86,7 +95,15 @@ test("admin data layer exposes staff-guarded AI functions", () => {
     "materializeAdminCrmSegment",
     "fetchAdminConversationAiAssist",
   ]) {
-    assert.match(client, new RegExp(`export\\s+const\\s+${name}\\b`), `admin-data.ts should export ${name}`);
-    assert.match(server, new RegExp(`export\\s+async\\s+function\\s+${name}\\b`), `admin-data.server.ts should export ${name}`);
+    assert.match(
+      client,
+      new RegExp(`export\\s+const\\s+${name}\\b`),
+      `admin-data.ts should export ${name}`,
+    );
+    assert.match(
+      server,
+      new RegExp(`export\\s+async\\s+function\\s+${name}\\b`),
+      `admin-data.server.ts should export ${name}`,
+    );
   }
 });

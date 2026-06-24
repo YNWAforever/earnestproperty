@@ -1,9 +1,20 @@
 export type AiVisibility = "public" | "staff";
-export type AiKnowledgeSourceType = "faq" | "estate" | "district" | "article" | "listing" | "manual_public";
+export type AiKnowledgeSourceType =
+  | "faq"
+  | "estate"
+  | "district"
+  | "article"
+  | "listing"
+  | "manual_public";
 export type AiTagSafetyLevel = "factual" | "sensitive" | "judgmental";
 export type AiTagStatus = "suggested" | "approved" | "rejected" | "auto_applied";
 export type CrmSegmentStatus = "draft" | "active" | "archived";
-export type CrmSegmentEligibility = "eligible" | "missing_phone" | "not_opted_in" | "opted_out" | "blocked";
+export type CrmSegmentEligibility =
+  | "eligible"
+  | "missing_phone"
+  | "not_opted_in"
+  | "opted_out"
+  | "blocked";
 
 export type AiKnowledgeSource = {
   id: string;

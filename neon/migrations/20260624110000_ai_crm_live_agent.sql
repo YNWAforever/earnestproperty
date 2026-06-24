@@ -110,8 +110,7 @@ CREATE TABLE IF NOT EXISTS crm_ai_profiles (
   analysis_version TEXT NOT NULL DEFAULT 'v1',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (contact_id IS NOT NULL OR lead_id IS NOT NULL),
-  UNIQUE (contact_id, lead_id)
+  CHECK (contact_id IS NOT NULL OR lead_id IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS crm_ai_tags (
@@ -128,8 +127,7 @@ CREATE TABLE IF NOT EXISTS crm_ai_tags (
   approved_by UUID REFERENCES staff_users(id) ON DELETE SET NULL,
   approved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (contact_id IS NOT NULL OR lead_id IS NOT NULL),
-  UNIQUE (contact_id, lead_id, tag)
+  CHECK (contact_id IS NOT NULL OR lead_id IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS crm_segments (
@@ -155,8 +153,7 @@ CREATE TABLE IF NOT EXISTS crm_segment_memberships (
   staff_approved BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (contact_id IS NOT NULL OR lead_id IS NOT NULL),
-  UNIQUE (segment_id, contact_id, lead_id)
+  CHECK (contact_id IS NOT NULL OR lead_id IS NOT NULL)
 );
 
 CREATE TABLE IF NOT EXISTS live_agent_sessions (
@@ -202,7 +199,54 @@ CREATE TABLE IF NOT EXISTS ai_audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_ai_knowledge_sources_type ON ai_knowledge_sources(source_type, published);
 CREATE INDEX IF NOT EXISTS idx_ai_knowledge_chunks_public ON ai_knowledge_chunks(visibility, stale, created_at);
-CREATE INDEX IF NOT EXISTS idx_ai_knowledge_chunks_embedding ON ai_knowledge_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS idx_ai_knowledge_chunks_embedding
+  ON ai_knowledge_chunks USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100)
+  WHERE embedding IS NOT NULL;
+
+-- REINDEX idx_ai_knowledge_chunks_embedding after initial backfill if a large embedding load is applied.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_ai_profiles_contact_only
+  ON crm_ai_profiles (contact_id)
+  WHERE contact_id IS NOT NULL AND lead_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_ai_profiles_lead_only
+  ON crm_ai_profiles (lead_id)
+  WHERE lead_id IS NOT NULL AND contact_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_ai_profiles_both
+  ON crm_ai_profiles (contact_id, lead_id)
+  WHERE contact_id IS NOT NULL AND lead_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_ai_tags_contact_only
+  ON crm_ai_tags (contact_id, tag)
+  WHERE contact_id IS NOT NULL AND lead_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_ai_tags_lead_only
+  ON crm_ai_tags (lead_id, tag)
+  WHERE lead_id IS NOT NULL AND contact_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_ai_tags_both
+  ON crm_ai_tags (contact_id, lead_id, tag)
+  WHERE contact_id IS NOT NULL AND lead_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_segment_memberships_segment_contact_only
+  ON crm_segment_memberships (segment_id, contact_id)
+  WHERE segment_id IS NOT NULL
+    AND contact_id IS NOT NULL
+    AND lead_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_segment_memberships_segment_lead_only
+  ON crm_segment_memberships (segment_id, lead_id)
+  WHERE segment_id IS NOT NULL
+    AND lead_id IS NOT NULL
+    AND contact_id IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_segment_memberships_segment_both
+  ON crm_segment_memberships (segment_id, contact_id, lead_id)
+  WHERE segment_id IS NOT NULL
+    AND contact_id IS NOT NULL
+    AND lead_id IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS idx_crm_ai_profiles_lead ON crm_ai_profiles(lead_id);
 CREATE INDEX IF NOT EXISTS idx_crm_ai_profiles_contact ON crm_ai_profiles(contact_id);
 CREATE INDEX IF NOT EXISTS idx_crm_ai_tags_lead ON crm_ai_tags(lead_id, status);
