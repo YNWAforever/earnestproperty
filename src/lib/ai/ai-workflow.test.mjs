@@ -1,28 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  chunkKnowledgeText,
-  filterPublicKnowledgeChunks,
-  normalizeKnowledgeSource,
-} from "./knowledge.ts";
-import {
-  canAutoApplyAiTag,
-  classifyAiTagSafety,
-  scoreLeadProfile,
-  suggestFactualTags,
-} from "./crm-rules.ts";
-import {
-  classifySegmentEligibility,
-  parseSegmentPromptToFilters,
-} from "./segments.ts";
-import {
-  buildLiveAgentLeadInput,
-  canUseChunkForPublicAnswer,
-  shouldOfferHumanHandoff,
-} from "./live-agent.ts";
+const loadKnowledge = () => import("./knowledge.ts");
+const loadCrmRules = () => import("./crm-rules.ts");
+const loadSegments = () => import("./segments.ts");
+const loadLiveAgent = () => import("./live-agent.ts");
 
-test("chunkKnowledgeText creates stable public answer chunks", () => {
+test("chunkKnowledgeText creates stable public answer chunks", async () => {
+  const { chunkKnowledgeText } = await loadKnowledge();
   const chunks = chunkKnowledgeText({
     text: "碧堤半島鄰近深井，屋苑有大型會所。".repeat(80),
     maxChars: 180,
@@ -33,7 +18,8 @@ test("chunkKnowledgeText creates stable public answer chunks", () => {
   assert.equal(chunks[0].sort_order, 1);
 });
 
-test("normalizeKnowledgeSource marks active listings public and stale offline listings private", () => {
+test("normalizeKnowledgeSource marks active listings public and stale offline listings private", async () => {
+  const { normalizeKnowledgeSource } = await loadKnowledge();
   assert.equal(
     normalizeKnowledgeSource({
       source_type: "listing",
@@ -57,7 +43,8 @@ test("normalizeKnowledgeSource marks active listings public and stale offline li
   );
 });
 
-test("filterPublicKnowledgeChunks excludes staff-only and stale chunks", () => {
+test("filterPublicKnowledgeChunks excludes staff-only and stale chunks", async () => {
+  const { filterPublicKnowledgeChunks } = await loadKnowledge();
   const chunks = filterPublicKnowledgeChunks([
     { id: "1", visibility: "public", published: true, stale: false, chunk_text: "可用" },
     { id: "2", visibility: "staff", published: true, stale: false, chunk_text: "內部" },
@@ -68,7 +55,8 @@ test("filterPublicKnowledgeChunks excludes staff-only and stale chunks", () => {
   assert.deepEqual(chunks.map((chunk) => chunk.id), ["1"]);
 });
 
-test("CRM AI tags distinguish factual auto-apply from staff approval tags", () => {
+test("CRM AI tags distinguish factual auto-apply from staff approval tags", async () => {
+  const { canAutoApplyAiTag, classifyAiTagSafety } = await loadCrmRules();
   assert.equal(classifyAiTagSafety("budget_8m_10m"), "factual");
   assert.equal(classifyAiTagSafety("bellagio_interest"), "factual");
   assert.equal(classifyAiTagSafety("hot_lead"), "sensitive");
@@ -77,7 +65,8 @@ test("CRM AI tags distinguish factual auto-apply from staff approval tags", () =
   assert.equal(canAutoApplyAiTag("hot_lead"), false);
 });
 
-test("suggestFactualTags derives safe tags from explicit lead data", () => {
+test("suggestFactualTags derives safe tags from explicit lead data", async () => {
+  const { suggestFactualTags } = await loadCrmRules();
   const tags = suggestFactualTags({
     intent: "buyer",
     budget_min: 8000000,
@@ -94,7 +83,8 @@ test("suggestFactualTags derives safe tags from explicit lead data", () => {
   assert.ok(tags.includes("lang_zh_hk"));
 });
 
-test("scoreLeadProfile gives higher score to opted-in urgent matched leads", () => {
+test("scoreLeadProfile gives higher score to opted-in urgent matched leads", async () => {
+  const { scoreLeadProfile } = await loadCrmRules();
   const cold = scoreLeadProfile({
     intent: "buyer",
     budget_min: null,
@@ -118,7 +108,8 @@ test("scoreLeadProfile gives higher score to opted-in urgent matched leads", () 
   assert.ok(warm <= 100);
 });
 
-test("parseSegmentPromptToFilters maps common Hong Kong property audience language", () => {
+test("parseSegmentPromptToFilters maps common Hong Kong property audience language", async () => {
+  const { parseSegmentPromptToFilters } = await loadSegments();
   const result = parseSegmentPromptToFilters(
     "深井買家，預算 800-1000 萬，對碧堤半島有興趣，最近 90 日查詢，有 WhatsApp opt-in",
   );
@@ -131,7 +122,8 @@ test("parseSegmentPromptToFilters maps common Hong Kong property audience langua
   assert.equal(result.require_whatsapp_opt_in, true);
 });
 
-test("classifySegmentEligibility explains why contacts cannot receive blasts", () => {
+test("classifySegmentEligibility explains why contacts cannot receive blasts", async () => {
+  const { classifySegmentEligibility } = await loadSegments();
   assert.equal(
     classifySegmentEligibility({ normalized_phone: "85260000000", opt_in_whatsapp: true, opted_out_whatsapp: false }),
     "eligible",
@@ -150,14 +142,16 @@ test("classifySegmentEligibility explains why contacts cannot receive blasts", (
   );
 });
 
-test("public live agent only uses public chunks and offers handoff for uncertain answers", () => {
+test("public live agent only uses public chunks and offers handoff for uncertain answers", async () => {
+  const { canUseChunkForPublicAnswer, shouldOfferHumanHandoff } = await loadLiveAgent();
   assert.equal(canUseChunkForPublicAnswer({ visibility: "public", stale: false, published: true }), true);
   assert.equal(canUseChunkForPublicAnswer({ visibility: "staff", stale: false, published: true }), false);
   assert.equal(shouldOfferHumanHandoff({ confidence: 0.25, userAskedForHuman: false }), true);
   assert.equal(shouldOfferHumanHandoff({ confidence: 0.9, userAskedForHuman: true }), true);
 });
 
-test("buildLiveAgentLeadInput creates CRM-safe lead payload", () => {
+test("buildLiveAgentLeadInput creates CRM-safe lead payload", async () => {
+  const { buildLiveAgentLeadInput } = await loadLiveAgent();
   const input = buildLiveAgentLeadInput({
     name: "Chan Tai Man",
     phone: "+852 6123 4567",
