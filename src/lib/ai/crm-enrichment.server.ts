@@ -51,6 +51,7 @@ type ProfileValues = {
   timeline: string | null;
   next_best_action: string;
   lead_score: number;
+  generated_by: "ai" | "fallback";
 };
 
 type TagValues = {
@@ -89,6 +90,15 @@ export async function analyzeCrmLead(leadId: string) {
     prompt: JSON.stringify(lead),
     fallback,
   });
+  // When the model call fails we still persist the canned fallback profile so staff
+  // have something to act on, but it must be marked as 'fallback' (not silently
+  // recorded as a real AI analysis) and the failure surfaced to the caller.
+  const generatedBy: "ai" | "fallback" = ai.ok ? "ai" : "fallback";
+  if (!ai.ok) {
+    console.error(
+      `[crm-enrichment] AI lead analysis failed for lead ${leadId}; persisting fallback profile (error=${ai.error ?? "unknown"})`,
+    );
+  }
   const value = normalizeAiResponse(ai.value ?? fallback, fallback);
 
   const leadScore = scoreLeadProfile({
@@ -135,6 +145,7 @@ export async function analyzeCrmLead(leadId: string) {
       timeline: value.timeline,
       next_best_action: value.next_best_action,
       lead_score: leadScore,
+      generated_by: generatedBy,
     },
     mergeTagInputs(tags),
   );
@@ -299,6 +310,7 @@ function profileParams(lead: LeadInput, values: ProfileValues) {
     values.lead_score,
     values.next_best_action,
     values.summary,
+    values.generated_by,
   ];
 }
 
@@ -321,6 +333,7 @@ function profileUpsertSql() {
         lead_score = $9,
         next_best_action = $10,
         summary = $11,
+        generated_by = $12,
         last_analyzed_at = now(),
         updated_at = now()
     WHERE lead_id = $1::uuid
@@ -329,7 +342,8 @@ function profileUpsertSql() {
   inserted AS (
     INSERT INTO crm_ai_profiles (
       contact_id, lead_id, intent, intent_confidence, budget_band, preferred_estates, urgency,
-      timeline, language, lead_score, next_best_action, summary, last_analyzed_at, updated_at
+      timeline, language, lead_score, next_best_action, summary, generated_by, last_analyzed_at,
+      updated_at
     )
     SELECT
       current_lead.contact_id,
@@ -344,6 +358,7 @@ function profileUpsertSql() {
       $9,
       $10,
       $11,
+      $12,
       now(),
       now()
     FROM current_lead

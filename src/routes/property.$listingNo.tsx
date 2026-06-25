@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -152,6 +153,7 @@ function PropertyPage() {
     : ["https://placehold.co/1200x800/e5e7eb/64748b?text=No+Image"];
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [consentWhatsapp, setConsentWhatsapp] = useState(false);
 
   const isRent = property.deal_type === "rent";
   const priceLabel = isRent
@@ -211,10 +213,10 @@ function PropertyPage() {
       data: {
         name: parsed.data.name,
         phone: parsed.data.phone,
-        email: parsed.data.email || null,
-        message: parsed.data.message || null,
+        email: parsed.data.email || "",
+        message: parsed.data.message || "",
         property_id: property.id,
-        assigned_agent_id: agent?.id ?? null,
+        consentWhatsapp,
       },
     }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
     setSubmitting(false);
@@ -224,6 +226,7 @@ function PropertyPage() {
     }
     toast.success("已收到查詢，經紀會盡快與你聯絡。");
     (e.target as HTMLFormElement).reset();
+    setConsentWhatsapp(false);
   }
 
   const jsonLd = {
@@ -724,6 +727,20 @@ function PropertyPage() {
                     rows={3}
                     placeholder={`想查詢編號 ${property.listing_no}`}
                   />
+                </div>
+                <div className="flex items-start gap-2">
+                  <Checkbox
+                    id="consentWhatsapp"
+                    checked={consentWhatsapp}
+                    onCheckedChange={(checked) => setConsentWhatsapp(checked === true)}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="consentWhatsapp"
+                    className="text-xs font-normal leading-snug text-muted-foreground"
+                  >
+                    我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
+                  </Label>
                 </div>
                 <Button type="submit" className="w-full" disabled={submitting}>
                   {submitting ? "提交中…" : "提交查詢"}

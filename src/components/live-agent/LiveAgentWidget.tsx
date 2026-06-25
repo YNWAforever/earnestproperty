@@ -26,6 +26,7 @@ const initialMessages: Message[] = [
 export function LiveAgentWidget() {
   const [open, setOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [handoffPhone, setHandoffPhone] = useState("");
@@ -43,7 +44,7 @@ export function LiveAgentWidget() {
   }, [messages, loading]);
 
   async function ensureSession() {
-    if (sessionId) return sessionId;
+    if (sessionId && accessToken) return { id: sessionId, token: accessToken };
 
     const response = await fetch(liveAgentEndpoints.session, {
       method: "POST",
@@ -55,11 +56,15 @@ export function LiveAgentWidget() {
     });
 
     if (!response.ok) throw new Error("Unable to start live-agent session.");
-    const data = (await response.json()) as { id?: unknown };
+    const data = (await response.json()) as { id?: unknown; accessToken?: unknown };
     if (typeof data.id !== "string" || !data.id) throw new Error("Invalid live-agent session.");
+    if (typeof data.accessToken !== "string" || !data.accessToken) {
+      throw new Error("Invalid live-agent session.");
+    }
 
     setSessionId(data.id);
-    return data.id;
+    setAccessToken(data.accessToken);
+    return { id: data.id, token: data.accessToken };
   }
 
   async function sendMessage(text = input) {
@@ -71,11 +76,11 @@ export function LiveAgentWidget() {
     setLoading(true);
 
     try {
-      const id = await ensureSession();
+      const { id, token } = await ensureSession();
       const response = await fetch(liveAgentEndpoints.message, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sessionId: id, message: trimmed }),
+        body: JSON.stringify({ sessionId: id, accessToken: token, message: trimmed }),
       });
 
       if (!response.ok) throw new Error("Unable to answer live-agent message.");
@@ -101,12 +106,13 @@ export function LiveAgentWidget() {
 
     setHandoffLoading(true);
     try {
-      const id = await ensureSession();
+      const { id, token } = await ensureSession();
       const response = await fetch(liveAgentEndpoints.handoff, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sessionId: id,
+          accessToken: token,
           phone: handoffPhone,
           intent: "buyer",
           opt_in_whatsapp: handoffConsent,

@@ -185,7 +185,16 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   }
   if (input.districtSlug) where.push(`p.district_slug = ${addParam(params, input.districtSlug)}`);
 
-  const priceColumn = input.deal === "rent" ? "p.rent" : "p.price";
+  // For deal="all" both sale and rent listings are returned, so compare against
+  // whichever price applies to each row (sale rows have p.price, rent rows have
+  // p.rent). Using COALESCE keeps a single column comparison while still matching
+  // rentals (whose p.price is NULL). The sale/rent cases stay on their own column.
+  const priceColumn =
+    input.deal === "rent"
+      ? "p.rent"
+      : input.deal === "sale"
+        ? "p.price"
+        : "COALESCE(p.price, p.rent)";
   if (input.minPrice !== undefined)
     where.push(`${priceColumn} >= ${addParam(params, input.minPrice)}`);
   if (input.maxPrice !== undefined)
@@ -277,25 +286,43 @@ function corridorWhere(input: NeonCorridorInventoryInput, params: unknown[]) {
 
 async function fetchCorridorRows(
   input: NeonCorridorInventoryInput,
-  dealType: "sale" | "rent",
-): Promise<NeonPropertyRow[]> {
-  const params: unknown[] = [];
-  const where = corridorWhere(input, params);
-  const dealParam = addParam(params, dealType);
+  params: unknown[],
+  where: string,
+): Promise<{ sale: NeonPropertyRow[]; rent: NeonPropertyRow[] }> {
   const limitParam = addParam(params, input.limit);
+  // Collapse the previous two per-deal-type queries into one round-trip: rank each
+  // listing within its deal_type partition using the same ordering as before, then
+  // keep the top N per partition. This yields identical rows/order to running a
+  // separate `LIMIT input.limit` query per deal type.
   const rows = await sql().query(
     `
-    SELECT ${listingColumns}
-    FROM properties p
-    LEFT JOIN estates e ON e.id = p.estate_id
-    LEFT JOIN staff_users s ON s.id = p.agent_id
-    WHERE ${where} AND p.deal_type = ${dealParam}::deal_type
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
-    LIMIT ${limitParam}
+    SELECT *
+    FROM (
+      SELECT
+        ${listingColumns},
+        ROW_NUMBER() OVER (
+          PARTITION BY p.deal_type
+          ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+        ) AS corridor_rank
+      FROM properties p
+      LEFT JOIN estates e ON e.id = p.estate_id
+      LEFT JOIN staff_users s ON s.id = p.agent_id
+      WHERE ${where}
+    ) ranked
+    WHERE ranked.corridor_rank <= ${limitParam}
+    ORDER BY ranked.deal_type, ranked.corridor_rank
     `,
     params,
   );
-  return rows.map(mapListingRow);
+
+  const sale: NeonPropertyRow[] = [];
+  const rent: NeonPropertyRow[] = [];
+  for (const row of rows) {
+    const mapped = mapListingRow(row);
+    if (mapped.deal_type === "rent") rent.push(mapped);
+    else sale.push(mapped);
+  }
+  return { sale, rent };
 }
 
 export async function searchListings(
@@ -340,36 +367,50 @@ export async function fetchCorridorInventory(
   const normalized = normalizeCorridorInventoryInput(input);
   if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
 
-  const params: unknown[] = [];
-  const where = corridorWhere(normalized, params);
-  const countRows = await sql().query(
-    `
-    SELECT p.deal_type, count(*)::int AS total
-    FROM properties p
-    LEFT JOIN estates e ON e.id = p.estate_id
-    WHERE ${where}
-    GROUP BY p.deal_type
-    `,
-    params,
-  );
+  const countParams: unknown[] = [];
+  const countWhere = corridorWhere(normalized, countParams);
+  const rowParams: unknown[] = [];
+  const rowWhere = corridorWhere(normalized, rowParams);
+
+  const [countRows, rows] = await Promise.all([
+    sql().query(
+      `
+      SELECT p.deal_type, count(*)::int AS total
+      FROM properties p
+      LEFT JOIN estates e ON e.id = p.estate_id
+      WHERE ${countWhere}
+      GROUP BY p.deal_type
+      `,
+      countParams,
+    ),
+    fetchCorridorRows(normalized, rowParams, rowWhere),
+  ]);
 
   const totals = new Map(countRows.map((row) => [stringOrEmpty(row.deal_type), Number(row.total)]));
-  const [saleRows, rentRows] = await Promise.all([
-    fetchCorridorRows(normalized, "sale"),
-    fetchCorridorRows(normalized, "rent"),
-  ]);
 
   return {
     saleTotal: totals.get("sale") ?? 0,
     rentTotal: totals.get("rent") ?? 0,
-    saleRows,
-    rentRows,
+    saleRows: rows.sale,
+    rentRows: rows.rent,
   };
 }
 
 export async function fetchFeaturedProperties(limit: number): Promise<NeonPropertyRow[]> {
-  const result = await searchListings({ deal: "all", page: 1, pageSize: limit });
-  return result.rows;
+  const pageSize = Math.min(Math.max(1, limit), 100);
+  const rows = await sql().query(
+    `
+    SELECT ${listingColumns}
+    FROM properties p
+    LEFT JOIN estates e ON e.id = p.estate_id
+    LEFT JOIN staff_users s ON s.id = p.agent_id
+    WHERE p.status = 'active' AND p.featured = true
+    ORDER BY p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    LIMIT $1
+    `,
+    [pageSize],
+  );
+  return rows.map(mapListingRow);
 }
 
 export async function fetchListingsForEstate(input: {

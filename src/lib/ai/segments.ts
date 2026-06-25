@@ -44,15 +44,37 @@ export function classifySegmentEligibility(input: {
   return "eligible";
 }
 
+const WAN_MULTIPLIER = 10000;
+const YIK_MULTIPLIER = 100000000;
+
 function parseBudget(prompt: string) {
-  const range = prompt.match(/(\d{2,4})\s*[-至到]\s*(\d{2,4})\s*萬/);
-  if (range) {
-    return { min: Number(range[1]) * 10000, max: Number(range[2]) * 10000 };
+  // 億 (hundred-million) ranges take precedence over 萬 (ten-thousand) so that a
+  // prompt like "1-2億" is not mis-parsed by the 萬 matcher.
+  const yikRange = prompt.match(/(\d+(?:\.\d+)?)\s*[-至到]\s*(\d+(?:\.\d+)?)\s*億/);
+  if (yikRange) {
+    return {
+      min: Math.round(Number(yikRange[1]) * YIK_MULTIPLIER),
+      max: Math.round(Number(yikRange[2]) * YIK_MULTIPLIER),
+    };
   }
 
-  const single = prompt.match(/(\d{2,4})\s*萬/);
-  if (single) {
-    const value = Number(single[1]) * 10000;
+  const wanRange = prompt.match(/(\d+(?:\.\d+)?)\s*[-至到]\s*(\d+(?:\.\d+)?)\s*萬/);
+  if (wanRange) {
+    return {
+      min: Math.round(Number(wanRange[1]) * WAN_MULTIPLIER),
+      max: Math.round(Number(wanRange[2]) * WAN_MULTIPLIER),
+    };
+  }
+
+  const yikSingle = prompt.match(/(\d+(?:\.\d+)?)\s*億/);
+  if (yikSingle) {
+    const value = Math.round(Number(yikSingle[1]) * YIK_MULTIPLIER);
+    return { min: value, max: value };
+  }
+
+  const wanSingle = prompt.match(/(\d+(?:\.\d+)?)\s*萬/);
+  if (wanSingle) {
+    const value = Math.round(Number(wanSingle[1]) * WAN_MULTIPLIER);
     return { min: value, max: value };
   }
 

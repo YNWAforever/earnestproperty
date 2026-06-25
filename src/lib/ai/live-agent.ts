@@ -7,7 +7,7 @@ export function canUseChunkForPublicAnswer(input: {
 }
 
 export function shouldOfferHumanHandoff(input: { confidence: number; userAskedForHuman: boolean }) {
-  return input.userAskedForHuman || input.confidence < 0.45;
+  return input.userAskedForHuman || input.confidence <= 0.45;
 }
 
 export function buildLiveAgentLeadInput(input: {

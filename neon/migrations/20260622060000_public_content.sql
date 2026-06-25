@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS faqs (
   question TEXT NOT NULL,
   answer TEXT NOT NULL,
   sort_order INT DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT faqs_scope_question_key UNIQUE (scope, question)
 );
 
 CREATE TABLE IF NOT EXISTS articles (
@@ -160,4 +161,4 @@ VALUES
   ('district:sham-tseng', '深井適合自住定投資？', '深井以海景、會所、實用率及較市區低入場費吸引用家，同時租務需求穩定，適合自住及長線收租。', 1),
   ('district:sham-tseng', '深井去中環要幾耐？', '由深井乘搭巴士經青馬大橋及西區海底隧道直達中環約 35 分鐘，亦可轉乘荃灣或荃灣西鐵路。', 2),
   ('district:sham-tseng', '深井屬於哪個校網？', '深井小學校網為 62 校網，中學屬荃灣區校網。', 3)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (scope, question) DO NOTHING;

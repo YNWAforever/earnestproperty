@@ -109,6 +109,7 @@ export function createNeonMlsDb(sql) {
         UPDATE properties
         SET status = 'inactive', updated_at = $3
         WHERE source_site = $1
+          AND legacy_detail_id IS NOT NULL
           AND legacy_detail_id <> ALL($2::text[])
         RETURNING id
         `,

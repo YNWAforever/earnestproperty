@@ -79,10 +79,12 @@ async function claimQueuedCampaignRecipients() {
     id: string;
     campaign_id: string;
     normalized_phone: string | null;
+    whatsapp_member_id: string | null;
     opt_in_whatsapp: boolean | null;
     opted_out_whatsapp: boolean | null;
     element_name: string;
     language_code: string | null;
+    components: unknown;
   }>(
     `
     WITH claimed AS (
@@ -112,27 +114,45 @@ async function claimQueuedCampaignRecipients() {
       r.id,
       r.campaign_id,
       c.normalized_phone,
+      c.whatsapp_member_id,
       c.opt_in_whatsapp,
       c.opted_out_whatsapp,
       t.element_name,
-      t.language_code
+      t.language_code,
+      t.components
     `,
   );
 }
 
 async function sendCampaignRecipient(recipient: {
   normalized_phone: string | null;
+  whatsapp_member_id: string | null;
   element_name: string;
   language_code: string | null;
+  components: unknown;
 }) {
+  // Inbound conversations are keyed by Woztell member id, so prefer it as the
+  // recipient identifier; fall back to the phone number only when absent.
+  const recipientId = recipient.whatsapp_member_id ?? recipient.normalized_phone;
+  if (!recipientId) {
+    return { ok: false, error: "Recipient has no Woztell member id or phone number" };
+  }
+
   try {
     return await sendWoztellResponse({
-      recipientId: String(recipient.normalized_phone),
+      recipientId: String(recipientId),
       response: [
         {
           type: "TEMPLATE",
           elementName: recipient.element_name,
           languageCode: recipient.language_code || "zh_HK",
+          // Forward the template's stored component structure (header/body/buttons).
+          // NOTE: per-recipient template variable values are not modeled in the
+          // schema yet, so dynamic placeholders are not substituted here. Add a
+          // recipient-level variables column + plumbing as a followup.
+          ...(Array.isArray(recipient.components) && recipient.components.length > 0
+            ? { components: recipient.components }
+            : {}),
         },
       ],
     });

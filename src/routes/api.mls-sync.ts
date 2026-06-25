@@ -37,7 +37,10 @@ export const Route = createFileRoute("/api/mls-sync")({
           now: () => new Date(),
         });
 
-        const result = await importer.sync({ maxDetails: 200 });
+        // Nightly cron does full discovery across all pages, so it may
+        // deactivate listings that disappeared from the source. Deactivation
+        // compares against every discovered legacy id, not just the fetched subset.
+        const result = await importer.sync({ maxDetails: 200, fullSync: true });
         return Response.json({ ok: true, ...result });
       },
     },

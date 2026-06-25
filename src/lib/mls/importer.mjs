@@ -16,6 +16,10 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function legacyIdFromUrl(url) {
+  return String(url ?? "").match(/property-detail\/(\d+)\.html/i)?.[1] ?? null;
+}
+
 export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
   return {
     async discover(seedUrls = DEFAULT_SEED_URLS, { maxPages = 50 } = {}) {
@@ -41,10 +45,13 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
       maxDetails = 200,
       maxPages = 50,
       dryRun = false,
+      fullSync = false,
     } = {}) {
       const nowIso = now().toISOString();
       const estateIdsBySlug = await db.listEstateIdsBySlug();
       const discoveredUrls = await this.discover(seedUrls, { maxPages });
+      // Detail fetch is limited to maxDetails, but discovery sees every listing.
+      const detailFetched = discoveredUrls.length <= maxDetails;
       const selectedUrls = discoveredUrls.slice(0, maxDetails);
       const rows = [];
       const errors = [];
@@ -59,6 +66,14 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
         }
       }
 
+      // Deactivation must compare against the FULL set of discovered legacy ids,
+      // never just the sliced/fetched subset — otherwise listings beyond
+      // maxDetails would be wrongly marked inactive on every partial run.
+      const discoveredLegacyIds = unique(discoveredUrls.map(legacyIdFromUrl));
+      // Only sweep when we trust the discovered set covers every live listing:
+      // an explicit fullSync, or a run small enough that we fetched every detail.
+      const canDeactivate = fullSync || detailFetched;
+
       if (dryRun) {
         return {
           discovered: discoveredUrls.length,
@@ -66,18 +81,20 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
           parsed: rows.length,
           upserted: 0,
           deactivated: 0,
+          deactivationSkipped: !canDeactivate,
           errors,
           dryRunRows: rows,
         };
       }
 
       const upserted = rows.length ? await db.upsertProperties(rows) : { count: 0 };
-      const seenLegacyIds = unique(rows.map((row) => row.legacy_detail_id));
-      const deactivated = await db.deactivateMissing({
-        sourceSite: "earnestproperty-old-site",
-        seenLegacyIds,
-        nowIso,
-      });
+      const deactivated = canDeactivate
+        ? await db.deactivateMissing({
+            sourceSite: "earnestproperty-old-site",
+            seenLegacyIds: discoveredLegacyIds,
+            nowIso,
+          })
+        : { count: 0 };
 
       return {
         discovered: discoveredUrls.length,
@@ -85,6 +102,7 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
         parsed: rows.length,
         upserted: upserted.count,
         deactivated: deactivated.count,
+        deactivationSkipped: !canDeactivate,
         errors,
         dryRunRows: [],
       };

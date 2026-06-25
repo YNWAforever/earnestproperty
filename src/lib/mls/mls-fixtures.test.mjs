@@ -67,6 +67,14 @@ test("primitive parsers handle Hong Kong listing text", () => {
   assert.deepEqual(parseRoomCounts("開放式"), { bedrooms: 0, livingRooms: null });
 });
 
+test("parseMoneyToHkd parses 億 amounts including combined forms", () => {
+  assert.equal(parseMoneyToHkd("$1.28億"), 128_000_000);
+  assert.equal(parseMoneyToHkd("1億"), 100_000_000);
+  assert.equal(parseMoneyToHkd("2.5億"), 250_000_000);
+  assert.equal(parseMoneyToHkd("1億2,800萬"), 128_000_000);
+  assert.equal(parseMoneyToHkd("$3億50萬"), 300_500_000);
+});
+
 test("resolveEstateSlug maps corrected estate aliases", () => {
   assert.equal(
     resolveEstateSlug({ buildingZh: "麗都花園 第03座", buildingEn: "LIDO GDN BLK 03" }),
@@ -147,4 +155,88 @@ test("createMlsImporter dry run reports discovered, parsed, and upsertable rows"
   assert.equal(result.upserted, 0);
   assert.equal(result.dryRunRows.length, 1);
   assert.equal(result.dryRunRows[0].listing_no, "B054805-6709182-S");
+});
+
+test("normalizeListingDetail skips listings without a legacy detail id", () => {
+  const rows = normalizeListingDetail(
+    {
+      legacyDetailId: null,
+      sourceUrl: "https://www.earnestproperty.com/property-detail/oops",
+      buildingZh: "麗都花園 第03座",
+      title: "麗都花園 第03座",
+      salePriceHkd: 5_900_000,
+    },
+    { nowIso: "2026-06-22T00:00:00.000Z" },
+  );
+
+  assert.deepEqual(rows, []);
+});
+
+test("partial sync does not deactivate listings beyond maxDetails", async () => {
+  const indexHtml = fixture("property-index-c1.html");
+  const detailHtml = fixture("property-detail-6709182.html");
+  const fetched = new Map([
+    ["https://www.earnestproperty.com/property/c1", indexHtml],
+    ["https://www.earnestproperty.com/property-detail/6709182.html", detailHtml],
+  ]);
+
+  let deactivateCalled = false;
+  const importer = createMlsImporter({
+    fetchText: async (url) => fetched.get(url) ?? "",
+    db: {
+      listEstateIdsBySlug: async () => new Map([["lido-garden", "estate-lido"]]),
+      upsertProperties: async (rows) => ({ count: rows.length }),
+      deactivateMissing: async () => {
+        deactivateCalled = true;
+        return { count: 5 };
+      },
+    },
+    now: () => new Date("2026-06-22T00:00:00.000Z"),
+  });
+
+  // 10 listings discovered, only 1 fetched, no fullSync -> never deactivate.
+  const result = await importer.sync({
+    seedUrls: ["https://www.earnestproperty.com/property/c1"],
+    maxDetails: 1,
+  });
+
+  assert.equal(result.discovered, 10);
+  assert.equal(result.deactivated, 0);
+  assert.equal(result.deactivationSkipped, true);
+  assert.equal(deactivateCalled, false);
+});
+
+test("fullSync deactivates against the full discovered legacy id set", async () => {
+  const indexHtml = fixture("property-index-c1.html");
+  const detailHtml = fixture("property-detail-6709182.html");
+  const fetched = new Map([
+    ["https://www.earnestproperty.com/property/c1", indexHtml],
+    ["https://www.earnestproperty.com/property-detail/6709182.html", detailHtml],
+  ]);
+
+  let seenLegacyIds = null;
+  const importer = createMlsImporter({
+    fetchText: async (url) => fetched.get(url) ?? "",
+    db: {
+      listEstateIdsBySlug: async () => new Map([["lido-garden", "estate-lido"]]),
+      upsertProperties: async (rows) => ({ count: rows.length }),
+      deactivateMissing: async ({ seenLegacyIds: ids }) => {
+        seenLegacyIds = ids;
+        return { count: 0 };
+      },
+    },
+    now: () => new Date("2026-06-22T00:00:00.000Z"),
+  });
+
+  // Only 1 detail fetched, but fullSync passes EVERY discovered legacy id
+  // (all 10) to deactivateMissing so unscraped listings are not swept.
+  const result = await importer.sync({
+    seedUrls: ["https://www.earnestproperty.com/property/c1"],
+    maxDetails: 1,
+    fullSync: true,
+  });
+
+  assert.equal(result.deactivationSkipped, false);
+  assert.equal(seenLegacyIds.length, 10);
+  assert.ok(seenLegacyIds.includes("6709182"));
 });

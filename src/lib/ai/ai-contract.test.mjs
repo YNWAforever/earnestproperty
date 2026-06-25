@@ -145,6 +145,9 @@ test("public AI answers are sourced only from public knowledge, not CRM or Whats
   assert.match(search, /s\.public_visibility = 'public'/);
   assert.match(search, /s\.published = true/);
   assert.match(search, /c\.stale = false/);
+  assert.match(search, /fallbackSearchPublicKnowledge/);
+  assert.match(source, /knowledgeSearchTokens/);
+  assert.match(source, /\\u3400-\\u9fff/);
   assert.doesNotMatch(search, /\b(?:crm_|whatsapp_)/i);
   assert.match(answer, /searchPublicKnowledge\(\{ query: input\.question, limit: 6 \}\)/);
   assert.doesNotMatch(answer, /\b(?:crm_|whatsapp_|fetchCrm|Conversation)/i);
@@ -192,7 +195,11 @@ test("live-agent handoff avoids fake Woztell conversations and implicit opt-in",
   assert.doesNotMatch(server, /INSERT\s+INTO\s+whatsapp_conversations/i);
   assert.match(server, /channel_id\s+IS\s+NOT\s+NULL/);
   assert.match(server, /woztell_member_id\s+IS\s+NOT\s+NULL/);
-  assert.match(server, /opted_out_whatsapp/);
+  // Force-opt-in fix: a public handoff must never escalate an existing contact's
+  // opt-in. The contact upsert preserves the stored value instead of OR-ing in the
+  // caller-supplied flag (was previously `... OR EXCLUDED.opt_in_whatsapp`).
+  assert.doesNotMatch(server, /OR\s+EXCLUDED\.opt_in_whatsapp/i);
+  assert.match(server, /opt_in_whatsapp = crm_contacts\.opt_in_whatsapp/);
   assert.match(server, /session\.status\s+!==\s+"handoff_requested"/);
 
   assert.match(widget, /<Checkbox/);

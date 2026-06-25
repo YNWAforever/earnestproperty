@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import {
   addParam,
   dateOrNull,
+  getSql,
   numberOrNull,
   queryRows,
   stringOrEmpty,
@@ -42,6 +43,21 @@ import {
   canQueueAdminCampaign,
   normalizeAdminPhone,
 } from "./admin-workflow";
+
+/**
+ * Row-ownership scope for the acting staff member.
+ *
+ * The Supabase -> Neon migration dropped the RLS policies that scoped agents to
+ * their own rows (auth.uid() = agent_id / assigned_agent_id). This helper
+ * restores that boundary in application code: admins and managers get
+ * unrestricted access (null), while a plain agent is restricted to rows they
+ * own. `properties.agent_id` and `crm_leads.assigned_agent_id` both reference
+ * `staff_users.id`, which is `actor.staffId`.
+ */
+function agentScope(actor: StaffAccess): string | null {
+  if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
+  return actor.roles.includes("agent") ? actor.staffId : null;
+}
 
 export type AdminPropertyInput = {
   id?: string;
@@ -200,9 +216,14 @@ export async function getAdminOverview() {
   };
 }
 
-export async function listAdminListings(input: AdminListingInput = {}) {
+export async function listAdminListings(input: AdminListingInput = {}, actor?: StaffAccess) {
   const params: unknown[] = [];
   const where: string[] = [];
+
+  const scope = actor ? agentScope(actor) : null;
+  if (scope !== null) {
+    where.push(`p.agent_id = ${addParam(params, scope)}::uuid`);
+  }
 
   if (input.q?.trim()) {
     const param = addParam(params, `%${input.q.trim()}%`);
@@ -289,6 +310,10 @@ export async function listAdminEstateOptions() {
 }
 
 export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  // Scoped agents may only ever own their own rows: ignore any caller-supplied
+  // agent_id on insert and force themselves as the owner.
+  const agentId = scope !== null ? actor.staffId : (input.agent_id ?? null);
   const params = [
     input.listing_no,
     input.title_zh,
@@ -308,7 +333,7 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.images,
     input.seo_title ?? null,
     input.seo_description ?? null,
-    input.agent_id ?? null,
+    agentId,
   ];
 
   const rows = input.id
@@ -335,10 +360,10 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
           seo_description = $18,
           agent_id = $19,
           updated_at = now()
-        WHERE id = $20
+        WHERE id = $20${scope !== null ? " AND agent_id = $21" : ""}
         RETURNING id
         `,
-        [...params, input.id],
+        scope !== null ? [...params, input.id, scope] : [...params, input.id],
       )
     : await queryRows(
         `
@@ -353,7 +378,10 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
         params,
       );
 
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
+  if (input.id && !rows[0]) {
+    if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    return { id: "", error: "Not found" };
+  }
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "property.update" : "property.create", "property", id);
   return { id };
@@ -364,11 +392,17 @@ export async function updateAdminPropertyStatus(
   status: AdminPropertyInput["status"],
   actor: StaffAccess,
 ) {
+  const scope = agentScope(actor);
   const rows = await queryRows(
-    "UPDATE properties SET status = $1::property_status, updated_at = now() WHERE id = $2 RETURNING id",
-    [status, id],
+    `UPDATE properties SET status = $1::property_status, updated_at = now() WHERE id = $2${
+      scope !== null ? " AND agent_id = $3" : ""
+    } RETURNING id`,
+    scope !== null ? [status, id, scope] : [status, id],
   );
-  if (!rows[0]) return { ok: false, error: "Not found" };
+  if (!rows[0]) {
+    if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    return { ok: false, error: "Not found" };
+  }
   await writeAudit(actor.staffId, "property.status", "property", id, { status });
   return { ok: true };
 }
@@ -691,9 +725,19 @@ export async function deleteAdminFaq(id: string, actor: StaffAccess) {
 }
 
 export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess) {
-  for (const [index, id] of orderedIds.entries()) {
-    await queryRows("UPDATE faqs SET sort_order = $1 WHERE id = $2", [index + 1, id]);
-  }
+  // NOTE: the faqs table has no updated_at column in this schema, so the
+  // batched UPDATE only sets sort_order (matching the previous per-row loop).
+  await queryRows(
+    `
+    UPDATE faqs SET sort_order = d.ord
+    FROM (
+      SELECT id, ordinality AS ord
+      FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ordinality)
+    ) AS d
+    WHERE faqs.id = d.id
+    `,
+    [orderedIds],
+  );
   await writeAudit(actor.staffId, "faq.reorder", "faq", undefined, { orderedIds });
   return { ok: true };
 }
@@ -730,7 +774,11 @@ export async function updateAdminMediaAsset(
   return { ok: true };
 }
 
-export async function listAdminLeads() {
+export async function listAdminLeads(actor?: StaffAccess) {
+  const scope = actor ? agentScope(actor) : null;
+  const params: unknown[] = [];
+  const where =
+    scope !== null ? `WHERE l.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
   const rows = await queryRows(
     `
     SELECT
@@ -752,14 +800,17 @@ export async function listAdminLeads() {
     FROM crm_leads l
     LEFT JOIN crm_contacts c ON c.id = l.contact_id
     LEFT JOIN properties p ON p.id = l.property_id
+    ${where}
     ORDER BY l.updated_at DESC, l.created_at DESC
     LIMIT 100
     `,
+    params,
   );
   return rows;
 }
 
-export async function fetchAdminLead(id: string) {
+export async function fetchAdminLead(id: string, actor?: StaffAccess) {
+  const scope = actor ? agentScope(actor) : null;
   const rows = await queryRows(
     `
     SELECT
@@ -783,10 +834,10 @@ export async function fetchAdminLead(id: string) {
     FROM crm_leads l
     LEFT JOIN crm_contacts c ON c.id = l.contact_id
     LEFT JOIN properties p ON p.id = l.property_id
-    WHERE l.id = $1
+    WHERE l.id = $1${scope !== null ? " AND l.assigned_agent_id = $2" : ""}
     LIMIT 1
     `,
-    [id],
+    scope !== null ? [id, scope] : [id],
   );
   const lead = rows[0];
   if (!lead) return null;
@@ -879,6 +930,18 @@ export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAcc
 }
 
 export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  const params: unknown[] = [
+    input.stage,
+    input.intent,
+    input.budget_min,
+    input.budget_max,
+    input.preferred_estates,
+    input.assigned_agent_id,
+    input.note,
+    input.id,
+  ];
+  if (scope !== null) params.push(scope);
   const rows = await queryRows(
     `UPDATE crm_leads SET
       stage = $1::crm_lead_stage,
@@ -889,20 +952,14 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
       assigned_agent_id = $6,
       note = $7,
       updated_at = now()
-     WHERE id = $8
+     WHERE id = $8${scope !== null ? " AND assigned_agent_id = $9" : ""}
      RETURNING id`,
-    [
-      input.stage,
-      input.intent,
-      input.budget_min,
-      input.budget_max,
-      input.preferred_estates,
-      input.assigned_agent_id,
-      input.note,
-      input.id,
-    ],
+    params,
   );
-  if (!rows[0]) return { ok: false, error: "Not found" };
+  if (!rows[0]) {
+    if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    return { ok: false, error: "Not found" };
+  }
   await writeAudit(actor.staffId, "lead.update", "lead", input.id, {
     stage: input.stage,
     intent: input.intent,
@@ -935,7 +992,11 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
   return { id };
 }
 
-export async function listAdminConversations() {
+export async function listAdminConversations(actor?: StaffAccess) {
+  const params: unknown[] = [];
+  const scope = actor ? agentScope(actor) : null;
+  const where =
+    scope !== null ? `WHERE wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
   const rows = await queryRows(
     `
     SELECT
@@ -957,14 +1018,20 @@ export async function listAdminConversations() {
       ORDER BY created_at DESC
       LIMIT 1
     ) m ON true
+    ${where}
     ORDER BY wc.last_message_at DESC NULLS LAST, wc.updated_at DESC
     LIMIT 100
     `,
+    params,
   );
   return rows;
 }
 
-export async function fetchAdminConversation(id: string) {
+export async function fetchAdminConversation(id: string, actor?: StaffAccess) {
+  const params: unknown[] = [id];
+  const scope = actor ? agentScope(actor) : null;
+  const scopeClause =
+    scope !== null ? ` AND wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
   const rows = await queryRows(
     `
     SELECT
@@ -989,10 +1056,10 @@ export async function fetchAdminConversation(id: string) {
       ORDER BY created_at DESC
       LIMIT 1
     ) m ON true
-    WHERE wc.id = $1
+    WHERE wc.id = $1${scopeClause}
     LIMIT 1
     `,
-    [id],
+    params,
   );
   const conversation = rows[0];
   if (!conversation) return null;
@@ -1041,7 +1108,10 @@ export async function fetchAdminConversationAiAssist(
   input: { conversationId: string },
   actor: StaffAccess,
 ): Promise<AdminConversationAiAssist> {
-  void actor;
+  const params: unknown[] = [input.conversationId];
+  const scope = agentScope(actor);
+  const scopeClause =
+    scope !== null ? ` AND wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
   const rows = await queryRows<{
     id: unknown;
     name: unknown;
@@ -1066,10 +1136,10 @@ export async function fetchAdminConversationAiAssist(
      FROM whatsapp_conversations wc
      LEFT JOIN crm_contacts c ON c.id = wc.contact_id
      LEFT JOIN whatsapp_messages m ON m.conversation_id = wc.id
-     WHERE wc.id = $1
+     WHERE wc.id = $1${scopeClause}
      GROUP BY wc.id, c.name, c.opted_out_whatsapp
      LIMIT 1`,
-    [input.conversationId],
+    params,
   );
   const row = rows[0];
   if (!row) throw new Error("Conversation not found");
@@ -1104,11 +1174,19 @@ export async function updateAdminConversation(
   input: AdminConversationUpdateInput,
   actor: StaffAccess,
 ) {
+  const scope = agentScope(actor);
   const rows = await queryRows(
-    "UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3 RETURNING id",
-    [input.status, input.assigned_agent_id, input.id],
+    `UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3${
+      scope !== null ? " AND assigned_agent_id = $4" : ""
+    } RETURNING id`,
+    scope !== null
+      ? [input.status, input.assigned_agent_id, input.id, scope]
+      : [input.status, input.assigned_agent_id, input.id],
   );
-  if (!rows[0]) return { ok: false, error: "Not found" };
+  if (!rows[0]) {
+    if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    return { ok: false, error: "Not found" };
+  }
   await writeAudit(actor.staffId, "conversation.update", "conversation", input.id, {
     status: input.status,
     assigned_agent_id: input.assigned_agent_id,
@@ -1385,14 +1463,57 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
   });
   if (!check.ok) return { ok: false, error: check.reason };
 
-  await queryRows(
-    "UPDATE whatsapp_campaigns SET status = 'queued', reviewed_by = $1, reviewed_at = now(), updated_at = now() WHERE id = $2",
-    [actor.staffId, id],
-  );
-  await queryRows(
-    "UPDATE whatsapp_campaign_recipients SET queued_at = COALESCE(queued_at, now()) WHERE campaign_id = $1 AND status = 'queued'",
-    [id],
-  );
+  // TOCTOU hardening: the eligibility predicate above can go stale between the
+  // SELECT and the writes (a concurrent cancel/materialize could change the
+  // campaign status or recipients). Re-assert the entire predicate inside the
+  // status flip's WHERE clause and run both writes in one atomic transaction so
+  // they cannot half-apply. The recipient update is gated on the campaign
+  // actually being 'queued' (set by the first statement in the same tx).
+  const sql = getSql();
+  const [flipped] = await sql.transaction((tx) => [
+    tx.query(
+      `
+      UPDATE whatsapp_campaigns c
+      SET status = 'queued', reviewed_by = $1, reviewed_at = now(), updated_at = now()
+      FROM whatsapp_templates t
+      WHERE c.id = $2
+        AND t.id = c.template_id
+        AND c.status IN ('draft', 'review', 'scheduled')
+        AND t.status LIKE 'active%'
+        AND EXISTS (
+          SELECT 1
+          FROM whatsapp_campaign_recipients r
+          JOIN crm_contacts contact ON contact.id = r.contact_id
+          WHERE r.campaign_id = c.id
+            AND r.status = 'queued'
+            AND NULLIF(contact.normalized_phone, '') IS NOT NULL
+            AND contact.opt_in_whatsapp = true
+            AND contact.opted_out_whatsapp = false
+        )
+      RETURNING c.id
+      `,
+      [actor.staffId, id],
+    ),
+    tx.query(
+      `
+      UPDATE whatsapp_campaign_recipients
+      SET queued_at = COALESCE(queued_at, now())
+      WHERE campaign_id = $1
+        AND status = 'queued'
+        AND EXISTS (
+          SELECT 1 FROM whatsapp_campaigns c WHERE c.id = $1 AND c.status = 'queued'
+        )
+      `,
+      [id],
+    ),
+  ]);
+
+  if (!Array.isArray(flipped) || !flipped[0]) {
+    // Lost the race (campaign was cancelled/changed concurrently) or no longer
+    // eligible. Nothing was committed.
+    return { ok: false, error: "CAMPAIGN_NOT_ELIGIBLE" };
+  }
+
   await writeAudit(actor.staffId, "campaign.queue", "campaign", id, {
     eligibleRecipients: Number(row.eligible_recipients ?? 0),
   });
@@ -1414,51 +1535,64 @@ export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
 }
 
 export async function createWebsiteInquiry(input: {
-  property_id: string;
-  assigned_agent_id: string | null;
   name: string;
   phone: string;
-  email: string | null;
-  message: string | null;
+  email?: string | null;
+  message?: string | null;
+  listingNo?: string | null;
+  property_id?: string | null;
+  consentWhatsapp?: boolean;
 }) {
+  // Public, untrusted path: agent assignment is never accepted from the client.
   const normalizedPhone = normalizeAdminPhone(input.phone);
-  const contacts = await queryRows(
+  const email = input.email ? input.email : null;
+  const message = input.message ? input.message : null;
+  const propertyId = input.property_id ?? null;
+  const optInWhatsapp = input.consentWhatsapp === true;
+
+  // Single atomic CTE statement so the new/upserted contact id always flows
+  // through into the inquiry and lead inserts (one round-trip, no orphan risk,
+  // and no empty contactId -> uuid cast crash).
+  //
+  // normalized_phone is UNIQUE but nullable; NULL can never match the
+  // ON CONFLICT arbiter, so when it is null we skip the upsert entirely and
+  // always insert a fresh contact.
+  // Params (shared across every CTE branch):
+  //   $1 name, $2 phone, $3 normalized_phone, $4 email,
+  //   $5 property_id (uuid), $6 message, $7 opt_in_whatsapp (boolean)
+  const contactCte = normalizedPhone
+    ? `
+      contact AS (
+        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
+        VALUES ($1, $2, $3, $4, 'website', $7)
+        ON CONFLICT (normalized_phone) DO UPDATE SET
+          name = COALESCE(EXCLUDED.name, crm_contacts.name),
+          email = COALESCE(EXCLUDED.email, crm_contacts.email),
+          opt_in_whatsapp = crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp,
+          updated_at = now()
+        RETURNING id
+      )`
+    : `
+      contact AS (
+        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
+        VALUES ($1, $2, $3, $4, 'website', $7)
+        RETURNING id
+      )`;
+
+  const rows = await queryRows(
     `
-    INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-    VALUES ($1, $2, $3, $4, 'website', true)
-    ON CONFLICT (normalized_phone) DO UPDATE SET
-      name = COALESCE(EXCLUDED.name, crm_contacts.name),
-      email = COALESCE(EXCLUDED.email, crm_contacts.email),
-      updated_at = now()
-    RETURNING id
-    `,
-    [input.name, input.phone, normalizedPhone, input.email],
-  );
-  const contactId = stringOrEmpty(contacts[0]?.id);
-  const inquiries = await queryRows(
-    `
+    WITH ${contactCte},
+    new_lead AS (
+      INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note)
+      SELECT contact.id, $5::uuid, NULL, 'new', 'buyer', 'website', $6 FROM contact
+    )
     INSERT INTO inquiries (source, property_id, name, phone, email, message, assigned_agent_id, crm_contact_id)
-    VALUES ('website', $1, $2, $3, $4, $5, $6, $7)
+    SELECT 'website', $5::uuid, $1, $2, $4, $6, NULL, contact.id FROM contact
     RETURNING id
     `,
-    [
-      input.property_id,
-      input.name,
-      input.phone,
-      input.email,
-      input.message,
-      input.assigned_agent_id,
-      contactId,
-    ],
+    [input.name, input.phone, normalizedPhone, email, propertyId, message, optInWhatsapp],
   );
-  await queryRows(
-    `
-    INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note)
-    VALUES ($1, $2, $3, 'new', 'buyer', 'website', $4)
-    `,
-    [contactId, input.property_id, input.assigned_agent_id, input.message],
-  );
-  return { id: stringOrEmpty(inquiries[0]?.id) };
+  return { id: stringOrEmpty(rows[0]?.id) };
 }
 
 export async function updateInquiryStatus(id: string, status: string, actor: StaffAccess) {

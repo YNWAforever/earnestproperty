@@ -62,6 +62,16 @@ function featuresFor(detail) {
 }
 
 export function normalizeListingDetail(detail, options = {}) {
+  // Without a legacy detail id we cannot build a stable, unique listing_no
+  // (rows would collapse to OLD-null-* and collide on the NOT NULL UNIQUE
+  // listing_no constraint). Skip the listing instead of emitting bad rows.
+  if (!detail.legacyDetailId) {
+    console.warn(
+      `[mls] skipping listing without legacy detail id: ${detail.sourceUrl ?? "<unknown url>"}`,
+    );
+    return [];
+  }
+
   const estateIdsBySlug = options.estateIdsBySlug ?? new Map();
   const estateSlug = resolveEstateSlug(detail);
   const estateId = estateSlug ? (estateIdsBySlug.get(estateSlug) ?? null) : null;

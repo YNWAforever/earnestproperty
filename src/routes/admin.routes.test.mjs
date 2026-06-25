@@ -134,13 +134,15 @@ test("admin lead CRM workflow guards async detail state and uses list assignment
     adminDataTypes,
     /export type AdminLeadDetail = AdminLeadRow & \{[\s\S]*contact_id: string \| null;/,
   );
+  // Signatures gained an optional `actor` param for agent row-ownership scoping;
+  // the contract still requires the assignment/contact columns to be selected.
   assert.match(
     adminDataServer,
-    /export async function listAdminLeads\(\)[\s\S]*l\.assigned_agent_id,/,
+    /export async function listAdminLeads\([\s\S]*?\)[\s\S]*l\.assigned_agent_id,/,
   );
   assert.match(
     adminDataServer,
-    /export async function fetchAdminLead\(id: string\)[\s\S]*l\.contact_id,/,
+    /export async function fetchAdminLead\(id: string[\s\S]*?\)[\s\S]*l\.contact_id,/,
   );
   assert.match(adminDataServer, /contact_id: stringOrNull\(lead\.contact_id\)/);
 });
@@ -167,13 +169,30 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "屋苑 SEO",
     "文章編輯",
     "FAQ 編輯",
+    "FAQ / AI Agent 配置",
+    "上載 FAQ 檔案",
+    "貼上 FAQ",
+    "FaqImportDialog",
     "媒體庫",
     "saveAdminEstate",
     "saveAdminArticle",
     "saveAdminFaq",
+    "parseAdminFaqImport",
+    "匯入並訓練 AI",
     "updateAdminMediaAsset",
   ]) {
     assert.match(read("src/routes/admin.cms.tsx"), new RegExp(text));
+  }
+
+  const faqImport = read("src/lib/admin/faq-import.ts");
+  for (const text of [
+    "parseAdminFaqImport",
+    "問題",
+    "答案",
+    "parseMarkdownHeadings",
+    "parseDelimitedRows",
+  ]) {
+    assert.match(faqImport, new RegExp(text));
   }
 
   const expectations = [
