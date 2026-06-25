@@ -28,6 +28,13 @@ test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   assert.match(adminLayout, /Outlet/);
   assert.match(adminLayout, /<Outlet\s*\/>/);
   assert.doesNotMatch(adminLayout, /fetchAdminOverview/);
+  // Regression guard: the /admin layout must stay a passthrough with NO server-side
+  // beforeLoad auth check. This app authenticates server functions with a client-held
+  // Neon Auth bearer token (withStaffAuthHeaders), which an SSR route guard cannot see,
+  // so a server-side guard bounced every signed-in user back to /auth/sign-in. Access is
+  // enforced at the data layer (requireStaff on each server fn) and client-side in AdminShell.
+  assert.doesNotMatch(adminLayout, /beforeLoad/);
+  assert.doesNotMatch(adminLayout, /requireStaffAccess/);
 
   const adminOverview = read("src/routes/admin.index.tsx");
   assert.match(adminOverview, /Neon/);
