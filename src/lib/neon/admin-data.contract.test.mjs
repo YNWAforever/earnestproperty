@@ -57,3 +57,17 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
   assert.doesNotMatch(server, /input\.agent_id\s*\|\|\s*actor\.staffId/);
   assert.match(server, /input\.agent_id\s*\?\?\s*null/);
 });
+
+test("command center read model is guarded and set-based", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const client = read("src/lib/neon/admin-data.ts");
+
+  assert.match(server, /export\s+async\s+function\s+listCommandCenter\b/);
+  assert.match(server, /export\s+async\s+function\s+completeAdminLeadActivity\b/);
+  assert.match(server, /LEFT JOIN LATERAL/);
+  assert.match(server, /COMMAND_CENTER_ROW_LIMIT/);
+
+  assert.match(client, /export\s+async\s+function\s+fetchCommandCenter\b/);
+  assert.match(client, /export\s+async\s+function\s+completeAdminLeadActivity\b/);
+  assert.match(client, /fetchCommandCenterServer[\s\S]*?requireStaff\(\["admin", "manager"\]\)/);
+});
