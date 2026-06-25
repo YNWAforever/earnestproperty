@@ -414,3 +414,13 @@ test("admin segment editor guards selected segment and preview context", () => {
   assert.match(source, /disabled=\{!canSaveSegment \|\| saving\}/);
   assert.match(source, /disabled=\{!canMaterializeSegment \|\| materializing\}/);
 });
+
+test("command center route is registered, noindex, and admin-guarded", () => {
+  const route = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(route, /createFileRoute\("\/admin\/leads_\/command-center"\)/);
+  assert.match(route, /robots".*noindex/s);
+  assert.match(route, /fetchCommandCenter/);
+
+  const routeTree = read("src/routeTree.gen.ts");
+  assert.match(routeTree, /['"]\/admin\/leads\/command-center['"]/);
+});
