@@ -134,13 +134,15 @@ test("admin lead CRM workflow guards async detail state and uses list assignment
     adminDataTypes,
     /export type AdminLeadDetail = AdminLeadRow & \{[\s\S]*contact_id: string \| null;/,
   );
+  // Signatures gained an optional `actor` param for agent row-ownership scoping;
+  // the contract still requires the assignment/contact columns to be selected.
   assert.match(
     adminDataServer,
-    /export async function listAdminLeads\(\)[\s\S]*l\.assigned_agent_id,/,
+    /export async function listAdminLeads\([\s\S]*?\)[\s\S]*l\.assigned_agent_id,/,
   );
   assert.match(
     adminDataServer,
-    /export async function fetchAdminLead\(id: string\)[\s\S]*l\.contact_id,/,
+    /export async function fetchAdminLead\(id: string[\s\S]*?\)[\s\S]*l\.contact_id,/,
   );
   assert.match(adminDataServer, /contact_id: stringOrNull\(lead\.contact_id\)/);
 });

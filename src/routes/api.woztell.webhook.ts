@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
+import { normalizeAdminPhone } from "@/lib/neon/admin-workflow";
 import { queryRows, stringOrEmpty } from "@/lib/neon/db.server";
 import {
   isOptOutText,
@@ -29,56 +30,126 @@ export const Route = createFileRoute("/api/woztell/webhook")({
         const payload = JSON.parse(raw || "{}") as Record<string, unknown>;
         const event = normalizeWoztellEvent(payload);
         const phone = event.direction === "inbound" ? event.fromPhone : event.toPhone;
-        const normalizedPhone = phone?.replace(/\D/g, "") ?? null;
+        const normalizedPhone = normalizeAdminPhone(phone);
+        const memberId = event.woztellMemberId;
 
-        const contacts = await queryRows(
-          `
-          INSERT INTO crm_contacts (
-            name, phone, normalized_phone, whatsapp_member_id, source,
-            opt_in_whatsapp, opted_out_whatsapp, last_inbound_at
-          )
-          VALUES ($1, $2, $3, $4, 'whatsapp', true, $5, $6)
-          ON CONFLICT (normalized_phone) DO UPDATE SET
-            name = COALESCE(EXCLUDED.name, crm_contacts.name),
-            whatsapp_member_id = COALESCE(EXCLUDED.whatsapp_member_id, crm_contacts.whatsapp_member_id),
-            opt_in_whatsapp = true,
-            opted_out_whatsapp = crm_contacts.opted_out_whatsapp OR EXCLUDED.opted_out_whatsapp,
-            last_inbound_at = COALESCE(EXCLUDED.last_inbound_at, crm_contacts.last_inbound_at),
-            updated_at = now()
-          RETURNING id
-          `,
-          [
-            event.memberName,
-            phone,
-            normalizedPhone,
-            event.woztellMemberId,
-            isOptOutText(event.text),
-            event.direction === "inbound" ? event.timestamp : null,
-          ],
-        );
-        const contactId = stringOrEmpty(contacts[0]?.id);
+        // The Woztell member id is the stable identity for a conversation. Without
+        // it (and without a phone) we cannot reliably thread the event, so skip it.
+        if (!memberId && !normalizedPhone) {
+          console.warn(
+            "[woztell] skipping event with no member id and no phone; cannot thread reliably",
+          );
+          return Response.json({ ok: true, skipped: "no-identity" });
+        }
 
-        const conversations = await queryRows(
+        const lastInboundAt = event.direction === "inbound" ? event.timestamp : null;
+        const optedOut = isOptOutText(event.text);
+
+        // Find an existing contact by phone OR by member id, then INSERT/UPDATE by
+        // primary id. NULLs are distinct in Postgres, so relying solely on
+        // ON CONFLICT (normalized_phone) would create a fresh row for every
+        // member-id-keyed event that lacks a phone.
+        const existingContacts = await queryRows<{ id: string }>(
           `
-          INSERT INTO whatsapp_conversations (
-            contact_id, woztell_member_id, channel_id, last_message_at, last_inbound_at
-          )
-          VALUES ($1, $2, $3, $4, $5)
-          ON CONFLICT (channel_id, woztell_member_id) DO UPDATE SET
-            contact_id = EXCLUDED.contact_id,
-            last_message_at = EXCLUDED.last_message_at,
-            last_inbound_at = COALESCE(EXCLUDED.last_inbound_at, whatsapp_conversations.last_inbound_at),
-            updated_at = now()
-          RETURNING id
+          SELECT id FROM crm_contacts
+          WHERE (normalized_phone IS NOT NULL AND normalized_phone = $1)
+             OR (whatsapp_member_id IS NOT NULL AND whatsapp_member_id = $2)
+          ORDER BY (normalized_phone = $1) DESC
+          LIMIT 1
           `,
-          [
-            contactId,
-            event.woztellMemberId,
-            event.channelId,
-            event.timestamp,
-            event.direction === "inbound" ? event.timestamp : null,
-          ],
+          [normalizedPhone, memberId],
         );
+
+        let contactId: string;
+        if (existingContacts[0]?.id) {
+          const updated = await queryRows<{ id: string }>(
+            `
+            UPDATE crm_contacts SET
+              name = COALESCE($2, name),
+              phone = COALESCE(phone, $3),
+              normalized_phone = COALESCE(normalized_phone, $4),
+              whatsapp_member_id = COALESCE(whatsapp_member_id, $5),
+              opt_in_whatsapp = true,
+              opted_out_whatsapp = opted_out_whatsapp OR $6,
+              last_inbound_at = COALESCE($7, last_inbound_at),
+              updated_at = now()
+            WHERE id = $1
+            RETURNING id
+            `,
+            [
+              existingContacts[0].id,
+              event.memberName,
+              phone,
+              normalizedPhone,
+              memberId,
+              optedOut,
+              lastInboundAt,
+            ],
+          );
+          contactId = stringOrEmpty(updated[0]?.id);
+        } else {
+          const inserted = await queryRows<{ id: string }>(
+            `
+            INSERT INTO crm_contacts (
+              name, phone, normalized_phone, whatsapp_member_id, source,
+              opt_in_whatsapp, opted_out_whatsapp, last_inbound_at
+            )
+            VALUES ($1, $2, $3, $4, 'whatsapp', true, $5, $6)
+            RETURNING id
+            `,
+            [event.memberName, phone, normalizedPhone, memberId, optedOut, lastInboundAt],
+          );
+          contactId = stringOrEmpty(inserted[0]?.id);
+        }
+
+        // Thread the conversation by member id. Skip when absent (channel_id alone
+        // is not a reliable key, and NULL member ids are distinct under the unique
+        // constraint, so ON CONFLICT would spawn a new row per message).
+        let conversationId: string | null = null;
+        if (memberId) {
+          const existingConversations = await queryRows<{ id: string }>(
+            `SELECT id FROM whatsapp_conversations WHERE woztell_member_id = $1 LIMIT 1`,
+            [memberId],
+          );
+          if (existingConversations[0]?.id) {
+            const updated = await queryRows<{ id: string }>(
+              `
+              UPDATE whatsapp_conversations SET
+                contact_id = $2,
+                channel_id = COALESCE(channel_id, $3),
+                last_message_at = $4,
+                last_inbound_at = COALESCE($5, last_inbound_at),
+                updated_at = now()
+              WHERE id = $1
+              RETURNING id
+              `,
+              [
+                existingConversations[0].id,
+                contactId,
+                event.channelId,
+                event.timestamp,
+                lastInboundAt,
+              ],
+            );
+            conversationId = updated[0]?.id ? stringOrEmpty(updated[0].id) : null;
+          } else {
+            const inserted = await queryRows<{ id: string }>(
+              `
+              INSERT INTO whatsapp_conversations (
+                contact_id, woztell_member_id, channel_id, last_message_at, last_inbound_at
+              )
+              VALUES ($1, $2, $3, $4, $5)
+              RETURNING id
+              `,
+              [contactId, memberId, event.channelId, event.timestamp, lastInboundAt],
+            );
+            conversationId = inserted[0]?.id ? stringOrEmpty(inserted[0].id) : null;
+          }
+        } else {
+          console.warn(
+            "[woztell] event has no member id; storing message without a threaded conversation",
+          );
+        }
 
         await queryRows(
           `
@@ -90,7 +161,7 @@ export const Route = createFileRoute("/api/woztell/webhook")({
           ON CONFLICT (external_message_id) DO NOTHING
           `,
           [
-            conversations[0]?.id,
+            conversationId,
             contactId,
             event.direction,
             event.messageType,

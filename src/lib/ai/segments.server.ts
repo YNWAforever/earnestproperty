@@ -39,13 +39,17 @@ export type CrmSegmentRow = CrmSegment & {
   eligible_members: number;
 };
 
-export async function previewCrmSegment(input: {
-  prompt: string;
-  filters?: CrmSegmentFilters;
-}): Promise<CrmSegmentPreview> {
-  const filters = normalizeSegmentFilters(
-    input.filters ?? parseSegmentPromptToFilters(input.prompt),
-  );
+// Preview is for UI display only, so it is capped. Materialize must enroll the full
+// matching set; a much higher bound (effectively "all" for any realistic segment)
+// avoids the bug where segments matching >200 contacts only enrolled the first 200.
+const SEGMENT_PREVIEW_LIMIT = 200;
+const SEGMENT_MATERIALIZE_LIMIT = 50000;
+
+async function fetchSegmentContacts(
+  prompt: string,
+  filters: CrmSegmentFilters,
+  limit: number,
+): Promise<CrmSegmentPreviewContact[]> {
   const rows = await queryRows(
     `SELECT DISTINCT ON (c.id, l.id)
        c.id AS contact_id,
@@ -79,7 +83,7 @@ export async function previewCrmSegment(input: {
          OR estate.district_slug = $9
        )
      ORDER BY c.id, l.id, l.updated_at DESC
-     LIMIT 200`,
+     LIMIT $10`,
     [
       filters.intent ?? null,
       filters.budget?.min ?? null,
@@ -90,10 +94,11 @@ export async function previewCrmSegment(input: {
       filters.source ?? null,
       filters.assigned_agent_id ?? null,
       filters.district_slug ?? null,
+      limit,
     ],
   );
 
-  const contacts = rows.map((row) => {
+  return rows.map((row) => {
     const eligibility = classifySegmentEligibility({
       normalized_phone: stringOrNull(row.normalized_phone),
       opt_in_whatsapp: row.opt_in_whatsapp === true,
@@ -106,9 +111,19 @@ export async function previewCrmSegment(input: {
       phone: stringOrNull(row.phone),
       eligibility_status: eligibility,
       confidence: segmentConfidence(filters, eligibility),
-      reason: segmentReason(input.prompt, filters),
+      reason: segmentReason(prompt, filters),
     };
   });
+}
+
+export async function previewCrmSegment(input: {
+  prompt: string;
+  filters?: CrmSegmentFilters;
+}): Promise<CrmSegmentPreview> {
+  const filters = normalizeSegmentFilters(
+    input.filters ?? parseSegmentPromptToFilters(input.prompt),
+  );
+  const contacts = await fetchSegmentContacts(input.prompt, filters, SEGMENT_PREVIEW_LIMIT);
 
   return {
     filters,
@@ -185,10 +200,13 @@ export async function materializeCrmSegment(input: { segmentId: string }) {
   if (!segment) throw new Error("Segment not found");
 
   const prompt = stringOrEmpty(segment.natural_language_prompt);
-  const filters =
-    parseStoredSegmentFilters(segment.structured_filters) ?? parseSegmentPromptToFilters(prompt);
-  const preview = await previewCrmSegment({ prompt, filters });
-  const memberships = preview.contacts.map((contact) => ({
+  const filters = normalizeSegmentFilters(
+    parseStoredSegmentFilters(segment.structured_filters) ?? parseSegmentPromptToFilters(prompt),
+  );
+  // Enroll the FULL matching set, not the 200-row preview, so segments with more than
+  // the preview cap still materialize every matching contact.
+  const contacts = await fetchSegmentContacts(prompt, filters, SEGMENT_MATERIALIZE_LIMIT);
+  const memberships = contacts.map((contact) => ({
     contact_id: contact.contact_id,
     lead_id: contact.lead_id,
     confidence: contact.confidence,
@@ -225,7 +243,10 @@ export async function materializeCrmSegment(input: { segmentId: string }) {
     tx.query("UPDATE crm_segments SET updated_at = now() WHERE id = $1", [input.segmentId]),
   ]);
 
-  return { materialized: preview.contacts.length, eligible: preview.eligible };
+  return {
+    materialized: contacts.length,
+    eligible: contacts.filter((contact) => contact.eligibility_status === "eligible").length,
+  };
 }
 
 export async function listCrmSegments(): Promise<CrmSegmentRow[]> {

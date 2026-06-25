@@ -25,10 +25,22 @@ export function verifyWoztellSignature(
   secret: string | null | undefined,
 ) {
   if (!signature || !secret) return false;
-  const digest = crypto.createHmac("sha256", secret).update(body).digest("base64");
-  const expected = Buffer.from(digest);
-  const actual = Buffer.from(signature);
-  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+
+  // Strip an optional scheme prefix (e.g. "sha256=") and surrounding whitespace.
+  const normalized = signature.trim().replace(/^sha256=/i, "");
+  if (!normalized) return false;
+
+  const hmac = crypto.createHmac("sha256", secret).update(body).digest();
+  const actual = Buffer.from(normalized);
+
+  // The header may carry the digest as either base64 or hex; accept both.
+  for (const encoding of ["base64", "hex"] as const) {
+    const expected = Buffer.from(hmac.toString(encoding));
+    if (expected.length === actual.length && crypto.timingSafeEqual(expected, actual)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function isOptOutText(value: string | null | undefined) {

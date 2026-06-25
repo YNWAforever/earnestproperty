@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
+import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
 import type {
@@ -104,9 +105,9 @@ export async function fetchAdminOverview() {
 }
 
 const fetchAdminListingsServer = createServerFn({ method: "GET" }).handler(async () => {
-  await requireStaff(["admin", "manager", "agent"]);
+  const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
-  return data.listAdminListings();
+  return data.listAdminListings({}, staff);
 });
 
 export async function fetchAdminListings() {
@@ -265,9 +266,9 @@ export const materializeAdminCrmSegment = async function materializeAdminCrmSegm
 };
 
 const fetchAdminLeadsServer = createServerFn({ method: "GET" }).handler(async () => {
-  await requireStaff(["admin", "manager", "agent"]);
+  const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
-  return data.listAdminLeads();
+  return data.listAdminLeads(staff);
 });
 
 export async function fetchAdminLeads() {
@@ -275,9 +276,9 @@ export async function fetchAdminLeads() {
 }
 
 const fetchAdminConversationsServer = createServerFn({ method: "GET" }).handler(async () => {
-  await requireStaff(["admin", "manager", "agent"]);
+  const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
-  return data.listAdminConversations();
+  return data.listAdminConversations(staff);
 });
 
 export async function fetchAdminConversations() {
@@ -294,17 +295,23 @@ export async function fetchAdminCampaigns() {
   return callStaffServerFn(async () => fetchAdminCampaignsServer(await withStaffAuthHeaders()));
 }
 
+const websiteInquirySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    phone: z.string().trim().max(30),
+    email: z.string().trim().max(254).email().optional().or(z.literal("")),
+    message: z.string().trim().max(2000).optional().or(z.literal("")),
+    listingNo: z.string().trim().uuid().optional(),
+    property_id: z.string().trim().uuid().optional(),
+    consentWhatsapp: z.boolean().default(false),
+  })
+  // Public, untrusted path: never accept a caller-supplied agent assignment.
+  .strip();
+
+export type WebsiteInquiryInput = z.infer<typeof websiteInquirySchema>;
+
 export const createWebsiteInquiry = createServerFn({ method: "POST" })
-  .inputValidator(
-    (data: {
-      property_id: string;
-      assigned_agent_id: string | null;
-      name: string;
-      phone: string;
-      email: string | null;
-      message: string | null;
-    }) => data,
-  )
+  .inputValidator((data: unknown) => websiteInquirySchema.parse(data))
   .handler(async ({ data }) => {
     const adminData = await import("./admin-data.server");
     return adminData.createWebsiteInquiry(data);
@@ -438,9 +445,9 @@ export async function updateAdminMediaAsset(options: {
 const fetchAdminListingsFilteredServer = createServerFn({ method: "GET" })
   .inputValidator((data: AdminListingFiltersInput) => data)
   .handler(async ({ data }) => {
-    await requireStaff(["admin", "manager", "agent"]);
+    const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.listAdminListings(data);
+    return adminData.listAdminListings(data, staff);
   });
 
 export async function fetchAdminListingsFiltered(options: { data: AdminListingFiltersInput }) {
@@ -468,9 +475,9 @@ export async function updateAdminPropertyStatus(options: {
 const fetchAdminLeadServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await requireStaff(["admin", "manager", "agent"]);
+    const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.fetchAdminLead(data.id);
+    return adminData.fetchAdminLead(data.id, staff);
   });
 
 export async function fetchAdminLead(options: { data: { id: string } }) {
@@ -568,9 +575,9 @@ export async function createAdminLeadActivity(options: { data: AdminLeadActivity
 const fetchAdminConversationServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await requireStaff(["admin", "manager", "agent"]);
+    const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.fetchAdminConversation(data.id);
+    return adminData.fetchAdminConversation(data.id, staff);
   });
 
 export async function fetchAdminConversation(options: { data: { id: string } }) {

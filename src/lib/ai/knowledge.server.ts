@@ -5,12 +5,18 @@ import { createHash } from "node:crypto";
 import { getSql, queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { AiKnowledgeChunk, AiKnowledgeSourceType, AiVisibility } from "./ai-types";
+import { getAiServerConfig } from "./config.server.ts";
 import {
   chunkKnowledgeText,
   filterPublicKnowledgeChunks,
   normalizeKnowledgeSource,
 } from "./knowledge.ts";
 import { embedAiTexts, generateAiText } from "./provider.server.ts";
+
+// Must match the embedding column dimension in the ai_knowledge_chunks migration
+// (vector(1536)). A returned embedding of any other length cannot be stored, so we
+// surface it loudly instead of silently degrading search to a null vector.
+const EMBEDDING_DIMENSIONS = 1536;
 
 type RawSource = {
   source_type: AiKnowledgeSourceType;
@@ -74,8 +80,10 @@ const MANAGED_REBUILD_SOURCE_TYPES: AiKnowledgeSourceType[] = [
 export async function rebuildAiKnowledgeIndex() {
   const sources = await fetchPublicKnowledgeSources();
   const observedSources = new Map<string, ObservedKnowledgeSource>();
+  const embeddingModel = getAiServerConfig().embeddingModel;
   let indexedSources = 0;
   let indexedChunks = 0;
+  let embeddingDimensionFailures = 0;
 
   for (const source of sources) {
     const normalizedText = normalizeSourceText(source.text);
@@ -107,7 +115,12 @@ export async function rebuildAiKnowledgeIndex() {
       listing_id: source.listing_id ?? null,
       visibility: normalized.visibility,
       freshness_score: freshnessScore(normalized.source_type),
-      embedding: embeddingVectorString(embeddings.ok ? embeddings.embeddings[index] : null),
+      embedding: embeddingVectorString(embeddings.ok ? embeddings.embeddings[index] : null, {
+        model: embeddingModel,
+        onDimensionMismatch: () => {
+          embeddingDimensionFailures += 1;
+        },
+      }),
       content_hash: chunk.content_hash,
     }));
 
@@ -153,13 +166,20 @@ export async function rebuildAiKnowledgeIndex() {
 
   await reconcileUnobservedKnowledgeSources(Array.from(observedSources.values()));
 
-  return { indexedSources, indexedChunks };
+  if (embeddingDimensionFailures > 0) {
+    console.error(
+      `[ai-knowledge] rebuild stored ${embeddingDimensionFailures} chunk(s) without embeddings due to dimension mismatch (model=${embeddingModel ?? "unknown"}, expected=${EMBEDDING_DIMENSIONS}). Semantic search is degraded for those chunks.`,
+    );
+  }
+
+  return { indexedSources, indexedChunks, embeddingDimensionFailures };
 }
 
 export async function searchPublicKnowledge(input: { query: string; limit?: number }) {
   const query = input.query.trim();
   if (!query) return [] as AiKnowledgeChunk[];
 
+  const likePattern = escapeLike(query);
   const requestedLimit = Number(input.limit ?? 6);
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(Math.max(Math.floor(requestedLimit), 1), 12)
@@ -189,15 +209,15 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
        AND s.published = true
        AND c.stale = false
        AND (
-         c.chunk_text ILIKE '%' || $1 || '%'
-         OR s.title ILIKE '%' || $1 || '%'
-         OR c.estate_slug ILIKE '%' || $1 || '%'
-         OR c.district_slug ILIKE '%' || $1 || '%'
-         OR c.metadata->>'listing_no' ILIKE '%' || $1 || '%'
+         c.chunk_text ILIKE '%' || $1 || '%' ESCAPE '\\'
+         OR s.title ILIKE '%' || $1 || '%' ESCAPE '\\'
+         OR c.estate_slug ILIKE '%' || $1 || '%' ESCAPE '\\'
+         OR c.district_slug ILIKE '%' || $1 || '%' ESCAPE '\\'
+         OR c.metadata->>'listing_no' ILIKE '%' || $1 || '%' ESCAPE '\\'
        )
      ORDER BY c.freshness_score DESC, c.created_at DESC
      LIMIT $2`,
-    [query, limit],
+    [likePattern, limit],
   );
 
   if (rows.length) return mapKnowledgeChunkRows(rows);
@@ -456,6 +476,12 @@ function normalizeSourceText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
+// Escape ILIKE wildcards so a visitor-supplied query containing % or _ (or a literal
+// backslash) is treated as literal text. Pairs with `ESCAPE '\\'` in the SQL pattern.
+function escapeLike(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
 function joinText(values: unknown[]) {
   return values
     .map((value) => stringOrNull(value)?.trim())
@@ -483,8 +509,22 @@ function freshnessScore(sourceType: AiKnowledgeSourceType) {
   return 0.8;
 }
 
-function embeddingVectorString(value: number[] | null | undefined) {
-  if (!Array.isArray(value) || value.length !== 1536) return null;
+function embeddingVectorString(
+  value: number[] | null | undefined,
+  context: { model: string | null; onDimensionMismatch: () => void },
+) {
+  if (value === null || value === undefined) return null;
+  if (!Array.isArray(value)) return null;
+  if (value.length !== EMBEDDING_DIMENSIONS) {
+    // A non-empty embedding with the wrong dimension would otherwise be dropped to
+    // null and silently degrade search. Report the model + actual length and let the
+    // caller count the failure so rebuildAiKnowledgeIndex can flag it.
+    console.error(
+      `[ai-knowledge] embedding dimension mismatch: model=${context.model ?? "unknown"} expected=${EMBEDDING_DIMENSIONS} actual=${value.length}`,
+    );
+    context.onDimensionMismatch();
+    return null;
+  }
   return `[${value.join(",")}]`;
 }
 

@@ -108,10 +108,26 @@ for (const file of migrationFiles) {
   }
 
   const query = readFileSync(join(migrationsDir, file), "utf8");
-  await sql.transaction((tx) => [
-    ...splitSqlStatements(query).map((statement) => tx.query(statement)),
-    tx.query("INSERT INTO app_migrations (version) VALUES ($1)", [file]),
-  ]);
+  const statements = splitSqlStatements(query);
+
+  for (let index = 0; index < statements.length; index += 1) {
+    const statement = statements[index];
+    try {
+      await sql.query(statement);
+    } catch (error) {
+      const cause = error instanceof Error ? error.message : String(error);
+      const preview = statement.length > 200 ? `${statement.slice(0, 200)}…` : statement;
+      throw new Error(
+        `Migration "${file}" failed at statement #${index + 1} of ${statements.length} ` +
+          `(not marked as applied): ${cause}\nStatement: ${preview}`,
+        { cause: error },
+      );
+    }
+  }
+
+  // Only record the migration after every statement has succeeded, so a
+  // mid-migration failure leaves app_migrations unwritten and the run is retried.
+  await sql.query("INSERT INTO app_migrations (version) VALUES ($1)", [file]);
   results.push({ file, status: "applied" });
 }
 

@@ -41,7 +41,11 @@ function staffRolesFromValue(value: unknown): StaffRole[] {
   if (Array.isArray(value)) return value.map(String) as StaffRole[];
   if (typeof value !== "string") return [];
   if (value.startsWith("[") && value.endsWith("]")) {
-    return JSON.parse(value).map(String) as StaffRole[];
+    try {
+      return JSON.parse(value).map(String) as StaffRole[];
+    } catch {
+      return [];
+    }
   }
   if (value.startsWith("{") && value.endsWith("}")) {
     return value
@@ -67,7 +71,10 @@ function isTokenTimeValid(payload: AnyRecord) {
   const now = Math.floor(Date.now() / 1000);
   const exp = typeof payload.exp === "number" ? payload.exp : null;
   const nbf = typeof payload.nbf === "number" ? payload.nbf : null;
-  return (!exp || exp > now) && (!nbf || nbf <= now);
+  // A positive future `exp` is ALWAYS required: a missing/zero/past exp is rejected.
+  if (exp === null || exp <= now) return false;
+  if (nbf !== null && nbf > now) return false;
+  return true;
 }
 
 async function listNeonAuthJwks() {
@@ -96,6 +103,16 @@ async function verifyNeonJwt(token: string) {
 
   const payload = base64UrlToJson(encodedPayload);
   if (!isTokenTimeValid(payload)) return null;
+
+  // Validate issuer/audience when configured (env unset = skip that specific check).
+  const expectedIssuer = process.env.NEON_AUTH_ISSUER;
+  if (expectedIssuer && payload.iss !== expectedIssuer) return null;
+  const expectedAudience = process.env.NEON_AUTH_AUDIENCE;
+  if (expectedAudience) {
+    const aud = payload.aud;
+    const audiences = Array.isArray(aud) ? aud.map(String) : typeof aud === "string" ? [aud] : [];
+    if (!audiences.includes(expectedAudience)) return null;
+  }
 
   const signedData = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
   const signature = base64UrlToBytes(encodedSignature);
@@ -222,7 +239,10 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
     FROM staff_users s
     LEFT JOIN staff_roles r ON r.staff_user_id = s.id
     WHERE s.active = true
-      AND (s.auth_user_id = $1 OR ($2::text IS NOT NULL AND lower(s.email) = lower($2::text)))
+      AND (
+        s.auth_user_id = $1
+        OR ($2::text IS NOT NULL AND lower(s.email) = lower($2::text) AND s.auth_user_id IS NULL)
+      )
     GROUP BY s.id
     LIMIT 1
     `,
@@ -236,7 +256,7 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
       UPDATE staff_users
       SET auth_user_id = $1, updated_at = now()
       WHERE id = $2
-        AND (auth_user_id IS NULL OR auth_user_id <> $1)
+        AND auth_user_id IS NULL
       `,
       [authUserId, row.id],
     ).catch(() => []);
@@ -286,20 +306,35 @@ async function bootstrapFirstStaff(input: {
   };
 }
 
+// ADMIN_BOOTSTRAP_EMAILS: comma-separated allowlist of emails permitted to become the
+// first admin when staff_users is empty. If unset/empty, first-login bootstrap is disabled
+// and access stays null (403) until staff are seeded out-of-band.
+function bootstrapAllowlist(): Set<string> {
+  return new Set(
+    (process.env.ADMIN_BOOTSTRAP_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 export async function requireStaffAccess(request: Request, allowed: StaffRole[] = ["admin"]) {
   const session = await getNeonSessionFromRequest(request);
   if (!session) throw new Response("Unauthorized", { status: 401 });
 
   const staff = await findStaff(session.user.id, session.user.email);
-  const access =
-    staff ??
-    ((await staffCount()) === 0
-      ? await bootstrapFirstStaff({
-          authUserId: session.user.id,
-          email: session.user.email,
-          name: session.user.name,
-        })
-      : null);
+  let access = staff;
+  if (!access) {
+    const email = session.user.email?.trim().toLowerCase() ?? "";
+    const allowlist = bootstrapAllowlist();
+    if (email && allowlist.has(email) && (await staffCount()) === 0) {
+      access = await bootstrapFirstStaff({
+        authUserId: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+      });
+    }
+  }
 
   if (!access) throw new Response("Forbidden", { status: 403 });
   if (!allowed.some((role) => access.roles.includes(role))) {

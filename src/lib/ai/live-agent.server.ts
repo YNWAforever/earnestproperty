@@ -20,6 +20,7 @@ type LiveAgentSessionRow = {
   preferred_estates: unknown;
   timeline: unknown;
   opt_in_whatsapp: unknown;
+  access_token: unknown;
 };
 
 type LiveAgentMessageRow = {
@@ -48,21 +49,32 @@ export class LiveAgentPublicError extends Error {
 export async function createLiveAgentSession(input: {
   anonymousId?: string | null;
   sourcePath?: string | null;
-}) {
+  sessionId?: string | null;
+  accessToken?: string | null;
+}): Promise<{ session: LiveAgentSession; accessToken: string }> {
   const anonymousId = cleanNullableText(input.anonymousId, 120);
   const sourcePath = cleanNullableText(input.sourcePath, 500);
 
-  if (anonymousId) {
+  // Only reuse an existing session when the caller proves ownership with the
+  // matching server-issued {sessionId, accessToken}. anonymousId alone is
+  // attacker-supplied and never authorizes reuse (analytics field only).
+  const sessionId = input.sessionId?.trim();
+  const accessToken = cleanNullableText(input.accessToken, 120);
+  if (sessionId && accessToken && isLiveAgentSessionId(sessionId)) {
     const existing = await queryRows<LiveAgentSessionRow>(
       `SELECT *
        FROM live_agent_sessions
-       WHERE anonymous_id = $1
+       WHERE id = $1
+         AND access_token = $2
          AND status IN ('open', 'qualified')
        ORDER BY updated_at DESC
        LIMIT 1`,
-      [anonymousId],
+      [sessionId, accessToken],
     );
-    if (existing[0]) return mapSession(existing[0]);
+    if (existing[0]) {
+      const row = existing[0];
+      return { session: mapSession(row), accessToken: stringOrEmpty(row.access_token) };
+    }
   }
 
   const rows = await queryRows<LiveAgentSessionRow>(
@@ -72,18 +84,24 @@ export async function createLiveAgentSession(input: {
     [anonymousId, sourcePath],
   );
 
-  return mapSession(requireRow(rows[0], "Unable to create live-agent session."));
+  const row = requireRow(rows[0], "Unable to create live-agent session.");
+  return { session: mapSession(row), accessToken: stringOrEmpty(row.access_token) };
 }
 
-export async function answerLiveAgentMessage(input: { sessionId: string; message: string }) {
+export async function answerLiveAgentMessage(input: {
+  sessionId: string;
+  accessToken: string;
+  message: string;
+}) {
   const sessionId = input.sessionId.trim();
+  const accessToken = input.accessToken.trim();
   const visitorMessage = input.message.trim().slice(0, 2000);
 
-  if (!isLiveAgentSessionId(sessionId) || !visitorMessage) {
+  if (!isLiveAgentSessionId(sessionId) || !accessToken || !visitorMessage) {
     throw new LiveAgentPublicError("Invalid live-agent message.", 400);
   }
 
-  const session = await getLiveAgentSessionForMessage(sessionId);
+  const session = await getLiveAgentSessionForMessage(sessionId, accessToken);
 
   await queryRows(
     `INSERT INTO live_agent_messages (session_id, direction, message_text, shown_publicly)
@@ -133,6 +151,7 @@ export function toPublicLiveAgentSession(session: LiveAgentSession): PublicLiveA
 
 export async function requestLiveAgentHandoff(input: {
   sessionId: string;
+  accessToken: string;
   name?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -143,11 +162,12 @@ export async function requestLiveAgentHandoff(input: {
   opt_in_whatsapp?: boolean | null;
 }) {
   const sessionId = input.sessionId.trim();
-  if (!isLiveAgentSessionId(sessionId)) {
+  const accessToken = input.accessToken.trim();
+  if (!isLiveAgentSessionId(sessionId) || !accessToken) {
     throw new LiveAgentPublicError("Invalid handoff session.", 400);
   }
 
-  const session = await getLiveAgentSessionForHandoff(sessionId);
+  const session = await getLiveAgentSessionForHandoff(sessionId, accessToken);
   const leadInput = buildLiveAgentLeadInput({
     ...input,
     source_path: session.source_path,
@@ -245,36 +265,54 @@ export async function requestLiveAgentHandoff(input: {
   return { ok: true, status: "handoff_requested" as const };
 }
 
-async function getLiveAgentSessionForMessage(sessionId: string) {
+async function getLiveAgentSessionForMessage(sessionId: string, accessToken: string) {
   const rows = await queryRows<LiveAgentSessionRow>(
     `SELECT *
      FROM live_agent_sessions
      WHERE id = $1
+       AND access_token = $2
        AND status IN ('open', 'qualified')
      LIMIT 1`,
-    [sessionId],
+    [sessionId, accessToken],
   );
   if (rows[0]) return mapSession(rows[0]);
 
-  const existing = await queryRows<{ status: unknown }>(
-    "SELECT status FROM live_agent_sessions WHERE id = $1 LIMIT 1",
+  // Distinguish a wrong/missing token (403) from a closed but owned session
+  // (400) and a truly unknown session (404) without leaking which sessions
+  // exist to an unauthenticated caller.
+  const owned = await queryRows<{ status: unknown }>(
+    "SELECT status FROM live_agent_sessions WHERE id = $1 AND access_token = $2 LIMIT 1",
+    [sessionId, accessToken],
+  );
+  if (owned[0]) throw new LiveAgentPublicError("Live-agent session is not open.", 400);
+
+  const existing = await queryRows<{ id: unknown }>(
+    "SELECT id FROM live_agent_sessions WHERE id = $1 LIMIT 1",
     [sessionId],
   );
   if (!existing[0]) throw new LiveAgentPublicError("Live-agent session not found.", 404);
 
-  throw new LiveAgentPublicError("Live-agent session is not open.", 400);
+  throw new LiveAgentPublicError("Live-agent session access denied.", 403);
 }
 
-async function getLiveAgentSessionForHandoff(sessionId: string) {
+async function getLiveAgentSessionForHandoff(sessionId: string, accessToken: string) {
   const rows = await queryRows<LiveAgentSessionRow>(
     `SELECT *
      FROM live_agent_sessions
      WHERE id = $1
+       AND access_token = $2
      LIMIT 1`,
-    [sessionId],
+    [sessionId, accessToken],
   );
   const session = rows[0] ? mapSession(rows[0]) : null;
-  if (!session) throw new LiveAgentPublicError("Live-agent session not found.", 404);
+  if (!session) {
+    const existing = await queryRows<{ id: unknown }>(
+      "SELECT id FROM live_agent_sessions WHERE id = $1 LIMIT 1",
+      [sessionId],
+    );
+    if (!existing[0]) throw new LiveAgentPublicError("Live-agent session not found.", 404);
+    throw new LiveAgentPublicError("Live-agent session access denied.", 403);
+  }
   if (
     session.status !== "open" &&
     session.status !== "qualified" &&
@@ -300,10 +338,7 @@ async function upsertLiveAgentContact(input: {
          name = COALESCE(EXCLUDED.name, crm_contacts.name),
          phone = COALESCE(EXCLUDED.phone, crm_contacts.phone),
          email = COALESCE(EXCLUDED.email, crm_contacts.email),
-         opt_in_whatsapp = CASE
-           WHEN crm_contacts.opted_out_whatsapp THEN crm_contacts.opt_in_whatsapp
-           ELSE crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp
-         END,
+         opt_in_whatsapp = crm_contacts.opt_in_whatsapp,
          updated_at = now()
        RETURNING id`,
       [input.name, input.phone, input.normalizedPhone, input.email, input.optInWhatsapp],
@@ -332,14 +367,10 @@ async function updateLiveAgentContact(input: {
      SET name = COALESCE($1, name),
          phone = COALESCE($2, phone),
          email = COALESCE($3, email),
-         opt_in_whatsapp = CASE
-           WHEN opted_out_whatsapp THEN opt_in_whatsapp
-           ELSE opt_in_whatsapp OR $4
-         END,
          updated_at = now()
-     WHERE id=$5
+     WHERE id=$4
      RETURNING id`,
-    [input.name, input.phone, input.email, input.optInWhatsapp, input.contactId],
+    [input.name, input.phone, input.email, input.contactId],
   );
   if (rows[0]) return stringOrEmpty(rows[0].id);
   return upsertLiveAgentContact({

@@ -38,6 +38,15 @@ export function parseMoneyToHkd(text) {
   const raw = normalizeText(text).replace(/,/g, "");
   if (!raw || raw === "--") return null;
 
+  // 億 = 100,000,000. Handle combined forms like X億Y萬 (e.g. 1億2,800萬).
+  const hundredMillion = raw.match(/(\d+(?:\.\d+)?)\s*億(?:\s*(\d+(?:\.\d+)?)\s*萬)?/);
+  if (hundredMillion) {
+    const yi = Number(hundredMillion[1]) * 100_000_000;
+    const wan = hundredMillion[2] ? Number(hundredMillion[2]) * 10_000 : 0;
+    const total = yi + wan;
+    return Number.isFinite(total) ? Math.round(total) : null;
+  }
+
   const tenThousand = raw.match(/\$?\s*(\d+(?:\.\d+)?)\s*萬/);
   if (tenThousand) return Math.round(Number(tenThousand[1]) * 10_000);
 
