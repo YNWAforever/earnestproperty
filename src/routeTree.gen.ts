@@ -47,6 +47,7 @@ import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent
 import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent.handoff'
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
 import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
+import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
@@ -243,6 +244,11 @@ const AdminListingsIdRoute = AdminListingsIdRouteImport.update({
   path: '/listings/$id',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminLeadsCommandCenterRoute = AdminLeadsCommandCenterRouteImport.update({
+  id: '/leads_/command-center',
+  path: '/leads/command-center',
+  getParentRoute: () => AdminRoute,
+} as any)
 const ApiAdminWoztellSendRoute = ApiAdminWoztellSendRouteImport.update({
   id: '/api/admin/woztell/send',
   path: '/api/admin/woztell/send',
@@ -302,6 +308,7 @@ export interface FileRoutesByFullPath {
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
@@ -345,6 +352,7 @@ export interface FileRoutesByTo {
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin': typeof AdminIndexRoute
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
+  '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
@@ -391,6 +399,7 @@ export interface FileRoutesById {
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings_/$id': typeof AdminListingsIdRoute
   '/admin/listings_/new': typeof AdminListingsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
@@ -438,6 +447,7 @@ export interface FileRouteTypes {
     | '/property/$listingNo'
     | '/admin/'
     | '/castle-peak-road/'
+    | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
     | '/api/live-agent/handoff'
@@ -481,6 +491,7 @@ export interface FileRouteTypes {
     | '/property/$listingNo'
     | '/admin'
     | '/castle-peak-road'
+    | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
     | '/api/live-agent/handoff'
@@ -526,6 +537,7 @@ export interface FileRouteTypes {
     | '/property/$listingNo'
     | '/admin/'
     | '/castle-peak-road/'
+    | '/admin/leads_/command-center'
     | '/admin/listings_/$id'
     | '/admin/listings_/new'
     | '/api/live-agent/handoff'
@@ -840,6 +852,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminListingsIdRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/leads_/command-center': {
+      id: '/admin/leads_/command-center'
+      path: '/leads/command-center'
+      fullPath: '/admin/leads/command-center'
+      preLoaderRoute: typeof AdminLeadsCommandCenterRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/api/admin/woztell/send': {
       id: '/api/admin/woztell/send'
       path: '/api/admin/woztell/send'
@@ -886,6 +905,7 @@ interface AdminRouteChildren {
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
   AdminListingsIdRoute: typeof AdminListingsIdRoute
   AdminListingsNewRoute: typeof AdminListingsNewRoute
 }
@@ -898,6 +918,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
   AdminListingsIdRoute: AdminListingsIdRoute,
   AdminListingsNewRoute: AdminListingsNewRoute,
 }
