@@ -1,5 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CheckCircle2,
   RotateCcw,
@@ -534,9 +534,14 @@ function AdminLeads() {
           </>
         }
         actions={
-          <Badge variant="secondary" className="h-9 rounded-md px-3">
-            {filteredRows.length} Leads
-          </Badge>
+          <>
+            <Button asChild size="sm" className="h-9">
+              <Link to="/admin/leads/command-center">前往 Command Center</Link>
+            </Button>
+            <Badge variant="secondary" className="h-9 rounded-md px-3">
+              {filteredRows.length} Leads
+            </Badge>
+          </>
         }
       />
 
