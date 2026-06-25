@@ -5,6 +5,7 @@ import type {
   CrmSegmentEligibility,
   CrmSegmentFilters,
 } from "@/lib/ai/ai-types";
+import type { LeadPriority, WhatsappLinkStatus } from "./command-center";
 
 export type StaffRole = "admin" | "manager" | "agent";
 
@@ -329,4 +330,56 @@ export type AdminCrmSegmentPreview = {
 export type AdminCrmSegmentRow = CrmSegment & {
   members: number;
   eligible_members: number;
+};
+
+export type CommandCenterFilterKey =
+  | "today"
+  | "high_score"
+  | "unassigned"
+  | "live_agent"
+  | "whatsapp"
+  | "all";
+
+export type CommandCenterRow = {
+  lead_id: string;
+  contact_id: string | null;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  stage: string;
+  intent: string | null;
+  budget_min: number | null;
+  budget_max: number | null;
+  preferred_estates: string[];
+  assigned_agent_id: string | null;
+  assigned_agent_name: string | null;
+  lead_score: number | null;
+  urgency: string | null;
+  timeline: string | null;
+  budget_band: string | null;
+  summary: string | null;
+  next_best_action: string | null;
+  last_analyzed_at: string | null;
+  has_overdue_followup: boolean;
+  next_followup_due_at: string | null;
+  last_activity_at: string | null;
+  handoff_status: string | null;
+  handoff_at: string | null;
+  whatsapp: WhatsappLinkStatus;
+  priority: LeadPriority;
+};
+
+export type CommandCenterKpis = {
+  hot: number;
+  overdue: number;
+  unassigned: number;
+  handoffs: number;
+  whatsapp_blocked: number;
+};
+
+export type CommandCenterData = {
+  rows: CommandCenterRow[];
+  kpis: CommandCenterKpis;
+  generated_at: string;
+  woztell_enabled: boolean;
 };
