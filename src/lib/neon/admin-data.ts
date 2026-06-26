@@ -285,6 +285,32 @@ export async function fetchAdminConversations() {
   return callStaffServerFn(async () => fetchAdminConversationsServer(await withStaffAuthHeaders()));
 }
 
+const fetchCommandCenterServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.listCommandCenter(staff);
+});
+
+export async function fetchCommandCenter() {
+  return callStaffServerFn(async () => fetchCommandCenterServer(await withStaffAuthHeaders()));
+}
+
+const completeAdminLeadActivityServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { activity_id: string; lead_id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.completeAdminLeadActivity(data, staff);
+  });
+
+export async function completeAdminLeadActivity(options: {
+  data: { activity_id: string; lead_id: string };
+}) {
+  return callStaffServerFn(async () =>
+    completeAdminLeadActivityServer(await withStaffAuthHeaders(options)),
+  );
+}
+
 const fetchAdminCampaignsServer = createServerFn({ method: "GET" }).handler(async () => {
   await requireStaff(["admin", "manager"]);
   const data = await import("./admin-data.server");

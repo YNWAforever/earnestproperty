@@ -28,6 +28,13 @@ test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   assert.match(adminLayout, /Outlet/);
   assert.match(adminLayout, /<Outlet\s*\/>/);
   assert.doesNotMatch(adminLayout, /fetchAdminOverview/);
+  // Regression guard: the /admin layout must stay a passthrough with NO server-side
+  // beforeLoad auth check. This app authenticates server functions with a client-held
+  // Neon Auth bearer token (withStaffAuthHeaders), which an SSR route guard cannot see,
+  // so a server-side guard bounced every signed-in user back to /auth/sign-in. Access is
+  // enforced at the data layer (requireStaff on each server fn) and client-side in AdminShell.
+  assert.doesNotMatch(adminLayout, /beforeLoad/);
+  assert.doesNotMatch(adminLayout, /requireStaffAccess/);
 
   const adminOverview = read("src/routes/admin.index.tsx");
   assert.match(adminOverview, /Neon/);
@@ -406,4 +413,14 @@ test("admin segment editor guards selected segment and preview context", () => {
   assert.match(source, /previewState\?\.result/);
   assert.match(source, /disabled=\{!canSaveSegment \|\| saving\}/);
   assert.match(source, /disabled=\{!canMaterializeSegment \|\| materializing\}/);
+});
+
+test("command center route is registered, noindex, and admin-guarded", () => {
+  const route = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(route, /createFileRoute\("\/admin\/leads_\/command-center"\)/);
+  assert.match(route, /robots".*noindex/s);
+  assert.match(route, /fetchCommandCenter/);
+
+  const routeTree = read("src/routeTree.gen.ts");
+  assert.match(routeTree, /['"]\/admin\/leads\/command-center['"]/);
 });

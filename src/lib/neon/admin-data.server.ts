@@ -27,6 +27,9 @@ import type {
   AdminAiKnowledgeStatus,
   AdminCrmSegmentPreview,
   AdminCrmSegmentRow,
+  CommandCenterData,
+  CommandCenterKpis,
+  CommandCenterRow,
 } from "./admin-data.types";
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
@@ -43,6 +46,15 @@ import {
   canQueueAdminCampaign,
   normalizeAdminPhone,
 } from "./admin-workflow";
+import {
+  COMMAND_CENTER_ROW_LIMIT,
+  HANDOFF_RECENT_HOURS,
+  WHATSAPP_ACTIVE_HOURS,
+  compareCommandCenterRows,
+  computeLeadPriority,
+  resolveWhatsappStatus,
+} from "./command-center";
+import { woztellEnabled } from "../woztell/woztell.server";
 
 /**
  * Row-ownership scope for the acting staff member.
@@ -990,6 +1002,223 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
     activity_type: input.activity_type,
   });
   return { id };
+}
+
+export async function completeAdminLeadActivity(
+  input: { activity_id: string; lead_id: string },
+  actor: StaffAccess,
+) {
+  const rows = await queryRows(
+    `UPDATE crm_activities SET completed_at = now()
+     WHERE id = $1 AND completed_at IS NULL
+     RETURNING id`,
+    [input.activity_id],
+  );
+  if (!rows[0]) return { ok: false as const, error: "Not found or already complete" };
+  await writeAudit(actor.staffId, "lead.activity.complete", "lead", input.lead_id, {
+    activityId: input.activity_id,
+  });
+  return { ok: true as const };
+}
+
+export async function listCommandCenter(actor: StaffAccess): Promise<CommandCenterData> {
+  void actor; // admin/manager only; agentScope(actor) is null, so no row scoping needed
+  const enabled = woztellEnabled();
+  const rows = await queryRows(
+    `
+    SELECT
+      l.id AS lead_id,
+      l.stage,
+      l.intent,
+      l.budget_min,
+      l.budget_max,
+      l.preferred_estates,
+      l.assigned_agent_id,
+      l.created_at,
+      l.updated_at,
+      c.id AS contact_id,
+      c.name,
+      c.phone,
+      c.email,
+      c.opt_in_whatsapp,
+      c.opted_out_whatsapp,
+      ap.lead_score,
+      ap.urgency,
+      ap.timeline,
+      ap.budget_band,
+      ap.summary,
+      ap.next_best_action,
+      ap.last_analyzed_at,
+      COALESCE(sa.name_zh, sa.name_en) AS assigned_agent_name,
+      fa.next_followup_due_at,
+      la.last_activity_at,
+      las.session_status AS handoff_status,
+      las.session_created_at AS handoff_at,
+      wc.id AS conversation_id,
+      wc.status AS conversation_status,
+      wc.last_inbound_at,
+      wc.woztell_member_id,
+      wc.channel_id,
+      wm.direction AS last_direction
+    FROM crm_leads l
+    LEFT JOIN crm_contacts c ON c.id = l.contact_id
+    LEFT JOIN staff_users sa ON sa.id = l.assigned_agent_id
+    LEFT JOIN LATERAL (
+      SELECT lead_score, urgency, timeline, budget_band, summary, next_best_action, last_analyzed_at
+      FROM crm_ai_profiles
+      WHERE lead_id = l.id
+      ORDER BY updated_at DESC
+      LIMIT 1
+    ) ap ON true
+    LEFT JOIN LATERAL (
+      SELECT min(due_at) AS next_followup_due_at
+      FROM crm_activities
+      WHERE lead_id = l.id AND completed_at IS NULL AND due_at < now()
+    ) fa ON true
+    LEFT JOIN LATERAL (
+      SELECT max(created_at) AS last_activity_at
+      FROM crm_activities
+      WHERE lead_id = l.id
+    ) la ON true
+    LEFT JOIN LATERAL (
+      SELECT status AS session_status, created_at AS session_created_at
+      FROM live_agent_sessions
+      WHERE lead_id = l.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) las ON true
+    LEFT JOIN LATERAL (
+      SELECT id, status, last_inbound_at, woztell_member_id, channel_id
+      FROM whatsapp_conversations
+      WHERE contact_id = c.id
+      ORDER BY last_message_at DESC NULLS LAST
+      LIMIT 1
+    ) wc ON true
+    LEFT JOIN LATERAL (
+      SELECT direction
+      FROM whatsapp_messages
+      WHERE conversation_id = wc.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) wm ON true
+    ORDER BY l.updated_at DESC, l.created_at DESC
+    LIMIT ${COMMAND_CENTER_ROW_LIMIT}
+    `,
+    [],
+  );
+
+  const now = new Date();
+  const handoffWindowMs = HANDOFF_RECENT_HOURS * 60 * 60 * 1000;
+  const whatsappWindowMs = WHATSAPP_ACTIVE_HOURS * 60 * 60 * 1000;
+
+  const mapped = rows.map((row) => {
+    const analyzed = row.last_analyzed_at != null;
+    const leadScore = analyzed ? numberOrNull(row.lead_score) : null;
+    const overdueDue = dateOrNull(row.next_followup_due_at);
+    const lastActivity = dateOrNull(row.last_activity_at);
+    const handoffAt = dateOrNull(row.handoff_at);
+    const lastInbound = dateOrNull(row.last_inbound_at);
+
+    const recentHandoff =
+      (row.handoff_status === "handoff_requested" || row.handoff_status === "handoff_completed") &&
+      handoffAt != null &&
+      now.getTime() - new Date(handoffAt).getTime() <= handoffWindowMs;
+
+    const activeWhatsapp =
+      row.conversation_id != null &&
+      lastInbound != null &&
+      now.getTime() - new Date(lastInbound).getTime() <= whatsappWindowMs;
+
+    const whatsapp = resolveWhatsappStatus({
+      conversation: row.conversation_id
+        ? {
+            id: stringOrEmpty(row.conversation_id),
+            status: stringOrEmpty(row.conversation_status),
+            lastInboundAt: lastInbound,
+            lastDirection:
+              row.last_direction === "inbound" || row.last_direction === "outbound"
+                ? row.last_direction
+                : null,
+            woztellMemberId: stringOrNull(row.woztell_member_id),
+            channelId: stringOrNull(row.channel_id),
+          }
+        : null,
+      phone: stringOrNull(row.phone),
+      optInWhatsapp: row.opt_in_whatsapp === true,
+      optedOutWhatsapp: row.opted_out_whatsapp === true,
+      woztellEnabled: enabled,
+      now,
+    });
+
+    const priority = computeLeadPriority({
+      leadScore,
+      analyzed,
+      hasOverdueFollowup: overdueDue != null,
+      recentHandoff,
+      isUnassigned: row.assigned_agent_id == null,
+      activeWhatsapp,
+    });
+
+    const mappedRow: CommandCenterRow = {
+      lead_id: stringOrEmpty(row.lead_id),
+      contact_id: stringOrNull(row.contact_id),
+      name: stringOrNull(row.name),
+      phone: stringOrNull(row.phone),
+      email: stringOrNull(row.email),
+      stage: stringOrEmpty(row.stage),
+      intent: stringOrNull(row.intent),
+      budget_min: numberOrNull(row.budget_min),
+      budget_max: numberOrNull(row.budget_max),
+      preferred_estates: Array.isArray(row.preferred_estates)
+        ? row.preferred_estates.map(String)
+        : [],
+      assigned_agent_id: stringOrNull(row.assigned_agent_id),
+      assigned_agent_name: stringOrNull(row.assigned_agent_name),
+      lead_score: leadScore,
+      urgency: stringOrNull(row.urgency),
+      timeline: stringOrNull(row.timeline),
+      budget_band: stringOrNull(row.budget_band),
+      summary: stringOrNull(row.summary),
+      next_best_action: stringOrNull(row.next_best_action),
+      last_analyzed_at: dateOrNull(row.last_analyzed_at),
+      has_overdue_followup: overdueDue != null,
+      next_followup_due_at: overdueDue,
+      last_activity_at: lastActivity,
+      handoff_status: stringOrNull(row.handoff_status),
+      handoff_at: handoffAt,
+      whatsapp,
+      priority,
+    };
+
+    const sortKey = {
+      id: mappedRow.lead_id,
+      bucket: priority.bucket,
+      leadScore,
+      overdueMs: overdueDue ? now.getTime() - new Date(overdueDue).getTime() : 0,
+      lastActivityMs: lastActivity ? new Date(lastActivity).getTime() : 0,
+    };
+
+    return { row: mappedRow, sortKey, recentHandoff };
+  });
+
+  mapped.sort((a, b) => compareCommandCenterRows(a.sortKey, b.sortKey));
+
+  const kpis: CommandCenterKpis = {
+    hot: mapped.filter((m) => m.row.priority.bucket <= 2).length,
+    overdue: mapped.filter((m) => m.row.has_overdue_followup).length,
+    unassigned: mapped.filter((m) => m.row.assigned_agent_id == null).length,
+    handoffs: mapped.filter((m) => m.recentHandoff).length,
+    whatsapp_blocked: mapped.filter(
+      (m) => m.row.whatsapp.linked === false || m.row.whatsapp.canReply === false,
+    ).length,
+  };
+
+  return {
+    rows: mapped.map((m) => m.row),
+    kpis,
+    generated_at: now.toISOString(),
+    woztell_enabled: enabled,
+  };
 }
 
 export async function listAdminConversations(actor?: StaffAccess) {
