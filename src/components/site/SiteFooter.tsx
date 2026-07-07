@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { MapPin, Phone, Mail } from "lucide-react";
-import { SITE_CONTACT } from "@/config/site";
+import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 
 export function SiteFooter() {
   return (
@@ -27,7 +27,7 @@ export function SiteFooter() {
               </div>
             </div>
             <p className="mt-4 text-sm leading-relaxed opacity-80">
-              深井．青山公路．我哋比你更熟。
+              深井．青山公路．汀九我哋比你更熟。
               <br />
               Your Sham Tseng Property Expert.
             </p>
@@ -66,37 +66,52 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <Link
-                  to="/castle-peak-road/$segment"
-                  params={{ segment: "ting-kau" }}
-                  data-canonical-path="/castle-peak-road/ting-kau"
-                  className="opacity-80 hover:opacity-100"
-                >
+                <Link to="/district/ting-kau" className="opacity-80 hover:opacity-100">
                   汀九 Ting Kau
                 </Link>
               </li>
               <li>
-                <Link to="/estate/bellagio" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/estate/$slug"
+                  params={{ slug: "bellagio" }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   碧堤半島
                 </Link>
               </li>
               <li>
-                <Link to="/estate/sea-crest-villa" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/estate/$slug"
+                  params={{ slug: "sea-crest-villa" }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   浪翠園
                 </Link>
               </li>
               <li>
-                <Link to="/estate/hong-kong-garden" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/estate/$slug"
+                  params={{ slug: "hong-kong-garden" }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   豪景花園
                 </Link>
               </li>
               <li>
-                <Link to="/estate/rhine-garden" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/estate/$slug"
+                  params={{ slug: "rhine-garden" }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   海韻花園
                 </Link>
               </li>
               <li>
-                <Link to="/estate/lido-garden" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/estate/$slug"
+                  params={{ slug: "lido-garden" }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   麗都花園
                 </Link>
               </li>
@@ -124,6 +139,21 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link to="/videos" className="opacity-80 hover:opacity-100">
+                  YouTube影片
+                </Link>
+              </li>
+              <li>
+                <Link to="/estate-reviews" className="opacity-80 hover:opacity-100">
+                  屋苑開箱
+                </Link>
+              </li>
+              <li>
+                <Link to="/transactions" className="opacity-80 hover:opacity-100">
+                  成交快訊
+                </Link>
+              </li>
+              <li>
                 <a href="/#owner-valuation" className="opacity-80 hover:opacity-100">
                   業主放盤 / 免費估價
                 </a>
@@ -141,16 +171,19 @@ export function SiteFooter() {
               聯絡 Contact
             </h3>
             <ul className="mt-4 space-y-3 text-sm">
-              <li className="flex items-start gap-2 opacity-80">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-                <span>{SITE_CONTACT.address}</span>
-              </li>
-              <li className="flex items-center gap-2 opacity-80">
-                <Phone className="h-4 w-4 text-gold" />
-                <a href={SITE_CONTACT.phoneTel ? `tel:${SITE_CONTACT.phoneTel}` : "/contact"}>
-                  {SITE_CONTACT.phoneDisplay || "聯絡我們"}
-                </a>
-              </li>
+              {SITE_BRANCHES.map((branch) => (
+                <li key={branch.phone} className="space-y-1 opacity-80">
+                  <p className="font-semibold text-primary-foreground">{branch.name}</p>
+                  <p className="flex items-start gap-2">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                    <span>{branch.address}</span>
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-gold" />
+                    <a href={`tel:${branch.phone}`}>{branch.phone}</a>
+                  </p>
+                </li>
+              ))}
               <li className="flex items-center gap-2 opacity-80">
                 <Mail className="h-4 w-4 text-gold" />
                 <a href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a>

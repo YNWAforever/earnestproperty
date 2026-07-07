@@ -1,15 +1,49 @@
 import { Link } from "@tanstack/react-router";
-import { MessageCircle, Menu } from "lucide-react";
+import { ChevronDown, MessageCircle, Menu } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { whatsappUrl } from "@/config/site";
 
-const navItems = [
+type NavItem =
+  | {
+      to:
+        | "/about"
+        | "/agents"
+        | "/blog"
+        | "/castle-peak-road"
+        | "/contact"
+        | "/district/sham-tseng"
+        | "/district/ting-kau"
+        | "/estate-reviews"
+        | "/listings"
+        | "/transactions"
+        | "/videos";
+      label: string;
+    }
+  | {
+      href: string;
+      label: string;
+    };
+
+const primaryNavItems: NavItem[] = [
   { to: "/listings", label: "搜尋放盤" },
-  { to: "/castle-peak-road", label: "青山公路" },
   { to: "/district/sham-tseng", label: "深井" },
-  { to: "/estate/bellagio", label: "屋苑" },
+  { to: "/castle-peak-road", label: "青山公路" },
+  { to: "/district/ting-kau", label: "汀九" },
+  { href: "/estate/bellagio", label: "屋苑" },
+];
+
+const secondaryNavItems: NavItem[] = [
+  { to: "/videos", label: "YouTube影片" },
+  { to: "/estate-reviews", label: "屋苑開箱" },
+  { to: "/transactions", label: "成交快訊" },
   { href: "/#owner-valuation", label: "業主放盤 / 免費估價" },
   { to: "/agents", label: "代理" },
   { to: "/blog", label: "市場分析" },
@@ -17,9 +51,38 @@ const navItems = [
   { to: "/contact", label: "聯絡" },
 ];
 
+const mobileNavItems = [...primaryNavItems, ...secondaryNavItems];
+
+function HeaderNavLink({ item, onClick }: { item: NavItem; onClick?: () => void }) {
+  if ("href" in item) {
+    return (
+      <a
+        href={item.href}
+        onClick={onClick}
+        className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+      >
+        {item.label}
+      </a>
+    );
+  }
+
+  return (
+    <Link
+      to={item.to}
+      onClick={onClick}
+      className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+      activeProps={{
+        className: "rounded-md px-3 py-2 text-sm font-semibold text-primary bg-accent",
+      }}
+    >
+      {item.label}
+    </Link>
+  );
+}
+
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-  const WHATSAPP_URL = whatsappUrl("你好，我想查詢深井物業");
+  const WHATSAPP_URL = whatsappUrl("你好，我想查詢深井／青山公路／汀九物業");
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -52,28 +115,36 @@ export function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-1 lg:flex">
-          {navItems.map((item) =>
-            "href" in item ? (
-              <a
-                key={item.href}
-                href={item.href}
-                className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+          {primaryNavItems.map((item) => (
+            <HeaderNavLink key={"href" in item ? item.href : item.to} item={item} />
+          ))}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1 px-3 text-sm font-medium text-foreground/80 hover:text-foreground"
               >
-                {item.label}
-              </a>
-            ) : (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-                activeProps={{
-                  className: "rounded-md px-3 py-2 text-sm font-semibold text-primary bg-accent",
-                }}
-              >
-                {item.label}
-              </Link>
-            ),
-          )}
+                更多
+                <ChevronDown className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {secondaryNavItems.map((item) => (
+                <DropdownMenuItem key={"href" in item ? item.href : item.to} asChild>
+                  {"href" in item ? (
+                    <a href={item.href} className="cursor-pointer">
+                      {item.label}
+                    </a>
+                  ) : (
+                    <Link to={item.to} className="cursor-pointer">
+                      {item.label}
+                    </Link>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </nav>
 
         <div className="flex items-center gap-2">
@@ -97,7 +168,7 @@ export function SiteHeader() {
             </SheetTrigger>
             <SheetContent side="right" className="w-72">
               <div className="mt-8 flex flex-col gap-1">
-                {navItems.map((item) =>
+                {mobileNavItems.map((item) =>
                   "href" in item ? (
                     <a
                       key={item.href}

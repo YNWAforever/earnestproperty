@@ -7,6 +7,10 @@ const files = [
   "src/components/site/SiteFooter.tsx",
   "src/routes/contact.tsx",
   "src/routes/index.tsx",
+  "src/routes/district.ting-kau.tsx",
+  "src/routes/videos.tsx",
+  "src/routes/estate-reviews.tsx",
+  "src/routes/transactions.tsx",
   "src/routes/estate.$slug.tsx",
 ];
 
@@ -27,6 +31,45 @@ test("site config exposes segmented whatsapp intent helpers", () => {
   assert.match(source, /我要租樓/);
   assert.match(source, /我要放盤估價/);
   assert.match(source, /深井業主估價報告/);
+});
+
+test("site config exposes all public branch contact details", () => {
+  const source = readFileSync("src/config/site.ts", "utf8");
+
+  for (const text of [
+    "SITE_BRANCHES",
+    "麗都分行",
+    "深井麗都花園地下5A舖",
+    "26882988",
+    "海韻分行",
+    "深井海韻花園地下G3舖",
+    "26886996",
+    "青山公路豪景分行",
+    "青龍頭村11號地下",
+    "26882883",
+  ]) {
+    assert.match(source, new RegExp(text));
+  }
+});
+
+test("homepage and navigation include Ting Kau content entry points", () => {
+  const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
+
+  for (const text of [
+    "汀九",
+    "YouTube影片",
+    "屋苑開箱",
+    "成交快訊",
+    "深井 青山公路 汀九買樓租樓",
+    "準備搵深井 青山公路 汀九筍盤",
+    "深井 青山公路 汀九我哋比你更熟",
+    "/district/ting-kau",
+    "/videos",
+    "/estate-reviews",
+    "/transactions",
+  ]) {
+    assert.match(combined, new RegExp(text));
+  }
 });
 
 test("valuation whatsapp intent includes search summary context", () => {

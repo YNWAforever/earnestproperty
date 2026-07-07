@@ -12,6 +12,24 @@ export const SITE_CONTACT = {
   publicProfileUrl: "https://www.28hse.com/agent/540",
 };
 
+export const SITE_BRANCHES = [
+  {
+    name: "麗都分行",
+    address: "深井麗都花園地下5A舖",
+    phone: "26882988",
+  },
+  {
+    name: "海韻分行",
+    address: "深井海韻花園地下G3舖",
+    phone: "26886996",
+  },
+  {
+    name: "青山公路豪景分行",
+    address: "青龍頭村11號地下",
+    phone: "26882883",
+  },
+] as const;
+
 export type WhatsAppIntent = "buy" | "rent" | "valuation";
 
 export type WhatsAppIntentContext = {
