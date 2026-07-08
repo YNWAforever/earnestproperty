@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const files = [
+  "src/config/site.ts",
   "src/components/site/SiteHeader.tsx",
   "src/components/site/SiteFooter.tsx",
   "src/routes/contact.tsx",
@@ -12,6 +13,12 @@ const files = [
   "src/routes/estate-reviews.tsx",
   "src/routes/transactions.tsx",
   "src/routes/estate.$slug.tsx",
+  "src/routes/admin.cms.tsx",
+  "src/components/dashboard/PropertyForm.tsx",
+  "src/lib/queries.ts",
+  "src/lib/neon/public-data.server.ts",
+  "src/lib/neon/admin-data.server.ts",
+  "src/lib/neon/admin-data.types.ts",
 ];
 
 test("public source files do not contain placeholder contact values", () => {
@@ -69,6 +76,36 @@ test("homepage and navigation include Ting Kau content entry points", () => {
     "/transactions",
   ]) {
     assert.match(combined, new RegExp(text));
+  }
+});
+
+test("youtube channel metadata and CMS video source are wired", () => {
+  const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
+
+  for (const text of [
+    "SITE_YOUTUBE_CHANNEL",
+    "https://www.youtube.com/@%E6%99%89%E8%AA%A0%E5%9C%B0%E7%94%A2-EarnestProperty",
+    "cms_videos",
+    "fetchCmsVideos",
+    "fetchAdminCmsVideos",
+    "saveAdminCmsVideo",
+    "YouTube影片",
+  ]) {
+    assert.match(combined, new RegExp(text));
+  }
+});
+
+test("listing admin can save property video urls", () => {
+  const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
+
+  for (const text of [
+    "video_url",
+    "YouTube影片連結",
+    "property?.video_url",
+    "input.video_url",
+    "p.video_url",
+  ]) {
+    assert.match(combined, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
 });
 

@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import {
   addParam,
+  booleanOrFalse,
   dateOrNull,
   getSql,
   numberOrNull,
@@ -13,6 +14,7 @@ import type { StaffAccess } from "./auth.server";
 import type {
   AdminLeadAiProfile,
   AdminArticleInput,
+  AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
   AdminConversationAiAssist,
@@ -92,6 +94,7 @@ export type AdminPropertyInput = {
   agent_id: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
+  video_url?: string | null;
 };
 
 type AdminListingInput = AdminListingFiltersInput & { limit?: number };
@@ -345,6 +348,7 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.images,
     input.seo_title ?? null,
     input.seo_description ?? null,
+    input.video_url ?? null,
     agentId,
   ];
 
@@ -370,9 +374,10 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
           images = $16::text[],
           seo_title = $17,
           seo_description = $18,
-          agent_id = $19,
+          video_url = $19,
+          agent_id = $20,
           updated_at = now()
-        WHERE id = $20${scope !== null ? " AND agent_id = $21" : ""}
+        WHERE id = $21${scope !== null ? " AND agent_id = $22" : ""}
         RETURNING id
         `,
         scope !== null ? [...params, input.id, scope] : [...params, input.id],
@@ -382,9 +387,9 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
         INSERT INTO properties (
           listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
           saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
-          seo_title, seo_description, agent_id
+          seo_title, seo_description, video_url, agent_id
         )
-        VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19)
+        VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20)
         RETURNING id
         `,
         params,
@@ -604,6 +609,71 @@ export async function listAdminCms() {
       created_at: dateOrNull(row.created_at),
     })),
   };
+}
+
+export async function fetchAdminCmsVideos() {
+  const rows = await queryRows(
+    `
+    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at
+    FROM cms_videos
+    ORDER BY sort_order ASC, created_at DESC
+    `,
+  );
+
+  return rows.map((row) => ({
+    id: stringOrEmpty(row.id),
+    title: stringOrEmpty(row.title),
+    video_url: stringOrEmpty(row.video_url),
+    description: stringOrNull(row.description),
+    sort_order: Number(row.sort_order ?? 0),
+    published: booleanOrFalse(row.published),
+    created_at: dateOrNull(row.created_at),
+    updated_at: dateOrNull(row.updated_at),
+  }));
+}
+
+export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffAccess) {
+  const params = [
+    input.title,
+    input.video_url,
+    input.description,
+    input.sort_order,
+    input.published,
+  ];
+
+  const rows = input.id
+    ? await queryRows(
+        `
+        UPDATE cms_videos SET
+          title = $1,
+          video_url = $2,
+          description = $3,
+          sort_order = $4,
+          published = $5,
+          updated_at = now()
+        WHERE id = $6
+        RETURNING id
+        `,
+        [...params, input.id],
+      )
+    : await queryRows(
+        `
+        INSERT INTO cms_videos (title, video_url, description, sort_order, published)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+        `,
+        params,
+      );
+
+  if (input.id && !rows[0]) return { id: "", error: "Not found" };
+  const id = stringOrEmpty(rows[0]?.id);
+  await writeAudit(
+    actor.staffId,
+    input.id ? "cms_video.update" : "cms_video.create",
+    "cms_video",
+    id,
+  );
+  return { id };
 }
 
 export async function saveAdminEstate(input: AdminEstateInput, actor: StaffAccess) {

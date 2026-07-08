@@ -88,6 +88,11 @@ export const fetchNeonFaqs = createServerFn({ method: "GET" })
     return neonData.fetchFaqs(data);
   });
 
+export const fetchNeonCmsVideos = createServerFn({ method: "GET" }).handler(async () => {
+  const neonData = await import("./public-data.server");
+  return neonData.fetchCmsVideos();
+});
+
 export const fetchNeonDistrictTransactions = createServerFn({ method: "GET" })
   .inputValidator((data: { districtSlug: string; monthsBack: number }) => data)
   .handler(async ({ data }) => {

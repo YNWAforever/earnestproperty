@@ -1,5 +1,6 @@
 import {
   fetchNeonArticleBySlug,
+  fetchNeonCmsVideos,
   fetchNeonCorridorInventory,
   fetchNeonDistrictTransactions,
   fetchNeonEstateBySlug,
@@ -252,6 +253,19 @@ export async function searchListings(f: ListingFilters): Promise<{
 
 export type VideoListing = ListingRow & { video_url: string };
 
+export type CmsVideo = {
+  id: string;
+  title: string;
+  video_url: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string | null;
+};
+
+export async function fetchCmsVideos(): Promise<CmsVideo[]> {
+  return (await fetchNeonCmsVideos()) as CmsVideo[];
+}
+
 export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
   const result = await searchListings({
     deal: "all",
@@ -265,6 +279,11 @@ export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
         typeof row.video_url === "string" && row.video_url.trim().length > 0,
     )
     .slice(0, limit);
+}
+
+export async function fetchVideosPageData() {
+  const [cmsVideos, listingVideos] = await Promise.all([fetchCmsVideos(), fetchVideoListings(12)]);
+  return { cmsVideos, listingVideos };
 }
 
 export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
