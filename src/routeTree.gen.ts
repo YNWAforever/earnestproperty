@@ -9,8 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VideosRouteImport } from './routes/videos'
+import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ListingsRouteImport } from './routes/listings'
+import { Route as EstateReviewsRouteImport } from './routes/estate-reviews'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CastlePeakRoadRouteImport } from './routes/castle-peak-road'
@@ -54,6 +57,16 @@ import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jo
 import { Route as ApiAdminAiRebuildKnowledgeRouteImport } from './routes/api.admin.ai.rebuild-knowledge'
 import { Route as ApiAdminCampaignsIdQueueRouteImport } from './routes/api.admin.campaigns.$id.queue'
 
+const VideosRoute = VideosRouteImport.update({
+  id: '/videos',
+  path: '/videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransactionsRoute = TransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -62,6 +75,11 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
 const ListingsRoute = ListingsRouteImport.update({
   id: '/listings',
   path: '/listings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EstateReviewsRoute = EstateReviewsRouteImport.update({
+  id: '/estate-reviews',
+  path: '/estate-reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -286,8 +304,11 @@ export interface FileRoutesByFullPath {
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/transactions': typeof TransactionsRoute
+  '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
@@ -330,8 +351,11 @@ export interface FileRoutesByTo {
   '/blog': typeof BlogRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/transactions': typeof TransactionsRoute
+  '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
@@ -377,8 +401,11 @@ export interface FileRoutesById {
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/transactions': typeof TransactionsRoute
+  '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
@@ -425,8 +452,11 @@ export interface FileRouteTypes {
     | '/castle-peak-road'
     | '/contact'
     | '/dashboard'
+    | '/estate-reviews'
     | '/listings'
     | '/sitemap.xml'
+    | '/transactions'
+    | '/videos'
     | '/account/$pathname'
     | '/admin/blasts'
     | '/admin/cms'
@@ -469,8 +499,11 @@ export interface FileRouteTypes {
     | '/blog'
     | '/contact'
     | '/dashboard'
+    | '/estate-reviews'
     | '/listings'
     | '/sitemap.xml'
+    | '/transactions'
+    | '/videos'
     | '/account/$pathname'
     | '/admin/blasts'
     | '/admin/cms'
@@ -515,8 +548,11 @@ export interface FileRouteTypes {
     | '/castle-peak-road'
     | '/contact'
     | '/dashboard'
+    | '/estate-reviews'
     | '/listings'
     | '/sitemap.xml'
+    | '/transactions'
+    | '/videos'
     | '/account/$pathname'
     | '/admin/blasts'
     | '/admin/cms'
@@ -562,8 +598,11 @@ export interface RootRouteChildren {
   CastlePeakRoadRoute: typeof CastlePeakRoadRouteWithChildren
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  EstateReviewsRoute: typeof EstateReviewsRoute
   ListingsRoute: typeof ListingsRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TransactionsRoute: typeof TransactionsRoute
+  VideosRoute: typeof VideosRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
   ApiMlsSyncRoute: typeof ApiMlsSyncRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
@@ -586,6 +625,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/videos': {
+      id: '/videos'
+      path: '/videos'
+      fullPath: '/videos'
+      preLoaderRoute: typeof VideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transactions': {
+      id: '/transactions'
+      path: '/transactions'
+      fullPath: '/transactions'
+      preLoaderRoute: typeof TransactionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
@@ -598,6 +651,13 @@ declare module '@tanstack/react-router' {
       path: '/listings'
       fullPath: '/listings'
       preLoaderRoute: typeof ListingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/estate-reviews': {
+      id: '/estate-reviews'
+      path: '/estate-reviews'
+      fullPath: '/estate-reviews'
+      preLoaderRoute: typeof EstateReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -974,8 +1034,11 @@ const rootRouteChildren: RootRouteChildren = {
   CastlePeakRoadRoute: CastlePeakRoadRouteWithChildren,
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  EstateReviewsRoute: EstateReviewsRoute,
   ListingsRoute: ListingsRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TransactionsRoute: TransactionsRoute,
+  VideosRoute: VideosRoute,
   AccountPathnameRoute: AccountPathnameRoute,
   ApiMlsSyncRoute: ApiMlsSyncRoute,
   AuthPathnameRoute: AuthPathnameRoute,

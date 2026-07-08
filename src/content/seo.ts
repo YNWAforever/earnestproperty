@@ -11,9 +11,9 @@ export type PageSeo = {
 export const pageSeo = {
   home: {
     path: "/",
-    title: "晉誠地產 Earnest Property｜深井買樓租樓．青山公路物業專家",
+    title: "晉誠地產 Earnest Property｜深井 青山公路 汀九買樓租樓",
     description:
-      "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園堅盤源，即時 WhatsApp 查詢。持牌代理 C-018613。",
+      "深井、青山公路、汀九買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園及汀九筍盤，即時 WhatsApp 查詢。持牌代理 C-018613。",
   },
   listings: {
     path: "/listings",
@@ -40,7 +40,7 @@ export const pageSeo = {
       "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產堅盤源 C-018613。",
   },
   tingKau: {
-    path: "/castle-peak-road/ting-kau",
+    path: "/district/ting-kau",
     title: "汀九 Ting Kau 樓盤｜青山公路低密度海景別墅、洋房",
     description:
       "青山公路汀九段樓盤一覽：觀海別墅、嘉御龍庭、汀九別墅等低密度海景別墅洋房，介乎荃灣與深井，62 校網。晉誠地產 C-018613。",

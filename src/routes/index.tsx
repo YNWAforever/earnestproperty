@@ -60,16 +60,16 @@ export const Route = createFileRoute("/")({
   ),
   head: () => ({
     meta: [
-      { title: "晉誠地產 Earnest Property｜深井買樓租樓．青山公路物業專家" },
+      { title: "晉誠地產 Earnest Property｜深井 青山公路 汀九買樓租樓" },
       {
         name: "description",
         content:
-          "深井 hyperlocal 地產專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園堅盤源。即時 WhatsApp 查詢。Licence C-018613。",
+          "深井、青山公路、汀九買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園及汀九筍盤，即時 WhatsApp 查詢。Licence C-018613。",
       },
-      { property: "og:title", content: "晉誠地產 Earnest Property｜深井物業專家" },
+      { property: "og:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
       {
         property: "og:description",
-        content: "深井．青山公路．我哋比你更熟。即時搜尋深井堅盤源。",
+        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓堅盤源。",
       },
       { property: "og:image", content: heroImage },
       { name: "twitter:image", content: heroImage },
@@ -133,15 +133,15 @@ function HomePage() {
           <div className="max-w-2xl text-primary-foreground">
             <span className="inline-flex items-center gap-2 rounded-full bg-gold/20 px-3 py-1 text-xs font-medium text-gold backdrop-blur">
               <MapPin className="h-3.5 w-3.5" />
-              深井 · 青山公路 · 荃灣
+              深井 · 青山公路 · 汀九
             </span>
             <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
-              深井買樓租樓
+              深井 青山公路 汀九買樓租樓
               <br />
               <span className="text-gold">晉誠地產</span>．堅盤源
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
-              深井．青山公路．我哋比你更熟。
+              深井 青山公路 汀九我哋比你更熟。
               <br />
               碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式堅盤源平台。
             </p>
@@ -353,7 +353,7 @@ function HomePage() {
       <OwnerValuationPanel
         id="owner-valuation"
         context={{
-          districtName: "深井 / 青山公路",
+          districtName: "深井 / 青山公路 / 汀九",
           source: "homepage-owner-valuation",
         }}
       />
@@ -362,7 +362,7 @@ function HomePage() {
       <section className="bg-primary text-primary-foreground">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
           <div>
-            <h2 className="text-2xl font-bold sm:text-3xl">準備搵深井筍盤？</h2>
+            <h2 className="text-2xl font-bold sm:text-3xl">準備搵深井 青山公路 汀九筍盤？</h2>
             <p className="mt-2 text-sm opacity-85">
               即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
             </p>
@@ -370,7 +370,7 @@ function HomePage() {
           <div className="w-full max-w-xl">
             <IntentWhatsAppCTA
               context={{
-                districtName: "深井 / 青山公路",
+                districtName: "深井 / 青山公路 / 汀九",
                 searchSummary: searchKeyword || undefined,
                 source: "homepage-final-cta",
               }}
@@ -387,7 +387,7 @@ function HomePage() {
             "@context": "https://schema.org",
             "@type": "RealEstateAgent",
             name: "晉誠地產 Earnest Property",
-            description: "深井．青山公路物業專家",
+            description: "深井．青山公路．汀九物業專家",
             url: "https://www.earnestproperty.com",
             address: {
               "@type": "PostalAddress",
@@ -395,7 +395,7 @@ function HomePage() {
               addressRegion: "新界",
               addressCountry: "HK",
             },
-            areaServed: ["深井 Sham Tseng", "荃灣 Tsuen Wan"],
+            areaServed: ["深井 Sham Tseng", "青山公路 Castle Peak Road", "汀九 Ting Kau"],
             identifier: "C-018613",
           }),
         }}
