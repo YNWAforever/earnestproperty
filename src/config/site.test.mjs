@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { getYouTubeEmbedUrl, isYouTubeVideoUrl } from "../lib/youtube-video-url.js";
+
 const files = [
   "src/config/site.ts",
   "src/components/site/SiteHeader.tsx",
@@ -19,6 +21,7 @@ const files = [
   "src/lib/neon/public-data.server.ts",
   "src/lib/neon/admin-data.server.ts",
   "src/lib/neon/admin-data.types.ts",
+  "src/lib/youtube-video-url.js",
 ];
 
 test("public source files do not contain placeholder contact values", () => {
@@ -127,10 +130,41 @@ test("YouTube CMS URL validation is present in admin CMS paths", () => {
   const cmsSource = readFileSync("src/routes/admin.cms.tsx", "utf8");
   const serverSource = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
 
-  assert.match(cmsSource, /function isYouTubeVideoUrl\(/);
-  assert.match(serverSource, /function isYouTubeVideoUrl\(/);
+  assert.match(cmsSource, /isYouTubeVideoUrl/);
+  assert.match(serverSource, /isYouTubeVideoUrl/);
   assert.match(cmsSource, /請輸入有效 YouTube 連結/);
   assert.match(serverSource, /請輸入有效 YouTube 連結/);
+});
+
+test("YouTube URL helper accepts only video URLs with IDs", () => {
+  const accepted = [
+    ["https://www.youtube.com/watch?v=abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://youtube.com/watch?v=abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://m.youtube.com/watch?v=abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://youtu.be/abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://www.youtube.com/embed/abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://www.youtube.com/shorts/abc123", "https://www.youtube.com/embed/abc123"],
+  ];
+
+  for (const [url, embedUrl] of accepted) {
+    assert.equal(isYouTubeVideoUrl(url), true);
+    assert.equal(getYouTubeEmbedUrl(url), embedUrl);
+  }
+
+  for (const url of [
+    "",
+    "not a url",
+    "https://notyoutube.com/watch?v=abc123",
+    "https://example.com/watch?v=abc123",
+    "https://www.youtube.com/watch",
+    "https://www.youtube.com/watch?v=",
+    "https://youtu.be/",
+    "https://www.youtube.com/embed/",
+    "https://www.youtube.com/shorts/",
+  ]) {
+    assert.equal(isYouTubeVideoUrl(url), false);
+    assert.equal(getYouTubeEmbedUrl(url), null);
+  }
 });
 
 test("listing admin can save property video urls", () => {

@@ -37,6 +37,7 @@ import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
 import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import type { CrmSegmentFilters } from "../ai/ai-types";
+import { isYouTubeVideoUrl } from "../youtube-video-url.js";
 import {
   listCrmSegments,
   materializeCrmSegment,
@@ -131,26 +132,6 @@ function requireNonEmpty(value: string | null | undefined, label: string) {
 function optionalText(value: unknown) {
   const text = stringOrNull(value)?.trim();
   return text || undefined;
-}
-
-function isYouTubeVideoUrl(value: string) {
-  const input = value.trim();
-  if (!input) return false;
-
-  try {
-    const url = new URL(input);
-    const host = url.hostname.toLowerCase();
-    const isYoutubeHost =
-      host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
-    if (!isYoutubeHost) return false;
-
-    if (host === "youtu.be") return url.pathname.slice(1).length > 0;
-    if (url.pathname.startsWith("/embed/")) return true;
-    if (url.pathname.startsWith("/shorts/")) return true;
-    return Boolean(url.searchParams.get("v"));
-  } catch {
-    return false;
-  }
 }
 
 function normalizeAudienceFilters(filters: AudienceFilters | null | undefined): AudienceFilters {

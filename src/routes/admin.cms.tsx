@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
+import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
   fetchAdminCms,
   fetchAdminAiKnowledgeStatus,
@@ -116,26 +117,6 @@ const emptyCmsVideo: AdminCmsVideoInput = {
   sort_order: 0,
   published: true,
 };
-
-function isYouTubeVideoUrl(value: string) {
-  const input = value.trim();
-  if (!input) return false;
-
-  try {
-    const url = new URL(input);
-    const host = url.hostname.toLowerCase();
-    const isYoutubeHost =
-      host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
-    if (!isYoutubeHost) return false;
-
-    if (host === "youtu.be") return url.pathname.slice(1).length > 0;
-    if (url.pathname.startsWith("/embed/")) return true;
-    if (url.pathname.startsWith("/shorts/")) return true;
-    return Boolean(url.searchParams.get("v"));
-  } catch {
-    return false;
-  }
-}
 
 function AdminCms() {
   const { user } = useNeonAuth();

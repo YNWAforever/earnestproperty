@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { SITE_YOUTUBE_CHANNEL, whatsappUrl } from "@/config/site";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
+import { getYouTubeEmbedUrl } from "@/lib/youtube-video-url.js";
 
 export const Route = createFileRoute("/videos")({
   loader: async () => fetchVideosPageData(),
@@ -181,25 +182,6 @@ function VideoFrame({
       </div>
     </article>
   );
-}
-
-function getYouTubeEmbedUrl(value: string) {
-  try {
-    const url = new URL(value);
-    const host = url.hostname.toLowerCase();
-    const isYouTubeHost =
-      host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
-    if (!isYouTubeHost) return null;
-    if (host === "youtu.be") return `https://www.youtube.com/embed/${url.pathname.slice(1)}`;
-    if (url.pathname.startsWith("/embed/")) return value;
-    if (url.pathname.startsWith("/shorts/")) {
-      return `https://www.youtube.com/embed/${url.pathname.split("/")[2]}`;
-    }
-    const videoId = url.searchParams.get("v");
-    return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
-  } catch {
-    return null;
-  }
 }
 
 function formatListingPrice(listing: VideoListing) {
