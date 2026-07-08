@@ -186,9 +186,11 @@ function VideoFrame({
 function getYouTubeEmbedUrl(value: string) {
   try {
     const url = new URL(value);
-    const host = url.hostname.replace(/^www\./, "");
+    const host = url.hostname.toLowerCase();
+    const isYouTubeHost =
+      host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+    if (!isYouTubeHost) return null;
     if (host === "youtu.be") return `https://www.youtube.com/embed/${url.pathname.slice(1)}`;
-    if (!host.endsWith("youtube.com")) return null;
     if (url.pathname.startsWith("/embed/")) return value;
     if (url.pathname.startsWith("/shorts/")) {
       return `https://www.youtube.com/embed/${url.pathname.split("/")[2]}`;

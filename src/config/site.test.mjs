@@ -95,6 +95,44 @@ test("youtube channel metadata and CMS video source are wired", () => {
   }
 });
 
+test("public CMS videos only fetch published rows", () => {
+  const source = readFileSync("src/lib/neon/public-data.server.ts", "utf8");
+  assert.match(source, /FROM cms_videos\s+WHERE\s+published\s*=\s*true/i);
+});
+
+test("videos page orders CMS videos above listing videos", () => {
+  const source = readFileSync("src/lib/queries.ts", "utf8");
+  const fetchCmsIndex = source.indexOf("fetchCmsVideos()");
+  const fetchListingIndex = source.indexOf("fetchVideoListings(12)");
+  assert.notEqual(fetchCmsIndex, -1);
+  assert.notEqual(fetchListingIndex, -1);
+  assert.ok(fetchCmsIndex < fetchListingIndex);
+
+  const routeSource = readFileSync("src/routes/videos.tsx", "utf8");
+  const cmsSectionIndex = routeSource.indexOf("{cmsVideos.length > 0 &&");
+  const listingSectionIndex = routeSource.indexOf("{listingVideos.length > 0 &&");
+  assert.notEqual(cmsSectionIndex, -1);
+  assert.notEqual(listingSectionIndex, -1);
+  assert.ok(cmsSectionIndex < listingSectionIndex);
+});
+
+test("admin property save SQL includes SEO and video URL parameters", () => {
+  const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+  assert.match(source, /video_url = \$19/);
+  assert.match(source, /INSERT INTO properties \(/);
+  assert.match(source, /seo_title, seo_description, video_url, agent_id/);
+});
+
+test("YouTube CMS URL validation is present in admin CMS paths", () => {
+  const cmsSource = readFileSync("src/routes/admin.cms.tsx", "utf8");
+  const serverSource = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+
+  assert.match(cmsSource, /function isYouTubeVideoUrl\(/);
+  assert.match(serverSource, /function isYouTubeVideoUrl\(/);
+  assert.match(cmsSource, /請輸入有效 YouTube 連結/);
+  assert.match(serverSource, /請輸入有效 YouTube 連結/);
+});
+
 test("listing admin can save property video urls", () => {
   const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
 

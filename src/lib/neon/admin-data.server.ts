@@ -133,6 +133,26 @@ function optionalText(value: unknown) {
   return text || undefined;
 }
 
+function isYouTubeVideoUrl(value: string) {
+  const input = value.trim();
+  if (!input) return false;
+
+  try {
+    const url = new URL(input);
+    const host = url.hostname.toLowerCase();
+    const isYoutubeHost =
+      host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+    if (!isYoutubeHost) return false;
+
+    if (host === "youtu.be") return url.pathname.slice(1).length > 0;
+    if (url.pathname.startsWith("/embed/")) return true;
+    if (url.pathname.startsWith("/shorts/")) return true;
+    return Boolean(url.searchParams.get("v"));
+  } catch {
+    return false;
+  }
+}
+
 function normalizeAudienceFilters(filters: AudienceFilters | null | undefined): AudienceFilters {
   return {
     intent: optionalText(filters?.intent),
@@ -633,6 +653,10 @@ export async function fetchAdminCmsVideos() {
 }
 
 export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffAccess) {
+  if (!isYouTubeVideoUrl(input.video_url)) {
+    return { id: "", error: "請輸入有效 YouTube 連結" };
+  }
+
   const params = [
     input.title,
     input.video_url,

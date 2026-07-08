@@ -117,6 +117,26 @@ const emptyCmsVideo: AdminCmsVideoInput = {
   published: true,
 };
 
+function isYouTubeVideoUrl(value: string) {
+  const input = value.trim();
+  if (!input) return false;
+
+  try {
+    const url = new URL(input);
+    const host = url.hostname.toLowerCase();
+    const isYoutubeHost =
+      host === "youtu.be" || host === "youtube.com" || host.endsWith(".youtube.com");
+    if (!isYoutubeHost) return false;
+
+    if (host === "youtu.be") return url.pathname.slice(1).length > 0;
+    if (url.pathname.startsWith("/embed/")) return true;
+    if (url.pathname.startsWith("/shorts/")) return true;
+    return Boolean(url.searchParams.get("v"));
+  } catch {
+    return false;
+  }
+}
+
 function AdminCms() {
   const { user } = useNeonAuth();
   const [data, setData] = useState<AdminCmsData | null>(null);
@@ -252,6 +272,10 @@ function AdminCms() {
     if (!editingCmsVideo) return;
     if (!editingCmsVideo.title.trim() || !editingCmsVideo.video_url.trim()) {
       toast.error("請填寫影片標題及 YouTube 連結");
+      return;
+    }
+    if (!isYouTubeVideoUrl(editingCmsVideo.video_url)) {
+      toast.error("請輸入有效 YouTube 連結");
       return;
     }
 
