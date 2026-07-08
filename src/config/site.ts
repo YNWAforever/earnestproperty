@@ -30,6 +30,12 @@ export const SITE_BRANCHES = [
   },
 ] as const;
 
+export const SITE_YOUTUBE_CHANNEL = {
+  name: "晉誠地產 Earnest Property",
+  handleLabel: "@晉誠地產-EarnestProperty",
+  url: "https://www.youtube.com/@%E6%99%89%E8%AA%A0%E5%9C%B0%E7%94%A2-EarnestProperty",
+} as const;
+
 export type WhatsAppIntent = "buy" | "rent" | "valuation";
 
 export type WhatsAppIntentContext = {

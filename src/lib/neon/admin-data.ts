@@ -10,6 +10,7 @@ import type {
   AdminConversationAiAssist,
   AdminConversationUpdateInput,
   AdminCrmSegmentPreview,
+  AdminCmsVideoInput,
   AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
@@ -174,6 +175,30 @@ const fetchAdminCmsServer = createServerFn({ method: "GET" }).handler(async () =
 
 export async function fetchAdminCms() {
   return callStaffServerFn(async () => fetchAdminCmsServer(await withStaffAuthHeaders()));
+}
+
+const fetchAdminCmsVideosServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminCmsVideos();
+});
+
+export async function fetchAdminCmsVideos() {
+  return callStaffServerFn(async () => fetchAdminCmsVideosServer(await withStaffAuthHeaders()));
+}
+
+const saveAdminCmsVideoServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminCmsVideoInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminCmsVideo(data, staff);
+  });
+
+export async function saveAdminCmsVideo(options: { data: AdminCmsVideoInput }) {
+  return callStaffServerFn(async () =>
+    saveAdminCmsVideoServer(await withStaffAuthHeaders(options)),
+  );
 }
 
 const fetchAdminAiKnowledgeStatusServer = createServerFn({ method: "GET" }).handler(async () => {

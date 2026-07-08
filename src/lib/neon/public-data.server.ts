@@ -536,6 +536,26 @@ export async function fetchFaqs(input: { scope: string }) {
   }));
 }
 
+export async function fetchCmsVideos() {
+  const rows = await sql().query(
+    `
+    SELECT id, title, video_url, description, sort_order, created_at
+    FROM cms_videos
+    WHERE published = true
+    ORDER BY sort_order ASC, created_at DESC
+    `,
+  );
+
+  return rows.map((row) => ({
+    id: stringOrEmpty(row.id),
+    title: stringOrEmpty(row.title),
+    video_url: stringOrEmpty(row.video_url),
+    description: stringOrNull(row.description),
+    sort_order: Number(row.sort_order ?? 0),
+    created_at: dateOrNull(row.created_at),
+  }));
+}
+
 export async function fetchDistrictTransactions(input: {
   districtSlug: string;
   monthsBack: number;

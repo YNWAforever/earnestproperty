@@ -30,6 +30,7 @@ export type AdminPropertyInput = {
   agent_id: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
+  video_url?: string | null;
 };
 
 export type AdminListingRow = {
@@ -66,6 +67,21 @@ export type AdminFaqGroupRow = {
 export type AdminFaqCmsRow = AdminFaqInput & {
   id: string;
   created_at: string | null;
+};
+
+export type AdminCmsVideoInput = {
+  id?: string;
+  title: string;
+  video_url: string;
+  description: string | null;
+  sort_order: number;
+  published: boolean;
+};
+
+export type AdminCmsVideoRow = AdminCmsVideoInput & {
+  id: string;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type AdminCmsData = {

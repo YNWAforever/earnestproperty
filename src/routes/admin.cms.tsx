@@ -32,12 +32,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
+import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
   fetchAdminCms,
   fetchAdminAiKnowledgeStatus,
+  fetchAdminCmsVideos,
   fetchAdminMediaAssets,
   rebuildAdminAiKnowledge,
   saveAdminArticle,
+  saveAdminCmsVideo,
   saveAdminEstate,
   saveAdminFaq,
   updateAdminMediaAsset,
@@ -47,6 +50,8 @@ import type {
   AdminArticleCmsRow,
   AdminArticleInput,
   AdminCmsData,
+  AdminCmsVideoInput,
+  AdminCmsVideoRow,
   AdminEstateCmsRow,
   AdminEstateInput,
   AdminFaqCmsRow,
@@ -105,6 +110,14 @@ const emptyFaq: AdminFaqInput = {
   sort_order: 0,
 };
 
+const emptyCmsVideo: AdminCmsVideoInput = {
+  title: "",
+  video_url: "",
+  description: null,
+  sort_order: 0,
+  published: true,
+};
+
 function AdminCms() {
   const { user } = useNeonAuth();
   const [data, setData] = useState<AdminCmsData | null>(null);
@@ -117,6 +130,8 @@ function AdminCms() {
   const [editingEstate, setEditingEstate] = useState<AdminEstateInput | null>(null);
   const [editingArticle, setEditingArticle] = useState<AdminArticleInput | null>(null);
   const [editingFaq, setEditingFaq] = useState<AdminFaqInput | null>(null);
+  const [cmsVideos, setCmsVideos] = useState<AdminCmsVideoRow[] | null>(null);
+  const [editingCmsVideo, setEditingCmsVideo] = useState<AdminCmsVideoInput | null>(null);
   const [faqImportOpen, setFaqImportOpen] = useState(false);
   const [faqImportText, setFaqImportText] = useState("");
   const [faqImportScope, setFaqImportScope] = useState(emptyFaq.scope);
@@ -124,9 +139,14 @@ function AdminCms() {
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
 
   const refreshCmsData = useCallback(async () => {
-    const [cms, media] = await Promise.all([fetchAdminCms(), fetchAdminMediaAssets()]);
+    const [cms, media, videos] = await Promise.all([
+      fetchAdminCms(),
+      fetchAdminMediaAssets(),
+      fetchAdminCmsVideos(),
+    ]);
     setData(cms as AdminCmsData);
     setMediaAssets(media as AdminMediaAssetRow[]);
+    setCmsVideos(videos as AdminCmsVideoRow[]);
     setError(null);
   }, []);
 
@@ -221,6 +241,31 @@ function AdminCms() {
       await refreshCmsData();
       toast.success(editingFaq.id ? "FAQ 編輯已儲存" : "FAQ 已新增");
       setEditingFaq(null);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSaveCmsVideo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingCmsVideo) return;
+    if (!editingCmsVideo.title.trim() || !editingCmsVideo.video_url.trim()) {
+      toast.error("請填寫影片標題及 YouTube 連結");
+      return;
+    }
+    if (!isYouTubeVideoUrl(editingCmsVideo.video_url)) {
+      toast.error("請輸入有效 YouTube 連結");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      assertNoServerError(await saveAdminCmsVideo({ data: editingCmsVideo }));
+      await refreshCmsData();
+      toast.success(editingCmsVideo.id ? "影片已更新" : "影片已新增");
+      setEditingCmsVideo(null);
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -377,9 +422,10 @@ function AdminCms() {
           </Card>
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4 grid h-auto w-full grid-cols-2 md:inline-flex md:w-auto">
+            <TabsList className="mb-4 grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:inline-flex lg:w-auto">
               <TabsTrigger value="estates">屋苑 SEO</TabsTrigger>
               <TabsTrigger value="articles">文章編輯</TabsTrigger>
+              <TabsTrigger value="videos">YouTube影片</TabsTrigger>
               <TabsTrigger value="faqs">FAQ 編輯</TabsTrigger>
               <TabsTrigger value="media">媒體庫</TabsTrigger>
             </TabsList>
@@ -517,6 +563,81 @@ function AdminCms() {
                           <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
                             <Plus className="h-4 w-4" />
                             新增文章
+                          </Button>
+                        }
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="videos">
+              <Card>
+                <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <CardTitle className="text-base">YouTube影片</CardTitle>
+                    <CardDescription>管理 /videos 顯示的官方頻道影片連結。</CardDescription>
+                  </div>
+                  <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
+                    <Plus className="h-4 w-4" />
+                    新增影片
+                  </Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {cmsVideos?.length ? (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>影片</TableHead>
+                          <TableHead>狀態</TableHead>
+                          <TableHead className="text-right">排序</TableHead>
+                          <TableHead className="w-28 text-right">操作</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {cmsVideos.map((video) => (
+                          <TableRow key={video.id}>
+                            <TableCell>
+                              <p className="font-medium">{video.title}</p>
+                              <a
+                                href={video.video_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="break-all text-xs text-muted-foreground hover:underline"
+                              >
+                                {video.video_url}
+                              </a>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={video.published ? "default" : "outline"}>
+                                {video.published ? "已發布" : "已隱藏"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">{video.sort_order}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setEditingCmsVideo(cmsVideoToInput(video))}
+                              >
+                                <Pencil className="h-4 w-4" />
+                                編輯
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  ) : (
+                    <div className="p-6">
+                      <AdminEmptyState
+                        title="未有 YouTube 影片"
+                        description="新增影片連結後，/videos 會顯示官方頻道影片。"
+                        action={
+                          <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
+                            <Plus className="h-4 w-4" />
+                            新增影片
                           </Button>
                         }
                       />
@@ -718,6 +839,13 @@ function AdminCms() {
             onClose={() => setEditingArticle(null)}
             onSubmit={handleSaveArticle}
           />
+          <CmsVideoDialog
+            video={editingCmsVideo}
+            saving={saving}
+            onChange={setEditingCmsVideo}
+            onClose={() => setEditingCmsVideo(null)}
+            onSubmit={handleSaveCmsVideo}
+          />
           <FaqDialog
             faq={editingFaq}
             saving={saving}
@@ -746,6 +874,71 @@ function AdminCms() {
         </>
       ) : null}
     </AdminShell>
+  );
+}
+
+function CmsVideoDialog({
+  video,
+  saving,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  video: AdminCmsVideoInput | null;
+  saving: boolean;
+  onChange: (video: AdminCmsVideoInput | null) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  return (
+    <Dialog open={!!video} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{video?.id ? "編輯 YouTube 影片" : "新增 YouTube 影片"}</DialogTitle>
+          <DialogDescription>影片會顯示於 /videos。關閉發布即可隱藏。</DialogDescription>
+        </DialogHeader>
+        {video ? (
+          <form className="grid gap-4" onSubmit={onSubmit}>
+            <TextField
+              label="標題"
+              value={video.title}
+              onChange={(value) => onChange({ ...video, title: value })}
+              required
+            />
+            <TextField
+              label="YouTube 連結"
+              value={video.video_url}
+              onChange={(value) => onChange({ ...video, video_url: value })}
+              required
+            />
+            <TextAreaField
+              label="描述"
+              value={video.description ?? ""}
+              onChange={(value) => onChange({ ...video, description: nullIfBlank(value) })}
+              rows={3}
+            />
+            <NumberField
+              label="排序"
+              value={video.sort_order}
+              onChange={(value) => onChange({ ...video, sort_order: value ?? 0 })}
+            />
+            <Field label="發布">
+              <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
+                <Switch
+                  checked={video.published}
+                  onCheckedChange={(checked) => onChange({ ...video, published: checked })}
+                  aria-label="切換影片發布狀態"
+                />
+                <span className="text-sm text-muted-foreground">
+                  {video.published ? "已發布" : "已隱藏"}
+                </span>
+              </div>
+            </Field>
+            <EditorFooter saving={saving} onClose={onClose} />
+          </form>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1261,6 +1454,17 @@ function articleToInput(article: AdminArticleCmsRow): AdminArticleInput {
     published_at: article.published_at,
     seo_title: article.seo_title,
     seo_description: article.seo_description,
+  };
+}
+
+function cmsVideoToInput(video: AdminCmsVideoRow): AdminCmsVideoInput {
+  return {
+    id: video.id,
+    title: video.title,
+    video_url: video.video_url,
+    description: video.description,
+    sort_order: video.sort_order,
+    published: video.published,
   };
 }
 

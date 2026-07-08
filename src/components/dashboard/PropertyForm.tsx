@@ -51,6 +51,7 @@ const schema = z.object({
   bathrooms: optionalInteger(20),
   floor: z.string().trim().max(40).optional().or(z.literal("")),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
+  video_url: z.string().trim().url("請輸入有效影片連結").max(500).optional().or(z.literal("")),
   seo_title: z.string().trim().max(200).optional().or(z.literal("")),
   seo_description: z.string().trim().max(300).optional().or(z.literal("")),
   agent_id: z.string().uuid().optional().or(z.literal("")),
@@ -81,6 +82,7 @@ export function PropertyForm({ property, onSaved }: Props) {
     bathrooms: property?.bathrooms?.toString() ?? "",
     floor: property?.floor ?? "",
     description: property?.description ?? "",
+    video_url: property?.video_url ?? "",
     seo_title: property?.seo_title ?? "",
     seo_description: property?.seo_description ?? "",
     agent_id: property?.agent_id ?? "",
@@ -126,6 +128,7 @@ export function PropertyForm({ property, onSaved }: Props) {
       bathrooms: d.bathrooms,
       floor: d.floor || null,
       description: d.description || null,
+      video_url: d.video_url || null,
       status: d.status,
       featured: d.featured,
       images,
@@ -313,6 +316,15 @@ export function PropertyForm({ property, onSaved }: Props) {
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             maxLength={4000}
+          />
+        </Field>
+        <Field label="YouTube影片連結" full>
+          <Input
+            type="url"
+            value={form.video_url}
+            onChange={(e) => set("video_url", e.target.value)}
+            maxLength={500}
+            placeholder="https://www.youtube.com/watch?v=..."
           />
         </Field>
         <Field label="SEO 標題" full>
