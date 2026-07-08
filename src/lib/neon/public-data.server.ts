@@ -100,6 +100,13 @@ function textArrayOrNull(value: unknown) {
   return value.map(String);
 }
 
+function isMissingCmsVideosTableError(error: unknown) {
+  const code =
+    typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return code === "42P01" || message.includes('relation "cms_videos" does not exist');
+}
+
 function dealType(value: unknown): "sale" | "rent" {
   return value === "rent" ? "rent" : "sale";
 }
@@ -537,14 +544,20 @@ export async function fetchFaqs(input: { scope: string }) {
 }
 
 export async function fetchCmsVideos() {
-  const rows = await sql().query(
-    `
-    SELECT id, title, video_url, description, sort_order, created_at
-    FROM cms_videos
-    WHERE published = true
-    ORDER BY sort_order ASC, created_at DESC
-    `,
-  );
+  let rows: DbRow[];
+  try {
+    rows = await sql().query(
+      `
+      SELECT id, title, video_url, description, sort_order, created_at
+      FROM cms_videos
+      WHERE published = true
+      ORDER BY sort_order ASC, created_at DESC
+      `,
+    );
+  } catch (error) {
+    if (isMissingCmsVideosTableError(error)) return [];
+    throw error;
+  }
 
   return rows.map((row) => ({
     id: stringOrEmpty(row.id),

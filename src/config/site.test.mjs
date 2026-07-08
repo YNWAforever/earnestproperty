@@ -103,6 +103,13 @@ test("public CMS videos only fetch published rows", () => {
   assert.match(source, /FROM cms_videos\s+WHERE\s+published\s*=\s*true/i);
 });
 
+test("public videos tolerate missing CMS table during rollout", () => {
+  const source = readFileSync("src/lib/neon/public-data.server.ts", "utf8");
+
+  assert.match(source, /relation "cms_videos" does not exist/);
+  assert.match(source, /return \[\]/);
+});
+
 test("videos page orders CMS videos above listing videos", () => {
   const source = readFileSync("src/lib/queries.ts", "utf8");
   const fetchCmsIndex = source.indexOf("fetchCmsVideos()");
