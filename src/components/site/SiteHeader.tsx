@@ -133,20 +133,24 @@ function itemKey(item: NavItem) {
   return "href" in item ? item.href : item.to;
 }
 
-function itemPath(item: NavItem) {
-  const rawPath = "href" in item ? item.href : item.to;
-  return rawPath.split("?")[0].split("#")[0];
+function itemHref(item: NavItem) {
+  return "href" in item ? item.href : item.to;
 }
 
-function itemMatchesPath(item: NavItem, pathname: string) {
-  const path = itemPath(item);
-  return path !== "/" && pathname === path;
+function itemMatchesLocation(item: NavItem, href: string) {
+  return itemHref(item) === href;
 }
 
-function menuMatchesPath(menu: MegaMenuGroup, pathname: string) {
-  return [...menu.featured, ...menu.links, menu.cta].some((item) =>
-    itemMatchesPath(item, pathname),
-  );
+function menuMatchesLocation(menu: MegaMenuGroup, href: string) {
+  return [...menu.featured, ...menu.links].some((item) => itemMatchesLocation(item, href));
+}
+
+function menuMobileItems(menu: MegaMenuGroup, whatsappHref: string) {
+  return [
+    ...menu.featured,
+    ...menu.links,
+    ...("href" in menu.cta && menu.cta.href === whatsappHref ? [] : [menu.cta]),
+  ];
 }
 
 function HeaderNavLink({
@@ -275,7 +279,7 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<MegaMenuId | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const location = useRouterState({ select: (state) => state.location });
   const WHATSAPP_URL = whatsappUrl("你好，我想查詢深井／青山公路／汀九物業");
   const activeMenu = megaMenus.find((menu) => menu.id === activeMegaMenu);
 
@@ -345,7 +349,7 @@ export function SiteHeader() {
             className="whitespace-nowrap"
           />
           {megaMenus.map((menu) => {
-            const isActive = activeMegaMenu === menu.id || menuMatchesPath(menu, pathname);
+            const isActive = activeMegaMenu === menu.id || menuMatchesLocation(menu, location.href);
 
             return (
               <Button
@@ -424,7 +428,7 @@ export function SiteHeader() {
                           {menu.label}
                         </h2>
                         <div className="mt-2 grid gap-1">
-                          {[...menu.featured, ...menu.links, menu.cta].map((item) => (
+                          {menuMobileItems(menu, WHATSAPP_URL).map((item) => (
                             <MegaMenuLink
                               key={`${menu.id}-${itemKey(item)}`}
                               item={item}

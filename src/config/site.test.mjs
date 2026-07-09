@@ -129,9 +129,15 @@ test("header exposes approved mega menu structure and controls", () => {
     "document.addEventListener",
     "Escape",
     "mousedown",
+    "location.href",
+    "menu.featured, ...menu.links",
   ]) {
     assert.equal(source.includes(text), true, `${text} should be wired in the header source`);
   }
+
+  assert.equal(source.includes("...menu.featured, ...menu.links, menu.cta"), false);
+  assert.equal(source.includes("menu.cta.href === whatsappHref ? [] : [menu.cta]"), true);
+  assert.equal(source.includes('split("?")[0].split("#")[0]'), false);
 });
 
 test("youtube channel metadata and CMS video source are wired", () => {
