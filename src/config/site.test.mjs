@@ -82,6 +82,64 @@ test("homepage and navigation include Ting Kau content entry points", () => {
   }
 });
 
+test("header exposes approved mega menu structure and controls", () => {
+  const source = readFileSync("src/components/site/SiteHeader.tsx", "utf8");
+
+  for (const text of [
+    "地區與屋苑",
+    "買租服務",
+    "市場資訊",
+    "深井買樓租樓",
+    "汀九地區頁",
+    "青山公路",
+    "屋苑入口",
+    "查看全部放盤",
+    "買樓",
+    "租樓",
+    "業主放盤 / 免費估價",
+    "代理團隊",
+    "聯絡門市",
+    "YouTube影片",
+    "成交快訊",
+    "屋苑開箱",
+    "市場分析",
+    "關於晉誠",
+    "觀看最新影片",
+    "/district/sham-tseng",
+    "/district/ting-kau",
+    "/castle-peak-road",
+    "/estate/bellagio",
+    "/listings?deal=sale",
+    "/listings?deal=rent",
+    "/#owner-valuation",
+    "/videos",
+    "/transactions",
+  ]) {
+    assert.equal(source.includes(text), true, `${text} should appear in the header source`);
+  }
+
+  for (const text of [
+    "mega-menu-districts",
+    "mega-menu-services",
+    "mega-menu-market",
+    "aria-expanded",
+    "aria-controls",
+    "activeMegaMenu",
+    "setActiveMegaMenu(null)",
+    "document.addEventListener",
+    "Escape",
+    "mousedown",
+    "location.href",
+    "menu.featured, ...menu.links",
+  ]) {
+    assert.equal(source.includes(text), true, `${text} should be wired in the header source`);
+  }
+
+  assert.equal(source.includes("...menu.featured, ...menu.links, menu.cta"), false);
+  assert.equal(source.includes("menu.cta.href === whatsappHref ? [] : [menu.cta]"), true);
+  assert.equal(source.includes('split("?")[0].split("#")[0]'), false);
+});
+
 test("youtube channel metadata and CMS video source are wired", () => {
   const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
 
