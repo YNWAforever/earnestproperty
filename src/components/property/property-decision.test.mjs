@@ -134,4 +134,6 @@ test("property route keeps the full decision and discovery feature set", () => {
   assert.match(actions, /bottom-16/);
   assert.doesNotMatch(actions, /bottom-0/);
   assert.match(liveAgent, /fixed bottom-4 right-4/);
+  assert.match(route, /暫時未能載入樓盤資料，請稍後再試。/);
+  assert.doesNotMatch(route, /\{error\.message\}/);
 });

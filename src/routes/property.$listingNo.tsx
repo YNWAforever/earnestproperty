@@ -112,12 +112,14 @@ export const Route = createFileRoute("/property/$listingNo")({
   component: PropertyPage,
 });
 
-function PropertyErrorComponent({ error }: { error: Error }) {
+function PropertyErrorComponent() {
   const router = useRouter();
   return (
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">載入失敗</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <p role="alert" className="mt-2 text-sm text-muted-foreground">
+        暫時未能載入樓盤資料，請稍後再試。
+      </p>
       <Button className="mt-6" onClick={() => router.invalidate()}>
         重試
       </Button>
