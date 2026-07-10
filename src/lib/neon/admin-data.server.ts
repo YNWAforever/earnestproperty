@@ -13,11 +13,13 @@ import {
 import type { StaffAccess } from "./auth.server";
 import {
   decideAgentProfileMutation,
+  type AgentProfileIdentityInput,
   type AgentProfileMutationDecision,
   type AgentProfileSecurityTarget,
 } from "./staff-security-policy";
 import type {
   AdminAgentProfileInput,
+  AdminAgentProfileMutationInput,
   AdminAgentProfileRow,
   AdminLeadAiProfile,
   AdminArticleInput,
@@ -136,15 +138,25 @@ async function fetchAgentProfileSecurityTarget(
 }
 
 async function agentProfileMutationDecision(
-  input: AdminAgentProfileInput,
+  input: AdminAgentProfileMutationInput,
   actor: StaffAccess,
-): Promise<Extract<AgentProfileMutationDecision, { allowed: true }> | null> {
+): Promise<{
+  decision: Extract<AgentProfileMutationDecision, { allowed: true }>;
+  identity: AgentProfileIdentityInput;
+} | null> {
   assertAgentProfileEditor(actor);
   const target = input.id ? await fetchAgentProfileSecurityTarget(input.id) : null;
   if (input.id && !target) return null;
-  const decision = decideAgentProfileMutation(actor.roles, input, target);
+  const hasOwn = (key: "auth_user_id" | "email" | "active") =>
+    Object.prototype.hasOwnProperty.call(input, key);
+  const identity: AgentProfileIdentityInput = {
+    auth_user_id: hasOwn("auth_user_id") ? input.auth_user_id ?? null : target?.authUserId ?? null,
+    email: hasOwn("email") ? input.email ?? null : target?.email ?? null,
+    active: hasOwn("active") ? input.active === true : target?.active ?? true,
+  };
+  const decision = decideAgentProfileMutation(actor.roles, identity, target);
   if (!decision.allowed) throw new Response("Forbidden", { status: 403 });
-  return decision;
+  return { decision, identity };
 }
 
 function nullableTrim(value: string | null) {
@@ -613,9 +625,13 @@ export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProf
   return rows[0] ? mapAdminAgentProfile(rows[0]) : null;
 }
 
-export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor: StaffAccess) {
-  const decision = await agentProfileMutationDecision(input, actor);
-  if (!decision) return { id: "", error: "Not found" };
+export async function saveAdminAgentProfile(
+  input: AdminAgentProfileMutationInput,
+  actor: StaffAccess,
+) {
+  const authorization = await agentProfileMutationDecision(input, actor);
+  if (!authorization) return { id: "", error: "Not found" };
+  const { decision, identity } = authorization;
 
   let publicSlug: string | null;
   try {
@@ -626,8 +642,8 @@ export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor
 
   const displayOrder = Number.isInteger(input.display_order) ? input.display_order : 0;
   const identityAndProfileParams = [
-    nullableTrim(input.auth_user_id),
-    nullableTrim(input.email),
+    nullableTrim(identity.auth_user_id),
+    nullableTrim(identity.email),
     nullableTrim(input.name_zh),
     nullableTrim(input.name_en),
     nullableTrim(input.job_title),
@@ -640,7 +656,7 @@ export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor
     publicSlug,
     input.show_on_website === true,
     displayOrder,
-    input.active === true,
+    identity.active,
   ];
   const publicProfileParams = identityAndProfileParams.slice(2, 14);
 

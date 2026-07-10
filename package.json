@@ -18,7 +18,7 @@
     "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs",
     "test:command-center": "node --test src/lib/neon/command-center.test.mjs src/lib/neon/admin-data.contract.test.mjs src/routes/admin.routes.test.mjs",
-    "test:property-experience": "bun test src/lib/mortgage.test.ts && node --test src/config/site.test.mjs src/config/site-branches.test.mjs src/components/property/property-decision.test.mjs src/routes/mortgage.test.mjs src/routes/agents.contract.test.mjs src/lib/neon/agent-profiles.contract.test.mjs src/lib/neon/staff-security-policy.test.mjs src/lib/neon/website-inquiry.test.mjs",
+    "test:property-experience": "bun test src/lib/mortgage.test.ts src/components/property/PropertyDecisionActions.test.tsx src/components/admin/AgentProfileForm.test.tsx && node --test src/config/site.test.mjs src/config/site-branches.test.mjs src/components/property/property-decision.test.mjs src/routes/mortgage.test.mjs src/routes/agents.contract.test.mjs src/lib/neon/agent-profiles.contract.test.mjs src/lib/neon/staff-security-policy.test.mjs src/lib/neon/website-inquiry.test.mjs",
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",

@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
+import * as staffSecurityPolicy from "./staff-security-policy.ts";
+
+const {
   decideAgentProfileMutation,
   shouldBootstrapFirstAdmin,
   isFirstAdminBootstrapEligible,
-} from "./staff-security-policy.ts";
+} = staffSecurityPolicy;
 
 const manager = ["manager"];
 const admin = ["admin"];
@@ -20,6 +22,15 @@ const unchangedIdentity = {
   email: ordinaryTarget.email,
   active: ordinaryTarget.active,
 };
+
+test("agent editor identity capability is derived from trusted staff roles", () => {
+  const { deriveAgentProfileEditorContext } = staffSecurityPolicy;
+  assert.equal(typeof deriveAgentProfileEditorContext, "function");
+  if (!deriveAgentProfileEditorContext) return;
+  assert.deepEqual(deriveAgentProfileEditorContext(admin), { canManageIdentity: true });
+  assert.deepEqual(deriveAgentProfileEditorContext(manager), { canManageIdentity: false });
+  assert.deepEqual(deriveAgentProfileEditorContext(["agent"]), { canManageIdentity: false });
+});
 
 test("manager may publish ordinary public profile fields without changing identity", () => {
   assert.deepEqual(decideAgentProfileMutation(manager, unchangedIdentity, ordinaryTarget), {

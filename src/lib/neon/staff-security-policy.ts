@@ -40,6 +40,10 @@ function normalizedEmail(value: string | null) {
   return normalizedNullable(value)?.toLowerCase() ?? null;
 }
 
+export function deriveAgentProfileEditorContext(actorRoles: readonly string[]) {
+  return { canManageIdentity: actorRoles.includes("admin") };
+}
+
 export function decideAgentProfileMutation(
   actorRoles: readonly string[],
   input: AgentProfileIdentityInput,
