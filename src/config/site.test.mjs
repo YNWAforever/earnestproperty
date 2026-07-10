@@ -168,6 +168,7 @@ test("property experience npm script runs every focused suite with a Windows-com
 
   assert.match(packageJson, /"test:property-experience"\s*:\s*"bun test/);
   for (const testFile of [
+    "src/config/site-branches.test.mjs",
     "src/components/property/property-decision.test.mjs",
     "src/lib/mortgage.test.ts",
     "src/routes/mortgage.test.mjs",
