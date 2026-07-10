@@ -36,7 +36,7 @@ import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
-import { Route as AgentsSlugRouteImport } from './routes/agents.$slug'
+import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
@@ -198,9 +198,9 @@ const ApiMlsSyncRoute = ApiMlsSyncRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgentsSlugRoute = AgentsSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => AgentsRoute,
+  id: '/agents_/$slug',
+  path: '/agents/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
   id: '/whatsapp',
@@ -329,7 +329,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
-  '/agents': typeof AgentsRouteWithChildren
+  '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
@@ -382,7 +382,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/agents': typeof AgentsRouteWithChildren
+  '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
@@ -436,7 +436,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
-  '/agents': typeof AgentsRouteWithChildren
+  '/agents': typeof AgentsRoute
   '/blog': typeof BlogRouteWithChildren
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
@@ -455,7 +455,7 @@ export interface FileRoutesById {
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
-  '/agents/$slug': typeof AgentsSlugRoute
+  '/agents_/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
@@ -617,7 +617,7 @@ export interface FileRouteTypes {
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
-    | '/agents/$slug'
+    | '/agents_/$slug'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
@@ -653,7 +653,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AdminRoute: typeof AdminRouteWithChildren
-  AgentsRoute: typeof AgentsRouteWithChildren
+  AgentsRoute: typeof AgentsRoute
   BlogRoute: typeof BlogRouteWithChildren
   CastlePeakRoadRoute: typeof CastlePeakRoadRouteWithChildren
   ContactRoute: typeof ContactRoute
@@ -665,6 +665,7 @@ export interface RootRouteChildren {
   TransactionsRoute: typeof TransactionsRoute
   VideosRoute: typeof VideosRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
+  AgentsSlugRoute: typeof AgentsSlugRoute
   ApiMlsSyncRoute: typeof ApiMlsSyncRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
@@ -875,12 +876,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMlsSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agents/$slug': {
-      id: '/agents/$slug'
-      path: '/$slug'
+    '/agents_/$slug': {
+      id: '/agents_/$slug'
+      path: '/agents/$slug'
       fullPath: '/agents/$slug'
       preLoaderRoute: typeof AgentsSlugRouteImport
-      parentRoute: typeof AgentsRoute
+      parentRoute: typeof rootRouteImport
     }
     '/admin/whatsapp': {
       id: '/admin/whatsapp'
@@ -1087,17 +1088,6 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
-interface AgentsRouteChildren {
-  AgentsSlugRoute: typeof AgentsSlugRoute
-}
-
-const AgentsRouteChildren: AgentsRouteChildren = {
-  AgentsSlugRoute: AgentsSlugRoute,
-}
-
-const AgentsRouteWithChildren =
-  AgentsRoute._addFileChildren(AgentsRouteChildren)
-
 interface BlogRouteChildren {
   BlogSlugRoute: typeof BlogSlugRoute
 }
@@ -1142,7 +1132,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AdminRoute: AdminRouteWithChildren,
-  AgentsRoute: AgentsRouteWithChildren,
+  AgentsRoute: AgentsRoute,
   BlogRoute: BlogRouteWithChildren,
   CastlePeakRoadRoute: CastlePeakRoadRouteWithChildren,
   ContactRoute: ContactRoute,
@@ -1154,6 +1144,7 @@ const rootRouteChildren: RootRouteChildren = {
   TransactionsRoute: TransactionsRoute,
   VideosRoute: VideosRoute,
   AccountPathnameRoute: AccountPathnameRoute,
+  AgentsSlugRoute: AgentsSlugRoute,
   ApiMlsSyncRoute: ApiMlsSyncRoute,
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,

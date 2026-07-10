@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 
+const DEFAULT_AGENT_BRANCH = SITE_BRANCHES[0];
+
 export const Route = createFileRoute("/agents")({
+  loader: async () => (await fetchNeonPublicAgentProfiles()) as NeonPublicAgentProfile[],
   head: () => ({
     meta: [
       { title: "專業代理｜晉誠地產" },
@@ -17,45 +20,20 @@ export const Route = createFileRoute("/agents")({
       },
     ],
   }),
+  pendingComponent: AgentDirectoryPending,
+  errorComponent: AgentDirectoryError,
   component: AgentsPage,
 });
 
 function AgentsPage() {
-  const [profiles, setProfiles] = useState<NeonPublicAgentProfile[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchNeonPublicAgentProfiles()
-      .then((data) => {
-        if (!cancelled) setProfiles(data as NeonPublicAgentProfile[]);
-      })
-      .catch((reason) => {
-        if (!cancelled) setError(errorText(reason));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const profiles = Route.useLoaderData();
 
   return (
     <main className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
-          <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-            團隊熟悉深井、青山公路及荃灣西市場，為買家、租客及業主提供直接、可靠的地產服務。
-          </p>
-        </div>
-      </section>
-
+      <AgentDirectoryHeader />
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        {error ? <DirectoryError message={error} /> : null}
-        {!profiles && !error ? <DirectorySkeleton /> : null}
-        {profiles?.length === 0 ? <DirectoryEmptyState /> : null}
-        {profiles && profiles.length > 0 ? (
+        {profiles.length === 0 ? <DirectoryEmptyState /> : null}
+        {profiles.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
             {profiles.map((profile) => (
               <AgentDirectoryCard key={profile.id} profile={profile} />
@@ -67,10 +45,28 @@ function AgentsPage() {
   );
 }
 
+function AgentDirectoryHeader() {
+  return (
+    <section className="border-b bg-muted/30">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+        <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
+        <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
+        <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
+          團隊熟悉深井、青山公路及荃灣西市場，為買家、租客及業主提供直接、可靠的地產服務。
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
   const name = profile.name_zh || profile.name_en || "晉誠地產代理";
-  const phoneHref = toTelHref(profile.phone);
-  const whatsappHref = toWhatsAppHref(profile.whatsapp ?? profile.phone);
+  const branch = profile.branch ?? DEFAULT_AGENT_BRANCH.name;
+  const phone = profile.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
+  const whatsapp = profile.whatsapp ?? profile.phone ?? SITE_CONTACT.whatsappPhone;
+  const phoneHref = toTelHref(phone);
+  const whatsappHref = toWhatsAppHref(whatsapp);
+  const usesGeneralContact = !profile.phone && !profile.whatsapp;
 
   return (
     <article className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-[104px_1fr]">
@@ -79,6 +75,9 @@ function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
           <img
             src={profile.avatar_url}
             alt={`${name} 個人相片`}
+            loading="lazy"
+            width={104}
+            height={104}
             className="h-full w-full object-cover"
           />
         ) : (
@@ -95,14 +94,17 @@ function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
               <p className="mt-1 text-sm text-muted-foreground">{profile.name_en}</p>
             ) : null}
           </div>
-          {profile.branch ? (
-            <span className="text-sm text-muted-foreground">{profile.branch}</span>
-          ) : null}
+          <span className="text-sm text-muted-foreground">{branch}</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {profile.job_title ? <span>{profile.job_title}</span> : null}
           {profile.licence_no ? <span>牌照：{profile.licence_no}</span> : null}
         </div>
+        {usesGeneralContact ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            代理未有提供直接聯絡方式，電話查詢將由{DEFAULT_AGENT_BRANCH.name}跟進。
+          </p>
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
           {profile.public_slug ? (
             <Button asChild variant="outline" size="sm">
@@ -128,14 +130,25 @@ function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
               </a>
             </Button>
           ) : null}
-          {!phoneHref && !whatsappHref ? (
+          {usesGeneralContact ? (
             <Button asChild size="sm">
-              <Link to="/contact">聯絡晉誠地產</Link>
+              <Link to="/contact">一般查詢</Link>
             </Button>
           ) : null}
         </div>
       </div>
     </article>
+  );
+}
+
+function AgentDirectoryPending() {
+  return (
+    <main className="bg-background">
+      <AgentDirectoryHeader />
+      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <DirectorySkeleton />
+      </section>
+    </main>
   );
 }
 
@@ -163,16 +176,24 @@ function DirectoryEmptyState() {
   );
 }
 
-function DirectoryError({ message }: { message: string }) {
+function AgentDirectoryError() {
   return (
-    <div className="border-y border-destructive/30 py-10 text-center">
-      <h2 className="text-xl font-semibold">暫時未能載入代理資料</h2>
-      <p className="mt-3 text-sm text-muted-foreground">請稍後再試，或直接聯絡晉誠地產。</p>
-      <p className="sr-only">{message}</p>
-      <Button asChild className="mt-5">
-        <Link to="/contact">聯絡我們</Link>
-      </Button>
-    </div>
+    <main className="bg-background">
+      <AgentDirectoryHeader />
+      <section
+        className="mx-auto max-w-6xl px-4 py-10 text-center sm:px-6 lg:px-8"
+        role="alert"
+        aria-live="polite"
+      >
+        <div className="border-y border-destructive/30 py-10">
+          <h2 className="text-xl font-semibold">暫時未能載入代理資料</h2>
+          <p className="mt-3 text-sm text-muted-foreground">請稍後再試，或直接聯絡晉誠地產。</p>
+          <Button asChild className="mt-5">
+            <Link to="/contact">聯絡我們</Link>
+          </Button>
+        </div>
+      </section>
+    </main>
   );
 }
 
@@ -184,8 +205,4 @@ function toTelHref(phone: string | null) {
 function toWhatsAppHref(phone: string | null) {
   const normalized = phone?.replace(/\D/g, "") ?? "";
   return normalized ? `https://wa.me/${normalized}` : null;
-}
-
-function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }

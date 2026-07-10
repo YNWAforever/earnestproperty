@@ -2,11 +2,14 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { SITE_NAME } from "@/content/seo";
 import { fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 
-export const Route = createFileRoute("/agents/$slug")({
+const DEFAULT_AGENT_BRANCH = SITE_BRANCHES[0];
+
+export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
     const profile = await fetchNeonPublicAgentProfileBySlug({ data: { slug: params.slug } });
     if (!profile) throw notFound();
@@ -25,6 +28,7 @@ export const Route = createFileRoute("/agents/$slug")({
       ],
     };
   },
+  errorComponent: AgentProfileError,
   notFoundComponent: AgentNotFound,
   component: AgentProfilePage,
 });
@@ -32,8 +36,12 @@ export const Route = createFileRoute("/agents/$slug")({
 function AgentProfilePage() {
   const { profile } = Route.useLoaderData();
   const name = profile.name_zh || profile.name_en || "晉誠地產代理";
-  const phoneHref = toTelHref(profile.phone);
-  const whatsappHref = toWhatsAppHref(profile.whatsapp ?? profile.phone);
+  const branch = profile.branch ?? DEFAULT_AGENT_BRANCH.name;
+  const phone = profile.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
+  const whatsapp = profile.whatsapp ?? profile.phone ?? SITE_CONTACT.whatsappPhone;
+  const phoneHref = toTelHref(phone);
+  const whatsappHref = toWhatsAppHref(whatsapp);
+  const usesGeneralContact = !profile.phone && !profile.whatsapp;
 
   return (
     <main className="bg-background">
@@ -53,6 +61,9 @@ function AgentProfilePage() {
                 <img
                   src={profile.avatar_url}
                   alt={`${name} 個人相片`}
+                  loading="lazy"
+                  width={128}
+                  height={128}
                   className="h-full w-full object-cover"
                 />
               ) : (
@@ -69,7 +80,7 @@ function AgentProfilePage() {
               ) : null}
               <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
                 {profile.job_title ? <span>{profile.job_title}</span> : null}
-                {profile.branch ? <span>{profile.branch}</span> : null}
+                <span>{branch}</span>
                 {profile.licence_no ? <span>牌照：{profile.licence_no}</span> : null}
               </div>
               {profile.bio ? (
@@ -80,6 +91,11 @@ function AgentProfilePage() {
 
           <aside className="border-t pt-6 md:border-l md:border-t-0 md:pl-6 md:pt-0">
             <h2 className="text-base font-semibold">直接聯絡</h2>
+            {usesGeneralContact ? (
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                代理未有提供直接聯絡方式，查詢將由{DEFAULT_AGENT_BRANCH.name}跟進。
+              </p>
+            ) : null}
             <div className="mt-4 grid gap-2">
               {phoneHref ? (
                 <Button asChild variant="outline" className="w-full justify-start">
@@ -97,9 +113,9 @@ function AgentProfilePage() {
                   </a>
                 </Button>
               ) : null}
-              {!phoneHref && !whatsappHref ? (
+              {usesGeneralContact ? (
                 <Button asChild className="w-full justify-start">
-                  <Link to="/contact">聯絡晉誠地產</Link>
+                  <Link to="/contact">一般查詢</Link>
                 </Button>
               ) : null}
             </div>
@@ -122,6 +138,27 @@ function AgentProfilePage() {
             </Button>
           </div>
         </section>
+      </div>
+    </main>
+  );
+}
+
+function AgentProfileError() {
+  return (
+    <main className="mx-auto max-w-md px-4 py-24 text-center">
+      <div role="alert" aria-live="polite">
+        <h1 className="text-2xl font-semibold">暫時未能載入代理資料</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          請稍後再試，或直接聯絡晉誠地產安排同事跟進。
+        </p>
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <Button asChild>
+            <Link to="/contact">聯絡晉誠地產</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/agents">返回代理團隊</Link>
+          </Button>
+        </div>
       </div>
     </main>
   );
