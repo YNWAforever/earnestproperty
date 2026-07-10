@@ -1,8 +1,16 @@
+import {
+  SITE_BRANCHES,
+  resolveBranchContact,
+  type SiteBranch,
+} from "./site-branches.js";
+
 const whatsappPhone = import.meta.env.VITE_CONTACT_WHATSAPP_PHONE ?? "";
 const phoneDisplay = import.meta.env.VITE_CONTACT_PHONE_DISPLAY ?? "";
 const phoneTel = import.meta.env.VITE_CONTACT_PHONE_TEL ?? "";
 
 export const SITE_CONTACT = {
+  id: "general",
+  name: "晉誠地產",
   whatsappPhone,
   phoneDisplay,
   phoneTel,
@@ -12,23 +20,22 @@ export const SITE_CONTACT = {
   publicProfileUrl: "https://www.28hse.com/agent/540",
 };
 
-export const SITE_BRANCHES = [
-  {
-    name: "麗都分行",
-    address: "深井麗都花園地下5A舖",
-    phone: "26882988",
-  },
-  {
-    name: "海韻分行",
-    address: "深井海韻花園地下G3舖",
-    phone: "26886996",
-  },
-  {
-    name: "青山公路豪景分行",
-    address: "青龍頭村11號地下",
-    phone: "26882883",
-  },
-] as const;
+export { SITE_BRANCHES };
+export type { SiteBranch };
+
+export type PropertyBranchContact = SiteBranch | typeof SITE_CONTACT;
+
+export function resolvePropertyBranchContact(input: {
+  estateSlug?: string | null;
+  districtSlug?: string | null;
+}): PropertyBranchContact {
+  return resolveBranchContact({
+    branches: SITE_BRANCHES,
+    fallback: SITE_CONTACT,
+    estateSlug: input.estateSlug,
+    districtSlug: input.districtSlug,
+  });
+}
 
 export const SITE_YOUTUBE_CHANNEL = {
   name: "晉誠地產 Earnest Property",

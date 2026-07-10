@@ -6,6 +6,7 @@ import { getYouTubeEmbedUrl, isYouTubeVideoUrl } from "../lib/youtube-video-url.
 
 const files = [
   "src/config/site.ts",
+  "src/config/site-branches.js",
   "src/components/site/SiteHeader.tsx",
   "src/components/site/SiteFooter.tsx",
   "src/routes/contact.tsx",
@@ -44,7 +45,9 @@ test("site config exposes segmented whatsapp intent helpers", () => {
 });
 
 test("site config exposes all public branch contact details", () => {
-  const source = readFileSync("src/config/site.ts", "utf8");
+  const source = ["src/config/site.ts", "src/config/site-branches.js"]
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
 
   for (const text of [
     "SITE_BRANCHES",
