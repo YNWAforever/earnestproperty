@@ -14,24 +14,15 @@ export function deriveWebsiteInquiryRouting(listing) {
   };
 }
 
-export const WEBSITE_LISTING_NO_PATTERN =
-  /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?$/;
+export const WEBSITE_LISTING_NO_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}[A-Za-z0-9])?$/;
 
 export function isValidWebsiteListingNo(value) {
   return typeof value === "string" && WEBSITE_LISTING_NO_PATTERN.test(value);
 }
 
 export async function persistWebsiteInquiry(query, input) {
-  const {
-    name,
-    phone,
-    normalizedPhone,
-    email,
-    message,
-    listingNo,
-    propertyId,
-    consentWhatsapp,
-  } = input;
+  const { name, phone, normalizedPhone, email, message, listingNo, propertyId, consentWhatsapp } =
+    input;
   const contactCte = normalizedPhone
     ? `
       contact AS (
@@ -83,9 +74,9 @@ export async function persistWebsiteInquiry(query, input) {
       CROSS JOIN routing
     )
     INSERT INTO inquiries (
-      source, property_id, name, phone, email, message, assigned_agent_id, crm_contact_id
+      source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id
     )
-    SELECT 'website', routing.property_id, $1, $2, $4, $5,
+    SELECT 'website', routing.property_id, routing.intent, $1, $2, $4, $5,
       routing.assigned_agent_id, contact.id
     FROM contact
     CROSS JOIN routing

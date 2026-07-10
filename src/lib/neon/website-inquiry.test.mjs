@@ -4,6 +4,27 @@ import test from "node:test";
 
 const moduleUrl = new URL("./website-inquiry.js", import.meta.url);
 
+function assertInsertUsesRoutingIntent(sql, table) {
+  const match = sql.match(
+    new RegExp(
+      `INSERT INTO ${table}\\s*\\(([^)]*)\\)\\s*SELECT\\s*([\\s\\S]*?)\\s+FROM\\s+contact\\b`,
+      "i",
+    ),
+  );
+  assert.ok(match, `${table} insert must select from the atomic contact CTE`);
+
+  const columns = match[1].split(",").map((value) => value.trim());
+  const values = match[2].split(",").map((value) => value.trim());
+  const intentIndex = columns.indexOf("intent");
+
+  assert.notEqual(intentIndex, -1, `${table}.intent must be part of the atomic insert`);
+  assert.equal(
+    values[intentIndex],
+    "routing.intent",
+    `${table}.intent must use the server-derived routing intent`,
+  );
+}
+
 test("active rental listings assign only active staff and derive renter intent", async () => {
   assert.equal(existsSync(moduleUrl), true, "website inquiry routing helper must exist");
   const { deriveWebsiteInquiryRouting } = await import(moduleUrl);
@@ -100,10 +121,48 @@ test("website inquiry persistence resolves assignment and writes through one ato
   assert.match(calls[0].sql, /p\.status = 'active'/);
   assert.match(calls[0].sql, /s\.active = true/);
   assert.match(calls[0].sql, /INSERT INTO crm_contacts/);
-  assert.match(calls[0].sql, /INSERT INTO crm_leads/);
-  assert.match(calls[0].sql, /INSERT INTO inquiries/);
+  assertInsertUsesRoutingIntent(calls[0].sql, "crm_leads");
+  assertInsertUsesRoutingIntent(calls[0].sql, "inquiries");
   assert.equal(calls[0].params.includes("caller-agent"), false);
   assert.equal(calls[0].params.includes("caller-assigned-agent"), false);
+});
+
+test("website inquiry persistence awaits and propagates an injected query failure", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const databaseFailure = Object.assign(new Error("database unavailable"), { code: "08006" });
+  let calls = 0;
+
+  await assert.rejects(
+    persistWebsiteInquiry(
+      async (sql, params) => {
+        calls += 1;
+        assert.match(sql, /^\s*WITH resolved_listing/i);
+        assert.deepEqual(params, [
+          "陳先生",
+          "9123 4567",
+          "85291234567",
+          null,
+          null,
+          false,
+          null,
+          "B059390",
+        ]);
+        throw databaseFailure;
+      },
+      {
+        name: "陳先生",
+        phone: "9123 4567",
+        normalizedPhone: "85291234567",
+        email: null,
+        message: null,
+        listingNo: "B059390",
+        propertyId: null,
+        consentWhatsapp: false,
+      },
+    ),
+    (error) => error === databaseFailure,
+  );
+  assert.equal(calls, 1);
 });
 
 test("listing number validation accepts bounded property references but property ids stay UUIDs", async () => {

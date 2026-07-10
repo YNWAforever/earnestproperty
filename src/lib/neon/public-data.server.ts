@@ -15,16 +15,23 @@ import { getSql } from "./db.server";
 
 type DbRow = Record<string, unknown>;
 
+const agentProfileColumns = new Set([
+  "public_slug",
+  "job_title",
+  "show_on_website",
+  "display_order",
+]);
+
 const publicAgentJoin = `LEFT JOIN staff_users s ON s.id = p.agent_id
   AND s.active = true
-  AND s.show_on_website = true`;
+  AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true`;
 
 const publicAgentProfileColumns = `
   s.id AS agent_id,
-  s.public_slug AS agent_public_slug,
+  to_jsonb(s)->>'public_slug' AS agent_public_slug,
   s.name_zh AS agent_name_zh,
   s.name_en AS agent_name_en,
-  s.job_title AS agent_job_title,
+  to_jsonb(s)->>'job_title' AS agent_job_title,
   s.phone AS agent_phone,
   s.whatsapp AS agent_whatsapp,
   s.licence_no AS agent_licence_no,
@@ -116,6 +123,38 @@ function isMissingCmsVideosTableError(error: unknown) {
     typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
   const message = error instanceof Error ? error.message : String(error);
   return code === "42P01" || message.includes('relation "cms_videos" does not exist');
+}
+
+function isMissingAgentProfileColumnError(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error) || String(error.code) !== "42703") {
+    return false;
+  }
+
+  const reportedColumn =
+    "column" in error
+      ? String(error.column ?? "")
+          .replaceAll('"', "")
+          .split(".")
+          .at(-1)
+          ?.toLowerCase()
+      : "";
+  if (reportedColumn) return agentProfileColumns.has(reportedColumn);
+
+  const message =
+    error instanceof Error ? error.message : "message" in error ? String(error.message ?? "") : "";
+  const missingColumn = message.match(
+    /\bcolumn\s+(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\.)?"?([a-z_][a-z0-9_]*)"?\s+does not exist\b/i,
+  )?.[1];
+  return Boolean(missingColumn && agentProfileColumns.has(missingColumn.toLowerCase()));
+}
+
+async function withAgentProfileRolloutFallback<T>(operation: () => Promise<T>, fallback: T) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isMissingAgentProfileColumnError(error)) return fallback;
+    throw error;
+  }
 }
 
 function dealType(value: unknown): "sale" | "rent" {
@@ -504,19 +543,23 @@ export async function fetchSimilarListings(
 }
 
 export async function listPublicAgentProfiles(): Promise<NeonPublicAgentProfile[]> {
-  const rows = await sql().query(
-    `
-    SELECT ${publicAgentProfileColumns}
-    FROM staff_users s
-    WHERE s.active = true
-      AND s.show_on_website = true
-    ORDER BY s.display_order ASC, COALESCE(s.name_zh, s.name_en) ASC NULLS LAST, s.id ASC
-    `,
-  );
-  return rows.flatMap((row) => {
-    const profile = mapPublicAgentProfile(row);
-    return profile ? [profile] : [];
-  });
+  return withAgentProfileRolloutFallback(async () => {
+    const rows = await sql().query(
+      `
+      SELECT ${publicAgentProfileColumns}
+      FROM staff_users s
+      WHERE s.active = true
+        AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+      ORDER BY COALESCE((to_jsonb(s)->>'display_order')::integer, 0) ASC,
+        COALESCE(s.name_zh, s.name_en) ASC NULLS LAST,
+        s.id ASC
+      `,
+    );
+    return rows.flatMap((row) => {
+      const profile = mapPublicAgentProfile(row);
+      return profile ? [profile] : [];
+    });
+  }, []);
 }
 
 export async function fetchPublicAgentProfileBySlug(input: {
@@ -524,18 +567,20 @@ export async function fetchPublicAgentProfileBySlug(input: {
 }): Promise<NeonPublicAgentProfile | null> {
   const slug = input.slug.trim().toLowerCase();
   if (!slug) return null;
-  const rows = await sql().query(
-    `
-    SELECT ${publicAgentProfileColumns}
-    FROM staff_users s
-    WHERE s.public_slug = $1
-      AND s.active = true
-      AND s.show_on_website = true
-    LIMIT 1
-    `,
-    [slug],
-  );
-  return rows[0] ? mapPublicAgentProfile(rows[0]) : null;
+  return withAgentProfileRolloutFallback(async () => {
+    const rows = await sql().query(
+      `
+      SELECT ${publicAgentProfileColumns}
+      FROM staff_users s
+      WHERE to_jsonb(s)->>'public_slug' = $1
+        AND s.active = true
+        AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+      LIMIT 1
+      `,
+      [slug],
+    );
+    return rows[0] ? mapPublicAgentProfile(rows[0]) : null;
+  }, null);
 }
 
 export async function fetchListingCountsByEstate(): Promise<Record<string, number>> {
