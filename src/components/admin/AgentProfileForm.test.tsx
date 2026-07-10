@@ -3,9 +3,8 @@ import { load } from "cheerio";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import * as AgentProfileModule from "./AgentProfileForm";
-
-const { AgentProfileForm } = AgentProfileModule;
+import { AgentProfileForm } from "./AgentProfileForm";
+import { buildAgentProfilePayload } from "./agent-profile-form-utils";
 
 const formData = {
   auth_user_id: "11111111-1111-4111-8111-111111111111",
@@ -57,18 +56,6 @@ describe("AgentProfileForm identity capability", () => {
   });
 
   test("manager payload omits privileged fields while admin payload includes them", () => {
-    const buildAgentProfilePayload = (
-      AgentProfileModule as typeof AgentProfileModule & {
-        buildAgentProfilePayload?: (input: {
-          profileId: string;
-          data: typeof formData;
-          canManageIdentity: boolean;
-        }) => Record<string, unknown>;
-      }
-    ).buildAgentProfilePayload;
-    expect(typeof buildAgentProfilePayload).toBe("function");
-    if (!buildAgentProfilePayload) return;
-
     const managerPayload = buildAgentProfilePayload({
       profileId: "agent-1",
       data: formData,

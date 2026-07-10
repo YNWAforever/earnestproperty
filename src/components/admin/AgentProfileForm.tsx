@@ -8,10 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { saveAdminAgentProfile } from "@/lib/neon/admin-data";
-import type {
-  AdminAgentProfileInput,
-  AdminAgentProfileMutationInput,
-} from "@/lib/neon/admin-data.types";
+import type { AdminAgentProfileInput } from "@/lib/neon/admin-data.types";
+import { buildAgentProfilePayload } from "./agent-profile-form-utils";
 
 type AgentProfile = Partial<AdminAgentProfileInput> & { id?: string };
 
@@ -71,41 +69,6 @@ function createInitialForm(profile?: AgentProfile) {
 }
 
 type FormState = ReturnType<typeof createInitialForm>;
-type ParsedAgentProfileFormData = z.infer<typeof schema>;
-
-export function buildAgentProfilePayload({
-  profileId,
-  data,
-  canManageIdentity,
-}: {
-  profileId?: string;
-  data: ParsedAgentProfileFormData;
-  canManageIdentity: boolean;
-}): AdminAgentProfileMutationInput {
-  return {
-    id: profileId,
-    name_zh: data.name_zh || null,
-    name_en: data.name_en || null,
-    job_title: data.job_title || null,
-    phone: data.phone || null,
-    whatsapp: data.whatsapp || null,
-    licence_no: data.licence_no || null,
-    avatar_url: data.avatar_url || null,
-    branch: data.branch || null,
-    bio: data.bio || null,
-    public_slug: data.public_slug || null,
-    show_on_website: data.show_on_website,
-    display_order: data.display_order,
-    ...(canManageIdentity
-      ? {
-          auth_user_id: data.auth_user_id || null,
-          email: data.email || null,
-          active: data.active,
-        }
-      : {}),
-  };
-}
-
 export function AgentProfileForm({
   profile,
   canManageIdentity,
