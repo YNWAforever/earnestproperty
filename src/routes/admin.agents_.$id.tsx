@@ -8,10 +8,11 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { fetchAdminAgentProfile } from "@/lib/neon/admin-data";
+import { fetchAdminAgentEditorContext, fetchAdminAgentProfile } from "@/lib/neon/admin-data";
 import type { AdminAgentProfileRow } from "@/lib/neon/admin-data.types";
 
 export const Route = createFileRoute("/admin/agents_/$id")({
+  loader: () => fetchAdminAgentEditorContext(),
   head: () => ({
     meta: [{ title: "編輯代理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/admin/agents_/$id")({
 
 function EditAdminAgent() {
   const { id } = Route.useParams();
+  const editorContext = Route.useLoaderData();
   const { user, loading } = useNeonAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<AdminAgentProfileRow | null>(null);
@@ -36,7 +38,9 @@ function EditAdminAgent() {
     setProfile(null);
     fetchAdminAgentProfile({ data: { id } })
       .then((data) => {
-        if (!cancelled) setProfile(data as AdminAgentProfileRow | null);
+        if (!cancelled) {
+          setProfile(data as AdminAgentProfileRow | null);
+        }
       })
       .catch((reason) => {
         if (!cancelled) toast.error(reason instanceof Error ? reason.message : String(reason));
@@ -59,7 +63,7 @@ function EditAdminAgent() {
           </Link>
         </Button>
         {loading || fetching ? <Skeleton className="h-96 w-full" /> : null}
-        {!loading && !fetching && !profile ? (
+        {!loading && !fetching && (!profile || !editorContext) ? (
           <div className="border-y py-10 text-center">
             <p className="text-sm text-muted-foreground">找不到代理資料或無權限編輯。</p>
             <Button asChild variant="link" className="mt-3">
@@ -67,8 +71,12 @@ function EditAdminAgent() {
             </Button>
           </div>
         ) : null}
-        {!loading && !fetching && profile ? (
-          <AgentProfileForm profile={profile} onSaved={() => navigate({ to: "/admin/agents" })} />
+        {!loading && !fetching && profile && editorContext ? (
+          <AgentProfileForm
+            profile={profile}
+            canManageIdentity={editorContext.canManageIdentity}
+            onSaved={() => navigate({ to: "/admin/agents" })}
+          />
         ) : null}
       </div>
     </AdminShell>

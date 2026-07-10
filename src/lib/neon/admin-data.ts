@@ -3,9 +3,12 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
+import { deriveAgentProfileEditorContext } from "./staff-security-policy";
 import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
 import type {
+  AdminAgentEditorContext,
   AdminAgentProfileInput,
+  AdminAgentProfileMutationInput,
   AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
@@ -25,6 +28,22 @@ import type {
 async function requireStaff(roles: StaffRole[] = ["admin"]) {
   const { requireStaffAccess } = await import("./auth.server");
   return requireStaffAccess(getRequest(), roles);
+}
+
+const fetchAdminAgentEditorContextServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  return deriveAgentProfileEditorContext(staff.roles);
+});
+
+export async function fetchAdminAgentEditorContext(): Promise<AdminAgentEditorContext | null> {
+  try {
+    return await callStaffServerFn(async () =>
+      fetchAdminAgentEditorContextServer(await withStaffAuthHeaders({})),
+    );
+  } catch (error) {
+    if (isStaffAuthorizationError(error)) return null;
+    throw error;
+  }
 }
 
 const fetchAdminAgentProfilesServer = createServerFn({ method: "GET" }).handler(async () => {
@@ -54,14 +73,14 @@ export async function fetchAdminAgentProfile(options: { data: { id: string } }) 
 }
 
 const saveAdminAgentProfileServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminAgentProfileInput) => data)
+  .inputValidator((data: AdminAgentProfileMutationInput) => data)
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
     return adminData.saveAdminAgentProfile(data, staff);
   });
 
-export async function saveAdminAgentProfile(options: { data: AdminAgentProfileInput }) {
+export async function saveAdminAgentProfile(options: { data: AdminAgentProfileMutationInput }) {
   return callStaffServerFn(async () =>
     saveAdminAgentProfileServer(await withStaffAuthHeaders(options)),
   );
@@ -84,6 +103,11 @@ function errorStatus(error: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function isStaffAuthorizationError(error: unknown) {
+  const status = errorStatus(error);
+  return status === 401 || status === 403;
 }
 
 function isStaleServerFunctionError(error: unknown) {

@@ -107,6 +107,28 @@ test("agent CMS source and generated tree register all three admin paths", () =>
   assert.doesNotMatch(list, /deleteAdminAgentProfile|刪除代理/i);
 });
 
+test("new and edit agent route loaders pass only the server-derived identity capability", () => {
+  for (const file of ["src/routes/admin.agents_.new.tsx", "src/routes/admin.agents_.$id.tsx"]) {
+    const source = readExisting(file);
+    assert.match(source, /fetchAdminAgentEditorContext/);
+    assert.match(source, /loader:\s*(?:async\s*)?\(\)\s*=>\s*fetchAdminAgentEditorContext\(\)/);
+    assert.match(source, /Route\.useLoaderData\(\)/);
+    assert.match(source, /canManageIdentity=\{editorContext\.canManageIdentity\}/);
+    assert.equal(
+      (source.match(/fetchAdminAgentEditorContext\(\)/g) ?? []).length,
+      1,
+      `${file} should obtain editor context only through its route loader`,
+    );
+    assert.doesNotMatch(source, /roles\.includes\(["']admin["']\)/);
+  }
+
+  const adminData = read("src/lib/neon/admin-data.ts");
+  assert.match(
+    adminData,
+    /fetchAdminAgentEditorContext\([\s\S]*?catch \(error\)[\s\S]*?isStaffAuthorizationError\(error\)[\s\S]*?return null/,
+  );
+});
+
 test("public profile projection and routes exclude auth and role fields", () => {
   const types = read("src/lib/neon/public-data.types.ts");
   const server = read("src/lib/neon/public-data.server.ts");
@@ -180,6 +202,8 @@ test("agent avatars and profile form include required accessibility details", ()
   }
 
   assert.match(form, /saveAdminAgentProfile/);
+  assert.match(form, /canManageIdentity/);
+  assert.match(form, /buildAgentProfilePayload/);
   assert.doesNotMatch(form, /deleteAdminAgentProfile|hard delete|刪除代理/i);
 });
 

@@ -163,6 +163,16 @@ export type AdminAgentProfileInput = {
   active: boolean;
 };
 
+export type AdminAgentProfileMutationInput = Omit<
+  AdminAgentProfileInput,
+  "auth_user_id" | "email" | "active"
+> &
+  Partial<Pick<AdminAgentProfileInput, "auth_user_id" | "email" | "active">>;
+
+export type AdminAgentEditorContext = {
+  canManageIdentity: boolean;
+};
+
 export type AdminAgentProfileRow = AdminAgentProfileInput & {
   id: string;
   created_at: string | null;

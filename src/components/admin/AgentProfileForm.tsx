@@ -8,7 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { saveAdminAgentProfile } from "@/lib/neon/admin-data";
-import type { AdminAgentProfileInput } from "@/lib/neon/admin-data.types";
+import type {
+  AdminAgentProfileInput,
+  AdminAgentProfileMutationInput,
+} from "@/lib/neon/admin-data.types";
 
 type AgentProfile = Partial<AdminAgentProfileInput> & { id?: string };
 
@@ -68,12 +71,48 @@ function createInitialForm(profile?: AgentProfile) {
 }
 
 type FormState = ReturnType<typeof createInitialForm>;
+type ParsedAgentProfileFormData = z.infer<typeof schema>;
+
+export function buildAgentProfilePayload({
+  profileId,
+  data,
+  canManageIdentity,
+}: {
+  profileId?: string;
+  data: ParsedAgentProfileFormData;
+  canManageIdentity: boolean;
+}): AdminAgentProfileMutationInput {
+  return {
+    id: profileId,
+    name_zh: data.name_zh || null,
+    name_en: data.name_en || null,
+    job_title: data.job_title || null,
+    phone: data.phone || null,
+    whatsapp: data.whatsapp || null,
+    licence_no: data.licence_no || null,
+    avatar_url: data.avatar_url || null,
+    branch: data.branch || null,
+    bio: data.bio || null,
+    public_slug: data.public_slug || null,
+    show_on_website: data.show_on_website,
+    display_order: data.display_order,
+    ...(canManageIdentity
+      ? {
+          auth_user_id: data.auth_user_id || null,
+          email: data.email || null,
+          active: data.active,
+        }
+      : {}),
+  };
+}
 
 export function AgentProfileForm({
   profile,
+  canManageIdentity,
   onSaved,
 }: {
   profile?: AgentProfile;
+  canManageIdentity: boolean;
   onSaved: (id: string) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -102,7 +141,9 @@ export function AgentProfileForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const parsed = schema.safeParse(form);
+    const parsed = schema.safeParse(
+      canManageIdentity ? form : { ...form, auth_user_id: "", email: "", active: true },
+    );
     if (!parsed.success) {
       const nextErrors: Partial<Record<keyof FormState, string>> = {};
       for (const issue of parsed.error.issues) {
@@ -122,25 +163,11 @@ export function AgentProfileForm({
 
     setFieldErrors({});
 
-    const data = parsed.data;
-    const payload: AdminAgentProfileInput = {
-      id: profile?.id,
-      auth_user_id: data.auth_user_id || null,
-      email: data.email || null,
-      name_zh: data.name_zh || null,
-      name_en: data.name_en || null,
-      job_title: data.job_title || null,
-      phone: data.phone || null,
-      whatsapp: data.whatsapp || null,
-      licence_no: data.licence_no || null,
-      avatar_url: data.avatar_url || null,
-      branch: data.branch || null,
-      bio: data.bio || null,
-      public_slug: data.public_slug || null,
-      show_on_website: data.show_on_website,
-      display_order: data.display_order,
-      active: data.active,
-    };
+    const payload = buildAgentProfilePayload({
+      profileId: profile?.id,
+      data: parsed.data,
+      canManageIdentity,
+    });
 
     setSubmitting(true);
     try {
@@ -245,7 +272,7 @@ export function AgentProfileForm({
         </Field>
       </FormSection>
 
-      <FormSection title="聯絡及帳戶連結">
+      <FormSection title="聯絡資料">
         <Field label="電話" htmlFor="phone" error={fieldErrors.phone}>
           <Input
             id="phone"
@@ -268,27 +295,43 @@ export function AgentProfileForm({
             maxLength={40}
           />
         </Field>
-        <Field label="帳戶電郵" htmlFor="email" error={fieldErrors.email}>
-          <Input
-            id="email"
-            {...fieldProps("email")}
-            type="email"
-            autoComplete="email"
-            value={form.email}
-            onChange={(event) => set("email", event.target.value)}
-            maxLength={320}
-          />
-        </Field>
-        <Field label="Neon Auth 使用者 ID" htmlFor="auth_user_id" error={fieldErrors.auth_user_id}>
-          <Input
-            id="auth_user_id"
-            {...fieldProps("auth_user_id")}
-            autoComplete="off"
-            value={form.auth_user_id}
-            onChange={(event) => set("auth_user_id", event.target.value)}
-          />
-        </Field>
       </FormSection>
+
+      {canManageIdentity ? (
+        <FormSection title="帳戶及存取">
+          <Field label="帳戶電郵" htmlFor="email" error={fieldErrors.email}>
+            <Input
+              id="email"
+              {...fieldProps("email")}
+              type="email"
+              autoComplete="email"
+              value={form.email}
+              onChange={(event) => set("email", event.target.value)}
+              maxLength={320}
+            />
+          </Field>
+          <Field
+            label="Neon Auth 使用者 ID"
+            htmlFor="auth_user_id"
+            error={fieldErrors.auth_user_id}
+          >
+            <Input
+              id="auth_user_id"
+              {...fieldProps("auth_user_id")}
+              autoComplete="off"
+              value={form.auth_user_id}
+              onChange={(event) => set("auth_user_id", event.target.value)}
+            />
+          </Field>
+          <ToggleField
+            label="帳戶啟用"
+            description="停用後不會出現在公開網站，亦不能使用後台帳戶。"
+            checked={form.active}
+            onCheckedChange={(value) => set("active", value)}
+            inputProps={fieldProps("active")}
+          />
+        </FormSection>
+      ) : null}
 
       <FormSection title="發布設定">
         <Field label="公開網址 slug" htmlFor="public_slug" error={fieldErrors.public_slug} full>
@@ -308,13 +351,6 @@ export function AgentProfileForm({
           checked={form.show_on_website}
           onCheckedChange={(value) => set("show_on_website", value)}
           inputProps={fieldProps("show_on_website")}
-        />
-        <ToggleField
-          label="帳戶啟用"
-          description="停用後不會出現在公開網站，亦不能使用後台帳戶。"
-          checked={form.active}
-          onCheckedChange={(value) => set("active", value)}
-          inputProps={fieldProps("active")}
         />
       </FormSection>
 
