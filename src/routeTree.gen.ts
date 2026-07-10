@@ -36,12 +36,14 @@ import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
+import { Route as AgentsSlugRouteImport } from './routes/agents.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
 import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
 import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
+import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
 import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
 import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
 import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
@@ -52,6 +54,8 @@ import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
 import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
 import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
+import { Route as AdminAgentsNewRouteImport } from './routes/admin.agents_.new'
+import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
@@ -193,6 +197,11 @@ const ApiMlsSyncRoute = ApiMlsSyncRouteImport.update({
   path: '/api/mls-sync',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentsSlugRoute = AgentsSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
+  getParentRoute: () => AgentsRoute,
+} as any)
 const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
   id: '/whatsapp',
   path: '/whatsapp',
@@ -221,6 +230,11 @@ const AdminCmsRoute = AdminCmsRouteImport.update({
 const AdminBlastsRoute = AdminBlastsRouteImport.update({
   id: '/blasts',
   path: '/blasts',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAgentsRoute = AdminAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
   getParentRoute: () => AdminRoute,
 } as any)
 const AccountPathnameRoute = AccountPathnameRouteImport.update({
@@ -273,6 +287,16 @@ const AdminLeadsCommandCenterRoute = AdminLeadsCommandCenterRouteImport.update({
   path: '/leads/command-center',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAgentsNewRoute = AdminAgentsNewRouteImport.update({
+  id: '/agents_/new',
+  path: '/agents/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAgentsIdRoute = AdminAgentsIdRouteImport.update({
+  id: '/agents_/$id',
+  path: '/agents/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
 const ApiAdminWoztellSendRoute = ApiAdminWoztellSendRouteImport.update({
   id: '/api/admin/woztell/send',
   path: '/api/admin/woztell/send',
@@ -305,7 +329,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
-  '/agents': typeof AgentsRoute
+  '/agents': typeof AgentsRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
@@ -317,12 +341,14 @@ export interface FileRoutesByFullPath {
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
@@ -336,6 +362,8 @@ export interface FileRoutesByFullPath {
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/agents/$id': typeof AdminAgentsIdRoute
+  '/admin/agents/new': typeof AdminAgentsNewRoute
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
@@ -354,7 +382,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
-  '/agents': typeof AgentsRoute
+  '/agents': typeof AgentsRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
@@ -365,12 +393,14 @@ export interface FileRoutesByTo {
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
@@ -384,6 +414,8 @@ export interface FileRoutesByTo {
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin': typeof AdminIndexRoute
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
+  '/admin/agents/$id': typeof AdminAgentsIdRoute
+  '/admin/agents/new': typeof AdminAgentsNewRoute
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
@@ -404,7 +436,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
-  '/agents': typeof AgentsRoute
+  '/agents': typeof AgentsRouteWithChildren
   '/blog': typeof BlogRouteWithChildren
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
@@ -416,12 +448,14 @@ export interface FileRoutesById {
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
@@ -435,6 +469,8 @@ export interface FileRoutesById {
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/agents_/$id': typeof AdminAgentsIdRoute
+  '/admin/agents_/new': typeof AdminAgentsNewRoute
   '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings_/$id': typeof AdminListingsIdRoute
   '/admin/listings_/new': typeof AdminListingsNewRoute
@@ -468,12 +504,14 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/videos'
     | '/account/$pathname'
+    | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
+    | '/agents/$slug'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
@@ -487,6 +525,8 @@ export interface FileRouteTypes {
     | '/property/$listingNo'
     | '/admin/'
     | '/castle-peak-road/'
+    | '/admin/agents/$id'
+    | '/admin/agents/new'
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
@@ -516,12 +556,14 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/videos'
     | '/account/$pathname'
+    | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
+    | '/agents/$slug'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
@@ -535,6 +577,8 @@ export interface FileRouteTypes {
     | '/property/$listingNo'
     | '/admin'
     | '/castle-peak-road'
+    | '/admin/agents/$id'
+    | '/admin/agents/new'
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
@@ -566,12 +610,14 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/videos'
     | '/account/$pathname'
+    | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/segments'
     | '/admin/whatsapp'
+    | '/agents/$slug'
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
@@ -585,6 +631,8 @@ export interface FileRouteTypes {
     | '/property/$listingNo'
     | '/admin/'
     | '/castle-peak-road/'
+    | '/admin/agents_/$id'
+    | '/admin/agents_/new'
     | '/admin/leads_/command-center'
     | '/admin/listings_/$id'
     | '/admin/listings_/new'
@@ -605,7 +653,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AdminRoute: typeof AdminRouteWithChildren
-  AgentsRoute: typeof AgentsRoute
+  AgentsRoute: typeof AgentsRouteWithChildren
   BlogRoute: typeof BlogRouteWithChildren
   CastlePeakRoadRoute: typeof CastlePeakRoadRouteWithChildren
   ContactRoute: typeof ContactRoute
@@ -827,6 +875,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMlsSyncRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agents/$slug': {
+      id: '/agents/$slug'
+      path: '/$slug'
+      fullPath: '/agents/$slug'
+      preLoaderRoute: typeof AgentsSlugRouteImport
+      parentRoute: typeof AgentsRoute
+    }
     '/admin/whatsapp': {
       id: '/admin/whatsapp'
       path: '/whatsapp'
@@ -867,6 +922,13 @@ declare module '@tanstack/react-router' {
       path: '/blasts'
       fullPath: '/admin/blasts'
       preLoaderRoute: typeof AdminBlastsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/agents': {
+      id: '/admin/agents'
+      path: '/agents'
+      fullPath: '/admin/agents'
+      preLoaderRoute: typeof AdminAgentsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/account/$pathname': {
@@ -939,6 +1001,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLeadsCommandCenterRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/agents_/new': {
+      id: '/admin/agents_/new'
+      path: '/agents/new'
+      fullPath: '/admin/agents/new'
+      preLoaderRoute: typeof AdminAgentsNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/agents_/$id': {
+      id: '/admin/agents_/$id'
+      path: '/agents/$id'
+      fullPath: '/admin/agents/$id'
+      preLoaderRoute: typeof AdminAgentsIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/api/admin/woztell/send': {
       id: '/api/admin/woztell/send'
       path: '/api/admin/woztell/send'
@@ -978,6 +1054,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
+  AdminAgentsRoute: typeof AdminAgentsRoute
   AdminBlastsRoute: typeof AdminBlastsRoute
   AdminCmsRoute: typeof AdminCmsRoute
   AdminLeadsRoute: typeof AdminLeadsRoute
@@ -985,12 +1062,15 @@ interface AdminRouteChildren {
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminAgentsIdRoute: typeof AdminAgentsIdRoute
+  AdminAgentsNewRoute: typeof AdminAgentsNewRoute
   AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
   AdminListingsIdRoute: typeof AdminListingsIdRoute
   AdminListingsNewRoute: typeof AdminListingsNewRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAgentsRoute: AdminAgentsRoute,
   AdminBlastsRoute: AdminBlastsRoute,
   AdminCmsRoute: AdminCmsRoute,
   AdminLeadsRoute: AdminLeadsRoute,
@@ -998,12 +1078,25 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminAgentsIdRoute: AdminAgentsIdRoute,
+  AdminAgentsNewRoute: AdminAgentsNewRoute,
   AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
   AdminListingsIdRoute: AdminListingsIdRoute,
   AdminListingsNewRoute: AdminListingsNewRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface AgentsRouteChildren {
+  AgentsSlugRoute: typeof AgentsSlugRoute
+}
+
+const AgentsRouteChildren: AgentsRouteChildren = {
+  AgentsSlugRoute: AgentsSlugRoute,
+}
+
+const AgentsRouteWithChildren =
+  AgentsRoute._addFileChildren(AgentsRouteChildren)
 
 interface BlogRouteChildren {
   BlogSlugRoute: typeof BlogSlugRoute
@@ -1049,7 +1142,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AdminRoute: AdminRouteWithChildren,
-  AgentsRoute: AgentsRoute,
+  AgentsRoute: AgentsRouteWithChildren,
   BlogRoute: BlogRouteWithChildren,
   CastlePeakRoadRoute: CastlePeakRoadRouteWithChildren,
   ContactRoute: ContactRoute,

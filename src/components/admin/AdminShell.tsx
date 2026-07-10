@@ -11,6 +11,7 @@ import {
   LogOut,
   MessageCircle,
   Send,
+  UserRoundCog,
   Users,
 } from "lucide-react";
 
@@ -23,6 +24,7 @@ const navItems = [
   { to: "/admin/cms", label: "CMS / FAQ", icon: BookOpen },
   { to: "/admin/cms", label: "AI Agent", icon: FileQuestion },
   { to: "/admin/listings", label: "放盤", icon: Building2 },
+  { to: "/admin/agents", label: "代理管理", icon: UserRoundCog },
   { to: "/admin/leads", label: "CRM", icon: ContactRound },
   { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
   { to: "/admin/segments", label: "Segments", icon: Users },

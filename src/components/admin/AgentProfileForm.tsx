@@ -1,0 +1,306 @@
+import { useState } from "react";
+import { z } from "zod";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { saveAdminAgentProfile } from "@/lib/neon/admin-data";
+import type { AdminAgentProfileInput } from "@/lib/neon/admin-data.types";
+
+type AgentProfile = Partial<AdminAgentProfileInput> & { id?: string };
+
+const optionalText = (max: number) => z.string().trim().max(max).or(z.literal(""));
+
+const schema = z.object({
+  auth_user_id: z.string().trim().uuid("請輸入有效 Neon Auth 使用者 ID").or(z.literal("")),
+  email: z.string().trim().email("請輸入有效電郵").max(320).or(z.literal("")),
+  name_zh: optionalText(100),
+  name_en: optionalText(100),
+  job_title: optionalText(100),
+  phone: optionalText(40),
+  whatsapp: optionalText(40),
+  licence_no: optionalText(80),
+  avatar_url: z.string().trim().url("請輸入有效相片網址").max(500).or(z.literal("")),
+  branch: optionalText(120),
+  bio: optionalText(2000),
+  public_slug: z
+    .string()
+    .trim()
+    .max(120)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "請使用小寫英文、數字及連字號")
+    .or(z.literal("")),
+  show_on_website: z.boolean(),
+  display_order: z.coerce.number().int().min(0).max(9999),
+  active: z.boolean(),
+});
+
+export function AgentProfileForm({
+  profile,
+  onSaved,
+}: {
+  profile?: AgentProfile;
+  onSaved: (id: string) => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    auth_user_id: profile?.auth_user_id ?? "",
+    email: profile?.email ?? "",
+    name_zh: profile?.name_zh ?? "",
+    name_en: profile?.name_en ?? "",
+    job_title: profile?.job_title ?? "",
+    phone: profile?.phone ?? "",
+    whatsapp: profile?.whatsapp ?? "",
+    licence_no: profile?.licence_no ?? "",
+    avatar_url: profile?.avatar_url ?? "",
+    branch: profile?.branch ?? "",
+    bio: profile?.bio ?? "",
+    public_slug: profile?.public_slug ?? "",
+    show_on_website: profile?.show_on_website ?? false,
+    display_order: profile?.display_order?.toString() ?? "0",
+    active: profile?.active ?? true,
+  });
+
+  function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    const parsed = schema.safeParse(form);
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "請檢查輸入資料");
+      return;
+    }
+
+    const data = parsed.data;
+    const payload: AdminAgentProfileInput = {
+      id: profile?.id,
+      auth_user_id: data.auth_user_id || null,
+      email: data.email || null,
+      name_zh: data.name_zh || null,
+      name_en: data.name_en || null,
+      job_title: data.job_title || null,
+      phone: data.phone || null,
+      whatsapp: data.whatsapp || null,
+      licence_no: data.licence_no || null,
+      avatar_url: data.avatar_url || null,
+      branch: data.branch || null,
+      bio: data.bio || null,
+      public_slug: data.public_slug || null,
+      show_on_website: data.show_on_website,
+      display_order: data.display_order,
+      active: data.active,
+    };
+
+    setSubmitting(true);
+    try {
+      const result = await saveAdminAgentProfile({ data: payload });
+      if (!result.id || result.error) throw new Error(result.error || "未能儲存代理資料");
+      toast.success(profile?.id ? "代理資料已更新" : "代理資料已建立");
+      onSaved(result.id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-7">
+      <FormSection title="公開資料">
+        <Field label="中文名稱" htmlFor="name_zh">
+          <Input
+            id="name_zh"
+            value={form.name_zh}
+            onChange={(event) => set("name_zh", event.target.value)}
+            maxLength={100}
+          />
+        </Field>
+        <Field label="英文名稱" htmlFor="name_en">
+          <Input
+            id="name_en"
+            value={form.name_en}
+            onChange={(event) => set("name_en", event.target.value)}
+            maxLength={100}
+          />
+        </Field>
+        <Field label="職銜" htmlFor="job_title">
+          <Input
+            id="job_title"
+            value={form.job_title}
+            onChange={(event) => set("job_title", event.target.value)}
+            maxLength={100}
+          />
+        </Field>
+        <Field label="分行 / 團隊" htmlFor="branch">
+          <Input
+            id="branch"
+            value={form.branch}
+            onChange={(event) => set("branch", event.target.value)}
+            maxLength={120}
+          />
+        </Field>
+        <Field label="牌照號碼" htmlFor="licence_no">
+          <Input
+            id="licence_no"
+            value={form.licence_no}
+            onChange={(event) => set("licence_no", event.target.value)}
+            maxLength={80}
+          />
+        </Field>
+        <Field label="顯示排序" htmlFor="display_order">
+          <Input
+            id="display_order"
+            type="number"
+            min="0"
+            max="9999"
+            value={form.display_order}
+            onChange={(event) => set("display_order", event.target.value)}
+          />
+        </Field>
+        <Field label="個人簡介" htmlFor="bio" full>
+          <Textarea
+            id="bio"
+            rows={5}
+            value={form.bio}
+            onChange={(event) => set("bio", event.target.value)}
+            maxLength={2000}
+          />
+        </Field>
+        <Field label="相片網址" htmlFor="avatar_url" full>
+          <Input
+            id="avatar_url"
+            type="url"
+            value={form.avatar_url}
+            onChange={(event) => set("avatar_url", event.target.value)}
+            maxLength={500}
+            placeholder="https://..."
+          />
+        </Field>
+      </FormSection>
+
+      <FormSection title="聯絡及帳戶連結">
+        <Field label="電話" htmlFor="phone">
+          <Input
+            id="phone"
+            type="tel"
+            value={form.phone}
+            onChange={(event) => set("phone", event.target.value)}
+            maxLength={40}
+          />
+        </Field>
+        <Field label="WhatsApp" htmlFor="whatsapp">
+          <Input
+            id="whatsapp"
+            type="tel"
+            value={form.whatsapp}
+            onChange={(event) => set("whatsapp", event.target.value)}
+            maxLength={40}
+          />
+        </Field>
+        <Field label="帳戶電郵" htmlFor="email">
+          <Input
+            id="email"
+            type="email"
+            value={form.email}
+            onChange={(event) => set("email", event.target.value)}
+            maxLength={320}
+          />
+        </Field>
+        <Field label="Neon Auth 使用者 ID" htmlFor="auth_user_id">
+          <Input
+            id="auth_user_id"
+            value={form.auth_user_id}
+            onChange={(event) => set("auth_user_id", event.target.value)}
+          />
+        </Field>
+      </FormSection>
+
+      <FormSection title="發布設定">
+        <Field label="公開網址 slug" htmlFor="public_slug" full>
+          <Input
+            id="public_slug"
+            value={form.public_slug}
+            onChange={(event) => set("public_slug", event.target.value.toLowerCase())}
+            maxLength={120}
+            placeholder="chan-tai-man"
+          />
+        </Field>
+        <ToggleField
+          label="顯示於網站"
+          description="只會在帳戶啟用時出現在公開代理目錄。"
+          checked={form.show_on_website}
+          onCheckedChange={(value) => set("show_on_website", value)}
+        />
+        <ToggleField
+          label="帳戶啟用"
+          description="停用後不會出現在公開網站，亦不能使用後台帳戶。"
+          checked={form.active}
+          onCheckedChange={(value) => set("active", value)}
+        />
+      </FormSection>
+
+      <div className="flex justify-end border-t pt-4">
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "儲存中…" : profile?.id ? "更新代理" : "建立代理"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold text-muted-foreground">{title}</h2>
+      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+function Field({
+  label,
+  htmlFor,
+  children,
+  full = false,
+}: {
+  label: string;
+  htmlFor: string;
+  children: React.ReactNode;
+  full?: boolean;
+}) {
+  return (
+    <div className={full ? "sm:col-span-2" : ""}>
+      <Label htmlFor={htmlFor} className="mb-1.5 block">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+
+function ToggleField({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (value: boolean) => void;
+}) {
+  const id = label === "顯示於網站" ? "show_on_website" : "active";
+  return (
+    <div className="flex min-h-12 items-start justify-between gap-4 border-y py-3 sm:col-span-2">
+      <div>
+        <Label htmlFor={id}>{label}</Label>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      </div>
+      <Switch id={id} checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
