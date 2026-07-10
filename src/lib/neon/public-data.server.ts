@@ -7,12 +7,38 @@ import type {
   NeonLegacyPropertyMatch,
   NeonListingFiltersInput,
   NeonListingSearchResult,
+  NeonPublicAgentProfile,
   NeonPropertyRow,
   NeonSimilarListingsInput,
 } from "./public-data.types";
 import { getSql } from "./db.server";
 
 type DbRow = Record<string, unknown>;
+
+const agentProfileColumns = new Set([
+  "public_slug",
+  "job_title",
+  "show_on_website",
+  "display_order",
+]);
+
+const publicAgentJoin = `LEFT JOIN staff_users s ON s.id = p.agent_id
+  AND s.active = true
+  AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true`;
+
+const publicAgentProfileColumns = `
+  s.id AS agent_id,
+  to_jsonb(s)->>'public_slug' AS agent_public_slug,
+  s.name_zh AS agent_name_zh,
+  s.name_en AS agent_name_en,
+  to_jsonb(s)->>'job_title' AS agent_job_title,
+  s.phone AS agent_phone,
+  s.whatsapp AS agent_whatsapp,
+  s.licence_no AS agent_licence_no,
+  s.avatar_url AS agent_avatar_url,
+  s.branch AS agent_branch,
+  s.bio AS agent_bio
+`;
 
 const listingColumns = `
   p.id,
@@ -48,15 +74,7 @@ const listingColumns = `
   p.last_scraped_at,
   p.created_at,
   p.updated_at,
-  s.id AS agent_id,
-  s.name_zh AS agent_name_zh,
-  s.name_en AS agent_name_en,
-  s.phone AS agent_phone,
-  s.whatsapp AS agent_whatsapp,
-  s.licence_no AS agent_licence_no,
-  s.avatar_url AS agent_avatar_url,
-  s.branch AS agent_branch,
-  s.bio AS agent_bio,
+  ${publicAgentProfileColumns},
   e.name_zh AS estate_name_zh,
   e.slug AS estate_slug,
   e.district_slug AS estate_district_slug,
@@ -107,8 +125,58 @@ function isMissingCmsVideosTableError(error: unknown) {
   return code === "42P01" || message.includes('relation "cms_videos" does not exist');
 }
 
+function isMissingAgentProfileColumnError(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error) || String(error.code) !== "42703") {
+    return false;
+  }
+
+  const reportedColumn =
+    "column" in error
+      ? String(error.column ?? "")
+          .replaceAll('"', "")
+          .split(".")
+          .at(-1)
+          ?.toLowerCase()
+      : "";
+  if (reportedColumn) return agentProfileColumns.has(reportedColumn);
+
+  const message =
+    error instanceof Error ? error.message : "message" in error ? String(error.message ?? "") : "";
+  const missingColumn = message.match(
+    /\bcolumn\s+(?:(?:"[^"]+"|[a-z_][a-z0-9_]*)\.)?"?([a-z_][a-z0-9_]*)"?\s+does not exist\b/i,
+  )?.[1];
+  return Boolean(missingColumn && agentProfileColumns.has(missingColumn.toLowerCase()));
+}
+
+async function withAgentProfileRolloutFallback<T>(operation: () => Promise<T>, fallback: T) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isMissingAgentProfileColumnError(error)) return fallback;
+    throw error;
+  }
+}
+
 function dealType(value: unknown): "sale" | "rent" {
   return value === "rent" ? "rent" : "sale";
+}
+
+function mapPublicAgentProfile(row: DbRow): NeonPublicAgentProfile | null {
+  const id = stringOrNull(row.agent_id);
+  if (!id) return null;
+  return {
+    id,
+    public_slug: stringOrNull(row.agent_public_slug),
+    name_zh: stringOrNull(row.agent_name_zh),
+    name_en: stringOrNull(row.agent_name_en),
+    job_title: stringOrNull(row.agent_job_title),
+    phone: stringOrNull(row.agent_phone),
+    whatsapp: stringOrNull(row.agent_whatsapp),
+    licence_no: stringOrNull(row.agent_licence_no),
+    avatar_url: stringOrNull(row.agent_avatar_url),
+    branch: stringOrNull(row.agent_branch),
+    bio: stringOrNull(row.agent_bio),
+  };
 }
 
 function mapListingRow(row: DbRow): NeonPropertyRow {
@@ -125,20 +193,7 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
       }
     : null;
 
-  const agentId = stringOrNull(row.agent_id);
-  const profile = agentId
-    ? {
-        id: agentId,
-        name_zh: stringOrNull(row.agent_name_zh),
-        name_en: stringOrNull(row.agent_name_en),
-        phone: stringOrNull(row.agent_phone),
-        whatsapp: stringOrNull(row.agent_whatsapp),
-        licence_no: stringOrNull(row.agent_licence_no),
-        avatar_url: stringOrNull(row.agent_avatar_url),
-        branch: stringOrNull(row.agent_branch),
-        bio: stringOrNull(row.agent_bio),
-      }
-    : null;
+  const profile = mapPublicAgentProfile(row);
 
   return {
     id: stringOrEmpty(row.id),
@@ -313,7 +368,7 @@ async function fetchCorridorRows(
         ) AS corridor_rank
       FROM properties p
       LEFT JOIN estates e ON e.id = p.estate_id
-      LEFT JOIN staff_users s ON s.id = p.agent_id
+      ${publicAgentJoin}
       WHERE ${where}
     ) ranked
     WHERE ranked.corridor_rank <= ${limitParam}
@@ -354,7 +409,7 @@ export async function searchListings(
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
-    LEFT JOIN staff_users s ON s.id = p.agent_id
+    ${publicAgentJoin}
     WHERE ${where}
     ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
     LIMIT ${limitParam} OFFSET ${offsetParam}
@@ -410,7 +465,7 @@ export async function fetchFeaturedProperties(limit: number): Promise<NeonProper
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
-    LEFT JOIN staff_users s ON s.id = p.agent_id
+    ${publicAgentJoin}
     WHERE p.status = 'active' AND p.featured = true
     ORDER BY p.last_seen_at DESC NULLS LAST, p.created_at DESC
     LIMIT $1
@@ -441,7 +496,7 @@ export async function fetchPropertyByListingNo(input: {
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
-    LEFT JOIN staff_users s ON s.id = p.agent_id
+    ${publicAgentJoin}
     WHERE p.status = 'active' AND p.listing_no = $1
     LIMIT 1
     `,
@@ -474,7 +529,7 @@ export async function fetchSimilarListings(
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
-    LEFT JOIN staff_users s ON s.id = p.agent_id
+    ${publicAgentJoin}
     WHERE p.status = 'active'
       AND p.estate_id = $1
       AND p.deal_type = $2::deal_type
@@ -485,6 +540,47 @@ export async function fetchSimilarListings(
     [input.estateId, input.dealType, input.excludeId, input.limit],
   );
   return rows.map(mapListingRow);
+}
+
+export async function listPublicAgentProfiles(): Promise<NeonPublicAgentProfile[]> {
+  return withAgentProfileRolloutFallback(async () => {
+    const rows = await sql().query(
+      `
+      SELECT ${publicAgentProfileColumns}
+      FROM staff_users s
+      WHERE s.active = true
+        AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+      ORDER BY COALESCE((to_jsonb(s)->>'display_order')::integer, 0) ASC,
+        COALESCE(s.name_zh, s.name_en) ASC NULLS LAST,
+        s.id ASC
+      `,
+    );
+    return rows.flatMap((row) => {
+      const profile = mapPublicAgentProfile(row);
+      return profile ? [profile] : [];
+    });
+  }, []);
+}
+
+export async function fetchPublicAgentProfileBySlug(input: {
+  slug: string;
+}): Promise<NeonPublicAgentProfile | null> {
+  const slug = input.slug.trim().toLowerCase();
+  if (!slug) return null;
+  return withAgentProfileRolloutFallback(async () => {
+    const rows = await sql().query(
+      `
+      SELECT ${publicAgentProfileColumns}
+      FROM staff_users s
+      WHERE to_jsonb(s)->>'public_slug' = $1
+        AND s.active = true
+        AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+      LIMIT 1
+      `,
+      [slug],
+    );
+    return rows[0] ? mapPublicAgentProfile(rows[0]) : null;
+  }, null);
 }
 
 export async function fetchListingCountsByEstate(): Promise<Record<string, number>> {

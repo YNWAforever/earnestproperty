@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
 import { SITE_URL, blogArticles, estateSeo, pageSeo } from "@/content/seo";
+import { listPublicAgentProfiles } from "@/lib/neon/public-data.server";
 
 const staticPaths = [
   pageSeo.home.path,
@@ -12,6 +13,8 @@ const staticPaths = [
   pageSeo.blog.path,
   pageSeo.about.path,
   pageSeo.contact.path,
+  "/mortgage",
+  "/agents",
   ...Object.values(estateSeo).map((estate) => `/estate/${estate.slug}`),
   ...blogArticles.map((article) => `/blog/${article.slug}`),
   ...castlePeakRoadSitemapPaths,
@@ -44,10 +47,17 @@ export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
       GET: async () => {
+        const agentPaths = await listPublicAgentProfiles()
+          .then((profiles) =>
+            profiles.flatMap((profile) =>
+              profile.public_slug ? [`/agents/${profile.public_slug}`] : [],
+            ),
+          )
+          .catch(() => []);
         const body = [
           '<?xml version="1.0" encoding="UTF-8"?>',
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-          ...uniquePaths(staticPaths).map(urlXml),
+          ...uniquePaths([...staticPaths, ...agentPaths]).map(urlXml),
           "</urlset>",
         ].join("\n");
 

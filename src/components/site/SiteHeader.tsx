@@ -15,6 +15,7 @@ type RouteTo =
   | "/district/ting-kau"
   | "/estate-reviews"
   | "/listings"
+  | "/mortgage"
   | "/transactions"
   | "/videos";
 
@@ -89,6 +90,7 @@ const megaMenus: MegaMenuGroup[] = [
         label: "業主放盤 / 免費估價",
         description: "提交物業資料，獲取深井業主估價報告。",
       },
+      { to: "/mortgage", label: "按揭計算機", description: "預覽供款、壓力測試及置業開支。" },
       { to: "/agents", label: "代理團隊", description: "認識熟悉區內屋苑的前線代理。" },
       { to: "/contact", label: "聯絡門市", description: "查看麗都、海韻及青山公路豪景分行資料。" },
     ],

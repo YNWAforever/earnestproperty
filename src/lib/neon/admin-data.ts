@@ -3,7 +3,12 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
+import { deriveAgentProfileEditorContext } from "./staff-security-policy";
+import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
 import type {
+  AdminAgentEditorContext,
+  AdminAgentProfileInput,
+  AdminAgentProfileMutationInput,
   AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
@@ -25,6 +30,62 @@ async function requireStaff(roles: StaffRole[] = ["admin"]) {
   return requireStaffAccess(getRequest(), roles);
 }
 
+const fetchAdminAgentEditorContextServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager"]);
+  return deriveAgentProfileEditorContext(staff.roles);
+});
+
+export async function fetchAdminAgentEditorContext(): Promise<AdminAgentEditorContext | null> {
+  try {
+    return await callStaffServerFn(async () =>
+      fetchAdminAgentEditorContextServer(await withStaffAuthHeaders({})),
+    );
+  } catch (error) {
+    if (isStaffAuthorizationError(error)) return null;
+    throw error;
+  }
+}
+
+const fetchAdminAgentProfilesServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminAgentProfiles();
+});
+
+export async function fetchAdminAgentProfiles() {
+  return callStaffServerFn(async () =>
+    fetchAdminAgentProfilesServer(await withStaffAuthHeaders({})),
+  );
+}
+
+const fetchAdminAgentProfileServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminAgentProfile(data.id);
+  });
+
+export async function fetchAdminAgentProfile(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    fetchAdminAgentProfileServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const saveAdminAgentProfileServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminAgentProfileMutationInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminAgentProfile(data, staff);
+  });
+
+export async function saveAdminAgentProfile(options: { data: AdminAgentProfileMutationInput }) {
+  return callStaffServerFn(async () =>
+    saveAdminAgentProfileServer(await withStaffAuthHeaders(options)),
+  );
+}
+
 const STALE_SERVER_FN_RELOAD_KEY = "earnest-admin-stale-server-fn-reloaded";
 
 function errorMessage(error: unknown) {
@@ -42,6 +103,11 @@ function errorStatus(error: unknown) {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function isStaffAuthorizationError(error: unknown) {
+  const status = errorStatus(error);
+  return status === 401 || status === 403;
 }
 
 function isStaleServerFunctionError(error: unknown) {
@@ -352,7 +418,7 @@ const websiteInquirySchema = z
     phone: z.string().trim().max(30),
     email: z.string().trim().max(254).email().optional().or(z.literal("")),
     message: z.string().trim().max(2000).optional().or(z.literal("")),
-    listingNo: z.string().trim().uuid().optional(),
+    listingNo: z.string().regex(WEBSITE_LISTING_NO_PATTERN).optional(),
     property_id: z.string().trim().uuid().optional(),
     consentWhatsapp: z.boolean().default(false),
   })

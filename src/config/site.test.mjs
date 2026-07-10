@@ -6,6 +6,7 @@ import { getYouTubeEmbedUrl, isYouTubeVideoUrl } from "../lib/youtube-video-url.
 
 const files = [
   "src/config/site.ts",
+  "src/config/site-branches.js",
   "src/components/site/SiteHeader.tsx",
   "src/components/site/SiteFooter.tsx",
   "src/routes/contact.tsx",
@@ -44,7 +45,9 @@ test("site config exposes segmented whatsapp intent helpers", () => {
 });
 
 test("site config exposes all public branch contact details", () => {
-  const source = readFileSync("src/config/site.ts", "utf8");
+  const source = ["src/config/site.ts", "src/config/site-branches.js"]
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
 
   for (const text of [
     "SITE_BRANCHES",
@@ -140,6 +143,43 @@ test("header exposes approved mega menu structure and controls", () => {
   assert.equal(source.includes('split("?")[0].split("#")[0]'), false);
 });
 
+test("property experience navigation exposes the mortgage calculator everywhere", () => {
+  const header = readFileSync("src/components/site/SiteHeader.tsx", "utf8");
+  const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
+
+  assert.match(header, /to: "\/mortgage", label: "按揭計算機"/);
+  assert.match(header, /menuMobileItems\(menu, WHATSAPP_URL\)/);
+  assert.match(footer, /<Link to="\/mortgage"[\s\S]*?按揭計算機/);
+});
+
+test("sitemap includes property experience routes and only discovered public agent profiles", () => {
+  const sitemap = readFileSync("src/routes/sitemap[.]xml.ts", "utf8");
+
+  assert.match(sitemap, /"\/mortgage"/);
+  assert.match(sitemap, /"\/agents"/);
+  assert.match(sitemap, /import \{ listPublicAgentProfiles \} from "@\/lib\/neon\/public-data\.server"/);
+  assert.match(sitemap, /await listPublicAgentProfiles\(\)/);
+  assert.match(sitemap, /profile\.public_slug \? \[`\/agents\/\$\{profile\.public_slug\}`\] : \[\]/);
+  assert.match(sitemap, /\.catch\(\(\) => \[\]\)/);
+});
+
+test("property experience npm script runs every focused suite with a Windows-compatible runner", () => {
+  const packageJson = readFileSync("package.json", "utf8");
+
+  assert.match(packageJson, /"test:property-experience"\s*:\s*"bun test/);
+  for (const testFile of [
+    "src/config/site-branches.test.mjs",
+    "src/components/property/property-decision.test.mjs",
+    "src/lib/mortgage.test.ts",
+    "src/routes/mortgage.test.mjs",
+    "src/routes/agents.contract.test.mjs",
+    "src/lib/neon/agent-profiles.contract.test.mjs",
+    "src/lib/neon/staff-security-policy.test.mjs",
+    "src/lib/neon/website-inquiry.test.mjs",
+  ]) {
+    assert.equal(packageJson.includes(testFile), true, `${testFile} should be covered by the npm script`);
+  }
+});
 test("youtube channel metadata and CMS video source are wired", () => {
   const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
 
