@@ -13,8 +13,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  DEFAULT_MORTGAGE_INPUTS,
+  MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
+  mortgageInputsFromSearch,
+  normalizeMortgageInputs,
   type MortgageInputs,
   type MortgageSearch,
 } from "@/lib/mortgage";
@@ -90,8 +92,7 @@ function Field({
           value={value}
           inputMode="decimal"
           onChange={(event) => {
-            const nextValue = Number(event.target.value);
-            if (Number.isFinite(nextValue)) onChange(nextValue);
+            onChange(Number(event.target.value));
           }}
         />
       </div>
@@ -123,18 +124,13 @@ function ResultRow({
 }
 
 export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
-  const [inputs, setInputs] = useState<MortgageInputs>({
-    ...DEFAULT_MORTGAGE_INPUTS,
-    ...(initialSearch.price === undefined ? {} : { price: initialSearch.price }),
-    ...(initialSearch.income === undefined ? {} : { monthlyIncome: initialSearch.income }),
-    ...(initialSearch.expenses === undefined
-      ? {}
-      : { monthlyDebtExpenses: initialSearch.expenses }),
-  });
+  const [inputs, setInputs] = useState<MortgageInputs>(() =>
+    mortgageInputsFromSearch(initialSearch),
+  );
   const result = useMemo(() => calculateMortgage(inputs), [inputs]);
 
   const updateInput = <K extends keyof MortgageInputs>(key: K, value: MortgageInputs[K]) => {
-    setInputs((current) => ({ ...current, [key]: value }));
+    setInputs((current) => normalizeMortgageInputs({ ...current, [key]: value }));
   };
 
   return (
@@ -173,8 +169,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               id="property-price"
               label="Property price"
               value={inputs.price}
-              min={1_000_000}
-              max={50_000_000}
+              min={MORTGAGE_INPUT_LIMITS.price.min}
+              max={MORTGAGE_INPUT_LIMITS.price.max}
               step={100_000}
               onChange={(value) => updateInput("price", value)}
             >
@@ -184,8 +180,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               id="ltv"
               label="Loan-to-value ratio"
               value={inputs.ltv}
-              min={0}
-              max={100}
+              min={MORTGAGE_INPUT_LIMITS.ltv.min}
+              max={MORTGAGE_INPUT_LIMITS.ltv.max}
               step={1}
               onChange={(value) => updateInput("ltv", value)}
             >
@@ -195,8 +191,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               id="mortgage-term"
               label="Mortgage term"
               value={inputs.years}
-              min={1}
-              max={50}
+              min={MORTGAGE_INPUT_LIMITS.years.min}
+              max={MORTGAGE_INPUT_LIMITS.years.max}
               step={1}
               onChange={(value) => updateInput("years", value)}
             >
@@ -206,8 +202,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               id="interest-rate"
               label="Annual interest rate"
               value={inputs.annualInterestRate}
-              min={0}
-              max={10}
+              min={MORTGAGE_INPUT_LIMITS.annualInterestRate.min}
+              max={MORTGAGE_INPUT_LIMITS.annualInterestRate.max}
               step={0.05}
               onChange={(value) => updateInput("annualInterestRate", value)}
             >
@@ -217,8 +213,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               id="stress-rate"
               label="Stress-test rate increase"
               value={inputs.stressRate}
-              min={0}
-              max={10}
+              min={MORTGAGE_INPUT_LIMITS.stressRate.min}
+              max={MORTGAGE_INPUT_LIMITS.stressRate.max}
               step={0.25}
               onChange={(value) => updateInput("stressRate", value)}
             >

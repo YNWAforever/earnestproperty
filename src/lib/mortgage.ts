@@ -44,9 +44,13 @@ export const DEFAULT_MORTGAGE_INPUTS: MortgageInputs = {
   stressRate: 2,
 };
 
-const MAX_PROPERTY_PRICE = 1_000_000_000;
-const MAX_YEARS = 50;
-const MAX_RATE = 100;
+export const MORTGAGE_INPUT_LIMITS = {
+  price: { min: 1_000_000, max: 50_000_000 },
+  ltv: { min: 0, max: 100 },
+  years: { min: 1, max: 50 },
+  annualInterestRate: { min: 0, max: 10 },
+  stressRate: { min: 0, max: 10 },
+} as const;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -56,21 +60,35 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function normalizedInputs(input: Partial<MortgageInputs>): MortgageInputs {
+export function normalizeMortgageInputs(input: Partial<MortgageInputs>): MortgageInputs {
   const price =
     isFiniteNumber(input.price) && input.price > 0
-      ? clamp(input.price, 1, MAX_PROPERTY_PRICE)
+      ? clamp(input.price, MORTGAGE_INPUT_LIMITS.price.min, MORTGAGE_INPUT_LIMITS.price.max)
       : DEFAULT_MORTGAGE_INPUTS.price;
-  const ltv = isFiniteNumber(input.ltv) ? clamp(input.ltv, 0, 100) : DEFAULT_MORTGAGE_INPUTS.ltv;
+  const ltv = isFiniteNumber(input.ltv)
+    ? clamp(input.ltv, MORTGAGE_INPUT_LIMITS.ltv.min, MORTGAGE_INPUT_LIMITS.ltv.max)
+    : DEFAULT_MORTGAGE_INPUTS.ltv;
   const years =
     isFiniteNumber(input.years) && input.years >= 1
-      ? clamp(input.years, 1, MAX_YEARS)
+      ? clamp(
+          Math.round(input.years),
+          MORTGAGE_INPUT_LIMITS.years.min,
+          MORTGAGE_INPUT_LIMITS.years.max,
+        )
       : DEFAULT_MORTGAGE_INPUTS.years;
   const annualInterestRate = isFiniteNumber(input.annualInterestRate)
-    ? clamp(input.annualInterestRate, 0, MAX_RATE)
+    ? clamp(
+        input.annualInterestRate,
+        MORTGAGE_INPUT_LIMITS.annualInterestRate.min,
+        MORTGAGE_INPUT_LIMITS.annualInterestRate.max,
+      )
     : DEFAULT_MORTGAGE_INPUTS.annualInterestRate;
   const stressRate = isFiniteNumber(input.stressRate)
-    ? clamp(input.stressRate, 0, MAX_RATE)
+    ? clamp(
+        input.stressRate,
+        MORTGAGE_INPUT_LIMITS.stressRate.min,
+        MORTGAGE_INPUT_LIMITS.stressRate.max,
+      )
     : DEFAULT_MORTGAGE_INPUTS.stressRate;
   const monthlyIncome =
     isFiniteNumber(input.monthlyIncome) && input.monthlyIncome >= 0
@@ -92,14 +110,37 @@ function normalizedInputs(input: Partial<MortgageInputs>): MortgageInputs {
   };
 }
 
+export function mortgageInputsFromSearch(search: MortgageSearch): MortgageInputs {
+  return normalizeMortgageInputs({
+    ...(search.price === undefined ? {} : { price: search.price }),
+    ...(search.income === undefined ? {} : { monthlyIncome: search.income }),
+    ...(search.expenses === undefined ? {} : { monthlyDebtExpenses: search.expenses }),
+  });
+}
+
+function finiteOrZero(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function debtServicingRatio(
+  payment: number,
+  debtExpenses: number,
+  income: number | undefined,
+): number | null {
+  if (income === undefined || income <= 0) return null;
+
+  const ratio = ((payment + debtExpenses) / income) * 100;
+  return Number.isFinite(ratio) ? ratio : null;
+}
+
 function monthlyPayment(principal: number, annualInterestRate: number, months: number): number {
   if (principal <= 0 || months <= 0) return 0;
 
   const monthlyRate = annualInterestRate / 1_200;
-  if (monthlyRate === 0) return principal / months;
+  if (monthlyRate === 0) return finiteOrZero(principal / months);
 
   const growth = (1 + monthlyRate) ** months;
-  return (principal * monthlyRate * growth) / (growth - 1);
+  return finiteOrZero((principal * monthlyRate * growth) / (growth - 1));
 }
 
 function annualAmortization(
@@ -150,7 +191,7 @@ export function calculateResidentialStampDuty(price: number): number {
 }
 
 export function calculateMortgage(input: Partial<MortgageInputs> = {}): MortgageResult {
-  const inputs = normalizedInputs(input);
+  const inputs = normalizeMortgageInputs(input);
   const loanAmount = inputs.price * (inputs.ltv / 100);
   const deposit = inputs.price - loanAmount;
   const months = inputs.years * 12;
@@ -179,27 +220,34 @@ export function calculateMortgage(input: Partial<MortgageInputs> = {}): Mortgage
     stressedMonthlyPayment: stressedPayment,
     totalRepayment,
     totalInterest,
-    dsr: income && income > 0 ? ((payment + debtExpenses) / income) * 100 : null,
-    stressedDsr: income && income > 0 ? ((stressedPayment + debtExpenses) / income) * 100 : null,
+    dsr: debtServicingRatio(payment, debtExpenses, income),
+    stressedDsr: debtServicingRatio(stressedPayment, debtExpenses, income),
     stampDuty: calculateResidentialStampDuty(inputs.price),
     amortization,
   };
 }
 
-function parseSearchNumber(value: unknown, minimum: number): number | undefined {
+function parseSearchNumber(value: unknown): number | undefined {
   if (typeof value !== "string" && typeof value !== "number") return undefined;
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= minimum ? parsed : undefined;
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 export function parseMortgageSearch(search: Record<string, unknown>): MortgageSearch {
-  const price = parseSearchNumber(search.price, 1);
-  const income = parseSearchNumber(search.income, 0);
-  const expenses = parseSearchNumber(search.expenses, 0);
+  const price = parseSearchNumber(search.price);
+  const income = parseSearchNumber(search.income);
+  const expenses = parseSearchNumber(search.expenses);
+  const normalized = normalizeMortgageInputs({
+    ...(price === undefined ? {} : { price }),
+    ...(income === undefined ? {} : { monthlyIncome: income }),
+    ...(expenses === undefined ? {} : { monthlyDebtExpenses: expenses }),
+  });
 
   return {
-    ...(price === undefined ? {} : { price }),
-    ...(income === undefined ? {} : { income }),
-    ...(expenses === undefined ? {} : { expenses }),
+    ...(price === undefined ? {} : { price: normalized.price }),
+    ...(normalized.monthlyIncome === undefined ? {} : { income: normalized.monthlyIncome }),
+    ...(normalized.monthlyDebtExpenses === undefined
+      ? {}
+      : { expenses: normalized.monthlyDebtExpenses }),
   };
 }

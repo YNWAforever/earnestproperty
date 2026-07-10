@@ -19,6 +19,11 @@ test("mortgage calculator route is registered with safe search parsing and SEO m
   assert.match(route, /按揭計算機/);
   assert.match(route, /name:\s*"description"/);
   assert.match(route, /MortgageCalculator/);
+  assert.match(
+    route,
+    /<MortgageCalculator\s+key=\{JSON\.stringify\(search\)\}\s+initialSearch=\{search\}\s*\/>/,
+    "route search changes should remount the calculator with synchronized state",
+  );
 });
 
 test("mortgage calculator exposes practical controls, results, and official references", () => {
@@ -39,6 +44,8 @@ test("mortgage calculator exposes practical controls, results, and official refe
     "Annual amortization",
     "Slider",
     "calculateMortgage",
+    "normalizeMortgageInputs",
+    "mortgageInputsFromSearch",
     "https://www.ird.gov.hk/chi/faq/avd.htm",
     "https://www.hkmc.com.hk/eng/our_business/mortgage_insurance_programme.html",
     "Mortgage insurance premiums are not estimated",
@@ -50,4 +57,9 @@ test("mortgage calculator exposes practical controls, results, and official refe
   assert.match(component, /aria-label=/);
   assert.match(component, /target="_blank"/);
   assert.match(component, /rel="noreferrer"/);
+  assert.match(
+    component,
+    /setInputs\(\(current\)\s*=>\s*normalizeMortgageInputs\(\{\s*\.\.\.current,\s*\[key\]: value\s*\}\)\)/,
+    "committed controls should store the same normalized values used by calculation",
+  );
 });

@@ -25,5 +25,5 @@ export const Route = createFileRoute("/mortgage")({
 function MortgageRoute() {
   const search = Route.useSearch();
 
-  return <MortgageCalculator initialSearch={search} />;
+  return <MortgageCalculator key={JSON.stringify(search)} initialSearch={search} />;
 }

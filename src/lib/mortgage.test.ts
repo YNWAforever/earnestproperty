@@ -2,10 +2,58 @@ import { describe, expect, test } from "bun:test";
 
 import {
   DEFAULT_MORTGAGE_INPUTS,
+  MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
   calculateResidentialStampDuty,
+  mortgageInputsFromSearch,
+  normalizeMortgageInputs,
   parseMortgageSearch,
 } from "./mortgage";
+
+function expectOnlyFiniteNumbersOrNull(value: unknown): void {
+  if (typeof value === "number") {
+    expect(Number.isFinite(value)).toBeTrue();
+    return;
+  }
+
+  if (value === null || value === undefined || typeof value !== "object") return;
+
+  for (const nestedValue of Object.values(value)) {
+    expectOnlyFiniteNumbersOrNull(nestedValue);
+  }
+}
+
+describe("normalizeMortgageInputs", () => {
+  test("uses one visible normalization result for zero and huge committed values", () => {
+    const normalized = normalizeMortgageInputs({
+      price: 0,
+      ltv: Number.MAX_VALUE,
+      years: Number.MAX_VALUE,
+      annualInterestRate: Number.MAX_VALUE,
+      stressRate: Number.MAX_VALUE,
+    });
+
+    expect(normalized).toEqual({
+      price: DEFAULT_MORTGAGE_INPUTS.price,
+      ltv: MORTGAGE_INPUT_LIMITS.ltv.max,
+      years: MORTGAGE_INPUT_LIMITS.years.max,
+      annualInterestRate: MORTGAGE_INPUT_LIMITS.annualInterestRate.max,
+      stressRate: MORTGAGE_INPUT_LIMITS.stressRate.max,
+    });
+    expect(calculateMortgage(normalized).inputs).toEqual(normalized);
+  });
+
+  test.each([
+    [1.1, 1],
+    [12.7, 13],
+    [49.9, 50],
+  ])("normalizes a %s-year term to %i whole years", (years, expectedYears) => {
+    const normalized = normalizeMortgageInputs({ years });
+
+    expect(normalized.years).toBe(expectedYears);
+    expect(calculateMortgage(normalized).amortization).toHaveLength(expectedYears);
+  });
+});
 
 describe("calculateMortgage", () => {
   test("calculates the default Hong Kong repayment and stressed repayment", () => {
@@ -74,6 +122,37 @@ describe("calculateMortgage", () => {
     expect(result.dsr).toBeNull();
     expect(result.stressedDsr).toBeNull();
   });
+
+  test.each([
+    {
+      ...DEFAULT_MORTGAGE_INPUTS,
+      monthlyIncome: Number.MIN_VALUE,
+      monthlyDebtExpenses: Number.MAX_VALUE,
+    },
+    {
+      price: Number.MAX_VALUE,
+      ltv: Number.MAX_VALUE,
+      years: Number.MAX_VALUE,
+      annualInterestRate: Number.MAX_VALUE,
+      stressRate: Number.MAX_VALUE,
+      monthlyIncome: Number.MIN_VALUE,
+      monthlyDebtExpenses: Number.MAX_VALUE,
+    },
+    {
+      ...DEFAULT_MORTGAGE_INPUTS,
+      ltv: 0,
+      annualInterestRate: 0,
+      stressRate: 0,
+      monthlyIncome: 0,
+      monthlyDebtExpenses: 0,
+    },
+  ])("returns only finite numbers or null for every numeric result", (input) => {
+    const result = calculateMortgage(input);
+
+    expectOnlyFiniteNumbersOrNull(result);
+    expect(result.dsr === null || Number.isFinite(result.dsr)).toBeTrue();
+    expect(result.stressedDsr === null || Number.isFinite(result.stressedDsr)).toBeTrue();
+  });
 });
 
 describe("calculateResidentialStampDuty", () => {
@@ -134,5 +213,18 @@ describe("parseMortgageSearch", () => {
 
   test("drops unusable optional values", () => {
     expect(parseMortgageSearch({ price: "NaN", income: "-2", expenses: "Infinity" })).toEqual({});
+  });
+
+  test("normalizes zero and huge URL prices before they reach displayed state", () => {
+    const zeroSearch = parseMortgageSearch({ price: "0" });
+    const hugeSearch = parseMortgageSearch({ price: String(Number.MAX_VALUE) });
+
+    expect(zeroSearch).toEqual({ price: DEFAULT_MORTGAGE_INPUTS.price });
+    expect(hugeSearch).toEqual({ price: MORTGAGE_INPUT_LIMITS.price.max });
+
+    for (const search of [zeroSearch, hugeSearch]) {
+      const displayedInputs = mortgageInputsFromSearch(search);
+      expect(calculateMortgage(displayedInputs).inputs).toEqual(displayedInputs);
+    }
   });
 });
