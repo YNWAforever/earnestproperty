@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VideosRouteImport } from './routes/videos'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as MortgageRouteImport } from './routes/mortgage'
 import { Route as ListingsRouteImport } from './routes/listings'
 import { Route as EstateReviewsRouteImport } from './routes/estate-reviews'
 import { Route as DashboardRouteImport } from './routes/dashboard'
@@ -70,6 +71,11 @@ const TransactionsRoute = TransactionsRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MortgageRoute = MortgageRouteImport.update({
+  id: '/mortgage',
+  path: '/mortgage',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ListingsRoute = ListingsRouteImport.update({
@@ -306,6 +312,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/mortgage': typeof MortgageRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
@@ -353,6 +360,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRouteWithChildren
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/mortgage': typeof MortgageRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/mortgage': typeof MortgageRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
@@ -454,6 +463,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/estate-reviews'
     | '/listings'
+    | '/mortgage'
     | '/sitemap.xml'
     | '/transactions'
     | '/videos'
@@ -501,6 +511,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/estate-reviews'
     | '/listings'
+    | '/mortgage'
     | '/sitemap.xml'
     | '/transactions'
     | '/videos'
@@ -550,6 +561,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/estate-reviews'
     | '/listings'
+    | '/mortgage'
     | '/sitemap.xml'
     | '/transactions'
     | '/videos'
@@ -600,6 +612,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRouteWithChildren
   EstateReviewsRoute: typeof EstateReviewsRoute
   ListingsRoute: typeof ListingsRoute
+  MortgageRoute: typeof MortgageRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TransactionsRoute: typeof TransactionsRoute
   VideosRoute: typeof VideosRoute
@@ -644,6 +657,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mortgage': {
+      id: '/mortgage'
+      path: '/mortgage'
+      fullPath: '/mortgage'
+      preLoaderRoute: typeof MortgageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/listings': {
@@ -1036,6 +1056,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRouteWithChildren,
   EstateReviewsRoute: EstateReviewsRoute,
   ListingsRoute: ListingsRoute,
+  MortgageRoute: MortgageRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TransactionsRoute: TransactionsRoute,
   VideosRoute: VideosRoute,
