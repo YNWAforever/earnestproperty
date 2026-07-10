@@ -64,7 +64,7 @@ import {
   computeLeadPriority,
   resolveWhatsappStatus,
 } from "./command-center";
-import { deriveWebsiteInquiryRouting } from "./website-inquiry.js";
+import { persistWebsiteInquiry } from "./website-inquiry.js";
 import { woztellEnabled } from "../woztell/woztell.server";
 
 /**
@@ -2137,90 +2137,16 @@ export async function createWebsiteInquiry(input: {
   const optInWhatsapp = input.consentWhatsapp === true;
   const requestedPropertyId = input.property_id ?? null;
   const requestedListingNo = input.listingNo?.trim() || null;
-  const listingRows =
-    requestedPropertyId || requestedListingNo
-      ? await queryRows(
-          `
-          SELECT p.id, p.deal_type, p.agent_id, s.active AS agent_active
-          FROM properties p
-          LEFT JOIN staff_users s ON s.id = p.agent_id
-          WHERE p.status = 'active'
-            AND (
-              ($1::uuid IS NOT NULL AND p.id = $1::uuid)
-              OR ($2::text IS NOT NULL AND p.listing_no = $2::text)
-            )
-          ORDER BY CASE WHEN p.id = $1::uuid THEN 0 ELSE 1 END
-          LIMIT 1
-          `,
-          [requestedPropertyId, requestedListingNo],
-        )
-      : [];
-  const listing = listingRows[0];
-  const routing = deriveWebsiteInquiryRouting(
-    listing
-      ? {
-          id: stringOrEmpty(listing.id),
-          dealType: listing.deal_type === "rent" ? "rent" : "sale",
-          agentId: stringOrNull(listing.agent_id),
-          agentActive: listing.agent_active === true,
-        }
-      : null,
-  );
-
-  // Single atomic CTE statement so the new/upserted contact id always flows
-  // through into the inquiry and lead inserts (one round-trip, no orphan risk,
-  // and no empty contactId -> uuid cast crash).
-  //
-  // normalized_phone is UNIQUE but nullable; NULL can never match the
-  // ON CONFLICT arbiter, so when it is null we skip the upsert entirely and
-  // always insert a fresh contact.
-  // Params (shared across every CTE branch):
-  //   $1 name, $2 phone, $3 normalized_phone, $4 email,
-  //   $5 property_id (uuid), $6 message, $7 opt_in_whatsapp (boolean),
-  //   $8 assigned_agent_id (uuid), $9 intent
-  const contactCte = normalizedPhone
-    ? `
-      contact AS (
-        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        VALUES ($1, $2, $3, $4, 'website', $7)
-        ON CONFLICT (normalized_phone) DO UPDATE SET
-          name = COALESCE(EXCLUDED.name, crm_contacts.name),
-          email = COALESCE(EXCLUDED.email, crm_contacts.email),
-          opt_in_whatsapp = crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp,
-          updated_at = now()
-        RETURNING id
-      )`
-    : `
-      contact AS (
-        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        VALUES ($1, $2, $3, $4, 'website', $7)
-        RETURNING id
-      )`;
-
-  const rows = await queryRows(
-    `
-    WITH ${contactCte},
-    new_lead AS (
-      INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note)
-      SELECT contact.id, $5::uuid, $8::uuid, 'new', $9, 'website', $6 FROM contact
-    )
-    INSERT INTO inquiries (source, property_id, name, phone, email, message, assigned_agent_id, crm_contact_id)
-    SELECT 'website', $5::uuid, $1, $2, $4, $6, $8::uuid, contact.id FROM contact
-    RETURNING id
-    `,
-    [
-      input.name,
-      input.phone,
-      normalizedPhone,
-      email,
-      routing.propertyId,
-      message,
-      optInWhatsapp,
-      routing.assignedAgentId,
-      routing.intent,
-    ],
-  );
-  return { id: stringOrEmpty(rows[0]?.id) };
+  return persistWebsiteInquiry(queryRows, {
+    name: input.name,
+    phone: input.phone,
+    normalizedPhone,
+    email,
+    message,
+    listingNo: requestedListingNo,
+    propertyId: requestedPropertyId,
+    consentWhatsapp: optInWhatsapp,
+  });
 }
 
 export async function updateInquiryStatus(id: string, status: string, actor: StaffAccess) {

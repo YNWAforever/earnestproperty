@@ -29,12 +29,99 @@ type PropertyDecisionActionsProps = {
   onInquiry: () => void;
 };
 
+type PropertyMobileContactSummaryProps = Omit<
+  PropertyDecisionActionsProps,
+  "price"
+>;
+
 function digits(value: string) {
   return value.replace(/[^\d]/g, "");
 }
 
 function formatMoney(value: number) {
   return `$${Math.round(value).toLocaleString("zh-HK")}`;
+}
+
+export function PropertyMobileContactSummary({
+  agent,
+  branchContact,
+  fallbackWhatsapp,
+  listingNo,
+  title,
+  dealType,
+  onInquiry,
+}: PropertyMobileContactSummaryProps) {
+  const decision = getPropertyDecision({ dealType, price: null });
+  const branchPhone = "phone" in branchContact ? branchContact.phone : branchContact.phoneTel;
+  const phone = agent?.phone || branchPhone;
+  const whatsapp = agent?.whatsapp || fallbackWhatsapp;
+  const phoneHref = phone ? `tel:${digits(phone)}` : "/contact";
+  const whatsappHref = whatsapp
+    ? `https://wa.me/${digits(whatsapp)}?text=${encodeURIComponent(`你好，我想查詢編號 ${listingNo} ${title}`)}`
+    : "/contact";
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{agent ? "負責經紀" : "負責分行"}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {agent ? (
+          <div className="flex items-center gap-3">
+            <Avatar className="h-12 w-12">
+              <AvatarImage src={agent.avatar_url ?? undefined} alt={agent.name_zh ?? ""} />
+              <AvatarFallback>
+                {(agent.name_zh ?? agent.name_en ?? "經").slice(0, 1)}
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <p className="font-semibold">{agent.name_zh ?? agent.name_en}</p>
+              {agent.licence_no ? (
+                <p className="text-xs text-muted-foreground">牌照 {agent.licence_no}</p>
+              ) : null}
+              {agent.branch ? (
+                <p className="text-xs text-muted-foreground">{agent.branch}</p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="font-semibold">{branchContact.name}</p>
+            <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+              {branchContact.address}
+            </p>
+            {phone ? <p className="mt-2 text-sm font-medium">{phone}</p> : null}
+          </div>
+        )}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Button asChild variant="outline">
+            <a href={phoneHref}>
+              <Phone className="mr-2 h-4 w-4" />
+              致電
+            </a>
+          </Button>
+          <Button asChild>
+            <a
+              href={whatsappHref}
+              target={whatsapp ? "_blank" : undefined}
+              rel="noopener noreferrer"
+            >
+              <MessageCircle className="mr-2 h-4 w-4" />
+              WhatsApp
+            </a>
+          </Button>
+        </div>
+        <Button
+          className="mt-2 w-full"
+          variant={dealType === "rent" ? "default" : "secondary"}
+          onClick={onInquiry}
+        >
+          {decision.inquiryLabel}
+        </Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 export function PropertyDecisionActions({
@@ -62,7 +149,8 @@ export function PropertyDecisionActions({
 
   return (
     <>
-      <Card>
+      <div className="hidden lg:block">
+        <Card>
         <CardHeader>
           <CardTitle className="text-base">{agent ? "負責經紀" : "負責分行"}</CardTitle>
         </CardHeader>
@@ -122,10 +210,10 @@ export function PropertyDecisionActions({
             {decision.inquiryLabel}
           </Button>
         </CardContent>
-      </Card>
+        </Card>
 
-      {mortgage && decision.mortgageHref ? (
-        <Card className="mt-4">
+        {mortgage && decision.mortgageHref ? (
+          <Card className="mt-4">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Calculator className="h-4 w-4" />
@@ -148,8 +236,9 @@ export function PropertyDecisionActions({
               <a href={decision.mortgageHref}>詳細計算</a>
             </Button>
           </CardContent>
-        </Card>
-      ) : null}
+          </Card>
+        ) : null}
+      </div>
 
       <div className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 px-3 py-2 shadow-lg backdrop-blur lg:hidden">
         <div

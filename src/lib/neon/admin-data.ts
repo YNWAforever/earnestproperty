@@ -3,6 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
+import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
 import type {
   AdminAgentProfileInput,
   AdminArticleInput,
@@ -393,7 +394,7 @@ const websiteInquirySchema = z
     phone: z.string().trim().max(30),
     email: z.string().trim().max(254).email().optional().or(z.literal("")),
     message: z.string().trim().max(2000).optional().or(z.literal("")),
-    listingNo: z.string().trim().uuid().optional(),
+    listingNo: z.string().regex(WEBSITE_LISTING_NO_PATTERN).optional(),
     property_id: z.string().trim().uuid().optional(),
     consentWhatsapp: z.boolean().default(false),
   })

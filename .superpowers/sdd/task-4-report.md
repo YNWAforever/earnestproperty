@@ -74,3 +74,26 @@ Covered behavior:
 - Mobile action labels come directly from the tested pure decision model; bottom padding and vertical offset protect content and the live-agent launcher.
 - Remaining concern: apply the already approved agent-profile migration to the verification database before final visual QA of real sale and rental property records.
 - Concurrent agent-route, `routeTree.gen.ts`, plan, and lockfile changes were not edited or included in Task 4 staging.
+
+## Review Fix RED/GREEN Evidence
+
+RED command:
+
+```powershell
+node --test src/components/property/property-decision.test.mjs src/lib/neon/website-inquiry.test.mjs
+```
+
+Result before review fixes: exit 1, 11 tests, 6 passed, 5 failed. The failures were the missing atomic persistence helper, missing bounded listing-number validator, missing rendered media/contact layout, missing route integration, and the existing two-query inquiry flow.
+
+GREEN evidence after review fixes:
+
+- Focused Task 4 command passed: 14/14 tests.
+- Mocked persistence behavior proves one query call contains active property/staff resolution plus contact, lead, and inquiry writes; caller agent values are absent from query parameters.
+- ReactDOMServer layout behavior proves media, mobile contact, and property details order, desktop media/contact pairing, and one inquiry form/name ID.
+- Listing-number behavior accepts `B059390`, numeric and bounded hyphenated references; invalid whitespace, separators, and overlong values are rejected while `property_id` remains UUID-validated.
+- `npm.cmd run test:contact`: 18/18 passed.
+- `npm.cmd run test:neon-auth`: 3/3 passed.
+- `npm.cmd run test:command-center`: 25/25 passed.
+- Scoped ESLint passed with the repository's baseline CRLF-only Prettier rule disabled.
+- `git diff --check` passed with CRLF conversion warnings only.
+- `npm.cmd run build` passed after rerunning with permission to write Vite temporary files: 4,840 client and 237 SSR modules transformed.

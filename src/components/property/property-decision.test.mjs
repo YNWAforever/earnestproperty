@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const moduleUrl = new URL("./property-decision.js", import.meta.url);
+const layoutModuleUrl = new URL("./property-media-contact-layout.js", import.meta.url);
 
 test("sale listings expose mortgage preview and the exact three mobile commands", async () => {
   assert.equal(existsSync(moduleUrl), true, "property decision helper must exist");
@@ -59,6 +62,40 @@ test("browser inquiry payload allow-lists fields and cannot select an agent", as
   assert.equal("assigned_agent_id" in payload, false);
 });
 
+test("property layout renders mobile contact immediately after media without duplicating the form", async () => {
+  assert.equal(existsSync(layoutModuleUrl), true, "property media/contact layout must exist");
+  const { PropertyMediaContactLayout } = await import(layoutModuleUrl);
+
+  const markup = renderToStaticMarkup(
+    createElement(PropertyMediaContactLayout, {
+      media: createElement("section", { "data-marker": "media" }, "media"),
+      mobileContact: createElement(
+        "section",
+        { "data-marker": "mobile-contact" },
+        "assigned public agent",
+      ),
+      details: createElement("section", { "data-marker": "details" }, "description"),
+      sidebar: createElement(
+        "form",
+        { id: "property-inquiry-form" },
+        createElement("input", { id: "name", name: "name" }),
+      ),
+    }),
+  );
+
+  const mediaIndex = markup.indexOf('data-marker="media"');
+  const mobileContactIndex = markup.indexOf('data-marker="mobile-contact"');
+  const detailsIndex = markup.indexOf('data-marker="details"');
+  const sidebarIndex = markup.indexOf('id="property-inquiry-form"');
+  assert.ok(mediaIndex < mobileContactIndex, "mobile contact must follow media");
+  assert.ok(mobileContactIndex < detailsIndex, "mobile contact must precede property details");
+  assert.ok(detailsIndex < sidebarIndex, "desktop sidebar stays paired beside the media/details column");
+  assert.match(markup, /lg:grid-cols-\[2fr_1fr\]/);
+  assert.match(markup, /data-slot="mobile-contact" class="mt-4 lg:hidden"/);
+  assert.equal((markup.match(/id="property-inquiry-form"/g) ?? []).length, 1);
+  assert.equal((markup.match(/id="name"/g) ?? []).length, 1);
+});
+
 test("property route keeps the full decision and discovery feature set", () => {
   const route = readFileSync(
     new URL("../../routes/property.$listingNo.tsx", import.meta.url),
@@ -75,6 +112,8 @@ test("property route keeps the full decision and discovery feature set", () => {
   assert.notEqual(summaryIndex, -1);
   assert.notEqual(mediaIndex, -1);
   assert.ok(summaryIndex < mediaIndex, "property summary must render before media");
+  assert.match(route, /PropertyMediaContactLayout/);
+  assert.match(route, /mobileContact=/);
 
   for (const contract of [
     "hasVideo",

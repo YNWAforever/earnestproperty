@@ -41,7 +41,11 @@ import {
   type EstateTransaction,
 } from "@/lib/queries";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
-import { PropertyDecisionActions } from "@/components/property/PropertyDecisionActions";
+import {
+  PropertyDecisionActions,
+  PropertyMobileContactSummary,
+} from "@/components/property/PropertyDecisionActions";
+import { PropertyMediaContactLayout } from "@/components/property/property-media-contact-layout.js";
 import {
   buildPropertyInquiryPayload,
   getPropertyDecision,
@@ -423,10 +427,8 @@ function PropertyPage() {
         </div>
       </section>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[2fr_1fr]">
-        {/* Left: media tabs + content */}
-        <div>
-          {/* Media tabs */}
+      <PropertyMediaContactLayout
+        media={
           <Tabs defaultValue="photos">
             <TabsList className="flex h-auto flex-wrap justify-start">
               <TabsTrigger value="photos">
@@ -547,6 +549,20 @@ function PropertyPage() {
               </TabsContent>
             )}
           </Tabs>
+        }
+        mobileContact={
+          <PropertyMobileContactSummary
+            agent={agent}
+            branchContact={branchContact}
+            fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
+            listingNo={property.listing_no}
+            title={property.title_zh}
+            dealType={property.deal_type}
+            onInquiry={focusInquiry}
+          />
+        }
+        details={
+          <>
 
           {/* Description */}
           {property.description && (
@@ -655,11 +671,11 @@ function PropertyPage() {
           <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
             免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
           </p>
-        </div>
-
-        {/* Right: agent + inquiry (sticky) */}
-        <aside className="lg:sticky lg:top-6 lg:h-fit">
-          <PropertyDecisionActions
+          </>
+        }
+        sidebar={
+          <>
+            <PropertyDecisionActions
             agent={agent}
             branchContact={branchContact}
             fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
@@ -670,7 +686,7 @@ function PropertyPage() {
             onInquiry={focusInquiry}
           />
 
-          <Card className="mt-4">
+            <Card className="mt-4">
             <CardHeader>
               <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
             </CardHeader>
@@ -727,9 +743,10 @@ function PropertyPage() {
                 </p>
               </form>
             </CardContent>
-          </Card>
-        </aside>
-      </div>
+            </Card>
+          </>
+        }
+      />
 
       <script
         type="application/ld+json"
