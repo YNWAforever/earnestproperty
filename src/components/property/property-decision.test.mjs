@@ -15,7 +15,34 @@ test("sale listings expose mortgage preview and the exact three mobile commands"
     intent: "buyer",
     inquiryLabel: "查詢此售盤",
     showMortgage: true,
+    hasMortgagePrice: true,
     mortgageHref: "/mortgage?price=8880000",
+    mobileCommands: ["致電", "WhatsApp", "計月供"],
+  });
+});
+
+test("sale listings without a price retain the generic mortgage action", async () => {
+  const { getPropertyDecision } = await import(moduleUrl);
+
+  assert.deepEqual(getPropertyDecision({ dealType: "sale", price: null }), {
+    intent: "buyer",
+    inquiryLabel: "查詢此售盤",
+    showMortgage: true,
+    hasMortgagePrice: false,
+    mortgageHref: "/mortgage",
+    mobileCommands: ["致電", "WhatsApp", "計月供"],
+  });
+});
+
+test("sale listings with an invalid price retain the generic mortgage action", async () => {
+  const { getPropertyDecision } = await import(moduleUrl);
+
+  assert.deepEqual(getPropertyDecision({ dealType: "sale", price: -1 }), {
+    intent: "buyer",
+    inquiryLabel: "查詢此售盤",
+    showMortgage: true,
+    hasMortgagePrice: false,
+    mortgageHref: "/mortgage",
     mobileCommands: ["致電", "WhatsApp", "計月供"],
   });
 });
@@ -28,6 +55,7 @@ test("rental listings use renter intent and never expose mortgage actions", asyn
     intent: "renter",
     inquiryLabel: "查詢此租盤",
     showMortgage: false,
+    hasMortgagePrice: false,
     mortgageHref: null,
     mobileCommands: ["致電", "WhatsApp"],
   });
@@ -89,7 +117,10 @@ test("property layout renders mobile contact immediately after media without dup
   const sidebarIndex = markup.indexOf('id="property-inquiry-form"');
   assert.ok(mediaIndex < mobileContactIndex, "mobile contact must follow media");
   assert.ok(mobileContactIndex < detailsIndex, "mobile contact must precede property details");
-  assert.ok(detailsIndex < sidebarIndex, "desktop sidebar stays paired beside the media/details column");
+  assert.ok(
+    detailsIndex < sidebarIndex,
+    "desktop sidebar stays paired beside the media/details column",
+  );
   assert.match(markup, /lg:grid-cols-\[2fr_1fr\]/);
   assert.match(markup, /data-slot="mobile-contact" class="mt-4 lg:hidden"/);
   assert.equal((markup.match(/id="property-inquiry-form"/g) ?? []).length, 1);
@@ -131,6 +162,9 @@ test("property route keeps the full decision and discovery feature set", () => {
   }
 
   assert.match(actions, /calculateMortgage\(\{ price \}\)/);
+  assert.match(actions, /decision\.hasMortgagePrice && price !== null/);
+  assert.match(actions, /輸入樓價、按揭成數及年期，快速估算置業預算。/);
+  assert.match(actions, /開啟按揭計算機/);
   assert.match(actions, /bottom-16/);
   assert.doesNotMatch(actions, /bottom-0/);
   assert.match(liveAgent, /fixed bottom-4 right-4/);

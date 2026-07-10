@@ -2,6 +2,7 @@ export type PropertyDecision = {
   intent: "buyer" | "renter";
   inquiryLabel: "查詢此售盤" | "查詢此租盤";
   showMortgage: boolean;
+  hasMortgagePrice: boolean;
   mortgageHref: string | null;
   mobileCommands: string[];
 };

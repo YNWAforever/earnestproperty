@@ -155,19 +155,17 @@ describe("calculateMortgage", () => {
 
   test.each([
     [100_000_000, 4_250_000],
-    [100_000_001, 4_250_000.3],
+    [100_000_001, 4_250_001],
     [109_574_470, 7_122_341],
-    [109_574_471, 7_122_340.615],
+    [109_574_471, 7_122_341],
     [500_000_000, 32_500_000],
-  ] as const)(
-    "preserves the high-value AVD tier through calculateMortgage at $%i",
-    (price, duty) => {
-      const result = calculateMortgage({ ...DEFAULT_MORTGAGE_INPUTS, price });
+  ] as const)("returns the payable integer AVD through calculateMortgage at $%i", (price, duty) => {
+    const result = calculateMortgage({ ...DEFAULT_MORTGAGE_INPUTS, price });
 
-      expect(result.inputs.price).toBe(price);
-      expect(result.stampDuty).toBeCloseTo(duty, 3);
-    },
-  );
+    expect(result.inputs.price).toBe(price);
+    expect(result.stampDuty).toBe(duty);
+    expect(Number.isInteger(result.stampDuty)).toBeTrue();
+  });
 
   test("normalizes unusable values without returning NaN or Infinity", () => {
     const result = calculateMortgage({
@@ -228,17 +226,17 @@ describe("calculateMortgage", () => {
 describe("calculateResidentialStampDuty", () => {
   const bands = [
     [4_000_000, 100, 100],
-    [4_323_780, 64_856, 64_855.8],
-    [4_500_000, 67_500, 67_499.985],
-    [4_935_480, 111_048, 111_047.9],
-    [6_000_000, 135_000, 134_999.9775],
-    [6_642_860, 199_286, 199_285.9],
-    [9_000_000, 270_000, 269_999.97],
-    [10_080_000, 378_000, 377_999.9],
-    [20_000_000, 750_000, 749_999.9625],
-    [21_739_120, 923_912, 923_911.9],
-    [100_000_000, 4_250_000, 4_249_999.9575],
-    [109_574_470, 7_122_341, 7_122_340.7],
+    [4_323_780, 64_856, 64_856],
+    [4_500_000, 67_500, 67_500],
+    [4_935_480, 111_048, 111_048],
+    [6_000_000, 135_000, 135_000],
+    [6_642_860, 199_286, 199_286],
+    [9_000_000, 270_000, 270_000],
+    [10_080_000, 378_000, 378_000],
+    [20_000_000, 750_000, 750_000],
+    [21_739_120, 923_912, 923_912],
+    [100_000_000, 4_250_000, 4_250_000],
+    [109_574_470, 7_122_341, 7_122_341],
   ] as const;
 
   test.each(bands)("applies the statutory duty at $%i", (price, expectedDuty) => {
@@ -246,24 +244,25 @@ describe("calculateResidentialStampDuty", () => {
   });
 
   test.each(bands)("uses the preceding scale just below $%i", (price, _expectedDuty, belowDuty) => {
-    expect(calculateResidentialStampDuty(price - 1)).toBeCloseTo(belowDuty, 3);
+    expect(calculateResidentialStampDuty(price - 1)).toBe(belowDuty);
   });
 
   test.each([
-    [4_000_001, 100.2],
-    [4_323_781, 64_856.715],
-    [4_500_001, 67_500.1],
-    [4_935_481, 111_048.3225],
-    [6_000_001, 135_000.1],
-    [6_642_861, 199_285.83],
-    [9_000_001, 270_000.1],
-    [10_080_001, 378_000.0375],
-    [20_000_001, 750_000.1],
-    [21_739_121, 923_912.6425],
-    [100_000_001, 4_250_000.3],
-    [109_574_471, 7_122_340.615],
+    [4_000_001, 101],
+    [4_323_781, 64_857],
+    [4_500_001, 67_501],
+    [4_935_481, 111_049],
+    [6_000_001, 135_001],
+    [6_642_861, 199_286],
+    [9_000_001, 270_001],
+    [10_080_001, 378_001],
+    [20_000_001, 750_001],
+    [21_739_121, 923_913],
+    [100_000_001, 4_250_001],
+    [109_574_471, 7_122_341],
   ] as const)("uses the next scale just above $%i", (price, expectedDuty) => {
-    expect(calculateResidentialStampDuty(price)).toBeCloseTo(expectedDuty, 3);
+    expect(calculateResidentialStampDuty(price)).toBe(expectedDuty);
+    expect(Number.isInteger(calculateResidentialStampDuty(price))).toBeTrue();
   });
 
   test("returns zero for unusable property values", () => {

@@ -216,18 +216,18 @@ function annualAmortization(
 export function calculateResidentialStampDuty(price: number): number {
   if (!Number.isFinite(price) || price <= 0) return 0;
   if (price <= 4_000_000) return 100;
-  if (price <= 4_323_780) return 100 + (price - 4_000_000) * 0.2;
-  if (price <= 4_500_000) return price * 0.015;
-  if (price <= 4_935_480) return 67_500 + (price - 4_500_000) * 0.1;
-  if (price <= 6_000_000) return price * 0.0225;
-  if (price <= 6_642_860) return 135_000 + (price - 6_000_000) * 0.1;
-  if (price <= 9_000_000) return price * 0.03;
-  if (price <= 10_080_000) return 270_000 + (price - 9_000_000) * 0.1;
-  if (price <= 20_000_000) return price * 0.0375;
-  if (price <= 21_739_120) return 750_000 + (price - 20_000_000) * 0.1;
-  if (price <= 100_000_000) return price * 0.0425;
-  if (price <= 109_574_470) return 4_250_000 + (price - 100_000_000) * 0.3;
-  return price * 0.065;
+  if (price <= 4_323_780) return Math.ceil(100 + (price - 4_000_000) * 0.2);
+  if (price <= 4_500_000) return Math.ceil(price * 0.015);
+  if (price <= 4_935_480) return Math.ceil(67_500 + (price - 4_500_000) * 0.1);
+  if (price <= 6_000_000) return Math.ceil(price * 0.0225);
+  if (price <= 6_642_860) return Math.ceil(135_000 + (price - 6_000_000) * 0.1);
+  if (price <= 9_000_000) return Math.ceil(price * 0.03);
+  if (price <= 10_080_000) return Math.ceil(270_000 + (price - 9_000_000) * 0.1);
+  if (price <= 20_000_000) return Math.ceil(price * 0.0375);
+  if (price <= 21_739_120) return Math.ceil(750_000 + (price - 20_000_000) * 0.1);
+  if (price <= 100_000_000) return Math.ceil(price * 0.0425);
+  if (price <= 109_574_470) return Math.ceil(4_250_000 + (price - 100_000_000) * 0.3);
+  return Math.ceil(price * 0.065);
 }
 
 export function calculateMortgage(input: Partial<MortgageInputs> = {}): MortgageResult {
