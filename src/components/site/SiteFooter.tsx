@@ -134,6 +134,11 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
+                <Link to="/mortgage" className="opacity-80 hover:opacity-100">
+                  按揭計算機
+                </Link>
+              </li>
+              <li>
                 <Link to="/blog" className="opacity-80 hover:opacity-100">
                   市場分析
                 </Link>

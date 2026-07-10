@@ -26,10 +26,12 @@ export type NeonEstateSnapshot = {
   lng: number | null;
 };
 
-export type NeonStaffProfile = {
+export type NeonPublicAgentProfile = {
   id: string;
+  public_slug: string | null;
   name_zh: string | null;
   name_en: string | null;
+  job_title: string | null;
   phone: string | null;
   whatsapp: string | null;
   licence_no: string | null;
@@ -37,6 +39,8 @@ export type NeonStaffProfile = {
   branch: string | null;
   bio: string | null;
 };
+
+export type NeonStaffProfile = NeonPublicAgentProfile;
 
 export type NeonPropertyRow = {
   id: string;

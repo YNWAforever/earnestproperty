@@ -6,6 +6,18 @@ import type {
   NeonSimilarListingsInput,
 } from "./public-data.types";
 
+export const fetchNeonPublicAgentProfiles = createServerFn({ method: "GET" }).handler(async () => {
+  const neonData = await import("./public-data.server");
+  return neonData.listPublicAgentProfiles();
+});
+
+export const fetchNeonPublicAgentProfileBySlug = createServerFn({ method: "GET" })
+  .inputValidator((data: { slug: string }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchPublicAgentProfileBySlug(data);
+  });
+
 export const searchNeonListings = createServerFn({ method: "GET" })
   .inputValidator((data: NeonListingFiltersInput) => data)
   .handler(async ({ data }) => {

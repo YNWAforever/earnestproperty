@@ -11,7 +11,16 @@ import {
   stringOrNull,
 } from "./db.server";
 import type { StaffAccess } from "./auth.server";
+import {
+  decideAgentProfileMutation,
+  type AgentProfileIdentityInput,
+  type AgentProfileMutationDecision,
+  type AgentProfileSecurityTarget,
+} from "./staff-security-policy";
 import type {
+  AdminAgentProfileInput,
+  AdminAgentProfileMutationInput,
+  AdminAgentProfileRow,
   AdminLeadAiProfile,
   AdminArticleInput,
   AdminCmsVideoInput,
@@ -57,6 +66,7 @@ import {
   computeLeadPriority,
   resolveWhatsappStatus,
 } from "./command-center";
+import { persistWebsiteInquiry } from "./website-inquiry.js";
 import { woztellEnabled } from "../woztell/woztell.server";
 
 /**
@@ -72,6 +82,109 @@ import { woztellEnabled } from "../woztell/woztell.server";
 function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
+}
+
+function normalizeAgentPublicSlug(value: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) throw new Error("Public slug must contain letters or numbers.");
+  return slug;
+}
+
+function agentProfileSlugConflictError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const dbError = error as { code?: unknown; constraint?: unknown };
+  return (
+    String(dbError.code ?? "") === "23505" &&
+    String(dbError.constraint ?? "") === "staff_users_public_slug_unique"
+  );
+}
+
+function assertAgentProfileEditor(actor: StaffAccess) {
+  if (actor.roles.includes("admin") || actor.roles.includes("manager")) return;
+  throw new Response("Forbidden", { status: 403 });
+}
+
+async function fetchAgentProfileSecurityTarget(
+  id: string,
+): Promise<AgentProfileSecurityTarget | null> {
+  const rows = await queryRows(
+    `
+    SELECT
+      s.auth_user_id,
+      s.email,
+      s.active,
+      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
+    FROM staff_users s
+    LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+    WHERE s.id = $1
+    GROUP BY s.id
+    LIMIT 1
+    `,
+    [id],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    authUserId: stringOrNull(row.auth_user_id),
+    email: stringOrNull(row.email),
+    active: row.active === true,
+    roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
+  };
+}
+
+async function agentProfileMutationDecision(
+  input: AdminAgentProfileMutationInput,
+  actor: StaffAccess,
+): Promise<{
+  decision: Extract<AgentProfileMutationDecision, { allowed: true }>;
+  identity: AgentProfileIdentityInput;
+} | null> {
+  assertAgentProfileEditor(actor);
+  const target = input.id ? await fetchAgentProfileSecurityTarget(input.id) : null;
+  if (input.id && !target) return null;
+  const hasOwn = (key: "auth_user_id" | "email" | "active") =>
+    Object.prototype.hasOwnProperty.call(input, key);
+  const identity: AgentProfileIdentityInput = {
+    auth_user_id: hasOwn("auth_user_id") ? input.auth_user_id ?? null : target?.authUserId ?? null,
+    email: hasOwn("email") ? input.email ?? null : target?.email ?? null,
+    active: hasOwn("active") ? input.active === true : target?.active ?? true,
+  };
+  const decision = decideAgentProfileMutation(actor.roles, identity, target);
+  if (!decision.allowed) throw new Response("Forbidden", { status: 403 });
+  return { decision, identity };
+}
+
+function nullableTrim(value: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function mapAdminAgentProfile(row: Record<string, unknown>): AdminAgentProfileRow {
+  return {
+    id: stringOrEmpty(row.id),
+    auth_user_id: stringOrNull(row.auth_user_id),
+    email: stringOrNull(row.email),
+    name_zh: stringOrNull(row.name_zh),
+    name_en: stringOrNull(row.name_en),
+    job_title: stringOrNull(row.job_title),
+    phone: stringOrNull(row.phone),
+    whatsapp: stringOrNull(row.whatsapp),
+    licence_no: stringOrNull(row.licence_no),
+    avatar_url: stringOrNull(row.avatar_url),
+    branch: stringOrNull(row.branch),
+    bio: stringOrNull(row.bio),
+    public_slug: stringOrNull(row.public_slug),
+    show_on_website: row.show_on_website === true,
+    display_order: numberOrNull(row.display_order) ?? 0,
+    active: row.active === true,
+    created_at: dateOrNull(row.created_at),
+    updated_at: dateOrNull(row.updated_at),
+  };
 }
 
 export type AdminPropertyInput = {
@@ -452,6 +565,192 @@ export async function fetchAdminAgents() {
     active: row.active === true,
     roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
   }));
+}
+
+export async function fetchAdminAgentProfiles(): Promise<AdminAgentProfileRow[]> {
+  const rows = await queryRows(`
+    SELECT
+      s.id,
+      s.auth_user_id,
+      s.email,
+      s.name_zh,
+      s.name_en,
+      s.job_title,
+      s.phone,
+      s.whatsapp,
+      s.licence_no,
+      s.avatar_url,
+      s.branch,
+      s.bio,
+      s.public_slug,
+      s.show_on_website,
+      s.display_order,
+      s.active,
+      s.created_at,
+      s.updated_at
+    FROM staff_users s
+    ORDER BY s.display_order ASC, COALESCE(s.name_zh, s.name_en) ASC NULLS LAST, s.id ASC
+  `);
+  return rows.map(mapAdminAgentProfile);
+}
+
+export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProfileRow | null> {
+  const rows = await queryRows(
+    `
+    SELECT
+      s.id,
+      s.auth_user_id,
+      s.email,
+      s.name_zh,
+      s.name_en,
+      s.job_title,
+      s.phone,
+      s.whatsapp,
+      s.licence_no,
+      s.avatar_url,
+      s.branch,
+      s.bio,
+      s.public_slug,
+      s.show_on_website,
+      s.display_order,
+      s.active,
+      s.created_at,
+      s.updated_at
+    FROM staff_users s
+    WHERE s.id = $1
+    LIMIT 1
+    `,
+    [id],
+  );
+  return rows[0] ? mapAdminAgentProfile(rows[0]) : null;
+}
+
+export async function saveAdminAgentProfile(
+  input: AdminAgentProfileMutationInput,
+  actor: StaffAccess,
+) {
+  const authorization = await agentProfileMutationDecision(input, actor);
+  if (!authorization) return { id: "", error: "Not found" };
+  const { decision, identity } = authorization;
+
+  let publicSlug: string | null;
+  try {
+    publicSlug = normalizeAgentPublicSlug(input.public_slug);
+  } catch (error) {
+    return { id: "", error: error instanceof Error ? error.message : "Invalid public slug." };
+  }
+
+  const displayOrder = Number.isInteger(input.display_order) ? input.display_order : 0;
+  const identityAndProfileParams = [
+    nullableTrim(identity.auth_user_id),
+    nullableTrim(identity.email),
+    nullableTrim(input.name_zh),
+    nullableTrim(input.name_en),
+    nullableTrim(input.job_title),
+    nullableTrim(input.phone),
+    nullableTrim(input.whatsapp),
+    nullableTrim(input.licence_no),
+    nullableTrim(input.avatar_url),
+    nullableTrim(input.branch),
+    nullableTrim(input.bio),
+    publicSlug,
+    input.show_on_website === true,
+    displayOrder,
+    identity.active,
+  ];
+  const publicProfileParams = identityAndProfileParams.slice(2, 14);
+
+  try {
+    let rows;
+    if (decision.mode === "identity-and-profile") {
+      rows = input.id
+        ? await queryRows(
+          `
+          UPDATE staff_users SET
+            auth_user_id = $1,
+            email = $2,
+            name_zh = $3,
+            name_en = $4,
+            job_title = $5,
+            phone = $6,
+            whatsapp = $7,
+            licence_no = $8,
+            avatar_url = $9,
+            branch = $10,
+            bio = $11,
+            public_slug = $12,
+            show_on_website = $13,
+            display_order = $14,
+            active = $15,
+            updated_at = now()
+          WHERE id = $16
+          RETURNING id
+          `,
+          [...identityAndProfileParams, input.id],
+        )
+        : await queryRows(
+          `
+          INSERT INTO staff_users (
+            auth_user_id, email, name_zh, name_en, job_title, phone, whatsapp, licence_no,
+            avatar_url, branch, bio, public_slug, show_on_website, display_order, active
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          RETURNING id
+          `,
+          identityAndProfileParams,
+        );
+    } else {
+      rows = input.id
+        ? await queryRows(
+            `
+            UPDATE staff_users AS target SET
+              name_zh = $1,
+              name_en = $2,
+              job_title = $3,
+              phone = $4,
+              whatsapp = $5,
+              licence_no = $6,
+              avatar_url = $7,
+              branch = $8,
+              bio = $9,
+              public_slug = $10,
+              show_on_website = $11,
+              display_order = $12,
+              updated_at = now()
+            WHERE target.id = $13
+              AND NOT EXISTS (
+                SELECT 1
+                FROM staff_roles privileged_role
+                WHERE privileged_role.staff_user_id = target.id
+                  AND privileged_role.role = 'admin'
+              )
+            RETURNING target.id
+            `,
+            [...publicProfileParams, input.id],
+          )
+        : await queryRows(
+            `
+            INSERT INTO staff_users (
+              name_zh, name_en, job_title, phone, whatsapp, licence_no,
+              avatar_url, branch, bio, public_slug, show_on_website, display_order
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+            `,
+            publicProfileParams,
+          );
+    }
+
+    if (input.id && !rows[0]) return { id: "", error: "Not found" };
+    const id = stringOrEmpty(rows[0]?.id);
+    await writeAudit(actor.staffId, input.id ? "agent-profile.update" : "agent-profile.create", "staff_user", id);
+    return { id };
+  } catch (error) {
+    if (agentProfileSlugConflictError(error)) {
+      return { id: "", error: "An agent already uses this public slug." };
+    }
+    throw error;
+  }
 }
 
 export async function fetchAdminAiKnowledgeStatus(
@@ -1851,52 +2150,19 @@ export async function createWebsiteInquiry(input: {
   const normalizedPhone = normalizeAdminPhone(input.phone);
   const email = input.email ? input.email : null;
   const message = input.message ? input.message : null;
-  const propertyId = input.property_id ?? null;
   const optInWhatsapp = input.consentWhatsapp === true;
-
-  // Single atomic CTE statement so the new/upserted contact id always flows
-  // through into the inquiry and lead inserts (one round-trip, no orphan risk,
-  // and no empty contactId -> uuid cast crash).
-  //
-  // normalized_phone is UNIQUE but nullable; NULL can never match the
-  // ON CONFLICT arbiter, so when it is null we skip the upsert entirely and
-  // always insert a fresh contact.
-  // Params (shared across every CTE branch):
-  //   $1 name, $2 phone, $3 normalized_phone, $4 email,
-  //   $5 property_id (uuid), $6 message, $7 opt_in_whatsapp (boolean)
-  const contactCte = normalizedPhone
-    ? `
-      contact AS (
-        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        VALUES ($1, $2, $3, $4, 'website', $7)
-        ON CONFLICT (normalized_phone) DO UPDATE SET
-          name = COALESCE(EXCLUDED.name, crm_contacts.name),
-          email = COALESCE(EXCLUDED.email, crm_contacts.email),
-          opt_in_whatsapp = crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp,
-          updated_at = now()
-        RETURNING id
-      )`
-    : `
-      contact AS (
-        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        VALUES ($1, $2, $3, $4, 'website', $7)
-        RETURNING id
-      )`;
-
-  const rows = await queryRows(
-    `
-    WITH ${contactCte},
-    new_lead AS (
-      INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note)
-      SELECT contact.id, $5::uuid, NULL, 'new', 'buyer', 'website', $6 FROM contact
-    )
-    INSERT INTO inquiries (source, property_id, name, phone, email, message, assigned_agent_id, crm_contact_id)
-    SELECT 'website', $5::uuid, $1, $2, $4, $6, NULL, contact.id FROM contact
-    RETURNING id
-    `,
-    [input.name, input.phone, normalizedPhone, email, propertyId, message, optInWhatsapp],
-  );
-  return { id: stringOrEmpty(rows[0]?.id) };
+  const requestedPropertyId = input.property_id ?? null;
+  const requestedListingNo = input.listingNo?.trim() || null;
+  return persistWebsiteInquiry(queryRows, {
+    name: input.name,
+    phone: input.phone,
+    normalizedPhone,
+    email,
+    message,
+    listingNo: requestedListingNo,
+    propertyId: requestedPropertyId,
+    consentWhatsapp: optInWhatsapp,
+  });
 }
 
 export async function updateInquiryStatus(id: string, status: string, actor: StaffAccess) {
