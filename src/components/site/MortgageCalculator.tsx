@@ -15,14 +15,37 @@ import {
 import {
   MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
+  commitMortgageDraft,
   mortgageInputsFromSearch,
   normalizeMortgageInputs,
+  parseMortgageDraft,
   type MortgageInputs,
   type MortgageSearch,
 } from "@/lib/mortgage";
 
 type MortgageCalculatorProps = {
   initialSearch: MortgageSearch;
+};
+
+type MortgageInputKey = keyof MortgageInputs;
+type MortgageDrafts = Record<MortgageInputKey, string>;
+
+type CalculatorState = {
+  inputs: MortgageInputs;
+  drafts: MortgageDrafts;
+  editingField: MortgageInputKey | null;
+};
+
+const OPTIONAL_INPUT_KEYS = new Set<MortgageInputKey>(["monthlyIncome", "monthlyDebtExpenses"]);
+
+const INPUT_LABELS: Record<MortgageInputKey, string> = {
+  price: "Property price",
+  ltv: "Loan-to-value ratio",
+  years: "Mortgage term",
+  annualInterestRate: "Annual interest rate",
+  stressRate: "Stress-test rate increase",
+  monthlyIncome: "Monthly income",
+  monthlyDebtExpenses: "Existing monthly debt expenses",
 };
 
 const moneyFormatter = new Intl.NumberFormat("en-HK", {
@@ -39,31 +62,108 @@ function formatMoney(value: number): string {
   return moneyFormatter.format(value);
 }
 
-function formatPercent(value: number | null): string {
-  return value === null ? "Add income to calculate" : `${percentFormatter.format(value)}%`;
+function formatPercent(value: number | null, incomeWasSupplied: boolean): string {
+  if (value !== null) return `${percentFormatter.format(value)}%`;
+  return incomeWasSupplied ? "Unavailable for this income" : "Add income to calculate";
 }
 
 function getSliderValue(value: number[] | undefined, fallback: number): number {
   return value?.[0] ?? fallback;
 }
 
+function draftValue(value: number | undefined): string {
+  return value === undefined ? "" : String(value);
+}
+
+function draftsFromInputs(inputs: MortgageInputs): MortgageDrafts {
+  return {
+    price: draftValue(inputs.price),
+    ltv: draftValue(inputs.ltv),
+    years: draftValue(inputs.years),
+    annualInterestRate: draftValue(inputs.annualInterestRate),
+    stressRate: draftValue(inputs.stressRate),
+    monthlyIncome: draftValue(inputs.monthlyIncome),
+    monthlyDebtExpenses: draftValue(inputs.monthlyDebtExpenses),
+  };
+}
+
+function DraftInput({
+  id,
+  label,
+  draft,
+  inputMode = "decimal",
+  placeholder,
+  isInvalid,
+  onStartEditing,
+  onDraftChange,
+  onCommitDraft,
+}: {
+  id: string;
+  label: string;
+  draft: string;
+  inputMode?: "decimal" | "numeric";
+  placeholder?: string;
+  isInvalid: boolean;
+  onStartEditing: () => void;
+  onDraftChange: (value: string) => void;
+  onCommitDraft: () => void;
+}) {
+  const messageId = `${id}-draft-message`;
+
+  return (
+    <div>
+      <Input
+        id={id}
+        aria-label={label}
+        aria-invalid={isInvalid}
+        aria-describedby={isInvalid ? messageId : undefined}
+        type="text"
+        inputMode={inputMode}
+        value={draft}
+        placeholder={placeholder}
+        onFocus={onStartEditing}
+        onChange={(event) => onDraftChange(event.target.value)}
+        onBlur={onCommitDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+      />
+      {isInvalid ? (
+        <p id={messageId} className="mt-1 text-xs font-medium text-destructive">
+          Enter a valid number, then press Enter or leave the field.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function Field({
   id,
   label,
-  value,
+  committedValue,
+  draft,
   min,
   max,
   step,
-  onChange,
+  isInvalid,
+  onStartEditing,
+  onDraftChange,
+  onCommitDraft,
+  onSliderCommit,
   children,
 }: {
   id: string;
   label: string;
-  value: number;
+  committedValue: number;
+  draft: string;
   min: number;
   max: number;
   step: number;
-  onChange: (value: number) => void;
+  isInvalid: boolean;
+  onStartEditing: () => void;
+  onDraftChange: (value: string) => void;
+  onCommitDraft: () => void;
+  onSliderCommit: (value: number) => void;
   children?: React.ReactNode;
 }) {
   return (
@@ -80,20 +180,17 @@ function Field({
           min={min}
           max={max}
           step={step}
-          value={[value]}
-          onValueChange={(nextValue) => onChange(getSliderValue(nextValue, value))}
+          value={[committedValue]}
+          onValueChange={(nextValue) => onSliderCommit(getSliderValue(nextValue, committedValue))}
         />
-        <Input
+        <DraftInput
           id={id}
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
-          inputMode="decimal"
-          onChange={(event) => {
-            onChange(Number(event.target.value));
-          }}
+          label={label}
+          draft={draft}
+          isInvalid={isInvalid}
+          onStartEditing={onStartEditing}
+          onDraftChange={onDraftChange}
+          onCommitDraft={onCommitDraft}
         />
       </div>
     </div>
@@ -124,13 +221,53 @@ function ResultRow({
 }
 
 export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
-  const [inputs, setInputs] = useState<MortgageInputs>(() =>
-    mortgageInputsFromSearch(initialSearch),
+  const [state, setState] = useState<CalculatorState>(() => {
+    const inputs = mortgageInputsFromSearch(initialSearch);
+    return { inputs, drafts: draftsFromInputs(inputs), editingField: null };
+  });
+  const result = useMemo(
+    () => (state.editingField === null ? calculateMortgage(state.inputs) : null),
+    [state.editingField, state.inputs],
   );
-  const result = useMemo(() => calculateMortgage(inputs), [inputs]);
+  const activeDraftParse =
+    state.editingField === null ? null : parseMortgageDraft(state.drafts[state.editingField]);
+  const activeDraftIsInvalid =
+    state.editingField !== null &&
+    (activeDraftParse?.status === "invalid" ||
+      (activeDraftParse?.status === "empty" && !OPTIONAL_INPUT_KEYS.has(state.editingField)));
 
-  const updateInput = <K extends keyof MortgageInputs>(key: K, value: MortgageInputs[K]) => {
-    setInputs((current) => normalizeMortgageInputs({ ...current, [key]: value }));
+  const startEditing = (key: MortgageInputKey) => {
+    setState((current) => ({ ...current, editingField: key }));
+  };
+
+  const updateDraft = (key: MortgageInputKey, value: string) => {
+    setState((current) => ({
+      ...current,
+      drafts: { ...current.drafts, [key]: value },
+      editingField: key,
+    }));
+  };
+
+  const commitDraft = (key: MortgageInputKey) => {
+    setState((current) => {
+      const inputs = commitMortgageDraft(current.inputs, key, current.drafts[key]);
+      return {
+        inputs,
+        drafts: { ...current.drafts, [key]: draftValue(inputs[key]) },
+        editingField: current.editingField === key ? null : current.editingField,
+      };
+    });
+  };
+
+  const commitSlider = (key: MortgageInputKey, value: number) => {
+    setState((current) => {
+      const inputs = normalizeMortgageInputs({ ...current.inputs, [key]: value });
+      return {
+        inputs,
+        drafts: { ...current.drafts, [key]: draftValue(inputs[key]) },
+        editingField: null,
+      };
+    });
   };
 
   return (
@@ -168,57 +305,82 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             <Field
               id="property-price"
               label="Property price"
-              value={inputs.price}
+              committedValue={state.inputs.price}
+              draft={state.drafts.price}
               min={MORTGAGE_INPUT_LIMITS.price.min}
               max={MORTGAGE_INPUT_LIMITS.price.max}
               step={100_000}
-              onChange={(value) => updateInput("price", value)}
+              isInvalid={state.editingField === "price" && activeDraftIsInvalid}
+              onStartEditing={() => startEditing("price")}
+              onDraftChange={(value) => updateDraft("price", value)}
+              onCommitDraft={() => commitDraft("price")}
+              onSliderCommit={(value) => commitSlider("price", value)}
             >
-              {formatMoney(inputs.price)}
+              {formatMoney(state.inputs.price)}
             </Field>
             <Field
               id="ltv"
               label="Loan-to-value ratio"
-              value={inputs.ltv}
+              committedValue={state.inputs.ltv}
+              draft={state.drafts.ltv}
               min={MORTGAGE_INPUT_LIMITS.ltv.min}
               max={MORTGAGE_INPUT_LIMITS.ltv.max}
               step={1}
-              onChange={(value) => updateInput("ltv", value)}
+              isInvalid={state.editingField === "ltv" && activeDraftIsInvalid}
+              onStartEditing={() => startEditing("ltv")}
+              onDraftChange={(value) => updateDraft("ltv", value)}
+              onCommitDraft={() => commitDraft("ltv")}
+              onSliderCommit={(value) => commitSlider("ltv", value)}
             >
-              {inputs.ltv}%
+              {state.inputs.ltv}%
             </Field>
             <Field
               id="mortgage-term"
               label="Mortgage term"
-              value={inputs.years}
+              committedValue={state.inputs.years}
+              draft={state.drafts.years}
               min={MORTGAGE_INPUT_LIMITS.years.min}
               max={MORTGAGE_INPUT_LIMITS.years.max}
               step={1}
-              onChange={(value) => updateInput("years", value)}
+              isInvalid={state.editingField === "years" && activeDraftIsInvalid}
+              onStartEditing={() => startEditing("years")}
+              onDraftChange={(value) => updateDraft("years", value)}
+              onCommitDraft={() => commitDraft("years")}
+              onSliderCommit={(value) => commitSlider("years", value)}
             >
-              {inputs.years} years
+              {state.inputs.years} years
             </Field>
             <Field
               id="interest-rate"
               label="Annual interest rate"
-              value={inputs.annualInterestRate}
+              committedValue={state.inputs.annualInterestRate}
+              draft={state.drafts.annualInterestRate}
               min={MORTGAGE_INPUT_LIMITS.annualInterestRate.min}
               max={MORTGAGE_INPUT_LIMITS.annualInterestRate.max}
               step={0.05}
-              onChange={(value) => updateInput("annualInterestRate", value)}
+              isInvalid={state.editingField === "annualInterestRate" && activeDraftIsInvalid}
+              onStartEditing={() => startEditing("annualInterestRate")}
+              onDraftChange={(value) => updateDraft("annualInterestRate", value)}
+              onCommitDraft={() => commitDraft("annualInterestRate")}
+              onSliderCommit={(value) => commitSlider("annualInterestRate", value)}
             >
-              {inputs.annualInterestRate.toFixed(2)}%
+              {state.inputs.annualInterestRate.toFixed(2)}%
             </Field>
             <Field
               id="stress-rate"
               label="Stress-test rate increase"
-              value={inputs.stressRate}
+              committedValue={state.inputs.stressRate}
+              draft={state.drafts.stressRate}
               min={MORTGAGE_INPUT_LIMITS.stressRate.min}
               max={MORTGAGE_INPUT_LIMITS.stressRate.max}
               step={0.25}
-              onChange={(value) => updateInput("stressRate", value)}
+              isInvalid={state.editingField === "stressRate" && activeDraftIsInvalid}
+              onStartEditing={() => startEditing("stressRate")}
+              onDraftChange={(value) => updateDraft("stressRate", value)}
+              onCommitDraft={() => commitDraft("stressRate")}
+              onSliderCommit={(value) => commitSlider("stressRate", value)}
             >
-              +{inputs.stressRate.toFixed(2)}%
+              +{state.inputs.stressRate.toFixed(2)}%
             </Field>
           </div>
 
@@ -233,40 +395,30 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="monthly-income">Monthly income</Label>
-                <Input
+                <DraftInput
                   id="monthly-income"
-                  aria-label="Monthly income"
-                  type="number"
-                  min="0"
-                  step="1000"
+                  label="Monthly income"
                   inputMode="numeric"
-                  value={inputs.monthlyIncome ?? ""}
+                  draft={state.drafts.monthlyIncome}
                   placeholder="Optional"
-                  onChange={(event) =>
-                    updateInput(
-                      "monthlyIncome",
-                      event.target.value === "" ? undefined : Number(event.target.value),
-                    )
-                  }
+                  isInvalid={state.editingField === "monthlyIncome" && activeDraftIsInvalid}
+                  onStartEditing={() => startEditing("monthlyIncome")}
+                  onDraftChange={(value) => updateDraft("monthlyIncome", value)}
+                  onCommitDraft={() => commitDraft("monthlyIncome")}
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="monthly-debt">Existing monthly debt expenses</Label>
-                <Input
+                <DraftInput
                   id="monthly-debt"
-                  aria-label="Existing monthly debt expenses"
-                  type="number"
-                  min="0"
-                  step="1000"
+                  label="Existing monthly debt expenses"
                   inputMode="numeric"
-                  value={inputs.monthlyDebtExpenses ?? ""}
+                  draft={state.drafts.monthlyDebtExpenses}
                   placeholder="Optional"
-                  onChange={(event) =>
-                    updateInput(
-                      "monthlyDebtExpenses",
-                      event.target.value === "" ? undefined : Number(event.target.value),
-                    )
-                  }
+                  isInvalid={state.editingField === "monthlyDebtExpenses" && activeDraftIsInvalid}
+                  onStartEditing={() => startEditing("monthlyDebtExpenses")}
+                  onDraftChange={(value) => updateDraft("monthlyDebtExpenses", value)}
+                  onCommitDraft={() => commitDraft("monthlyDebtExpenses")}
                 />
               </div>
             </div>
@@ -291,25 +443,50 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </div>
           </div>
 
-          <div className="mt-5">
-            <ResultRow
-              label="Monthly repayment"
-              value={formatMoney(result.monthlyPayment)}
-              emphasized
-            />
-            <ResultRow
-              label="Stressed monthly repayment"
-              value={formatMoney(result.stressedMonthlyPayment)}
-            />
-            <ResultRow label="Loan amount" value={formatMoney(result.loanAmount)} />
-            <ResultRow label="Deposit" value={formatMoney(result.deposit)} />
-            <ResultRow label="Residential stamp duty" value={formatMoney(result.stampDuty)} />
-            <ResultRow label="Total interest over term" value={formatMoney(result.totalInterest)} />
-            <ResultRow label="Debt servicing ratio" value={formatPercent(result.dsr)} />
-            <ResultRow
-              label="Stressed debt servicing ratio"
-              value={formatPercent(result.stressedDsr)}
-            />
+          <div className="mt-5" aria-live="polite">
+            {result === null ? (
+              <div
+                role="status"
+                className="rounded-md border border-border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground"
+              >
+                <p className="font-semibold text-foreground">Results unavailable while editing</p>
+                <p className="mt-1">
+                  {activeDraftIsInvalid
+                    ? `Enter a valid ${INPUT_LABELS[state.editingField!].toLowerCase()} to continue.`
+                    : `Finish editing ${INPUT_LABELS[state.editingField!].toLowerCase()} to update your estimate.`}
+                </p>
+              </div>
+            ) : (
+              <>
+                <ResultRow
+                  label="Monthly repayment"
+                  value={formatMoney(result.monthlyPayment)}
+                  emphasized
+                />
+                <ResultRow
+                  label="Stressed monthly repayment"
+                  value={formatMoney(result.stressedMonthlyPayment)}
+                />
+                <ResultRow label="Loan amount" value={formatMoney(result.loanAmount)} />
+                <ResultRow label="Deposit" value={formatMoney(result.deposit)} />
+                <ResultRow label="Residential stamp duty" value={formatMoney(result.stampDuty)} />
+                <ResultRow
+                  label="Total interest over term"
+                  value={formatMoney(result.totalInterest)}
+                />
+                <ResultRow
+                  label="Debt servicing ratio"
+                  value={formatPercent(result.dsr, result.inputs.monthlyIncome !== undefined)}
+                />
+                <ResultRow
+                  label="Stressed debt servicing ratio"
+                  value={formatPercent(
+                    result.stressedDsr,
+                    result.inputs.monthlyIncome !== undefined,
+                  )}
+                />
+              </>
+            )}
           </div>
 
           <div className="mt-6 rounded-md border border-coral/25 bg-coral/5 p-4 text-sm leading-6 text-muted-foreground">
@@ -338,7 +515,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </p>
           </div>
           <span className="text-sm font-medium text-muted-foreground">
-            Total repayment: {formatMoney(result.totalRepayment)}
+            Total repayment:{" "}
+            {result === null ? "Unavailable while editing" : formatMoney(result.totalRepayment)}
           </span>
         </div>
         <div className="mt-5 rounded-lg border border-border bg-card px-3 py-1 sm:px-4">
@@ -353,23 +531,31 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {result.amortization.map((row) => (
-                <TableRow key={row.year}>
-                  <TableCell className="font-medium">{row.year}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatMoney(row.openingBalance)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatMoney(row.principalPaid)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatMoney(row.interestPaid)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatMoney(row.closingBalance)}
+              {result === null ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                    Finish editing to view the updated amortization schedule.
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                result.amortization.map((row) => (
+                  <TableRow key={row.year}>
+                    <TableCell className="font-medium">{row.year}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(row.openingBalance)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(row.principalPaid)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(row.interestPaid)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatMoney(row.closingBalance)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </div>

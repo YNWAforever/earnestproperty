@@ -44,8 +44,12 @@ test("mortgage calculator exposes practical controls, results, and official refe
     "Annual amortization",
     "Slider",
     "calculateMortgage",
+    "commitMortgageDraft",
     "normalizeMortgageInputs",
+    "parseMortgageDraft",
     "mortgageInputsFromSearch",
+    "Results unavailable while editing",
+    "Unavailable for this income",
     "https://www.ird.gov.hk/chi/faq/avd.htm",
     "https://www.hkmc.com.hk/eng/our_business/mortgage_insurance_programme.html",
     "Mortgage insurance premiums are not estimated",
@@ -59,7 +63,23 @@ test("mortgage calculator exposes practical controls, results, and official refe
   assert.match(component, /rel="noreferrer"/);
   assert.match(
     component,
-    /setInputs\(\(current\)\s*=>\s*normalizeMortgageInputs\(\{\s*\.\.\.current,\s*\[key\]: value\s*\}\)\)/,
-    "committed controls should store the same normalized values used by calculation",
+    /type="text"/,
+    "keyboard inputs should preserve draft strings instead of coercing every keystroke",
+  );
+  assert.match(
+    component,
+    /onChange=\{\(event\) => onDraftChange\(event\.target\.value\)\}/,
+    "keyboard changes should update only the visible draft",
+  );
+  assert.match(component, /onBlur=\{onCommitDraft\}/, "keyboard drafts should commit on blur");
+  assert.match(
+    component,
+    /event\.currentTarget\.blur\(\)/,
+    "Enter should commit by completing the field edit",
+  );
+  assert.match(
+    component,
+    /editingField === null \? calculateMortgage\(state\.inputs\) : null/,
+    "results must not be calculated from a hidden committed value during keyboard editing",
   );
 });

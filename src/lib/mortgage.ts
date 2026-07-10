@@ -36,6 +36,11 @@ export type MortgageSearch = {
   expenses?: number;
 };
 
+export type MortgageDraftParseResult =
+  | { status: "empty" }
+  | { status: "invalid" }
+  | { status: "valid"; value: number };
+
 export const DEFAULT_MORTGAGE_INPUTS: MortgageInputs = {
   price: 8_000_000,
   ltv: 70,
@@ -45,7 +50,7 @@ export const DEFAULT_MORTGAGE_INPUTS: MortgageInputs = {
 };
 
 export const MORTGAGE_INPUT_LIMITS = {
-  price: { min: 1_000_000, max: 50_000_000 },
+  price: { min: 1_000_000, max: 500_000_000 },
   ltv: { min: 0, max: 100 },
   years: { min: 1, max: 50 },
   annualInterestRate: { min: 0, max: 10 },
@@ -118,6 +123,36 @@ export function mortgageInputsFromSearch(search: MortgageSearch): MortgageInputs
   });
 }
 
+export function parseMortgageDraft(draft: string): MortgageDraftParseResult {
+  const trimmed = draft.trim();
+  if (trimmed === "") return { status: "empty" };
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(trimmed)) return { status: "invalid" };
+
+  const value = Number(trimmed);
+  return Number.isFinite(value) ? { status: "valid", value } : { status: "invalid" };
+}
+
+export function commitMortgageDraft(
+  inputs: MortgageInputs,
+  key: keyof MortgageInputs,
+  draft: string,
+): MortgageInputs {
+  const parsed = parseMortgageDraft(draft);
+
+  if (parsed.status === "empty" && key === "monthlyIncome") {
+    const { monthlyIncome: _monthlyIncome, ...remaining } = inputs;
+    return normalizeMortgageInputs(remaining);
+  }
+
+  if (parsed.status === "empty" && key === "monthlyDebtExpenses") {
+    const { monthlyDebtExpenses: _monthlyDebtExpenses, ...remaining } = inputs;
+    return normalizeMortgageInputs(remaining);
+  }
+
+  if (parsed.status !== "valid") return normalizeMortgageInputs(inputs);
+  return normalizeMortgageInputs({ ...inputs, [key]: parsed.value });
+}
+
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
@@ -139,8 +174,10 @@ function monthlyPayment(principal: number, annualInterestRate: number, months: n
   const monthlyRate = annualInterestRate / 1_200;
   if (monthlyRate === 0) return finiteOrZero(principal / months);
 
-  const growth = (1 + monthlyRate) ** months;
-  return finiteOrZero((principal * monthlyRate * growth) / (growth - 1));
+  const denominator = -Math.expm1(-months * Math.log1p(monthlyRate));
+  if (denominator <= 0) return finiteOrZero(principal / months);
+
+  return finiteOrZero((principal * monthlyRate) / denominator);
 }
 
 function annualAmortization(
@@ -160,7 +197,10 @@ function annualAmortization(
 
     for (let month = 0; month < 12 && balance > 0; month += 1) {
       const interest = monthlyRate === 0 ? 0 : balance * monthlyRate;
-      const principalPortion = Math.min(balance, Math.max(0, payment - interest));
+      const isFinalScheduledPayment = year === years && month === 11;
+      const principalPortion = isFinalScheduledPayment
+        ? balance
+        : Math.min(balance, Math.max(0, payment - interest));
 
       interestPaid += interest;
       principalPaid += principalPortion;
@@ -202,7 +242,7 @@ export function calculateMortgage(input: Partial<MortgageInputs> = {}): Mortgage
     months,
   );
   const totalRepayment = payment * months;
-  const totalInterest = totalRepayment - loanAmount;
+  const totalInterest = Math.max(0, totalRepayment - loanAmount);
   const debtExpenses = inputs.monthlyDebtExpenses ?? 0;
   const income = inputs.monthlyIncome;
   const amortization = annualAmortization(

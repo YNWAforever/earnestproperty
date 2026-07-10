@@ -5,8 +5,10 @@ import {
   MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
   calculateResidentialStampDuty,
+  commitMortgageDraft,
   mortgageInputsFromSearch,
   normalizeMortgageInputs,
+  parseMortgageDraft,
   parseMortgageSearch,
 } from "./mortgage";
 
@@ -55,6 +57,39 @@ describe("normalizeMortgageInputs", () => {
   });
 });
 
+describe("mortgage numeric drafts", () => {
+  test.each([
+    ["", { status: "empty" }],
+    [".", { status: "invalid" }],
+    ["-", { status: "invalid" }],
+    ["3.", { status: "valid", value: 3 }],
+    [".25", { status: "valid", value: 0.25 }],
+    ["100000001", { status: "valid", value: 100_000_001 }],
+  ] as const)("parses the editing draft %j without normalizing it", (draft, expected) => {
+    expect(parseMortgageDraft(draft)).toEqual(expected);
+  });
+
+  test("commits a completed draft through shared mortgage normalization", () => {
+    const current = normalizeMortgageInputs(DEFAULT_MORTGAGE_INPUTS);
+
+    expect(commitMortgageDraft(current, "price", "100000001").price).toBe(100_000_001);
+    expect(commitMortgageDraft(current, "annualInterestRate", "3.").annualInterestRate).toBe(3);
+    expect(commitMortgageDraft(current, "ltv", "999").ltv).toBe(MORTGAGE_INPUT_LIMITS.ltv.max);
+  });
+
+  test("restores required invalid drafts and allows optional drafts to be cleared", () => {
+    const current = normalizeMortgageInputs({
+      ...DEFAULT_MORTGAGE_INPUTS,
+      monthlyIncome: 80_000,
+      monthlyDebtExpenses: 5_000,
+    });
+
+    expect(commitMortgageDraft(current, "price", "")).toEqual(current);
+    expect(commitMortgageDraft(current, "price", ".")).toEqual(current);
+    expect(commitMortgageDraft(current, "monthlyIncome", "")).not.toHaveProperty("monthlyIncome");
+  });
+});
+
 describe("calculateMortgage", () => {
   test("calculates the default Hong Kong repayment and stressed repayment", () => {
     const result = calculateMortgage(DEFAULT_MORTGAGE_INPUTS);
@@ -98,6 +133,41 @@ describe("calculateMortgage", () => {
       closingBalance: 540_000,
     });
   });
+
+  test("amortizes principal at a tiny positive rate without negative interest", () => {
+    const result = calculateMortgage({
+      price: 8_000_000,
+      ltv: 70,
+      years: 30,
+      annualInterestRate: Number.EPSILON,
+      stressRate: 0,
+    });
+
+    expect(result.monthlyPayment).toBeGreaterThan(0);
+    expect(result.monthlyPayment).toBeCloseTo(result.loanAmount / (30 * 12), 8);
+    expect(result.totalInterest).toBeGreaterThanOrEqual(0);
+    expect(result.amortization.reduce((total, row) => total + row.principalPaid, 0)).toBeCloseTo(
+      result.loanAmount,
+      6,
+    );
+    expect(result.amortization.at(-1)?.closingBalance).toBe(0);
+  });
+
+  test.each([
+    [100_000_000, 4_250_000],
+    [100_000_001, 4_250_000.3],
+    [109_574_470, 7_122_341],
+    [109_574_471, 7_122_340.615],
+    [500_000_000, 32_500_000],
+  ] as const)(
+    "preserves the high-value AVD tier through calculateMortgage at $%i",
+    (price, duty) => {
+      const result = calculateMortgage({ ...DEFAULT_MORTGAGE_INPUTS, price });
+
+      expect(result.inputs.price).toBe(price);
+      expect(result.stampDuty).toBeCloseTo(duty, 3);
+    },
+  );
 
   test("normalizes unusable values without returning NaN or Infinity", () => {
     const result = calculateMortgage({
