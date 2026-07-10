@@ -1,7 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { queryRows, stringOrEmpty, stringOrNull } from "./db.server";
-import { isFirstAdminBootstrapEligible } from "./staff-security-policy";
+import { shouldBootstrapFirstAdmin } from "./staff-security-policy";
 
 export type StaffRole = "admin" | "manager" | "agent";
 
@@ -12,6 +12,10 @@ export type StaffAccess = {
   name: string | null;
   roles: StaffRole[];
   bootstrap: boolean;
+};
+
+type StaffLookup = StaffAccess & {
+  matchedProfileOnly: boolean;
 };
 
 type AnyRecord = Record<string, unknown>;
@@ -238,7 +242,7 @@ async function bootstrapStaffRows() {
   }));
 }
 
-async function findStaff(authUserId: string, email: string | null): Promise<StaffAccess | null> {
+async function findStaff(authUserId: string, email: string | null): Promise<StaffLookup | null> {
   const rows = await queryRows(
     `
     SELECT
@@ -261,7 +265,8 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
   );
   const row = rows[0];
   if (!row) return null;
-  if (stringOrEmpty(row.auth_user_id) !== authUserId) {
+  const matchedProfileOnly = stringOrNull(row.auth_user_id) === null;
+  if (matchedProfileOnly) {
     await queryRows(
       `
       UPDATE staff_users
@@ -279,6 +284,7 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
     name: stringOrNull(row.name),
     roles: staffRolesFromValue(row.roles),
     bootstrap: false,
+    matchedProfileOnly,
   };
 }
 
@@ -333,22 +339,25 @@ export async function requireStaffAccess(request: Request, allowed: StaffRole[] 
   const session = await getNeonSessionFromRequest(request);
   if (!session) throw new Response("Unauthorized", { status: 401 });
 
+  const email = session.user.email?.trim().toLowerCase() ?? "";
+  const allowlist = bootstrapAllowlist();
+  const bootstrapRows =
+    email && allowlist.has(email) ? await bootstrapStaffRows() : [];
   const staff = await findStaff(session.user.id, session.user.email);
-  let access = staff;
-  if (!access) {
-    const email = session.user.email?.trim().toLowerCase() ?? "";
-    const allowlist = bootstrapAllowlist();
-    if (
-      email &&
-      allowlist.has(email) &&
-      isFirstAdminBootstrapEligible(await bootstrapStaffRows())
-    ) {
-      access = await bootstrapFirstStaff({
-        authUserId: session.user.id,
-        email: session.user.email,
-        name: session.user.name,
-      });
-    }
+  let access: StaffAccess | null = staff;
+  if (
+    shouldBootstrapFirstAdmin({
+      email,
+      allowlistedEmails: allowlist,
+      access: staff,
+      staffRows: bootstrapRows,
+    })
+  ) {
+    access = await bootstrapFirstStaff({
+      authUserId: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
+    });
   }
 
   if (!access) throw new Response("Forbidden", { status: 403 });

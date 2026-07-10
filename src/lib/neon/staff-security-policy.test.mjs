@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   decideAgentProfileMutation,
+  shouldBootstrapFirstAdmin,
   isFirstAdminBootstrapEligible,
 } from "./staff-security-policy.ts";
 
@@ -25,6 +26,17 @@ test("manager may publish ordinary public profile fields without changing identi
     allowed: true,
     mode: "public-profile-only",
   });
+});
+
+test("manager may create a profile-only row when target is null", () => {
+  assert.deepEqual(
+    decideAgentProfileMutation(
+      manager,
+      { auth_user_id: null, email: null, active: true },
+      null,
+    ),
+    { allowed: true, mode: "public-profile-only" },
+  );
 });
 
 test("manager cannot mutate identity or access fields on an ordinary staff row", async (t) => {
@@ -73,4 +85,28 @@ test("profile-only staff rows do not block first-admin bootstrap", () => {
   );
   assert.equal(isFirstAdminBootstrapEligible([{ authUserId: "auth-user", roles: [] }]), false);
   assert.equal(isFirstAdminBootstrapEligible([{ authUserId: null, roles: ["manager"] }]), false);
+});
+
+test("allowlisted roleless profile-only match may bootstrap from a pre-bind snapshot", () => {
+  assert.equal(
+    shouldBootstrapFirstAdmin({
+      email: "first-admin@example.com",
+      allowlistedEmails: new Set(["first-admin@example.com"]),
+      access: { roles: [], matchedProfileOnly: true },
+      staffRows: [{ authUserId: null, roles: [] }],
+    }),
+    true,
+  );
+});
+
+test("arbitrary roleless authenticated staff may not bootstrap", () => {
+  assert.equal(
+    shouldBootstrapFirstAdmin({
+      email: "first-admin@example.com",
+      allowlistedEmails: new Set(["first-admin@example.com"]),
+      access: { roles: [], matchedProfileOnly: false },
+      staffRows: [],
+    }),
+    false,
+  );
 });

@@ -26,6 +26,11 @@ type BootstrapStaffRow = {
   roles: readonly string[];
 };
 
+type FirstAdminBootstrapAccess = {
+  roles: readonly string[];
+  matchedProfileOnly: boolean;
+};
+
 function normalizedNullable(value: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
@@ -73,4 +78,21 @@ export function isFirstAdminBootstrapEligible(rows: readonly BootstrapStaffRow[]
   return !rows.some(
     (row) => normalizedNullable(row.authUserId) !== null || row.roles.length > 0,
   );
+}
+
+export function shouldBootstrapFirstAdmin(input: {
+  email: string | null;
+  allowlistedEmails: ReadonlySet<string>;
+  access: FirstAdminBootstrapAccess | null;
+  staffRows: readonly BootstrapStaffRow[];
+}) {
+  const email = normalizedEmail(input.email);
+  if (!email || !input.allowlistedEmails.has(email)) return false;
+  if (
+    input.access &&
+    (!input.access.matchedProfileOnly || input.access.roles.length > 0)
+  ) {
+    return false;
+  }
+  return isFirstAdminBootstrapEligible(input.staffRows);
 }
