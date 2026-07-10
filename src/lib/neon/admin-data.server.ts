@@ -11,6 +11,11 @@ import {
   stringOrNull,
 } from "./db.server";
 import type { StaffAccess } from "./auth.server";
+import {
+  decideAgentProfileMutation,
+  type AgentProfileMutationDecision,
+  type AgentProfileSecurityTarget,
+} from "./staff-security-policy";
 import type {
   AdminAgentProfileInput,
   AdminAgentProfileRow,
@@ -99,6 +104,46 @@ function agentProfileSlugConflictError(error: unknown) {
 function assertAgentProfileEditor(actor: StaffAccess) {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return;
   throw new Response("Forbidden", { status: 403 });
+}
+
+async function fetchAgentProfileSecurityTarget(
+  id: string,
+): Promise<AgentProfileSecurityTarget | null> {
+  const rows = await queryRows(
+    `
+    SELECT
+      s.auth_user_id,
+      s.email,
+      s.active,
+      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
+    FROM staff_users s
+    LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+    WHERE s.id = $1
+    GROUP BY s.id
+    LIMIT 1
+    `,
+    [id],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    authUserId: stringOrNull(row.auth_user_id),
+    email: stringOrNull(row.email),
+    active: row.active === true,
+    roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
+  };
+}
+
+async function agentProfileMutationDecision(
+  input: AdminAgentProfileInput,
+  actor: StaffAccess,
+): Promise<Extract<AgentProfileMutationDecision, { allowed: true }> | null> {
+  assertAgentProfileEditor(actor);
+  const target = input.id ? await fetchAgentProfileSecurityTarget(input.id) : null;
+  if (input.id && !target) return null;
+  const decision = decideAgentProfileMutation(actor.roles, input, target);
+  if (!decision.allowed) throw new Response("Forbidden", { status: 403 });
+  return decision;
 }
 
 function nullableTrim(value: string | null) {
@@ -568,7 +613,8 @@ export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProf
 }
 
 export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor: StaffAccess) {
-  assertAgentProfileEditor(actor);
+  const decision = await agentProfileMutationDecision(input, actor);
+  if (!decision) return { id: "", error: "Not found" };
 
   let publicSlug: string | null;
   try {
@@ -578,7 +624,7 @@ export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor
   }
 
   const displayOrder = Number.isInteger(input.display_order) ? input.display_order : 0;
-  const params = [
+  const identityAndProfileParams = [
     nullableTrim(input.auth_user_id),
     nullableTrim(input.email),
     nullableTrim(input.name_zh),
@@ -595,10 +641,13 @@ export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor
     displayOrder,
     input.active === true,
   ];
+  const publicProfileParams = identityAndProfileParams.slice(2, 14);
 
   try {
-    const rows = input.id
-      ? await queryRows(
+    let rows;
+    if (decision.mode === "identity-and-profile") {
+      rows = input.id
+        ? await queryRows(
           `
           UPDATE staff_users SET
             auth_user_id = $1,
@@ -620,9 +669,9 @@ export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor
           WHERE id = $16
           RETURNING id
           `,
-          [...params, input.id],
+          [...identityAndProfileParams, input.id],
         )
-      : await queryRows(
+        : await queryRows(
           `
           INSERT INTO staff_users (
             auth_user_id, email, name_zh, name_en, job_title, phone, whatsapp, licence_no,
@@ -631,8 +680,49 @@ export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           RETURNING id
           `,
-          params,
+          identityAndProfileParams,
         );
+    } else {
+      rows = input.id
+        ? await queryRows(
+            `
+            UPDATE staff_users AS target SET
+              name_zh = $1,
+              name_en = $2,
+              job_title = $3,
+              phone = $4,
+              whatsapp = $5,
+              licence_no = $6,
+              avatar_url = $7,
+              branch = $8,
+              bio = $9,
+              public_slug = $10,
+              show_on_website = $11,
+              display_order = $12,
+              updated_at = now()
+            WHERE target.id = $13
+              AND NOT EXISTS (
+                SELECT 1
+                FROM staff_roles privileged_role
+                WHERE privileged_role.staff_user_id = target.id
+                  AND privileged_role.role = 'admin'
+              )
+            RETURNING target.id
+            `,
+            [...publicProfileParams, input.id],
+          )
+        : await queryRows(
+            `
+            INSERT INTO staff_users (
+              name_zh, name_en, job_title, phone, whatsapp, licence_no,
+              avatar_url, branch, bio, public_slug, show_on_website, display_order
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id
+            `,
+            publicProfileParams,
+          );
+    }
 
     if (input.id && !rows[0]) return { id: "", error: "Not found" };
     const id = stringOrEmpty(rows[0]?.id);

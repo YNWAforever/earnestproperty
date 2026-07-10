@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { queryRows, stringOrEmpty, stringOrNull } from "./db.server";
+import { isFirstAdminBootstrapEligible } from "./staff-security-policy";
 
 export type StaffRole = "admin" | "manager" | "agent";
 
@@ -222,9 +223,19 @@ export async function getNeonSessionFromRequest(request: Request) {
   return bearerToken ? getNeonSessionFromBearerToken(bearerToken) : null;
 }
 
-async function staffCount() {
-  const rows = await queryRows("SELECT count(*)::int AS total FROM staff_users");
-  return Number(rows[0]?.total ?? 0);
+async function bootstrapStaffRows() {
+  const rows = await queryRows(`
+    SELECT
+      s.auth_user_id,
+      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
+    FROM staff_users s
+    LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+    GROUP BY s.id
+  `);
+  return rows.map((row) => ({
+    authUserId: stringOrNull(row.auth_user_id),
+    roles: staffRolesFromValue(row.roles),
+  }));
 }
 
 async function findStaff(authUserId: string, email: string | null): Promise<StaffAccess | null> {
@@ -327,7 +338,11 @@ export async function requireStaffAccess(request: Request, allowed: StaffRole[] 
   if (!access) {
     const email = session.user.email?.trim().toLowerCase() ?? "";
     const allowlist = bootstrapAllowlist();
-    if (email && allowlist.has(email) && (await staffCount()) === 0) {
+    if (
+      email &&
+      allowlist.has(email) &&
+      isFirstAdminBootstrapEligible(await bootstrapStaffRows())
+    ) {
       access = await bootstrapFirstStaff({
         authUserId: session.user.id,
         email: session.user.email,
