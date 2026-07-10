@@ -144,6 +144,31 @@ export type AdminAgentRow = {
   active: boolean;
 };
 
+export type AdminAgentProfileInput = {
+  id?: string;
+  auth_user_id: string | null;
+  email: string | null;
+  name_zh: string | null;
+  name_en: string | null;
+  job_title: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  licence_no: string | null;
+  avatar_url: string | null;
+  branch: string | null;
+  bio: string | null;
+  public_slug: string | null;
+  show_on_website: boolean;
+  display_order: number;
+  active: boolean;
+};
+
+export type AdminAgentProfileRow = AdminAgentProfileInput & {
+  id: string;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type AdminEstateInput = {
   id?: string;
   slug: string;

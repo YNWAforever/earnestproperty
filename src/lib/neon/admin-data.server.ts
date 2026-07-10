@@ -12,6 +12,8 @@ import {
 } from "./db.server";
 import type { StaffAccess } from "./auth.server";
 import type {
+  AdminAgentProfileInput,
+  AdminAgentProfileRow,
   AdminLeadAiProfile,
   AdminArticleInput,
   AdminCmsVideoInput,
@@ -72,6 +74,59 @@ import { woztellEnabled } from "../woztell/woztell.server";
 function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
+}
+
+function normalizeAgentPublicSlug(value: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) throw new Error("Public slug must contain letters or numbers.");
+  return slug;
+}
+
+function agentProfileSlugConflictError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const dbError = error as { code?: unknown; constraint?: unknown };
+  return (
+    String(dbError.code ?? "") === "23505" &&
+    String(dbError.constraint ?? "") === "staff_users_public_slug_unique"
+  );
+}
+
+function assertAgentProfileEditor(actor: StaffAccess) {
+  if (actor.roles.includes("admin") || actor.roles.includes("manager")) return;
+  throw new Response("Forbidden", { status: 403 });
+}
+
+function nullableTrim(value: string | null) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
+function mapAdminAgentProfile(row: Record<string, unknown>): AdminAgentProfileRow {
+  return {
+    id: stringOrEmpty(row.id),
+    auth_user_id: stringOrNull(row.auth_user_id),
+    email: stringOrNull(row.email),
+    name_zh: stringOrNull(row.name_zh),
+    name_en: stringOrNull(row.name_en),
+    job_title: stringOrNull(row.job_title),
+    phone: stringOrNull(row.phone),
+    whatsapp: stringOrNull(row.whatsapp),
+    licence_no: stringOrNull(row.licence_no),
+    avatar_url: stringOrNull(row.avatar_url),
+    branch: stringOrNull(row.branch),
+    bio: stringOrNull(row.bio),
+    public_slug: stringOrNull(row.public_slug),
+    show_on_website: row.show_on_website === true,
+    display_order: numberOrNull(row.display_order) ?? 0,
+    active: row.active === true,
+    created_at: dateOrNull(row.created_at),
+    updated_at: dateOrNull(row.updated_at),
+  };
 }
 
 export type AdminPropertyInput = {
@@ -452,6 +507,143 @@ export async function fetchAdminAgents() {
     active: row.active === true,
     roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
   }));
+}
+
+export async function fetchAdminAgentProfiles(): Promise<AdminAgentProfileRow[]> {
+  const rows = await queryRows(`
+    SELECT
+      s.id,
+      s.auth_user_id,
+      s.email,
+      s.name_zh,
+      s.name_en,
+      s.job_title,
+      s.phone,
+      s.whatsapp,
+      s.licence_no,
+      s.avatar_url,
+      s.branch,
+      s.bio,
+      s.public_slug,
+      s.show_on_website,
+      s.display_order,
+      s.active,
+      s.created_at,
+      s.updated_at
+    FROM staff_users s
+    ORDER BY s.display_order ASC, COALESCE(s.name_zh, s.name_en) ASC NULLS LAST, s.id ASC
+  `);
+  return rows.map(mapAdminAgentProfile);
+}
+
+export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProfileRow | null> {
+  const rows = await queryRows(
+    `
+    SELECT
+      s.id,
+      s.auth_user_id,
+      s.email,
+      s.name_zh,
+      s.name_en,
+      s.job_title,
+      s.phone,
+      s.whatsapp,
+      s.licence_no,
+      s.avatar_url,
+      s.branch,
+      s.bio,
+      s.public_slug,
+      s.show_on_website,
+      s.display_order,
+      s.active,
+      s.created_at,
+      s.updated_at
+    FROM staff_users s
+    WHERE s.id = $1
+    LIMIT 1
+    `,
+    [id],
+  );
+  return rows[0] ? mapAdminAgentProfile(rows[0]) : null;
+}
+
+export async function saveAdminAgentProfile(input: AdminAgentProfileInput, actor: StaffAccess) {
+  assertAgentProfileEditor(actor);
+
+  let publicSlug: string | null;
+  try {
+    publicSlug = normalizeAgentPublicSlug(input.public_slug);
+  } catch (error) {
+    return { id: "", error: error instanceof Error ? error.message : "Invalid public slug." };
+  }
+
+  const displayOrder = Number.isInteger(input.display_order) ? input.display_order : 0;
+  const params = [
+    nullableTrim(input.auth_user_id),
+    nullableTrim(input.email),
+    nullableTrim(input.name_zh),
+    nullableTrim(input.name_en),
+    nullableTrim(input.job_title),
+    nullableTrim(input.phone),
+    nullableTrim(input.whatsapp),
+    nullableTrim(input.licence_no),
+    nullableTrim(input.avatar_url),
+    nullableTrim(input.branch),
+    nullableTrim(input.bio),
+    publicSlug,
+    input.show_on_website === true,
+    displayOrder,
+    input.active === true,
+  ];
+
+  try {
+    const rows = input.id
+      ? await queryRows(
+          `
+          UPDATE staff_users SET
+            auth_user_id = $1,
+            email = $2,
+            name_zh = $3,
+            name_en = $4,
+            job_title = $5,
+            phone = $6,
+            whatsapp = $7,
+            licence_no = $8,
+            avatar_url = $9,
+            branch = $10,
+            bio = $11,
+            public_slug = $12,
+            show_on_website = $13,
+            display_order = $14,
+            active = $15,
+            updated_at = now()
+          WHERE id = $16
+          RETURNING id
+          `,
+          [...params, input.id],
+        )
+      : await queryRows(
+          `
+          INSERT INTO staff_users (
+            auth_user_id, email, name_zh, name_en, job_title, phone, whatsapp, licence_no,
+            avatar_url, branch, bio, public_slug, show_on_website, display_order, active
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          RETURNING id
+          `,
+          params,
+        );
+
+    if (input.id && !rows[0]) return { id: "", error: "Not found" };
+    const id = stringOrEmpty(rows[0]?.id);
+    await writeAudit(actor.staffId, input.id ? "agent-profile.update" : "agent-profile.create", "staff_user", id);
+    return { id };
+  } catch (error) {
+    if (agentProfileSlugConflictError(error)) {
+      return { id: "", error: "An agent already uses this public slug." };
+    }
+    throw error;
+  }
 }
 
 export async function fetchAdminAiKnowledgeStatus(

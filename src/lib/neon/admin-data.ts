@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
 import type {
+  AdminAgentProfileInput,
   AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
@@ -23,6 +24,46 @@ import type {
 async function requireStaff(roles: StaffRole[] = ["admin"]) {
   const { requireStaffAccess } = await import("./auth.server");
   return requireStaffAccess(getRequest(), roles);
+}
+
+const fetchAdminAgentProfilesServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminAgentProfiles();
+});
+
+export async function fetchAdminAgentProfiles() {
+  return callStaffServerFn(async () =>
+    fetchAdminAgentProfilesServer(await withStaffAuthHeaders({})),
+  );
+}
+
+const fetchAdminAgentProfileServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchAdminAgentProfile(data.id);
+  });
+
+export async function fetchAdminAgentProfile(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    fetchAdminAgentProfileServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const saveAdminAgentProfileServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminAgentProfileInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminAgentProfile(data, staff);
+  });
+
+export async function saveAdminAgentProfile(options: { data: AdminAgentProfileInput }) {
+  return callStaffServerFn(async () =>
+    saveAdminAgentProfileServer(await withStaffAuthHeaders(options)),
+  );
 }
 
 const STALE_SERVER_FN_RELOAD_KEY = "earnest-admin-stale-server-fn-reloaded";
