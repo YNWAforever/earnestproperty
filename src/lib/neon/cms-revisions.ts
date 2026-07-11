@@ -32,7 +32,8 @@ export function makeRestoreDraft(revision: {
     resourceType: revision.resource_type,
     resourceId: revision.resource_id,
     basePublishedVersion: revision.version_number,
-    payload: revision.payload,
+    payload: structuredClone(revision.payload),
     restoredFromRevisionId: revision.id,
   };
 }
+

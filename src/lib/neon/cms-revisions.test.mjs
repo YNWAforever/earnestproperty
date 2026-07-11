@@ -19,19 +19,35 @@ test("nextCmsVersion increments from the latest revision", () => {
 });
 
 test("restore creates a new draft without rewriting the source revision", () => {
-  const restored = makeRestoreDraft({
+  const revision = {
     id: "old",
     resource_type: "estate",
     resource_id: "estate-1",
     version_number: 4,
-    payload: { name_zh: "Lido Garden" },
-  });
+    payload: {
+      name_zh: "Lido Garden",
+      meta: { slug: "lido-garden" },
+    },
+  };
+  const restored = makeRestoreDraft(revision);
 
   assert.deepEqual(restored, {
     resourceType: "estate",
     resourceId: "estate-1",
     basePublishedVersion: 4,
-    payload: { name_zh: "Lido Garden" },
+    payload: {
+      name_zh: "Lido Garden",
+      meta: { slug: "lido-garden" },
+    },
     restoredFromRevisionId: "old",
   });
+
+  restored.payload.meta.slug = "royal-peninsula";
+  restored.payload.name_zh = "Royal Peninsula";
+
+  assert.deepEqual(revision.payload, {
+    name_zh: "Lido Garden",
+    meta: { slug: "lido-garden" },
+  });
 });
+
