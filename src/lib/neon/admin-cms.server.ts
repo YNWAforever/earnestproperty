@@ -20,6 +20,7 @@ import {
   type CmsResourceType,
   type CmsRevisionState,
 } from "./cms-revisions";
+import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { writeAudit } from "./admin-data.server";
 
 const ALL_CMS_ROLES = ["admin", "manager", "agent"] as const;
@@ -172,7 +173,7 @@ export async function fetchAdminCmsCategory(input: {
   try {
     return { rows: (await listHubRows(input, actor)).map(hubRow) };
   } catch (error) {
-    if (input.resourceType === "video" && /cms_videos|does not exist/i.test(String(error))) {
+    if (input.resourceType === "video" && isMissingCmsVideosTableError(error)) {
       return { rows: [], unavailableReason: "影片資料表尚未建立" };
     }
     throw error;
