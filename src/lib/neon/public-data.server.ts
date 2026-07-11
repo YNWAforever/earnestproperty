@@ -12,6 +12,7 @@ import type {
   NeonSimilarListingsInput,
 } from "./public-data.types";
 import { getSql } from "./db.server";
+import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 
 type DbRow = Record<string, unknown>;
 
@@ -116,13 +117,6 @@ function dateOrNull(value: unknown) {
 function textArrayOrNull(value: unknown) {
   if (!Array.isArray(value)) return null;
   return value.map(String);
-}
-
-function isMissingCmsVideosTableError(error: unknown) {
-  const code =
-    typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
-  const message = error instanceof Error ? error.message : String(error);
-  return code === "42P01" || message.includes('relation "cms_videos" does not exist');
 }
 
 function isMissingAgentProfileColumnError(error: unknown) {

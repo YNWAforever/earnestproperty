@@ -10,6 +10,7 @@ import {
   stringOrEmpty,
   stringOrNull,
 } from "./db.server";
+import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import type { StaffAccess } from "./auth.server";
 import {
   decideAgentProfileMutation,
@@ -912,13 +913,19 @@ export async function listAdminCms() {
 }
 
 export async function fetchAdminCmsVideos() {
-  const rows = await queryRows(
-    `
+  let rows;
+  try {
+    rows = await queryRows(
+      `
     SELECT id, title, video_url, description, sort_order, published, created_at, updated_at
     FROM cms_videos
     ORDER BY sort_order ASC, created_at DESC
     `,
-  );
+    );
+  } catch (error) {
+    if (isMissingCmsVideosTableError(error)) return [];
+    throw error;
+  }
 
   return rows.map((row) => ({
     id: stringOrEmpty(row.id),
@@ -945,9 +952,11 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     input.published,
   ];
 
-  const rows = input.id
-    ? await queryRows(
-        `
+  let rows;
+  try {
+    rows = input.id
+      ? await queryRows(
+          `
         UPDATE cms_videos SET
           title = $1,
           video_url = $2,
@@ -960,14 +969,20 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
         `,
         [...params, input.id],
       )
-    : await queryRows(
-        `
+      : await queryRows(
+          `
         INSERT INTO cms_videos (title, video_url, description, sort_order, published)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id
         `,
         params,
       );
+  } catch (error) {
+    if (isMissingCmsVideosTableError(error)) {
+      return { id: "", error: "影片資料表尚未建立，請先執行資料庫 migration" };
+    }
+    throw error;
+  }
 
   if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
