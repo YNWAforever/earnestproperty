@@ -597,7 +597,9 @@ export async function fetchListingCountsByEstate(): Promise<Record<string, numbe
 }
 
 export async function fetchEstateOptions(): Promise<NeonEstateOption[]> {
-  const rows = await sql().query("SELECT slug, name_zh FROM estates WHERE published = true ORDER BY name_zh");
+  const rows = await sql().query(
+    "SELECT slug, name_zh FROM estates WHERE COALESCE((to_jsonb(estates)->>'published')::boolean, true) ORDER BY name_zh",
+  );
   return rows.map((row) => ({
     slug: stringOrEmpty(row.slug),
     name_zh: stringOrEmpty(row.name_zh),
@@ -611,7 +613,7 @@ export async function fetchEstates(input: { districtSlug?: string } = {}) {
     SELECT *
     FROM estates
     WHERE district_slug = $1
-      AND published = true
+      AND COALESCE((to_jsonb(estates)->>'published')::boolean, true)
     ORDER BY total_units DESC NULLS LAST, name_zh ASC
     `,
     [districtSlug],
@@ -620,7 +622,10 @@ export async function fetchEstates(input: { districtSlug?: string } = {}) {
 }
 
 export async function fetchEstateBySlug(input: { slug: string }) {
-  const rows = await sql().query("SELECT * FROM estates WHERE slug = $1 AND published = true LIMIT 1", [input.slug]);
+  const rows = await sql().query(
+    "SELECT * FROM estates WHERE slug = $1 AND COALESCE((to_jsonb(estates)->>'published')::boolean, true) LIMIT 1",
+    [input.slug],
+  );
   return rows[0] ?? null;
 }
 
@@ -630,7 +635,7 @@ export async function fetchFaqs(input: { scope: string }) {
     SELECT question, answer
     FROM faqs
     WHERE scope = $1
-      AND published = true
+      AND COALESCE((to_jsonb(faqs)->>'published')::boolean, true)
     ORDER BY sort_order ASC, created_at ASC
     `,
     [input.scope],
