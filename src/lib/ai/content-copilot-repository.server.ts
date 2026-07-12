@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { queryRows, type DbRow } from "@/lib/neon/db.server";
 
 import {
+  allowedContentCopilotFields,
   contentCopilotRequestSchema,
   validateContentCopilotProposal,
   type ContentCopilotAction,
@@ -53,7 +54,7 @@ export type StartContentProposalInput = {
   request: ContentCopilotRequest;
   sourceFingerprint: string;
   promptVersion: string;
-  provider?: string;
+  provider?: "opencode_go";
   model?: string | null;
 };
 
@@ -87,6 +88,8 @@ export async function startContentProposal(input: StartContentProposalInput) {
   const requestsPerStaffPerHour = 20;
   const requestResult = contentCopilotRequestSchema.safeParse(input.request);
   if (!requestResult.success) throw contentCopilotError("COPILOT_REQUEST_INVALID");
+  if (input.provider && input.provider !== "opencode_go") throw contentCopilotError("COPILOT_PROVIDER_UNSUPPORTED");
+  if (!/^[0-9a-f]{64}$/.test(input.sourceFingerprint)) throw contentCopilotError("COPILOT_FINGERPRINT_INVALID");
 
   await expireGeneratingProposal(input.staffId);
 
@@ -152,6 +155,7 @@ export async function completeContentProposal(input: CompleteContentProposalInpu
      WHERE id = $7
        AND requested_by = $8
        AND status = 'generating'
+       AND expires_at > now()
        AND resource_type = $9
        AND resource_id = $10
        AND action = $11
@@ -162,7 +166,7 @@ export async function completeContentProposal(input: CompleteContentProposalInpu
       JSON.stringify(proposalResult.value.evidence),
       JSON.stringify(proposalResult.value.warnings),
       input.latencyMs ?? null,
-      JSON.stringify(input.usageMetadata ?? {}),
+      JSON.stringify(sanitizeContentCopilotUsageMetadata(input.usageMetadata)),
       input.model ?? null,
       input.proposalId,
       input.staffId,
@@ -176,6 +180,7 @@ export async function completeContentProposal(input: CompleteContentProposalInpu
 }
 
 export async function failContentProposal(input: FailContentProposalInput) {
+  const errorCode = sanitizeContentCopilotErrorCode(input.errorCode);
   await expireOwnedProposal(input.proposalId, input.staffId);
   const rows = await queryRows(
     `UPDATE ai_content_proposals
@@ -186,6 +191,7 @@ export async function failContentProposal(input: FailContentProposalInput) {
      WHERE id = $4
        AND requested_by = $5
        AND status = 'generating'
+       AND expires_at > now()
      RETURNING *`,
     [input.errorCode, input.latencyMs ?? null, JSON.stringify(input.usageMetadata ?? {}), input.proposalId, input.staffId],
   );
@@ -229,7 +235,7 @@ export async function decideContentProposal(input: DecideContentProposalInput) {
 }
 
 export type ContentCopilotAuditMetadata = Partial<{
-  provider: string;
+  provider: "opencode_go";
   model: string;
   latencyMs: number;
   researchMode: "internal" | "web";
@@ -240,27 +246,55 @@ export type ContentCopilotAuditMetadata = Partial<{
   warningsCount: number;
 }>;
 
-export function sanitizeContentCopilotAuditMetadata(metadata: Record<string, unknown> | undefined): ContentCopilotAuditMetadata {
+const CONTENT_COPILOT_RESOURCE_TYPES = new Set<ContentCopilotResourceType>(["estate", "article", "faq", "video", "listing"]);
+const CONTENT_PROPOSAL_STATUSES = new Set<ContentProposalStatus>(["generating", "generated", "partially_applied", "applied", "rejected", "expired", "failed"]);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function sanitizeContentCopilotAuditMetadata(metadata: Record<string, unknown> | undefined, resourceType?: ContentCopilotResourceType): ContentCopilotAuditMetadata {
   const allowed = new Set(["provider", "model", "latencyMs", "researchMode", "status", "errorCode", "acceptedFields", "citationCount", "warningsCount"]);
   const result: ContentCopilotAuditMetadata = {};
   for (const [key, value] of Object.entries(metadata ?? {})) {
     if (!allowed.has(key)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
-    if (typeof value === "string") {
-      if (value.length > 200) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "provider" && value !== "opencode_go") throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "researchMode" && value !== "internal" && value !== "web") throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "status" && (typeof value !== "string" || !CONTENT_PROPOSAL_STATUSES.has(value as ContentProposalStatus))) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "errorCode" && (typeof value !== "string" || !/^[A-Z0-9_]{1,80}$/.test(value))) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "acceptedFields") {
+      if (!Array.isArray(value) || value.length > 20 || !value.every((item) => typeof item === "string" && (resourceType ? allowedContentCopilotFields(resourceType).includes(item) : /^[a-z_]{1,40}$/.test(item)))) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
       (result as Record<string, unknown>)[key] = value;
       continue;
     }
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100000) {
+    if (["latencyMs", "citationCount", "warningsCount"].includes(key)) {
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100000) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
       (result as Record<string, unknown>)[key] = value;
       continue;
     }
-    if (Array.isArray(value) && value.length <= 20 && value.every((item) => typeof item === "string" && item.length <= 80)) {
+    if (typeof value === "string" && value.length <= 100 && !/[\\u0000-\\u001f]/.test(value)) {
       (result as Record<string, unknown>)[key] = value;
       continue;
     }
     throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
   }
   return result;
+}
+
+function sanitizeContentCopilotErrorCode(value: string) {
+  if (!/^[A-Z0-9_]{1,80}$/.test(value)) throw contentCopilotError("COPILOT_USAGE_METADATA_INVALID");
+  return value;
+}
+
+export function sanitizeContentCopilotUsageMetadata(metadata: Record<string, unknown> | undefined) {
+  const allowed = new Set(["inputTokens", "outputTokens", "totalTokens", "cachedTokens", "retryCount"]);
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (!allowed.has(key) || typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 10000000) throw contentCopilotError("COPILOT_USAGE_METADATA_INVALID");
+    result[key] = value;
+  }
+  return result;
+}
+
+function assertContentCopilotAuditIdentity(input: { actorId: string; proposalId: string; resourceType: string; resourceId: string }) {
+  if (!UUID_PATTERN.test(input.actorId) || !UUID_PATTERN.test(input.proposalId) || !UUID_PATTERN.test(input.resourceId) || !CONTENT_COPILOT_RESOURCE_TYPES.has(input.resourceType as ContentCopilotResourceType)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
 }
 
 export async function writeContentCopilotAudit(input: {
@@ -271,7 +305,8 @@ export async function writeContentCopilotAudit(input: {
   resourceId: string;
   metadata?: ContentCopilotAuditMetadata;
 }) {
-  const metadata = sanitizeContentCopilotAuditMetadata(input.metadata);
+  assertContentCopilotAuditIdentity(input);
+  const metadata = sanitizeContentCopilotAuditMetadata(input.metadata, input.resourceType as ContentCopilotResourceType);
   await queryRows(
     `INSERT INTO ai_audit_logs (actor_type, actor_id, action, subject_type, subject_id, metadata)
      VALUES ('staff',$1,$2,$3,$4,$5::jsonb)`,
@@ -304,7 +339,11 @@ async function expireOwnedProposal(proposalId: string, staffId: string) {
 
 function requireTransition(row: DbRow | undefined, proposalId: string, staffId: string) {
   if (row) return mapProposal(row);
-  return getTransitionFailure(proposalId, staffId).then((proposal) => {
+  return getTransitionFailure(proposalId, staffId).then(async (proposal) => {
+    if (proposal && Date.parse(proposal.expiresAt) <= Date.now()) {
+      await expireOwnedProposal(proposalId, staffId);
+      throw contentCopilotError("COPILOT_PROPOSAL_EXPIRED");
+    }
     if (proposal?.status === "expired") throw contentCopilotError("COPILOT_PROPOSAL_EXPIRED");
     throw contentCopilotError("COPILOT_PROPOSAL_TRANSITION_INVALID");
   });

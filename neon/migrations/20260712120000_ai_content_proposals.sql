@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS ai_content_proposals (
   patches JSONB NOT NULL DEFAULT '[]'::jsonb,
   evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
   warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
-  provider TEXT NOT NULL DEFAULT 'opencode_go',
+  provider TEXT NOT NULL DEFAULT 'opencode_go' CHECK (provider = 'opencode_go'),
   model TEXT,
   prompt_version TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('generating','generated','partially_applied','applied','rejected','expired','failed')),
