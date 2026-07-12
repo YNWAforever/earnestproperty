@@ -40,6 +40,7 @@ export type ContentCopilotPatch = {
   confidence: "high" | "medium" | "low";
   evidenceIds: string[];
   unsupportedClaims: string[];
+  claimType: "subjective" | "factual_internal" | "factual_web";
 };
 
 export type ContentCopilotProposal = {
@@ -58,7 +59,7 @@ export type ContentCopilotPatchApplyOptions = {
 
 export type ContentCopilotPatchApplyResult =
   | { ok: true; value: Record<string, ContentCopilotValue>; error: null }
-  | { ok: false; value: null; error: "COPILOT_UNKNOWN_FIELD" | "COPILOT_STALE_PROPOSAL" | "COPILOT_PATCH_CONFLICT" };
+  | { ok: false; value: null; error: "COPILOT_UNKNOWN_FIELD" | "COPILOT_STALE_PROPOSAL" | "COPILOT_PATCH_CONFLICT" | "COPILOT_FINGERPRINT_INVALID" };
 
 const valueSchema = z.union([
   z.string().max(12000),
@@ -74,6 +75,7 @@ const patchSchema = z.object({
   confidence: z.enum(["high", "medium", "low"]),
   evidenceIds: z.array(z.string()).max(20),
   unsupportedClaims: z.array(z.string().max(500)).max(20),
+  claimType: z.enum(["subjective", "factual_internal", "factual_web"]),
 });
 
 const resourceTypeSchema = z.enum(["estate", "article", "faq", "video", "listing"]);
@@ -93,9 +95,10 @@ const evidenceSchema = z.discriminatedUnion("type", [
     url: z.string().refine((url) => normalizeCitationUrl(url) !== null, "COPILOT_WEB_CITATION_REQUIRED"),
   }),
 ]);
+const fingerprintSchema = z.string().regex(/^[0-9a-f]{64}$/);
 const proposalSchema = z.object({
   resourceType: resourceTypeSchema,
-  sourceFingerprint: z.string().min(16).max(128),
+  sourceFingerprint: fingerprintSchema,
   patches: z.array(patchSchema).max(12),
   evidence: z.array(evidenceSchema).max(20),
   warnings: z.array(z.string().max(500)).max(20),
@@ -154,9 +157,16 @@ export function validateContentCopilotProposal(value: unknown) {
   if (!parsed.success) return { ok: false as const, value: null, error: "COPILOT_PROPOSAL_INVALID" };
   const allowed = new Set(allowedContentCopilotFields(parsed.data.resourceType));
   const evidenceIds = new Set(parsed.data.evidence.map((item) => item.id));
+  const evidenceById = new Map(parsed.data.evidence.map((item) => [item.id, item]));
   for (const patch of parsed.data.patches) {
     if (!allowed.has(patch.field)) return { ok: false as const, value: null, error: "COPILOT_UNKNOWN_FIELD" };
     if (patch.evidenceIds.some((id) => !evidenceIds.has(id))) return { ok: false as const, value: null, error: "COPILOT_EVIDENCE_MISSING" };
+    if (patch.claimType === "factual_internal" && patch.evidenceIds.length === 0) {
+      return { ok: false as const, value: null, error: "COPILOT_EVIDENCE_REQUIRED" };
+    }
+    if (patch.claimType === "factual_web" && !patch.evidenceIds.some((id) => evidenceById.get(id)?.type === "web")) {
+      return { ok: false as const, value: null, error: "COPILOT_CITATION_REQUIRED" };
+    }
   }
   return { ok: true as const, value: parsed.data, error: null };
 }
@@ -175,6 +185,9 @@ export function applySelectedContentPatches(
 ): ContentCopilotPatchApplyResult {
   const allowed = new Set(allowedContentCopilotFields(options.resourceType));
   const selected = new Set(selectedFields);
+  if (!fingerprintSchema.safeParse(options.sourceFingerprint).success || !fingerprintSchema.safeParse(options.currentFingerprint).success) {
+    return { ok: false, value: null, error: "COPILOT_FINGERPRINT_INVALID" };
+  }
   if (options.sourceFingerprint !== options.currentFingerprint) {
     return { ok: false, value: null, error: "COPILOT_STALE_PROPOSAL" };
   }
