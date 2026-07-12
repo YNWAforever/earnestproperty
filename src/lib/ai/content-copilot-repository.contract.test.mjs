@@ -18,6 +18,7 @@ test("repository exposes explicit proposal transitions and AI audit writes", () 
   }
   assert.match(source, /20[\s\S]*interval '1 hour'/i);
   assert.match(source, /pg_advisory_xact_lock/);
+  assert.match(source, /sql\.transaction/);
   assert.match(source, /ai_content_proposals_one_generating_per_staff_idx/);
   assert.match(source, /resource_id =/);
   assert.match(source, /INSERT INTO ai_audit_logs/);

@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { queryRows, type DbRow } from "@/lib/neon/db.server";
+import { getSql, queryRows, type DbRow } from "@/lib/neon/db.server";
 
 import {
   allowedContentCopilotFields,
@@ -94,40 +94,38 @@ export async function startContentProposal(input: StartContentProposalInput) {
   await expireGeneratingProposal(input.staffId);
 
   try {
-    const rows = await queryRows(
-      `WITH locked AS (
-         SELECT pg_advisory_xact_lock(hashtextextended($10::text, 0))
-       ), recent AS (
-         SELECT count(*)::int AS total
-         FROM ai_content_proposals, locked
-         WHERE requested_by = $10::uuid
-           AND created_at >= now() - interval '1 hour'
-       )
-       INSERT INTO ai_content_proposals (
-         resource_type, resource_id, action, selected_fields, source_fingerprint,
-         request_context, provider, model, prompt_version, status, requested_by
-       )
-       SELECT $1,$2,$3,$4::text[],$5,$6::jsonb,$7,$8,$9,'generating',$10
-       FROM recent
-       WHERE recent.total < ${requestsPerStaffPerHour}
-       RETURNING *`,
-      [
-        requestResult.data.resourceType,
-        requestResult.data.resourceId,
-        requestResult.data.action,
-        requestResult.data.selectedFields,
-        input.sourceFingerprint,
-        JSON.stringify({
-          tone: requestResult.data.tone,
-          targetLanguage: requestResult.data.targetLanguage,
-          researchMode: requestResult.data.researchMode,
-        }),
-        input.provider ?? "opencode_go",
-        input.model ?? null,
-        input.promptVersion,
-        input.staffId,
-      ],
-    );
+    const sql = getSql();
+    const [, rows] = await sql.transaction((tx) => [
+      tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", [input.staffId]),
+      tx.query(
+        `INSERT INTO ai_content_proposals (
+           resource_type, resource_id, action, selected_fields, source_fingerprint,
+           request_context, provider, model, prompt_version, status, requested_by
+         )
+         SELECT $1,$2,$3,$4::text[],$5,$6::jsonb,$7,$8,$9,'generating',$10
+         WHERE (SELECT count(*)::int
+                FROM ai_content_proposals
+                WHERE requested_by = $10::uuid
+                  AND created_at >= now() - interval '1 hour') < ${requestsPerStaffPerHour}
+         RETURNING *`,
+        [
+          requestResult.data.resourceType,
+          requestResult.data.resourceId,
+          requestResult.data.action,
+          requestResult.data.selectedFields,
+          input.sourceFingerprint,
+          JSON.stringify({
+            tone: requestResult.data.tone,
+            targetLanguage: requestResult.data.targetLanguage,
+            researchMode: requestResult.data.researchMode,
+          }),
+          input.provider ?? "opencode_go",
+          input.model ?? null,
+          input.promptVersion,
+          input.staffId,
+        ],
+      ),
+    ]);
     if (!rows[0]) throw contentCopilotError("COPILOT_RATE_LIMITED");
     return mapProposal(requireProposal(rows[0]));
   } catch (error) {
