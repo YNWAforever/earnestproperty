@@ -58,6 +58,28 @@ test("OpenCode client retries 429 twice", async () => {
   assert.deepEqual(delays, [300, 600]);
 });
 
+test("OpenCode cancels retryable response bodies", async () => {
+  let cancelled = 0;
+  let attempts = 0;
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    sleepImpl: async () => undefined,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("provider detail")); }, cancel() { cancelled += 1; } });
+        return new Response(body, { status: 503 });
+      }
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }), { status: 200 });
+    },
+  });
+
+  const result = await client.generateProposal({ system: "rules", prompt: "record" });
+
+  assert.equal(result.ok, true);
+  assert.equal(attempts, 3);
+  assert.equal(cancelled, 2);
+});
 test("OpenCode client retries network failures twice", async () => {
   let attempts = 0;
   const client = createOpenCodeGoClient({

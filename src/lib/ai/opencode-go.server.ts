@@ -106,6 +106,7 @@ async function fetchWithRetry(
     try {
       const response = await fetchImpl(url, { ...init, signal: AbortSignal.timeout(OPENCODE_GO_TIMEOUT_MS) });
       if (isRetryableStatus(response.status) && attempt < OPENCODE_GO_MAX_RETRIES) {
+        await cancelResponseBody(response);
         await sleepImpl(OPENCODE_GO_RETRY_BASE_DELAY_MS * 2 ** attempt);
         continue;
       }
@@ -153,6 +154,13 @@ function extractUsageMetadata(usage: unknown): Record<string, number> {
   return metadata;
 }
 
+async function cancelResponseBody(response: Response) {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // A failed cleanup must not hide the stable provider result.
+  }
+}
 function isRetryableStatus(status: number) {
   return status === 429 || status >= 500;
 }
