@@ -60,6 +60,9 @@ export type StartContentProposalInput = {
 export type CompleteContentProposalInput = {
   staffId: string;
   proposalId: string;
+  resourceType: ContentCopilotResourceType;
+  resourceId: string;
+  action: ContentCopilotAction;
   proposal: ContentCopilotProposal;
   latencyMs?: number | null;
   usageMetadata?: Record<string, unknown>;
@@ -86,22 +89,24 @@ export async function startContentProposal(input: StartContentProposalInput) {
   if (!requestResult.success) throw contentCopilotError("COPILOT_REQUEST_INVALID");
 
   await expireGeneratingProposal(input.staffId);
-  const rateRows = await queryRows<{ total: number }>(
-    `SELECT count(*)::int AS total
-     FROM ai_content_proposals
-     WHERE requested_by = $1
-       AND created_at >= now() - interval '1 hour'`,
-    [input.staffId],
-  );
-  if (Number(rateRows[0]?.total ?? 0) >= requestsPerStaffPerHour) throw contentCopilotError("COPILOT_RATE_LIMITED");
 
   try {
     const rows = await queryRows(
-      `INSERT INTO ai_content_proposals (
+      `WITH locked AS (
+         SELECT pg_advisory_xact_lock(hashtextextended($10::text, 0))
+       ), recent AS (
+         SELECT count(*)::int AS total
+         FROM ai_content_proposals, locked
+         WHERE requested_by = $10::uuid
+           AND created_at >= now() - interval '1 hour'
+       )
+       INSERT INTO ai_content_proposals (
          resource_type, resource_id, action, selected_fields, source_fingerprint,
          request_context, provider, model, prompt_version, status, requested_by
        )
-       VALUES ($1,$2,$3,$4::text[],$5,$6::jsonb,$7,$8,$9,'generating',$10)
+       SELECT $1,$2,$3,$4::text[],$5,$6::jsonb,$7,$8,$9,'generating',$10
+       FROM recent
+       WHERE recent.total < ${requestsPerStaffPerHour}
        RETURNING *`,
       [
         requestResult.data.resourceType,
@@ -120,9 +125,11 @@ export async function startContentProposal(input: StartContentProposalInput) {
         input.staffId,
       ],
     );
+    if (!rows[0]) throw contentCopilotError("COPILOT_RATE_LIMITED");
     return mapProposal(requireProposal(rows[0]));
   } catch (error) {
-    if (postgresErrorCode(error) === "23505") throw contentCopilotError("COPILOT_GENERATION_IN_PROGRESS");
+    if (isGeneratingProposalConflict(error)) throw contentCopilotError("COPILOT_GENERATION_IN_PROGRESS");
+    if (postgresErrorCode(error) === "23505") throw contentCopilotError("COPILOT_DATABASE_CONFLICT");
     throw error;
   }
 }
@@ -130,6 +137,7 @@ export async function startContentProposal(input: StartContentProposalInput) {
 export async function completeContentProposal(input: CompleteContentProposalInput) {
   const proposalResult = validateContentCopilotProposal(input.proposal);
   if (!proposalResult.ok) throw contentCopilotError(proposalResult.error);
+  if (proposalResult.value.resourceType !== input.resourceType) throw contentCopilotError("COPILOT_PROPOSAL_CONTEXT_MISMATCH");
 
   await expireOwnedProposal(input.proposalId, input.staffId);
   const rows = await queryRows(
@@ -145,7 +153,9 @@ export async function completeContentProposal(input: CompleteContentProposalInpu
        AND requested_by = $8
        AND status = 'generating'
        AND resource_type = $9
-       AND source_fingerprint = $10
+       AND resource_id = $10
+       AND action = $11
+       AND source_fingerprint = $12
      RETURNING *`,
     [
       JSON.stringify(proposalResult.value.patches),
@@ -156,7 +166,9 @@ export async function completeContentProposal(input: CompleteContentProposalInpu
       input.model ?? null,
       input.proposalId,
       input.staffId,
-      proposalResult.value.resourceType,
+      input.resourceType,
+      input.resourceId,
+      input.action,
       proposalResult.value.sourceFingerprint,
     ],
   );
@@ -216,18 +228,54 @@ export async function decideContentProposal(input: DecideContentProposalInput) {
   return requireTransition(rows[0], input.proposalId, input.staffId);
 }
 
+export type ContentCopilotAuditMetadata = Partial<{
+  provider: string;
+  model: string;
+  latencyMs: number;
+  researchMode: "internal" | "web";
+  status: ContentProposalStatus;
+  errorCode: string;
+  acceptedFields: string[];
+  citationCount: number;
+  warningsCount: number;
+}>;
+
+export function sanitizeContentCopilotAuditMetadata(metadata: Record<string, unknown> | undefined): ContentCopilotAuditMetadata {
+  const allowed = new Set(["provider", "model", "latencyMs", "researchMode", "status", "errorCode", "acceptedFields", "citationCount", "warningsCount"]);
+  const result: ContentCopilotAuditMetadata = {};
+  for (const [key, value] of Object.entries(metadata ?? {})) {
+    if (!allowed.has(key)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (typeof value === "string") {
+      if (value.length > 200) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+      (result as Record<string, unknown>)[key] = value;
+      continue;
+    }
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100000) {
+      (result as Record<string, unknown>)[key] = value;
+      continue;
+    }
+    if (Array.isArray(value) && value.length <= 20 && value.every((item) => typeof item === "string" && item.length <= 80)) {
+      (result as Record<string, unknown>)[key] = value;
+      continue;
+    }
+    throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+  }
+  return result;
+}
+
 export async function writeContentCopilotAudit(input: {
   actorId: string;
   action: "content_copilot.generated" | "content_copilot.failed" | "content_copilot.applied" | "content_copilot.rejected" | "content_copilot.stale";
   proposalId: string;
   resourceType: string;
   resourceId: string;
-  metadata?: Record<string, unknown>;
+  metadata?: ContentCopilotAuditMetadata;
 }) {
+  const metadata = sanitizeContentCopilotAuditMetadata(input.metadata);
   await queryRows(
     `INSERT INTO ai_audit_logs (actor_type, actor_id, action, subject_type, subject_id, metadata)
      VALUES ('staff',$1,$2,$3,$4,$5::jsonb)`,
-    [input.actorId, input.action, input.resourceType, input.resourceId, JSON.stringify({ proposalId: input.proposalId, ...input.metadata })],
+    [input.actorId, input.action, input.resourceType, input.resourceId, JSON.stringify({ proposalId: input.proposalId, ...metadata })],
   );
 }
 
@@ -332,8 +380,20 @@ function numberOrNull(value: unknown) {
   return Number.isFinite(number) ? number : null;
 }
 
+export function isGeneratingProposalConflict(error: unknown) {
+  if (postgresErrorCode(error) !== "23505") return false;
+  return postgresErrorConstraint(error) === "ai_content_proposals_one_generating_per_staff_idx";
+}
+
 function postgresErrorCode(error: unknown) {
   return error && typeof error === "object" && "code" in error ? String(error.code) : null;
+}
+
+function postgresErrorConstraint(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  if ("constraint" in error && typeof error.constraint === "string") return error.constraint;
+  if ("constraint_name" in error && typeof error.constraint_name === "string") return error.constraint_name;
+  return null;
 }
 
 function contentCopilotError(code: string) {

@@ -17,5 +17,18 @@ test("repository exposes explicit proposal transitions and AI audit writes", () 
     assert.match(source, new RegExp(`export async function ${name}\\b`));
   }
   assert.match(source, /20[\s\S]*interval '1 hour'/i);
+  assert.match(source, /pg_advisory_xact_lock/);
+  assert.match(source, /ai_content_proposals_one_generating_per_staff_idx/);
+  assert.match(source, /resource_id =/);
   assert.match(source, /INSERT INTO ai_audit_logs/);
+  assert.match(source, /COPILOT_AUDIT_METADATA_INVALID/);
+  assert.match(source, /isGeneratingProposalConflict/);
+});
+
+test("repository safety helpers are behaviorally testable under Bun", { skip: !process.versions.bun }, async () => {
+  const { isGeneratingProposalConflict, sanitizeContentCopilotAuditMetadata } = await import("./content-copilot-repository.server.ts");
+  assert.equal(isGeneratingProposalConflict({ code: "23505", constraint: "ai_content_proposals_one_generating_per_staff_idx" }), true);
+  assert.equal(isGeneratingProposalConflict({ code: "23505", constraint: "other_unique_constraint" }), false);
+  assert.deepEqual(sanitizeContentCopilotAuditMetadata({ model: "go-content", latencyMs: 12, acceptedFields: ["title"] }), { model: "go-content", latencyMs: 12, acceptedFields: ["title"] });
+  assert.throws(() => sanitizeContentCopilotAuditMetadata({ crmLead: "private" }), /COPILOT_AUDIT_METADATA_INVALID/);
 });
