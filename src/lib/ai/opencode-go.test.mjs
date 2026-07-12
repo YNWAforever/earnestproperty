@@ -58,6 +58,41 @@ test("OpenCode client retries 429 twice", async () => {
   assert.deepEqual(delays, [300, 600]);
 });
 
+test("OpenCode client retries network failures twice", async () => {
+  let attempts = 0;
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    sleepImpl: async () => undefined,
+    fetchImpl: async () => {
+      attempts += 1;
+      throw new Error("provider network detail");
+    },
+  });
+
+  const result = await client.generateProposal({ system: "rules", prompt: "record" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "OPENCODE_GO_GENERATION_FAILED");
+  assert.equal(attempts, 3);
+});
+
+test("OpenCode client retries 5xx twice", async () => {
+  let attempts = 0;
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    sleepImpl: async () => undefined,
+    fetchImpl: async () => {
+      attempts += 1;
+      if (attempts < 3) return new Response("provider detail", { status: 503 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }), { status: 200 });
+    },
+  });
+
+  const result = await client.generateProposal({ system: "rules", prompt: "record" });
+
+  assert.equal(result.ok, true);
+  assert.equal(attempts, 3);
+});
 test("disabled configuration returns OPENCODE_GO_NOT_CONFIGURED without fetch", async () => {
   let called = false;
   const client = createOpenCodeGoClient({
