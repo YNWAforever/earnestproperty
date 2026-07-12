@@ -50,6 +50,16 @@ export type ContentCopilotProposal = {
   warnings: string[];
 };
 
+export type ContentCopilotPatchApplyOptions = {
+  resourceType: ContentCopilotResourceType;
+  sourceFingerprint: string;
+  currentFingerprint: string;
+};
+
+export type ContentCopilotPatchApplyResult =
+  | { ok: true; value: Record<string, ContentCopilotValue>; error: null }
+  | { ok: false; value: null; error: "COPILOT_UNKNOWN_FIELD" | "COPILOT_STALE_PROPOSAL" | "COPILOT_PATCH_CONFLICT" };
+
 const valueSchema = z.union([
   z.string().max(12000),
   z.array(z.string().max(300)).max(30),
@@ -68,13 +78,21 @@ const patchSchema = z.object({
 
 const resourceTypeSchema = z.enum(["estate", "article", "faq", "video", "listing"]);
 const actionSchema = z.enum(["generate", "improve", "shorten", "translate", "seo_optimize", "fact_check"]);
-const evidenceSchema = z.object({
+const evidenceBaseSchema = z.object({
   id: z.string().min(1).max(80),
-  type: z.enum(["internal", "web"]),
   title: z.string().max(300),
-  url: z.string().nullable(),
   excerpt: z.string().max(1000),
 });
+const evidenceSchema = z.discriminatedUnion("type", [
+  evidenceBaseSchema.extend({
+    type: z.literal("internal"),
+    url: z.string().nullable().refine((url) => url === null || normalizeCitationUrl(url) !== null, "COPILOT_UNSAFE_URL"),
+  }),
+  evidenceBaseSchema.extend({
+    type: z.literal("web"),
+    url: z.string().refine((url) => normalizeCitationUrl(url) !== null, "COPILOT_WEB_CITATION_REQUIRED"),
+  }),
+]);
 const proposalSchema = z.object({
   resourceType: resourceTypeSchema,
   sourceFingerprint: z.string().min(16).max(128),
@@ -90,7 +108,7 @@ export const contentCopilotRequestSchema = z.object({
   selectedFields: z.array(z.string()).min(1).max(6),
   tone: z.enum(["professional_property", "concise_portal", "cantonese_conversational", "neutral_informational"]),
   targetLanguage: z.enum(["zh-HK", "en"]).nullable(),
-  researchMode: z.enum(["internal", "web"]),
+  researchMode: z.enum(["internal", "web"]).default("internal"),
 }).superRefine((request, context) => {
   const allowed = new Set(allowedContentCopilotFields(request.resourceType));
   for (const field of request.selectedFields) {
@@ -143,15 +161,37 @@ export function validateContentCopilotProposal(value: unknown) {
   return { ok: true as const, value: parsed.data, error: null };
 }
 
+export function validatePersistedContentCopilotRecord(value: unknown) {
+  const result = z.object({ resourceId: z.string().uuid(), persisted: z.literal(true) }).safeParse(value);
+  if (!result.success) return { ok: false as const, value: null, error: "COPILOT_SAVE_FIRST" as const };
+  return { ok: true as const, value: result.data, error: null };
+}
+
 export function applySelectedContentPatches(
   current: Record<string, ContentCopilotValue>,
   patches: ContentCopilotPatch[],
   selectedFields: string[],
-) {
+  options: ContentCopilotPatchApplyOptions,
+): ContentCopilotPatchApplyResult {
+  const allowed = new Set(allowedContentCopilotFields(options.resourceType));
   const selected = new Set(selectedFields);
+  if (options.sourceFingerprint !== options.currentFingerprint) {
+    return { ok: false, value: null, error: "COPILOT_STALE_PROPOSAL" };
+  }
+  if ([...selected].some((field) => !allowed.has(field)) || patches.some((patch) => !allowed.has(patch.field))) {
+    return { ok: false, value: null, error: "COPILOT_UNKNOWN_FIELD" };
+  }
   const next = { ...current };
   for (const patch of patches) {
-    if (selected.has(patch.field) && patch.unsupportedClaims.length === 0) next[patch.field] = patch.after;
+    if (!selected.has(patch.field) || patch.unsupportedClaims.length > 0) continue;
+    if (!sameContentCopilotValue(current[patch.field] ?? null, patch.before)) {
+      return { ok: false, value: null, error: "COPILOT_PATCH_CONFLICT" };
+    }
+    next[patch.field] = patch.after;
   }
-  return next;
+  return { ok: true, value: next, error: null };
+}
+
+function sameContentCopilotValue(left: ContentCopilotValue, right: ContentCopilotValue) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

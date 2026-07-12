@@ -4,7 +4,9 @@ import {
   allowedContentCopilotFields,
   applySelectedContentPatches,
   buildContentFingerprint,
+  contentCopilotRequestSchema,
   normalizeCitationUrl,
+  validatePersistedContentCopilotRecord,
   validateContentCopilotProposal,
 } from "./content-copilot.ts";
 
@@ -52,8 +54,28 @@ test("only selected supported patches are applied", () => {
       { field: "description", before: "old description", after: "new description", reason: "clearer", confidence: "high", evidenceIds: [], unsupportedClaims: ["uncited travel time"] },
     ],
     ["title_zh", "description"],
+    { resourceType: "listing", sourceFingerprint: "same", currentFingerprint: "same" },
   );
-  assert.deepEqual(result, { title_zh: "new title", description: "old description" });
+  assert.deepEqual(result, { ok: true, value: { title_zh: "new title", description: "old description" }, error: null });
+});
+
+test("patch application rejects stale, conflicting, and non-allowlisted changes", () => {
+  const patch = { field: "title_zh", before: "old title", after: "new title", reason: "clearer", confidence: "high", evidenceIds: [], unsupportedClaims: [] };
+  assert.equal(applySelectedContentPatches({}, [patch], ["title_zh"], { resourceType: "listing", sourceFingerprint: "old", currentFingerprint: "new" }).error, "COPILOT_STALE_PROPOSAL");
+  assert.equal(applySelectedContentPatches({ title_zh: "changed" }, [patch], ["title_zh"], { resourceType: "listing", sourceFingerprint: "same", currentFingerprint: "same" }).error, "COPILOT_PATCH_CONFLICT");
+  assert.equal(applySelectedContentPatches({ price: "1" }, [{ ...patch, field: "price" }], ["price"], { resourceType: "listing", sourceFingerprint: "same", currentFingerprint: "same" }).error, "COPILOT_UNKNOWN_FIELD");
+});
+
+test("web evidence requires an https citation and requests default to internal research", () => {
+  const missingCitation = validateContentCopilotProposal({ resourceType: "article", sourceFingerprint: "1234567890abcdef", patches: [], evidence: [{ id: "web-1", type: "web", title: "Unsafe", url: "http://example.com", excerpt: "x" }], warnings: [] });
+  assert.equal(missingCitation.ok, false);
+  assert.equal(missingCitation.error, "COPILOT_PROPOSAL_INVALID");
+  assert.equal(contentCopilotRequestSchema.safeParse({ resourceType: "article", resourceId: "11111111-1111-4111-8111-111111111111", action: "improve", selectedFields: ["title"], tone: "professional_property", targetLanguage: "zh-HK" }).data.researchMode, "internal");
+});
+
+test("unsaved records receive a stable save-first result", () => {
+  assert.equal(validatePersistedContentCopilotRecord({ resourceId: "11111111-1111-4111-8111-111111111111", persisted: false }).error, "COPILOT_SAVE_FIRST");
+  assert.equal(validatePersistedContentCopilotRecord({ resourceId: "11111111-1111-4111-8111-111111111111", persisted: true }).ok, true);
 });
 
 test("citation normalization accepts https only", () => {
