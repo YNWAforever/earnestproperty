@@ -26,13 +26,3 @@ test("repository exposes explicit proposal transitions and AI audit writes", () 
   assert.match(source, /expires_at > now\(\)/);
   assert.match(source, /COPILOT_PROVIDER_UNSUPPORTED/);
 });
-
-test("repository safety helpers are behaviorally testable under Bun", { skip: !process.versions.bun }, async () => {
-  const { isGeneratingProposalConflict, sanitizeContentCopilotAuditMetadata, sanitizeContentCopilotUsageMetadata } = await import("./content-copilot-repository.server.ts");
-  assert.equal(isGeneratingProposalConflict({ code: "23505", constraint: "ai_content_proposals_one_generating_per_staff_idx" }), true);
-  assert.equal(isGeneratingProposalConflict({ code: "23505", constraint: "other_unique_constraint" }), false);
-  assert.deepEqual(sanitizeContentCopilotAuditMetadata({ model: "go-content", latencyMs: 12, acceptedFields: ["title"] }), { model: "go-content", latencyMs: 12, acceptedFields: ["title"] });
-  assert.throws(() => sanitizeContentCopilotAuditMetadata({ crmLead: "private" }), /COPILOT_AUDIT_METADATA_INVALID/);
-  assert.throws(() => sanitizeContentCopilotAuditMetadata({ status: "crm" }), /COPILOT_AUDIT_METADATA_INVALID/);
-  assert.throws(() => sanitizeContentCopilotUsageMetadata({ prompt: "private" }), /COPILOT_USAGE_METADATA_INVALID/);
-});

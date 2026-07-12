@@ -193,7 +193,7 @@ export async function failContentProposal(input: FailContentProposalInput) {
        AND status = 'generating'
        AND expires_at > now()
      RETURNING *`,
-    [input.errorCode, input.latencyMs ?? null, JSON.stringify(input.usageMetadata ?? {}), input.proposalId, input.staffId],
+    [errorCode, input.latencyMs ?? null, JSON.stringify(sanitizeContentCopilotUsageMetadata(input.usageMetadata)), input.proposalId, input.staffId],
   );
   return requireTransition(rows[0], input.proposalId, input.staffId);
 }
@@ -249,6 +249,7 @@ export type ContentCopilotAuditMetadata = Partial<{
 const CONTENT_COPILOT_RESOURCE_TYPES = new Set<ContentCopilotResourceType>(["estate", "article", "faq", "video", "listing"]);
 const CONTENT_PROPOSAL_STATUSES = new Set<ContentProposalStatus>(["generating", "generated", "partially_applied", "applied", "rejected", "expired", "failed"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CONTENT_COPILOT_AUDIT_ACTIONS = new Set(["content_copilot.generated", "content_copilot.failed", "content_copilot.applied", "content_copilot.rejected", "content_copilot.stale"]);
 
 export function sanitizeContentCopilotAuditMetadata(metadata: Record<string, unknown> | undefined, resourceType?: ContentCopilotResourceType): ContentCopilotAuditMetadata {
   const allowed = new Set(["provider", "model", "latencyMs", "researchMode", "status", "errorCode", "acceptedFields", "citationCount", "warningsCount"]);
@@ -293,8 +294,8 @@ export function sanitizeContentCopilotUsageMetadata(metadata: Record<string, unk
   return result;
 }
 
-function assertContentCopilotAuditIdentity(input: { actorId: string; proposalId: string; resourceType: string; resourceId: string }) {
-  if (!UUID_PATTERN.test(input.actorId) || !UUID_PATTERN.test(input.proposalId) || !UUID_PATTERN.test(input.resourceId) || !CONTENT_COPILOT_RESOURCE_TYPES.has(input.resourceType as ContentCopilotResourceType)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+function assertContentCopilotAuditIdentity(input: { actorId: string; proposalId: string; resourceType: string; resourceId: string; action: string }) {
+  if (!CONTENT_COPILOT_AUDIT_ACTIONS.has(input.action) || !UUID_PATTERN.test(input.actorId) || !UUID_PATTERN.test(input.proposalId) || !UUID_PATTERN.test(input.resourceId) || !CONTENT_COPILOT_RESOURCE_TYPES.has(input.resourceType as ContentCopilotResourceType)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
 }
 
 export async function writeContentCopilotAudit(input: {
