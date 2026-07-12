@@ -54,7 +54,7 @@ The server owns an explicit allowlist per resource type. Unknown fields are reje
 - Article: `title`, `excerpt`, `content`, `seo_title`, `seo_description`.
 - FAQ: `question`, `answer`.
 - Video: `title`, `description`.
-- Listing: `title_zh`, `title_en`, `description`, `features`.
+- Listing: `title_zh`, `title_en`, `description`, `features`, `seo_title`, `seo_description`.
 
 Structured facts such as price, rent, area, bedrooms, bathrooms, floor, orientation, address, estate, district, listing status, publication state, IDs, ownership, and timestamps are context-only. The Copilot cannot patch them.
 
@@ -158,6 +158,8 @@ Existing `ai_audit_logs` records high-level events: proposal generated, generati
 ## Editor Workflow
 
 Each supported editor gets a fixed-width side panel that does not resize the form when loading or displaying results.
+
+The Copilot is available only for persisted records with a UUID. New CMS records and listings show a disabled panel asking staff to save the record once before generating proposals, ensuring the server can reload authoritative facts and enforce a stable fingerprint.
 
 ### Request Controls
 
