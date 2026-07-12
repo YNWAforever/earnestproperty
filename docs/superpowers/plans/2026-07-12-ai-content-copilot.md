@@ -330,6 +330,8 @@ git add neon/migrations/20260712120000_ai_content_proposals.sql src/lib/ai/conte
 git commit -m "feat(ai): persist content copilot proposals"
 ```
 
+Task 2 hardening: startContentProposal uses getSql().transaction with a staff advisory lock query before the rolling-hour count/insert. Completion requires resourceType, resourceId, and action context; provider is opencode_go-only; expiry, audit metadata, usage metadata, and error codes are bounded. The repository behavior test is src/lib/ai/content-copilot-repository.behavior.test.ts and runs with bun:test.
+
 ### Task 3: OpenCode Go Provider Adapter
 
 **Files:**
