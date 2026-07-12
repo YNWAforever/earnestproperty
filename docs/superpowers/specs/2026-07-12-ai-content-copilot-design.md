@@ -118,7 +118,7 @@ OpenCode Go returns strict JSON containing:
 - Proposed patches keyed by allowed field name.
 - Existing and proposed values.
 - Reason for each change.
-- Claim-level evidence references.
+- Claim-level evidence references. Each patch declares subjective, factual_internal, or factual_web; factual web patches must reference at least one HTTPS web citation.
 - Confidence: `high`, `medium`, or `low`.
 - Warnings and unsupported claims.
 - Language and tone metadata.

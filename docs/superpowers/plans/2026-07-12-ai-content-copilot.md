@@ -65,7 +65,7 @@ test("fingerprints are stable across object key order and change with source con
 test("proposal validation rejects unknown fields and unsupported selectable claims", () => {
   const result = validateContentCopilotProposal({
     resourceType: "listing",
-    sourceFingerprint: "1234567890abcdef",
+    sourceFingerprint: "a".repeat(64),
     patches: [{
       field: "price",
       before: null,
@@ -74,6 +74,7 @@ test("proposal validation rejects unknown fields and unsupported selectable clai
       confidence: "low",
       evidenceIds: [],
       unsupportedClaims: ["Estimated price"],
+      claimType: "factual_web",
     }],
     evidence: [],
     warnings: [],
@@ -91,7 +92,7 @@ test("only selected supported patches are applied", () => {
     ],
     ["title_zh", "description"],
   );
-  assert.deepEqual(result, { title_zh: "深井海景三房", description: "舊描述" });
+  assert.deepEqual(result, { ok: true, value: { title_zh: "深井海景三房", description: "舊描述" }, error: null });
 });
 
 test("citation normalization accepts https only", () => {
@@ -137,11 +138,11 @@ export type ContentCopilotRequest = {
 };
 
 export type ContentCopilotEvidence = { id: string; type: "internal" | "web"; title: string; url: string | null; excerpt: string };
-export type ContentCopilotPatch = { field: string; before: ContentCopilotValue; after: ContentCopilotValue; reason: string; confidence: "high" | "medium" | "low"; evidenceIds: string[]; unsupportedClaims: string[] };
+export type ContentCopilotPatch = { field: string; before: ContentCopilotValue; after: ContentCopilotValue; reason: string; confidence: "high" | "medium" | "low"; evidenceIds: string[]; unsupportedClaims: string[]; claimType: "subjective" | "factual_internal" | "factual_web" };
 export type ContentCopilotProposal = { resourceType: ContentCopilotResourceType; sourceFingerprint: string; patches: ContentCopilotPatch[]; evidence: ContentCopilotEvidence[]; warnings: string[] };
 
 const valueSchema = z.union([z.string().max(12000), z.array(z.string().max(300)).max(30), z.null()]);
-const patchSchema = z.object({ field: z.string(), before: valueSchema, after: valueSchema, reason: z.string().max(500), confidence: z.enum(["high", "medium", "low"]), evidenceIds: z.array(z.string()).max(20), unsupportedClaims: z.array(z.string().max(500)).max(20) });
+const patchSchema = z.object({ field: z.string(), before: valueSchema, after: valueSchema, reason: z.string().max(500), confidence: z.enum(["high", "medium", "low"]), evidenceIds: z.array(z.string()).max(20), unsupportedClaims: z.array(z.string().max(500)).max(20), claimType: z.enum(["subjective", "factual_internal", "factual_web"]) });
 
 export function allowedContentCopilotFields(resourceType: ContentCopilotResourceType) { return [...CONTENT_COPILOT_RESOURCE_FIELDS[resourceType]]; }
 export async function buildContentFingerprint(value: Record<string, unknown>) { const stable = JSON.stringify(Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)))); const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(stable)); return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
@@ -154,7 +155,7 @@ Add these schemas and functions to the same module:
 const resourceTypeSchema = z.enum(["estate", "article", "faq", "video", "listing"]);
 const actionSchema = z.enum(["generate", "improve", "shorten", "translate", "seo_optimize", "fact_check"]);
 const evidenceSchema = z.object({ id: z.string().min(1).max(80), type: z.enum(["internal", "web"]), title: z.string().max(300), url: z.string().nullable(), excerpt: z.string().max(1000) });
-const proposalSchema = z.object({ resourceType: resourceTypeSchema, sourceFingerprint: z.string().min(16).max(128), patches: z.array(patchSchema).max(12), evidence: z.array(evidenceSchema).max(20), warnings: z.array(z.string().max(500)).max(20) });
+const proposalSchema = z.object({ resourceType: resourceTypeSchema, sourceFingerprint: z.string().regex(/^[0-9a-f]{64}$/), patches: z.array(patchSchema).max(12), evidence: z.array(evidenceSchema).max(20), warnings: z.array(z.string().max(500)).max(20) });
 
 export const contentCopilotRequestSchema = z.object({
   resourceType: resourceTypeSchema,
@@ -163,7 +164,7 @@ export const contentCopilotRequestSchema = z.object({
   selectedFields: z.array(z.string()).min(1).max(6),
   tone: z.enum(["professional_property", "concise_portal", "cantonese_conversational", "neutral_informational"]),
   targetLanguage: z.enum(["zh-HK", "en"]).nullable(),
-  researchMode: z.enum(["internal", "web"]),
+  researchMode: z.enum(["internal", "web"]).default("internal"),
 }).superRefine((request, context) => {
   const allowed = new Set(allowedContentCopilotFields(request.resourceType));
   for (const field of request.selectedFields) if (!allowed.has(field)) context.addIssue({ code: "custom", message: "COPILOT_UNKNOWN_FIELD", path: ["selectedFields"] });
@@ -189,7 +190,7 @@ export function validateContentCopilotProposal(value: unknown) {
   return { ok: true as const, value: parsed.data, error: null };
 }
 
-export function applySelectedContentPatches(current: Record<string, ContentCopilotValue>, patches: ContentCopilotPatch[], selectedFields: string[]) {
+export function applySelectedContentPatches(current: Record<string, ContentCopilotValue>, patches: ContentCopilotPatch[], selectedFields: string[], options: ContentCopilotPatchApplyOptions) {
   const selected = new Set(selectedFields);
   const next = { ...current };
   for (const patch of patches) {
@@ -211,6 +212,8 @@ Expected: all Content Copilot policy tests PASS.
 git add src/lib/ai/content-copilot.ts src/lib/ai/content-copilot.test.mjs
 git commit -m "feat(ai): define content copilot proposal policy"
 ```
+
+Task 1 hardening: claimType factual_web requires at least one referenced web evidence item; factual_internal requires evidence. applySelectedContentPatches returns a result object and requires resourceType, a 64-character source fingerprint, and the freshly recomputed current fingerprint before applying patches.
 
 ### Task 2: Proposal Migration and Neon Repository
 
