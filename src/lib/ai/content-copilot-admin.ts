@@ -30,11 +30,11 @@ const decideServer = createServerFn({ method: "POST" })
   });
 
 export async function generateAdminContentProposal(options: { data: ContentCopilotRequest }) {
-  return callStaffServerFn(() => generateServer(withStaffAuthHeaders(options)));
+  return callStaffServerFn(() => generateServer(await withStaffAuthHeaders(options)));
 }
 
 export async function decideAdminContentProposal(options: { data: z.infer<typeof decisionSchema> }) {
-  return callStaffServerFn(() => decideServer(withStaffAuthHeaders(options)));
+  return callStaffServerFn(() => decideServer(await withStaffAuthHeaders(options)));
 }
 
 async function requireStaffAccess(request: Request, roles: Array<"admin" | "manager" | "agent">) {

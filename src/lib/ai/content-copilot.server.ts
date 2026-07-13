@@ -131,7 +131,7 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
         return failure("COPILOT_STALE_PROPOSAL");
       }
 
-      const allowed = new Set(allowedContentCopilotFields(record.resourceType));
+      const allowed = new Set<string>(allowedContentCopilotFields(record.resourceType));
       const acceptedFields = input.decision === "reject" ? [] : [...new Set(input.acceptedFields)];
       if (acceptedFields.some((field) => !allowed.has(field) || !record.selectedFields.includes(field))) return failure("COPILOT_UNKNOWN_FIELD");
       try {
