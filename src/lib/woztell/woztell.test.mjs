@@ -177,3 +177,15 @@ test("admin send route gates replies through a fetched conversation", () => {
   assert.match(sendRoute, /status,\s*payload/);
   assert.match(sendRoute, /result\.ok \? "sent" : "failed"/);
 });
+
+test("webhook validates the raw body before parsing and deduplicates messages", () => {
+  const webhookRoute = read("src/routes/api.woztell.webhook.ts");
+
+  assert.match(webhookRoute, /request\.text\(\)/);
+  assert.match(webhookRoute, /x-woztell-signature/);
+  assert.match(webhookRoute, /try\s*\{[\s\S]*JSON\.parse\(raw/);
+  assert.match(webhookRoute, /INVALID_JSON/);
+  assert.match(webhookRoute, /external_message_id/);
+  assert.match(webhookRoute, /ON CONFLICT \(external_message_id\) DO NOTHING/);
+  assert.match(webhookRoute, /ORDER BY \(whatsapp_member_id = \$2\)/);
+});

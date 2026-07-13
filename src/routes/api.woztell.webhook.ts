@@ -27,7 +27,12 @@ export const Route = createFileRoute("/api/woztell/webhook")({
           return Response.json({ ok: false, error: "Invalid signature" }, { status: 401 });
         }
 
-        const payload = JSON.parse(raw || "{}") as Record<string, unknown>;
+        let payload: Record<string, unknown>;
+        try {
+          payload = JSON.parse(raw || "{}") as Record<string, unknown>;
+        } catch {
+          return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 });
+        }
         const event = normalizeWoztellEvent(payload);
         const phone = event.direction === "inbound" ? event.fromPhone : event.toPhone;
         const normalizedPhone = normalizeAdminPhone(phone);
@@ -42,8 +47,10 @@ export const Route = createFileRoute("/api/woztell/webhook")({
           return Response.json({ ok: true, skipped: "no-identity" });
         }
 
-        const lastInboundAt = event.direction === "inbound" ? event.timestamp : null;
-        const optedOut = isOptOutText(event.text);
+        const isInbound = event.direction === "inbound";
+        const lastInboundAt = isInbound ? event.timestamp : null;
+        const optIn = isInbound;
+        const optedOut = isInbound && isOptOutText(event.text);
 
         // Find an existing contact by phone OR by member id, then INSERT/UPDATE by
         // primary id. NULLs are distinct in Postgres, so relying solely on
@@ -54,7 +61,7 @@ export const Route = createFileRoute("/api/woztell/webhook")({
           SELECT id FROM crm_contacts
           WHERE (normalized_phone IS NOT NULL AND normalized_phone = $1)
              OR (whatsapp_member_id IS NOT NULL AND whatsapp_member_id = $2)
-          ORDER BY (normalized_phone = $1) DESC
+          ORDER BY (whatsapp_member_id = $2) DESC, (normalized_phone = $1) DESC
           LIMIT 1
           `,
           [normalizedPhone, memberId],
@@ -69,9 +76,9 @@ export const Route = createFileRoute("/api/woztell/webhook")({
               phone = COALESCE(phone, $3),
               normalized_phone = COALESCE(normalized_phone, $4),
               whatsapp_member_id = COALESCE(whatsapp_member_id, $5),
-              opt_in_whatsapp = true,
-              opted_out_whatsapp = opted_out_whatsapp OR $6,
-              last_inbound_at = COALESCE($7, last_inbound_at),
+              opt_in_whatsapp = opt_in_whatsapp OR $6,
+              opted_out_whatsapp = opted_out_whatsapp OR $7,
+              last_inbound_at = COALESCE($8, last_inbound_at),
               updated_at = now()
             WHERE id = $1
             RETURNING id
@@ -82,6 +89,7 @@ export const Route = createFileRoute("/api/woztell/webhook")({
               phone,
               normalizedPhone,
               memberId,
+              optIn,
               optedOut,
               lastInboundAt,
             ],
@@ -94,10 +102,10 @@ export const Route = createFileRoute("/api/woztell/webhook")({
               name, phone, normalized_phone, whatsapp_member_id, source,
               opt_in_whatsapp, opted_out_whatsapp, last_inbound_at
             )
-            VALUES ($1, $2, $3, $4, 'whatsapp', true, $5, $6)
+            VALUES ($1, $2, $3, $4, 'whatsapp', $5, $6, $7)
             RETURNING id
             `,
-            [event.memberName, phone, normalizedPhone, memberId, optedOut, lastInboundAt],
+            [event.memberName, phone, normalizedPhone, memberId, optIn, optedOut, lastInboundAt],
           );
           contactId = stringOrEmpty(inserted[0]?.id);
         }
@@ -108,8 +116,11 @@ export const Route = createFileRoute("/api/woztell/webhook")({
         let conversationId: string | null = null;
         if (memberId) {
           const existingConversations = await queryRows<{ id: string }>(
-            `SELECT id FROM whatsapp_conversations WHERE woztell_member_id = $1 LIMIT 1`,
-            [memberId],
+            `SELECT id FROM whatsapp_conversations
+             WHERE woztell_member_id = $1 AND (channel_id = $2 OR channel_id IS NULL)
+             ORDER BY (channel_id = $2) DESC
+             LIMIT 1`,
+            [memberId, event.channelId],
           );
           if (existingConversations[0]?.id) {
             const updated = await queryRows<{ id: string }>(
