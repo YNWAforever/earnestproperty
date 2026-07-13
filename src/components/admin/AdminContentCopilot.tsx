@@ -97,10 +97,10 @@ export function AdminContentCopilot({
   onApply: (patch: Record<string, ContentCopilotValue>) => void;
 }) {
   const valueFieldKey = Object.keys(values).sort().join("|");
-  const availableFields = useMemo(
-    () => allowedContentCopilotFields(resourceType).filter((field) => Object.hasOwn(values, field)),
-    [resourceType, valueFieldKey],
-  );
+  const availableFields = useMemo(() => {
+    const valueFields = new Set(valueFieldKey ? valueFieldKey.split("|") : []);
+    return allowedContentCopilotFields(resourceType).filter((field) => valueFields.has(field));
+  }, [resourceType, valueFieldKey]);
   const [state, setState] = useState<PanelState>(resourceId ? "ready" : "disabled-unsaved");
   const [action, setAction] = useState<ContentCopilotAction>("improve");
   const [selectedFields, setSelectedFields] = useState<string[]>(() => availableFields.slice(0, 6));
