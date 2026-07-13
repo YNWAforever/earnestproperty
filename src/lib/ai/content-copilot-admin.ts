@@ -30,11 +30,11 @@ const decideServer = createServerFn({ method: "POST" })
   });
 
 export async function generateAdminContentProposal(options: { data: ContentCopilotRequest }) {
-  return callStaffServerFn(() => generateServer(await withStaffAuthHeaders(options)));
+  return callStaffServerFn(async () => generateServer(await withStaffAuthHeaders(options)));
 }
 
 export async function decideAdminContentProposal(options: { data: z.infer<typeof decisionSchema> }) {
-  return callStaffServerFn(() => decideServer(await withStaffAuthHeaders(options)));
+  return callStaffServerFn(async () => decideServer(await withStaffAuthHeaders(options)));
 }
 
 async function requireStaffAccess(request: Request, roles: Array<"admin" | "manager" | "agent">) {
@@ -46,8 +46,13 @@ async function callStaffServerFn<T>(call: () => Promise<T>) {
   try {
     return await call();
   } catch (error) {
-    if (error instanceof Response && (error.status === 401 || error.status === 403)) {
-      return { ok: false, proposal: null, error: error.status === 401 ? "COPILOT_UNAUTHORIZED" : "COPILOT_FORBIDDEN" } as T;
+    const status = error instanceof Response
+      ? error.status
+      : error && typeof error === "object" && "status" in error
+        ? Number((error as { status?: unknown }).status)
+        : 0;
+    if (status === 401 || status === 403) {
+      return { ok: false, proposal: null, error: status === 401 ? "COPILOT_UNAUTHORIZED" : "COPILOT_FORBIDDEN" } as T;
     }
     throw error;
   }

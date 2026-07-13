@@ -55,8 +55,15 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
       const parsed = contentCopilotRequestSchema.safeParse(request);
       if (!parsed.success) return failure("COPILOT_REQUEST_INVALID");
       const normalized = parsed.data;
-      const context = await loadContext(normalized, actor);
-      const sourceFingerprint = await buildContentFingerprint(context.resource);
+      let context: LoadedContentContext;
+      let sourceFingerprint: string;
+      try {
+        context = await loadContext(normalized, actor);
+        sourceFingerprint = await buildContentFingerprint(context.resource);
+      } catch (error) {
+        if (isResponseError(error)) throw error;
+        return failure(stableError(errorCodeOf(error), "COPILOT_CONTEXT_FAILED"));
+      }
       let proposalRecord: ProposalRecord | null = null;
 
       try {
@@ -88,11 +95,11 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
           return failure(stableError(generated.error, "COPILOT_GENERATION_FAILED"));
         }
 
-        const checked = validateGeneratedProposal(generated.value, normalized, sourceFingerprint, context.resource);
+        const checked = validateGeneratedProposal(generated.value, normalized, sourceFingerprint, context.resource, evidence);
         if (!checked.ok) throw copilotError(checked.error);
         const finalProposal: ContentCopilotProposal = {
           ...checked.value,
-          evidence: checked.value.evidence.length ? checked.value.evidence : evidence,
+          evidence,
           warnings: [...warnings, ...checked.value.warnings],
         };
         const completed = await completeProposal({
@@ -106,12 +113,19 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
           usageMetadata: generated.usageMetadata,
           model: generated.model,
         });
-        await writeAudit({ actorId: actor.staffId, action: "content_copilot.generated", proposalId: proposalRecord.id, resourceType: normalized.resourceType, resourceId: normalized.resourceId, metadata: { provider: "opencode_go", model: generated.model ?? "", latencyMs: generated.latencyMs, researchMode: normalized.researchMode, status: "generated", citationCount: finalProposal.evidence.length, warningsCount: finalProposal.warnings.length } });
+        try {
+          await writeAudit({ actorId: actor.staffId, action: "content_copilot.generated", proposalId: proposalRecord.id, resourceType: normalized.resourceType, resourceId: normalized.resourceId, metadata: { provider: "opencode_go", model: generated.model ?? "", latencyMs: generated.latencyMs, researchMode: normalized.researchMode, status: "generated", citationCount: finalProposal.evidence.length, warningsCount: finalProposal.warnings.length } });
+        } catch {
+          // A completed proposal remains reviewable even if audit persistence is unavailable.
+        }
         return { ok: true, proposal: completed, error: null };
       } catch (error) {
         if (proposalRecord) {
           const errorCode = stableError(errorCodeOf(error), "COPILOT_GENERATION_FAILED");
           try { await failProposal({ staffId: actor.staffId, proposalId: proposalRecord.id, errorCode }); } catch { /* preserve the original stable result */ }
+          try {
+            await writeAudit({ actorId: actor.staffId, action: "content_copilot.failed", proposalId: proposalRecord.id, resourceType: normalized.resourceType, resourceId: normalized.resourceId, metadata: { provider: "opencode_go", status: "failed", errorCode } });
+          } catch { /* preserve the original stable result */ }
         }
         if (isResponseError(error)) throw error;
         return failure(stableError(errorCodeOf(error), "COPILOT_GENERATION_FAILED"));
@@ -124,8 +138,15 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
       if (record.status === "expired" || (record.expiresAt && Date.parse(record.expiresAt) <= now())) return failure("COPILOT_PROPOSAL_EXPIRED");
 
       const request = proposalRequest(record);
-      const context = await loadContext(request, actor);
-      const currentFingerprint = await buildContentFingerprint(context.resource);
+      let context: LoadedContentContext;
+      let currentFingerprint: string;
+      try {
+        context = await loadContext(request, actor);
+        currentFingerprint = await buildContentFingerprint(context.resource);
+      } catch (error) {
+        if (isResponseError(error)) throw error;
+        return failure(stableError(errorCodeOf(error), "COPILOT_CONTEXT_FAILED"));
+      }
       if (currentFingerprint !== record.sourceFingerprint) {
         await writeAudit({ actorId: actor.staffId, action: "content_copilot.stale", proposalId: record.id, resourceType: record.resourceType, resourceId: record.resourceId, metadata: { status: "generated", errorCode: "COPILOT_STALE_PROPOSAL" } });
         return failure("COPILOT_STALE_PROPOSAL");
@@ -146,13 +167,15 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
   };
 }
 
-function validateGeneratedProposal(value: unknown, request: ContentCopilotRequest, fingerprint: string, resource: Record<string, unknown>) {
+function validateGeneratedProposal(value: unknown, request: ContentCopilotRequest, fingerprint: string, resource: Record<string, unknown>, trustedEvidence: ContentCopilotEvidence[]) {
   const result = validateContentCopilotProposal(value);
   if (!result.ok) return result;
   if (result.value.resourceType !== request.resourceType || result.value.sourceFingerprint !== fingerprint) return { ok: false as const, value: null, error: "COPILOT_PROPOSAL_CONTEXT_MISMATCH" };
   const selected = new Set(request.selectedFields);
+  const trustedEvidenceIds = new Set(trustedEvidence.map((item) => item.id));
   for (const patch of result.value.patches) {
     if (!selected.has(patch.field)) return { ok: false as const, value: null, error: "COPILOT_UNKNOWN_FIELD" };
+    if (patch.evidenceIds.some((id) => !trustedEvidenceIds.has(id))) return { ok: false as const, value: null, error: "COPILOT_EVIDENCE_MISSING" };
     if (JSON.stringify(resource[patch.field] ?? null) !== JSON.stringify(patch.before)) return { ok: false as const, value: null, error: "COPILOT_PATCH_CONFLICT" };
   }
   return result;

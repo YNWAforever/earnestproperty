@@ -116,7 +116,7 @@ async function fetchResource(queryRows: QueryRows, request: ContentCopilotReques
        s.name_zh AS agent_name_zh, s.name_en AS agent_name_en
      FROM properties p
      LEFT JOIN estates e ON e.id = p.estate_id
-     LEFT JOIN staff_users s ON s.id = p.agent_id
+     LEFT JOIN staff_users s ON s.id = p.agent_id\n       AND s.active = true\n       AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
      WHERE ${ownership}
      LIMIT 1`,
     params,

@@ -38,19 +38,21 @@ test("context loader uses explicit projections, public knowledge limit, and no C
   const loader = createContentCopilotContextLoader({
     queryRows: async (sql, params) => {
       calls.push([sql, params]);
-      return [{ id: articleRequest.resourceId, title: "Sham Tseng market guide", content: "", district_slug: "sham-tseng" }];
+      return [{ id: listingRequest.resourceId, title_zh: "Sham Tseng listing", description: "", district_slug: "sham-tseng", status: "active" }];
     },
     searchPublicKnowledge: async (input) => {
       assert.equal(input.limit, 6);
       return [{ id: "chunk-1", title: "Sham Tseng", chunk_text: "public facts", url_path: "/estate/sham-tseng" }];
     },
   });
-  const context = await loader.load(articleRequest, managerActor);
-  assert.equal(context.resource.id, articleRequest.resourceId);
+  const context = await loader.load(listingRequest, managerActor);
+  assert.equal(context.resource.id, listingRequest.resourceId);
   assert.equal(context.internalEvidence[0].type, "internal");
   assert.equal(calls.length, 1);
-  assert.doesNotMatch(calls[0][0], /SELECT\\s+\\*/i);
+  assert.doesNotMatch(calls[0][0], /SELECT\s+\*/i);
   assert.doesNotMatch(calls[0][0], /crm|lead|contact|whatsapp|campaign|staff.?note/i);
+  assert.match(calls[0][0], /s\.active = true/);
+  assert.match(calls[0][0], /show_on_website/);
 });
 
 test("generation reloads authoritative record and excludes CRM data from prompts", async () => {
@@ -99,6 +101,30 @@ test("provider failure marks proposal failed and clears the generating lease", a
   assert.equal(failedId, "proposal-1");
 });
 
+test("generated model evidence cannot replace trusted evidence", async () => {
+  const service = createContentCopilotService({
+    ...makeServiceDeps(),
+    generate: async ({ context }) => ({
+      ok: true,
+      value: {
+        resourceType: "article",
+        sourceFingerprint: await buildContentFingerprint(context.resource),
+        patches: [{ field: "title", before: context.resource.title, after: "unsupported fact", reason: "model", confidence: "high", evidenceIds: ["model-only"], unsupportedClaims: [], claimType: "factual_web" }],
+        evidence: [{ id: "model-only", type: "web", title: "Untrusted", url: "https://example.com/model", excerpt: "Untrusted" }],
+        warnings: [],
+      },
+      model: "go-content",
+      latencyMs: 10,
+      usageMetadata: {},
+      error: null,
+    }),
+  });
+
+  const result = await service.generateContentProposal(articleRequest, managerActor);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "COPILOT_EVIDENCE_MISSING");
+});
 test("decision rejects stale fingerprints before recording applied status", async () => {
   let decisionWritten = false;
   const service = createContentCopilotService({
