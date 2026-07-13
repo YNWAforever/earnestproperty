@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import {
   allowedContentCopilotFields,
   applySelectedContentPatches,
+  buildContentFingerprint,
   type ContentCopilotAction,
   type ContentCopilotPatch,
   type ContentCopilotProposal,
@@ -86,11 +87,13 @@ export function AdminContentCopilot({
   resourceType,
   resourceId,
   values,
+  fingerprintValues,
   onApply,
 }: {
   resourceType: ContentCopilotResourceType;
   resourceId: string | null;
   values: Record<string, ContentCopilotValue>;
+  fingerprintValues?: Record<string, unknown>;
   onApply: (patch: Record<string, ContentCopilotValue>) => void;
 }) {
   const availableFields = useMemo(
@@ -114,11 +117,15 @@ export function AdminContentCopilot({
     : "disabled-unsaved";
 
   useEffect(() => {
+    setState(resourceId ? "ready" : "disabled-unsaved");
+    setProposal(null);
+    setAcceptedFields([]);
+    setError(null);
     setSelectedFields((current) => {
       const retained = current.filter((field) => new Set<string>(availableFields).has(field));
       return retained.length ? retained : availableFields.slice(0, 6);
     });
-  }, [availableFields]);
+  }, [availableFields, resourceId]);
 
   function toggleField(field: string) {
     setSelectedFields((current) =>
@@ -191,7 +198,7 @@ export function AdminContentCopilot({
       const patchResult = applySelectedContentPatches(values, proposal.patches, acceptedFields, {
         resourceType,
         sourceFingerprint: proposal.sourceFingerprint,
-        currentFingerprint: proposal.sourceFingerprint,
+        currentFingerprint: await buildContentFingerprint(fingerprintValues ?? values),
       });
       if (!patchResult.ok) {
         setError(patchResult.error);

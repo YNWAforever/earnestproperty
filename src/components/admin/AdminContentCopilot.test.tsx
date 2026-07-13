@@ -5,7 +5,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { AdminContentCopilot } from "./AdminContentCopilot";
 import {
   buildContentCopilotPartialUpdate,
-  decideAndApplyContentCopilotProposal,
   contentCopilotCharacterCount,
   getContentCopilotPatchSelection,
 } from "./content-copilot-ui";

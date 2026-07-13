@@ -191,6 +191,7 @@ export type AdminPropertyInput = {
   id?: string;
   listing_no: string;
   title_zh: string;
+  title_en: string | null;
   deal_type: "sale" | "rent";
   estate_id: string | null;
   district_slug: string;
@@ -202,6 +203,7 @@ export type AdminPropertyInput = {
   bathrooms: number | null;
   floor: string | null;
   description: string | null;
+  features: string[];
   status: "draft" | "active" | "sold" | "rented" | "offline";
   featured: boolean;
   images: string[];
@@ -464,6 +466,8 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.seo_description ?? null,
     input.video_url ?? null,
     agentId,
+    input.title_en ?? null,
+    input.features ?? [],
   ];
 
   const rows = input.id
@@ -490,8 +494,10 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
           seo_description = $18,
           video_url = $19,
           agent_id = $20,
+          title_en = $21,
+          features = $22::text[],
           updated_at = now()
-        WHERE id = $21${scope !== null ? " AND agent_id = $22" : ""}
+        WHERE id = $23${scope !== null ? " AND agent_id = $24" : ""}
         RETURNING id
         `,
         scope !== null ? [...params, input.id, scope] : [...params, input.id],
@@ -501,9 +507,9 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
         INSERT INTO properties (
           listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
           saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
-          seo_title, seo_description, video_url, agent_id
+          seo_title, seo_description, video_url, agent_id, title_en, features
         )
-        VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20)
+        VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20, $21, $22::text[])
         RETURNING id
         `,
         params,

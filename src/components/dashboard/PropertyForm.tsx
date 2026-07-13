@@ -13,7 +13,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
 import { ImageUploader } from "./ImageUploader";
+import {
+  applyPropertyContentCopilotPatch,
+  buildPropertyContentCopilotFields,
+  buildPropertyContentCopilotFingerprintValues,
+  normalizePropertyFeatures,
+} from "./property-form-content";
 import {
   fetchAdminAgents,
   fetchAdminEstateOptions,
@@ -40,6 +47,7 @@ function optionalInteger(max?: number) {
 const schema = z.object({
   listing_no: z.string().trim().min(1, "請輸入編號").max(40),
   title_zh: z.string().trim().min(1, "請輸入標題").max(200),
+  title_en: z.string().trim().max(200).optional().or(z.literal("")),
   deal_type: z.enum(["sale", "rent"]),
   estate_id: z.string().uuid().optional().or(z.literal("")),
   district_slug: z.string().trim().min(1).max(60),
@@ -51,6 +59,7 @@ const schema = z.object({
   bathrooms: optionalInteger(20),
   floor: z.string().trim().max(40).optional().or(z.literal("")),
   description: z.string().trim().max(4000).optional().or(z.literal("")),
+  features: z.string().trim().max(3000).optional().or(z.literal("")),
   video_url: z.string().trim().url("請輸入有效影片連結").max(500).optional().or(z.literal("")),
   seo_title: z.string().trim().max(200).optional().or(z.literal("")),
   seo_description: z.string().trim().max(300).optional().or(z.literal("")),
@@ -71,6 +80,7 @@ export function PropertyForm({ property, onSaved }: Props) {
   const [form, setForm] = useState({
     listing_no: property?.listing_no ?? "",
     title_zh: property?.title_zh ?? "",
+    title_en: property?.title_en ?? "",
     deal_type: (property?.deal_type ?? "sale") as "sale" | "rent",
     estate_id: property?.estate_id ?? "",
     district_slug: property?.district_slug ?? "sham-tseng",
@@ -82,6 +92,7 @@ export function PropertyForm({ property, onSaved }: Props) {
     bathrooms: property?.bathrooms?.toString() ?? "",
     floor: property?.floor ?? "",
     description: property?.description ?? "",
+    features: Array.isArray(property?.features) ? property.features.join("\n") : "",
     video_url: property?.video_url ?? "",
     seo_title: property?.seo_title ?? "",
     seo_description: property?.seo_description ?? "",
@@ -117,6 +128,7 @@ export function PropertyForm({ property, onSaved }: Props) {
       id: property?.id,
       listing_no: d.listing_no,
       title_zh: d.title_zh,
+      title_en: d.title_en || null,
       deal_type: d.deal_type,
       estate_id: d.estate_id || null,
       district_slug: d.district_slug,
@@ -128,6 +140,7 @@ export function PropertyForm({ property, onSaved }: Props) {
       bathrooms: d.bathrooms,
       floor: d.floor || null,
       description: d.description || null,
+      features: normalizePropertyFeatures(d.features),
       video_url: d.video_url || null,
       status: d.status,
       featured: d.featured,
@@ -327,6 +340,21 @@ export function PropertyForm({ property, onSaved }: Props) {
             placeholder="https://www.youtube.com/watch?v=..."
           />
         </Field>
+        <Field label="English title" full>
+          <Input
+            value={form.title_en}
+            onChange={(e) => set("title_en", e.target.value)}
+            maxLength={200}
+          />
+        </Field>
+        <Field label="Features (one per line)" full>
+          <Textarea
+            rows={4}
+            value={form.features}
+            onChange={(e) => set("features", e.target.value)}
+            maxLength={3000}
+          />
+        </Field>
         <Field label="SEO 標題" full>
           <Input
             value={form.seo_title}
@@ -352,6 +380,22 @@ export function PropertyForm({ property, onSaved }: Props) {
         </Field>
       </Section>
 
+      <AdminContentCopilot
+        resourceType="listing"
+        resourceId={property?.id ?? null}
+        values={buildPropertyContentCopilotFields(form)}
+        fingerprintValues={buildPropertyContentCopilotFingerprintValues({
+          ...property,
+          id: property?.id,
+          title_zh: form.title_zh,
+          title_en: form.title_en,
+          description: form.description,
+          features: normalizePropertyFeatures(form.features),
+          seo_title: form.seo_title,
+          seo_description: form.seo_description,
+        })}
+        onApply={(patch) => setForm((current) => applyPropertyContentCopilotPatch(current, patch))}
+      />
       <div className="flex justify-end gap-2 border-t pt-4">
         <Button type="submit" disabled={submitting}>
           {submitting ? "儲存中…" : property ? "更新放盤" : "建立放盤"}
