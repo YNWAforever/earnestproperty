@@ -113,7 +113,10 @@ function nullableText(value: string | null | undefined) {
 function assignTextPatch(
   next: PropertyFormContentState,
   patch: Record<string, ContentCopilotValue>,
-  field: keyof Pick<PropertyFormContentState, "title_zh" | "title_en" | "description" | "seo_title" | "seo_description">,
+  field: keyof Pick<
+    PropertyFormContentState,
+    "title_zh" | "title_en" | "description" | "seo_title" | "seo_description"
+  >,
 ) {
   const value = patch[field];
   if (typeof value === "string" || value === null) next[field] = value ?? "";

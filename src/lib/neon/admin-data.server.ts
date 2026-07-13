@@ -150,9 +150,11 @@ async function agentProfileMutationDecision(
   const hasOwn = (key: "auth_user_id" | "email" | "active") =>
     Object.prototype.hasOwnProperty.call(input, key);
   const identity: AgentProfileIdentityInput = {
-    auth_user_id: hasOwn("auth_user_id") ? input.auth_user_id ?? null : target?.authUserId ?? null,
-    email: hasOwn("email") ? input.email ?? null : target?.email ?? null,
-    active: hasOwn("active") ? input.active === true : target?.active ?? true,
+    auth_user_id: hasOwn("auth_user_id")
+      ? (input.auth_user_id ?? null)
+      : (target?.authUserId ?? null),
+    email: hasOwn("email") ? (input.email ?? null) : (target?.email ?? null),
+    active: hasOwn("active") ? input.active === true : (target?.active ?? true),
   };
   const decision = decideAgentProfileMutation(actor.roles, identity, target);
   if (!decision.allowed) throw new Response("Forbidden", { status: 403 });
@@ -671,7 +673,7 @@ export async function saveAdminAgentProfile(
     if (decision.mode === "identity-and-profile") {
       rows = input.id
         ? await queryRows(
-          `
+            `
           UPDATE staff_users SET
             auth_user_id = $1,
             email = $2,
@@ -692,10 +694,10 @@ export async function saveAdminAgentProfile(
           WHERE id = $16
           RETURNING id
           `,
-          [...identityAndProfileParams, input.id],
-        )
+            [...identityAndProfileParams, input.id],
+          )
         : await queryRows(
-          `
+            `
           INSERT INTO staff_users (
             auth_user_id, email, name_zh, name_en, job_title, phone, whatsapp, licence_no,
             avatar_url, branch, bio, public_slug, show_on_website, display_order, active
@@ -703,8 +705,8 @@ export async function saveAdminAgentProfile(
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           RETURNING id
           `,
-          identityAndProfileParams,
-        );
+            identityAndProfileParams,
+          );
     } else {
       rows = input.id
         ? await queryRows(
@@ -749,7 +751,12 @@ export async function saveAdminAgentProfile(
 
     if (input.id && !rows[0]) return { id: "", error: "Not found" };
     const id = stringOrEmpty(rows[0]?.id);
-    await writeAudit(actor.staffId, input.id ? "agent-profile.update" : "agent-profile.create", "staff_user", id);
+    await writeAudit(
+      actor.staffId,
+      input.id ? "agent-profile.update" : "agent-profile.create",
+      "staff_user",
+      id,
+    );
     return { id };
   } catch (error) {
     if (agentProfileSlugConflictError(error)) {
