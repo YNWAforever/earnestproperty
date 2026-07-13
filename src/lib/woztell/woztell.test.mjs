@@ -9,6 +9,7 @@ import {
   isBlastRecipientAllowed,
   isOptOutText,
   normalizeWoztellEvent,
+  sendWoztellResponse,
   verifyWoztellSignature,
 } from "./woztell.server.ts";
 
@@ -66,6 +67,62 @@ test("normalizeWoztellEvent handles outbound manual events", () => {
   assert.equal(event.direction, "outbound");
   assert.equal(event.externalMessageId, "wamid.123");
   assert.equal(event.text, "收到，我哋幫你配盤");
+});
+
+
+test("normalizeWoztellEvent supports official memberId and channelId fields", () => {
+  const event = normalizeWoztellEvent({
+    memberId: "woztell-member-1",
+    channelId: "woztell-channel-1",
+    messageEvent: {
+      from: "85260000000",
+      to: "85268888888",
+      timestamp: 1712807869354,
+      type: "TEXT",
+      data: { text: "official payload text" },
+      messageId: "wamid.official-1",
+    },
+  });
+
+  assert.equal(event.woztellMemberId, "woztell-member-1");
+  assert.equal(event.channelId, "woztell-channel-1");
+  assert.equal(event.externalMessageId, "wamid.official-1");
+  assert.equal(event.text, "official payload text");
+});
+
+test("sendWoztellResponse uses memberId rather than a browser recipient id", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url, init };
+    return new Response(JSON.stringify({ ok: 1 }), { status: 200 });
+  };
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+
+  try {
+    const result = await sendWoztellResponse({
+      memberId: "woztell-member-1",
+      response: [{ type: "TEXT", text: "reply text" }],
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(request.init.body), {
+      channelId: "test-channel",
+      memberId: "woztell-member-1",
+      response: [{ type: "TEXT", text: "reply text" }],
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
 });
 
 test("blast and service-window guards enforce WhatsApp safety defaults", () => {
