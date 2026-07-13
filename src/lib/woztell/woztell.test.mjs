@@ -162,7 +162,7 @@ test("admin send route gates replies through a fetched conversation", () => {
     "last_inbound_at",
     "opted_out_whatsapp",
     "woztell_member_id",
-    "recipientId !== conversationRecipientId",
+    "memberId",
     "let result",
     "try",
     "catch",
@@ -176,6 +176,14 @@ test("admin send route gates replies through a fetched conversation", () => {
   assert.match(sendRoute, /catch\s*\([^)]*\)\s*\{[\s\S]*ok:\s*false[\s\S]*error:/);
   assert.match(sendRoute, /status,\s*payload/);
   assert.match(sendRoute, /result\.ok \? "sent" : "failed"/);
+  assert.doesNotMatch(sendRoute, /recipientId/);
+  assert.match(sendRoute, /status,\s*payload/);
+  assert.match(sendRoute, /'sending'/);
+  assert.match(sendRoute, /RETURNING id/);
+  assert.match(sendRoute, /UPDATE whatsapp_messages[\s\S]*SET status/);
+  assert.match(sendRoute, /status = \$2/);
+  assert.match(sendRoute, /payload = \$3::jsonb/);
+  assert.match(sendRoute, /WHERE id = \$1/);
 });
 
 test("webhook validates the raw body before parsing and deduplicates messages", () => {
@@ -188,4 +196,11 @@ test("webhook validates the raw body before parsing and deduplicates messages", 
   assert.match(webhookRoute, /external_message_id/);
   assert.match(webhookRoute, /ON CONFLICT \(external_message_id\) DO NOTHING/);
   assert.match(webhookRoute, /ORDER BY \(whatsapp_member_id = \$2\)/);
+});
+
+test("admin reply server action never accepts a browser recipient id", () => {
+  const adminData = read("src/lib/neon/admin-data.ts");
+
+  assert.match(adminData, /conversationId: string; text: string/);
+  assert.doesNotMatch(adminData, /conversationId: string; recipientId: string; text: string/);
 });
