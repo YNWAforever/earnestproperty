@@ -3,8 +3,6 @@ import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-rout
 import { z } from "zod";
 import { toast } from "sonner";
 import {
-  Phone,
-  MessageCircle,
   MapPin,
   Bed,
   Bath,
@@ -25,7 +23,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
@@ -44,6 +41,16 @@ import {
   type EstateTransaction,
 } from "@/lib/queries";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
+import {
+  PropertyDecisionActions,
+  PropertyMobileContactSummary,
+} from "@/components/property/PropertyDecisionActions";
+import { PropertyMediaContactLayout } from "@/components/property/property-media-contact-layout.js";
+import {
+  buildPropertyInquiryPayload,
+  getPropertyDecision,
+} from "@/components/property/property-decision.js";
+import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
@@ -105,12 +112,14 @@ export const Route = createFileRoute("/property/$listingNo")({
   component: PropertyPage,
 });
 
-function PropertyErrorComponent({ error }: { error: Error }) {
+function PropertyErrorComponent() {
   const router = useRouter();
   return (
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">載入失敗</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <p role="alert" className="mt-2 text-sm text-muted-foreground">
+        暫時未能載入樓盤資料，請稍後再試。
+      </p>
       <Button className="mt-6" onClick={() => router.invalidate()}>
         重試
       </Button>
@@ -174,6 +183,11 @@ function PropertyPage() {
 
   const agent = property.profiles;
   const estate = property.estates;
+  const decision = getPropertyDecision({ dealType: property.deal_type, price: property.price });
+  const branchContact = resolvePropertyBranchContact({
+    estateSlug: estate?.slug,
+    districtSlug: estate?.district_slug ?? property.district_slug,
+  });
 
   const hasVideo = !!property.video_url && !isVrUrl(property.video_url);
   const hasVR = isVrUrl(property.video_url);
@@ -210,14 +224,16 @@ function PropertyPage() {
     }
     setSubmitting(true);
     const result = await createWebsiteInquiry({
-      data: {
-        name: parsed.data.name,
-        phone: parsed.data.phone,
-        email: parsed.data.email || "",
-        message: parsed.data.message || "",
-        property_id: property.id,
+      data: buildPropertyInquiryPayload({
+        form: {
+          name: parsed.data.name,
+          phone: parsed.data.phone,
+          email: parsed.data.email || "",
+          message: parsed.data.message || "",
+        },
+        propertyId: property.id,
         consentWhatsapp,
-      },
+      }),
     }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
     setSubmitting(false);
     if ("error" in result && result.error) {
@@ -227,6 +243,12 @@ function PropertyPage() {
     toast.success("已收到查詢，經紀會盡快與你聯絡。");
     (e.target as HTMLFormElement).reset();
     setConsentWhatsapp(false);
+  }
+
+  function focusInquiry() {
+    const element = document.getElementById("name");
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => element?.focus(), 400);
   }
 
   const jsonLd = {
@@ -299,7 +321,7 @@ function PropertyPage() {
         : null;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8">
+    <div className="mx-auto max-w-6xl px-6 py-8 pb-32 lg:pb-8">
       {/* Breadcrumb + actions */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <nav className="text-sm text-muted-foreground">
@@ -326,7 +348,6 @@ function PropertyPage() {
           <span>編號 {property.listing_no}</span>
         </nav>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          {updatedAt && <span>最後更新：{updatedAt}</span>}
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2 className="mr-1.5 h-3.5 w-3.5" />
             分享
@@ -334,10 +355,82 @@ function PropertyPage() {
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-        {/* Left: media tabs + content */}
-        <div>
-          {/* Media tabs */}
+      <section aria-labelledby="property-title">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={isRent ? "secondary" : "default"}>{isRent ? "租盤" : "售盤"}</Badge>
+          {property.featured ? <Badge variant="outline">精選</Badge> : null}
+          <span className="text-xs text-muted-foreground">編號 {property.listing_no}</span>
+          {updatedAt ? (
+            <span className="text-xs text-muted-foreground">最後更新：{updatedAt}</span>
+          ) : null}
+        </div>
+        <h1 id="property-title" className="mt-3 text-3xl font-bold tracking-tight">
+          {property.title_zh}
+        </h1>
+        {property.address ? (
+          <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
+            <MapPin className="h-4 w-4" />
+            {property.address}
+          </p>
+        ) : null}
+        <p className="mt-4 text-3xl font-bold text-primary">
+          {priceLabel}
+          {psf && !isRent ? (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              實呎 ${psf.toLocaleString()}
+            </span>
+          ) : null}
+          {grossPsf && !isRent ? (
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              · 建呎 ${grossPsf.toLocaleString()}
+            </span>
+          ) : null}
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-4 border-y py-5 sm:grid-cols-4">
+          <Spec
+            icon={<Maximize className="h-4 w-4" />}
+            label="實用面積"
+            value={property.saleable_area ? `${property.saleable_area} 呎` : "—"}
+          />
+          <Spec
+            icon={<Bed className="h-4 w-4" />}
+            label="房間"
+            value={property.bedrooms ?? "—"}
+          />
+          <Spec
+            icon={<Bath className="h-4 w-4" />}
+            label="浴室"
+            value={property.bathrooms ?? "—"}
+          />
+          <Spec
+            icon={<Building2 className="h-4 w-4" />}
+            label="樓層"
+            value={property.floor ?? "—"}
+          />
+          <Spec
+            label="建築面積"
+            value={property.gross_area ? `${property.gross_area} 呎` : "—"}
+          />
+          <Spec label="座向" value={property.orientation ?? "—"} />
+          <Spec
+            label="管理費"
+            value={
+              property.management_fee
+                ? `$${Number(property.management_fee).toLocaleString()}`
+                : "—"
+            }
+          />
+          <Spec
+            icon={<Calendar className="h-4 w-4" />}
+            label="入伙年份"
+            value={estate?.year_completed ?? "—"}
+          />
+        </div>
+      </section>
+
+      <PropertyMediaContactLayout
+        media={
           <Tabs defaultValue="photos">
             <TabsList className="flex h-auto flex-wrap justify-start">
               <TabsTrigger value="photos">
@@ -458,82 +551,20 @@ function PropertyPage() {
               </TabsContent>
             )}
           </Tabs>
-
-          {/* Title */}
-          <div className="mt-6">
-            <div className="flex items-center gap-2">
-              <Badge variant={isRent ? "secondary" : "default"}>{isRent ? "租盤" : "售盤"}</Badge>
-              {property.featured && <Badge variant="outline">精選</Badge>}
-              <span className="text-xs text-muted-foreground">編號 {property.listing_no}</span>
-            </div>
-            <h1 className="mt-3 text-3xl font-bold tracking-tight">{property.title_zh}</h1>
-            {property.address && (
-              <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4" />
-                {property.address}
-              </p>
-            )}
-            <p className="mt-4 text-3xl font-bold text-primary">
-              {priceLabel}
-              {psf && !isRent && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  實呎 ${psf.toLocaleString()}
-                </span>
-              )}
-              {grossPsf && !isRent && (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">
-                  · 建呎 ${grossPsf.toLocaleString()}
-                </span>
-              )}
-            </p>
-          </div>
-
-          {/* Specs */}
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle className="text-base">物業資料</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <Spec
-                icon={<Maximize className="h-4 w-4" />}
-                label="實用面積"
-                value={property.saleable_area ? `${property.saleable_area} 呎` : "—"}
-              />
-              <Spec
-                icon={<Bed className="h-4 w-4" />}
-                label="房間"
-                value={property.bedrooms ?? "—"}
-              />
-              <Spec
-                icon={<Bath className="h-4 w-4" />}
-                label="浴室"
-                value={property.bathrooms ?? "—"}
-              />
-              <Spec
-                icon={<Building2 className="h-4 w-4" />}
-                label="樓層"
-                value={property.floor ?? "—"}
-              />
-              <Spec
-                label="建築面積"
-                value={property.gross_area ? `${property.gross_area} 呎` : "—"}
-              />
-              <Spec label="座向" value={property.orientation ?? "—"} />
-              <Spec
-                label="管理費"
-                value={
-                  property.management_fee
-                    ? `$${Number(property.management_fee).toLocaleString()}`
-                    : "—"
-                }
-              />
-              <Spec
-                icon={<Calendar className="h-4 w-4" />}
-                label="入伙年份"
-                value={estate?.year_completed ?? "—"}
-              />
-            </CardContent>
-          </Card>
+        }
+        mobileContact={
+          <PropertyMobileContactSummary
+            agent={agent}
+            branchContact={branchContact}
+            fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
+            listingNo={property.listing_no}
+            title={property.title_zh}
+            dealType={property.deal_type}
+            onInquiry={focusInquiry}
+          />
+        }
+        details={
+          <>
 
           {/* Description */}
           {property.description && (
@@ -642,60 +673,24 @@ function PropertyPage() {
           <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
             免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
           </p>
-        </div>
+          </>
+        }
+        sidebar={
+          <>
+            <PropertyDecisionActions
+            agent={agent}
+            branchContact={branchContact}
+            fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
+            listingNo={property.listing_no}
+            title={property.title_zh}
+            dealType={property.deal_type}
+            price={property.price}
+            onInquiry={focusInquiry}
+          />
 
-        {/* Right: agent + inquiry (sticky) */}
-        <aside className="lg:sticky lg:top-6 lg:h-fit">
-          {agent && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">負責經紀</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-14 w-14">
-                    <AvatarImage src={agent.avatar_url ?? undefined} alt={agent.name_zh ?? ""} />
-                    <AvatarFallback>{(agent.name_zh ?? "經").slice(0, 1)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-semibold">{agent.name_zh ?? agent.name_en}</p>
-                    {agent.licence_no && (
-                      <p className="text-xs text-muted-foreground">牌照 {agent.licence_no}</p>
-                    )}
-                    {agent.branch && (
-                      <p className="text-xs text-muted-foreground">{agent.branch}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  {agent.phone && (
-                    <Button asChild variant="outline" className="flex-1">
-                      <a href={`tel:${agent.phone}`}>
-                        <Phone className="mr-2 h-4 w-4" />
-                        致電
-                      </a>
-                    </Button>
-                  )}
-                  {agent.whatsapp && (
-                    <Button asChild className="flex-1">
-                      <a
-                        href={`https://wa.me/${agent.whatsapp.replace(/[^\d]/g, "")}?text=${encodeURIComponent(`你好，我想查詢編號 ${property.listing_no} ${property.title_zh}`)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <MessageCircle className="mr-2 h-4 w-4" />
-                        WhatsApp
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="mt-4">
+            <Card className="mt-4">
             <CardHeader>
-              <CardTitle className="text-base">查詢此盤</CardTitle>
+              <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-3">
@@ -750,48 +745,10 @@ function PropertyPage() {
                 </p>
               </form>
             </CardContent>
-          </Card>
-        </aside>
-      </div>
-
-      {/* Mobile sticky contact bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 py-2 shadow-lg backdrop-blur lg:hidden">
-        <div className="mx-auto flex max-w-6xl items-center gap-2">
-          {agent?.phone && (
-            <Button asChild variant="outline" size="sm" className="flex-1">
-              <a href={`tel:${agent.phone}`}>
-                <Phone className="mr-1 h-4 w-4" />
-                致電
-              </a>
-            </Button>
-          )}
-          {agent?.whatsapp && (
-            <Button asChild size="sm" className="flex-1 bg-[#25D366] text-white hover:bg-[#1ebe57]">
-              <a
-                href={`https://wa.me/${agent.whatsapp.replace(/[^\d]/g, "")}?text=${encodeURIComponent(`你好，我想查詢編號 ${property.listing_no} ${property.title_zh}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <MessageCircle className="mr-1 h-4 w-4" />
-                WhatsApp
-              </a>
-            </Button>
-          )}
-          <Button
-            size="sm"
-            className="flex-1"
-            onClick={() => {
-              const el = document.getElementById("name");
-              el?.scrollIntoView({ behavior: "smooth", block: "center" });
-              setTimeout(() => el?.focus(), 400);
-            }}
-          >
-            查詢
-          </Button>
-        </div>
-      </div>
-      {/* Spacer so the bar never covers content */}
-      <div className="h-16 lg:hidden" aria-hidden />
+            </Card>
+          </>
+        }
+      />
 
       <script
         type="application/ld+json"

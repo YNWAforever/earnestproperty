@@ -13,6 +13,7 @@ export type AdminPropertyInput = {
   id?: string;
   listing_no: string;
   title_zh: string;
+  title_en: string | null;
   deal_type: "sale" | "rent";
   estate_id: string | null;
   district_slug: string;
@@ -24,12 +25,14 @@ export type AdminPropertyInput = {
   bathrooms: number | null;
   floor: string | null;
   description: string | null;
+  features: string[];
   status: "draft" | "active" | "sold" | "rented" | "offline";
   featured: boolean;
   images: string[];
   agent_id: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
+  video_url?: string | null;
 };
 
 export type AdminListingRow = {
@@ -66,6 +69,21 @@ export type AdminFaqGroupRow = {
 export type AdminFaqCmsRow = AdminFaqInput & {
   id: string;
   created_at: string | null;
+};
+
+export type AdminCmsVideoInput = {
+  id?: string;
+  title: string;
+  video_url: string;
+  description: string | null;
+  sort_order: number;
+  published: boolean;
+};
+
+export type AdminCmsVideoRow = AdminCmsVideoInput & {
+  id: string;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type AdminCmsData = {
@@ -126,6 +144,41 @@ export type AdminAgentRow = {
   email: string | null;
   roles: StaffRole[];
   active: boolean;
+};
+
+export type AdminAgentProfileInput = {
+  id?: string;
+  auth_user_id: string | null;
+  email: string | null;
+  name_zh: string | null;
+  name_en: string | null;
+  job_title: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  licence_no: string | null;
+  avatar_url: string | null;
+  branch: string | null;
+  bio: string | null;
+  public_slug: string | null;
+  show_on_website: boolean;
+  display_order: number;
+  active: boolean;
+};
+
+export type AdminAgentProfileMutationInput = Omit<
+  AdminAgentProfileInput,
+  "auth_user_id" | "email" | "active"
+> &
+  Partial<Pick<AdminAgentProfileInput, "auth_user_id" | "email" | "active">>;
+
+export type AdminAgentEditorContext = {
+  canManageIdentity: boolean;
+};
+
+export type AdminAgentProfileRow = AdminAgentProfileInput & {
+  id: string;
+  created_at: string | null;
+  updated_at: string | null;
 };
 
 export type AdminEstateInput = {

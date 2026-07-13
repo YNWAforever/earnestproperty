@@ -1,5 +1,6 @@
 import {
   fetchNeonArticleBySlug,
+  fetchNeonCmsVideos,
   fetchNeonCorridorInventory,
   fetchNeonDistrictTransactions,
   fetchNeonEstateBySlug,
@@ -70,7 +71,11 @@ export type FeaturedProperty = {
 export type FaqItem = { question: string; answer: string };
 
 export async function fetchEstates(): Promise<EstateSummary[]> {
-  const rows = await fetchNeonEstates({ data: { districtSlug: "sham-tseng" } });
+  return fetchEstatesByDistrict("sham-tseng");
+}
+
+export async function fetchEstatesByDistrict(districtSlug: string): Promise<EstateSummary[]> {
+  const rows = await fetchNeonEstates({ data: { districtSlug } });
   return (rows as EstateSummary[]).map((estate) => withCanonicalSlug(estate));
 }
 
@@ -156,6 +161,7 @@ export type ListingRow = Pick<
   | "last_seen_at"
   | "source_site"
   | "images"
+  | "video_url"
   | "estates"
 >;
 
@@ -245,6 +251,41 @@ export async function searchListings(f: ListingFilters): Promise<{
   };
 }
 
+export type VideoListing = ListingRow & { video_url: string };
+
+export type CmsVideo = {
+  id: string;
+  title: string;
+  video_url: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string | null;
+};
+
+export async function fetchCmsVideos(): Promise<CmsVideo[]> {
+  return (await fetchNeonCmsVideos()) as CmsVideo[];
+}
+
+export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
+  const result = await searchListings({
+    deal: "all",
+    page: 1,
+    pageSize: Math.max(limit * 3, limit),
+  });
+
+  return result.rows
+    .filter(
+      (row): row is VideoListing =>
+        typeof row.video_url === "string" && row.video_url.trim().length > 0,
+    )
+    .slice(0, limit);
+}
+
+export async function fetchVideosPageData() {
+  const [cmsVideos, listingVideos] = await Promise.all([fetchCmsVideos(), fetchVideoListings(12)]);
+  return { cmsVideos, listingVideos };
+}
+
 export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
   for (const candidate of estateSlugCandidates(estateSlug)) {
     const rows = (await fetchNeonListingsForEstate({
@@ -316,6 +357,36 @@ export async function fetchPublishedArticles(): Promise<ArticleSummary[]> {
   return (await fetchNeonPublishedArticles()) as ArticleSummary[];
 }
 
+export async function fetchPublishedArticlesByCategory(
+  category: string,
+): Promise<ArticleSummary[]> {
+  const articles = await fetchPublishedArticles();
+  return articles.filter((article) => article.category === category);
+}
+
 export async function fetchArticleBySlug(slug: string) {
   return fetchNeonArticleBySlug({ data: { slug } });
+}
+
+export type RecentTransaction = DistrictTransaction & {
+  districtSlug: string;
+};
+
+export async function fetchRecentTransactions(limit = 20): Promise<RecentTransaction[]> {
+  const districtSlugs = ["sham-tseng", "ting-kau", "tsuen-wan"];
+  const rows = await Promise.all(
+    districtSlugs.map(async (districtSlug) => {
+      const transactions = await fetchDistrictTransactions(districtSlug, 12);
+      return transactions.map((transaction) => ({ ...transaction, districtSlug }));
+    }),
+  );
+
+  return rows
+    .flat()
+    .sort((a, b) => {
+      const left = a.deal_date ? new Date(a.deal_date).getTime() : 0;
+      const right = b.deal_date ? new Date(b.deal_date).getTime() : 0;
+      return right - left;
+    })
+    .slice(0, limit);
 }

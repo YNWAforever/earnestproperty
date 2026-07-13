@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { queryRows, stringOrEmpty, stringOrNull } from "./db.server";
+import { shouldBootstrapFirstAdmin } from "./staff-security-policy";
 
 export type StaffRole = "admin" | "manager" | "agent";
 
@@ -11,6 +12,10 @@ export type StaffAccess = {
   name: string | null;
   roles: StaffRole[];
   bootstrap: boolean;
+};
+
+type StaffLookup = StaffAccess & {
+  matchedProfileOnly: boolean;
 };
 
 type AnyRecord = Record<string, unknown>;
@@ -222,12 +227,22 @@ export async function getNeonSessionFromRequest(request: Request) {
   return bearerToken ? getNeonSessionFromBearerToken(bearerToken) : null;
 }
 
-async function staffCount() {
-  const rows = await queryRows("SELECT count(*)::int AS total FROM staff_users");
-  return Number(rows[0]?.total ?? 0);
+async function bootstrapStaffRows() {
+  const rows = await queryRows(`
+    SELECT
+      s.auth_user_id,
+      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
+    FROM staff_users s
+    LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+    GROUP BY s.id
+  `);
+  return rows.map((row) => ({
+    authUserId: stringOrNull(row.auth_user_id),
+    roles: staffRolesFromValue(row.roles),
+  }));
 }
 
-async function findStaff(authUserId: string, email: string | null): Promise<StaffAccess | null> {
+async function findStaff(authUserId: string, email: string | null): Promise<StaffLookup | null> {
   const rows = await queryRows(
     `
     SELECT
@@ -250,7 +265,8 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
   );
   const row = rows[0];
   if (!row) return null;
-  if (stringOrEmpty(row.auth_user_id) !== authUserId) {
+  const matchedProfileOnly = stringOrNull(row.auth_user_id) === null;
+  if (matchedProfileOnly) {
     await queryRows(
       `
       UPDATE staff_users
@@ -268,6 +284,7 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
     name: stringOrNull(row.name),
     roles: staffRolesFromValue(row.roles),
     bootstrap: false,
+    matchedProfileOnly,
   };
 }
 
@@ -322,18 +339,25 @@ export async function requireStaffAccess(request: Request, allowed: StaffRole[] 
   const session = await getNeonSessionFromRequest(request);
   if (!session) throw new Response("Unauthorized", { status: 401 });
 
+  const email = session.user.email?.trim().toLowerCase() ?? "";
+  const allowlist = bootstrapAllowlist();
+  const bootstrapRows =
+    email && allowlist.has(email) ? await bootstrapStaffRows() : [];
   const staff = await findStaff(session.user.id, session.user.email);
-  let access = staff;
-  if (!access) {
-    const email = session.user.email?.trim().toLowerCase() ?? "";
-    const allowlist = bootstrapAllowlist();
-    if (email && allowlist.has(email) && (await staffCount()) === 0) {
-      access = await bootstrapFirstStaff({
-        authUserId: session.user.id,
-        email: session.user.email,
-        name: session.user.name,
-      });
-    }
+  let access: StaffAccess | null = staff;
+  if (
+    shouldBootstrapFirstAdmin({
+      email,
+      allowlistedEmails: allowlist,
+      access: staff,
+      staffRows: bootstrapRows,
+    })
+  ) {
+    access = await bootstrapFirstStaff({
+      authUserId: session.user.id,
+      email: session.user.email,
+      name: session.user.name,
+    });
   }
 
   if (!access) throw new Response("Forbidden", { status: 403 });
