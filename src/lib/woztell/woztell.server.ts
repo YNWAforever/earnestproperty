@@ -82,6 +82,14 @@ function stringOrNull(value: unknown) {
   return String(value);
 }
 
+function identityValue(value: unknown) {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const identity = record(value);
+    return stringOrNull(identity.id ?? identity._id ?? identity.memberId ?? identity.channelId);
+  }
+  return stringOrNull(value);
+}
+
 function eventTimestamp(value: unknown) {
   const raw = stringOrNull(value) ?? String(Math.floor(Date.now() / 1000));
   const numeric = Number(raw);
@@ -102,12 +110,16 @@ export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEven
       ? "outbound"
       : "inbound";
   const data = record(source.data);
-  const channelId = stringOrNull(payload.channel ?? source.channel);
-  const memberId = stringOrNull(payload.member ?? source.member);
+  const channelId = identityValue(
+    payload.channelId ?? payload.channel ?? source.channelId ?? source.channel,
+  );
+  const memberId = identityValue(
+    payload.memberId ?? payload.member ?? source.memberId ?? source.member,
+  );
   const messageType = stringOrNull(source.type) ?? "UNKNOWN";
   const timestampRaw = source.timestamp ?? payload.timestamp;
   const externalMessageId =
-    stringOrNull(source.messageId) ??
+    stringOrNull(source.messageId ?? payload.messageId) ??
     `${direction}:${channelId ?? "channel"}:${memberId ?? "member"}:${stringOrNull(timestampRaw) ?? "time"}:${messageType}`;
 
   return {
@@ -140,7 +152,7 @@ export function woztellConfig() {
 }
 
 export async function sendWoztellResponse(input: {
-  recipientId: string;
+  memberId: string;
   response: Record<string, unknown>[];
 }) {
   const config = woztellConfig();
@@ -158,12 +170,26 @@ export async function sendWoztellResponse(input: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         channelId: config.channelId,
-        recipientId: input.recipientId,
+        memberId: input.memberId,
         response: input.response,
       }),
     },
   );
 
-  const body = await res.json().catch(() => ({}));
-  return res.ok ? { ok: true, body } : { ok: false, error: JSON.stringify(body) };
+  const rawBody = await res.text();
+  let body: unknown = {};
+  if (rawBody.trim()) {
+    try {
+      body = JSON.parse(rawBody) as unknown;
+    } catch {
+      return { ok: false, error: "WOZTELL_INVALID_RESPONSE", status: res.status };
+    }
+  }
+  if (res.ok) return { ok: true, body, status: res.status };
+
+  const providerError =
+    body && typeof body === "object" && "error" in body
+      ? String((body as Record<string, unknown>).error).slice(0, 500)
+      : `WOZTELL_HTTP_${res.status}`;
+  return { ok: false, error: providerError, status: res.status };
 }
