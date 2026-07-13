@@ -71,3 +71,14 @@ test("command center read model is guarded and set-based", () => {
   assert.match(client, /export\s+async\s+function\s+completeAdminLeadActivity\b/);
   assert.match(client, /fetchCommandCenterServer[\s\S]*?requireStaff\(\["admin", "manager"\]\)/);
 });
+
+test("property mutation keeps Copilot content fields explicit and scoped", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const types = read("src/lib/neon/admin-data.types.ts");
+  assert.match(types, /title_en:\s*string\s*\|\s*null/);
+  assert.match(types, /features:\s*string\[\]/);
+  assert.match(server, /title_en = \$21/);
+  assert.match(server, /features = \$22::text\[\]/);
+  assert.match(server, /video_url, agent_id, title_en, features/);
+  assert.match(server, /input\.features \?\? \[\]/);
+});

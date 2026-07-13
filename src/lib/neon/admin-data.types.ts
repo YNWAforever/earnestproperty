@@ -13,6 +13,7 @@ export type AdminPropertyInput = {
   id?: string;
   listing_no: string;
   title_zh: string;
+  title_en: string | null;
   deal_type: "sale" | "rent";
   estate_id: string | null;
   district_slug: string;
@@ -24,6 +25,7 @@ export type AdminPropertyInput = {
   bathrooms: number | null;
   floor: string | null;
   description: string | null;
+  features: string[];
   status: "draft" | "active" | "sold" | "rented" | "offline";
   featured: boolean;
   images: string[];
