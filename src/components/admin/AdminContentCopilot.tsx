@@ -96,9 +96,10 @@ export function AdminContentCopilot({
   fingerprintValues?: Record<string, unknown>;
   onApply: (patch: Record<string, ContentCopilotValue>) => void;
 }) {
+  const valueFieldKey = Object.keys(values).sort().join("|");
   const availableFields = useMemo(
     () => allowedContentCopilotFields(resourceType).filter((field) => Object.hasOwn(values, field)),
-    [resourceType, values],
+    [resourceType, valueFieldKey],
   );
   const [state, setState] = useState<PanelState>(resourceId ? "ready" : "disabled-unsaved");
   const [action, setAction] = useState<ContentCopilotAction>("improve");
@@ -186,15 +187,6 @@ export function AdminContentCopilot({
     if (!proposal) return;
     setError(null);
     try {
-      const { decideAdminContentProposal } = await import("@/lib/ai/content-copilot-admin");
-      const decision = await decideAdminContentProposal({
-        data: { proposalId: proposal.id, decision: "apply", acceptedFields },
-      });
-      if (!decision.ok) {
-        setError(decision.error || "COPILOT_DECISION_FAILED");
-        setState(decision.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "failed");
-        return;
-      }
       const patchResult = applySelectedContentPatches(values, proposal.patches, acceptedFields, {
         resourceType,
         sourceFingerprint: proposal.sourceFingerprint,
@@ -205,6 +197,16 @@ export function AdminContentCopilot({
         setState(patchResult.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "failed");
         return;
       }
+
+      const { decideAdminContentProposal } = await import("@/lib/ai/content-copilot-admin");
+      const decision = await decideAdminContentProposal({
+        data: { proposalId: proposal.id, decision: "apply", acceptedFields },
+      });
+      if (!decision.ok) {
+        setError(decision.error || "COPILOT_DECISION_FAILED");
+        setState(decision.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "failed");
+        return;
+      }
       onApply(patchResult.value);
       setState("applied");
     } catch {
@@ -212,7 +214,6 @@ export function AdminContentCopilot({
       setState("failed");
     }
   }
-
   return (
     <aside
       className="w-full space-y-4 rounded-md border bg-muted/20 p-4 lg:w-[24rem] lg:flex-none"
