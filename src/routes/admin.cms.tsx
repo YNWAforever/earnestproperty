@@ -5,6 +5,7 @@ import { Brain, FileText, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-r
 import { toast } from "sonner";
 
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -827,6 +828,10 @@ function AdminCms() {
 
           <EstateDialog
             estate={editingEstate}
+            fingerprintValues={estateFingerprintValues(
+              editingEstate,
+              data?.estates.find((item) => item.id === editingEstate?.id) ?? null,
+            )}
             saving={saving}
             onChange={setEditingEstate}
             onClose={() => setEditingEstate(null)}
@@ -834,6 +839,10 @@ function AdminCms() {
           />
           <ArticleDialog
             article={editingArticle}
+            fingerprintValues={articleFingerprintValues(
+              editingArticle,
+              data?.articles.find((item) => item.id === editingArticle?.id) ?? null,
+            )}
             saving={saving}
             onChange={setEditingArticle}
             onClose={() => setEditingArticle(null)}
@@ -841,6 +850,10 @@ function AdminCms() {
           />
           <CmsVideoDialog
             video={editingCmsVideo}
+            fingerprintValues={cmsVideoFingerprintValues(
+              editingCmsVideo,
+              cmsVideos?.find((item) => item.id === editingCmsVideo?.id) ?? null,
+            )}
             saving={saving}
             onChange={setEditingCmsVideo}
             onClose={() => setEditingCmsVideo(null)}
@@ -848,6 +861,10 @@ function AdminCms() {
           />
           <FaqDialog
             faq={editingFaq}
+            fingerprintValues={faqFingerprintValues(
+              editingFaq,
+              data?.faqs.find((item) => item.id === editingFaq?.id) ?? null,
+            )}
             saving={saving}
             onChange={setEditingFaq}
             onClose={() => setEditingFaq(null)}
@@ -880,62 +897,73 @@ function AdminCms() {
 function CmsVideoDialog({
   video,
   saving,
+  fingerprintValues,
   onChange,
   onClose,
   onSubmit,
 }: {
   video: AdminCmsVideoInput | null;
   saving: boolean;
+  fingerprintValues: Record<string, unknown>;
   onChange: (video: AdminCmsVideoInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <Dialog open={!!video} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{video?.id ? "編輯 YouTube 影片" : "新增 YouTube 影片"}</DialogTitle>
           <DialogDescription>影片會顯示於 /videos。關閉發布即可隱藏。</DialogDescription>
         </DialogHeader>
         {video ? (
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <TextField
-              label="標題"
-              value={video.title}
-              onChange={(value) => onChange({ ...video, title: value })}
-              required
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+            <form className="grid gap-4" onSubmit={onSubmit}>
+              <TextField
+                label="標題"
+                value={video.title}
+                onChange={(value) => onChange({ ...video, title: value })}
+                required
+              />
+              <TextField
+                label="YouTube 連結"
+                value={video.video_url}
+                onChange={(value) => onChange({ ...video, video_url: value })}
+                required
+              />
+              <TextAreaField
+                label="描述"
+                value={video.description ?? ""}
+                onChange={(value) => onChange({ ...video, description: nullIfBlank(value) })}
+                rows={3}
+              />
+              <NumberField
+                label="排序"
+                value={video.sort_order}
+                onChange={(value) => onChange({ ...video, sort_order: value ?? 0 })}
+              />
+              <Field label="發布">
+                <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
+                  <Switch
+                    checked={video.published}
+                    onCheckedChange={(checked) => onChange({ ...video, published: checked })}
+                    aria-label="切換影片發布狀態"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {video.published ? "已發布" : "已隱藏"}
+                  </span>
+                </div>
+              </Field>
+              <EditorFooter saving={saving} onClose={onClose} />
+            </form>
+            <AdminContentCopilot
+              resourceType="video"
+              resourceId={video.id ?? null}
+              fingerprintValues={fingerprintValues}
+              values={{ title: video.title, description: video.description }}
+              onApply={(patch) => onChange({ ...video, ...patch })}
             />
-            <TextField
-              label="YouTube 連結"
-              value={video.video_url}
-              onChange={(value) => onChange({ ...video, video_url: value })}
-              required
-            />
-            <TextAreaField
-              label="描述"
-              value={video.description ?? ""}
-              onChange={(value) => onChange({ ...video, description: nullIfBlank(value) })}
-              rows={3}
-            />
-            <NumberField
-              label="排序"
-              value={video.sort_order}
-              onChange={(value) => onChange({ ...video, sort_order: value ?? 0 })}
-            />
-            <Field label="發布">
-              <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
-                <Switch
-                  checked={video.published}
-                  onCheckedChange={(checked) => onChange({ ...video, published: checked })}
-                  aria-label="切換影片發布狀態"
-                />
-                <span className="text-sm text-muted-foreground">
-                  {video.published ? "已發布" : "已隱藏"}
-                </span>
-              </div>
-            </Field>
-            <EditorFooter saving={saving} onClose={onClose} />
-          </form>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -945,110 +973,127 @@ function CmsVideoDialog({
 function EstateDialog({
   estate,
   saving,
+  fingerprintValues,
   onChange,
   onClose,
   onSubmit,
 }: {
   estate: AdminEstateInput | null;
   saving: boolean;
+  fingerprintValues: Record<string, unknown>;
   onChange: (estate: AdminEstateInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <Dialog open={!!estate} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{estate?.id ? "編輯屋苑 SEO" : "新增屋苑 SEO"}</DialogTitle>
           <DialogDescription>完整欄位會一併儲存，避免覆寫未載入資料。</DialogDescription>
         </DialogHeader>
         {estate ? (
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <div className="grid gap-4 md:grid-cols-3">
-              <TextField
-                label="Slug"
-                value={estate.slug}
-                onChange={(value) => onChange({ ...estate, slug: value })}
-                required
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+            <form className="grid gap-4" onSubmit={onSubmit}>
+              <div className="grid gap-4 md:grid-cols-3">
+                <TextField
+                  label="Slug"
+                  value={estate.slug}
+                  onChange={(value) => onChange({ ...estate, slug: value })}
+                  required
+                />
+                <TextField
+                  label="中文名"
+                  value={estate.name_zh}
+                  onChange={(value) => onChange({ ...estate, name_zh: value })}
+                  required
+                />
+                <TextField
+                  label="英文名"
+                  value={estate.name_en ?? ""}
+                  onChange={(value) => onChange({ ...estate, name_en: nullIfBlank(value) })}
+                />
+                <TextField
+                  label="地區"
+                  value={estate.district_slug}
+                  onChange={(value) => onChange({ ...estate, district_slug: value })}
+                  required
+                />
+                <TextField
+                  label="發展商"
+                  value={estate.developer ?? ""}
+                  onChange={(value) => onChange({ ...estate, developer: nullIfBlank(value) })}
+                />
+                <TextField
+                  label="Hero 圖片"
+                  value={estate.hero_image ?? ""}
+                  onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
+                />
+                <NumberField
+                  label="落成年份"
+                  value={estate.year_completed}
+                  onChange={(value) => onChange({ ...estate, year_completed: value })}
+                />
+                <NumberField
+                  label="期數"
+                  value={estate.phases}
+                  onChange={(value) => onChange({ ...estate, phases: value })}
+                />
+                <NumberField
+                  label="伙數"
+                  value={estate.total_units}
+                  onChange={(value) => onChange({ ...estate, total_units: value })}
+                />
+                <NumberField
+                  label="面積下限"
+                  value={estate.area_min}
+                  onChange={(value) => onChange({ ...estate, area_min: value })}
+                />
+                <NumberField
+                  label="面積上限"
+                  value={estate.area_max}
+                  onChange={(value) => onChange({ ...estate, area_max: value })}
+                />
+              </div>
+              <TextAreaField
+                label="設施"
+                value={estate.facilities.join("\n")}
+                onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
+                rows={4}
+              />
+              <TextAreaField
+                label="描述"
+                value={estate.description ?? ""}
+                onChange={(value) => onChange({ ...estate, description: nullIfBlank(value) })}
+                rows={5}
               />
               <TextField
-                label="中文名"
-                value={estate.name_zh}
-                onChange={(value) => onChange({ ...estate, name_zh: value })}
-                required
+                label="SEO 標題"
+                value={estate.seo_title ?? ""}
+                onChange={(value) => onChange({ ...estate, seo_title: nullIfBlank(value) })}
               />
-              <TextField
-                label="英文名"
-                value={estate.name_en ?? ""}
-                onChange={(value) => onChange({ ...estate, name_en: nullIfBlank(value) })}
+              <TextAreaField
+                label="SEO 描述"
+                value={estate.seo_description ?? ""}
+                onChange={(value) => onChange({ ...estate, seo_description: nullIfBlank(value) })}
+                rows={3}
               />
-              <TextField
-                label="地區"
-                value={estate.district_slug}
-                onChange={(value) => onChange({ ...estate, district_slug: value })}
-                required
-              />
-              <TextField
-                label="發展商"
-                value={estate.developer ?? ""}
-                onChange={(value) => onChange({ ...estate, developer: nullIfBlank(value) })}
-              />
-              <TextField
-                label="Hero 圖片"
-                value={estate.hero_image ?? ""}
-                onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
-              />
-              <NumberField
-                label="落成年份"
-                value={estate.year_completed}
-                onChange={(value) => onChange({ ...estate, year_completed: value })}
-              />
-              <NumberField
-                label="期數"
-                value={estate.phases}
-                onChange={(value) => onChange({ ...estate, phases: value })}
-              />
-              <NumberField
-                label="伙數"
-                value={estate.total_units}
-                onChange={(value) => onChange({ ...estate, total_units: value })}
-              />
-              <NumberField
-                label="面積下限"
-                value={estate.area_min}
-                onChange={(value) => onChange({ ...estate, area_min: value })}
-              />
-              <NumberField
-                label="面積上限"
-                value={estate.area_max}
-                onChange={(value) => onChange({ ...estate, area_max: value })}
-              />
-            </div>
-            <TextAreaField
-              label="設施"
-              value={estate.facilities.join("\n")}
-              onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
-              rows={4}
+              <EditorFooter saving={saving} onClose={onClose} />
+            </form>
+            <AdminContentCopilot
+              resourceType="estate"
+              resourceId={estate.id ?? null}
+              fingerprintValues={fingerprintValues}
+              values={{
+                name_zh: estate.name_zh,
+                name_en: estate.name_en,
+                description: estate.description,
+                seo_title: estate.seo_title,
+                seo_description: estate.seo_description,
+              }}
+              onApply={(patch) => onChange({ ...estate, ...patch })}
             />
-            <TextAreaField
-              label="描述"
-              value={estate.description ?? ""}
-              onChange={(value) => onChange({ ...estate, description: nullIfBlank(value) })}
-              rows={5}
-            />
-            <TextField
-              label="SEO 標題"
-              value={estate.seo_title ?? ""}
-              onChange={(value) => onChange({ ...estate, seo_title: nullIfBlank(value) })}
-            />
-            <TextAreaField
-              label="SEO 描述"
-              value={estate.seo_description ?? ""}
-              onChange={(value) => onChange({ ...estate, seo_description: nullIfBlank(value) })}
-              rows={3}
-            />
-            <EditorFooter saving={saving} onClose={onClose} />
-          </form>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -1058,96 +1103,113 @@ function EstateDialog({
 function ArticleDialog({
   article,
   saving,
+  fingerprintValues,
   onChange,
   onClose,
   onSubmit,
 }: {
   article: AdminArticleInput | null;
   saving: boolean;
+  fingerprintValues: Record<string, unknown>;
   onChange: (article: AdminArticleInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <Dialog open={!!article} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{article?.id ? "文章編輯" : "新增文章"}</DialogTitle>
           <DialogDescription>內容、發布狀態及 SEO 欄位會一併儲存。</DialogDescription>
         </DialogHeader>
         {article ? (
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <TextField
-                label="Slug"
-                value={article.slug}
-                onChange={(value) => onChange({ ...article, slug: value })}
-                required
-              />
-              <TextField
-                label="標題"
-                value={article.title}
-                onChange={(value) => onChange({ ...article, title: value })}
-                required
-              />
-              <TextField
-                label="分類"
-                value={article.category ?? ""}
-                onChange={(value) => onChange({ ...article, category: nullIfBlank(value) })}
-              />
-              <NumberField
-                label="閱讀分鐘"
-                value={article.reading_minutes}
-                onChange={(value) => onChange({ ...article, reading_minutes: value })}
-              />
-              <TextField
-                label="封面圖片"
-                value={article.cover_image ?? ""}
-                onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
-              />
-              <TextField
-                label="發布時間"
-                value={article.published_at ?? ""}
-                onChange={(value) => onChange({ ...article, published_at: nullIfBlank(value) })}
-              />
-            </div>
-            <Field label="發布">
-              <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
-                <Switch
-                  checked={article.published}
-                  onCheckedChange={(checked) => onChange({ ...article, published: checked })}
-                  aria-label="切換文章發布狀態"
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+            <form className="grid gap-4" onSubmit={onSubmit}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField
+                  label="Slug"
+                  value={article.slug}
+                  onChange={(value) => onChange({ ...article, slug: value })}
+                  required
                 />
-                <span className="text-sm text-muted-foreground">
-                  {article.published ? "已發布" : "草稿"}
-                </span>
+                <TextField
+                  label="標題"
+                  value={article.title}
+                  onChange={(value) => onChange({ ...article, title: value })}
+                  required
+                />
+                <TextField
+                  label="分類"
+                  value={article.category ?? ""}
+                  onChange={(value) => onChange({ ...article, category: nullIfBlank(value) })}
+                />
+                <NumberField
+                  label="閱讀分鐘"
+                  value={article.reading_minutes}
+                  onChange={(value) => onChange({ ...article, reading_minutes: value })}
+                />
+                <TextField
+                  label="封面圖片"
+                  value={article.cover_image ?? ""}
+                  onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
+                />
+                <TextField
+                  label="發布時間"
+                  value={article.published_at ?? ""}
+                  onChange={(value) => onChange({ ...article, published_at: nullIfBlank(value) })}
+                />
               </div>
-            </Field>
-            <TextAreaField
-              label="摘要"
-              value={article.excerpt ?? ""}
-              onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
-              rows={3}
+              <Field label="發布">
+                <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
+                  <Switch
+                    checked={article.published}
+                    onCheckedChange={(checked) => onChange({ ...article, published: checked })}
+                    aria-label="切換文章發布狀態"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {article.published ? "已發布" : "草稿"}
+                  </span>
+                </div>
+              </Field>
+              <TextAreaField
+                label="摘要"
+                value={article.excerpt ?? ""}
+                onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
+                rows={3}
+              />
+              <TextAreaField
+                label="內容"
+                value={article.content ?? ""}
+                onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
+                rows={8}
+              />
+              <TextField
+                label="SEO 標題"
+                value={article.seo_title ?? ""}
+                onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
+              />
+              <TextAreaField
+                label="SEO 描述"
+                value={article.seo_description ?? ""}
+                onChange={(value) => onChange({ ...article, seo_description: nullIfBlank(value) })}
+                rows={3}
+              />
+              <EditorFooter saving={saving} onClose={onClose} />
+            </form>
+            <AdminContentCopilot
+              resourceType="article"
+              resourceId={article.id ?? null}
+              fingerprintValues={fingerprintValues}
+              values={{
+                title: article.title,
+                excerpt: article.excerpt,
+                content: article.content,
+                seo_title: article.seo_title,
+                seo_description: article.seo_description,
+              }}
+              onApply={(patch) => onChange({ ...article, ...patch })}
             />
-            <TextAreaField
-              label="內容"
-              value={article.content ?? ""}
-              onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
-              rows={8}
-            />
-            <TextField
-              label="SEO 標題"
-              value={article.seo_title ?? ""}
-              onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
-            />
-            <TextAreaField
-              label="SEO 描述"
-              value={article.seo_description ?? ""}
-              onChange={(value) => onChange({ ...article, seo_description: nullIfBlank(value) })}
-              rows={3}
-            />
-            <EditorFooter saving={saving} onClose={onClose} />
-          </form>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -1157,53 +1219,64 @@ function ArticleDialog({
 function FaqDialog({
   faq,
   saving,
+  fingerprintValues,
   onChange,
   onClose,
   onSubmit,
 }: {
   faq: AdminFaqInput | null;
   saving: boolean;
+  fingerprintValues: Record<string, unknown>;
   onChange: (faq: AdminFaqInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <Dialog open={!!faq} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>{faq?.id ? "FAQ 編輯" : "新增 FAQ"}</DialogTitle>
           <DialogDescription>FAQ 會按 scope 分組並依排序值顯示。</DialogDescription>
         </DialogHeader>
         {faq ? (
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+            <form className="grid gap-4" onSubmit={onSubmit}>
+              <div className="grid gap-4 md:grid-cols-2">
+                <TextField
+                  label="Scope"
+                  value={faq.scope}
+                  onChange={(value) => onChange({ ...faq, scope: value })}
+                  required
+                />
+                <NumberField
+                  label="排序"
+                  value={faq.sort_order}
+                  onChange={(value) => onChange({ ...faq, sort_order: value ?? 0 })}
+                />
+              </div>
               <TextField
-                label="Scope"
-                value={faq.scope}
-                onChange={(value) => onChange({ ...faq, scope: value })}
+                label="問題"
+                value={faq.question}
+                onChange={(value) => onChange({ ...faq, question: value })}
                 required
               />
-              <NumberField
-                label="排序"
-                value={faq.sort_order}
-                onChange={(value) => onChange({ ...faq, sort_order: value ?? 0 })}
+              <TextAreaField
+                label="答案"
+                value={faq.answer}
+                onChange={(value) => onChange({ ...faq, answer: value })}
+                rows={6}
+                required
               />
-            </div>
-            <TextField
-              label="問題"
-              value={faq.question}
-              onChange={(value) => onChange({ ...faq, question: value })}
-              required
+              <EditorFooter saving={saving} onClose={onClose} />
+            </form>
+            <AdminContentCopilot
+              resourceType="faq"
+              resourceId={faq.id ?? null}
+              fingerprintValues={fingerprintValues}
+              values={{ question: faq.question, answer: faq.answer }}
+              onApply={(patch) => onChange({ ...faq, ...patch })}
             />
-            <TextAreaField
-              label="答案"
-              value={faq.answer}
-              onChange={(value) => onChange({ ...faq, answer: value })}
-              rows={6}
-              required
-            />
-            <EditorFooter saving={saving} onClose={onClose} />
-          </form>
+          </div>
         ) : null}
       </DialogContent>
     </Dialog>
@@ -1419,6 +1492,83 @@ function TextAreaField({
   );
 }
 
+function estateFingerprintValues(
+  estate: AdminEstateInput | null,
+  persisted: AdminEstateCmsRow | null,
+): Record<string, unknown> {
+  if (!estate) return {};
+  return {
+    id: estate.id ?? "",
+    name_zh: estate.name_zh,
+    name_en: estate.name_en,
+    description: estate.description,
+    seo_title: estate.seo_title,
+    seo_description: estate.seo_description,
+    slug: estate.slug,
+    district_slug: estate.district_slug,
+    developer: estate.developer,
+    year_completed: estate.year_completed,
+    phases: estate.phases,
+    total_units: estate.total_units,
+    area_min: estate.area_min,
+    area_max: estate.area_max,
+    facilities: estate.facilities,
+    updated_at: persisted?.updated_at ?? null,
+  };
+}
+
+function articleFingerprintValues(
+  article: AdminArticleInput | null,
+  persisted: AdminArticleCmsRow | null,
+): Record<string, unknown> {
+  if (!article) return {};
+  return {
+    id: article.id ?? "",
+    title: article.title,
+    excerpt: article.excerpt,
+    content: article.content,
+    seo_title: article.seo_title,
+    seo_description: article.seo_description,
+    slug: article.slug,
+    category: article.category,
+    reading_minutes: article.reading_minutes,
+    published: article.published,
+    published_at: article.published_at,
+    updated_at: persisted?.updated_at ?? null,
+  };
+}
+
+function faqFingerprintValues(
+  faq: AdminFaqInput | null,
+  persisted: AdminFaqCmsRow | null,
+): Record<string, unknown> {
+  if (!faq) return {};
+  return {
+    id: faq.id ?? "",
+    question: faq.question,
+    answer: faq.answer,
+    scope: faq.scope,
+    sort_order: faq.sort_order,
+    created_at: persisted?.created_at ?? null,
+  };
+}
+
+function cmsVideoFingerprintValues(
+  video: AdminCmsVideoInput | null,
+  persisted: AdminCmsVideoRow | null,
+): Record<string, unknown> {
+  if (!video) return {};
+  return {
+    id: video.id ?? "",
+    title: video.title,
+    description: video.description,
+    video_url: video.video_url,
+    sort_order: video.sort_order,
+    published: video.published,
+    created_at: persisted?.created_at ?? null,
+    updated_at: persisted?.updated_at ?? null,
+  };
+}
 function estateToInput(estate: AdminEstateCmsRow): AdminEstateInput {
   return {
     id: estate.id,
