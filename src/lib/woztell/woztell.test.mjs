@@ -9,6 +9,7 @@ import {
   isBlastRecipientAllowed,
   isOptOutText,
   normalizeWoztellEvent,
+  sendWoztellResponse,
   verifyWoztellSignature,
 } from "./woztell.server.ts";
 
@@ -68,6 +69,62 @@ test("normalizeWoztellEvent handles outbound manual events", () => {
   assert.equal(event.text, "收到，我哋幫你配盤");
 });
 
+
+test("normalizeWoztellEvent supports official memberId and channelId fields", () => {
+  const event = normalizeWoztellEvent({
+    memberId: "woztell-member-1",
+    channelId: "woztell-channel-1",
+    messageEvent: {
+      from: "85260000000",
+      to: "85268888888",
+      timestamp: 1712807869354,
+      type: "TEXT",
+      data: { text: "official payload text" },
+      messageId: "wamid.official-1",
+    },
+  });
+
+  assert.equal(event.woztellMemberId, "woztell-member-1");
+  assert.equal(event.channelId, "woztell-channel-1");
+  assert.equal(event.externalMessageId, "wamid.official-1");
+  assert.equal(event.text, "official payload text");
+});
+
+test("sendWoztellResponse uses memberId rather than a browser recipient id", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url, init };
+    return new Response(JSON.stringify({ ok: 1 }), { status: 200 });
+  };
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+
+  try {
+    const result = await sendWoztellResponse({
+      memberId: "woztell-member-1",
+      response: [{ type: "TEXT", text: "reply text" }],
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(request.init.body), {
+      channelId: "test-channel",
+      memberId: "woztell-member-1",
+      response: [{ type: "TEXT", text: "reply text" }],
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
+});
+
 test("blast and service-window guards enforce WhatsApp safety defaults", () => {
   const now = new Date("2026-06-23T12:00:00.000Z");
 
@@ -105,7 +162,7 @@ test("admin send route gates replies through a fetched conversation", () => {
     "last_inbound_at",
     "opted_out_whatsapp",
     "woztell_member_id",
-    "recipientId !== conversationRecipientId",
+    "memberId",
     "let result",
     "try",
     "catch",
@@ -119,4 +176,31 @@ test("admin send route gates replies through a fetched conversation", () => {
   assert.match(sendRoute, /catch\s*\([^)]*\)\s*\{[\s\S]*ok:\s*false[\s\S]*error:/);
   assert.match(sendRoute, /status,\s*payload/);
   assert.match(sendRoute, /result\.ok \? "sent" : "failed"/);
+  assert.doesNotMatch(sendRoute, /recipientId/);
+  assert.match(sendRoute, /status,\s*payload/);
+  assert.match(sendRoute, /'sending'/);
+  assert.match(sendRoute, /RETURNING id/);
+  assert.match(sendRoute, /UPDATE whatsapp_messages[\s\S]*SET status/);
+  assert.match(sendRoute, /status = \$2/);
+  assert.match(sendRoute, /payload = \$3::jsonb/);
+  assert.match(sendRoute, /WHERE id = \$1/);
+});
+
+test("webhook validates the raw body before parsing and deduplicates messages", () => {
+  const webhookRoute = read("src/routes/api.woztell.webhook.ts");
+
+  assert.match(webhookRoute, /request\.text\(\)/);
+  assert.match(webhookRoute, /x-woztell-signature/);
+  assert.match(webhookRoute, /try\s*\{[\s\S]*JSON\.parse\(raw/);
+  assert.match(webhookRoute, /INVALID_JSON/);
+  assert.match(webhookRoute, /external_message_id/);
+  assert.match(webhookRoute, /ON CONFLICT \(external_message_id\) DO NOTHING/);
+  assert.match(webhookRoute, /ORDER BY \(whatsapp_member_id = \$2\)/);
+});
+
+test("admin reply server action never accepts a browser recipient id", () => {
+  const adminData = read("src/lib/neon/admin-data.ts");
+
+  assert.match(adminData, /conversationId: string; text: string/);
+  assert.doesNotMatch(adminData, /conversationId: string; recipientId: string; text: string/);
 });

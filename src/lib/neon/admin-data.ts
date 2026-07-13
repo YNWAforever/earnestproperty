@@ -735,7 +735,7 @@ export async function updateAdminConversation(options: { data: AdminConversation
 }
 
 export async function sendAdminConversationReply(options: {
-  data: { conversationId: string; recipientId: string; text: string };
+  data: { conversationId: string; text: string };
 }) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },

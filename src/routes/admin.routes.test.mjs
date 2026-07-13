@@ -171,6 +171,18 @@ test("admin WhatsApp inbox guards stale selected conversation actions", () => {
   }
 });
 
+test("admin WhatsApp reply delegates recipient identity to the server", () => {
+  const whatsappRoute = read("src/routes/admin.whatsapp.tsx");
+
+  assert.doesNotMatch(whatsappRoute, /recipientId/);
+  assert.match(whatsappRoute, /conversationId: targetId,[\s\S]*text/);
+  assert.match(whatsappRoute, /sendingReply/);
+  assert.match(whatsappRoute, /status === "sending"/);
+  assert.match(whatsappRoute, /status === "failed"/);
+  assert.match(whatsappRoute, /傳送中/);
+  assert.match(whatsappRoute, /送出失敗/);
+});
+
 test("admin routes expose functional workflows, not only read-only tables", () => {
   for (const text of [
     "屋苑 SEO",

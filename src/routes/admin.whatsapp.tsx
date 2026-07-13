@@ -50,13 +50,20 @@ const statusLabels: Record<string, string> = {
   closed: "已關閉",
 };
 
+
+const messageStatusLabels: Record<string, string> = {
+  received: "已接收",
+  sending: "傳送中",
+  sent: "已送出",
+  failed: "送出失敗",
+};
+
 const replyErrorLabels: Record<string, string> = {
   WOZTELL_DISABLED: "WOZTELL_ENABLED 未啟用",
   CONTACT_OPTED_OUT: "客戶已 Opt-out WhatsApp",
   OUTSIDE_24_HOUR_WINDOW: "超過 24 小時回覆窗口",
   CONVERSATION_NOT_FOUND: "找不到 WhatsApp 對話",
   MISSING_WOZTELL_MEMBER_ID: "缺少 Woztell member ID",
-  RECIPIENT_MISMATCH: "收件人與對話不相符",
 };
 
 export const Route = createFileRoute("/admin/whatsapp")({
@@ -297,7 +304,6 @@ function AdminWhatsapp() {
       const result = await sendAdminConversationReply({
         data: {
           conversationId: targetId,
-          recipientId: detail.woztell_member_id ?? "",
           text,
         },
       });
@@ -713,6 +719,12 @@ function MessageTimeline({ messages }: { messages: AdminConversationMessageRow[]
 
 function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
   const outbound = message.direction === "outbound";
+  const statusClass =
+    message.status === "failed"
+      ? "font-semibold"
+      : message.status === "sending"
+        ? "italic"
+        : "";
   return (
     <article className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
       <div
@@ -725,7 +737,7 @@ function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
           <MessageCircle className="h-3.5 w-3.5" />
           <span>{formatDirection(message.direction)}</span>
           <span>{formatDate(message.created_at)}</span>
-          <span>{message.status}</span>
+          <span className={statusClass}>{messageStatusLabel(message.status)}</span>
         </div>
         <p className="whitespace-pre-wrap break-words">{message.text ?? "（非文字訊息）"}</p>
         {message.error ? <p className="mt-2 text-xs opacity-90">{message.error}</p> : null}
@@ -793,6 +805,10 @@ function useDesktopBreakpoint() {
 
 function statusLabel(status: string) {
   return statusLabels[status] ?? status;
+}
+
+function messageStatusLabel(status: string) {
+  return messageStatusLabels[status] ?? status;
 }
 
 function formatDirection(direction: string | null) {

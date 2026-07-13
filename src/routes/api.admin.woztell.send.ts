@@ -24,17 +24,15 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
       POST: async ({ request }) => {
         const staff = await requireStaffAccess(request, ["admin", "manager", "agent"]);
         const body = (await request.json().catch(() => null)) as {
-          recipientId?: string;
           text?: string;
           conversationId?: string;
         } | null;
         const conversationId = body?.conversationId?.trim();
-        const recipientId = body?.recipientId?.trim();
         const text = body?.text?.trim();
 
-        if (!conversationId || !recipientId || !text) {
+        if (!conversationId || !text) {
           return Response.json(
-            { ok: false, error: "conversationId, recipientId and text are required" },
+            { ok: false, error: "conversationId and text are required" },
             { status: 400 },
           );
         }
@@ -60,12 +58,9 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
           return Response.json({ ok: false, error: "CONVERSATION_NOT_FOUND" }, { status: 400 });
         }
 
-        const conversationRecipientId = stringOrNull(conversation.woztell_member_id)?.trim();
-        if (!conversationRecipientId) {
+        const memberId = stringOrNull(conversation.woztell_member_id)?.trim();
+        if (!memberId) {
           return Response.json({ ok: false, error: "MISSING_WOZTELL_MEMBER_ID" }, { status: 400 });
-        }
-        if (recipientId !== conversationRecipientId) {
-          return Response.json({ ok: false, error: "RECIPIENT_MISMATCH" }, { status: 400 });
         }
 
         const replyGuard = canReplyToConversation({
@@ -77,10 +72,34 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
           return Response.json({ ok: false, error: replyGuard.reason }, { status: 400 });
         }
 
+        const pendingRows = await queryRows<{ id: unknown }>(
+          `
+          INSERT INTO whatsapp_messages (
+            conversation_id, contact_id, direction, message_type, text, sent_by,
+            status, payload, error, woztell_member_id, channel_id
+          )
+          VALUES ($1, $2, 'outbound', 'TEXT', $3, $4, 'sending', $5::jsonb, NULL, $6, $7)
+          RETURNING id
+          `,
+          [
+            conversationId,
+            stringOrNull(conversation.contact_id),
+            text,
+            staff.staffId,
+            JSON.stringify({ state: "sending" }),
+            memberId,
+            stringOrNull(conversation.channel_id),
+          ],
+        );
+        const messageId = stringOrNull(pendingRows[0]?.id);
+        if (!messageId) {
+          return Response.json({ ok: false, error: "MESSAGE_CREATE_FAILED" }, { status: 500 });
+        }
+
         let result: WoztellSendResult;
         try {
           result = await sendWoztellResponse({
-            recipientId: conversationRecipientId,
+            memberId,
             response: [{ type: "TEXT", text }],
           });
         } catch (sendError) {
@@ -89,22 +108,15 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
 
         await queryRows(
           `
-          INSERT INTO whatsapp_messages (
-            conversation_id, contact_id, direction, message_type, text, sent_by,
-            status, payload, error, woztell_member_id, channel_id
-          )
-          VALUES ($1, $2, 'outbound', 'TEXT', $3, $4, $5, $6::jsonb, $7, $8, $9)
+          UPDATE whatsapp_messages
+          SET status = $2, payload = $3::jsonb, error = $4
+          WHERE id = $1
           `,
           [
-            conversationId,
-            stringOrNull(conversation.contact_id),
-            text,
-            staff.staffId,
+            messageId,
             result.ok ? "sent" : "failed",
-            JSON.stringify({ ...result, requestedRecipientId: recipientId }),
+            JSON.stringify(result),
             result.ok ? null : result.error,
-            conversationRecipientId,
-            stringOrNull(conversation.channel_id),
           ],
         );
 
