@@ -121,8 +121,8 @@ export const contentCopilotRequestSchema = z.object({
   }
 });
 
-export function allowedContentCopilotFields(resourceType: ContentCopilotResourceType) {
-  return [...CONTENT_COPILOT_RESOURCE_FIELDS[resourceType]];
+export function allowedContentCopilotFields(resourceType: ContentCopilotResourceType): string[] {
+  return [...CONTENT_COPILOT_RESOURCE_FIELDS[resourceType]] as string[];
 }
 
 export async function buildContentFingerprint(value: Record<string, unknown>) {
