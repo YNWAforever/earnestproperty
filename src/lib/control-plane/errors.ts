@@ -24,19 +24,37 @@ export function mapControlPlaneError(error: unknown): PublicControlPlaneError {
     };
   }
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
-  if (code === "42P01")
+  if (code === "42P01" || code === "SCHEMA_RELATION_MISSING")
     return {
       code: "SCHEMA_RELATION_MISSING",
       message: "A required database relation is missing.",
       retryable: false,
     };
-  if (code === "42703")
+  if (code === "42703" || code === "SCHEMA_COLUMN_MISSING")
     return {
       code: "SCHEMA_COLUMN_MISSING",
       message: "A required database column is missing.",
       retryable: false,
     };
   if (code === "23505")
+    return {
+      code: "CONFLICT_DUPLICATE",
+      message: "The operation conflicts with existing data.",
+      retryable: false,
+    };
+  if (code === "MIGRATION_APPROVAL_INVALID")
+    return {
+      code: "MIGRATION_APPROVAL_INVALID",
+      message: "Migration approval is invalid or expired.",
+      retryable: false,
+    };
+  if (code === "VALIDATION_ERROR")
+    return {
+      code: "VALIDATION_ERROR",
+      message: "The operation failed validation.",
+      retryable: false,
+    };
+  if (code === "CONFLICT_DUPLICATE")
     return {
       code: "CONFLICT_DUPLICATE",
       message: "The operation conflicts with existing data.",
