@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { neon } from "@neondatabase/serverless";
 
 export type DbRow = Record<string, unknown>;
+export type TransactionStatement = { statement: string; params?: unknown[] };
 
 export function getDatabaseUrl() {
   return process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
@@ -19,6 +20,19 @@ export async function queryRows<T extends DbRow = DbRow>(
   params: unknown[] = [],
 ): Promise<T[]> {
   return (await getSql().query(statement, params)) as T[];
+}
+
+export async function transactionRows(
+  statements: readonly TransactionStatement[],
+  options: {
+    isolationLevel?: "ReadUncommitted" | "ReadCommitted" | "RepeatableRead" | "Serializable";
+  } = {},
+) {
+  const sql = getSql();
+  return sql.transaction(
+    (tx) => statements.map(({ statement, params = [] }) => tx.query(statement, params)),
+    options,
+  );
 }
 
 export function addParam(params: unknown[], value: unknown) {
