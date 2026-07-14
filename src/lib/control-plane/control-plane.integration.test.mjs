@@ -61,19 +61,48 @@ test("control plane migration applies and protects audit rows in a disposable da
 
   try {
     const { queryRows, transactionRows } = await import("../neon/db.server.ts");
+    const { listAuditLogs, writeAudit } = await import("./audit.server.ts");
     for (const table of ["ops_audit_logs", "ops_jobs", "ops_job_attempts", "ops_migration_runs"]) {
       const rows = await queryRows("SELECT to_regclass($1)::text AS name", [table]);
       assert.equal(rows[0]?.name, table);
     }
 
     const requestId = crypto.randomUUID();
-    await queryRows(
-      `INSERT INTO ops_audit_logs (permission, action, outcome, request_id, metadata)
-       VALUES ($1, $2, $3, $4::uuid, $5::jsonb)`,
-      ["system.health.read", "test", "success", requestId, JSON.stringify({ ok: true })],
+    const staffRows = await queryRows(
+      `INSERT INTO staff_users (email, name_en)
+       VALUES ($1, $2)
+       ON CONFLICT (email) DO UPDATE SET name_en = EXCLUDED.name_en
+       RETURNING id::text AS id`,
+      [`control-plane-${requestId}@example.test`, "Control Plane Test"],
     );
+    const actor = {
+      staffId: staffRows[0].id,
+      authUserId: `test-${requestId}`,
+      email: `control-plane-${requestId}@example.test`,
+      name: "Control Plane Test",
+      roles: ["admin"],
+      bootstrap: false,
+    };
+    await writeAudit({
+      actor,
+      permission: "system.health.read",
+      action: "test.audit",
+      outcome: "success",
+      context: { requestId, startedAt: new Date().toISOString() },
+      metadata: { title: "visible", token: "hidden" },
+    });
+
+    const logs = await listAuditLogs({ limit: 100 });
+    const auditLog = logs.find((row) => row.request_id === requestId);
+    assert.ok(auditLog);
+    assert.equal(auditLog.metadata.title, "visible");
+    assert.equal(auditLog.metadata.token, "[REDACTED]");
     await assert.rejects(
       () => queryRows("UPDATE ops_audit_logs SET action = $1 WHERE request_id = $2::uuid", ["changed", requestId]),
+      /append-only/i,
+    );
+    await assert.rejects(
+      () => queryRows("DELETE FROM ops_audit_logs WHERE request_id = $1::uuid", [requestId]),
       /append-only/i,
     );
 
