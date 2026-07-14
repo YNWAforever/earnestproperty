@@ -63,6 +63,28 @@ test("admin child routes are present in the generated route tree", () => {
   assert.doesNotMatch(routeTree, /AdminListingsRouteWithChildren/);
   assert.doesNotMatch(routeTree, /parentRoute: typeof AdminListingsRoute/);
 });
+test("CMS and AI Agent sidebar entries keep independent active states", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+  const cmsRoute = read("src/routes/admin.cms.tsx");
+
+  assert.match(shell, /to: "\/admin\/cms", label: "CMS \/ FAQ"/);
+  assert.match(shell, /label: "CMS \/ FAQ",[\s\S]*?search: \{ tab: undefined \}/);
+  assert.match(
+    shell,
+    /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/,
+  );
+  assert.match(shell, /includeSearch: true/);
+  const navLinkOpening = shell.match(
+    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
+  )?.[0];
+  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
+  assert.match(navLinkOpening, /\.\.\.\("search" in item/);
+  assert.match(navLinkOpening, /activeOptions=\{\{/);
+  assert.match(navLinkOpening, /explicitUndefined: true/);
+
+  assert.match(cmsRoute, /validateSearch/);
+  assert.match(cmsRoute, /Route\.useSearch\(\)/);
+});
 
 test("admin server functions recover from stale deployed hashes", () => {
   const adminData = read("src/lib/neon/admin-data.ts");

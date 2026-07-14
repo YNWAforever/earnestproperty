@@ -60,7 +60,21 @@ import type {
   AdminMediaAssetRow,
 } from "@/lib/neon/admin-data.types";
 
+const adminCmsTabs = ["estates", "articles", "videos", "faqs", "media"] as const;
+type AdminCmsTab = (typeof adminCmsTabs)[number];
+
+function parseAdminCmsSearch(search: Record<string, unknown>): { tab?: AdminCmsTab } {
+  const tab = search.tab;
+  return {
+    tab:
+      typeof tab === "string" && adminCmsTabs.includes(tab as AdminCmsTab)
+        ? (tab as AdminCmsTab)
+        : undefined,
+  };
+}
+
 export const Route = createFileRoute("/admin/cms")({
+  validateSearch: parseAdminCmsSearch,
   head: () => ({
     meta: [{ title: "CMS｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
@@ -121,12 +135,14 @@ const emptyCmsVideo: AdminCmsVideoInput = {
 
 function AdminCms() {
   const { user } = useNeonAuth();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [data, setData] = useState<AdminCmsData | null>(null);
   const [mediaAssets, setMediaAssets] = useState<AdminMediaAssetRow[] | null>(null);
   const [knowledgeStatus, setKnowledgeStatus] = useState<AdminAiKnowledgeStatus | null>(null);
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("estates");
+  const activeTab = search.tab ?? "estates";
   const [saving, setSaving] = useState(false);
   const [editingEstate, setEditingEstate] = useState<AdminEstateInput | null>(null);
   const [editingArticle, setEditingArticle] = useState<AdminArticleInput | null>(null);
@@ -422,7 +438,16 @@ function AdminCms() {
             </CardContent>
           </Card>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs
+            value={activeTab}
+            onValueChange={(tab) => {
+              const nextTab = tab as AdminCmsTab;
+              void navigate({
+                search: { tab: nextTab === "estates" ? undefined : nextTab },
+                replace: true,
+              });
+            }}
+          >
             <TabsList className="mb-4 grid h-auto w-full grid-cols-2 sm:grid-cols-3 lg:inline-flex lg:w-auto">
               <TabsTrigger value="estates">屋苑 SEO</TabsTrigger>
               <TabsTrigger value="articles">文章編輯</TabsTrigger>
