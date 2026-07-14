@@ -5,6 +5,7 @@ import { hasPermission } from "./permissions.ts";
 import { errorResponse, mapControlPlaneError, successResponse } from "./errors.ts";
 import { createOperationContext } from "./request-context.ts";
 import { sanitizeAuditMetadata } from "./audit.server.ts";
+import { aggregateHealth } from "./health.server.ts";
 
 test("permission matrix defaults to deny", () => {
   assert.equal(hasPermission(["agent"], "system.health.read"), true);
@@ -66,4 +67,20 @@ test("audit metadata applies bounded strings, arrays, and nesting", () => {
   assert.equal(metadata.items.length, 50);
   assert.equal(metadata.nested.a.b.c.d, "[TRUNCATED]");
   assert.equal(metadata.accessToken, "[REDACTED]");
+});
+
+test("required failed checks make health failed while optional failures degrade", () => {
+  assert.equal(
+    aggregateHealth([
+      { key: "database", required: true, status: "healthy" },
+      { key: "woztell", required: false, status: "failed" },
+    ]).status,
+    "degraded",
+  );
+  assert.equal(
+    aggregateHealth([
+      { key: "database", required: true, status: "failed" },
+    ]).status,
+    "failed",
+  );
 });

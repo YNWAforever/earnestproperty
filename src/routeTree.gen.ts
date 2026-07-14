@@ -59,6 +59,7 @@ import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
+import { Route as ApiAdminControlPlaneHealthRouteImport } from './routes/api.admin.control-plane.health'
 import { Route as ApiAdminAiRebuildKnowledgeRouteImport } from './routes/api.admin.ai.rebuild-knowledge'
 import { Route as ApiAdminCampaignsIdQueueRouteImport } from './routes/api.admin.campaigns.$id.queue'
 
@@ -312,6 +313,12 @@ const ApiAdminJobsSendQueueRoute = ApiAdminJobsSendQueueRouteImport.update({
   path: '/api/admin/jobs/send-queue',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminControlPlaneHealthRoute =
+  ApiAdminControlPlaneHealthRouteImport.update({
+    id: '/api/admin/control-plane/health',
+    path: '/api/admin/control-plane/health',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminAiRebuildKnowledgeRoute =
   ApiAdminAiRebuildKnowledgeRouteImport.update({
     id: '/api/admin/ai/rebuild-knowledge',
@@ -374,6 +381,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
@@ -426,6 +434,7 @@ export interface FileRoutesByTo {
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
@@ -481,6 +490,7 @@ export interface FileRoutesById {
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
@@ -537,6 +547,7 @@ export interface FileRouteTypes {
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/health'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
@@ -589,6 +600,7 @@ export interface FileRouteTypes {
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/health'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
@@ -643,6 +655,7 @@ export interface FileRouteTypes {
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/health'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
@@ -679,6 +692,7 @@ export interface RootRouteChildren {
   ApiLiveAgentSessionRoute: typeof ApiLiveAgentSessionRoute
   ApiWoztellWebhookRoute: typeof ApiWoztellWebhookRoute
   ApiAdminAiRebuildKnowledgeRoute: typeof ApiAdminAiRebuildKnowledgeRoute
+  ApiAdminControlPlaneHealthRoute: typeof ApiAdminControlPlaneHealthRoute
   ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
@@ -1037,6 +1051,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminJobsSendQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/control-plane/health': {
+      id: '/api/admin/control-plane/health'
+      path: '/api/admin/control-plane/health'
+      fullPath: '/api/admin/control-plane/health'
+      preLoaderRoute: typeof ApiAdminControlPlaneHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/ai/rebuild-knowledge': {
       id: '/api/admin/ai/rebuild-knowledge'
       path: '/api/admin/ai/rebuild-knowledge'
@@ -1158,6 +1179,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLiveAgentSessionRoute: ApiLiveAgentSessionRoute,
   ApiWoztellWebhookRoute: ApiWoztellWebhookRoute,
   ApiAdminAiRebuildKnowledgeRoute: ApiAdminAiRebuildKnowledgeRoute,
+  ApiAdminControlPlaneHealthRoute: ApiAdminControlPlaneHealthRoute,
   ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,
