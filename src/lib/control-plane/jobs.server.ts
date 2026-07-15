@@ -271,6 +271,95 @@ export async function recoverExpiredLeases() {
   );
 }
 
+type JobListCursor = { createdAt: string; id: string };
+
+function encodeJobCursor(cursor: JobListCursor) {
+  const bytes = new TextEncoder().encode(JSON.stringify(cursor));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeJobCursor(value: string | undefined): JobListCursor | null {
+  if (!value) return null;
+  try {
+    if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid cursor");
+    const padded = `${value.replace(/-/g, "+").replace(/_/g, "/")}${"=".repeat((4 - (value.length % 4)) % 4)}`;
+    const parsed = JSON.parse(atob(padded)) as unknown;
+    if (!parsed || typeof parsed !== "object") throw new Error("Invalid cursor");
+    const cursor = parsed as Record<string, unknown>;
+    if (
+      typeof cursor.createdAt !== "string" ||
+      Number.isNaN(Date.parse(cursor.createdAt)) ||
+      typeof cursor.id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id)
+    ) {
+      throw new Error("Invalid cursor");
+    }
+    return { createdAt: cursor.createdAt, id: cursor.id };
+  } catch {
+    throw validationError("The job cursor is invalid.");
+  }
+}
+
+function isoDate(value: unknown) {
+  return (value instanceof Date ? value : new Date(String(value))).toISOString();
+}
+
+export async function listJobs(
+  input: {
+    status?: JobRow["status"];
+    jobType?: string;
+    cursor?: string;
+    limit?: number;
+  } = {},
+) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 20), 1), 100);
+  const cursor = decodeJobCursor(input.cursor);
+  const rows = await queryRows(
+    `SELECT id::text AS id, job_type, payload_version, status, attempt_count, max_attempts,
+            run_after, lease_expires_at, last_error_code, created_at, updated_at
+     FROM ops_jobs
+     WHERE ($1::text IS NULL OR status = $1)
+       AND ($2::text IS NULL OR job_type = $2)
+       AND (
+         $3::timestamptz IS NULL
+         OR (created_at, id) < ($3::timestamptz, $4::uuid)
+       )
+     ORDER BY created_at DESC, id DESC
+     LIMIT $5`,
+    [
+      input.status ?? null,
+      input.jobType?.trim().slice(0, 100) || null,
+      cursor?.createdAt ?? null,
+      cursor?.id ?? null,
+      limit + 1,
+    ],
+  );
+  const pageRows = rows.slice(0, limit).map((row) => ({
+    id: String(row.id),
+    jobType: String(row.job_type),
+    payloadVersion: Number(row.payload_version),
+    status: String(row.status),
+    attemptCount: Number(row.attempt_count),
+    maxAttempts: Number(row.max_attempts),
+    runAfter: isoDate(row.run_after),
+    leaseExpiresAt: row.lease_expires_at == null ? null : isoDate(row.lease_expires_at),
+    errorCode: row.last_error_code == null ? null : String(row.last_error_code),
+    createdAt: isoDate(row.created_at),
+    updatedAt: isoDate(row.updated_at),
+  }));
+  const last = pageRows.at(-1);
+  return {
+    rows: pageRows,
+    nextCursor:
+      rows.length > limit && last
+        ? encodeJobCursor({ createdAt: last.createdAt, id: last.id })
+        : null,
+  };
+}
+
 function safeJobErrorCode(error: unknown) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   return /^[A-Z][A-Z0-9_]{0,99}$/.test(code) ? code : "JOB_HANDLER_FAILED";

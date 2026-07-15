@@ -72,3 +72,37 @@ test("control-plane worker requires cron authorization and returns counts only",
   assert.doesNotMatch(source, /payload\s*:/i);
   assert.doesNotMatch(source, /last_error_summary/);
 });
+
+test("job management routes validate IDs, permissions, and safe summaries", () => {
+  const listSource = readFileSync("src/routes/api.admin.control-plane.jobs.ts", "utf8");
+  const retrySource = readFileSync(
+    "src/routes/api.admin.control-plane.jobs.$id.retry.ts",
+    "utf8",
+  );
+  const cancelSource = readFileSync(
+    "src/routes/api.admin.control-plane.jobs.$id.cancel.ts",
+    "utf8",
+  );
+
+  assert.match(listSource, /requireStaffPermission\(request, "system\.jobs\.read"\)/);
+  assert.match(retrySource, /requireStaffPermission\(request, "system\.jobs\.retry"\)/);
+  assert.match(cancelSource, /requireStaffPermission\(request, "system\.jobs\.cancel"\)/);
+  for (const source of [retrySource, cancelSource]) {
+    assert.match(source, /z\.object\(\{\}\)\.strict\(\)/);
+    assert.match(source, /z\.string\(\)\.uuid\(\)/);
+    assert.match(source, /writeAudit/);
+  }
+  for (const key of ["status", "jobType", "cursor", "limit"]) {
+    assert.match(listSource, new RegExp(`${key}:`));
+  }
+  assert.match(listSource, /\.max\(100\)/);
+  for (const sensitive of [
+    /payload\s*:/i,
+    /phone\s*:/i,
+    /prompt\s*:/i,
+    /providerToken\s*:/i,
+    /last_error_summary/,
+  ]) {
+    assert.doesNotMatch(listSource, sensitive);
+  }
+});
