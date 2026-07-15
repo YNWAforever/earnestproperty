@@ -15,6 +15,12 @@ import {
   listRegisteredMigrations,
 } from "./migration-registry.server.ts";
 import { applyMigration, planMigration } from "./migrations.server.ts";
+import {
+  canCancelJob,
+  jobFailureTransition,
+  manualRetryTransition,
+  retryDelayMs,
+} from "./jobs.ts";
 
 test("permission matrix defaults to deny", () => {
   assert.equal(hasPermission(["agent"], "system.health.read"), true);
@@ -276,4 +282,36 @@ test("migration service revalidates schema and applies once through a transactio
   );
   assert.equal(failureRuns.length, 1);
   assert.equal(audits.at(-1).outcome, "failure");
+});
+
+test("retryable failures back off and exhausted failures stop", () => {
+  assert.deepEqual(
+    jobFailureTransition({ attemptCount: 1, maxAttempts: 3, retryable: true, nowMs: 1_000 }),
+    { status: "queued", runAfterMs: 3_000 },
+  );
+  assert.deepEqual(
+    jobFailureTransition({ attemptCount: 3, maxAttempts: 3, retryable: true, nowMs: 1_000 }),
+    { status: "failed", runAfterMs: null },
+  );
+  assert.deepEqual(
+    jobFailureTransition({ attemptCount: 1, maxAttempts: 3, retryable: false, nowMs: 1_000 }),
+    { status: "failed", runAfterMs: null },
+  );
+  assert.equal(retryDelayMs(20), 15 * 60 * 1_000);
+});
+
+test("manual retry grants exactly one additional attempt", () => {
+  assert.deepEqual(
+    manualRetryTransition({ status: "failed", attemptCount: 5, maxAttempts: 5 }),
+    { status: "queued", maxAttempts: 6 },
+  );
+  assert.equal(manualRetryTransition({ status: "succeeded", attemptCount: 1, maxAttempts: 5 }), null);
+});
+
+test("only unfinished or failed jobs can be cancelled", () => {
+  assert.equal(canCancelJob("queued"), true);
+  assert.equal(canCancelJob("running"), true);
+  assert.equal(canCancelJob("failed"), true);
+  assert.equal(canCancelJob("succeeded"), false);
+  assert.equal(canCancelJob("cancelled"), false);
 });
