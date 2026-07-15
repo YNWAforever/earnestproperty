@@ -23,6 +23,7 @@ import {
 } from "./jobs.ts";
 import {
   createAiKnowledgeRebuildHandler,
+  createWoztellCampaignDeliveryHandler,
   isRetryableJobError,
   parseRegisteredJobPayload,
   registerJobHandler,
@@ -369,5 +370,33 @@ test("AI knowledge handler delegates safely and marks provider timeouts retryabl
   await assert.rejects(
     () => timeoutHandler.run(payload, { jobId: "job-2", attempt: 1 }),
     (error) => isRetryableJobError(error) && error.code === "AI_KNOWLEDGE_REBUILD_TIMEOUT",
+  );
+});
+
+test("WozTell campaign handler maps timeout to retry and permanent rejection to failure", async () => {
+  const payload = { campaignId: "11111111-1111-4111-8111-111111111111" };
+  const success = createWoztellCampaignDeliveryHandler({
+    deliverCampaign: async () => ({ sent: 3, blocked: 1, failed: 0, checked: 4 }),
+  });
+  assert.deepEqual(await success.run(payload, { jobId: "job-1", attempt: 1 }), {
+    summary: { sent: 3, blocked: 1, failed: 0, checked: 4 },
+  });
+
+  const timeout = createWoztellCampaignDeliveryHandler({
+    deliverCampaign: async () => {
+      throw Object.assign(new Error("timeout"), { code: "WOZTELL_PROVIDER_TIMEOUT" });
+    },
+  });
+  await assert.rejects(
+    () => timeout.run(payload, { jobId: "job-2", attempt: 1 }),
+    (error) => isRetryableJobError(error) && error.code === "WOZTELL_CAMPAIGN_RETRYABLE",
+  );
+
+  const rejected = createWoztellCampaignDeliveryHandler({
+    deliverCampaign: async () => ({ sent: 0, blocked: 0, failed: 1, checked: 1 }),
+  });
+  await assert.rejects(
+    () => rejected.run(payload, { jobId: "job-3", attempt: 1 }),
+    (error) => error?.code === "WOZTELL_CAMPAIGN_REJECTED" && !isRetryableJobError(error),
   );
 });

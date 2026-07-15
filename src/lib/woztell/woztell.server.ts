@@ -193,3 +193,5 @@ export async function sendWoztellResponse(input: {
       : `WOZTELL_HTTP_${res.status}`;
   return { ok: false, error: providerError, status: res.status };
 }
+
+export { deliverWoztellCampaign } from "./campaign-delivery.server.ts";

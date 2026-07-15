@@ -117,3 +117,20 @@ test("AI knowledge rebuild route enqueues one versioned job per active window", 
   assert.match(source, /status:\s*202/);
   assert.doesNotMatch(source, /rebuildAdminAiKnowledge/);
 });
+
+test("WozTell queue routes enqueue durable campaign jobs and delegate to the worker", () => {
+  const queueSource = readFileSync("src/routes/api.admin.campaigns.$id.queue.ts", "utf8");
+  const cronSource = readFileSync("src/routes/api.admin.jobs.send-queue.ts", "utf8");
+
+  assert.match(queueSource, /requireStaffPermission\(request, "campaign\.queue"\)/);
+  assert.match(queueSource, /jobType:\s*"woztell\.campaign\.deliver"/);
+  assert.match(queueSource, /payloadVersion:\s*1/);
+  assert.match(queueSource, /woztell\.campaign\.deliver:\$\{params\.id\}/);
+  assert.match(cronSource, /process\.env\.CRON_SECRET/);
+  assert.match(cronSource, /enqueueJob\(/);
+  assert.match(cronSource, /runClaimedJobs\(/);
+  assert.match(cronSource, /ORDER BY campaign_id/);
+  assert.match(cronSource, /woztell\.campaign\.deliver:\$\{campaignId\}/);
+  assert.doesNotMatch(cronSource, /sendWoztellResponse/);
+  assert.doesNotMatch(cronSource, /opt_in_whatsapp/);
+});

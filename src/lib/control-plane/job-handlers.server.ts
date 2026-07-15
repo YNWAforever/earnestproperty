@@ -57,7 +57,9 @@ export function retryableJobError(code: string, message: string) {
 }
 
 export function isRetryableJobError(error: unknown) {
-  return Boolean(error && typeof error === "object" && "retryable" in error && error.retryable === true);
+  return Boolean(
+    error && typeof error === "object" && "retryable" in error && error.retryable === true,
+  );
 }
 
 type AiKnowledgeRebuildPayload = { requestedByStaffId: string };
@@ -122,7 +124,10 @@ export function createAiKnowledgeRebuildHandler(
         return { summary: result };
       } catch (error) {
         if (isProviderTimeout(error)) {
-          throw retryableJobError("AI_KNOWLEDGE_REBUILD_TIMEOUT", "AI knowledge rebuild timed out.");
+          throw retryableJobError(
+            "AI_KNOWLEDGE_REBUILD_TIMEOUT",
+            "AI knowledge rebuild timed out.",
+          );
         }
         throw error;
       }
@@ -131,3 +136,86 @@ export function createAiKnowledgeRebuildHandler(
 }
 
 export const aiKnowledgeRebuildHandler = registerJobHandler(createAiKnowledgeRebuildHandler());
+
+type WoztellCampaignDeliveryPayload = { campaignId: string };
+type WoztellCampaignDeliveryResult = {
+  sent: number;
+  blocked: number;
+  failed: number;
+  checked: number;
+};
+
+function parseWoztellCampaignDeliveryPayload(input: unknown): WoztellCampaignDeliveryPayload {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw Object.assign(new Error("WozTell campaign delivery payload is invalid."), {
+      code: "VALIDATION_ERROR",
+    });
+  }
+  const payload = input as Record<string, unknown>;
+  if (
+    Object.keys(payload).length !== 1 ||
+    typeof payload.campaignId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      payload.campaignId,
+    )
+  ) {
+    throw Object.assign(new Error("WozTell campaign delivery payload is invalid."), {
+      code: "VALIDATION_ERROR",
+    });
+  }
+  return { campaignId: payload.campaignId };
+}
+
+function isRetryableWoztellError(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String(error.code) : "";
+  const name = "name" in error ? String(error.name) : "";
+  return (
+    name === "AbortError" ||
+    code === "WOZTELL_PROVIDER_TIMEOUT" ||
+    code === "WOZTELL_PROVIDER_UNAVAILABLE" ||
+    code === "WOZTELL_CONFIGURATION_UNAVAILABLE" ||
+    code === "WOZTELL_DELIVERY_INCOMPLETE"
+  );
+}
+
+export function createWoztellCampaignDeliveryHandler(
+  deps: {
+    deliverCampaign?: (campaignId: string) => Promise<WoztellCampaignDeliveryResult>;
+  } = {},
+): JobHandler<WoztellCampaignDeliveryPayload> {
+  return {
+    jobType: "woztell.campaign.deliver",
+    payloadVersion: 1,
+    parsePayload: parseWoztellCampaignDeliveryPayload,
+    async run(payload) {
+      try {
+        const deliver =
+          deps.deliverCampaign ??
+          (async (campaignId: string) => {
+            const module = await import("../woztell/woztell.server.ts");
+            return module.deliverWoztellCampaign(campaignId);
+          });
+        const result = await deliver(payload.campaignId);
+        if (result.failed > 0) {
+          throw Object.assign(new Error("One or more campaign recipients were rejected."), {
+            code: "WOZTELL_CAMPAIGN_REJECTED",
+          });
+        }
+        return { summary: result };
+      } catch (error) {
+        if (isRetryableWoztellError(error)) {
+          throw retryableJobError(
+            "WOZTELL_CAMPAIGN_RETRYABLE",
+            "WozTell campaign delivery could not be completed yet.",
+          );
+        }
+        throw error;
+      }
+    },
+  };
+}
+
+export const woztellCampaignDeliveryHandler = registerJobHandler(
+  createWoztellCampaignDeliveryHandler(),
+);

@@ -326,18 +326,28 @@ test("admin routes expose functional workflows, not only read-only tables", () =
 
   const sendQueueJob = read("src/routes/api.admin.jobs.send-queue.ts");
   for (const text of [
-    "claimQueuedCampaignRecipients",
+    "findEligibleCampaigns",
+    "enqueueJob",
+    "runClaimedJobs",
+    "woztell.campaign.deliver",
+    "interval '15 minutes'",
+  ]) {
+    assert.match(sendQueueJob, new RegExp(text));
+  }
+
+  const campaignDelivery = read("src/lib/woztell/campaign-delivery.server.ts");
+  for (const text of [
+    "claimCampaignRecipients",
     "FOR UPDATE SKIP LOCKED",
     "RETURNING",
     "status = 'sending'",
     "queued_at = now()",
-    "interval '15 minutes'",
-    "r.status = 'sending'",
-    "catch \\(err\\)",
-    "refreshTouchedCampaignStatuses",
-    "blocked, failed",
+    "isBlastRecipientAllowed",
+    "opt_in_whatsapp",
+    "opted_out_whatsapp",
+    "refreshCampaignDeliveryStatus",
   ]) {
-    assert.match(sendQueueJob, new RegExp(text));
+    assert.match(campaignDelivery, new RegExp(text));
   }
 
   assert.match(
@@ -419,7 +429,10 @@ test("AI CRM, segment, and live-agent routes are wired", () => {
     ["src/routes/api.live-agent.session.ts", ["createLiveAgentSession"]],
     ["src/routes/api.live-agent.message.ts", ["answerLiveAgentMessage"]],
     ["src/routes/api.live-agent.handoff.ts", ["requestLiveAgentHandoff"]],
-    ["src/routes/api.admin.ai.rebuild-knowledge.ts", ["rebuildAdminAiKnowledge"]],
+    [
+      "src/routes/api.admin.ai.rebuild-knowledge.ts",
+      ["enqueueJob", "ai.knowledge.rebuild"],
+    ],
   ];
 
   for (const [file, requiredNames] of expectations) {
