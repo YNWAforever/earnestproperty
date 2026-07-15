@@ -51,6 +51,7 @@ export async function requestControlPlane<T>(
 ): Promise<{ data: T; requestId: string }> {
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
+  headers.delete("authorization");
   if (init.body !== undefined) headers.set("content-type", "application/json");
 
   const response = await fetchImpl(`/api/admin/control-plane${path}`, {
