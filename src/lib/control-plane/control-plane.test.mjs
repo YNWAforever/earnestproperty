@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { operationsCapabilitiesForRoles } from "./capabilities.ts";
 import { hasPermission } from "./permissions.ts";
 import { errorResponse, mapControlPlaneError, successResponse } from "./errors.ts";
 import { createOperationContext } from "./request-context.ts";
@@ -34,6 +35,34 @@ test("permission matrix defaults to deny", () => {
   assert.equal(hasPermission(["agent"], "system.health.read"), true);
   assert.equal(hasPermission(["agent"], "system.jobs.retry"), false);
   assert.equal(hasPermission(["unknown"], "system.health.read"), false);
+});
+
+test("operations capabilities expose no protected panels beyond each role", () => {
+  assert.deepEqual(operationsCapabilitiesForRoles(["agent"]), {
+    jobsRead: false,
+    jobsRetry: false,
+    jobsCancel: false,
+    auditRead: false,
+    migrationsPlan: false,
+    migrationsApply: false,
+  });
+  assert.deepEqual(operationsCapabilitiesForRoles(["manager"]), {
+    jobsRead: true,
+    jobsRetry: true,
+    jobsCancel: true,
+    auditRead: true,
+    migrationsPlan: false,
+    migrationsApply: false,
+  });
+  assert.equal(operationsCapabilitiesForRoles(["admin"]).migrationsApply, true);
+  assert.deepEqual(operationsCapabilitiesForRoles(["unknown"]), {
+    jobsRead: false,
+    jobsRetry: false,
+    jobsCancel: false,
+    auditRead: false,
+    migrationsPlan: false,
+    migrationsApply: false,
+  });
 });
 
 test("structured postgres codes map to stable public errors", () => {

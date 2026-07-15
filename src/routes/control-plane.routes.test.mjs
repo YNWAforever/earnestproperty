@@ -9,9 +9,17 @@ test("health route is permissioned and uses stable response envelopes", () => {
 
   assert.match(source, /requireStaffPermission\(request, "system\.health\.read"\)/);
   assert.match(source, /runControlPlaneHealthChecks\(\)/);
-  assert.match(source, /successResponse\(health, context\.requestId\)/);
+  assert.match(source, /successResponse\(\s*\{/);
   assert.match(source, /errorResponse\(error, context\.requestId, status\)/);
   assert.doesNotMatch(source, /process\.env/);
+});
+
+test("health returns role-derived Operations capabilities", () => {
+  const source = readFileSync("src/routes/api.admin.control-plane.health.ts", "utf8");
+  assert.match(source, /const actor = await requireStaffPermission/);
+  assert.match(source, /operationsCapabilitiesForRoles\(actor\.roles\)/);
+  assert.match(source, /capabilities/);
+  assert.doesNotMatch(source, /roles:\s*actor\.roles/);
 });
 
 test("health service queries table and column metadata once each", () => {
