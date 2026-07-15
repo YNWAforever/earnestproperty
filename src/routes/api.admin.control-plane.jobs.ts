@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
 import { errorResponse, successResponse } from "../lib/control-plane/errors.ts";
-import { listJobs } from "../lib/control-plane/jobs.server.ts";
+import { getJobSummary, listJobs } from "../lib/control-plane/jobs.server.ts";
 import { requireStaffPermission } from "../lib/control-plane/permissions.ts";
 import { createOperationContext } from "../lib/control-plane/request-context.ts";
 
@@ -28,8 +28,8 @@ export const Route = createFileRoute("/api/admin/control-plane/jobs")({
           if (!parsed.success) {
             return errorResponse({ code: "VALIDATION_ERROR" }, context.requestId, 400);
           }
-          const page = await listJobs(parsed.data);
-          return successResponse(page, context.requestId);
+          const [page, summary] = await Promise.all([listJobs(parsed.data), getJobSummary()]);
+          return successResponse({ ...page, summary }, context.requestId);
         } catch (error) {
           const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
           const status = error instanceof Response ? error.status : code === "VALIDATION_ERROR" ? 400 : 500;

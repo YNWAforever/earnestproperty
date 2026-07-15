@@ -306,6 +306,46 @@ function isoDate(value: unknown) {
   return (value instanceof Date ? value : new Date(String(value))).toISOString();
 }
 
+export async function getJobSummary() {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const [countRows, attentionRows] = await Promise.all([
+    queryRows(`SELECT
+      count(*) FILTER (WHERE status = 'queued')::int AS queued,
+      count(*) FILTER (WHERE status = 'running')::int AS running,
+      count(*) FILTER (WHERE status = 'succeeded')::int AS succeeded,
+      count(*) FILTER (WHERE status = 'failed')::int AS failed,
+      count(*) FILTER (WHERE status = 'cancelled')::int AS cancelled
+      FROM ops_jobs`),
+    queryRows(`SELECT id::text AS id, job_type, status, attempt_count, max_attempts,
+        lease_expires_at, last_error_code, updated_at
+      FROM ops_jobs
+      WHERE status = 'failed'
+         OR (status = 'running' AND lease_expires_at < now())
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 5`),
+  ]);
+  const counts = countRows[0] ?? {};
+  return {
+    counts: {
+      queued: Number(counts.queued ?? 0),
+      running: Number(counts.running ?? 0),
+      succeeded: Number(counts.succeeded ?? 0),
+      failed: Number(counts.failed ?? 0),
+      cancelled: Number(counts.cancelled ?? 0),
+    },
+    attention: attentionRows.map((row) => ({
+      id: String(row.id),
+      jobType: String(row.job_type),
+      status: String(row.status),
+      attemptCount: Number(row.attempt_count),
+      maxAttempts: Number(row.max_attempts),
+      leaseExpiresAt: row.lease_expires_at == null ? null : isoDate(row.lease_expires_at),
+      errorCode: row.last_error_code == null ? null : String(row.last_error_code),
+      updatedAt: isoDate(row.updated_at),
+    })),
+  };
+}
+
 export async function listJobs(
   input: {
     status?: JobRow["status"];

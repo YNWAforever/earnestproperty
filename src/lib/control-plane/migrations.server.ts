@@ -40,6 +40,15 @@ export type MigrationServiceDependencies = {
   now?: () => number;
 };
 
+export type MigrationState = {
+  id: string;
+  checksum: string;
+  dependencies: string[];
+  summary: string;
+  postconditions: RegisteredMigration["postconditions"];
+  status: "pending" | "applied" | "drift";
+};
+
 const requiredSchema = {
   app_migrations: ["version", "applied_at"],
   staff_users: ["id"],
@@ -72,6 +81,40 @@ async function resolveDependencies(deps: MigrationServiceDependencies) {
     transactionRows: deps.transactionRows ?? (db?.transactionRows as TransactionRows),
     writeAudit: deps.writeAudit ?? (audit?.writeAudit as AuditWriter),
   };
+}
+
+export async function listMigrationStates(
+  deps: Pick<MigrationServiceDependencies, "registry" | "queryRows"> = {},
+): Promise<MigrationState[]> {
+  const resolved = await resolveDependencies(deps);
+  const [appliedRows, runRows] = await Promise.all([
+    resolved.queryRows<{ version: unknown }>("SELECT version FROM app_migrations"),
+    resolved.queryRows<{ migration_id: unknown; checksum: unknown }>(
+      "SELECT DISTINCT ON (migration_id) migration_id, checksum FROM ops_migration_runs WHERE result = 'succeeded' ORDER BY migration_id, finished_at DESC NULLS LAST, id DESC",
+    ),
+  ]);
+  const applied = new Set(appliedRows.map((row) => String(row.version)));
+  const runChecksums = new Map(
+    runRows.map((row) => [String(row.migration_id), String(row.checksum)]),
+  );
+  return resolved.registry.map((migration) => {
+    const record = {
+      id: migration.id,
+      checksum: migration.checksum,
+      dependencies: [...migration.dependencies],
+      summary: migration.summary,
+      postconditions: migration.postconditions.map((item) => ({ ...item })),
+    };
+    if (
+      runChecksums.has(migration.id) && runChecksums.get(migration.id) !== migration.checksum
+    ) {
+      return { ...record, status: "drift" as const };
+    }
+    if (applied.has(migration.id) || runChecksums.has(migration.id)) {
+      return { ...record, status: "applied" as const };
+    }
+    return { ...record, status: "pending" as const };
+  });
 }
 
 async function findMigration(id: string, deps: MigrationServiceDependencies) {

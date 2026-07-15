@@ -360,3 +360,22 @@ test("durable jobs are idempotent, claimed disjointly, and recover expired lease
     else process.env.DATABASE_URL_UNPOOLED = previousUnpooledUrl;
   }
 });
+
+test("Operations read models aggregate jobs without exposing payloads", () => {
+  const source = readFileSync("src/lib/control-plane/jobs.server.ts", "utf8");
+  assert.match(source, /export async function getJobSummary/);
+  assert.match(source, /count\(\*\) FILTER \(WHERE status = 'queued'\)/);
+  assert.match(source, /lease_expires_at < now\(\)/);
+  assert.doesNotMatch(
+    source.slice(source.indexOf("export async function getJobSummary")),
+    /SELECT[\s\S]{0,300}\bpayload\b/,
+  );
+});
+
+test("migration states compare registry checksums with applied records", () => {
+  const source = readFileSync("src/lib/control-plane/migrations.server.ts", "utf8");
+  assert.match(source, /export async function listMigrationStates/);
+  assert.match(source, /ops_migration_runs/);
+  assert.match(source, /status: "drift"/);
+  assert.doesNotMatch(source, /SELECT\s+statement|SELECT\s+sql/i);
+});

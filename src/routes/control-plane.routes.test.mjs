@@ -142,3 +142,16 @@ test("WozTell queue routes enqueue durable campaign jobs and delegate to the wor
   assert.doesNotMatch(cronSource, /sendWoztellResponse/);
   assert.doesNotMatch(cronSource, /opt_in_whatsapp/);
 });
+
+test("job and migration overview routes compose safe read models", () => {
+  const jobsSource = readFileSync("src/routes/api.admin.control-plane.jobs.ts", "utf8");
+  const migrationsSource = readFileSync(
+    "src/routes/api.admin.control-plane.migrations.ts",
+    "utf8",
+  );
+
+  assert.match(jobsSource, /Promise\.all\(\[listJobs\(parsed\.data\), getJobSummary\(\)\]\)/);
+  assert.match(jobsSource, /summary/);
+  assert.match(migrationsSource, /listMigrationStates\(\)/);
+  assert.doesNotMatch(migrationsSource, /migration\.statements/);
+});
