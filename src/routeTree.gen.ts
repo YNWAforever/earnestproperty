@@ -59,6 +59,7 @@ import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
+import { Route as ApiAdminControlPlaneWorkerRouteImport } from './routes/api.admin.control-plane.worker'
 import { Route as ApiAdminControlPlaneMigrationsRouteImport } from './routes/api.admin.control-plane.migrations'
 import { Route as ApiAdminControlPlaneHealthRouteImport } from './routes/api.admin.control-plane.health'
 import { Route as ApiAdminControlPlaneAuditRouteImport } from './routes/api.admin.control-plane.audit'
@@ -317,6 +318,12 @@ const ApiAdminJobsSendQueueRoute = ApiAdminJobsSendQueueRouteImport.update({
   path: '/api/admin/jobs/send-queue',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminControlPlaneWorkerRoute =
+  ApiAdminControlPlaneWorkerRouteImport.update({
+    id: '/api/admin/control-plane/worker',
+    path: '/api/admin/control-plane/worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminControlPlaneMigrationsRoute =
   ApiAdminControlPlaneMigrationsRouteImport.update({
     id: '/api/admin/control-plane/migrations',
@@ -412,6 +419,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
   '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
@@ -469,6 +477,7 @@ export interface FileRoutesByTo {
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
   '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
@@ -529,6 +538,7 @@ export interface FileRoutesById {
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
   '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
@@ -590,6 +600,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
     | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
@@ -647,6 +658,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
     | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
@@ -706,6 +718,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
     | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
@@ -747,6 +760,7 @@ export interface RootRouteChildren {
   ApiAdminControlPlaneAuditRoute: typeof ApiAdminControlPlaneAuditRoute
   ApiAdminControlPlaneHealthRoute: typeof ApiAdminControlPlaneHealthRoute
   ApiAdminControlPlaneMigrationsRoute: typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  ApiAdminControlPlaneWorkerRoute: typeof ApiAdminControlPlaneWorkerRoute
   ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
@@ -1105,6 +1119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminJobsSendQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/control-plane/worker': {
+      id: '/api/admin/control-plane/worker'
+      path: '/api/admin/control-plane/worker'
+      fullPath: '/api/admin/control-plane/worker'
+      preLoaderRoute: typeof ApiAdminControlPlaneWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/control-plane/migrations': {
       id: '/api/admin/control-plane/migrations'
       path: '/api/admin/control-plane/migrations'
@@ -1283,6 +1304,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminControlPlaneHealthRoute: ApiAdminControlPlaneHealthRoute,
   ApiAdminControlPlaneMigrationsRoute:
     ApiAdminControlPlaneMigrationsRouteWithChildren,
+  ApiAdminControlPlaneWorkerRoute: ApiAdminControlPlaneWorkerRoute,
   ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,

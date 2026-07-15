@@ -21,6 +21,12 @@ import {
   manualRetryTransition,
   retryDelayMs,
 } from "./jobs.ts";
+import {
+  isRetryableJobError,
+  parseRegisteredJobPayload,
+  registerJobHandler,
+  retryableJobError,
+} from "./job-handlers.server.ts";
 
 test("permission matrix defaults to deny", () => {
   assert.equal(hasPermission(["agent"], "system.health.read"), true);
@@ -314,4 +320,30 @@ test("only unfinished or failed jobs can be cancelled", () => {
   assert.equal(canCancelJob("failed"), true);
   assert.equal(canCancelJob("succeeded"), false);
   assert.equal(canCancelJob("cancelled"), false);
+});
+
+test("job handlers are versioned and validate payloads before execution", () => {
+  const handler = {
+    jobType: "test.controlplane",
+    payloadVersion: 1,
+    parsePayload(input) {
+      if (!input || typeof input !== "object" || typeof input.value !== "number") {
+        throw Object.assign(new Error("Invalid payload"), { code: "VALIDATION_ERROR" });
+      }
+      return { value: input.value };
+    },
+    async run() {
+      return { summary: { processed: 1 } };
+    },
+  };
+  registerJobHandler(handler);
+  assert.deepEqual(parseRegisteredJobPayload("test.controlplane", 1, { value: 2 }).payload, {
+    value: 2,
+  });
+  assert.throws(
+    () => parseRegisteredJobPayload("test.controlplane", 1, { value: "bad" }),
+    (error) => error?.code === "VALIDATION_ERROR",
+  );
+  assert.equal(isRetryableJobError(retryableJobError("TIMEOUT", "Timed out")), true);
+  assert.equal(isRetryableJobError(new Error("Permanent")), false);
 });

@@ -1,0 +1,316 @@
+import {
+  getJobHandler,
+  isRetryableJobError,
+  parseRegisteredJobPayload,
+} from "./job-handlers.server.ts";
+
+type JobRow = {
+  id: string;
+  job_type: string;
+  payload_version: number;
+  payload: unknown;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  attempt_count: number;
+  max_attempts: number;
+  run_after: unknown;
+  lease_owner: string | null;
+  lease_expires_at: unknown;
+  last_error_code: string | null;
+  last_error_summary: string | null;
+  idempotency_key: string;
+  actor_staff_id: string | null;
+  created_at: unknown;
+  updated_at: unknown;
+};
+
+function validationError(message: string) {
+  return Object.assign(new Error(message), { code: "VALIDATION_ERROR" });
+}
+
+function cleanWorkerId(workerId: string) {
+  const value = workerId.trim().slice(0, 120);
+  if (!value) throw validationError("Worker ID is required.");
+  return value;
+}
+
+function cleanIdempotencyKey(value: string) {
+  const key = value.trim().slice(0, 200);
+  if (!key) throw validationError("Idempotency key is required.");
+  return key;
+}
+
+export async function enqueueJob(input: {
+  jobType: string;
+  payloadVersion: number;
+  payload: unknown;
+  idempotencyKey: string;
+  actorStaffId?: string | null;
+  maxAttempts?: number;
+  runAfter?: Date;
+}) {
+  const parsed = parseRegisteredJobPayload(input.jobType, input.payloadVersion, input.payload);
+  const { queryRows } = await import("../neon/db.server.ts");
+  const rows = await queryRows<JobRow>(
+    `INSERT INTO ops_jobs
+      (job_type, payload_version, payload, status, max_attempts, run_after,
+       idempotency_key, actor_staff_id)
+     VALUES ($1, $2, $3::jsonb, 'queued', $4, $5, $6, $7)
+     ON CONFLICT (idempotency_key) DO UPDATE
+       SET idempotency_key = EXCLUDED.idempotency_key
+     RETURNING *`,
+    [
+      input.jobType,
+      input.payloadVersion,
+      JSON.stringify(parsed.payload),
+      Math.min(Math.max(Math.trunc(input.maxAttempts ?? 5), 1), 100),
+      (input.runAfter ?? new Date()).toISOString(),
+      cleanIdempotencyKey(input.idempotencyKey),
+      input.actorStaffId ?? null,
+    ],
+  );
+  return rows[0];
+}
+
+export async function claimJobs(input: {
+  workerId: string;
+  limit?: number;
+  leaseSeconds?: number;
+}) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const workerId = cleanWorkerId(input.workerId);
+  const limit = Math.min(Math.max(Math.trunc(input.limit ?? 10), 1), 100);
+  const leaseSeconds = Math.min(Math.max(Math.trunc(input.leaseSeconds ?? 60), 5), 3_600);
+  return queryRows<JobRow>(
+    `WITH candidates AS (
+       SELECT id
+       FROM ops_jobs
+       WHERE status = 'queued' AND run_after <= now()
+       ORDER BY run_after, created_at
+       FOR UPDATE SKIP LOCKED
+       LIMIT $1
+     )
+     UPDATE ops_jobs AS job
+     SET status = 'running',
+         attempt_count = attempt_count + 1,
+         lease_owner = $2,
+         lease_expires_at = now() + ($3::integer * interval '1 second'),
+         updated_at = now()
+     FROM candidates
+     WHERE job.id = candidates.id
+     RETURNING job.*`,
+    [limit, workerId, leaseSeconds],
+  );
+}
+
+export async function completeJob(input: { jobId: string; workerId: string }) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const rows = await queryRows<JobRow>(
+    `WITH completed AS (
+       UPDATE ops_jobs
+       SET status = 'succeeded',
+           lease_owner = NULL,
+           lease_expires_at = NULL,
+           last_error_code = NULL,
+           last_error_summary = NULL,
+           updated_at = now()
+       WHERE id = $1::uuid
+         AND status = 'running'
+         AND lease_owner = $2
+       RETURNING *
+     ), attempt AS (
+       INSERT INTO ops_job_attempts
+         (job_id, attempt_number, worker_id, outcome, started_at, finished_at)
+       SELECT id, attempt_count, $2, 'succeeded', updated_at, now()
+       FROM completed
+       ON CONFLICT (job_id, attempt_number) DO NOTHING
+       RETURNING id
+     )
+     SELECT * FROM completed`,
+    [input.jobId, cleanWorkerId(input.workerId)],
+  );
+  return rows[0] ?? null;
+}
+
+export async function failJob(input: {
+  jobId: string;
+  workerId: string;
+  retryable: boolean;
+  errorCode: string;
+  errorSummary: string;
+}) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const rows = await queryRows<JobRow>(
+    `WITH failed AS (
+       UPDATE ops_jobs
+       SET status = CASE
+             WHEN $3::boolean AND attempt_count < max_attempts THEN 'queued'
+             ELSE 'failed'
+           END,
+           run_after = CASE
+             WHEN $3::boolean AND attempt_count < max_attempts
+               THEN now() + (LEAST(power(2, LEAST(attempt_count, 30)), 900)::integer * interval '1 second')
+             ELSE run_after
+           END,
+           lease_owner = NULL,
+           lease_expires_at = NULL,
+           last_error_code = $4,
+           last_error_summary = $5,
+           updated_at = now()
+       WHERE id = $1::uuid
+         AND status = 'running'
+         AND lease_owner = $2
+       RETURNING *
+     ), attempt AS (
+       INSERT INTO ops_job_attempts
+         (job_id, attempt_number, worker_id, outcome, error_code, error_summary, finished_at)
+       SELECT id, attempt_count, $2, 'failed', $4, $5, now()
+       FROM failed
+       ON CONFLICT (job_id, attempt_number) DO NOTHING
+       RETURNING id
+     )
+     SELECT * FROM failed`,
+    [
+      input.jobId,
+      cleanWorkerId(input.workerId),
+      input.retryable,
+      input.errorCode.trim().slice(0, 100) || "JOB_HANDLER_FAILED",
+      input.errorSummary.trim().slice(0, 500) || "The job handler could not be completed.",
+    ],
+  );
+  return rows[0] ?? null;
+}
+
+export async function retryJob(jobId: string) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const rows = await queryRows<JobRow>(
+    `UPDATE ops_jobs
+     SET status = 'queued',
+         max_attempts = GREATEST(max_attempts, attempt_count) + 1,
+         run_after = now(),
+         lease_owner = NULL,
+         lease_expires_at = NULL,
+         last_error_code = NULL,
+         last_error_summary = NULL,
+         updated_at = now()
+     WHERE id = $1::uuid AND status = 'failed'
+     RETURNING *`,
+    [jobId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function cancelJob(input: { jobId: string; workerId?: string }) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const workerId = cleanWorkerId(input.workerId ?? "manual-control-plane");
+  const rows = await queryRows<JobRow>(
+    `WITH candidate AS (
+       SELECT id, status AS previous_status, attempt_count, lease_owner
+       FROM ops_jobs
+       WHERE id = $1::uuid AND status IN ('queued', 'running', 'failed')
+       FOR UPDATE
+     ), cancelled AS (
+       UPDATE ops_jobs AS job
+       SET status = 'cancelled',
+           lease_owner = NULL,
+           lease_expires_at = NULL,
+           updated_at = now()
+       FROM candidate
+       WHERE job.id = candidate.id
+       RETURNING job.*, candidate.previous_status, candidate.lease_owner AS previous_worker
+     ), attempt AS (
+       INSERT INTO ops_job_attempts
+         (job_id, attempt_number, worker_id, outcome, finished_at)
+       SELECT id, attempt_count, COALESCE(previous_worker, $2), 'cancelled', now()
+       FROM cancelled
+       WHERE previous_status = 'running' AND attempt_count > 0
+       ON CONFLICT (job_id, attempt_number) DO NOTHING
+       RETURNING id
+     )
+     SELECT id, job_type, payload_version, payload, status, attempt_count, max_attempts,
+            run_after, lease_owner, lease_expires_at, last_error_code, last_error_summary,
+            idempotency_key, actor_staff_id, created_at, updated_at
+     FROM cancelled`,
+    [input.jobId, workerId],
+  );
+  return rows[0] ?? null;
+}
+
+export async function recoverExpiredLeases() {
+  const { queryRows } = await import("../neon/db.server.ts");
+  return queryRows<JobRow>(
+    `WITH expired AS (
+       SELECT id, lease_owner
+       FROM ops_jobs
+       WHERE status = 'running' AND lease_expires_at < now()
+       FOR UPDATE SKIP LOCKED
+     ), recovered AS (
+       UPDATE ops_jobs AS job
+       SET status = CASE WHEN attempt_count < max_attempts THEN 'queued' ELSE 'failed' END,
+           run_after = CASE WHEN attempt_count < max_attempts THEN now() ELSE run_after END,
+           lease_owner = NULL,
+           lease_expires_at = NULL,
+           last_error_code = 'LEASE_EXPIRED',
+           last_error_summary = 'The worker lease expired before completion.',
+           updated_at = now()
+       FROM expired
+       WHERE job.id = expired.id
+       RETURNING job.*, expired.lease_owner AS previous_worker
+     ), attempt AS (
+       INSERT INTO ops_job_attempts
+         (job_id, attempt_number, worker_id, outcome, error_code, error_summary, finished_at)
+       SELECT id, attempt_count, COALESCE(previous_worker, 'expired-worker'), 'failed',
+              'LEASE_EXPIRED', 'The worker lease expired before completion.', now()
+       FROM recovered
+       ON CONFLICT (job_id, attempt_number) DO NOTHING
+       RETURNING id
+     )
+     SELECT id, job_type, payload_version, payload, status, attempt_count, max_attempts,
+            run_after, lease_owner, lease_expires_at, last_error_code, last_error_summary,
+            idempotency_key, actor_staff_id, created_at, updated_at
+     FROM recovered`,
+  );
+}
+
+function safeJobErrorCode(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  return /^[A-Z][A-Z0-9_]{0,99}$/.test(code) ? code : "JOB_HANDLER_FAILED";
+}
+
+export async function runClaimedJobs(input: {
+  workerId: string;
+  limit?: number;
+  leaseSeconds?: number;
+}) {
+  await recoverExpiredLeases();
+  const jobs = await claimJobs(input);
+  const counts = { claimed: jobs.length, succeeded: 0, retried: 0, failed: 0, cancelled: 0 };
+
+  for (const job of jobs) {
+    try {
+      const registered = parseRegisteredJobPayload(job.job_type, job.payload_version, job.payload);
+      await registered.handler.run(registered.payload, {
+        jobId: job.id,
+        attempt: job.attempt_count,
+      });
+      const completed = await completeJob({ jobId: job.id, workerId: input.workerId });
+      if (completed) counts.succeeded += 1;
+      else counts.cancelled += 1;
+    } catch (error) {
+      const failed = await failJob({
+        jobId: job.id,
+        workerId: input.workerId,
+        retryable: isRetryableJobError(error),
+        errorCode: safeJobErrorCode(error),
+        errorSummary: "The job handler could not be completed.",
+      });
+      if (!failed) counts.cancelled += 1;
+      else if (failed.status === "queued") counts.retried += 1;
+      else counts.failed += 1;
+    }
+  }
+  return counts;
+}
+
+export function hasRegisteredJobHandler(jobType: string, payloadVersion: number) {
+  return getJobHandler(jobType, payloadVersion) !== null;
+}

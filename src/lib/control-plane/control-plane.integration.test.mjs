@@ -43,6 +43,16 @@ test("database helper uses Neon transaction batching", () => {
   assert.match(source, /tx\.query\(statement, params\)/);
 });
 
+test("job repository uses idempotent inserts, skip-locked claims, and guarded completion", () => {
+  const source = readFileSync("src/lib/control-plane/jobs.server.ts", "utf8");
+  assert.match(source, /ON CONFLICT \(idempotency_key\) DO UPDATE/);
+  assert.match(source, /FOR UPDATE SKIP LOCKED/);
+  assert.match(source, /status = 'running'[\s\S]*lease_owner = \$2/);
+  assert.match(source, /status = 'cancelled'/);
+  assert.match(source, /ON CONFLICT \(job_id, attempt_number\) DO NOTHING/);
+  assert.doesNotMatch(source, /Math\.random/);
+});
+
 test("control plane migration applies and protects audit rows in a disposable database", {
   skip: !process.env.TEST_DATABASE_URL,
 }, async () => {
@@ -225,6 +235,124 @@ test("migration service rejects stale approvals and records one successful apply
     const counts = Object.fromEntries(runRows.map((row) => [row.result, row.count]));
     assert.equal(counts.succeeded, 1);
     assert.equal(counts.failed, 1);
+  } finally {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
+    if (previousUnpooledUrl === undefined) delete process.env.DATABASE_URL_UNPOOLED;
+    else process.env.DATABASE_URL_UNPOOLED = previousUnpooledUrl;
+  }
+});
+
+test("durable jobs are idempotent, claimed disjointly, and recover expired leases", {
+  skip: !process.env.TEST_DATABASE_URL,
+}, async () => {
+  const databaseEnv = { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL };
+  delete databaseEnv.DATABASE_URL_UNPOOLED;
+  const migrationRun = spawnSync(process.execPath, ["scripts/neon/apply-migrations.mjs"], {
+    env: databaseEnv,
+    encoding: "utf8",
+  });
+  assert.equal(migrationRun.status, 0, migrationRun.stderr || migrationRun.stdout);
+
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  const previousUnpooledUrl = process.env.DATABASE_URL_UNPOOLED;
+  process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  delete process.env.DATABASE_URL_UNPOOLED;
+
+  try {
+    const { queryRows } = await import("../neon/db.server.ts");
+    const { registerJobHandler } = await import("./job-handlers.server.ts");
+    const {
+      cancelJob,
+      claimJobs,
+      completeJob,
+      enqueueJob,
+      recoverExpiredLeases,
+    } = await import("./jobs.server.ts");
+    const handler = {
+      jobType: "test.integration",
+      payloadVersion: 1,
+      parsePayload(input) {
+        if (!input || typeof input !== "object" || typeof input.value !== "number") {
+          throw Object.assign(new Error("Invalid payload"), { code: "VALIDATION_ERROR" });
+        }
+        return { value: input.value };
+      },
+      async run() {
+        return { summary: { processed: 1 } };
+      },
+    };
+    registerJobHandler(handler);
+    await queryRows("DELETE FROM ops_jobs WHERE idempotency_key LIKE 'control-plane-integration:%'");
+
+    const enqueueInput = {
+      jobType: handler.jobType,
+      payloadVersion: handler.payloadVersion,
+      payload: { value: 1 },
+      idempotencyKey: "control-plane-integration:idempotent",
+      runAfter: new Date(Date.now() + 60 * 60 * 1_000),
+    };
+    const [first, second] = await Promise.all([enqueueJob(enqueueInput), enqueueJob(enqueueInput)]);
+    assert.equal(first.id, second.id);
+
+    const claimable = await Promise.all(
+      Array.from({ length: 4 }, (_, index) =>
+        enqueueJob({
+          ...enqueueInput,
+          payload: { value: index },
+          idempotencyKey: `control-plane-integration:claim:${index}`,
+          runAfter: new Date(0),
+        }),
+      ),
+    );
+    const [workerA, workerB] = await Promise.all([
+      claimJobs({ workerId: "integration-worker-a", limit: 2, leaseSeconds: 60 }),
+      claimJobs({ workerId: "integration-worker-b", limit: 2, leaseSeconds: 60 }),
+    ]);
+    const workerAIds = new Set(workerA.map((job) => job.id));
+    assert.equal(workerA.length, 2);
+    assert.equal(workerB.length, 2);
+    assert.equal(workerB.some((job) => workerAIds.has(job.id)), false);
+    assert.deepEqual(
+      new Set([...workerA, ...workerB].map((job) => job.id)),
+      new Set(claimable.map((job) => job.id)),
+    );
+
+    const expired = await enqueueJob({
+      ...enqueueInput,
+      idempotencyKey: "control-plane-integration:expired",
+      runAfter: new Date(0),
+    });
+    const live = await enqueueJob({
+      ...enqueueInput,
+      idempotencyKey: "control-plane-integration:live",
+      runAfter: new Date(0),
+    });
+    await queryRows(
+      `UPDATE ops_jobs
+       SET status = 'running', attempt_count = 1, lease_owner = 'lease-test',
+           lease_expires_at = CASE WHEN id = $1::uuid THEN now() - interval '1 minute'
+                                   ELSE now() + interval '1 hour' END
+       WHERE id IN ($1::uuid, $2::uuid)`,
+      [expired.id, live.id],
+    );
+    await recoverExpiredLeases();
+    const recovered = await claimJobs({ workerId: "integration-worker-c", limit: 10 });
+    assert.equal(recovered.some((job) => job.id === expired.id), true);
+    assert.equal(recovered.some((job) => job.id === live.id), false);
+
+    const cancellable = await enqueueJob({
+      ...enqueueInput,
+      idempotencyKey: "control-plane-integration:cancel",
+      runAfter: new Date(0),
+    });
+    const [running] = await claimJobs({ workerId: "integration-worker-cancel", limit: 1 });
+    assert.equal(running.id, cancellable.id);
+    assert.ok(await cancelJob({ jobId: running.id }));
+    assert.equal(
+      await completeJob({ jobId: running.id, workerId: "integration-worker-cancel" }),
+      null,
+    );
   } finally {
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousDatabaseUrl;

@@ -59,3 +59,16 @@ test("audit service uses keyset pagination and re-sanitizes stored metadata", ()
   assert.match(source, /sanitizeAuditMetadata\(row\.metadata/);
   assert.doesNotMatch(source, /OFFSET/i);
 });
+
+test("control-plane worker requires cron authorization and returns counts only", () => {
+  const source = readFileSync("src/routes/api.admin.control-plane.worker.ts", "utf8");
+  assert.match(source, /process\.env\.CRON_SECRET/);
+  assert.match(source, /request\.headers\.get\("authorization"\)/);
+  assert.match(source, /actual !== `Bearer \$\{expected\}`/);
+  assert.match(source, /runClaimedJobs/);
+  for (const key of ["claimed", "succeeded", "retried", "failed", "cancelled"]) {
+    assert.match(source, new RegExp(key));
+  }
+  assert.doesNotMatch(source, /payload\s*:/i);
+  assert.doesNotMatch(source, /last_error_summary/);
+});
