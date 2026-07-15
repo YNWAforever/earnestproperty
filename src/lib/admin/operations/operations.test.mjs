@@ -11,6 +11,7 @@ import {
   fetchOperationsJobs,
   retryOperationsJob,
 } from "./operations-client.ts";
+import { createOperationsPoller } from "./operations-polling.ts";
 
 const agent = {
   jobsRead: false,
@@ -133,4 +134,62 @@ test("control-plane client rejects successful envelopes without data", async () 
       error.code === "INVALID_RESPONSE" &&
       error.requestId === "r-malformed",
   );
+});
+
+test("poller pauses while hidden and refreshes immediately when visible", () => {
+  let visible = true;
+  let timerCallback;
+  let visibilityCallback;
+  let ticks = 0;
+  const poller = createOperationsPoller({
+    intervalMs: 30_000,
+    isVisible: () => visible,
+    subscribeVisibility: (next) => {
+      visibilityCallback = next;
+      return () => { visibilityCallback = undefined; };
+    },
+    setTimer: (next, ms) => {
+      assert.equal(ms, 30_000);
+      timerCallback = next;
+      return 1;
+    },
+    clearTimer: () => undefined,
+    onPulse: () => { ticks += 1; },
+  });
+
+  poller.start();
+  visible = false;
+  timerCallback();
+  assert.equal(ticks, 0);
+  visible = true;
+  visibilityCallback();
+  assert.equal(ticks, 1);
+  poller.stop();
+});
+
+test("poller installs one timer and listener, then removes both on stop", () => {
+  let setTimerCalls = 0;
+  let clearTimerCalls = 0;
+  let subscribeCalls = 0;
+  let unsubscribeCalls = 0;
+  const poller = createOperationsPoller({
+    intervalMs: 30_000,
+    isVisible: () => true,
+    subscribeVisibility: () => {
+      subscribeCalls += 1;
+      return () => { unsubscribeCalls += 1; };
+    },
+    setTimer: () => { setTimerCalls += 1; return 1; },
+    clearTimer: () => { clearTimerCalls += 1; },
+    onPulse: () => undefined,
+  });
+
+  poller.start();
+  poller.start();
+  poller.stop();
+  poller.stop();
+  assert.equal(setTimerCalls, 1);
+  assert.equal(subscribeCalls, 1);
+  assert.equal(clearTimerCalls, 1);
+  assert.equal(unsubscribeCalls, 1);
 });

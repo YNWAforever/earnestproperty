@@ -39,6 +39,7 @@ import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
+import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
 import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
@@ -219,6 +220,11 @@ const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
 const AdminSegmentsRoute = AdminSegmentsRouteImport.update({
   id: '/segments',
   path: '/segments',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminOperationsRoute = AdminOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminListingsRoute = AdminListingsRouteImport.update({
@@ -409,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
@@ -470,6 +477,7 @@ export interface FileRoutesByTo {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
@@ -534,6 +542,7 @@ export interface FileRoutesById {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents_/$slug': typeof AgentsSlugRoute
@@ -599,6 +608,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
+    | '/admin/operations'
     | '/admin/segments'
     | '/admin/whatsapp'
     | '/agents/$slug'
@@ -660,6 +670,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
+    | '/admin/operations'
     | '/admin/segments'
     | '/admin/whatsapp'
     | '/agents/$slug'
@@ -723,6 +734,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
+    | '/admin/operations'
     | '/admin/segments'
     | '/admin/whatsapp'
     | '/agents_/$slug'
@@ -1019,6 +1031,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSegmentsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/operations': {
+      id: '/admin/operations'
+      path: '/operations'
+      fullPath: '/admin/operations'
+      preLoaderRoute: typeof AdminOperationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/listings': {
       id: '/admin/listings'
       path: '/listings'
@@ -1245,6 +1264,7 @@ interface AdminRouteChildren {
   AdminCmsRoute: typeof AdminCmsRoute
   AdminLeadsRoute: typeof AdminLeadsRoute
   AdminListingsRoute: typeof AdminListingsRoute
+  AdminOperationsRoute: typeof AdminOperationsRoute
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1261,6 +1281,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCmsRoute: AdminCmsRoute,
   AdminLeadsRoute: AdminLeadsRoute,
   AdminListingsRoute: AdminListingsRoute,
+  AdminOperationsRoute: AdminOperationsRoute,
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
   AdminIndexRoute: AdminIndexRoute,

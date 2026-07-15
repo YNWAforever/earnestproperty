@@ -471,3 +471,8 @@ test("command center route is registered, noindex, and admin-guarded", () => {
   const routeTree = read("src/routeTree.gen.ts");
   assert.match(routeTree, /['"]\/admin\/leads\/command-center['"]/);
 });
+
+test("Operations route is present in the generated route tree", () => {
+  const routeTree = read("src/routeTree.gen.ts");
+  assert.match(routeTree, /['"]\/admin\/operations['"]/);
+});
