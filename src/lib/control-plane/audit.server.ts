@@ -78,10 +78,55 @@ export async function writeAudit(input: {
   );
 }
 
-export async function listAuditLogs(input: { limit?: number } = {}) {
+type AuditCursor = { createdAt: string; id: string };
+
+function encodeAuditCursor(cursor: AuditCursor) {
+  const bytes = new TextEncoder().encode(JSON.stringify(cursor));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function decodeAuditCursor(value: string | undefined): AuditCursor | null {
+  if (!value) return null;
+  try {
+    if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid cursor");
+    const padded = `${value.replace(/-/g, "+").replace(/_/g, "/")}${"=".repeat((4 - (value.length % 4)) % 4)}`;
+    const parsed = JSON.parse(atob(padded)) as unknown;
+    if (!parsed || typeof parsed !== "object") throw new Error("Invalid cursor");
+    const cursor = parsed as Record<string, unknown>;
+    if (
+      typeof cursor.createdAt !== "string" ||
+      Number.isNaN(Date.parse(cursor.createdAt)) ||
+      typeof cursor.id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id)
+    ) {
+      throw new Error("Invalid cursor");
+    }
+    return { createdAt: cursor.createdAt, id: cursor.id };
+  } catch {
+    throw Object.assign(new Error("The audit cursor is invalid."), { code: "VALIDATION_ERROR" });
+  }
+}
+
+function stringDate(value: unknown) {
+  const date = value instanceof Date ? value : new Date(String(value));
+  return date.toISOString();
+}
+
+export async function listAuditLogs(
+  input: {
+    cursor?: string;
+    limit?: number;
+    outcome?: "success" | "failure" | "denied";
+    action?: string;
+    requestId?: string;
+  } = {},
+) {
   const { queryRows } = await import("../neon/db.server.ts");
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? 20), 1), 100);
-  return queryRows(
+  const cursor = decodeAuditCursor(input.cursor);
+  const rows = await queryRows(
     `SELECT
        id::text AS id,
        actor_staff_id::text AS actor_staff_id,
@@ -94,8 +139,38 @@ export async function listAuditLogs(input: { limit?: number } = {}) {
        metadata,
        created_at
      FROM ops_audit_logs
+     WHERE ($1::text IS NULL OR outcome = $1)
+       AND ($2::text IS NULL OR action = $2)
+       AND ($3::uuid IS NULL OR request_id = $3::uuid)
+       AND (
+         $4::timestamptz IS NULL
+         OR (created_at, id) < ($4::timestamptz, $5::uuid)
+       )
      ORDER BY created_at DESC, id DESC
-     LIMIT $1`,
-    [limit],
+     LIMIT $6`,
+    [
+      input.outcome ?? null,
+      input.action?.slice(0, 100) ?? null,
+      input.requestId ?? null,
+      cursor?.createdAt ?? null,
+      cursor?.id ?? null,
+      limit + 1,
+    ],
   );
+  const pageRows = rows.slice(0, limit).map((row) => ({
+    ...row,
+    metadata:
+      row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+        ? sanitizeAuditMetadata(row.metadata as Record<string, unknown>)
+        : {},
+    created_at: stringDate(row.created_at),
+  }));
+  const last = pageRows.at(-1);
+  return {
+    rows: pageRows,
+    nextCursor:
+      rows.length > limit && last
+        ? encodeAuditCursor({ createdAt: last.created_at, id: String(last.id) })
+        : null,
+  };
 }

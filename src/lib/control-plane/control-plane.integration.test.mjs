@@ -92,7 +92,7 @@ test("control plane migration applies and protects audit rows in a disposable da
       metadata: { title: "visible", token: "hidden" },
     });
 
-    const logs = await listAuditLogs({ limit: 100 });
+    const { rows: logs } = await listAuditLogs({ limit: 100 });
     const auditLog = logs.find((row) => row.request_id === requestId);
     assert.ok(auditLog);
     assert.equal(auditLog.metadata.title, "visible");
