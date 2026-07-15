@@ -175,6 +175,20 @@ export async function rebuildAiKnowledgeIndex() {
   return { indexedSources, indexedChunks, embeddingDimensionFailures };
 }
 
+export type AiKnowledgeRebuildJobPayload = { requestedByStaffId: string };
+
+export async function runAiKnowledgeRebuildOperation(
+  _payload: AiKnowledgeRebuildJobPayload,
+  deps: { rebuildAiKnowledgeIndex?: typeof rebuildAiKnowledgeIndex } = {},
+) {
+  const result = await (deps.rebuildAiKnowledgeIndex ?? rebuildAiKnowledgeIndex)();
+  return {
+    indexedSources: Number(result.indexedSources) || 0,
+    indexedChunks: Number(result.indexedChunks) || 0,
+    embeddingDimensionFailures: Number(result.embeddingDimensionFailures) || 0,
+  };
+}
+
 export async function searchPublicKnowledge(input: { query: string; limit?: number }) {
   const query = input.query.trim();
   if (!query) return [] as AiKnowledgeChunk[];

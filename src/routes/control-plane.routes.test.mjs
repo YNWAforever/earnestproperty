@@ -106,3 +106,14 @@ test("job management routes validate IDs, permissions, and safe summaries", () =
     assert.doesNotMatch(listSource, sensitive);
   }
 });
+
+test("AI knowledge rebuild route enqueues one versioned job per active window", () => {
+  const source = readFileSync("src/routes/api.admin.ai.rebuild-knowledge.ts", "utf8");
+  assert.match(source, /requireStaffPermission\(request, "ai\.knowledge\.rebuild"\)/);
+  assert.match(source, /enqueueJob\(/);
+  assert.match(source, /jobType:\s*"ai\.knowledge\.rebuild"/);
+  assert.match(source, /payloadVersion:\s*1/);
+  assert.match(source, /ai\.knowledge\.rebuild:\$\{activeWindow\}/);
+  assert.match(source, /status:\s*202/);
+  assert.doesNotMatch(source, /rebuildAdminAiKnowledge/);
+});

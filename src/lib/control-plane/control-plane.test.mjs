@@ -22,6 +22,7 @@ import {
   retryDelayMs,
 } from "./jobs.ts";
 import {
+  createAiKnowledgeRebuildHandler,
   isRetryableJobError,
   parseRegisteredJobPayload,
   registerJobHandler,
@@ -346,4 +347,27 @@ test("job handlers are versioned and validate payloads before execution", () => 
   );
   assert.equal(isRetryableJobError(retryableJobError("TIMEOUT", "Timed out")), true);
   assert.equal(isRetryableJobError(new Error("Permanent")), false);
+});
+
+test("AI knowledge handler delegates safely and marks provider timeouts retryable", async () => {
+  const payload = { requestedByStaffId: "11111111-1111-4111-8111-111111111111" };
+  const handler = createAiKnowledgeRebuildHandler({
+    runKnowledgeRebuild: async (input) => {
+      assert.deepEqual(input, payload);
+      return { indexedSources: 4, indexedChunks: 12, embeddingDimensionFailures: 1 };
+    },
+  });
+  assert.deepEqual(await handler.run(payload, { jobId: "job-1", attempt: 1 }), {
+    summary: { indexedSources: 4, indexedChunks: 12, embeddingDimensionFailures: 1 },
+  });
+
+  const timeoutHandler = createAiKnowledgeRebuildHandler({
+    runKnowledgeRebuild: async () => {
+      throw Object.assign(new Error("Provider timed out"), { code: "INTEGRATION_TIMEOUT" });
+    },
+  });
+  await assert.rejects(
+    () => timeoutHandler.run(payload, { jobId: "job-2", attempt: 1 }),
+    (error) => isRetryableJobError(error) && error.code === "AI_KNOWLEDGE_REBUILD_TIMEOUT",
+  );
 });
