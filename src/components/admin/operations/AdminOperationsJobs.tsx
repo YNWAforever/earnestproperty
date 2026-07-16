@@ -36,6 +36,26 @@ export const canRetryOperationsJob = (status: JobStatus) => status === "failed";
 export const canCancelOperationsJob = (status: JobStatus) =>
   status === "queued" || status === "running" || status === "failed";
 
+export const mergeOperationsJobRows = (
+  current: JobListItem[],
+  incoming: JobListItem[],
+  append: boolean,
+) => (append ? [...current, ...incoming] : incoming);
+
+export const shouldRefreshOperationsJobs = ({
+  active,
+  jobsRead,
+  pending,
+  previousPulse,
+  pulse,
+}: {
+  active: boolean;
+  jobsRead: boolean;
+  pending: boolean;
+  previousPulse: number;
+  pulse: number;
+}) => active && jobsRead && !pending && pulse !== previousPulse;
+
 type JobCommand = { action: "retry" | "cancel"; job: JobListItem };
 
 const statusOptions: Array<{ value: "all" | JobStatus; label: string }> = [
@@ -103,7 +123,7 @@ export function AdminOperationsJobs({
           limit: 25,
         });
         if (request !== requestSequence.current) return;
-        setRows((current) => (append ? [...current, ...result.data.rows] : result.data.rows));
+        setRows((current) => mergeOperationsJobRows(current, result.data.rows, append));
         setNextCursor(result.data.nextCursor);
       } catch (reason) {
         if (request === requestSequence.current) setError(operationsErrorMessage(reason));
@@ -120,9 +140,18 @@ export function AdminOperationsJobs({
   }, [active, capabilities.jobsRead, loadJobs]);
 
   useEffect(() => {
-    const changed = pulse !== previousPulse.current;
+    const priorPulse = previousPulse.current;
     previousPulse.current = pulse;
-    if (!changed || !active || pendingCommand) return;
+    if (
+      !shouldRefreshOperationsJobs({
+        active,
+        jobsRead: capabilities.jobsRead,
+        pending: pendingCommand !== null,
+        previousPulse: priorPulse,
+        pulse,
+      })
+    )
+      return;
     void loadJobs();
   }, [active, loadJobs, pendingCommand, pulse]);
 
@@ -161,7 +190,7 @@ export function AdminOperationsJobs({
       setCommand(null);
       if (reason instanceof OperationsClientError && reason.status === 409) {
         await loadJobs();
-        setError("Job state changed. The list has been refreshed.");
+        setError("工作狀態已更新");
       } else {
         toast.error(operationsErrorMessage(reason));
       }
@@ -184,22 +213,42 @@ export function AdminOperationsJobs({
               </SelectTrigger>
               <SelectContent>
                 {statusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </label>
           <label className="grid min-w-52 flex-1 gap-1 text-sm">
             <span className="text-muted-foreground">Job type</span>
-            <Input value={jobTypeDraft} onChange={(event) => setJobTypeDraft(event.target.value)} placeholder="Filter by job type" disabled={loading} />
+            <Input
+              value={jobTypeDraft}
+              onChange={(event) => setJobTypeDraft(event.target.value)}
+              placeholder="Filter by job type"
+              disabled={loading}
+            />
           </label>
-          <Button type="submit" variant="secondary" disabled={loading}>Apply filters</Button>
+          <Button type="submit" variant="secondary" disabled={loading}>
+            Apply filters
+          </Button>
         </form>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button type="button" size="icon" variant="outline" aria-label="Refresh jobs" disabled={loading || pendingCommand !== null} onClick={() => void loadJobs()}>
-                {loading ? <LoaderCircle className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                aria-label="Refresh jobs"
+                disabled={loading || pendingCommand !== null}
+                onClick={() => void loadJobs()}
+              >
+                {loading ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
               </Button>
             </TooltipTrigger>
             <TooltipContent>Refresh jobs</TooltipContent>
@@ -207,48 +256,120 @@ export function AdminOperationsJobs({
         </TooltipProvider>
       </div>
 
-      {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
 
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Job</TableHead><TableHead>Status</TableHead><TableHead>Attempts</TableHead>
-            <TableHead>Run after</TableHead><TableHead>Updated</TableHead><TableHead className="w-24 text-right">Actions</TableHead>
+            <TableHead>Job</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Attempts</TableHead>
+            <TableHead>Run after</TableHead>
+            <TableHead>Updated</TableHead>
+            <TableHead className="w-24 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((job) => (
             <TableRow key={job.id}>
-              <TableCell><p className="font-medium">{job.jobType}</p><p className="max-w-56 truncate font-mono text-xs text-muted-foreground" title={job.id}>{job.id}</p></TableCell>
-              <TableCell><Badge variant={statusVariant(job.status)}>{job.status}</Badge></TableCell>
-              <TableCell className="tabular-nums">{job.attemptCount} / {job.maxAttempts}</TableCell>
-              <TableCell>{formatDate(job.runAfter)}</TableCell><TableCell>{formatDate(job.updatedAt)}</TableCell>
               <TableCell>
-                <TooltipProvider><div className="flex justify-end gap-1">
-                  {capabilities.jobsRetry && canRetryOperationsJob(job.status) ? (
-                    <Tooltip><TooltipTrigger asChild><Button type="button" size="icon" variant="ghost" aria-label={`Retry job ${job.id}`} disabled={pendingCommand !== null} onClick={() => setCommand({ action: "retry", job })}><RotateCcw className="size-4" /></Button></TooltipTrigger><TooltipContent>Retry job</TooltipContent></Tooltip>
-                  ) : null}
-                  {capabilities.jobsCancel && canCancelOperationsJob(job.status) ? (
-                    <Tooltip><TooltipTrigger asChild><Button type="button" size="icon" variant="ghost" aria-label={`Cancel job ${job.id}`} disabled={pendingCommand !== null} onClick={() => setCommand({ action: "cancel", job })}><XCircle className="size-4" /></Button></TooltipTrigger><TooltipContent>Cancel job</TooltipContent></Tooltip>
-                  ) : null}
-                </div></TooltipProvider>
+                <p className="font-medium">{job.jobType}</p>
+                <p
+                  className="max-w-56 truncate font-mono text-xs text-muted-foreground"
+                  title={job.id}
+                >
+                  {job.id}
+                </p>
+              </TableCell>
+              <TableCell>
+                <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+              </TableCell>
+              <TableCell className="tabular-nums">
+                {job.attemptCount} / {job.maxAttempts}
+              </TableCell>
+              <TableCell>{formatDate(job.runAfter)}</TableCell>
+              <TableCell>{formatDate(job.updatedAt)}</TableCell>
+              <TableCell>
+                <TooltipProvider>
+                  <div className="flex justify-end gap-1">
+                    {capabilities.jobsRetry && canRetryOperationsJob(job.status) ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Retry job ${job.id}`}
+                            disabled={pendingCommand !== null}
+                            onClick={() => setCommand({ action: "retry", job })}
+                          >
+                            <RotateCcw className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Retry job</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                    {capabilities.jobsCancel && canCancelOperationsJob(job.status) ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label={`Cancel job ${job.id}`}
+                            disabled={pendingCommand !== null}
+                            onClick={() => setCommand({ action: "cancel", job })}
+                          >
+                            <XCircle className="size-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Cancel job</TooltipContent>
+                      </Tooltip>
+                    ) : null}
+                  </div>
+                </TooltipProvider>
               </TableCell>
             </TableRow>
           ))}
-          {!rows.length && !loading ? <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No jobs found.</TableCell></TableRow> : null}
+          {!rows.length && !loading ? (
+            <TableRow>
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                No jobs found.
+              </TableCell>
+            </TableRow>
+          ) : null}
         </TableBody>
       </Table>
 
-      {nextCursor ? <div className="flex justify-center"><Button type="button" variant="outline" disabled={loading} onClick={() => void loadJobs({ append: true, cursor: nextCursor })}>{loading ? "Loading..." : "Load more"}</Button></div> : null}
+      {nextCursor ? (
+        <div className="flex justify-center">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => void loadJobs({ append: true, cursor: nextCursor })}
+          >
+            {loading ? "Loading..." : "Load more"}
+          </Button>
+        </div>
+      ) : null}
 
       <AdminConfirmDialog
         open={command !== null}
         title={command?.action === "retry" ? "Retry job?" : "Cancel job?"}
-        description={command ? `${command.job.jobType} (${command.job.id})` : "Confirm this job command."}
+        description={
+          command ? `${command.job.jobType} (${command.job.id})` : "Confirm this job command."
+        }
         confirmLabel={command?.action === "retry" ? "Retry" : "Cancel job"}
         confirmVariant={command?.action === "cancel" ? "destructive" : "default"}
         isPending={pendingCommand !== null}
-        onOpenChange={(open) => { if (!open) setCommand(null); }}
+        onOpenChange={(open) => {
+          if (!open) setCommand(null);
+        }}
         onConfirm={() => void runCommand()}
       />
     </div>

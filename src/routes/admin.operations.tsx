@@ -37,7 +37,7 @@ export const Route = createFileRoute("/admin/operations")({
   validateSearch: parseOperationsSearch,
   head: () => ({
     meta: [
-      { title: "Operations | Earnest Admin" },
+      { title: "系統營運 | Earnest Admin" },
       { name: "robots", content: operationsMetadata.robots },
     ],
   }),
@@ -55,7 +55,10 @@ function AdminOperations() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { pulse, refreshNow } = useOperationsPulse();
-  const [healthState, setHealthState] = useState<OperationsHealthState>({ health: null, error: null });
+  const [healthState, setHealthState] = useState<OperationsHealthState>({
+    health: null,
+    error: null,
+  });
   const [jobsSummary, setJobsSummary] = useState<JobSummary | null>(null);
   const [migrations, setMigrations] = useState<MigrationState[] | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
@@ -121,15 +124,26 @@ function AdminOperations() {
   );
 
   return (
-    <AdminShell title="Operations" description="Control-plane health and capability-aware operations access.">
+    <AdminShell
+      title="系統營運"
+      description="Control-plane health and capability-aware operations access."
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div aria-live="polite" className="flex items-center gap-2">
           <Badge variant={health?.status === "healthy" ? "default" : "secondary"}>
             {health?.status ?? "Loading"}
           </Badge>
-          {health ? <span className="text-sm text-muted-foreground">{health.checkedAt}</span> : null}
+          {health ? (
+            <span className="text-sm text-muted-foreground">{health.checkedAt}</span>
+          ) : null}
         </div>
-        <Button type="button" variant="outline" size="icon" onClick={refreshNow} aria-label="Refresh health">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={refreshNow}
+          aria-label="Refresh health"
+        >
           <RefreshCw className="h-4 w-4" />
         </Button>
       </div>
@@ -141,7 +155,11 @@ function AdminOperations() {
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
           <Tabs.List aria-label="Operations tabs" className="flex flex-wrap gap-2 border-b">
             {allowedTabs.map((tab) => (
-              <Tabs.Trigger key={tab} value={tab} className="border-b-2 border-transparent px-3 py-2 text-sm data-[state=active]:border-primary">
+              <Tabs.Trigger
+                key={tab}
+                value={tab}
+                className="border-b-2 border-transparent px-3 py-2 text-sm data-[state=active]:border-primary"
+              >
                 {TAB_LABELS[tab]}
               </Tabs.Trigger>
             ))}
@@ -160,7 +178,12 @@ function AdminOperations() {
                   onOpenJobs={() => handleTabChange("jobs")}
                 />
               ) : tab === "jobs" && activeTab === "jobs" && health.capabilities.jobsRead ? (
-                <AdminOperationsJobs capabilities={health.capabilities} active pulse={pulse} onMutationComplete={refreshNow} />
+                <AdminOperationsJobs
+                  capabilities={health.capabilities}
+                  active
+                  pulse={pulse}
+                  onMutationComplete={refreshNow}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {TAB_LABELS[tab]} becomes available when its capability is granted.

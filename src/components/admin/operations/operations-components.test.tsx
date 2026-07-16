@@ -3,9 +3,13 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AdminOperationsOverview } from "./AdminOperationsOverview";
-import { canCancelOperationsJob, canRetryOperationsJob } from "./AdminOperationsJobs";
+import {
+  canCancelOperationsJob,
+  canRetryOperationsJob,
+  mergeOperationsJobRows,
+  shouldRefreshOperationsJobs,
+} from "./AdminOperationsJobs";
 const jobsSource = readFileSync(new URL("./AdminOperationsJobs.tsx", import.meta.url), "utf8");
-
 
 const agentCapabilities = {
   jobsRead: false,
@@ -22,11 +26,35 @@ test("job commands follow guarded backend states", () => {
   expect(canCancelOperationsJob("queued")).toBe(true);
   expect(canCancelOperationsJob("succeeded")).toBe(false);
 });
+test("job pagination and polling helpers preserve active capability boundaries", () => {
+  const first = [{ id: "first" }] as never[];
+  const second = [{ id: "second" }] as never[];
+  expect(mergeOperationsJobRows(first, second, false)).toEqual(second);
+  expect(mergeOperationsJobRows(first, second, true)).toEqual([...first, ...second]);
+  expect(
+    shouldRefreshOperationsJobs({
+      active: true,
+      jobsRead: true,
+      pending: false,
+      previousPulse: 1,
+      pulse: 2,
+    }),
+  ).toBe(true);
+  expect(
+    shouldRefreshOperationsJobs({
+      active: false,
+      jobsRead: true,
+      pending: false,
+      previousPulse: 1,
+      pulse: 2,
+    }),
+  ).toBe(false);
+});
 test("jobs UI omits sensitive payload fields", () => {
   expect(jobsSource).toContain("AdminConfirmDialog");
   expect(jobsSource).not.toMatch(/\bpayload\b|authorization|prompt|phone|approvalToken/i);
+  expect(jobsSource).toContain("工作狀態已更新");
 });
-
 
 test("Agent overview omits job and migration summaries", () => {
   const html = renderToStaticMarkup(
