@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AdminOperationsOverview } from "./AdminOperationsOverview";
+import { isValidAuditRequestId, safeAuditMetadataEntries } from "./AdminOperationsAudit";
 import {
   canCancelOperationsJob,
   canRetryOperationsJob,
@@ -10,6 +11,7 @@ import {
   shouldRefreshOperationsJobs,
 } from "./AdminOperationsJobs";
 const jobsSource = readFileSync(new URL("./AdminOperationsJobs.tsx", import.meta.url), "utf8");
+const auditSource = readFileSync(new URL("./AdminOperationsAudit.tsx", import.meta.url), "utf8");
 
 const agentCapabilities = {
   jobsRead: false,
@@ -61,6 +63,21 @@ test("jobs UI omits sensitive payload fields", () => {
   expect(jobsSource).toContain("AdminConfirmDialog");
   expect(jobsSource).not.toMatch(/\bpayload\b|authorization|prompt|phone|approvalToken/i);
   expect(jobsSource).toContain("工作狀態已更新");
+});
+
+test("audit metadata and request filters stay deterministic and sanitized", () => {
+  expect(
+    safeAuditMetadataEntries({
+      status: "queued",
+      nested: { token: "[REDACTED]" },
+    }),
+  ).toEqual([
+    ["nested", '{"token":"[REDACTED]"}'],
+    ["status", "queued"],
+  ]);
+  expect(isValidAuditRequestId("123e4567-e89b-42d3-a456-426614174000")).toBe(true);
+  expect(isValidAuditRequestId("not-a-uuid")).toBe(false);
+  expect(auditSource).not.toMatch(/\bdelete\b|CSV export|\bphone\b|\bprompt\b|authorization/i);
 });
 
 test("Agent overview omits job and migration summaries", () => {

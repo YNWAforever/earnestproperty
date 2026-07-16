@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import * as Tabs from "@radix-ui/react-tabs";
 
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
+import { AdminOperationsAudit } from "@/components/admin/operations/AdminOperationsAudit";
 import { AdminOperationsJobs } from "@/components/admin/operations/AdminOperationsJobs";
 import { AdminOperationsOverview } from "@/components/admin/operations/AdminOperationsOverview";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,7 @@ function AdminOperations() {
   const [jobsSummary, setJobsSummary] = useState<JobSummary | null>(null);
   const [migrations, setMigrations] = useState<MigrationState[] | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [mutationRevision, setMutationRevision] = useState(0);
   const { health, error } = healthState;
 
   useEffect(() => {
@@ -123,6 +125,11 @@ function AdminOperations() {
     [navigate],
   );
 
+  const handleMutationComplete = useCallback(() => {
+    setMutationRevision((value) => value + 1);
+    refreshNow();
+  }, [refreshNow]);
+
   return (
     <AdminShell
       title="系統營運"
@@ -182,8 +189,10 @@ function AdminOperations() {
                   capabilities={health.capabilities}
                   active
                   pulse={pulse}
-                  onMutationComplete={refreshNow}
+                  onMutationComplete={handleMutationComplete}
                 />
+              ) : tab === "audit" && activeTab === "audit" && health.capabilities.auditRead ? (
+                <AdminOperationsAudit active revision={mutationRevision} />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {TAB_LABELS[tab]} becomes available when its capability is granted.
