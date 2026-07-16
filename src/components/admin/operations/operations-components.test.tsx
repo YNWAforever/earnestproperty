@@ -49,6 +49,13 @@ test("job pagination and polling helpers preserve active capability boundaries",
       pulse: 2,
     }),
   ).toBe(false);
+  for (const blocked of [
+    { active: true, jobsRead: false, pending: false, previousPulse: 1, pulse: 2 },
+    { active: true, jobsRead: true, pending: true, previousPulse: 1, pulse: 2 },
+    { active: true, jobsRead: true, pending: false, previousPulse: 2, pulse: 2 },
+  ]) {
+    expect(shouldRefreshOperationsJobs(blocked)).toBe(false);
+  }
 });
 test("jobs UI omits sensitive payload fields", () => {
   expect(jobsSource).toContain("AdminConfirmDialog");
