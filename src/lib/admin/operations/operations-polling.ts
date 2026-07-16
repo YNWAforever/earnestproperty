@@ -22,29 +22,35 @@ export function createOperationsPoller({
   let unsubscribe: (() => void) | undefined;
   let wasVisible = isVisible();
 
-  function pulseFromTimer() {
+  function pulseFromTimer(run: number) {
+    if (!started || run !== currentRun) return;
     const visible = isVisible();
     wasVisible = visible;
     if (visible) onPulse();
   }
 
-  function pulseOnVisibleTransition() {
+  function pulseOnVisibleTransition(run: number) {
+    if (!started || run !== currentRun) return;
     const visible = isVisible();
     if (visible && !wasVisible) onPulse();
     wasVisible = visible;
   }
 
+  let currentRun = 0;
+
   return {
     start() {
       if (started) return;
       started = true;
+      const run = ++currentRun;
       wasVisible = isVisible();
-      unsubscribe = subscribeVisibility(pulseOnVisibleTransition);
-      timer = setTimer(pulseFromTimer, intervalMs);
+      unsubscribe = subscribeVisibility(() => pulseOnVisibleTransition(run));
+      timer = setTimer(() => pulseFromTimer(run), intervalMs);
     },
     stop() {
       if (!started) return;
       started = false;
+      currentRun += 1;
       if (timer !== undefined) clearTimer(timer);
       timer = undefined;
       unsubscribe?.();

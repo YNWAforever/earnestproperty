@@ -8,8 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchOperationsHealth } from "@/lib/admin/operations/operations-client";
-import { allowedOperationTabs, resolveOperationTab } from "@/lib/admin/operations/operations-permissions";
 import { useOperationsPulse } from "@/lib/admin/operations/operations-polling";
+import {
+  createOperationsHealthLoader,
+  resolveOperationsRouteState,
+  type OperationsHealthState,
+} from "@/lib/admin/operations/operations-route-state";
 import type { HealthData, OperationTab } from "@/lib/admin/operations/operations-types";
 
 const operationsMetadata = { robots: "noindex, nofollow" } as const;
@@ -40,42 +44,32 @@ function AdminOperations() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { pulse, refreshNow } = useOperationsPulse();
-  const [health, setHealth] = useState<HealthData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [healthState, setHealthState] = useState<OperationsHealthState>({ health: null, error: null });
+  const { health, error } = healthState;
 
   useEffect(() => {
     let cancelled = false;
-
-    async function loadHealth() {
-      try {
-        const result = await fetchOperationsHealth();
-        if (cancelled) return;
-        setHealth(result.data);
-        setError(null);
-      } catch (cause) {
-        if (cancelled) return;
-        setError(errorText(cause));
-      }
-    }
-
-    void loadHealth();
+    const loader = createOperationsHealthLoader({
+      fetchHealth: () => fetchOperationsHealth(),
+      setState: (updater) => {
+        if (!cancelled) setHealthState(updater);
+      },
+    });
+    void loader.load();
     return () => {
       cancelled = true;
     };
   }, [pulse]);
 
-  const hasHealth = health !== null;
-  const capabilities = health?.capabilities;
-  const allowedTabs = capabilities ? allowedOperationTabs(capabilities) : [];
-  const activeTab = capabilities ? resolveOperationTab(search.tab, capabilities) : "overview";
+  const { allowedTabs, activeTab, correction } = resolveOperationsRouteState(search.tab, health);
 
   useEffect(() => {
-    if (!hasHealth || !search.tab || search.tab === activeTab) return;
+    if (!health || !correction) return;
     void navigate({
-      search: { tab: activeTab === "overview" ? undefined : activeTab },
+      search: correction,
       replace: true,
     });
-  }, [activeTab, hasHealth, navigate, search.tab]);
+  }, [correction, health, navigate]);
 
   const handleTabChange = useCallback(
     (tab: string) => {
@@ -89,6 +83,7 @@ function AdminOperations() {
       title="系統營運"
       description="Control-plane health and capability-aware operations access."
     >
+      <div aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Badge variant={health?.status === "healthy" ? "default" : "secondary"}>
@@ -103,10 +98,11 @@ function AdminOperations() {
 
       {error ? <AdminError message={error} /> : null}
       {!health && !error ? <Skeleton className="mt-4 h-48 w-full" /> : null}
+      </div>
 
       {health ? (
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
-          <Tabs.List className="flex flex-wrap gap-2 border-b">
+          <Tabs.List aria-label="Operations tabs" className="flex flex-wrap gap-2 border-b">
             {allowedTabs.map((tab) => (
               <Tabs.Trigger
                 key={tab}

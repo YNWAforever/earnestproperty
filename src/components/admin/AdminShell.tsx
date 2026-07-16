@@ -28,7 +28,7 @@ const navItems = [
   { to: "/admin/agents", label: "經紀管理", icon: UserRoundCog },
   { to: "/admin/leads", label: "CRM", icon: ContactRound },
   { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
-  { to: "/admin/operations", label: "系統營運", icon: ServerCog },
+  { to: "/admin/operations", label: "系統營運", icon: ServerCog, includeSearch: false },
   { to: "/admin/segments", label: "Segments", icon: Users },
   { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { to: "/admin/blasts", label: "群發", icon: Send },
@@ -101,7 +101,7 @@ export function AdminShell({
                   {...("search" in item ? { search: item.search } : {})}
                   activeOptions={{
                     exact: true,
-                    includeSearch: true,
+                    includeSearch: ("includeSearch" in item ? item.includeSearch : true),
                     explicitUndefined: true,
                   }}
                   className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"

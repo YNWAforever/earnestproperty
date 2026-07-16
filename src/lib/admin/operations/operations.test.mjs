@@ -11,6 +11,12 @@ import {
   fetchOperationsJobs,
   retryOperationsJob,
 } from "./operations-client.ts";
+import {
+  createOperationsHealthLoader,
+  getOperationsSearchCorrection,
+  resolveOperationsRouteState,
+  transitionOperationsHealthState,
+} from "./operations-route-state.ts";
 import { createOperationsPoller } from "./operations-polling.ts";
 
 const agent = {
@@ -192,4 +198,104 @@ test("poller installs one timer and listener, then removes both on stop", () => 
   assert.equal(subscribeCalls, 1);
   assert.equal(clearTimerCalls, 1);
   assert.equal(unsubscribeCalls, 1);
+});
+
+function operationsHealth(capabilities) {
+  return {
+    status: "healthy",
+    checks: [],
+    checkedAt: "2026-07-16T00:00:00.000Z",
+    capabilities,
+  };
+}
+
+test("Operations health failure clears prior capabilities and default-denies protected tabs", () => {
+  const manager = { ...agent, jobsRead: true, auditRead: true };
+  const failed = transitionOperationsHealthState(
+    { health: operationsHealth(manager), error: null },
+    { type: "failure", error: "Refresh failed" },
+  );
+
+  assert.deepEqual(failed, { health: null, error: "Refresh failed" });
+  assert.deepEqual(resolveOperationsRouteState("jobs", failed.health).allowedTabs, ["overview"]);
+  assert.equal(resolveOperationsRouteState("jobs", failed.health).activeTab, "overview");
+});
+
+test("Operations route state derives Agent, Manager, and Admin tab matrices", () => {
+  const manager = { ...agent, jobsRead: true, auditRead: true };
+  const admin = { ...manager, migrationsPlan: true };
+
+  assert.deepEqual(resolveOperationsRouteState("jobs", operationsHealth(agent)).allowedTabs, ["overview"]);
+  assert.deepEqual(resolveOperationsRouteState("audit", operationsHealth(manager)).allowedTabs, [
+    "overview",
+    "jobs",
+    "audit",
+  ]);
+  assert.deepEqual(resolveOperationsRouteState("migrations", operationsHealth(admin)).allowedTabs, [
+    "overview",
+    "jobs",
+    "audit",
+    "migrations",
+  ]);
+});
+
+test("Operations route replaces unauthorized searches once and skips resolved searches", () => {
+  const manager = { ...agent, jobsRead: true, auditRead: true };
+  const unauthorized = resolveOperationsRouteState("migrations", operationsHealth(manager));
+
+  assert.deepEqual(unauthorized.correction, { tab: undefined });
+  assert.equal(getOperationsSearchCorrection("audit", "audit"), null);
+  assert.deepEqual(getOperationsSearchCorrection("unknown", "overview"), { tab: undefined });
+});
+
+test("Operations health loader starts with only the injected health fetch", async () => {
+  let state = { health: null, error: null };
+  const calls = [];
+  const loader = createOperationsHealthLoader({
+    fetchHealth: async () => {
+      calls.push("health");
+      return { data: operationsHealth(agent), requestId: "health-1" };
+    },
+    setState: (updater) => {
+      state = updater(state);
+    },
+  });
+
+  await loader.load();
+
+  assert.deepEqual(calls, ["health"]);
+  assert.deepEqual(state, { health: operationsHealth(agent), error: null });
+});
+
+test("poller ignores retained timer and visibility callbacks after stop", () => {
+  let visible = true;
+  let timerCallback;
+  let visibilityCallback;
+  let ticks = 0;
+  const poller = createOperationsPoller({
+    intervalMs: 30_000,
+    isVisible: () => visible,
+    subscribeVisibility: (listener) => {
+      visibilityCallback = listener;
+      return () => undefined;
+    },
+    setTimer: (listener) => {
+      timerCallback = listener;
+      return 1;
+    },
+    clearTimer: () => undefined,
+    onPulse: () => {
+      ticks += 1;
+    },
+  });
+
+  poller.start();
+  poller.stop();
+  timerCallback();
+  visible = false;
+  visibilityCallback();
+  visible = true;
+  visibilityCallback();
+
+  assert.equal(ticks, 0);
 });

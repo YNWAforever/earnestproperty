@@ -73,7 +73,7 @@ test("CMS and AI Agent sidebar entries keep independent active states", () => {
     shell,
     /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/,
   );
-  assert.match(shell, /includeSearch: true/);
+  assert.match(shell, /includeSearch: false/);
   const navLinkOpening = shell.match(
     /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
   )?.[0];
