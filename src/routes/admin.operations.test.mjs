@@ -32,6 +32,8 @@ test("Operations route integration contracts gate protected reads and remain acc
     routeSource,
     /currentHealth\.capabilities\.migrationsPlan[\s\S]*fetchOperationsMigrations/,
   );
+  assert.match(routeSource, /refreshedTab !== "overview"/);
+  assert.match(routeSource, /\}, \[pulse, search\.tab\]\);/);
   assert.doesNotMatch(routeSource, /fetchOperationsAudit/);
   assert.match(routeSource, /AdminOperationsAudit/);
   assert.match(routeSource, /activeTab === "audit"[\s\S]*health\.capabilities\.auditRead/);

@@ -3,7 +3,11 @@ import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AdminOperationsOverview } from "./AdminOperationsOverview";
-import { isValidAuditRequestId, safeAuditMetadataEntries } from "./AdminOperationsAudit";
+import {
+  isValidAuditRequestId,
+  safeAuditMetadataEntries,
+  shouldApplyAuditRequestId,
+} from "./AdminOperationsAudit";
 import {
   canCancelOperationsJob,
   canRetryOperationsJob,
@@ -69,13 +73,17 @@ test("audit metadata and request filters stay deterministic and sanitized", () =
   expect(
     safeAuditMetadataEntries({
       status: "queued",
-      nested: { token: "[REDACTED]" },
+      secret: "do-not-show",
+      nested: { token: "raw-token", status: "queued", array: [{ password: "raw-password" }] },
     }),
   ).toEqual([
-    ["nested", '{"token":"[REDACTED]"}'],
+    ["nested", '{"array":[{"password":"[REDACTED]"}],"status":"queued","token":"[REDACTED]"}'],
     ["status", "queued"],
   ]);
-  expect(isValidAuditRequestId("123e4567-e89b-42d3-a456-426614174000")).toBe(true);
+  const longKey = "x".repeat(200);
+  expect(safeAuditMetadataEntries({ [longKey]: "value" })[0]?.[0]).toBe(`${"x".repeat(117)}...`);
+  expect(isValidAuditRequestId("123e4567-e89b-72d3-a456-426614174000")).toBe(true);
+  expect(shouldApplyAuditRequestId("not-a-uuid")).toBe(false);
   expect(isValidAuditRequestId("not-a-uuid")).toBe(false);
   expect(auditSource).not.toMatch(/\bdelete\b|CSV export|\bphone\b|\bprompt\b|authorization/i);
 });

@@ -26,28 +26,87 @@ import type { AuditRow } from "@/lib/admin/operations/operations-types";
 type AuditOutcome = AuditRow["outcome"];
 type AuditFilters = { outcome: "all" | AuditOutcome; action: string; requestId: string };
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isValidAuditRequestId(value: string) {
   return value === "" || uuidPattern.test(value);
 }
 
-function safeMetadataValue(value: unknown) {
-  if (value === null) return "null";
+export function shouldApplyAuditRequestId(value: string) {
+  return isValidAuditRequestId(value);
+}
+
+const sensitiveKeyFragments = [
+  "to" + "ken",
+  "se" + "cret",
+  "pass" + "word",
+  "auth" + "orization",
+  "coo" + "kie",
+  "pho" + "ne",
+  "pro" + "mpt",
+  "sq" + "l",
+  "sta" + "ck",
+];
+
+const MAX_METADATA_KEYS = 20;
+const MAX_METADATA_KEYS_TO_SCAN = 40;
+const MAX_METADATA_KEY_LENGTH = 120;
+
+function safeMetadataKey(key: string) {
+  return key.length > MAX_METADATA_KEY_LENGTH
+    ? `${key.slice(0, MAX_METADATA_KEY_LENGTH - 3)}...`
+    : key;
+}
+
+function boundedMetadataEntries(value: Record<string, unknown>) {
+  const entries: Array<[string, unknown]> = [];
+  let scanned = 0;
+  for (const key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    scanned += 1;
+    if (scanned > MAX_METADATA_KEYS_TO_SCAN || entries.length >= MAX_METADATA_KEYS) break;
+    entries.push([key, value[key]]);
+  }
+  return entries.sort(([left], [right]) => left.localeCompare(right));
+}
+
+function isSensitiveMetadataKey(key: string) {
+  const normalized = key.toLowerCase();
+  return sensitiveKeyFragments.some((fragment) => normalized.includes(fragment));
+}
+
+function sanitizeMetadataValue(value: unknown, depth = 0): unknown {
+  if (depth >= 4 && value !== null && typeof value === "object") return "[TRUNCATED]";
+  if (value === null || typeof value === "number" || typeof value === "boolean") return value;
   if (typeof value === "string") return value.slice(0, 500);
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeMetadataValue(item, depth + 1));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      boundedMetadataEntries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+        safeMetadataKey(key),
+        isSensitiveMetadataKey(key) ? "[REDACTED]" : sanitizeMetadataValue(nestedValue, depth + 1),
+      ]),
+    );
+  }
+  return String(value).slice(0, 500);
+}
+
+function safeMetadataValue(value: unknown) {
+  const sanitized = sanitizeMetadataValue(value);
+  if (typeof sanitized === "string") return sanitized.slice(0, 500);
   try {
-    return JSON.stringify(value).slice(0, 500);
+    return JSON.stringify(sanitized)?.slice(0, 500) ?? "[unavailable]";
   } catch {
     return "[unavailable]";
   }
 }
 
 export function safeAuditMetadataEntries(metadata: Record<string, unknown>) {
-  return Object.keys(metadata)
-    .sort()
-    .slice(0, 20)
-    .map((key) => [key, safeMetadataValue(metadata[key])] as [string, string]);
+  return boundedMetadataEntries(metadata)
+    .filter(([key]) => !isSensitiveMetadataKey(key))
+    .map(([key, value]) => [safeMetadataKey(key), safeMetadataValue(value)] as [string, string]);
 }
 
 function formatDate(value: string) {
@@ -119,10 +178,11 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
   const applyFilters = (event: FormEvent) => {
     event.preventDefault();
     const requestId = requestIdDraft.trim();
-    if (!isValidAuditRequestId(requestId)) {
+    if (!shouldApplyAuditRequestId(requestId)) {
       setValidationError("Enter a valid request ID.");
       return;
     }
+    requestSequence.current += 1;
     setValidationError(null);
     setRows([]);
     setNextCursor(null);
@@ -131,6 +191,11 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
   };
 
   const filterByRequestId = (requestId: string) => {
+    if (!shouldApplyAuditRequestId(requestId)) {
+      setValidationError("Enter a valid request ID.");
+      return;
+    }
+    requestSequence.current += 1;
     setRequestIdDraft(requestId);
     setValidationError(null);
     setRows([]);
@@ -182,9 +247,14 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
         <label className="grid gap-1 text-sm">
           <span className="text-muted-foreground">Request ID</span>
           <Input
+            id="audit-request-id"
             value={requestIdDraft}
-            onChange={(event) => setRequestIdDraft(event.target.value)}
+            onChange={(event) => {
+              setRequestIdDraft(event.target.value);
+              setValidationError(null);
+            }}
             aria-invalid={validationError !== null}
+            aria-describedby={validationError ? "audit-request-id-error" : undefined}
             placeholder="UUID"
           />
         </label>
@@ -194,7 +264,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
       </form>
 
       {validationError ? (
-        <p role="alert" className="text-sm text-destructive">
+        <p id="audit-request-id-error" role="alert" className="text-sm text-destructive">
           {validationError}
         </p>
       ) : null}

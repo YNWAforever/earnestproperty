@@ -85,6 +85,9 @@ function AdminOperations() {
       if (cancelled || !fetchedHealth) return;
 
       const currentHealth = fetchedHealth as HealthData;
+      const refreshedTab = resolveOperationsRouteState(search.tab, currentHealth).activeTab;
+      if (refreshedTab !== "overview") return;
+
       setJobsSummary(null);
       setMigrations(null);
       setOverviewError(null);
@@ -109,7 +112,7 @@ function AdminOperations() {
     return () => {
       cancelled = true;
     };
-  }, [pulse]);
+  }, [pulse, search.tab]);
 
   const { allowedTabs, activeTab, correction } = resolveOperationsRouteState(search.tab, health);
 
