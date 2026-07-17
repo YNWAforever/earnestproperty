@@ -14,8 +14,13 @@ import {
   mergeOperationsJobRows,
   shouldRefreshOperationsJobs,
 } from "./AdminOperationsJobs";
+import { canConfirmMigrationApply, migrationPlanShouldClear } from "./AdminOperationsMigrations";
 const jobsSource = readFileSync(new URL("./AdminOperationsJobs.tsx", import.meta.url), "utf8");
 const auditSource = readFileSync(new URL("./AdminOperationsAudit.tsx", import.meta.url), "utf8");
+const migrationsSource = readFileSync(
+  new URL("./AdminOperationsMigrations.tsx", import.meta.url),
+  "utf8",
+);
 
 const agentCapabilities = {
   jobsRead: false,
@@ -86,6 +91,36 @@ test("audit metadata and request filters stay deterministic and sanitized", () =
   expect(shouldApplyAuditRequestId("not-a-uuid")).toBe(false);
   expect(isValidAuditRequestId("not-a-uuid")).toBe(false);
   expect(auditSource).not.toMatch(/\bdelete\b|CSV export|\bphone\b|\bprompt\b|authorization/i);
+});
+
+test("migration apply requires an exact full ID", () => {
+  expect(
+    canConfirmMigrationApply(
+      "20260714180000_backend_control_plane",
+      "20260714180000_backend_control_plane",
+    ),
+  ).toBe(true);
+  expect(canConfirmMigrationApply("20260714180000_backend_control_plane", "20260714180000")).toBe(
+    false,
+  );
+});
+
+test("stale or conflicting migration plans are cleared", () => {
+  expect(migrationPlanShouldClear(409)).toBe(true);
+  expect(migrationPlanShouldClear(500)).toBe(false);
+});
+
+test("migration controls keep approval tokens and raw SQL out of the UI", () => {
+  expect(migrationsSource).toContain("AdminConfirmDialog");
+  expect(migrationsSource).not.toMatch(
+    /localStorage|sessionStorage|URLSearchParams[\s\S]*approvalToken/,
+  );
+  expect(migrationsSource).toMatch(/setPlan\(null\)[\s\S]*applyOperationsMigration/);
+  expect(migrationsSource).toMatch(/migration\.status === "pending"[\s\S]*Plan migration/);
+  expect(migrationsSource).toMatch(/migration\.status === "applied"[\s\S]*Applied/);
+  expect(migrationsSource).toMatch(/capabilities\.migrationsApply/);
+  expect(migrationsSource).toMatch(/setPlan\(null\)[\s\S]*fetchOperationsMigrations/);
+  expect(migrationsSource).not.toMatch(/Apply All|\bsql\b|\bpayload\b|\bprovider\b/i);
 });
 
 test("Agent overview omits job and migration summaries", () => {

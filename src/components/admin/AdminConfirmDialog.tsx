@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -15,6 +17,7 @@ export function AdminConfirmDialog({
   description,
   confirmLabel,
   confirmVariant = "default",
+  children,
   disabled,
   isPending,
   onOpenChange,
@@ -25,6 +28,7 @@ export function AdminConfirmDialog({
   description: string;
   confirmLabel: string;
   confirmVariant?: "default" | "destructive";
+  children?: ReactNode;
   disabled?: boolean;
   isPending?: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,6 +49,7 @@ export function AdminConfirmDialog({
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
+        {children ? <div className="space-y-3">{children}</div> : null}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isDisabled}>取消</AlertDialogCancel>
           <Button disabled={isDisabled} onClick={onConfirm} type="button" variant={confirmVariant}>

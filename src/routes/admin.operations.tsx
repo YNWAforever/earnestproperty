@@ -6,6 +6,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminOperationsAudit } from "@/components/admin/operations/AdminOperationsAudit";
 import { AdminOperationsJobs } from "@/components/admin/operations/AdminOperationsJobs";
+import { AdminOperationsMigrations } from "@/components/admin/operations/AdminOperationsMigrations";
 import { AdminOperationsOverview } from "@/components/admin/operations/AdminOperationsOverview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,7 +105,7 @@ function AdminOperations() {
         setJobsSummary(jobsPage?.data.summary ?? null);
         setMigrations(migrationPage?.data ?? null);
       } catch (reason) {
-        if (!cancelled) setOverviewError(errorText(reason));
+        if (!cancelled) setOverviewError(safeOperationsRefreshError(reason));
       }
     }
 
@@ -132,6 +133,28 @@ function AdminOperations() {
     setMutationRevision((value) => value + 1);
     refreshNow();
   }, [refreshNow]);
+
+  const handleMigrationApplied = useCallback(async () => {
+    setMutationRevision((value) => value + 1);
+    refreshNow();
+    if (!health) return;
+
+    setOverviewError(null);
+    const jobsPromise = health.capabilities.jobsRead
+      ? fetchOperationsJobs({ limit: 5 })
+      : Promise.resolve(null);
+    const migrationsPromise = health.capabilities.migrationsPlan
+      ? fetchOperationsMigrations()
+      : Promise.resolve(null);
+
+    try {
+      const [jobsPage, migrationPage] = await Promise.all([jobsPromise, migrationsPromise]);
+      setJobsSummary(jobsPage?.data.summary ?? null);
+      setMigrations(migrationPage?.data ?? null);
+    } catch (reason) {
+      setOverviewError(safeOperationsRefreshError(reason));
+    }
+  }, [health, refreshNow]);
 
   return (
     <AdminShell
@@ -196,6 +219,14 @@ function AdminOperations() {
                 />
               ) : tab === "audit" && activeTab === "audit" && health.capabilities.auditRead ? (
                 <AdminOperationsAudit active revision={mutationRevision} />
+              ) : tab === "migrations" &&
+                activeTab === "migrations" &&
+                health.capabilities.migrationsPlan ? (
+                <AdminOperationsMigrations
+                  capabilities={health.capabilities}
+                  active
+                  onApplied={handleMigrationApplied}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
                   {TAB_LABELS[tab]} becomes available when its capability is granted.
@@ -209,6 +240,11 @@ function AdminOperations() {
   );
 }
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : "Unable to load operations overview.";
+function safeOperationsRefreshError(error: unknown): string {
+  return error &&
+    typeof error === "object" &&
+    "requestId" in error &&
+    typeof error.requestId === "string"
+    ? `Unable to refresh operations overview. Request ID: ${error.requestId}`
+    : "Unable to refresh operations overview.";
 }

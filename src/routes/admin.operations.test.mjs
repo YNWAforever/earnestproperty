@@ -39,6 +39,11 @@ test("Operations route integration contracts gate protected reads and remain acc
   assert.match(routeSource, /activeTab === "audit"[\s\S]*health\.capabilities\.auditRead/);
   assert.match(routeSource, /revision=\{mutationRevision\}/);
   assert.match(routeSource, /activeTab === "jobs"[\s\S]*health\.capabilities\.jobsRead/);
+  assert.match(
+    routeSource,
+    /tab === "migrations"[\s\S]*activeTab === "migrations"[\s\S]*health\.capabilities\.migrationsPlan[\s\S]*AdminOperationsMigrations/,
+  );
+  assert.match(routeSource, /safeOperationsRefreshError/);
   assert.match(routeSource, /AdminOperationsOverview/);
   assert.match(routeSource, /AdminOperationsJobs/);
   assert.match(routeSource, /aria-live="polite"/);
