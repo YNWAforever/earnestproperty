@@ -4,8 +4,18 @@ import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
+const packagePath = join(root, "package.json");
 const routePath = join(root, "src/routes/admin.operations.tsx");
 const shellPath = join(root, "src/components/admin/AdminShell.tsx");
+
+test("Operations package script runs the focused route, library, and component suites", () => {
+  const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
+
+  assert.equal(
+    packageJson.scripts["test:operations"],
+    "node --test src/lib/admin/operations/operations.test.mjs src/routes/admin.operations.test.mjs && bun test src/components/admin/operations/operations-components.test.tsx",
+  );
+});
 
 test("Operations route and sidebar expose the capability-gated center", () => {
   assert.equal(existsSync(routePath), true, "Operations route should exist");
