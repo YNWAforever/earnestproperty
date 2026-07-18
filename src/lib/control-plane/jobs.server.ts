@@ -55,8 +55,28 @@ export async function enqueueJob(input: {
       (job_type, payload_version, payload, status, max_attempts, run_after,
        idempotency_key, actor_staff_id)
      VALUES ($1, $2, $3::jsonb, 'queued', $4, $5, $6, $7)
-     ON CONFLICT (idempotency_key) DO UPDATE
-       SET idempotency_key = EXCLUDED.idempotency_key
+     ON CONFLICT (idempotency_key) DO UPDATE SET
+       status = CASE
+         WHEN ops_jobs.status IN ('cancelled', 'failed') THEN 'queued'
+         ELSE ops_jobs.status
+       END,
+       max_attempts = CASE
+         WHEN ops_jobs.status IN ('cancelled', 'failed')
+           THEN GREATEST(ops_jobs.max_attempts, ops_jobs.attempt_count) + 1
+         ELSE ops_jobs.max_attempts
+       END,
+       run_after = CASE
+         WHEN ops_jobs.status IN ('cancelled', 'failed') THEN now()
+         ELSE ops_jobs.run_after
+       END,
+       lease_owner = CASE WHEN ops_jobs.status IN ('cancelled', 'failed') THEN NULL ELSE ops_jobs.lease_owner END,
+       lease_expires_at = CASE WHEN ops_jobs.status IN ('cancelled', 'failed') THEN NULL ELSE ops_jobs.lease_expires_at END,
+       last_error_code = CASE WHEN ops_jobs.status IN ('cancelled', 'failed') THEN NULL ELSE ops_jobs.last_error_code END,
+       last_error_summary = CASE WHEN ops_jobs.status IN ('cancelled', 'failed') THEN NULL ELSE ops_jobs.last_error_summary END,
+       updated_at = CASE
+         WHEN ops_jobs.status IN ('cancelled', 'failed') THEN now()
+         ELSE ops_jobs.updated_at
+       END
      RETURNING *`,
     [
       input.jobType,
@@ -158,6 +178,7 @@ function startLeaseHeartbeat(input: { jobId: string; workerId: string; leaseSeco
       stopped = true;
       clearInterval(timer);
       await pending;
+      return !ownershipLost;
     },
   };
 }
@@ -176,6 +197,7 @@ export async function completeJob(input: { jobId: string; workerId: string }) {
        WHERE id = $1::uuid
          AND status = 'running'
          AND lease_owner = $2
+         AND lease_expires_at >= now()
        RETURNING *
      ), attempt AS (
        INSERT INTO ops_job_attempts
@@ -219,6 +241,7 @@ export async function failJob(input: {
        WHERE id = $1::uuid
          AND status = 'running'
          AND lease_owner = $2
+         AND lease_expires_at >= now()
        RETURNING *
      ), attempt AS (
        INSERT INTO ops_job_attempts
@@ -496,7 +519,7 @@ export async function runClaimedJobs(input: {
   leaseSeconds?: number;
 }) {
   await recoverExpiredLeases();
-  const jobs = await claimJobs(input);
+  const jobs = await claimJobs({ ...input, limit: 1 });
   const counts = { claimed: jobs.length, succeeded: 0, retried: 0, failed: 0, cancelled: 0 };
   const leaseSeconds = Math.min(Math.max(Math.trunc(input.leaseSeconds ?? 60), 5), 3_600);
 
@@ -513,7 +536,10 @@ export async function runClaimedJobs(input: {
         attempt: job.attempt_count,
         checkpoint: heartbeat.checkpoint,
       });
-      await heartbeat.stop();
+      const leaseOwned = await heartbeat.stop();
+      if (!leaseOwned) {
+        throw ownershipLostError();
+      }
       const completed = await completeJob({ jobId: job.id, workerId: input.workerId });
       if (completed) counts.succeeded += 1;
       else counts.cancelled += 1;

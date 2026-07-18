@@ -214,10 +214,12 @@ test("campaign delivery checkpoints before claims and every recipient send", asy
   assert.equal(checkpoints, 3);
 });
 
-test("campaign claims never recover stale sending recipients automatically", () => {
+test("campaign reconciliation makes stale sending recipients terminal without resending", () => {
   const source = read("src/lib/woztell/campaign-delivery.server.ts");
-  assert.doesNotMatch(source, /recipient\.status = 'sending'/);
-  assert.doesNotMatch(source, /now\(\) - interval '15 minutes'/);
+  assert.match(source, /status = 'failed', error = 'WOZTELL_DELIVERY_UNKNOWN'/);
+  assert.match(source, /status = 'sending'/);
+  assert.match(source, /now\(\) - interval '15 minutes'/);
+  assert.doesNotMatch(source, /OR\s*\(\s*recipient\.status = 'sending'/);
 });
 test("blast and service-window guards enforce WhatsApp safety defaults", () => {
   const now = new Date("2026-06-23T12:00:00.000Z");

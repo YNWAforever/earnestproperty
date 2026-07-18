@@ -35,7 +35,14 @@ function deliveryError(code: string, message: string) {
 async function claimCampaignRecipients(campaignId: string) {
   const { queryRows } = await import("../neon/db.server.ts");
   return queryRows<CampaignRecipient>(
-    `WITH claimed AS (
+    `WITH reconciled AS (
+       UPDATE whatsapp_campaign_recipients
+       SET status = 'failed', error = 'WOZTELL_DELIVERY_UNKNOWN'
+       WHERE campaign_id = $1::uuid
+         AND status = 'sending'
+         AND COALESCE(queued_at, 'epoch'::timestamptz) < now() - interval '15 minutes'
+       RETURNING id
+     ), claimed AS (
        SELECT recipient.id
        FROM whatsapp_campaign_recipients recipient
        INNER JOIN whatsapp_campaigns campaign ON campaign.id = recipient.campaign_id

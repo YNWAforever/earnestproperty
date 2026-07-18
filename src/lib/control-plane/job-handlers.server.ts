@@ -112,7 +112,8 @@ export function createAiKnowledgeRebuildHandler(
     jobType: "ai.knowledge.rebuild",
     payloadVersion: 1,
     parsePayload: parseAiKnowledgeRebuildPayload,
-    async run(payload) {
+    async run(payload, context) {
+      await context.checkpoint();
       try {
         const run =
           deps.runKnowledgeRebuild ??
@@ -121,6 +122,7 @@ export function createAiKnowledgeRebuildHandler(
             return module.runAiKnowledgeRebuildOperation(input);
           });
         const result = await run(payload);
+        await context.checkpoint();
         return { summary: result };
       } catch (error) {
         if (isProviderTimeout(error)) {

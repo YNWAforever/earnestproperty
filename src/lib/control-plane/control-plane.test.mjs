@@ -359,6 +359,11 @@ test("job workers renew leases, expose checkpoints, and stop heartbeats", () => 
   const runnerSource = jobsServer.runClaimedJobs.toString();
 
   assert.match(renewSource, /lease_expires_at >= now/);
+  assert.match(runnerSource, /claimJobs\(\{ \.\.\.input, limit: 1 \}\)/);
+  assert.match(jobsServer.completeJob.toString(), /lease_expires_at >= now/);
+  assert.match(jobsServer.failJob.toString(), /lease_expires_at >= now/);
+  assert.match(jobsServer.enqueueJob.toString(), /status IN \('cancelled', 'failed'\)/);
+  assert.match(jobsServer.enqueueJob.toString(), /THEN 'queued'/);
   assert.match(runnerSource, /startLeaseHeartbeat/);
   assert.match(runnerSource, /checkpoint: heartbeat\.checkpoint/);
   assert.equal(runnerSource.match(/heartbeat\.stop/g)?.length, 2);
@@ -436,23 +441,39 @@ test("job handlers are versioned and validate payloads before execution", () => 
 
 test("AI knowledge handler delegates safely and marks provider timeouts retryable", async () => {
   const payload = { requestedByStaffId: "11111111-1111-4111-8111-111111111111" };
+  let checkpoints = 0;
   const handler = createAiKnowledgeRebuildHandler({
     runKnowledgeRebuild: async (input) => {
       assert.deepEqual(input, payload);
       return { indexedSources: 4, indexedChunks: 12, embeddingDimensionFailures: 1 };
     },
   });
-  assert.deepEqual(await handler.run(payload, { jobId: "job-1", attempt: 1 }), {
-    summary: { indexedSources: 4, indexedChunks: 12, embeddingDimensionFailures: 1 },
-  });
+  assert.deepEqual(
+    await handler.run(payload, {
+      jobId: "job-1",
+      attempt: 1,
+      checkpoint: async () => {
+        checkpoints += 1;
+      },
+    }),
+    {
+      summary: { indexedSources: 4, indexedChunks: 12, embeddingDimensionFailures: 1 },
+    },
+  );
 
+  assert.equal(checkpoints, 2);
   const timeoutHandler = createAiKnowledgeRebuildHandler({
     runKnowledgeRebuild: async () => {
       throw Object.assign(new Error("Provider timed out"), { code: "INTEGRATION_TIMEOUT" });
     },
   });
   await assert.rejects(
-    () => timeoutHandler.run(payload, { jobId: "job-2", attempt: 1 }),
+    () =>
+      timeoutHandler.run(payload, {
+        jobId: "job-2",
+        attempt: 1,
+        checkpoint: async () => {},
+      }),
     (error) => isRetryableJobError(error) && error.code === "AI_KNOWLEDGE_REBUILD_TIMEOUT",
   );
 });

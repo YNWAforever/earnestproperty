@@ -49,7 +49,8 @@ Task 8 verification. The follow-up implementation now:
 - treats ambiguous WozTell outcomes as terminal `WOZTELL_DELIVERY_UNKNOWN`
   instead of automatically retrying a message that the provider may have accepted;
 - renews running job leases and passes cooperative ownership checkpoints into
-  campaign delivery before each recipient send;
+  campaign delivery before each recipient send, claims only one durable job per
+  serial worker run, and rejects completion or failure after lease expiry;
 - returns claimed but unattempted campaign recipients to `queued` when a worker
   loses ownership or delivery is interrupted;
 - writes successful retry/cancel audits in the same SQL statement as the job
@@ -58,6 +59,9 @@ Task 8 verification. The follow-up implementation now:
   revalidates the schema fingerprint and dependency state inside that transaction,
   and writes the success audit before commit; and
 - redacts recipient/provider payload fields and caps audit object width deterministically.
+- reconciles stale `sending` recipients to terminal `WOZTELL_DELIVERY_UNKNOWN`
+  without resending and permits an explicitly re-enqueued cancelled campaign to
+  continue only its queued recipients;
 
 | `npm.cmd run test:control-plane:db` | exit 0; 5 pass, 3 explicit skips because no disposable database was configured |
 | `npm.cmd run test:neon-auth` | exit 0; 3 pass |
