@@ -77,7 +77,9 @@ const MANAGED_REBUILD_SOURCE_TYPES: AiKnowledgeSourceType[] = [
   "listing",
 ];
 
-export async function rebuildAiKnowledgeIndex() {
+export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Promise<void> } = {}) {
+  const checkpoint = options.checkpoint ?? (async () => {});
+  await checkpoint();
   const sources = await fetchPublicKnowledgeSources();
   const observedSources = new Map<string, ObservedKnowledgeSource>();
   const embeddingModel = getAiServerConfig().embeddingModel;
@@ -86,6 +88,7 @@ export async function rebuildAiKnowledgeIndex() {
   let embeddingDimensionFailures = 0;
 
   for (const source of sources) {
+    await checkpoint();
     const normalizedText = normalizeSourceText(source.text);
     if (!normalizedText) continue;
 
@@ -100,7 +103,9 @@ export async function rebuildAiKnowledgeIndex() {
     }));
     if (chunks.length === 0) continue;
 
+    await checkpoint();
     const embeddings = await embedAiTexts(chunks.map((chunk) => chunk.text));
+    await checkpoint();
     const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk, index) => ({
       sort_order: chunk.sort_order,
       chunk_text: chunk.text,
@@ -129,6 +134,7 @@ export async function rebuildAiKnowledgeIndex() {
       source_id: normalized.source_id,
     });
 
+    await checkpoint();
     const sourceRows = await queryRows(
       `INSERT INTO ai_knowledge_sources (
         source_type, source_id, title, url_path, public_visibility, published,
@@ -158,13 +164,17 @@ export async function rebuildAiKnowledgeIndex() {
     const sourceId = stringOrEmpty(sourceRows[0]?.id);
     if (!sourceId) continue;
 
+    await checkpoint();
     await replaceKnowledgeChunks(sourceId, preparedChunks);
+    await checkpoint();
     indexedChunks += preparedChunks.length;
 
     indexedSources += 1;
   }
 
+  await checkpoint();
   await reconcileUnobservedKnowledgeSources(Array.from(observedSources.values()));
+  await checkpoint();
 
   if (embeddingDimensionFailures > 0) {
     console.error(
@@ -173,6 +183,24 @@ export async function rebuildAiKnowledgeIndex() {
   }
 
   return { indexedSources, indexedChunks, embeddingDimensionFailures };
+}
+
+export type AiKnowledgeRebuildJobPayload = { requestedByStaffId: string };
+
+export async function runAiKnowledgeRebuildOperation(
+  _payload: AiKnowledgeRebuildJobPayload,
+  deps: {
+    rebuildAiKnowledgeIndex?: typeof rebuildAiKnowledgeIndex;
+    checkpoint?: () => Promise<void>;
+  } = {},
+) {
+  const rebuild = deps.rebuildAiKnowledgeIndex ?? rebuildAiKnowledgeIndex;
+  const result = await rebuild({ checkpoint: deps.checkpoint });
+  return {
+    indexedSources: Number(result.indexedSources) || 0,
+    indexedChunks: Number(result.indexedChunks) || 0,
+    embeddingDimensionFailures: Number(result.embeddingDimensionFailures) || 0,
+  };
 }
 
 export async function searchPublicKnowledge(input: { query: string; limit?: number }) {

@@ -11,6 +11,7 @@ import {
   LogOut,
   MessageCircle,
   Send,
+  ServerCog,
   UserRoundCog,
   Users,
 } from "lucide-react";
@@ -21,12 +22,13 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 
 const navItems = [
   { to: "/admin", label: "總覽", icon: BarChart3 },
-  { to: "/admin/cms", label: "CMS / FAQ", icon: BookOpen },
-  { to: "/admin/cms", label: "AI Agent", icon: FileQuestion },
+  { to: "/admin/cms", label: "CMS / FAQ", icon: BookOpen, search: { tab: undefined } },
+  { to: "/admin/cms", label: "AI Agent", icon: FileQuestion, search: { tab: "faqs" } },
   { to: "/admin/listings", label: "放盤", icon: Building2 },
   { to: "/admin/agents", label: "經紀管理", icon: UserRoundCog },
   { to: "/admin/leads", label: "CRM", icon: ContactRound },
   { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
+  { to: "/admin/operations", label: "系統營運", icon: ServerCog, includeSearch: false },
   { to: "/admin/segments", label: "Segments", icon: Users },
   { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { to: "/admin/blasts", label: "群發", icon: Send },
@@ -96,6 +98,12 @@ export function AdminShell({
                 <Link
                   key={`${item.to}-${item.label}`}
                   to={item.to}
+                  {...("search" in item ? { search: item.search } : {})}
+                  activeOptions={{
+                    exact: true,
+                    includeSearch: ("includeSearch" in item ? item.includeSearch : true),
+                    explicitUndefined: true,
+                  }}
                   className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
                   activeProps={{ className: "bg-primary/10 text-primary" }}
                 >

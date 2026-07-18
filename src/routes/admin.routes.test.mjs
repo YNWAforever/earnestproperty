@@ -63,6 +63,28 @@ test("admin child routes are present in the generated route tree", () => {
   assert.doesNotMatch(routeTree, /AdminListingsRouteWithChildren/);
   assert.doesNotMatch(routeTree, /parentRoute: typeof AdminListingsRoute/);
 });
+test("CMS and AI Agent sidebar entries keep independent active states", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+  const cmsRoute = read("src/routes/admin.cms.tsx");
+
+  assert.match(shell, /to: "\/admin\/cms", label: "CMS \/ FAQ"/);
+  assert.match(shell, /label: "CMS \/ FAQ",[\s\S]*?search: \{ tab: undefined \}/);
+  assert.match(
+    shell,
+    /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/,
+  );
+  assert.match(shell, /includeSearch: false/);
+  const navLinkOpening = shell.match(
+    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
+  )?.[0];
+  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
+  assert.match(navLinkOpening, /\.\.\.\("search" in item/);
+  assert.match(navLinkOpening, /activeOptions=\{\{/);
+  assert.match(navLinkOpening, /explicitUndefined: true/);
+
+  assert.match(cmsRoute, /validateSearch/);
+  assert.match(cmsRoute, /Route\.useSearch\(\)/);
+});
 
 test("admin server functions recover from stale deployed hashes", () => {
   const adminData = read("src/lib/neon/admin-data.ts");
@@ -304,18 +326,28 @@ test("admin routes expose functional workflows, not only read-only tables", () =
 
   const sendQueueJob = read("src/routes/api.admin.jobs.send-queue.ts");
   for (const text of [
-    "claimQueuedCampaignRecipients",
+    "findEligibleCampaigns",
+    "enqueueJob",
+    "runClaimedJobs",
+    "woztell.campaign.deliver",
+    "interval '15 minutes'",
+  ]) {
+    assert.match(sendQueueJob, new RegExp(text));
+  }
+
+  const campaignDelivery = read("src/lib/woztell/campaign-delivery.server.ts");
+  for (const text of [
+    "claimCampaignRecipients",
     "FOR UPDATE SKIP LOCKED",
     "RETURNING",
     "status = 'sending'",
     "queued_at = now()",
-    "interval '15 minutes'",
-    "r.status = 'sending'",
-    "catch \\(err\\)",
-    "refreshTouchedCampaignStatuses",
-    "blocked, failed",
+    "isBlastRecipientAllowed",
+    "opt_in_whatsapp",
+    "opted_out_whatsapp",
+    "refreshCampaignDeliveryStatus",
   ]) {
-    assert.match(sendQueueJob, new RegExp(text));
+    assert.match(campaignDelivery, new RegExp(text));
   }
 
   assert.match(
@@ -397,7 +429,10 @@ test("AI CRM, segment, and live-agent routes are wired", () => {
     ["src/routes/api.live-agent.session.ts", ["createLiveAgentSession"]],
     ["src/routes/api.live-agent.message.ts", ["answerLiveAgentMessage"]],
     ["src/routes/api.live-agent.handoff.ts", ["requestLiveAgentHandoff"]],
-    ["src/routes/api.admin.ai.rebuild-knowledge.ts", ["rebuildAdminAiKnowledge"]],
+    [
+      "src/routes/api.admin.ai.rebuild-knowledge.ts",
+      ["enqueueJob", "ai.knowledge.rebuild"],
+    ],
   ];
 
   for (const [file, requiredNames] of expectations) {
@@ -435,4 +470,9 @@ test("command center route is registered, noindex, and admin-guarded", () => {
 
   const routeTree = read("src/routeTree.gen.ts");
   assert.match(routeTree, /['"]\/admin\/leads\/command-center['"]/);
+});
+
+test("Operations route is present in the generated route tree", () => {
+  const routeTree = read("src/routeTree.gen.ts");
+  assert.match(routeTree, /['"]\/admin\/operations['"]/);
 });

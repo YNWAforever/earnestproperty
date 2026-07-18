@@ -39,6 +39,7 @@ import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
+import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
 import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
@@ -59,8 +60,17 @@ import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
+import { Route as ApiAdminControlPlaneWorkerRouteImport } from './routes/api.admin.control-plane.worker'
+import { Route as ApiAdminControlPlaneMigrationsRouteImport } from './routes/api.admin.control-plane.migrations'
+import { Route as ApiAdminControlPlaneJobsRouteImport } from './routes/api.admin.control-plane.jobs'
+import { Route as ApiAdminControlPlaneHealthRouteImport } from './routes/api.admin.control-plane.health'
+import { Route as ApiAdminControlPlaneAuditRouteImport } from './routes/api.admin.control-plane.audit'
 import { Route as ApiAdminAiRebuildKnowledgeRouteImport } from './routes/api.admin.ai.rebuild-knowledge'
 import { Route as ApiAdminCampaignsIdQueueRouteImport } from './routes/api.admin.campaigns.$id.queue'
+import { Route as ApiAdminControlPlaneMigrationsIdPlanRouteImport } from './routes/api.admin.control-plane.migrations.$id.plan'
+import { Route as ApiAdminControlPlaneMigrationsIdApplyRouteImport } from './routes/api.admin.control-plane.migrations.$id.apply'
+import { Route as ApiAdminControlPlaneJobsIdRetryRouteImport } from './routes/api.admin.control-plane.jobs.$id.retry'
+import { Route as ApiAdminControlPlaneJobsIdCancelRouteImport } from './routes/api.admin.control-plane.jobs.$id.cancel'
 
 const VideosRoute = VideosRouteImport.update({
   id: '/videos',
@@ -212,6 +222,11 @@ const AdminSegmentsRoute = AdminSegmentsRouteImport.update({
   path: '/segments',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminOperationsRoute = AdminOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminListingsRoute = AdminListingsRouteImport.update({
   id: '/listings',
   path: '/listings',
@@ -312,6 +327,36 @@ const ApiAdminJobsSendQueueRoute = ApiAdminJobsSendQueueRouteImport.update({
   path: '/api/admin/jobs/send-queue',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminControlPlaneWorkerRoute =
+  ApiAdminControlPlaneWorkerRouteImport.update({
+    id: '/api/admin/control-plane/worker',
+    path: '/api/admin/control-plane/worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneMigrationsRoute =
+  ApiAdminControlPlaneMigrationsRouteImport.update({
+    id: '/api/admin/control-plane/migrations',
+    path: '/api/admin/control-plane/migrations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneJobsRoute =
+  ApiAdminControlPlaneJobsRouteImport.update({
+    id: '/api/admin/control-plane/jobs',
+    path: '/api/admin/control-plane/jobs',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneHealthRoute =
+  ApiAdminControlPlaneHealthRouteImport.update({
+    id: '/api/admin/control-plane/health',
+    path: '/api/admin/control-plane/health',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneAuditRoute =
+  ApiAdminControlPlaneAuditRouteImport.update({
+    id: '/api/admin/control-plane/audit',
+    path: '/api/admin/control-plane/audit',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminAiRebuildKnowledgeRoute =
   ApiAdminAiRebuildKnowledgeRouteImport.update({
     id: '/api/admin/ai/rebuild-knowledge',
@@ -323,6 +368,30 @@ const ApiAdminCampaignsIdQueueRoute =
     id: '/api/admin/campaigns/$id/queue',
     path: '/api/admin/campaigns/$id/queue',
     getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneMigrationsIdPlanRoute =
+  ApiAdminControlPlaneMigrationsIdPlanRouteImport.update({
+    id: '/$id/plan',
+    path: '/$id/plan',
+    getParentRoute: () => ApiAdminControlPlaneMigrationsRoute,
+  } as any)
+const ApiAdminControlPlaneMigrationsIdApplyRoute =
+  ApiAdminControlPlaneMigrationsIdApplyRouteImport.update({
+    id: '/$id/apply',
+    path: '/$id/apply',
+    getParentRoute: () => ApiAdminControlPlaneMigrationsRoute,
+  } as any)
+const ApiAdminControlPlaneJobsIdRetryRoute =
+  ApiAdminControlPlaneJobsIdRetryRouteImport.update({
+    id: '/$id/retry',
+    path: '/$id/retry',
+    getParentRoute: () => ApiAdminControlPlaneJobsRoute,
+  } as any)
+const ApiAdminControlPlaneJobsIdCancelRoute =
+  ApiAdminControlPlaneJobsIdCancelRouteImport.update({
+    id: '/$id/cancel',
+    path: '/$id/cancel',
+    getParentRoute: () => ApiAdminControlPlaneJobsRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -346,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
@@ -374,10 +444,19 @@ export interface FileRoutesByFullPath {
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
+  '/api/admin/control-plane/jobs': typeof ApiAdminControlPlaneJobsRouteWithChildren
+  '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
+  '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
+  '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
+  '/api/admin/control-plane/migrations/$id/apply': typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  '/api/admin/control-plane/migrations/$id/plan': typeof ApiAdminControlPlaneMigrationsIdPlanRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -398,6 +477,7 @@ export interface FileRoutesByTo {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
@@ -426,10 +506,19 @@ export interface FileRoutesByTo {
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
+  '/api/admin/control-plane/jobs': typeof ApiAdminControlPlaneJobsRouteWithChildren
+  '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
+  '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
+  '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
+  '/api/admin/control-plane/migrations/$id/apply': typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  '/api/admin/control-plane/migrations/$id/plan': typeof ApiAdminControlPlaneMigrationsIdPlanRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -453,6 +542,7 @@ export interface FileRoutesById {
   '/admin/cms': typeof AdminCmsRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents_/$slug': typeof AgentsSlugRoute
@@ -481,10 +571,19 @@ export interface FileRoutesById {
   '/dashboard/property/$id': typeof DashboardPropertyIdRoute
   '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
+  '/api/admin/control-plane/jobs': typeof ApiAdminControlPlaneJobsRouteWithChildren
+  '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
+  '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
+  '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
+  '/api/admin/control-plane/migrations/$id/apply': typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  '/api/admin/control-plane/migrations/$id/plan': typeof ApiAdminControlPlaneMigrationsIdPlanRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -509,6 +608,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
+    | '/admin/operations'
     | '/admin/segments'
     | '/admin/whatsapp'
     | '/agents/$slug'
@@ -537,10 +637,19 @@ export interface FileRouteTypes {
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/audit'
+    | '/api/admin/control-plane/health'
+    | '/api/admin/control-plane/jobs'
+    | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
     | '/api/admin/campaigns/$id/queue'
+    | '/api/admin/control-plane/jobs/$id/cancel'
+    | '/api/admin/control-plane/jobs/$id/retry'
+    | '/api/admin/control-plane/migrations/$id/apply'
+    | '/api/admin/control-plane/migrations/$id/plan'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -561,6 +670,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
+    | '/admin/operations'
     | '/admin/segments'
     | '/admin/whatsapp'
     | '/agents/$slug'
@@ -589,10 +699,19 @@ export interface FileRouteTypes {
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/audit'
+    | '/api/admin/control-plane/health'
+    | '/api/admin/control-plane/jobs'
+    | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
     | '/api/admin/campaigns/$id/queue'
+    | '/api/admin/control-plane/jobs/$id/cancel'
+    | '/api/admin/control-plane/jobs/$id/retry'
+    | '/api/admin/control-plane/migrations/$id/apply'
+    | '/api/admin/control-plane/migrations/$id/plan'
   id:
     | '__root__'
     | '/'
@@ -615,6 +734,7 @@ export interface FileRouteTypes {
     | '/admin/cms'
     | '/admin/leads'
     | '/admin/listings'
+    | '/admin/operations'
     | '/admin/segments'
     | '/admin/whatsapp'
     | '/agents_/$slug'
@@ -643,10 +763,19 @@ export interface FileRouteTypes {
     | '/dashboard/property/$id'
     | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/audit'
+    | '/api/admin/control-plane/health'
+    | '/api/admin/control-plane/jobs'
+    | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
     | '/api/admin/woztell/send'
     | '/api/admin/campaigns/$id/queue'
+    | '/api/admin/control-plane/jobs/$id/cancel'
+    | '/api/admin/control-plane/jobs/$id/retry'
+    | '/api/admin/control-plane/migrations/$id/apply'
+    | '/api/admin/control-plane/migrations/$id/plan'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -679,6 +808,11 @@ export interface RootRouteChildren {
   ApiLiveAgentSessionRoute: typeof ApiLiveAgentSessionRoute
   ApiWoztellWebhookRoute: typeof ApiWoztellWebhookRoute
   ApiAdminAiRebuildKnowledgeRoute: typeof ApiAdminAiRebuildKnowledgeRoute
+  ApiAdminControlPlaneAuditRoute: typeof ApiAdminControlPlaneAuditRoute
+  ApiAdminControlPlaneHealthRoute: typeof ApiAdminControlPlaneHealthRoute
+  ApiAdminControlPlaneJobsRoute: typeof ApiAdminControlPlaneJobsRouteWithChildren
+  ApiAdminControlPlaneMigrationsRoute: typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  ApiAdminControlPlaneWorkerRoute: typeof ApiAdminControlPlaneWorkerRoute
   ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
@@ -897,6 +1031,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSegmentsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/operations': {
+      id: '/admin/operations'
+      path: '/operations'
+      fullPath: '/admin/operations'
+      preLoaderRoute: typeof AdminOperationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/listings': {
       id: '/admin/listings'
       path: '/listings'
@@ -1037,6 +1178,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminJobsSendQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/control-plane/worker': {
+      id: '/api/admin/control-plane/worker'
+      path: '/api/admin/control-plane/worker'
+      fullPath: '/api/admin/control-plane/worker'
+      preLoaderRoute: typeof ApiAdminControlPlaneWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/migrations': {
+      id: '/api/admin/control-plane/migrations'
+      path: '/api/admin/control-plane/migrations'
+      fullPath: '/api/admin/control-plane/migrations'
+      preLoaderRoute: typeof ApiAdminControlPlaneMigrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/jobs': {
+      id: '/api/admin/control-plane/jobs'
+      path: '/api/admin/control-plane/jobs'
+      fullPath: '/api/admin/control-plane/jobs'
+      preLoaderRoute: typeof ApiAdminControlPlaneJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/health': {
+      id: '/api/admin/control-plane/health'
+      path: '/api/admin/control-plane/health'
+      fullPath: '/api/admin/control-plane/health'
+      preLoaderRoute: typeof ApiAdminControlPlaneHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/audit': {
+      id: '/api/admin/control-plane/audit'
+      path: '/api/admin/control-plane/audit'
+      fullPath: '/api/admin/control-plane/audit'
+      preLoaderRoute: typeof ApiAdminControlPlaneAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/ai/rebuild-knowledge': {
       id: '/api/admin/ai/rebuild-knowledge'
       path: '/api/admin/ai/rebuild-knowledge'
@@ -1051,6 +1227,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminCampaignsIdQueueRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/control-plane/migrations/$id/plan': {
+      id: '/api/admin/control-plane/migrations/$id/plan'
+      path: '/$id/plan'
+      fullPath: '/api/admin/control-plane/migrations/$id/plan'
+      preLoaderRoute: typeof ApiAdminControlPlaneMigrationsIdPlanRouteImport
+      parentRoute: typeof ApiAdminControlPlaneMigrationsRoute
+    }
+    '/api/admin/control-plane/migrations/$id/apply': {
+      id: '/api/admin/control-plane/migrations/$id/apply'
+      path: '/$id/apply'
+      fullPath: '/api/admin/control-plane/migrations/$id/apply'
+      preLoaderRoute: typeof ApiAdminControlPlaneMigrationsIdApplyRouteImport
+      parentRoute: typeof ApiAdminControlPlaneMigrationsRoute
+    }
+    '/api/admin/control-plane/jobs/$id/retry': {
+      id: '/api/admin/control-plane/jobs/$id/retry'
+      path: '/$id/retry'
+      fullPath: '/api/admin/control-plane/jobs/$id/retry'
+      preLoaderRoute: typeof ApiAdminControlPlaneJobsIdRetryRouteImport
+      parentRoute: typeof ApiAdminControlPlaneJobsRoute
+    }
+    '/api/admin/control-plane/jobs/$id/cancel': {
+      id: '/api/admin/control-plane/jobs/$id/cancel'
+      path: '/$id/cancel'
+      fullPath: '/api/admin/control-plane/jobs/$id/cancel'
+      preLoaderRoute: typeof ApiAdminControlPlaneJobsIdCancelRouteImport
+      parentRoute: typeof ApiAdminControlPlaneJobsRoute
+    }
   }
 }
 
@@ -1060,6 +1264,7 @@ interface AdminRouteChildren {
   AdminCmsRoute: typeof AdminCmsRoute
   AdminLeadsRoute: typeof AdminLeadsRoute
   AdminListingsRoute: typeof AdminListingsRoute
+  AdminOperationsRoute: typeof AdminOperationsRoute
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1076,6 +1281,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCmsRoute: AdminCmsRoute,
   AdminLeadsRoute: AdminLeadsRoute,
   AdminListingsRoute: AdminListingsRoute,
+  AdminOperationsRoute: AdminOperationsRoute,
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
   AdminIndexRoute: AdminIndexRoute,
@@ -1128,6 +1334,41 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
   DashboardRouteChildren,
 )
 
+interface ApiAdminControlPlaneJobsRouteChildren {
+  ApiAdminControlPlaneJobsIdCancelRoute: typeof ApiAdminControlPlaneJobsIdCancelRoute
+  ApiAdminControlPlaneJobsIdRetryRoute: typeof ApiAdminControlPlaneJobsIdRetryRoute
+}
+
+const ApiAdminControlPlaneJobsRouteChildren: ApiAdminControlPlaneJobsRouteChildren =
+  {
+    ApiAdminControlPlaneJobsIdCancelRoute:
+      ApiAdminControlPlaneJobsIdCancelRoute,
+    ApiAdminControlPlaneJobsIdRetryRoute: ApiAdminControlPlaneJobsIdRetryRoute,
+  }
+
+const ApiAdminControlPlaneJobsRouteWithChildren =
+  ApiAdminControlPlaneJobsRoute._addFileChildren(
+    ApiAdminControlPlaneJobsRouteChildren,
+  )
+
+interface ApiAdminControlPlaneMigrationsRouteChildren {
+  ApiAdminControlPlaneMigrationsIdApplyRoute: typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  ApiAdminControlPlaneMigrationsIdPlanRoute: typeof ApiAdminControlPlaneMigrationsIdPlanRoute
+}
+
+const ApiAdminControlPlaneMigrationsRouteChildren: ApiAdminControlPlaneMigrationsRouteChildren =
+  {
+    ApiAdminControlPlaneMigrationsIdApplyRoute:
+      ApiAdminControlPlaneMigrationsIdApplyRoute,
+    ApiAdminControlPlaneMigrationsIdPlanRoute:
+      ApiAdminControlPlaneMigrationsIdPlanRoute,
+  }
+
+const ApiAdminControlPlaneMigrationsRouteWithChildren =
+  ApiAdminControlPlaneMigrationsRoute._addFileChildren(
+    ApiAdminControlPlaneMigrationsRouteChildren,
+  )
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -1158,6 +1399,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiLiveAgentSessionRoute: ApiLiveAgentSessionRoute,
   ApiWoztellWebhookRoute: ApiWoztellWebhookRoute,
   ApiAdminAiRebuildKnowledgeRoute: ApiAdminAiRebuildKnowledgeRoute,
+  ApiAdminControlPlaneAuditRoute: ApiAdminControlPlaneAuditRoute,
+  ApiAdminControlPlaneHealthRoute: ApiAdminControlPlaneHealthRoute,
+  ApiAdminControlPlaneJobsRoute: ApiAdminControlPlaneJobsRouteWithChildren,
+  ApiAdminControlPlaneMigrationsRoute:
+    ApiAdminControlPlaneMigrationsRouteWithChildren,
+  ApiAdminControlPlaneWorkerRoute: ApiAdminControlPlaneWorkerRoute,
   ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,

@@ -101,6 +101,19 @@ test("AI modules expose the expected public and server-only contracts", () => {
   }
 });
 
+test("AI knowledge rebuild checks job ownership around provider and database work", () => {
+  const source = read("src/lib/ai/knowledge.server.ts");
+  const rebuild = functionSource(source, "rebuildAiKnowledgeIndex");
+  const operation = functionSource(source, "runAiKnowledgeRebuildOperation");
+  const checkpoints = rebuild.match(/await checkpoint\(\)/g) ?? [];
+
+  assert.ok(checkpoints.length >= 8, "rebuild should checkpoint throughout each source");
+  assert.match(rebuild, /await checkpoint\(\);\s*const embeddings = await embedAiTexts/);
+  assert.match(rebuild, /await checkpoint\(\);\s*const sourceRows = await queryRows/);
+  assert.match(rebuild, /await checkpoint\(\);\s*await replaceKnowledgeChunks/);
+  assert.match(operation, /rebuild\(\{ checkpoint: deps\.checkpoint \}\)/);
+});
+
 test("server-only AI secrets stay out of browser-safe modules", () => {
   for (const file of [
     "src/lib/ai/ai-types.ts",
@@ -212,7 +225,7 @@ test("CRM AI model suggestions stay suggested until staff review", () => {
   const source = read("src/lib/ai/crm-enrichment.server.ts");
   const suggestedTagLoop =
     source.match(
-      /for \(const suggestion of value\.suggested_tags\) \{[\s\S]*?tags\.push\(\{[\s\S]*?\}\);\n  \}/,
+      /for \(const suggestion of value\.suggested_tags\) \{[\s\S]*?tags\.push\(\{[\s\S]*?\}\);\r?\n  \}/,
     )?.[0] ?? "";
 
   assert.notEqual(suggestedTagLoop, "", "crm-enrichment should persist AI suggested tags");

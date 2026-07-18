@@ -12,11 +12,40 @@ import {
   sendWoztellResponse,
   verifyWoztellSignature,
 } from "./woztell.server.ts";
+import { deliverWoztellCampaign } from "./campaign-delivery.server.ts";
 
 const root = process.cwd();
 
 function read(path) {
   return readFileSync(join(root, path), "utf8");
+}
+
+const campaignRecipient = {
+  id: "11111111-1111-4111-8111-111111111111",
+  normalized_phone: "85260000000",
+  whatsapp_member_id: "woztell-member-1",
+  opt_in_whatsapp: true,
+  opted_out_whatsapp: false,
+  element_name: "campaign-template",
+  language_code: "zh_HK",
+  components: [],
+};
+
+async function runSingleRecipientCampaign(sendResponse) {
+  let claimCount = 0;
+  const updates = [];
+  const summary = await deliverWoztellCampaign("22222222-2222-4222-8222-222222222222", {
+    isEnabled: () => true,
+    checkpoint: async () => {},
+    claimRecipients: async () => {
+      claimCount += 1;
+      return claimCount === 1 ? [campaignRecipient] : [];
+    },
+    updateRecipient: async (...args) => updates.push(args),
+    refreshStatus: async () => {},
+    sendResponse,
+  });
+  return { claimCount, summary, updates };
 }
 
 test("verifyWoztellSignature validates HMAC-SHA256 base64 signatures", () => {
@@ -68,7 +97,6 @@ test("normalizeWoztellEvent handles outbound manual events", () => {
   assert.equal(event.externalMessageId, "wamid.123");
   assert.equal(event.text, "收到，我哋幫你配盤");
 });
-
 
 test("normalizeWoztellEvent supports official memberId and channelId fields", () => {
   const event = normalizeWoztellEvent({
@@ -125,6 +153,74 @@ test("sendWoztellResponse uses memberId rather than a browser recipient id", asy
   }
 });
 
+test("campaign delivery makes accepted-then-timeout recipients terminal unknown", async () => {
+  const result = await runSingleRecipientCampaign(async () => {
+    throw Object.assign(new Error("response lost after provider acceptance"), {
+      name: "AbortError",
+    });
+  });
+
+  assert.deepEqual(result.summary, { sent: 0, blocked: 0, failed: 1, checked: 1 });
+  assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN"]]);
+  assert.equal(result.claimCount, 2);
+});
+
+test("campaign delivery makes ambiguous HTTP responses terminal unknown", async () => {
+  for (const status of [200, 408, 429, 503]) {
+    const result = await runSingleRecipientCampaign(async () => ({
+      ok: false,
+      status,
+      error: "ambiguous response",
+    }));
+    assert.deepEqual(result.updates, [
+      [campaignRecipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN"],
+    ]);
+    assert.equal(result.summary.failed, 1);
+  }
+});
+
+test("campaign delivery checkpoints before claims and every recipient send", async () => {
+  let checkpoints = 0;
+  let sends = 0;
+  let claims = 0;
+  await assert.rejects(
+    () =>
+      deliverWoztellCampaign("22222222-2222-4222-8222-222222222222", {
+        isEnabled: () => true,
+        checkpoint: async () => {
+          checkpoints += 1;
+          if (checkpoints === 3) {
+            throw Object.assign(new Error("job cancelled"), { code: "JOB_OWNERSHIP_LOST" });
+          }
+        },
+        claimRecipients: async () => {
+          claims += 1;
+          return [
+            campaignRecipient,
+            { ...campaignRecipient, id: "33333333-3333-4333-8333-333333333333" },
+          ];
+        },
+        updateRecipient: async () => {},
+        refreshStatus: async () => {},
+        sendResponse: async () => {
+          sends += 1;
+          return { ok: true, status: 200, body: {} };
+        },
+      }),
+    (error) => error?.code === "JOB_OWNERSHIP_LOST",
+  );
+  assert.equal(claims, 1);
+  assert.equal(sends, 1);
+  assert.equal(checkpoints, 3);
+});
+
+test("campaign reconciliation makes stale sending recipients terminal without resending", () => {
+  const source = read("src/lib/woztell/campaign-delivery.server.ts");
+  assert.match(source, /status = 'failed', error = 'WOZTELL_DELIVERY_UNKNOWN'/);
+  assert.match(source, /status = 'sending'/);
+  assert.match(source, /now\(\) - interval '15 minutes'/);
+  assert.doesNotMatch(source, /OR\s*\(\s*recipient\.status = 'sending'/);
+});
 test("blast and service-window guards enforce WhatsApp safety defaults", () => {
   const now = new Date("2026-06-23T12:00:00.000Z");
 
