@@ -60,7 +60,7 @@ Task 8 verification. The follow-up implementation now:
   and writes the success audit before commit; and
 - redacts recipient/provider payload fields and caps audit object width deterministically.
 - reconciles stale `sending` recipients to terminal `WOZTELL_DELIVERY_UNKNOWN`
-  without resending and permits an explicitly re-enqueued cancelled campaign to
+  without resending and permits a permissioned manual retry of a cancelled campaign to
   continue only its queued recipients;
 
 | `npm.cmd run test:control-plane:db` | exit 0; 5 pass, 3 explicit skips because no disposable database was configured |

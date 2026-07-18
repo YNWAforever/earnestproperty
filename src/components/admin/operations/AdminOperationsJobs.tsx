@@ -31,7 +31,8 @@ import {
 import type { JobListItem, JobStatus } from "@/lib/admin/operations/operations-types";
 import type { OperationsCapabilities } from "@/lib/control-plane/capabilities";
 
-export const canRetryOperationsJob = (status: JobStatus) => status === "failed";
+export const canRetryOperationsJob = (status: JobStatus) =>
+  status === "failed" || status === "cancelled";
 
 export const canCancelOperationsJob = (status: JobStatus) =>
   status === "queued" || status === "running" || status === "failed";

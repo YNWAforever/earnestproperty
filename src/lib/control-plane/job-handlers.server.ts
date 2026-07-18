@@ -105,7 +105,10 @@ function isProviderTimeout(error: unknown) {
 
 export function createAiKnowledgeRebuildHandler(
   deps: {
-    runKnowledgeRebuild?: (payload: AiKnowledgeRebuildPayload) => Promise<AiKnowledgeRebuildResult>;
+    runKnowledgeRebuild?: (
+      payload: AiKnowledgeRebuildPayload,
+      options: { checkpoint: () => Promise<void> },
+    ) => Promise<AiKnowledgeRebuildResult>;
   } = {},
 ): JobHandler<AiKnowledgeRebuildPayload> {
   return {
@@ -117,11 +120,16 @@ export function createAiKnowledgeRebuildHandler(
       try {
         const run =
           deps.runKnowledgeRebuild ??
-          (async (input: AiKnowledgeRebuildPayload) => {
+          (async (
+            input: AiKnowledgeRebuildPayload,
+            options: { checkpoint: () => Promise<void> },
+          ) => {
             const module = await import("../ai/knowledge.server.ts");
-            return module.runAiKnowledgeRebuildOperation(input);
+            return module.runAiKnowledgeRebuildOperation(input, {
+              checkpoint: options.checkpoint,
+            });
           });
-        const result = await run(payload);
+        const result = await run(payload, { checkpoint: context.checkpoint });
         await context.checkpoint();
         return { summary: result };
       } catch (error) {

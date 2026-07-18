@@ -27,10 +27,10 @@ export function manualRetryTransition(input: {
   attemptCount: number;
   maxAttempts: number;
 }): { status: "queued"; maxAttempts: number } | null {
-  if (input.status !== "failed") return null;
+  if (input.status !== "failed" && input.status !== "cancelled") return null;
   return {
     status: "queued",
-    maxAttempts: Math.max(input.maxAttempts, input.attemptCount) + 1,
+    maxAttempts: input.attemptCount + 1,
   };
 }
 

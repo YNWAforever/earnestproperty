@@ -33,6 +33,7 @@ const agentCapabilities = {
 
 test("job commands follow guarded backend states", () => {
   expect(canRetryOperationsJob("failed")).toBe(true);
+  expect(canRetryOperationsJob("cancelled")).toBe(true);
   expect(canRetryOperationsJob("running")).toBe(false);
   expect(canCancelOperationsJob("queued")).toBe(true);
   expect(canCancelOperationsJob("succeeded")).toBe(false);

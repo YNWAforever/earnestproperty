@@ -362,8 +362,9 @@ test("job workers renew leases, expose checkpoints, and stop heartbeats", () => 
   assert.match(runnerSource, /claimJobs\(\{ \.\.\.input, limit: 1 \}\)/);
   assert.match(jobsServer.completeJob.toString(), /lease_expires_at >= now/);
   assert.match(jobsServer.failJob.toString(), /lease_expires_at >= now/);
-  assert.match(jobsServer.enqueueJob.toString(), /status IN \('cancelled', 'failed'\)/);
-  assert.match(jobsServer.enqueueJob.toString(), /THEN 'queued'/);
+  assert.doesNotMatch(jobsServer.enqueueJob.toString(), /status IN \('cancelled', 'failed'\)/);
+  assert.match(jobsServer.retryJob.toString(), /status IN \('failed', 'cancelled'\)/);
+  assert.match(jobsServer.retryJob.toString(), /max_attempts = attempt_count \+ 1/);
   assert.match(runnerSource, /startLeaseHeartbeat/);
   assert.match(runnerSource, /checkpoint: heartbeat\.checkpoint/);
   assert.equal(runnerSource.match(/heartbeat\.stop/g)?.length, 2);
@@ -399,6 +400,10 @@ test("manual retry grants exactly one additional attempt", () => {
     status: "queued",
     maxAttempts: 6,
   });
+  assert.deepEqual(
+    manualRetryTransition({ status: "cancelled", attemptCount: 2, maxAttempts: 5 }),
+    { status: "queued", maxAttempts: 3 },
+  );
   assert.equal(
     manualRetryTransition({ status: "succeeded", attemptCount: 1, maxAttempts: 5 }),
     null,
