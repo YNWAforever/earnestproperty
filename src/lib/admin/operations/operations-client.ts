@@ -8,6 +8,15 @@ import type {
 } from "./operations-types.ts";
 
 type ControlPlaneRecord = Record<string, unknown>;
+type OperationsAuthHeaderProvider = (options: {
+  headers: Headers;
+}) => Promise<{ headers: Headers }>;
+
+async function withOperationsStaffAuth(options: { headers: Headers }) {
+  if (typeof window === "undefined") return options;
+  const { withStaffAuthHeaders } = await import("../../../auth.ts");
+  return withStaffAuthHeaders(options);
+}
 
 function isRecord(value: unknown): value is ControlPlaneRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -48,16 +57,18 @@ export async function requestControlPlane<T>(
   path: string,
   init: RequestInit = {},
   fetchImpl: typeof fetch = fetch,
+  authHeaders: OperationsAuthHeaderProvider = withOperationsStaffAuth,
 ): Promise<{ data: T; requestId: string }> {
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
   headers.delete("authorization");
   if (init.body !== undefined) headers.set("content-type", "application/json");
+  const authenticated = await authHeaders({ headers });
 
   const response = await fetchImpl(`/api/admin/control-plane${path}`, {
     ...init,
     credentials: "same-origin",
-    headers,
+    headers: authenticated.headers,
   });
   const parsed = await response.json().catch(() => null);
   const body = isRecord(parsed) ? parsed : null;
@@ -108,17 +119,23 @@ export function fetchOperationsJobs(
 }
 
 export function retryOperationsJob(id: string) {
-  return requestControlPlane<{ id: string; status: JobStatus }>(`/jobs/${encodeURIComponent(id)}/retry`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
+  return requestControlPlane<{ id: string; status: JobStatus }>(
+    `/jobs/${encodeURIComponent(id)}/retry`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
 }
 
 export function cancelOperationsJob(id: string) {
-  return requestControlPlane<{ id: string; status: JobStatus }>(`/jobs/${encodeURIComponent(id)}/cancel`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
+  return requestControlPlane<{ id: string; status: JobStatus }>(
+    `/jobs/${encodeURIComponent(id)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
 }
 
 export function fetchOperationsAudit(

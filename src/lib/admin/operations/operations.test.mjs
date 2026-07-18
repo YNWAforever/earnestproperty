@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  allowedOperationTabs,
-  resolveOperationTab,
-} from "./operations-permissions.ts";
+import { allowedOperationTabs, resolveOperationTab } from "./operations-permissions.ts";
 import {
   OperationsClientError,
   requestControlPlane,
@@ -72,23 +69,33 @@ test("Operations tabs retain Manager and Admin ordering with a safe fallback", (
   assert.equal(resolveOperationTab("migrations", admin), "migrations");
 });
 
-test("control-plane transport forces cookie credentials and strips authorization", async () => {
+test("control-plane transport replaces caller authorization with trusted staff auth", async () => {
   let captured;
   const fetchImpl = async (url, init) => {
     captured = { url, init };
     return new Response(JSON.stringify({ ok: true, data: {}, requestId: "r-transport" }));
   };
-  await requestControlPlane("/health", {
-    method: "POST",
-    body: JSON.stringify({}),
-    headers: { authorization: "Bearer caller-token" },
-  }, fetchImpl);
+  await requestControlPlane(
+    "/health",
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+      headers: { authorization: "Bearer caller-token" },
+    },
+    fetchImpl,
+    async (options = {}) => {
+      const headers = new Headers(options.headers);
+      assert.equal(headers.get("authorization"), null);
+      headers.set("authorization", "Bearer trusted-staff-token");
+      return { ...options, headers };
+    },
+  );
   const headers = new Headers(captured.init.headers);
   assert.equal(captured.url, "/api/admin/control-plane/health");
   assert.equal(captured.init.credentials, "same-origin");
   assert.equal(headers.get("accept"), "application/json");
   assert.equal(headers.get("content-type"), "application/json");
-  assert.equal(headers.get("authorization"), null);
+  assert.equal(headers.get("authorization"), "Bearer trusted-staff-token");
 });
 
 test("Operations client wrappers encode query and path values", async () => {
@@ -152,7 +159,9 @@ test("poller pauses while hidden and refreshes immediately when visible", () => 
     isVisible: () => visible,
     subscribeVisibility: (next) => {
       visibilityCallback = next;
-      return () => { visibilityCallback = undefined; };
+      return () => {
+        visibilityCallback = undefined;
+      };
     },
     setTimer: (next, ms) => {
       assert.equal(ms, 30_000);
@@ -160,7 +169,9 @@ test("poller pauses while hidden and refreshes immediately when visible", () => 
       return 1;
     },
     clearTimer: () => undefined,
-    onPulse: () => { ticks += 1; },
+    onPulse: () => {
+      ticks += 1;
+    },
   });
 
   poller.start();
@@ -183,10 +194,17 @@ test("poller installs one timer and listener, then removes both on stop", () => 
     isVisible: () => true,
     subscribeVisibility: () => {
       subscribeCalls += 1;
-      return () => { unsubscribeCalls += 1; };
+      return () => {
+        unsubscribeCalls += 1;
+      };
     },
-    setTimer: () => { setTimerCalls += 1; return 1; },
-    clearTimer: () => { clearTimerCalls += 1; },
+    setTimer: () => {
+      setTimerCalls += 1;
+      return 1;
+    },
+    clearTimer: () => {
+      clearTimerCalls += 1;
+    },
     onPulse: () => undefined,
   });
 
@@ -225,7 +243,9 @@ test("Operations route state derives Agent, Manager, and Admin tab matrices", ()
   const manager = { ...agent, jobsRead: true, auditRead: true };
   const admin = { ...manager, migrationsPlan: true };
 
-  assert.deepEqual(resolveOperationsRouteState("jobs", operationsHealth(agent)).allowedTabs, ["overview"]);
+  assert.deepEqual(resolveOperationsRouteState("jobs", operationsHealth(agent)).allowedTabs, [
+    "overview",
+  ]);
   assert.deepEqual(resolveOperationsRouteState("audit", operationsHealth(manager)).allowedTabs, [
     "overview",
     "jobs",
