@@ -4,7 +4,7 @@ export type JobHandler<T = unknown> = {
   parsePayload(input: unknown): T;
   run(
     payload: T,
-    context: { jobId: string; attempt: number },
+    context: { jobId: string; attempt: number; checkpoint: () => Promise<void> },
   ): Promise<{ summary: Record<string, number> }>;
 };
 
@@ -181,22 +181,25 @@ function isRetryableWoztellError(error: unknown) {
 
 export function createWoztellCampaignDeliveryHandler(
   deps: {
-    deliverCampaign?: (campaignId: string) => Promise<WoztellCampaignDeliveryResult>;
+    deliverCampaign?: (
+      campaignId: string,
+      options: { checkpoint: () => Promise<void> },
+    ) => Promise<WoztellCampaignDeliveryResult>;
   } = {},
 ): JobHandler<WoztellCampaignDeliveryPayload> {
   return {
     jobType: "woztell.campaign.deliver",
     payloadVersion: 1,
     parsePayload: parseWoztellCampaignDeliveryPayload,
-    async run(payload) {
+    async run(payload, context) {
       try {
         const deliver =
           deps.deliverCampaign ??
-          (async (campaignId: string) => {
-            const module = await import("../woztell/woztell.server.ts");
-            return module.deliverWoztellCampaign(campaignId);
+          (async (campaignId: string, options: { checkpoint: () => Promise<void> }) => {
+            const module = await import("../woztell/campaign-delivery.server.ts");
+            return module.deliverWoztellCampaign(campaignId, { checkpoint: options.checkpoint });
           });
-        const result = await deliver(payload.campaignId);
+        const result = await deliver(payload.campaignId, { checkpoint: context.checkpoint });
         if (result.failed > 0) {
           throw Object.assign(new Error("One or more campaign recipients were rejected."), {
             code: "WOZTELL_CAMPAIGN_REJECTED",

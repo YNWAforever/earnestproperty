@@ -30,18 +30,11 @@ export const Route = createFileRoute("/api/admin/control-plane/jobs/$id/retry")(
           if (!id.success || !body.success) {
             return errorResponse({ code: "VALIDATION_ERROR" }, context.requestId, 400);
           }
-          const job = await retryJob(id.data);
-          if (!job) throw conflictError();
-          await writeAudit({
-            actor,
-            permission: "system.jobs.retry",
-            action: "job.retry",
-            resourceType: "job",
-            resourceId: id.data,
-            outcome: "success",
-            context,
-            metadata: { jobId: id.data, status: job.status },
+          const job = await retryJob(id.data, {
+            actorStaffId: actor.staffId,
+            requestId: context.requestId,
           });
+          if (!job) throw conflictError();
           return successResponse({ id: id.data, status: job.status }, context.requestId);
         } catch (error) {
           if (actor) {
@@ -60,7 +53,8 @@ export const Route = createFileRoute("/api/admin/control-plane/jobs/$id/retry")(
               // Preserve the command failure when audit storage is unavailable.
             }
           }
-          const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+          const code =
+            error && typeof error === "object" && "code" in error ? String(error.code) : "";
           const status =
             error instanceof Response ? error.status : code === "CONFLICT_DUPLICATE" ? 409 : 500;
           return errorResponse(error, context.requestId, status);

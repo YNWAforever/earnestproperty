@@ -33,18 +33,12 @@ export const Route = createFileRoute("/api/admin/control-plane/jobs/$id/cancel")
           const job = await cancelJob({
             jobId: id.data,
             workerId: `manual:${actor.staffId}`,
+            audit: {
+              actorStaffId: actor.staffId,
+              requestId: context.requestId,
+            },
           });
           if (!job) throw conflictError();
-          await writeAudit({
-            actor,
-            permission: "system.jobs.cancel",
-            action: "job.cancel",
-            resourceType: "job",
-            resourceId: id.data,
-            outcome: "success",
-            context,
-            metadata: { jobId: id.data, status: job.status },
-          });
           return successResponse({ id: id.data, status: job.status }, context.requestId);
         } catch (error) {
           if (actor) {
@@ -63,7 +57,8 @@ export const Route = createFileRoute("/api/admin/control-plane/jobs/$id/cancel")
               // Preserve the command failure when audit storage is unavailable.
             }
           }
-          const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+          const code =
+            error && typeof error === "object" && "code" in error ? String(error.code) : "";
           const status =
             error instanceof Response ? error.status : code === "CONFLICT_DUPLICATE" ? 409 : 500;
           return errorResponse(error, context.requestId, status);

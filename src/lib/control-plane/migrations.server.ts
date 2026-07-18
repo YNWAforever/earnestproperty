@@ -1,14 +1,8 @@
 import type { StaffAccess } from "../neon/auth.server.ts";
 import type { OperationContext } from "./request-context.ts";
 import { mapControlPlaneError } from "./errors.ts";
-import {
-  issueMigrationApproval,
-  verifyMigrationApproval,
-} from "./migration-approval.ts";
-import {
-  listRegisteredMigrations,
-  type RegisteredMigration,
-} from "./migration-registry.server.ts";
+import { issueMigrationApproval, verifyMigrationApproval } from "./migration-approval.ts";
+import { listRegisteredMigrations, type RegisteredMigration } from "./migration-registry.server.ts";
 
 type QueryRows = <T extends Record<string, unknown> = Record<string, unknown>>(
   statement: string,
@@ -17,7 +11,9 @@ type QueryRows = <T extends Record<string, unknown> = Record<string, unknown>>(
 
 type TransactionRows = (
   statements: readonly { statement: string; params?: unknown[] }[],
-  options?: { isolationLevel?: "ReadUncommitted" | "ReadCommitted" | "RepeatableRead" | "Serializable" },
+  options?: {
+    isolationLevel?: "ReadUncommitted" | "ReadCommitted" | "RepeatableRead" | "Serializable";
+  },
 ) => Promise<Record<string, unknown>[][]>;
 
 type AuditWriter = (input: {
@@ -105,9 +101,7 @@ export async function listMigrationStates(
       summary: migration.summary,
       postconditions: migration.postconditions.map((item) => ({ ...item })),
     };
-    if (
-      runChecksums.has(migration.id) && runChecksums.get(migration.id) !== migration.checksum
-    ) {
+    if (runChecksums.has(migration.id) && runChecksums.get(migration.id) !== migration.checksum) {
       return { ...record, status: "drift" as const };
     }
     if (applied.has(migration.id) || runChecksums.has(migration.id)) {
@@ -147,14 +141,19 @@ async function computeSchemaFingerprint(queryRows: QueryRows) {
     }
     for (const column of requiredColumns) {
       if (!columns.has(`${table}.${column}`)) {
-        throw serviceError("SCHEMA_COLUMN_MISSING", `Required column is missing: ${table}.${column}`);
+        throw serviceError(
+          "SCHEMA_COLUMN_MISSING",
+          `Required column is missing: ${table}.${column}`,
+        );
       }
     }
   }
   return sha256(
-    [...tables].map((table) => `relation:${table}`).concat(
-      [...columns].map((column) => `column:${column}`),
-    ).sort().join("\n"),
+    [...tables]
+      .map((table) => `relation:${table}`)
+      .concat([...columns].map((column) => `column:${column}`))
+      .sort()
+      .join("\n"),
   );
 }
 
@@ -175,7 +174,9 @@ function assertMigrationReady(migration: RegisteredMigration, applied: Set<strin
   if (applied.has(migration.id)) {
     throw serviceError("CONFLICT_DUPLICATE", "The migration has already been applied.");
   }
-  const missingDependencies = migration.dependencies.filter((dependency) => !applied.has(dependency));
+  const missingDependencies = migration.dependencies.filter(
+    (dependency) => !applied.has(dependency),
+  );
   if (missingDependencies.length > 0) {
     throw serviceError(
       "VALIDATION_ERROR",
@@ -194,6 +195,48 @@ function postconditionStatement(postcondition: RegisteredMigration["postconditio
     ? `EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ${relation} AND column_name = ${quoteSqlLiteral(postcondition.column)})`
     : `to_regclass(current_schema() || '.' || ${relation}) IS NOT NULL`;
   return `DO $$ BEGIN IF NOT (${condition}) THEN RAISE EXCEPTION 'Migration postcondition failed'; END IF; END $$`;
+}
+
+function migrationGuardStatement(migration: RegisteredMigration, schemaFingerprint: string) {
+  const dependencies = migration.dependencies.length
+    ? `ARRAY[${migration.dependencies.map(quoteSqlLiteral).join(", ")}]::text[]`
+    : "ARRAY[]::text[]";
+  return `DO $$
+DECLARE current_fingerprint text;
+BEGIN
+  SELECT 'sha256:' || encode(digest(COALESCE(string_agg(item, E'\\n' ORDER BY item), ''), 'sha256'), 'hex')
+  INTO current_fingerprint
+  FROM (
+    SELECT 'relation:' || table_name AS item
+    FROM information_schema.tables
+    WHERE table_schema = current_schema()
+    UNION ALL
+    SELECT 'column:' || table_name || '.' || column_name AS item
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+  ) snapshot;
+
+  IF current_fingerprint <> ${quoteSqlLiteral(schemaFingerprint)} THEN
+    RAISE EXCEPTION 'Migration schema changed after approval';
+  END IF;
+  IF EXISTS (SELECT 1 FROM app_migrations WHERE version = ${quoteSqlLiteral(migration.id)})
+     OR EXISTS (
+       SELECT 1 FROM ops_migration_runs
+       WHERE migration_id = ${quoteSqlLiteral(migration.id)} AND result = 'succeeded'
+     ) THEN
+    RAISE EXCEPTION 'Migration has already been applied';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM unnest(${dependencies}) AS dependency(id)
+    WHERE NOT EXISTS (SELECT 1 FROM app_migrations WHERE version = dependency.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM ops_migration_runs
+        WHERE migration_id = dependency.id AND result = 'succeeded'
+      )
+  ) THEN
+    RAISE EXCEPTION 'Migration dependencies changed after approval';
+  END IF;
+END $$`;
 }
 
 export async function planMigration(
@@ -287,6 +330,15 @@ export async function applyMigration(
     const applied = await migrationState(queryRows);
     assertMigrationReady(migration, applied);
     const statements = [
+      {
+        statement:
+          "SELECT pg_advisory_xact_lock(hashtextextended('earnestproperty:control-plane:migrations', 0))",
+        params: [],
+      },
+      {
+        statement: migrationGuardStatement(migration, schemaFingerprint),
+        params: [],
+      },
       ...migration.statements.map(({ statement, params = [] }) => ({
         statement,
         params: [...params],
@@ -311,6 +363,24 @@ export async function applyMigration(
           schemaFingerprint,
           input.actor.staffId,
           input.context.requestId,
+        ],
+      },
+      {
+        statement: `INSERT INTO ops_audit_logs
+          (actor_staff_id, permission, action, resource_type, resource_id, outcome, request_id, metadata)
+         VALUES ($1::uuid, 'system.migrations.apply', 'migration.apply', 'migration', $2,
+                 'success', $3::uuid,
+                 jsonb_build_object(
+                   'migrationId', $2,
+                   'checksum', $4,
+                   'schemaFingerprint', $5
+                 ))`,
+        params: [
+          input.actor.staffId,
+          migration.id,
+          input.context.requestId,
+          migration.checksum,
+          schemaFingerprint,
         ],
       },
     ];
@@ -341,15 +411,5 @@ export async function applyMigration(
     throw error;
   }
 
-  await writeAudit({
-    actor: input.actor,
-    permission: "system.migrations.apply",
-    action: "migration.apply",
-    resourceType: "migration",
-    resourceId: migration.id,
-    outcome: "success",
-    context: input.context,
-    metadata: { migrationId: migration.id, checksum: migration.checksum, schemaFingerprint },
-  });
   return { migrationId: migration.id, status: "succeeded" as const, schemaFingerprint };
 }

@@ -19,6 +19,14 @@ export type WoztellCampaignDeliverySummary = {
   failed: number;
   checked: number;
 };
+type CampaignDeliveryDependencies = {
+  isEnabled?: () => boolean;
+  checkpoint?: () => Promise<void>;
+  claimRecipients?: typeof claimCampaignRecipients;
+  updateRecipient?: typeof updateCampaignRecipient;
+  refreshStatus?: typeof refreshCampaignDeliveryStatus;
+  sendResponse?: typeof sendWoztellResponse;
+};
 
 function deliveryError(code: string, message: string) {
   return Object.assign(new Error(message), { code });
@@ -32,14 +40,7 @@ async function claimCampaignRecipients(campaignId: string) {
        FROM whatsapp_campaign_recipients recipient
        INNER JOIN whatsapp_campaigns campaign ON campaign.id = recipient.campaign_id
        WHERE recipient.campaign_id = $1::uuid
-         AND (
-           recipient.status = 'queued'
-           OR (
-             recipient.status = 'sending'
-             AND COALESCE(recipient.queued_at, 'epoch'::timestamptz)
-               < now() - interval '15 minutes'
-           )
-         )
+         AND recipient.status = 'queued'
          AND campaign.status IN ('queued', 'sending')
        ORDER BY recipient.queued_at ASC NULLS FIRST, recipient.id ASC
        FOR UPDATE SKIP LOCKED
@@ -122,32 +123,34 @@ async function refreshCampaignDeliveryStatus(campaignId: string) {
 }
 
 function providerFailureCode(result: { ok: boolean; status?: number }) {
-  if (result.status === 408 || result.status === 429) return "WOZTELL_PROVIDER_TIMEOUT";
-  if (result.status && result.status >= 500) return "WOZTELL_PROVIDER_UNAVAILABLE";
   if (!result.status) return "WOZTELL_CONFIGURATION_UNAVAILABLE";
-  return "WOZTELL_PROVIDER_REJECTED";
+  if ([400, 401, 403, 404, 422].includes(result.status)) return "WOZTELL_PROVIDER_REJECTED";
+  return "WOZTELL_DELIVERY_UNKNOWN";
 }
 
-async function deliverCampaignRecipient(recipient: CampaignRecipient) {
+async function deliverCampaignRecipient(
+  recipient: CampaignRecipient,
+  dependencies: Required<CampaignDeliveryDependencies>,
+) {
   if (
     !isBlastRecipientAllowed({
       optedIn: recipient.opt_in_whatsapp === true,
       optedOut: recipient.opted_out_whatsapp === true,
     })
   ) {
-    await updateCampaignRecipient(recipient.id, "blocked", "WOZTELL_RECIPIENT_NOT_OPTED_IN");
+    await dependencies.updateRecipient(recipient.id, "blocked", "WOZTELL_RECIPIENT_NOT_OPTED_IN");
     return "blocked" as const;
   }
 
   const memberId = recipient.whatsapp_member_id ?? recipient.normalized_phone;
   if (!memberId) {
-    await updateCampaignRecipient(recipient.id, "failed", "WOZTELL_RECIPIENT_MISSING");
+    await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_RECIPIENT_MISSING");
     return "failed" as const;
   }
 
   let result: Awaited<ReturnType<typeof sendWoztellResponse>>;
   try {
-    result = await sendWoztellResponse({
+    result = await dependencies.sendResponse({
       memberId: String(memberId),
       response: [
         {
@@ -160,32 +163,38 @@ async function deliverCampaignRecipient(recipient: CampaignRecipient) {
         },
       ],
     });
-  } catch (error) {
-    await updateCampaignRecipient(recipient.id, "queued", "WOZTELL_PROVIDER_TIMEOUT");
-    if (error && typeof error === "object" && "name" in error && error.name === "AbortError") {
-      throw deliveryError("WOZTELL_PROVIDER_TIMEOUT", "WozTell request timed out.");
-    }
-    throw deliveryError("WOZTELL_PROVIDER_UNAVAILABLE", "WozTell request failed.");
+  } catch {
+    await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN");
+    return "failed" as const;
   }
 
   if (result.ok) {
-    await updateCampaignRecipient(recipient.id, "sent", null);
+    await dependencies.updateRecipient(recipient.id, "sent", null);
     return "sent" as const;
   }
 
   const code = providerFailureCode(result);
-  if (code !== "WOZTELL_PROVIDER_REJECTED") {
-    await updateCampaignRecipient(recipient.id, "queued", code);
-    throw deliveryError(code, "WozTell provider is temporarily unavailable.");
+  if (code === "WOZTELL_CONFIGURATION_UNAVAILABLE") {
+    await dependencies.updateRecipient(recipient.id, "queued", code);
+    throw deliveryError(code, "WozTell configuration is unavailable.");
   }
-  await updateCampaignRecipient(recipient.id, "failed", code);
+  await dependencies.updateRecipient(recipient.id, "failed", code);
   return "failed" as const;
 }
 
 export async function deliverWoztellCampaign(
   campaignId: string,
+  overrides: CampaignDeliveryDependencies = {},
 ): Promise<WoztellCampaignDeliverySummary> {
-  if (!woztellEnabled()) {
+  const dependencies: Required<CampaignDeliveryDependencies> = {
+    isEnabled: overrides.isEnabled ?? woztellEnabled,
+    checkpoint: overrides.checkpoint ?? (async () => {}),
+    claimRecipients: overrides.claimRecipients ?? claimCampaignRecipients,
+    updateRecipient: overrides.updateRecipient ?? updateCampaignRecipient,
+    refreshStatus: overrides.refreshStatus ?? refreshCampaignDeliveryStatus,
+    sendResponse: overrides.sendResponse ?? sendWoztellResponse,
+  };
+  if (!dependencies.isEnabled()) {
     throw deliveryError("WOZTELL_CONFIGURATION_UNAVAILABLE", "WozTell delivery is disabled.");
   }
   const summary: WoztellCampaignDeliverySummary = {
@@ -198,13 +207,39 @@ export async function deliverWoztellCampaign(
 
   try {
     for (let batch = 0; batch < 100; batch += 1) {
-      const recipients = await claimCampaignRecipients(campaignId);
+      await dependencies.checkpoint();
+      const recipients = await dependencies.claimRecipients(campaignId);
       if (recipients.length === 0) {
         exhausted = false;
         break;
       }
-      for (const recipient of recipients) {
-        const outcome = await deliverCampaignRecipient(recipient);
+      for (let index = 0; index < recipients.length; index += 1) {
+        const recipient = recipients[index];
+        try {
+          await dependencies.checkpoint();
+        } catch (error) {
+          await Promise.all(
+            recipients
+              .slice(index)
+              .map((pending) =>
+                dependencies.updateRecipient(pending.id, "queued", "JOB_OWNERSHIP_LOST"),
+              ),
+          );
+          throw error;
+        }
+        let outcome: Awaited<ReturnType<typeof deliverCampaignRecipient>>;
+        try {
+          outcome = await deliverCampaignRecipient(recipient, dependencies);
+        } catch (error) {
+          await Promise.all(
+            recipients
+              .slice(index + 1)
+              .map((pending) =>
+                dependencies.updateRecipient(pending.id, "queued", "JOB_DELIVERY_INTERRUPTED"),
+              ),
+          );
+          throw error;
+        }
         summary[outcome] += 1;
         summary.checked += 1;
       }
@@ -217,6 +252,6 @@ export async function deliverWoztellCampaign(
     }
     return summary;
   } finally {
-    await refreshCampaignDeliveryStatus(campaignId);
+    await dependencies.refreshStatus(campaignId);
   }
 }

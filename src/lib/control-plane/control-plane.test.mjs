@@ -7,21 +7,10 @@ import { errorResponse, mapControlPlaneError, successResponse } from "./errors.t
 import { createOperationContext } from "./request-context.ts";
 import { sanitizeAuditMetadata } from "./audit.server.ts";
 import { aggregateHealth } from "./health.server.ts";
-import {
-  issueMigrationApproval,
-  verifyMigrationApproval,
-} from "./migration-approval.ts";
-import {
-  computeMigrationChecksum,
-  listRegisteredMigrations,
-} from "./migration-registry.server.ts";
+import { issueMigrationApproval, verifyMigrationApproval } from "./migration-approval.ts";
+import { computeMigrationChecksum, listRegisteredMigrations } from "./migration-registry.server.ts";
 import { applyMigration, planMigration } from "./migrations.server.ts";
-import {
-  canCancelJob,
-  jobFailureTransition,
-  manualRetryTransition,
-  retryDelayMs,
-} from "./jobs.ts";
+import { canCancelJob, jobFailureTransition, manualRetryTransition, retryDelayMs } from "./jobs.ts";
 import {
   createAiKnowledgeRebuildHandler,
   createWoztellCampaignDeliveryHandler,
@@ -30,6 +19,7 @@ import {
   registerJobHandler,
   retryableJobError,
 } from "./job-handlers.server.ts";
+import * as jobsServer from "./jobs.server.ts";
 
 test("permission matrix defaults to deny", () => {
   assert.equal(hasPermission(["agent"], "system.health.read"), true);
@@ -120,6 +110,47 @@ test("audit metadata applies bounded strings, arrays, and nesting", () => {
   assert.equal(metadata.nested.a.b.c.d, "[TRUNCATED]");
   assert.equal(metadata.accessToken, "[REDACTED]");
 });
+test("audit metadata redacts recipient and provider payloads and caps object width", () => {
+  const wide = Object.fromEntries(
+    Array.from({ length: 60 }, (_, index) => [`key${String(59 - index).padStart(2, "0")}`, index]),
+  );
+  const metadata = sanitizeAuditMetadata({
+    jobId: "job-1",
+    migrationId: "migration-1",
+    status: "queued",
+    nested: {
+      email: "recipient@example.test",
+      memberId: "member-1",
+      recipient: { id: "contact-1" },
+      provider: { token: "provider-secret" },
+      headers: { authorization: "Bearer secret" },
+      payload: { text: "private message" },
+      details: { phone: "91234567" },
+    },
+    wide,
+  });
+
+  assert.deepEqual(
+    { jobId: metadata.jobId, migrationId: metadata.migrationId, status: metadata.status },
+    { jobId: "job-1", migrationId: "migration-1", status: "queued" },
+  );
+  for (const key of [
+    "email",
+    "memberId",
+    "recipient",
+    "provider",
+    "headers",
+    "payload",
+    "details",
+  ]) {
+    assert.equal(metadata.nested[key], "[REDACTED]");
+  }
+  assert.equal(Object.keys(metadata.wide).length, 50);
+  assert.deepEqual(
+    Object.keys(metadata.wide),
+    Array.from({ length: 50 }, (_, index) => `key${String(index).padStart(2, "0")}`),
+  );
+});
 
 test("required failed checks make health failed while optional failures degrade", () => {
   assert.equal(
@@ -130,9 +161,7 @@ test("required failed checks make health failed while optional failures degrade"
     "degraded",
   );
   assert.equal(
-    aggregateHealth([
-      { key: "database", required: true, status: "failed" },
-    ]).status,
+    aggregateHealth([{ key: "database", required: true, status: "failed" }]).status,
     "failed",
   );
 });
@@ -171,9 +200,7 @@ test("migration approval is bound to actor, checksum, schema and expiry", async 
 });
 
 test("migration checksums are stable and registry declarations are enforced", async () => {
-  const statements = [
-    { statement: "SELECT $1::jsonb", params: [{ zebra: 1, alpha: [2, 3] }] },
-  ];
+  const statements = [{ statement: "SELECT $1::jsonb", params: [{ zebra: 1, alpha: [2, 3] }] }];
   const checksum = await computeMigrationChecksum(statements);
   assert.equal(
     checksum,
@@ -197,7 +224,10 @@ test("migration checksums are stable and registry declarations are enforced", as
       ]),
     (error) => error?.code === "VALIDATION_ERROR",
   );
-  assert.equal(mapControlPlaneError({ code: "MIGRATION_APPROVAL_INVALID" }).code, "MIGRATION_APPROVAL_INVALID");
+  assert.equal(
+    mapControlPlaneError({ code: "MIGRATION_APPROVAL_INVALID" }).code,
+    "MIGRATION_APPROVAL_INVALID",
+  );
 });
 
 test("migration service revalidates schema and applies once through a transaction", async () => {
@@ -294,8 +324,11 @@ test("migration service revalidates schema and applies once through a transactio
   );
   assert.equal(result.status, "succeeded");
   assert.equal(transactions.length, 1);
-  assert.match(transactions[0].at(-2).statement, /INSERT INTO app_migrations/);
-  assert.equal(audits.at(-1).outcome, "success");
+  assert.match(transactions[0][0].statement, /pg_advisory_xact_lock/);
+  assert.match(transactions[0][1].statement, /current_fingerprint/);
+  assert.ok(transactions[0].some(({ statement }) => /INSERT INTO app_migrations/.test(statement)));
+  assert.match(transactions[0].at(-1).statement, /INSERT INTO ops_audit_logs/);
+  assert.equal(audits.length, 0);
   await assert.rejects(
     () => planMigration({ migrationId: migration.id, actor }, deps),
     (error) => error?.code === "CONFLICT_DUPLICATE",
@@ -321,6 +354,25 @@ test("migration service revalidates schema and applies once through a transactio
   assert.equal(audits.at(-1).outcome, "failure");
 });
 
+test("job workers renew leases, expose checkpoints, and stop heartbeats", () => {
+  const renewSource = jobsServer.renewJobLease.toString();
+  const runnerSource = jobsServer.runClaimedJobs.toString();
+
+  assert.match(renewSource, /lease_expires_at >= now/);
+  assert.match(runnerSource, /startLeaseHeartbeat/);
+  assert.match(runnerSource, /checkpoint: heartbeat\.checkpoint/);
+  assert.equal(runnerSource.match(/heartbeat\.stop/g)?.length, 2);
+});
+
+test("manual job commands couple success audits to their state transitions", () => {
+  for (const command of [jobsServer.retryJob, jobsServer.cancelJob]) {
+    const source = command.toString();
+    assert.match(source, /WITH/);
+    assert.match(source, /INSERT INTO ops_audit_logs/);
+    assert.match(source, /FROM (retried|cancelled)/);
+  }
+});
+
 test("retryable failures back off and exhausted failures stop", () => {
   assert.deepEqual(
     jobFailureTransition({ attemptCount: 1, maxAttempts: 3, retryable: true, nowMs: 1_000 }),
@@ -338,11 +390,14 @@ test("retryable failures back off and exhausted failures stop", () => {
 });
 
 test("manual retry grants exactly one additional attempt", () => {
-  assert.deepEqual(
-    manualRetryTransition({ status: "failed", attemptCount: 5, maxAttempts: 5 }),
-    { status: "queued", maxAttempts: 6 },
+  assert.deepEqual(manualRetryTransition({ status: "failed", attemptCount: 5, maxAttempts: 5 }), {
+    status: "queued",
+    maxAttempts: 6,
+  });
+  assert.equal(
+    manualRetryTransition({ status: "succeeded", attemptCount: 1, maxAttempts: 5 }),
+    null,
   );
-  assert.equal(manualRetryTransition({ status: "succeeded", attemptCount: 1, maxAttempts: 5 }), null);
 });
 
 test("only unfinished or failed jobs can be cancelled", () => {

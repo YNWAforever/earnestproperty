@@ -1,6 +1,6 @@
 # Admin Operations Center Verification
 
-Date: 2026-07-17
+Date: 2026-07-18
 Branch: codex/fix-admin-login-load
 Base commit before Task 8: bb01ce4
 
@@ -36,14 +36,33 @@ Implemented script:
 
 All commands removed `TEST_DATABASE_URL` first.
 
-| Command                             | Result                                                                         |
-| ----------------------------------- | ------------------------------------------------------------------------------ |
-| `npm.cmd run test:operations`       | exit 0; Node 18 pass, Bun 8 pass                                               |
-| `npm.cmd run test:control-plane`    | exit 0; 27 pass                                                                |
+| Command                          | Result                           |
+| -------------------------------- | -------------------------------- |
+| `npm.cmd run test:operations`    | exit 0; Node 18 pass, Bun 8 pass |
+| `npm.cmd run test:control-plane` | exit 0; 30 pass                  |
+
+## Final Review Hardening
+
+A branch-wide review found concurrency and privacy blockers after the initial
+Task 8 verification. The follow-up implementation now:
+
+- treats ambiguous WozTell outcomes as terminal `WOZTELL_DELIVERY_UNKNOWN`
+  instead of automatically retrying a message that the provider may have accepted;
+- renews running job leases and passes cooperative ownership checkpoints into
+  campaign delivery before each recipient send;
+- returns claimed but unattempted campaign recipients to `queued` when a worker
+  loses ownership or delivery is interrupted;
+- writes successful retry/cancel audits in the same SQL statement as the job
+  state transition;
+- serializes migration execution with a transaction-scoped advisory lock,
+  revalidates the schema fingerprint and dependency state inside that transaction,
+  and writes the success audit before commit; and
+- redacts recipient/provider payload fields and caps audit object width deterministically.
+
 | `npm.cmd run test:control-plane:db` | exit 0; 5 pass, 3 explicit skips because no disposable database was configured |
-| `npm.cmd run test:neon-auth`        | exit 0; 3 pass                                                                 |
-| `npm.cmd run test:command-center`   | exit 0; 29 pass                                                                |
-| `npm.cmd run test:woztell`          | exit 0; 25 pass                                                                |
+| `npm.cmd run test:neon-auth` | exit 0; 3 pass |
+| `npm.cmd run test:command-center` | exit 0; 29 pass |
+| `npm.cmd run test:woztell` | exit 0; 29 pass |
 
 ## Static Verification
 

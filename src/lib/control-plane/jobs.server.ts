@@ -101,6 +101,66 @@ export async function claimJobs(input: {
     [limit, workerId, leaseSeconds],
   );
 }
+export async function renewJobLease(input: {
+  jobId: string;
+  workerId: string;
+  leaseSeconds: number;
+}) {
+  const { queryRows } = await import("../neon/db.server.ts");
+  const leaseSeconds = Math.min(Math.max(Math.trunc(input.leaseSeconds), 5), 3_600);
+  const rows = await queryRows<JobRow>(
+    `UPDATE ops_jobs
+     SET lease_expires_at = now() + ($3::integer * interval '1 second')
+     WHERE id = $1::uuid
+       AND status = 'running'
+       AND lease_owner = $2
+       AND lease_expires_at >= now()
+     RETURNING *`,
+    [input.jobId, cleanWorkerId(input.workerId), leaseSeconds],
+  );
+  return rows[0] ?? null;
+}
+
+function ownershipLostError() {
+  return Object.assign(new Error("The job lease is no longer owned by this worker."), {
+    code: "JOB_OWNERSHIP_LOST",
+  });
+}
+
+function startLeaseHeartbeat(input: { jobId: string; workerId: string; leaseSeconds: number }) {
+  let stopped = false;
+  let ownershipLost = false;
+  let pending = Promise.resolve();
+  const renew = async () => {
+    if (stopped || ownershipLost) return;
+    const renewed = await renewJobLease(input);
+    if (!renewed) ownershipLost = true;
+  };
+  const queueRenew = () => {
+    pending = pending.then(renew).catch(() => {
+      ownershipLost = true;
+    });
+  };
+  const intervalMs = Math.max(1_000, Math.floor((input.leaseSeconds * 1_000) / 3));
+  const timer = setInterval(queueRenew, intervalMs);
+
+  return {
+    async checkpoint() {
+      await pending;
+      if (stopped || ownershipLost) throw ownershipLostError();
+      const renewed = await renewJobLease(input);
+      if (!renewed) {
+        ownershipLost = true;
+        throw ownershipLostError();
+      }
+    },
+    async stop() {
+      stopped = true;
+      clearInterval(timer);
+      await pending;
+    },
+  };
+}
 
 export async function completeJob(input: { jobId: string; workerId: string }) {
   const { queryRows } = await import("../neon/db.server.ts");
@@ -180,26 +240,43 @@ export async function failJob(input: {
   return rows[0] ?? null;
 }
 
-export async function retryJob(jobId: string) {
+type JobCommandAudit = { actorStaffId: string; requestId: string };
+
+export async function retryJob(jobId: string, audit?: JobCommandAudit) {
   const { queryRows } = await import("../neon/db.server.ts");
   const rows = await queryRows<JobRow>(
-    `UPDATE ops_jobs
-     SET status = 'queued',
-         max_attempts = GREATEST(max_attempts, attempt_count) + 1,
-         run_after = now(),
-         lease_owner = NULL,
-         lease_expires_at = NULL,
-         last_error_code = NULL,
-         last_error_summary = NULL,
-         updated_at = now()
-     WHERE id = $1::uuid AND status = 'failed'
-     RETURNING *`,
-    [jobId],
+    `WITH retried AS (
+       UPDATE ops_jobs
+       SET status = 'queued',
+           max_attempts = GREATEST(max_attempts, attempt_count) + 1,
+           run_after = now(),
+           lease_owner = NULL,
+           lease_expires_at = NULL,
+           last_error_code = NULL,
+           last_error_summary = NULL,
+           updated_at = now()
+       WHERE id = $1::uuid AND status = 'failed'
+       RETURNING *
+     ), audit AS (
+       INSERT INTO ops_audit_logs
+         (actor_staff_id, permission, action, resource_type, resource_id, outcome, request_id, metadata)
+       SELECT $2::uuid, 'system.jobs.retry', 'job.retry', 'job', id::text, 'success', $3::uuid,
+              jsonb_build_object('jobId', id::text, 'status', status)
+       FROM retried
+       WHERE $2::uuid IS NOT NULL
+       RETURNING id
+     )
+     SELECT * FROM retried`,
+    [jobId, audit?.actorStaffId ?? null, audit?.requestId ?? null],
   );
   return rows[0] ?? null;
 }
 
-export async function cancelJob(input: { jobId: string; workerId?: string }) {
+export async function cancelJob(input: {
+  jobId: string;
+  workerId?: string;
+  audit?: JobCommandAudit;
+}) {
   const { queryRows } = await import("../neon/db.server.ts");
   const workerId = cleanWorkerId(input.workerId ?? "manual-control-plane");
   const rows = await queryRows<JobRow>(
@@ -225,12 +302,20 @@ export async function cancelJob(input: { jobId: string; workerId?: string }) {
        WHERE previous_status = 'running' AND attempt_count > 0
        ON CONFLICT (job_id, attempt_number) DO NOTHING
        RETURNING id
+     ), audit AS (
+       INSERT INTO ops_audit_logs
+         (actor_staff_id, permission, action, resource_type, resource_id, outcome, request_id, metadata)
+       SELECT $3::uuid, 'system.jobs.cancel', 'job.cancel', 'job', id::text, 'success', $4::uuid,
+              jsonb_build_object('jobId', id::text, 'status', status)
+       FROM cancelled
+       WHERE $3::uuid IS NOT NULL
+       RETURNING id
      )
      SELECT id, job_type, payload_version, payload, status, attempt_count, max_attempts,
             run_after, lease_owner, lease_expires_at, last_error_code, last_error_summary,
             idempotency_key, actor_staff_id, created_at, updated_at
      FROM cancelled`,
-    [input.jobId, workerId],
+    [input.jobId, workerId, input.audit?.actorStaffId ?? null, input.audit?.requestId ?? null],
   );
   return rows[0] ?? null;
 }
@@ -413,18 +498,27 @@ export async function runClaimedJobs(input: {
   await recoverExpiredLeases();
   const jobs = await claimJobs(input);
   const counts = { claimed: jobs.length, succeeded: 0, retried: 0, failed: 0, cancelled: 0 };
+  const leaseSeconds = Math.min(Math.max(Math.trunc(input.leaseSeconds ?? 60), 5), 3_600);
 
   for (const job of jobs) {
+    const heartbeat = startLeaseHeartbeat({
+      jobId: job.id,
+      workerId: input.workerId,
+      leaseSeconds,
+    });
     try {
       const registered = parseRegisteredJobPayload(job.job_type, job.payload_version, job.payload);
       await registered.handler.run(registered.payload, {
         jobId: job.id,
         attempt: job.attempt_count,
+        checkpoint: heartbeat.checkpoint,
       });
+      await heartbeat.stop();
       const completed = await completeJob({ jobId: job.id, workerId: input.workerId });
       if (completed) counts.succeeded += 1;
       else counts.cancelled += 1;
     } catch (error) {
+      await heartbeat.stop();
       const failed = await failJob({
         jobId: job.id,
         workerId: input.workerId,

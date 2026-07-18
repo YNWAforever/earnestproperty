@@ -12,12 +12,20 @@ const sensitiveAuditKeys = [
   "prompt",
   "sql",
   "stack",
+  "email",
+  "memberid",
+  "recipient",
+  "provider",
+  "headers",
+  "payload",
+  "details",
 ] as const;
 
 const maxAuditDepth = 5;
 const maxAuditArrayItems = 50;
 const maxAuditStringLength = 500;
 
+const maxAuditObjectKeys = 50;
 function isSensitiveAuditKey(key: string) {
   const normalized = key.toLowerCase();
   return sensitiveAuditKeys.some((sensitiveKey) => normalized.includes(sensitiveKey));
@@ -31,16 +39,17 @@ function sanitizeAuditValue(value: unknown, depth: number): unknown {
   if (typeof value === "bigint") return value.toString();
   if (value === null || typeof value === "number" || typeof value === "boolean") return value;
   if (Array.isArray(value)) {
-    return value
-      .slice(0, maxAuditArrayItems)
-      .map((item) => sanitizeAuditValue(item, depth + 1));
+    return value.slice(0, maxAuditArrayItems).map((item) => sanitizeAuditValue(item, depth + 1));
   }
   if (value && typeof value === "object") {
     return Object.fromEntries(
-      Object.entries(value).map(([key, nestedValue]) => [
-        key,
-        isSensitiveAuditKey(key) ? "[REDACTED]" : sanitizeAuditValue(nestedValue, depth + 1),
-      ]),
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(0, maxAuditObjectKeys)
+        .map(([key, nestedValue]) => [
+          key,
+          isSensitiveAuditKey(key) ? "[REDACTED]" : sanitizeAuditValue(nestedValue, depth + 1),
+        ]),
     );
   }
   return String(value);
