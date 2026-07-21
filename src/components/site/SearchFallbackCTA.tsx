@@ -24,7 +24,7 @@ export function SearchFallbackCTA({
             WhatsApp 講低預算、屋苑、房數同睇樓時間，晉誠代理幫你配盤。
           </p>
         </div>
-        <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
+        <Button asChild variant="brand">
           <a
             href={whatsappIntentUrl(intent, {
               ...context,

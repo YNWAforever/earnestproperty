@@ -6,6 +6,9 @@ export const SITE_BRANCHES = [
     phone: "26882988",
     estateSlugs: ["bellagio", "sea-crest-villa", "lido-garden"],
     districtSlugs: ["sham-tseng"],
+    photo: "/branches/lido.jpg",
+    // TODO: confirm opening hours with client (`hours`).
+    // TODO: confirm Google Maps link with client (`mapUrl`).
   },
   {
     id: "rhine",
@@ -14,6 +17,9 @@ export const SITE_BRANCHES = [
     phone: "26886996",
     estateSlugs: ["rhine-garden", "sea-pearl-garden"],
     districtSlugs: [],
+    photo: "/branches/rhine.jpg",
+    // TODO: confirm opening hours with client (`hours`).
+    // TODO: confirm Google Maps link with client (`mapUrl`).
   },
   {
     id: "hong-kong-garden",
@@ -22,6 +28,9 @@ export const SITE_BRANCHES = [
     phone: "26882883",
     estateSlugs: ["hong-kong-garden"],
     districtSlugs: ["ting-kau"],
+    photo: "/branches/hong-kong-garden.jpg",
+    // TODO: confirm opening hours with client (`hours`).
+    // TODO: confirm Google Maps link with client (`mapUrl`).
   },
 ];
 

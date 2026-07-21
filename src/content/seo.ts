@@ -1,6 +1,7 @@
 export const SITE_URL = "https://earnestproperty.vercel.app";
 export const SITE_NAME = "晉誠地產 Earnest Property";
-export const SITE_OG_IMAGE = `${SITE_URL}/assets/hero-shamtseng.jpg`;
+export const SITE_OG_IMAGE = `${SITE_URL}/og-cover.jpg`;
+export const SITE_LOGO_URL = `${SITE_URL}/logo-mark.png`;
 
 export type PageSeo = {
   title: string;

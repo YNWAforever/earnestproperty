@@ -12,20 +12,35 @@ export const Route = createFileRoute("/contact")({
 
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         {SITE_BRANCHES.map((branch) => (
-          <div key={branch.phone} className="rounded-lg border border-border bg-card p-5">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground">門市</p>
-            <h2 className="mt-1 text-lg font-semibold text-primary">{branch.name}</h2>
-            <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-muted-foreground">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-coral" />
-              {branch.address}
-            </p>
-            <a
-              href={`tel:${branch.phone}`}
-              className="mt-3 flex items-center gap-2 text-base font-semibold text-primary hover:underline"
-            >
-              <Phone className="h-4 w-4 text-coral" />
-              {branch.phone}
-            </a>
+          <div
+            key={branch.phone}
+            className="overflow-hidden rounded-lg border border-border bg-card"
+          >
+            {branch.photo ? (
+              <img
+                src={branch.photo}
+                alt={`${branch.name}舖面`}
+                loading="lazy"
+                width={640}
+                height={480}
+                className="h-40 w-full object-cover"
+              />
+            ) : null}
+            <div className="p-5">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">門市</p>
+              <h2 className="mt-1 text-lg font-semibold text-primary">{branch.name}</h2>
+              <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-muted-foreground">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                {branch.address}
+              </p>
+              <a
+                href={`tel:${branch.phone}`}
+                className="mt-3 flex items-center gap-2 text-base font-semibold text-primary hover:underline"
+              >
+                <Phone className="h-4 w-4 text-primary" />
+                {branch.phone}
+              </a>
+            </div>
           </div>
         ))}
       </div>
@@ -51,7 +66,7 @@ export const Route = createFileRoute("/contact")({
         rel="noopener noreferrer"
         className="mt-8 inline-block"
       >
-        <Button size="lg" className="bg-coral text-coral-foreground hover:bg-coral/90">
+        <Button size="lg" variant="brand">
           <MessageCircle className="h-4 w-4" />
           WhatsApp 即時查詢
         </Button>

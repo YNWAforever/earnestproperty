@@ -139,7 +139,11 @@ test("header exposes approved mega menu structure and controls", () => {
   }
 
   assert.equal(source.includes("...menu.featured, ...menu.links, menu.cta"), false);
-  assert.equal(source.includes("menu.cta.href === whatsappHref ? [] : [menu.cta]"), true);
+  // The mobile cta is deduped both against the header WhatsApp link and
+  // against any featured/link item that already points to the same route
+  // (e.g. market's "/videos" featured item and cta), to avoid duplicate keys.
+  assert.equal(source.includes('"href" in menu.cta && menu.cta.href === whatsappHref'), true);
+  assert.equal(source.includes("base.some((item) => itemKey(item) === itemKey(menu.cta))"), true);
   assert.equal(source.includes('split("?")[0].split("#")[0]'), false);
 });
 
@@ -157,9 +161,15 @@ test("sitemap includes property experience routes and only discovered public age
 
   assert.match(sitemap, /"\/mortgage"/);
   assert.match(sitemap, /"\/agents"/);
-  assert.match(sitemap, /import \{ listPublicAgentProfiles \} from "@\/lib\/neon\/public-data\.server"/);
+  assert.match(
+    sitemap,
+    /import \{ listPublicAgentProfiles \} from "@\/lib\/neon\/public-data\.server"/,
+  );
   assert.match(sitemap, /await listPublicAgentProfiles\(\)/);
-  assert.match(sitemap, /profile\.public_slug \? \[`\/agents\/\$\{profile\.public_slug\}`\] : \[\]/);
+  assert.match(
+    sitemap,
+    /profile\.public_slug \? \[`\/agents\/\$\{profile\.public_slug\}`\] : \[\]/,
+  );
   assert.match(sitemap, /\.catch\(\(\) => \[\]\)/);
 });
 
@@ -177,7 +187,11 @@ test("property experience npm script runs every focused suite with a Windows-com
     "src/lib/neon/staff-security-policy.test.mjs",
     "src/lib/neon/website-inquiry.test.mjs",
   ]) {
-    assert.equal(packageJson.includes(testFile), true, `${testFile} should be covered by the npm script`);
+    assert.equal(
+      packageJson.includes(testFile),
+      true,
+      `${testFile} should be covered by the npm script`,
+    );
   }
 });
 test("youtube channel metadata and CMS video source are wired", () => {

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { BadgeCheck, ExternalLink, MapPin, Phone } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { BadgeCheck, MapPin, Phone, Users } from "lucide-react";
 
 import { earnestPublicTrust } from "@/content/estate-pages";
 
@@ -31,22 +32,19 @@ export function TrustProofPanel() {
               label="地舖地址"
               value={earnestPublicTrust.address}
             />
-            <a
-              href={earnestPublicTrust.profileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              to={earnestPublicTrust.agentDirectoryHref}
               className="rounded-md border bg-background p-4 text-sm hover:border-primary"
             >
               <span className="flex items-center gap-2 font-semibold text-primary">
-                公開代理資料
-                <ExternalLink className="h-3.5 w-3.5" />
+                <Users className="h-3.5 w-3.5" />
+                持牌代理團隊
               </span>
-              <span className="mt-1 block text-muted-foreground">28Hse agent profile</span>
-            </a>
+              <span className="mt-1 block text-muted-foreground">查看全部代理資料</span>
+            </Link>
           </div>
         </div>
         <p className="mt-5 border-t pt-4 text-xs leading-relaxed text-muted-foreground">
-          {earnestPublicTrust.observedListingFootprint}。
           {earnestPublicTrust.coverageNotes.join(" ")}
         </p>
       </div>

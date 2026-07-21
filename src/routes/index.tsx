@@ -11,6 +11,10 @@ import {
   Bed,
   Bath,
   Maximize,
+  Users,
+  Newspaper,
+  Store,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,11 +31,15 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Card, CardContent } from "@/components/ui/card";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
-import heroImage from "@/assets/hero-shamtseng.jpg";
-import { whatsappUrl } from "@/config/site";
+import heroImage from "@/assets/hero-front.jpg";
+import logoMark from "@/assets/logo-earnest-mark.png";
+import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
+import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
+import { resolveDisplayAgents } from "@/lib/agent-directory";
+import { toTelHref } from "@/lib/contact-links";
+import { SITE_URL, SITE_LOGO_URL } from "@/content/seo";
 import {
   fetchEstates,
   fetchFeaturedProperties,
@@ -44,13 +52,20 @@ import {
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [estates, featured, faqs, counts] = await Promise.all([
+    const [estates, featured, faqs, counts, agentProfiles] = await Promise.all([
       fetchEstates(),
       fetchFeaturedProperties(),
       fetchFaqs("district:sham-tseng"),
       fetchListingCountsByEstate(),
+      fetchNeonPublicAgentProfiles(),
     ]);
-    return { estates, featured, faqs, counts: Object.fromEntries(counts) };
+    return {
+      estates,
+      featured,
+      faqs,
+      counts: Object.fromEntries(counts),
+      agents: resolveDisplayAgents(agentProfiles, 6),
+    };
   },
   errorComponent: ({ error }) => (
     <div className="mx-auto max-w-md py-24 text-center">
@@ -79,17 +94,16 @@ export const Route = createFileRoute("/")({
 });
 
 const ESTATE_GRADIENTS: Record<string, string> = {
-  bellagio: "linear-gradient(135deg, oklch(0.55 0.1 220), oklch(0.32 0.07 240))",
-  "sea-crest-villa": "linear-gradient(135deg, oklch(0.6 0.08 200), oklch(0.35 0.07 230))",
-  "hong-kong-garden": "linear-gradient(135deg, oklch(0.65 0.09 180), oklch(0.38 0.06 220))",
-  "rhine-garden": "linear-gradient(135deg, oklch(0.58 0.1 210), oklch(0.32 0.07 240))",
-  "lido-garden": "linear-gradient(135deg, oklch(0.62 0.08 195), oklch(0.36 0.07 225))",
+  bellagio: "linear-gradient(135deg, oklch(0.62 0.1 125), oklch(0.4 0.09 122))",
+  "sea-crest-villa": "linear-gradient(135deg, oklch(0.65 0.09 135), oklch(0.42 0.08 128))",
+  "hong-kong-garden": "linear-gradient(135deg, oklch(0.68 0.08 110), oklch(0.44 0.07 118))",
+  "rhine-garden": "linear-gradient(135deg, oklch(0.6 0.1 130), oklch(0.4 0.09 122))",
+  "lido-garden": "linear-gradient(135deg, oklch(0.65 0.08 115), oklch(0.43 0.08 120))",
 };
 
 function HomePage() {
-  const { estates, featured, faqs, counts } = Route.useLoaderData();
+  const { estates, featured, faqs, counts, agents } = Route.useLoaderData();
   const navigate = useNavigate({ from: "/" });
-  const [searchEstate, setSearchEstate] = useState("");
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
 
@@ -107,7 +121,6 @@ function HomePage() {
       to: "/listings",
       search: {
         deal: searchType as "sale" | "rent",
-        estate: searchEstate || undefined,
         keyword: searchKeyword.trim() || undefined,
         page: 1,
       },
@@ -116,17 +129,17 @@ function HomePage() {
 
   return (
     <div className="bg-background">
-      {/* HERO */}
+      {/* HERO — brand-led, search demoted to a small optional entry point */}
       <section className="relative isolate overflow-hidden">
         <div className="absolute inset-0 -z-10">
           <img
             src={heroImage}
-            alt="深井海岸線及碧堤半島景觀"
+            alt="深井海岸線及屋苑景觀"
             className="h-full w-full object-cover"
-            width={1920}
-            height={1080}
+            width={2048}
+            height={1370}
           />
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/85 via-primary/60 to-primary/30" />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
         </div>
 
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8 lg:py-36">
@@ -141,17 +154,42 @@ function HomePage() {
               <span className="text-gold">晉誠地產</span>．堅盤源
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
-              深井 青山公路 汀九我哋比你更熟。
+              由熟悉深井、青山公路及汀九嘅持牌代理，為你提供買樓、租樓及放盤貼身服務。
               <br />
-              碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 一站式堅盤源平台。
+              碧堤半島．浪翠園．豪景花園．海韻花園．麗都花園 — 我哋逐個屋苑都熟。
             </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Button
+                asChild
+                size="lg"
+                className="bg-background text-foreground hover:bg-background/90"
+              >
+                <Link to="/agents">
+                  <Users className="h-4 w-4" />
+                  認識代理團隊
+                </Link>
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                variant="outline"
+                className="border-primary-foreground/40 bg-transparent text-primary-foreground hover:bg-primary-foreground/10"
+              >
+                <Link to="/blog">
+                  睇最新市場資訊
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
 
-          {/* SEARCH BAR */}
-          <Card className="mt-10 border-0 bg-card/95 shadow-elegant backdrop-blur">
-            <CardContent className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
+          {/* Small, optional search entry point — full filters live on /listings */}
+          <div className="mt-10 max-w-md rounded-lg border border-border bg-card/95 p-3 shadow-card backdrop-blur">
+            <p className="px-1 text-xs font-medium text-muted-foreground">或直接搜尋放盤</p>
+            <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <Select value={searchType} onValueChange={setSearchType}>
-                <SelectTrigger className="h-11" aria-label="買樓或租樓">
+                <SelectTrigger className="h-10 sm:w-32" aria-label="買樓或租樓">
                   <SelectValue placeholder="買 / 租" />
                 </SelectTrigger>
                 <SelectContent>
@@ -159,39 +197,19 @@ function HomePage() {
                   <SelectItem value="rent">租樓 Rent</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={searchEstate} onValueChange={setSearchEstate}>
-                <SelectTrigger className="h-11" aria-label="選擇屋苑">
-                  <SelectValue placeholder="選擇屋苑" />
-                </SelectTrigger>
-                <SelectContent>
-                  {estates.map((e: EstateSummary) => (
-                    <SelectItem key={e.slug} value={e.slug}>
-                      {e.name_zh}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Input
-                className="h-11"
+                className="h-10"
                 aria-label="預算、房數或關鍵字"
-                placeholder="預算 / 房數 / 關鍵字（配盤用）"
+                placeholder="預算 / 房數 / 關鍵字"
                 value={searchKeyword}
                 onChange={(event) => setSearchKeyword(event.target.value)}
               />
-              <Button
-                type="button"
-                size="lg"
-                onClick={submitHeroSearch}
-                className="h-11 bg-coral text-coral-foreground hover:bg-coral/90"
-              >
+              <Button type="button" onClick={submitHeroSearch} className="h-10">
                 <Search className="h-4 w-4" />
                 搜尋
               </Button>
-            </CardContent>
-          </Card>
-          <p className="mt-3 text-sm text-primary-foreground/85">
-            搵唔到心水盤？搜尋後可直接 WhatsApp 講低預算，代理幫你配盤。
-          </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -227,7 +245,7 @@ function HomePage() {
                     background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio,
                   }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-t from-primary/70 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                   <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
                   <div className="absolute bottom-4 left-5 text-primary-foreground">
                     <h3 className="text-2xl font-bold">{estate.name_zh}</h3>
@@ -315,6 +333,148 @@ function HomePage() {
         </div>
       </section>
 
+      {/* AGENT TEAM PREVIEW */}
+      <section className="bg-muted/40">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+            <SectionHeader
+              eyebrow="專業代理"
+              title="認識晉誠代理團隊"
+              desc="熟悉深井、青山公路及汀九市場，直接 WhatsApp 查詢。"
+              className="text-left"
+            />
+            <Button asChild variant="outline">
+              <Link to="/agents">
+                查看全部代理
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+
+          <div className="mt-8 grid gap-5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            {agents.map((agent) => {
+              const name = agent.nameZh || agent.nameEn || "晉誠地產代理";
+              return (
+                <div key={agent.id} className="text-center">
+                  <div className="mx-auto aspect-square w-full overflow-hidden rounded-full bg-muted">
+                    {agent.photo ? (
+                      <img
+                        src={agent.photo}
+                        alt={`${name} 個人相片`}
+                        loading="lazy"
+                        width={160}
+                        height={160}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-sm font-semibold">{name}</p>
+                  {agent.jobTitle ? (
+                    <p className="text-xs text-muted-foreground">{agent.jobTitle}</p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* MARKET INFO */}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <SectionHeader eyebrow="市場資訊" title="最新樓市動態" />
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <Feature
+            icon={<Newspaper className="h-5 w-5" />}
+            title="市場分析"
+            desc="深井、青山公路、汀九樓市觀察。"
+            href="/blog"
+          />
+          <Feature
+            icon={<TrendingUp className="h-5 w-5" />}
+            title="成交快訊"
+            desc="追蹤近期成交及區內價格走勢。"
+            href="/transactions"
+          />
+          <Feature
+            icon={<Building2 className="h-5 w-5" />}
+            title="屋苑開箱"
+            desc="以實地內容了解屋苑優劣。"
+            href="/estate-reviews"
+          />
+        </div>
+      </section>
+
+      {/* ABOUT PREVIEW */}
+      <section className="border-y border-border bg-card">
+        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
+          <div>
+            <div className="flex items-center gap-3">
+              <img src={logoMark} alt="" className="h-9 w-9 object-contain" />
+              <p className="text-sm font-semibold text-primary">關於晉誠</p>
+            </div>
+            <h2 className="mt-3 text-2xl font-bold sm:text-3xl">
+              深井物業專家，堅盤源、即時回覆、持牌可靠
+            </h2>
+            <p className="mt-4 max-w-2xl text-muted-foreground">
+              我哋係一間以深井為核心的本地地產代理，日常接觸同管理區內真實買賣、租務和業主委託，
+              對每個屋苑座向、樓層景觀、車位、會所和近期叫價都有第一手理解。
+            </p>
+          </div>
+          <Button asChild variant="outline" className="w-fit">
+            <Link to="/about">
+              了解晉誠地產
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* BRANCH NETWORK */}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <SectionHeader eyebrow="分行網絡" title="我們的分行" desc="歡迎親臨門市傾盤。" />
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {SITE_BRANCHES.map((branch) => {
+            const phoneHref = toTelHref(branch.phone);
+            return (
+              <div
+                key={branch.id}
+                className="overflow-hidden rounded-lg border border-border bg-card"
+              >
+                {branch.photo ? (
+                  <img
+                    src={branch.photo}
+                    alt={`${branch.name}舖面`}
+                    loading="lazy"
+                    width={640}
+                    height={480}
+                    className="h-44 w-full object-cover"
+                  />
+                ) : null}
+                <div className="p-5">
+                  <h3 className="text-lg font-semibold text-primary">
+                    <Store className="mr-2 inline h-4 w-4" />
+                    {branch.name}
+                  </h3>
+                  <p className="mt-2 flex items-start gap-2 text-sm leading-6 text-muted-foreground">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    {branch.address}
+                  </p>
+                  {phoneHref ? (
+                    <a
+                      href={phoneHref}
+                      className="mt-3 flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+                    >
+                      <Building2 className="h-4 w-4" />
+                      {branch.phone}
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
       {/* FAQ */}
       {faqs.length > 0 && (
         <section className="bg-card border-y border-border">
@@ -359,11 +519,13 @@ function HomePage() {
       />
 
       {/* CTA BAND */}
-      <section className="bg-primary text-primary-foreground">
+      <section className="border-y border-border bg-card">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
           <div>
-            <h2 className="text-2xl font-bold sm:text-3xl">準備搵深井 青山公路 汀九筍盤？</h2>
-            <p className="mt-2 text-sm opacity-85">
+            <h2 className="text-2xl font-bold text-foreground sm:text-3xl">
+              準備搵深井 青山公路 汀九筍盤？
+            </h2>
+            <p className="mt-2 text-sm text-muted-foreground">
               即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
             </p>
           </div>
@@ -388,7 +550,8 @@ function HomePage() {
             "@type": "RealEstateAgent",
             name: "晉誠地產 Earnest Property",
             description: "深井．青山公路．汀九物業專家",
-            url: "https://www.earnestproperty.com",
+            url: SITE_URL,
+            logo: SITE_LOGO_URL,
             address: {
               "@type": "PostalAddress",
               streetAddress: "新界深井青山公路深井段 23 號麗都花園地下 5A 舖",
@@ -434,16 +597,39 @@ function SectionHeader({
   );
 }
 
-function Feature({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-6 shadow-card">
+function Feature({
+  icon,
+  title,
+  desc,
+  href,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  href?: "/blog" | "/transactions" | "/estate-reviews";
+}) {
+  const content = (
+    <>
       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
         {icon}
       </div>
       <h3 className="mt-4 text-base font-semibold text-primary">{title}</h3>
       <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{desc}</p>
-    </div>
+    </>
   );
+
+  if (href) {
+    return (
+      <Link
+        to={href}
+        className="block rounded-xl border border-border bg-card p-6 shadow-card transition-shadow hover:shadow-elegant"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className="rounded-xl border border-border bg-card p-6 shadow-card">{content}</div>;
 }
 
 type PropertyItem = {
@@ -475,7 +661,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
     <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant">
       <div className="relative h-48 bg-gradient-to-br from-primary/40 to-primary">
         <div className="absolute left-3 top-3 flex gap-2">
-          <span className="rounded-full bg-coral px-2.5 py-1 text-[11px] font-semibold text-coral-foreground">
+          <span className="rounded-full bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background">
             {isRent ? "租 Rent" : "售 Sale"}
           </span>
           <span className="rounded-full bg-card/90 px-2.5 py-1 text-[11px] font-semibold text-primary backdrop-blur">

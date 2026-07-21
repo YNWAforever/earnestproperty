@@ -30,7 +30,7 @@ export function OwnerValuationPanel({
               </p>
             </div>
           </div>
-          <Button asChild className="mt-5 w-full bg-coral text-coral-foreground hover:bg-coral/90">
+          <Button asChild variant="brand" className="mt-5 w-full">
             <a
               href={whatsappIntentUrl("valuation", {
                 ...context,
