@@ -5,6 +5,12 @@ export type SiteBranch = {
   phone: string;
   estateSlugs: string[];
   districtSlugs: string[];
+  /** Shop-front photo path under `public/`, if supplied. */
+  photo?: string;
+  /** Opening hours — only set once confirmed by the client. */
+  hours?: string;
+  /** Google Maps link — only set once confirmed by the client. */
+  mapUrl?: string;
 };
 
 export const SITE_BRANCHES: SiteBranch[];

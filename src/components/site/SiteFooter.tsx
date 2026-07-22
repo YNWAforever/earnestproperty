@@ -1,26 +1,16 @@
 import { Link } from "@tanstack/react-router";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
+import logoMark from "@/assets/logo-earnest-mark.png";
 
 export function SiteFooter() {
   return (
-    <footer className="mt-24 border-t border-border bg-primary text-primary-foreground">
+    <footer className="mt-24 border-t border-border bg-foreground text-background">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-gold text-primary">
-                <svg
-                  viewBox="0 0 24 24"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M3 12 12 4l9 8" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M5 10v9h14v-9" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+              <img src={logoMark} alt="" className="h-10 w-10 object-contain" />
               <div className="flex flex-col leading-none">
                 <span className="text-base font-bold">晉誠地產</span>
                 <span className="text-[10px] tracking-widest opacity-70">EARNEST PROPERTY</span>
@@ -33,15 +23,9 @@ export function SiteFooter() {
             </p>
             <p className="mt-4 text-xs opacity-60">牌照號 Licence No.: C-018613</p>
             <p className="mt-3 text-xs opacity-60">
-              公開代理資料：
-              <a
-                href="https://www.28hse.com/agent/540"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline underline-offset-2"
-              >
-                28Hse
-              </a>
+              <Link to="/agents" className="underline underline-offset-2">
+                查看持牌代理團隊
+              </Link>
             </p>
           </div>
 
@@ -178,7 +162,7 @@ export function SiteFooter() {
             <ul className="mt-4 space-y-3 text-sm">
               {SITE_BRANCHES.map((branch) => (
                 <li key={branch.phone} className="space-y-1 opacity-80">
-                  <p className="font-semibold text-primary-foreground">{branch.name}</p>
+                  <p className="font-semibold text-background">{branch.name}</p>
                   <p className="flex items-start gap-2">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
                     <span>{branch.address}</span>
@@ -197,7 +181,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-primary-foreground/15 pt-6 text-xs opacity-70 md:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-background/15 pt-6 text-xs opacity-70 md:flex-row">
           <p>© {new Date().getFullYear()} Earnest Property 晉誠地產. All rights reserved.</p>
           <p>Licence {SITE_CONTACT.licenceNo} · Estate Agents Authority HK</p>
         </div>

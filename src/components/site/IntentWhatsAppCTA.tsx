@@ -7,25 +7,21 @@ const intentItems: Array<{
   intent: WhatsAppIntent;
   label: string;
   icon: typeof MessageCircle;
-  className: string;
 }> = [
   {
     intent: "buy",
     label: "我要買樓",
     icon: Home,
-    className: "bg-primary text-primary-foreground hover:bg-primary/90",
   },
   {
     intent: "rent",
     label: "我要租樓",
     icon: KeyRound,
-    className: "bg-gold text-primary hover:bg-gold/90",
   },
   {
     intent: "valuation",
     label: "我要放盤估價",
     icon: MessageCircle,
-    className: "bg-coral text-coral-foreground hover:bg-coral/90",
   },
 ];
 
@@ -44,8 +40,9 @@ export function IntentWhatsAppCTA({
           <Button
             key={item.intent}
             asChild
+            variant="brand"
             size={compact ? "sm" : "lg"}
-            className={`w-full ${item.className}`}
+            className="w-full"
           >
             <a
               href={whatsappIntentUrl(item.intent, context)}

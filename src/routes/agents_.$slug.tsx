@@ -6,6 +6,7 @@ import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { SITE_NAME } from "@/content/seo";
 import { fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 
 const DEFAULT_AGENT_BRANCH = SITE_BRANCHES[0];
 
@@ -106,8 +107,8 @@ function AgentProfilePage() {
                 </Button>
               ) : null}
               {whatsappHref ? (
-                <Button asChild className="w-full justify-start">
-                  <a href={whatsappHref} target="_blank" rel="noreferrer">
+                <Button asChild variant="brand" className="w-full justify-start">
+                  <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
                     <MessageCircle className="mr-2 h-4 w-4" />
                     WhatsApp 聯絡
                   </a>
@@ -174,14 +175,4 @@ function AgentNotFound() {
       </Button>
     </main>
   );
-}
-
-function toTelHref(phone: string | null) {
-  const normalized = phone?.replace(/[^+\d]/g, "") ?? "";
-  return normalized ? `tel:${normalized}` : null;
-}
-
-function toWhatsAppHref(phone: string | null) {
-  const normalized = phone?.replace(/\D/g, "") ?? "";
-  return normalized ? `https://wa.me/${normalized}` : null;
 }

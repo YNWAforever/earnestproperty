@@ -117,16 +117,14 @@ test("each estate block carries the required conversion content fields", () => {
   }
 });
 
-test("estate conversion registry includes factual trust proof from public sources", () => {
+test("estate conversion registry includes factual trust proof and no 28Hse dependency", () => {
   const source = read("src/content/estate-pages.ts");
 
   assert.match(source, /C-018613/);
   assert.match(source, /深井麗都花園地下5A舖/);
   assert.match(source, /2688 2988/);
-  assert.match(source, /28hse\.com\/agent\/540/);
-  assert.match(source, /229 個公開放售樓盤/);
-  assert.match(source, /2026-06-22/);
-  assert.match(source, /observedListingFootprint: ".*顯示/);
+  assert.match(source, /agentDirectoryHref: "\/agents"/);
+  assert.equal(/28hse/i.test(source), false);
   assert.equal(/Google review|testimonial|五星|客戶好評/.test(source), false);
 });
 
@@ -214,5 +212,6 @@ test("public search and homepage expose lead capture paths", () => {
   assert.match(home, /keyword/);
   assert.match(header, /業主放盤 \/ 免費估價/);
   assert.match(footer, /業主放盤/);
-  assert.match(footer, /28Hse/);
+  assert.match(footer, /查看持牌代理團隊/);
+  assert.equal(/28hse/i.test(footer), false);
 });

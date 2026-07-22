@@ -32,8 +32,7 @@ export const earnestPublicTrust = {
   companyNameEn: "Earnest Property Agency Ltd",
   phoneDisplay: "2688 2988",
   address: "深井麗都花園地下5A舖",
-  profileUrl: "https://www.28hse.com/agent/540",
-  observedListingFootprint: "28Hse 公開代理頁於 2026-06-22 顯示 229 個公開放售樓盤",
+  agentDirectoryHref: "/agents",
   coverageNotes: [
     "公開資料顯示晉誠地產紮根深井麗都花園地舖。",
     "公開盤源覆蓋深井、屯門青山公路、碧堤半島、琨崙、海澄軒等沿線屋苑。",

@@ -7,8 +7,10 @@
 
 /*
  * Earnest Property 晉誠地產 — Design System
- * Brand: Deep Sea Blue, Gold, Coral CTA
+ * Brand: Company Green (sampled from the shop signage / logo), Gold accent.
  * All colors in oklch. Use semantic tokens only.
+ * `--coral` is kept only for backward compatibility with existing className
+ * usage and now resolves to the brand green — new code should use `--primary`.
  */
 
 @theme inline {
@@ -52,86 +54,105 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --shadow-elegant: 0 10px 40px -12px color-mix(in oklab, var(--primary) 35%, transparent);
-  --shadow-card: 0 2px 12px -4px color-mix(in oklab, var(--primary) 12%, transparent);
+  --shadow-elegant: 0 10px 40px -12px color-mix(in oklab, var(--foreground) 35%, transparent);
+  --shadow-card: 0 2px 12px -4px color-mix(in oklab, var(--foreground) 12%, transparent);
 }
 
 :root {
   --radius: 0.5rem;
 
-  /* Brand palette
-     #0B3B5C deep sea blue   -> oklch(0.32 0.07 240)
-     #C9A96E gold sand       -> oklch(0.74 0.09 80)
-     #E85D45 coral CTA       -> oklch(0.65 0.18 32)
-     #F7F7F5 soft bg         -> oklch(0.975 0.003 90)
-     #2B2B2B ink text        -> oklch(0.27 0 0)
-     #E5E2DB muted border    -> oklch(0.91 0.008 80) */
+  /* Brand palette — sampled from 公司LOGO (shop signage / logo artwork)
+     #6B7A16 brand green (accessible, 4.75:1 on white)  -> oklch(0.549 0.120 118.3)
+     #556310 brand green, darker (hover/active)         -> oklch(0.472 0.104 119.3)
+     #41500C brand green, deepest (footer/headings)     -> oklch(0.404 0.091 121.8)
+     #CADB2A signature lime (logo/signage, fills only)  -> oklch(0.850 0.183 115.4)
+     #F4F7DD lime tint (light chips/badges)             -> oklch(0.967 0.034 112.4)
+     #C9A96E gold sand (logo wordmark, accent)          -> oklch(0.74 0.09 80)
+     #FBFBF8 warm off-white bg                          -> oklch(0.985 0.003 90)
+     #2B2B2B ink text                                   -> oklch(0.27 0 0)
+     #E3E3D6 warm-neutral border                        -> oklch(0.912 0.017 106.7) */
 
-  --background: oklch(0.985 0.003 90);
-  --foreground: oklch(0.27 0 0);
+  /* Reusable brand aliases (see redesign brief) */
+  --brand-primary: oklch(0.549 0.12 118.3);
+  --brand-primary-dark: oklch(0.472 0.104 119.3);
+  --brand-primary-deep: oklch(0.404 0.091 121.8);
+  --brand-primary-light: oklch(0.967 0.034 112.4);
+  --brand-lime: oklch(0.85 0.183 115.4);
+  --brand-accent: oklch(0.74 0.09 80);
+  --surface: oklch(0.985 0.003 90);
+  --text-primary: oklch(0.27 0 0);
+  --text-secondary: oklch(0.535 0.017 107);
+
+  --background: var(--surface);
+  --foreground: var(--text-primary);
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.27 0 0);
+  --card-foreground: var(--text-primary);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.27 0 0);
+  --popover-foreground: var(--text-primary);
 
-  --primary: oklch(0.32 0.07 240);
-  --primary-foreground: oklch(0.985 0.003 90);
+  --primary: var(--brand-primary);
+  --primary-foreground: var(--surface);
 
-  --secondary: oklch(0.95 0.012 240);
-  --secondary-foreground: oklch(0.32 0.07 240);
+  --secondary: oklch(0.95 0.025 118);
+  --secondary-foreground: var(--brand-primary-dark);
 
-  --muted: oklch(0.96 0.005 80);
-  --muted-foreground: oklch(0.5 0.012 240);
+  --muted: oklch(0.96 0.008 100);
+  --muted-foreground: var(--text-secondary);
 
-  --accent: oklch(0.94 0.015 240);
-  --accent-foreground: oklch(0.32 0.07 240);
+  --accent: var(--brand-primary-light);
+  --accent-foreground: var(--brand-primary-deep);
 
-  --gold: oklch(0.74 0.09 80);
+  --gold: var(--brand-accent);
   --gold-foreground: oklch(0.27 0 0);
 
-  --coral: oklch(0.65 0.18 32);
-  --coral-foreground: oklch(0.985 0.003 90);
+  /* Retired CTA colour — now resolves to brand green, see file header note. */
+  --coral: var(--brand-primary);
+  --coral-foreground: var(--surface);
 
   --destructive: oklch(0.6 0.22 27);
   --destructive-foreground: oklch(0.985 0.003 90);
 
-  --border: oklch(0.91 0.008 80);
-  --input: oklch(0.91 0.008 80);
-  --ring: oklch(0.32 0.07 240);
+  --border: oklch(0.912 0.017 106.7);
+  --input: oklch(0.912 0.017 106.7);
+  --ring: var(--brand-primary);
 
-  --chart-1: oklch(0.32 0.07 240);
-  --chart-2: oklch(0.74 0.09 80);
-  --chart-3: oklch(0.65 0.18 32);
-  --chart-4: oklch(0.55 0.1 220);
+  --chart-1: var(--brand-primary);
+  --chart-2: var(--brand-accent);
+  --chart-3: var(--brand-primary-deep);
+  --chart-4: oklch(0.595 0.066 182.4);
   --chart-5: oklch(0.6 0.06 60);
 }
 
 .dark {
-  --background: oklch(0.18 0.02 240);
-  --foreground: oklch(0.97 0.005 90);
-  --card: oklch(0.22 0.03 240);
-  --card-foreground: oklch(0.97 0.005 90);
-  --popover: oklch(0.22 0.03 240);
-  --popover-foreground: oklch(0.97 0.005 90);
-  --primary: oklch(0.74 0.09 80);
-  --primary-foreground: oklch(0.18 0.02 240);
-  --secondary: oklch(0.28 0.03 240);
-  --secondary-foreground: oklch(0.97 0.005 90);
-  --muted: oklch(0.28 0.03 240);
-  --muted-foreground: oklch(0.7 0.02 240);
-  --accent: oklch(0.28 0.03 240);
-  --accent-foreground: oklch(0.97 0.005 90);
+  --surface: oklch(0.17 0.02 120);
+  --text-primary: oklch(0.97 0.01 100);
+  --text-secondary: oklch(0.7 0.02 110);
+
+  --background: var(--surface);
+  --foreground: var(--text-primary);
+  --card: oklch(0.21 0.03 120);
+  --card-foreground: var(--text-primary);
+  --popover: oklch(0.21 0.03 120);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--brand-accent);
+  --primary-foreground: var(--surface);
+  --secondary: oklch(0.28 0.04 120);
+  --secondary-foreground: var(--text-primary);
+  --muted: oklch(0.28 0.04 120);
+  --muted-foreground: var(--text-secondary);
+  --accent: oklch(0.28 0.04 120);
+  --accent-foreground: var(--text-primary);
   --gold: oklch(0.78 0.1 80);
-  --gold-foreground: oklch(0.18 0.02 240);
-  --coral: oklch(0.7 0.18 32);
-  --coral-foreground: oklch(0.985 0.003 90);
+  --gold-foreground: oklch(0.18 0.02 120);
+  --coral: var(--primary);
+  --coral-foreground: var(--surface);
   --destructive: oklch(0.65 0.2 27);
   --destructive-foreground: oklch(0.985 0.003 90);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.74 0.09 80);
+  --ring: oklch(0.78 0.1 80);
 }
 
 @layer base {

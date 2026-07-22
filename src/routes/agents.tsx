@@ -6,6 +6,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { resolveDisplayAgents, type DisplayAgent } from "@/lib/agent-directory";
+import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 
 const DEFAULT_AGENT_BRANCH = SITE_BRANCHES[0];
 
@@ -27,16 +29,17 @@ export const Route = createFileRoute("/agents")({
 
 function AgentsPage() {
   const profiles = Route.useLoaderData();
+  const agents = resolveDisplayAgents(profiles);
 
   return (
     <main className="bg-background">
       <AgentDirectoryHeader />
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        {profiles.length === 0 ? <DirectoryEmptyState /> : null}
-        {profiles.length > 0 ? (
+        {agents.length === 0 ? <DirectoryEmptyState /> : null}
+        {agents.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2">
-            {profiles.map((profile) => (
-              <AgentDirectoryCard key={profile.id} profile={profile} />
+            {agents.map((agent) => (
+              <AgentDirectoryCard key={agent.id} agent={agent} />
             ))}
           </div>
         ) : null}
@@ -52,28 +55,28 @@ function AgentDirectoryHeader() {
         <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
         <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-          團隊熟悉深井、青山公路及荃灣西市場，為買家、租客及業主提供直接、可靠的地產服務。
+          持牌代理團隊熟悉深井、青山公路及荃灣西市場，為買家、租客及業主提供直接、可靠的地產服務。
         </p>
       </div>
     </section>
   );
 }
 
-function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
-  const name = profile.name_zh || profile.name_en || "晉誠地產代理";
-  const branch = profile.branch ?? DEFAULT_AGENT_BRANCH.name;
-  const phone = profile.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
-  const whatsapp = profile.whatsapp ?? profile.phone ?? SITE_CONTACT.whatsappPhone;
+function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
+  const name = agent.nameZh || agent.nameEn || "晉誠地產代理";
+  const branch = agent.branch ?? DEFAULT_AGENT_BRANCH.name;
+  const phone = agent.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
+  const whatsapp = agent.whatsapp ?? agent.phone ?? SITE_CONTACT.whatsappPhone;
   const phoneHref = toTelHref(phone);
   const whatsappHref = toWhatsAppHref(whatsapp);
-  const usesGeneralContact = !profile.phone && !profile.whatsapp;
+  const usesGeneralContact = !agent.phone && !agent.whatsapp;
 
   return (
     <article className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-[104px_1fr]">
       <div className="aspect-square overflow-hidden rounded-md bg-muted">
-        {profile.avatar_url ? (
+        {agent.photo ? (
           <img
-            src={profile.avatar_url}
+            src={agent.photo}
             alt={`${name} 個人相片`}
             loading="lazy"
             width={104}
@@ -90,25 +93,28 @@ function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-semibold">{name}</h2>
-            {profile.name_zh && profile.name_en ? (
-              <p className="mt-1 text-sm text-muted-foreground">{profile.name_en}</p>
+            {agent.nameZh && agent.nameEn ? (
+              <p className="mt-1 text-sm text-muted-foreground">{agent.nameEn}</p>
             ) : null}
           </div>
           <span className="text-sm text-muted-foreground">{branch}</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          {profile.job_title ? <span>{profile.job_title}</span> : null}
-          {profile.licence_no ? <span>牌照：{profile.licence_no}</span> : null}
+          {agent.jobTitle ? <span>{agent.jobTitle}</span> : null}
+          {agent.licenceNo ? <span>牌照：{agent.licenceNo}</span> : null}
         </div>
+        {agent.isPlaceholder ? (
+          <p className="mt-3 text-xs text-muted-foreground">資料整理中，詳情稍後更新。</p>
+        ) : null}
         {usesGeneralContact ? (
           <p className="mt-3 text-xs text-muted-foreground">
             代理未有提供直接聯絡方式，電話查詢將由{DEFAULT_AGENT_BRANCH.name}跟進。
           </p>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
-          {profile.public_slug ? (
+          {agent.slug ? (
             <Button asChild variant="outline" size="sm">
-              <Link to="/agents/$slug" params={{ slug: profile.public_slug }}>
+              <Link to="/agents/$slug" params={{ slug: agent.slug }}>
                 <Building2 className="mr-2 h-4 w-4" />
                 查看資料
               </Link>
@@ -123,8 +129,8 @@ function AgentDirectoryCard({ profile }: { profile: NeonPublicAgentProfile }) {
             </Button>
           ) : null}
           {whatsappHref ? (
-            <Button asChild size="sm">
-              <a href={whatsappHref} target="_blank" rel="noreferrer">
+            <Button asChild variant="brand" size="sm">
+              <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
                 <MessageCircle className="mr-2 h-4 w-4" />
                 WhatsApp
               </a>
@@ -195,14 +201,4 @@ function AgentDirectoryError() {
       </section>
     </main>
   );
-}
-
-function toTelHref(phone: string | null) {
-  const normalized = phone?.replace(/[^+\d]/g, "") ?? "";
-  return normalized ? `tel:${normalized}` : null;
-}
-
-function toWhatsAppHref(phone: string | null) {
-  const normalized = phone?.replace(/\D/g, "") ?? "";
-  return normalized ? `https://wa.me/${normalized}` : null;
 }

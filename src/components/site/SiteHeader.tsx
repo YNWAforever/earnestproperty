@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { whatsappUrl } from "@/config/site";
+import logoMark from "@/assets/logo-earnest-mark.png";
 
 type RouteTo =
   | "/about"
@@ -115,11 +116,12 @@ const megaMenus: MegaMenuGroup[] = [
     links: [
       { to: "/estate-reviews", label: "屋苑開箱", description: "以實地內容了解屋苑優劣。" },
       { to: "/blog", label: "市場分析", description: "閱讀深井、青山公路、汀九樓市觀察。" },
-      { to: "/about", label: "關於晉誠", description: "了解晉誠地產服務背景。" },
     ],
     cta: { to: "/videos", label: "觀看最新影片" },
   },
 ];
+
+const aboutNavItem: NavItem = { to: "/about", label: "關於晉誠" };
 
 const megaMenuIds = {
   districts: "mega-menu-districts",
@@ -148,11 +150,13 @@ function menuMatchesLocation(menu: MegaMenuGroup, href: string) {
 }
 
 function menuMobileItems(menu: MegaMenuGroup, whatsappHref: string) {
-  return [
-    ...menu.featured,
-    ...menu.links,
-    ...("href" in menu.cta && menu.cta.href === whatsappHref ? [] : [menu.cta]),
-  ];
+  const base = [...menu.featured, ...menu.links];
+  const ctaIsWhatsapp = "href" in menu.cta && menu.cta.href === whatsappHref;
+  // Skip the cta if it points to the same route as an item already listed
+  // above (e.g. market's "/videos" featured item and cta) to avoid duplicate
+  // React keys and a redundant link.
+  const ctaIsDuplicate = base.some((item) => itemKey(item) === itemKey(menu.cta));
+  return ctaIsWhatsapp || ctaIsDuplicate ? base : [...base, menu.cta];
 }
 
 function HeaderNavLink({
@@ -318,24 +322,7 @@ export function SiteHeader() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2.5" onClick={() => setActiveMegaMenu(null)}>
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M3 12 12 4l9 8" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M5 10v9h14v-9" strokeLinecap="round" strokeLinejoin="round" />
-              <path
-                d="M2 18c3-1 5-1 7 0s4 1 7 0 5-1 6 0"
-                strokeLinecap="round"
-                className="text-gold"
-                stroke="currentColor"
-              />
-            </svg>
-          </div>
+          <img src={logoMark} alt="" className="h-10 w-10 object-contain" />
           <div className="flex flex-col leading-none">
             <span className="text-base font-bold tracking-tight text-primary">晉誠地產</span>
             <span className="text-[10px] font-medium tracking-widest text-muted-foreground">
@@ -381,6 +368,11 @@ export function SiteHeader() {
               </Button>
             );
           })}
+          <HeaderNavLink
+            item={aboutNavItem}
+            onClick={() => setActiveMegaMenu(null)}
+            className="whitespace-nowrap"
+          />
           {activeMenu ? (
             <MegaMenuPanel menu={activeMenu} onLinkClick={() => setActiveMegaMenu(null)} />
           ) : null}
@@ -394,7 +386,7 @@ export function SiteHeader() {
             className="hidden sm:inline-flex"
             onClick={() => setActiveMegaMenu(null)}
           >
-            <Button size="sm" className="bg-coral text-coral-foreground hover:bg-coral/90">
+            <Button size="sm" variant="brand">
               <MessageCircle className="h-4 w-4" />
               WhatsApp
             </Button>
@@ -440,6 +432,11 @@ export function SiteHeader() {
                         </div>
                       </section>
                     ))}
+                    <HeaderNavLink
+                      item={aboutNavItem}
+                      onClick={() => setOpen(false)}
+                      className="flex w-full justify-start px-3 py-2.5 text-base"
+                    />
                   </div>
                 </div>
                 <a
@@ -449,7 +446,7 @@ export function SiteHeader() {
                   className="mt-4"
                   onClick={() => setOpen(false)}
                 >
-                  <Button className="w-full bg-coral text-coral-foreground hover:bg-coral/90">
+                  <Button variant="brand" className="w-full">
                     <MessageCircle className="h-4 w-4" />
                     WhatsApp 查詢
                   </Button>

@@ -1,8 +1,4 @@
-import {
-  SITE_BRANCHES,
-  resolveBranchContact,
-  type SiteBranch,
-} from "./site-branches.js";
+import { SITE_BRANCHES, resolveBranchContact, type SiteBranch } from "./site-branches.js";
 
 const whatsappPhone = import.meta.env.VITE_CONTACT_WHATSAPP_PHONE ?? "";
 const phoneDisplay = import.meta.env.VITE_CONTACT_PHONE_DISPLAY ?? "";
@@ -17,7 +13,6 @@ export const SITE_CONTACT = {
   email: "info@earnestproperty.com",
   address: "新界深井青山公路深井段 23 號麗都花園地下 5A 舖",
   licenceNo: "C-018613",
-  publicProfileUrl: "https://www.28hse.com/agent/540",
 };
 
 export { SITE_BRANCHES };
