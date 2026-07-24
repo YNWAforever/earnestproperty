@@ -135,8 +135,10 @@ function CorridorRelatedLink({
     );
   }
   if (href === "/district/ting-kau") {
+    // Legacy URL — resolve straight to the canonical corridor page so content
+    // referencing it doesn't send readers through the 301.
     return (
-      <Link to="/district/ting-kau" className={className}>
+      <Link to="/castle-peak-road/$segment" params={{ segment: "ting-kau" }} className={className}>
         {children}
       </Link>
     );

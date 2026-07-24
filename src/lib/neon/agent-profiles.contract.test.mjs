@@ -7,30 +7,49 @@ import ts from "typescript";
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
 
+const dataUrl = (source) =>
+  `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+
+const transpile = (source) =>
+  ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+/**
+ * Load public-data.server.ts as a data: URL module with getSql stubbed out.
+ *
+ * A data: URL has no filesystem location, so every relative import in the module
+ * has to be inlined as its own data: URL too — otherwise Node throws
+ * ERR_UNSUPPORTED_RESOLVE_REQUEST the moment a new sibling import is added.
+ * Rewriting every "./x" specifier keeps this harness working as the module's
+ * imports change, rather than needing a hand-written case per sibling.
+ */
+function inlineRelativeImports(source, dir) {
+  return source.replace(/from "\.\/([\w.-]+?)(?:\.js)?"/g, (match, name) => {
+    for (const candidate of [`${name}.ts`, `${name}.js`]) {
+      const path = join(root, dir, candidate);
+      if (!existsSync(path)) continue;
+      const code = readFileSync(path, "utf8");
+      return `from "${dataUrl(candidate.endsWith(".ts") ? transpile(code) : code)}"`;
+    }
+    return match;
+  });
+}
+
 async function importPublicDataServerWithInjectedQuery(query) {
   globalThis.__agentProfileContractQuery = query;
 
-  const dbUrl = `data:text/javascript;base64,${Buffer.from(
+  const dbUrl = dataUrl(
     "export const getSql = () => ({ query: (...args) => globalThis.__agentProfileContractQuery(...args) });",
-  ).toString("base64")}`;
-  const transpiled = ts.transpileModule(read("src/lib/neon/public-data.server.ts"), {
-    compilerOptions: {
-      module: ts.ModuleKind.ESNext,
-      target: ts.ScriptTarget.ES2022,
-    },
-  }).outputText;
-  let executable = transpiled
-    .replace('import "@tanstack/react-start/server-only";', "")
-    .replace('from "./db.server"', `from "${dbUrl}"`);
-  if (executable.includes('from "./agent-profile-rollout.js"')) {
-    const helperUrl = `data:text/javascript;base64,${Buffer.from(
-      read("src/lib/neon/agent-profile-rollout.js"),
-    ).toString("base64")}`;
-    executable = executable.replace('from "./agent-profile-rollout.js"', `from "${helperUrl}"`);
-  }
-  const moduleUrl = `data:text/javascript;base64,${Buffer.from(executable).toString("base64")}`;
+  );
+  const executable = inlineRelativeImports(
+    transpile(read("src/lib/neon/public-data.server.ts"))
+      .replace('import "@tanstack/react-start/server-only";', "")
+      .replace('from "./db.server"', `from "${dbUrl}"`),
+    "src/lib/neon",
+  );
 
-  return import(moduleUrl);
+  return import(dataUrl(executable));
 }
 
 test("agent profile migration adds publish controls and a unique public slug", () => {

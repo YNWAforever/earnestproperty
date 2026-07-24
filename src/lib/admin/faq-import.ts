@@ -39,6 +39,9 @@ function parseQuestionAnswerBlocks(text: string, fallbackScope: string) {
     const answerMatch = line.match(/^(?:a|answer|答案|答)\s*[:：]\s*(.+)$/i);
 
     if (scopeMatch) {
+      // Flush before switching: the pending question belongs to the scope that
+      // was in effect when it was read, not the one being declared here.
+      flush();
       scope = scopeMatch[1]?.trim() || scope;
       continue;
     }

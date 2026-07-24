@@ -189,7 +189,11 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(shamTsengRoute, /pageSeo\.shamTseng\.path/);
   assert.match(shamTsengRoute, /\/castle-peak-road/);
   assert.match(header, /青山公路/);
-  assert.match(footer, /\/castle-peak-road\/ting-kau/);
+  // Typed <Link> to a param route, so the slug appears in params rather than as
+  // a literal path. What matters is that it targets the corridor page and not
+  // the legacy /district/ting-kau URL, which 301s.
+  assert.match(footer, /segment:\s*["']ting-kau["']/);
+  assert.doesNotMatch(footer, /to="\/district\/ting-kau"/);
   assert.match(sitemap, /sitemap\.xml/);
   assert.match(sitemap, /castlePeakRoadSitemapPaths/);
   assert.match(sitemap, /function escapeXml/);

@@ -15,10 +15,16 @@ test("public navigation and homepage use corrected estate slugs", () => {
     .map(read)
     .join("\n");
 
-  assert.equal(files.includes("/estate/belvedere-garden"), false);
-  assert.equal(files.includes("/estate/sea-pearl-garden"), false);
-  assert.match(files, /\/estate\/bellagio/);
-  assert.match(files, /\/estate\/rhine-garden/);
+  // An estate can be linked either as a literal href ("/estate/bellagio") or
+  // through the typed route (<Link to="/estate/$slug" params={{ slug: "..." }}>),
+  // so match on the slug in either position rather than the literal path.
+  const linksEstate = (slug) =>
+    new RegExp(`/estate/${slug}\\b|slug:\\s*["']${slug}["']`).test(files);
+
+  assert.equal(linksEstate("belvedere-garden"), false);
+  assert.equal(linksEstate("sea-pearl-garden"), false);
+  assert.ok(linksEstate("bellagio"), "navigation should link the bellagio estate page");
+  assert.ok(linksEstate("rhine-garden"), "navigation should link the rhine-garden estate page");
 
   const vercel = read("vercel.ts");
   assert.match(vercel, /\/estate\/belvedere-garden/);

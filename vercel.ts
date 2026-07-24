@@ -23,7 +23,15 @@ const detailRedirects = importedRedirects.map((redirect) =>
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
-  crons: [{ path: "/api/mls-sync", schedule: "0 20 * * *" }],
+  crons: [
+    { path: "/api/mls-sync", schedule: "0 20 * * *" },
+    // runClaimedJobs is only reachable from these two routes, so without them
+    // nothing drains ops_jobs: queued WhatsApp campaigns and AI knowledge
+    // rebuilds return 202 and then sit forever. Both authenticate with
+    // Bearer ${CRON_SECRET}.
+    { path: "/api/admin/control-plane/worker", schedule: "*/5 * * * *" },
+    { path: "/api/admin/jobs/send-queue", schedule: "*/10 * * * *" },
+  ],
   redirects: [
     ...detailRedirects,
     redirectEntry("/", "/", true, {
