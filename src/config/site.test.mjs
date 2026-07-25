@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 
 import { getYouTubeEmbedUrl, isYouTubeVideoUrl } from "../lib/youtube-video-url.js";
@@ -109,7 +109,8 @@ test("header exposes approved mega menu structure and controls", () => {
     "關於晉誠",
     "觀看最新影片",
     "/district/sham-tseng",
-    "/district/ting-kau",
+    // Ting Kau's canonical page is the corridor segment; /district/ting-kau 301s.
+    "/castle-peak-road/ting-kau",
     "/castle-peak-road",
     "/estate/bellagio",
     "/listings?deal=sale",
@@ -173,6 +174,34 @@ test("sitemap includes property experience routes and only discovered public age
   assert.match(sitemap, /\.catch\(\(\) => \[\]\)/);
 });
 
+// The sitemap's static list is hand-maintained, so a new public page ships
+// unlisted unless someone remembers to touch two files. Derive the expected
+// paths from the route directory instead of asserting on literals: this fails
+// when the *next* page is added, which is how /videos, /transactions and
+// /estate-reviews went missing in the first place.
+test("sitemap lists every indexable public route", () => {
+  const nonPublicPrefix = /^(?:__root|admin|api|auth|account|dashboard|control-plane|sitemap)\b/;
+  const declared = [
+    readFileSync("src/routes/sitemap[.]xml.ts", "utf8"),
+    readFileSync("src/content/seo.ts", "utf8"),
+  ].join("\n");
+
+  const missing = readdirSync("src/routes")
+    .filter((file) => file.endsWith(".tsx") && !file.includes(".test."))
+    .filter((file) => !nonPublicPrefix.test(file) && !file.includes("$") && !file.includes("_"))
+    // Redirect-only routes are deliberately absent — listing a 301 wastes crawl
+    // budget and splits the signal from the canonical URL.
+    .filter((file) => !readFileSync(`src/routes/${file}`, "utf8").includes("statusCode: 301"))
+    .map((file) => {
+      const segments = file.replace(/\.tsx$/, "").split(".");
+      const path = `/${segments.filter((segment) => segment !== "index").join("/")}`;
+      return path === "/" ? "/" : path;
+    })
+    .filter((path) => !declared.includes(`"${path}"`));
+
+  assert.deepEqual(missing, [], `sitemap is missing public routes: ${missing.join(", ")}`);
+});
+
 test("property experience npm script runs every focused suite with a Windows-compatible runner", () => {
   const packageJson = readFileSync("package.json", "utf8");
 
@@ -216,10 +245,15 @@ test("public CMS videos only fetch published rows", () => {
 });
 
 test("public videos tolerate missing CMS table during rollout", () => {
-  const source = readFileSync("src/lib/neon/public-data.server.ts", "utf8");
+  // The recogniser lives in cms-videos-schema.ts so the admin and public read
+  // paths share one definition of "the table isn't there yet".
+  const guard = readFileSync("src/lib/neon/cms-videos-schema.ts", "utf8");
+  assert.match(guard, /relation "\$\{CMS_VIDEOS_TABLE\}" does not exist/);
+  assert.match(guard, /42P01/);
 
-  assert.match(source, /relation "cms_videos" does not exist/);
-  assert.match(source, /return \[\]/);
+  const source = readFileSync("src/lib/neon/public-data.server.ts", "utf8");
+  assert.match(source, /isMissingCmsVideosTableError/);
+  assert.match(source, /if \(isMissingCmsVideosTableError\(error\)\) return \[\];/);
 });
 
 test("videos page orders CMS videos above listing videos", () => {

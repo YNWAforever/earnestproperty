@@ -50,7 +50,11 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/district/ting-kau" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/castle-peak-road/$segment"
+                  params={{ segment: "ting-kau" }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   汀九 Ting Kau
                 </Link>
               </li>

@@ -152,8 +152,11 @@ test("public cards provide stable branch and general contact fallbacks", () => {
     const source = readExisting(file);
     assert.match(source, /SITE_BRANCHES/);
     assert.match(source, /DEFAULT_AGENT_BRANCH/);
-    assert.match(source, /profile\.branch\s*\?\?/);
-    assert.match(source, /profile\.phone\s*\?\?/);
+    // The list route maps rows through resolveDisplayAgents and names the
+    // receiver `agent`; the detail route reads the raw `profile`. Either way the
+    // branch and phone must fall back to the default branch.
+    assert.match(source, /(?:profile|agent)\.branch\s*\?\?/);
+    assert.match(source, /(?:profile|agent)\.phone\s*\?\?/);
   }
 });
 

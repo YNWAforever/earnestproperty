@@ -13,7 +13,6 @@ type RouteTo =
   | "/castle-peak-road"
   | "/contact"
   | "/district/sham-tseng"
-  | "/district/ting-kau"
   | "/estate-reviews"
   | "/listings"
   | "/mortgage"
@@ -57,7 +56,8 @@ const megaMenus: MegaMenuGroup[] = [
         description: "集中瀏覽深井區內買賣、租盤及生活配套。",
       },
       {
-        to: "/district/ting-kau",
+        // Param route, so it goes through href like the estate links below.
+        href: "/castle-peak-road/ting-kau",
         label: "汀九地區頁",
         description: "查看汀九筍盤、海景屋苑及區內成交資訊。",
       },

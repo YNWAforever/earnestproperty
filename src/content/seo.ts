@@ -41,7 +41,9 @@ export const pageSeo = {
       "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產堅盤源 C-018613。",
   },
   tingKau: {
-    path: "/district/ting-kau",
+    // Canonical lives on the Castle Peak Road corridor page; /district/ting-kau
+    // is a legacy URL that redirects there (see vercel.ts and the route below).
+    path: "/castle-peak-road/ting-kau",
     title: "汀九 Ting Kau 樓盤｜青山公路低密度海景別墅、洋房",
     description:
       "青山公路汀九段樓盤一覽：觀海別墅、嘉御龍庭、汀九別墅等低密度海景別墅洋房，介乎荃灣與深井，62 校網。晉誠地產 C-018613。",

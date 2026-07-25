@@ -22,6 +22,7 @@ export type NeonEstateSnapshot = {
   district_slug: string;
   year_completed: number | null;
   developer: string | null;
+  total_units: number | null;
   lat: number | null;
   lng: number | null;
 };
@@ -59,6 +60,7 @@ export type NeonPropertyRow = {
   bathrooms: number | null;
   floor: string | null;
   orientation: string | null;
+  management_fee: number | null;
   features: string[] | null;
   description: string | null;
   images: string[] | null;

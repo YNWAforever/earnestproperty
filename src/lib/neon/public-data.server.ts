@@ -55,6 +55,7 @@ const listingColumns = `
   p.bathrooms,
   p.floor,
   p.orientation,
+  p.management_fee,
   p.features,
   p.description,
   p.images,
@@ -81,6 +82,7 @@ const listingColumns = `
   e.district_slug AS estate_district_slug,
   e.year_completed AS estate_year_completed,
   e.developer AS estate_developer,
+  e.total_units AS estate_total_units,
   e.lat AS estate_lat,
   e.lng AS estate_lng
 `;
@@ -182,6 +184,7 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
         district_slug: stringOrEmpty(row.estate_district_slug),
         year_completed: numberOrNull(row.estate_year_completed),
         developer: stringOrNull(row.estate_developer),
+        total_units: numberOrNull(row.estate_total_units),
         lat: numberOrNull(row.estate_lat),
         lng: numberOrNull(row.estate_lng),
       }
@@ -206,6 +209,7 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
     bathrooms: numberOrNull(row.bathrooms),
     floor: stringOrNull(row.floor),
     orientation: stringOrNull(row.orientation),
+    management_fee: numberOrNull(row.management_fee),
     features: textArrayOrNull(row.features),
     description: stringOrNull(row.description),
     images: textArrayOrNull(row.images),
