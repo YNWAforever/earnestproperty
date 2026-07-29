@@ -128,10 +128,18 @@ test("estate conversion registry includes factual trust proof and no 28Hse depen
   assert.equal(/Google review|testimonial|五星|客戶好評/.test(source), false);
 });
 
+// Same char-code spelling as the site-wide guard in src/config/site.test.mjs, so
+// the banned phrases never appear as literals anywhere the repo-wide grep looks.
 test("estate conversion source avoids the older disallowed listing wording", () => {
-  const forbidden = String.fromCharCode(30495, 30436, 28304);
+  const forbidden = [
+    String.fromCharCode(30495, 30436, 28304),
+    String.fromCharCode(22533, 30436, 28304),
+    String.fromCharCode(21313, 22810, 24180),
+  ];
   const source = read("src/content/estate-pages.ts");
-  assert.equal(source.includes(forbidden), false);
+  for (const phrase of forbidden) {
+    assert.equal(source.includes(phrase), false, `${phrase} is no longer approved copy`);
+  }
 });
 
 test("conversion components use intent helpers and factual proof", () => {

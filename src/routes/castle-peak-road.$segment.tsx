@@ -15,6 +15,7 @@ import {
   fetchCorridorInventoryForAliases,
   type CorridorInventory as CorridorInventoryData,
 } from "@/lib/queries";
+import { renderableFaqs } from "@/lib/faq";
 
 type SegmentLoaderData = {
   segment: CorridorSegment;
@@ -143,14 +144,6 @@ function CorridorRelatedLink({
       </Link>
     );
   }
-  if (href === "/district/tsuen-wan") {
-    return (
-      <Link to="/district/tsuen-wan" className={className}>
-        {children}
-      </Link>
-    );
-  }
-
   const estateMatch = href.match(/^\/estate\/([^/?#]+)$/);
   if (estateMatch) {
     return (
@@ -232,10 +225,11 @@ function CastlePeakRoadSegmentPage() {
       },
     ],
   };
+  const faqs = renderableFaqs(segment.faqs);
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: segment.faqs.map((faq) => ({
+    mainEntity: faqs.map((faq) => ({
       "@type": "Question",
       name: faq.question,
       acceptedAnswer: { "@type": "Answer", text: faq.answer },
@@ -258,10 +252,12 @@ function CastlePeakRoadSegmentPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
+      {faqs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        />
+      )}
       {allListings.length > 0 && (
         <script
           type="application/ld+json"
@@ -286,7 +282,7 @@ function CastlePeakRoadSegmentPage() {
             {segment.description}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
+            <Button asChild className="bg-coral text-coral-foreground hover:bg-primary-hover">
               <a
                 href={whatsappUrl(`你好，我想查詢${segment.nameZh}樓盤`)}
                 target="_blank"
@@ -354,17 +350,19 @@ function CastlePeakRoadSegmentPage() {
 
       <section className="border-y bg-card">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_0.8fr] lg:px-8">
-          <div>
-            <h2 className="text-2xl font-bold text-primary">{segment.nameZh} FAQ</h2>
-            <div className="mt-5 divide-y rounded-lg border bg-background">
-              {segment.faqs.map((faq) => (
-                <article key={faq.question} className="p-5">
-                  <h3 className="font-semibold text-primary">{faq.question}</h3>
-                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
-                </article>
-              ))}
+          {faqs.length > 0 && (
+            <div>
+              <h2 className="text-2xl font-bold text-primary">{segment.nameZh} FAQ</h2>
+              <div className="mt-5 divide-y rounded-lg border bg-background">
+                {faqs.map((faq) => (
+                  <article key={faq.question} className="p-5">
+                    <h3 className="font-semibold text-primary">{faq.question}</h3>
+                    <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           <div>
             <h2 className="text-2xl font-bold text-primary">相關連結</h2>
             <div className="mt-5 grid gap-3">

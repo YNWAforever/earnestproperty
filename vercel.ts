@@ -39,6 +39,14 @@ export const config: VercelConfig = {
     }),
     redirectEntry("/district/ting-kau", "/castle-peak-road/ting-kau", true),
     redirectEntry("/district/ting-kau/", "/castle-peak-road/ting-kau", true),
+    // Five lifestyle zones collapsed to three. Both retired URLs are already
+    // indexed, and /castle-peak-road/$segment throws notFound() on an unknown
+    // slug, so without these 301s they become hard 404s. Successor zones:
+    // 油柑頭 → 汀九, 青龍頭 → 深井 / 青山公路.
+    redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau/", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/castle-peak-road/tsing-lung-tau", "/castle-peak-road/sham-tseng", true),
+    redirectEntry("/castle-peak-road/tsing-lung-tau/", "/castle-peak-road/sham-tseng", true),
     redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
     redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
     redirectEntry("/property-detail/:oldId.html", "/listings", true),

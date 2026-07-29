@@ -9,6 +9,7 @@ import {
 } from "@/content/castle-peak-road";
 import { SITE_URL } from "@/content/seo";
 import { fetchCorridorInventoryForAliases, type CorridorInventory } from "@/lib/queries";
+import { renderableFaqs } from "@/lib/faq";
 
 type HubLoaderData = {
   inventories: Record<string, CorridorInventory>;
@@ -64,7 +65,11 @@ function SegmentCard({
       <p className="text-xs font-semibold uppercase text-coral">{segment.eyebrow}</p>
       <h2 className="mt-2 text-xl font-bold text-primary">{segment.nameZh}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{segment.nameEn}</p>
-      <p className="mt-4 text-sm leading-7 text-muted-foreground">{segment.buyerFit}</p>
+      <div className="mt-4 space-y-2 text-sm leading-7 text-muted-foreground">
+        {segment.zoneSummary.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </div>
       <div className="mt-5 flex items-center justify-between border-t pt-4 text-sm">
         <span className="font-semibold text-primary">
           {segmentTotal(inventory).toLocaleString()} 個即時放盤
@@ -113,10 +118,11 @@ function CastlePeakRoadHubPage() {
       },
     ],
   };
+  const faqs = renderableFaqs(castlePeakRoadHub.faqs);
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    mainEntity: castlePeakRoadHub.faqs.map((faq) => ({
+    mainEntity: faqs.map((faq) => ({
       "@type": "Question",
       name: faq.question,
       acceptedAnswer: { "@type": "Answer", text: faq.answer },
@@ -129,10 +135,12 @@ function CastlePeakRoadHubPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-      />
+      {faqs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        />
+      )}
 
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
@@ -167,19 +175,21 @@ function CastlePeakRoadHubPage() {
         </div>
       </section>
 
-      <section className="border-y bg-card">
-        <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-primary">青山公路買樓 FAQ</h2>
-          <div className="mt-6 divide-y rounded-lg border bg-background">
-            {castlePeakRoadHub.faqs.map((faq) => (
-              <article key={faq.question} className="p-5">
-                <h3 className="font-semibold text-primary">{faq.question}</h3>
-                <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
-              </article>
-            ))}
+      {faqs.length > 0 && (
+        <section className="border-y bg-card">
+          <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
+            <h2 className="text-2xl font-bold text-primary">青山公路買樓 FAQ</h2>
+            <div className="mt-6 divide-y rounded-lg border bg-background">
+              {faqs.map((faq) => (
+                <article key={faq.question} className="p-5">
+                  <h3 className="font-semibold text-primary">{faq.question}</h3>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 }
