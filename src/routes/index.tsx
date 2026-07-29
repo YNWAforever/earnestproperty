@@ -39,7 +39,7 @@ import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { resolveDisplayAgents } from "@/lib/agent-directory";
 import { toTelHref } from "@/lib/contact-links";
-import { SITE_URL, SITE_LOGO_URL } from "@/content/seo";
+import { SITE_URL, SITE_LOGO_URL, pageSeo } from "@/content/seo";
 import {
   fetchEstates,
   fetchFeaturedProperties,
@@ -49,6 +49,13 @@ import {
   type FeaturedProperty,
   type FaqItem,
 } from "@/lib/queries";
+import { renderableFaqs } from "@/lib/faq";
+
+// Vite resolves the import to a hashed, site-root-relative path. Facebook and X
+// reject a relative og:image outright, so it is absolutised here rather than in
+// the meta block — `new URL` keeps working if the asset ever moves to a CDN and
+// the import starts returning a full URL.
+const HERO_OG_IMAGE = new URL(heroImage, SITE_URL).href;
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -73,36 +80,38 @@ export const Route = createFileRoute("/")({
       <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
     </div>
   ),
+  // Title and description come from the registry. They used to be duplicated
+  // here with a divergent licence tail, so the rendered page and the sitemap
+  // advertised two different descriptions for the same URL.
   head: () => ({
     meta: [
-      { title: "晉誠地產 Earnest Property｜深井 青山公路 汀九買樓租樓" },
-      {
-        name: "description",
-        content:
-          "深井、青山公路、汀九買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園及汀九筍盤，即時 WhatsApp 查詢。Licence C-018613。",
-      },
+      { title: pageSeo.home.title },
+      { name: "description", content: pageSeo.home.description },
       { property: "og:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
       {
         property: "og:description",
-        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓堅盤源。",
+        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
       },
-      { property: "og:image", content: heroImage },
-      { name: "twitter:image", content: heroImage },
+      { property: "og:image", content: HERO_OG_IMAGE },
+      { name: "twitter:image", content: HERO_OG_IMAGE },
     ],
   }),
   component: HomePage,
 });
 
+// Card placeholders until 屋苑相片 land. Hues sit in a ±13° band around the brand
+// green (157°) so each estate stays distinguishable without drifting off-palette.
 const ESTATE_GRADIENTS: Record<string, string> = {
-  bellagio: "linear-gradient(135deg, oklch(0.62 0.1 125), oklch(0.4 0.09 122))",
-  "sea-crest-villa": "linear-gradient(135deg, oklch(0.65 0.09 135), oklch(0.42 0.08 128))",
-  "hong-kong-garden": "linear-gradient(135deg, oklch(0.68 0.08 110), oklch(0.44 0.07 118))",
-  "rhine-garden": "linear-gradient(135deg, oklch(0.6 0.1 130), oklch(0.4 0.09 122))",
-  "lido-garden": "linear-gradient(135deg, oklch(0.65 0.08 115), oklch(0.43 0.08 120))",
+  bellagio: "linear-gradient(135deg, oklch(0.62 0.1 159.5), oklch(0.4 0.09 156.5))",
+  "sea-crest-villa": "linear-gradient(135deg, oklch(0.65 0.09 169.5), oklch(0.42 0.08 162.5))",
+  "hong-kong-garden": "linear-gradient(135deg, oklch(0.68 0.08 144.5), oklch(0.44 0.07 152.5))",
+  "rhine-garden": "linear-gradient(135deg, oklch(0.6 0.1 164.5), oklch(0.4 0.09 156.5))",
+  "lido-garden": "linear-gradient(135deg, oklch(0.65 0.08 149.5), oklch(0.43 0.08 154.5))",
 };
 
 function HomePage() {
-  const { estates, featured, faqs, counts, agents } = Route.useLoaderData();
+  const { estates, featured, faqs: faqRows, counts, agents } = Route.useLoaderData();
+  const faqs = renderableFaqs(faqRows as FaqItem[]);
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -144,14 +153,16 @@ function HomePage() {
 
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8 lg:py-36">
           <div className="max-w-2xl text-primary-foreground">
-            <span className="inline-flex items-center gap-2 rounded-full bg-gold/20 px-3 py-1 text-xs font-medium text-gold backdrop-blur">
+            {/* Solid green pill: a translucent fill over the photo scrim tops out
+                at 3.5:1, under the 4.5:1 AA floor for this 12px label. */}
+            <span className="inline-flex items-center gap-2 rounded-full bg-primary/90 px-3 py-1 text-xs font-medium text-primary-foreground backdrop-blur">
               <MapPin className="h-3.5 w-3.5" />
               深井 · 青山公路 · 汀九
             </span>
             <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
               深井 青山公路 汀九買樓租樓
               <br />
-              <span className="text-gold">晉誠地產</span>．堅盤源
+              <span className="text-brand-bright">晉誠地產</span> ‧ 全部真盤
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
               由熟悉深井、青山公路及汀九嘅持牌代理，為你提供買樓、租樓及放盤貼身服務。
@@ -222,12 +233,45 @@ function HomePage() {
         </div>
       </section>
 
+      {/* FEATURED LISTINGS — 精選筍盤置頂 (client p2): live stock is the first
+          thing after the hero, ahead of the evergreen estate directory. It keeps
+          bg-muted/40 so it still reads as a band against the white stats strip
+          above and the plain estates section below. */}
+      <section className="bg-muted/40">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+            <SectionHeader
+              eyebrow="精選筍盤"
+              title="Featured Listings"
+              desc="即日新放盤，隨時 WhatsApp 查詢及預約睇樓。"
+              className="text-left"
+            />
+            <Link
+              to="/district/sham-tseng"
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              所有放盤 →
+            </Link>
+          </div>
+
+          {featured.length === 0 ? (
+            <p className="mt-8 text-center text-muted-foreground">暫時未有精選放盤，請稍後再試。</p>
+          ) : (
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {featured.map((p: FeaturedProperty) => (
+                <PropertyCard key={p.id} property={p} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* CORE ESTATES */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader
           eyebrow="深井核心屋苑"
           title="Sham Tseng Signature Estates"
-          desc="紮根深井十多年，每個屋苑我哋都熟到尾。"
+          desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉"
         />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {estates.map((estate: EstateSummary) => {
@@ -276,36 +320,6 @@ function HomePage() {
         </div>
       </section>
 
-      {/* FEATURED LISTINGS */}
-      <section className="bg-muted/40">
-        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-            <SectionHeader
-              eyebrow="精選筍盤"
-              title="Featured Listings"
-              desc="即日新放盤，隨時 WhatsApp 查詢及預約睇樓。"
-              className="text-left"
-            />
-            <Link
-              to="/district/sham-tseng"
-              className="text-sm font-medium text-primary hover:underline"
-            >
-              所有放盤 →
-            </Link>
-          </div>
-
-          {featured.length === 0 ? (
-            <p className="mt-8 text-center text-muted-foreground">暫時未有精選放盤，請稍後再試。</p>
-          ) : (
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {featured.map((p: FeaturedProperty) => (
-                <PropertyCard key={p.id} property={p} />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
       {/* WHY US */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader eyebrow="為何選晉誠" title="Why Earnest Property" />
@@ -313,7 +327,7 @@ function HomePage() {
           <Feature
             icon={<MapPin className="h-5 w-5" />}
             title="紮根深井"
-            desc="十多年深耕深井 · 青山公路，每條街每幢樓都熟。"
+            desc="廿多年深耕深井 · 青山公路，每條街每幢樓都熟。"
           />
           <Feature
             icon={<ShieldCheck className="h-5 w-5" />}
@@ -322,7 +336,7 @@ function HomePage() {
           />
           <Feature
             icon={<Home className="h-5 w-5" />}
-            title="堅盤源"
+            title="全部真盤"
             desc="所有放盤親身核實，無虛假廣告，無釣魚盤。"
           />
           <Feature
@@ -409,14 +423,20 @@ function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
             <div className="flex items-center gap-3">
-              <img src={logoMark} alt="" className="h-9 w-9 object-contain" />
-              <p className="text-sm font-semibold text-primary">關於晉誠</p>
+              <img
+                src={logoMark}
+                alt=""
+                width={44}
+                height={44}
+                className="h-11 w-11 object-contain"
+              />
+              <p className="text-sm font-semibold text-primary">關於晉誠地產</p>
             </div>
             <h2 className="mt-3 text-2xl font-bold sm:text-3xl">
-              深井物業專家，堅盤源、即時回覆、持牌可靠
+              深井、青山公路物業專家，全部真盤、即時回覆、持牌可靠
             </h2>
             <p className="mt-4 max-w-2xl text-muted-foreground">
-              我哋係一間以深井為核心的本地地產代理，日常接觸同管理區內真實買賣、租務和業主委託，
+              我哋係一間以深井、青山公路為核心的本地地產代理，日常接觸同管理區內真實買賣、租務和業主委託。
               對每個屋苑座向、樓層景觀、車位、會所和近期叫價都有第一手理解。
             </p>
           </div>
@@ -445,9 +465,9 @@ function HomePage() {
                     src={branch.photo}
                     alt={`${branch.name}舖面`}
                     loading="lazy"
-                    width={640}
-                    height={480}
-                    className="h-44 w-full object-cover"
+                    width={branch.photoWidth}
+                    height={branch.photoHeight}
+                    className="h-64 w-full object-cover sm:h-72"
                   />
                 ) : null}
                 <div className="p-5">
@@ -523,7 +543,7 @@ function HomePage() {
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
           <div>
             <h2 className="text-2xl font-bold text-foreground sm:text-3xl">
-              準備搵深井 青山公路 汀九筍盤？
+              準備搵深井 青山公路筍盤？
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
               即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
