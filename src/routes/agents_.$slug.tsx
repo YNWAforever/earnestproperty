@@ -37,7 +37,9 @@ export const Route = createFileRoute("/agents_/$slug")({
 function AgentProfilePage() {
   const { profile } = Route.useLoaderData();
   const name = profile.name_zh || profile.name_en || "晉誠地產代理";
-  const branch = profile.branch ?? DEFAULT_AGENT_BRANCH.name;
+  // See agents.tsx: defaulting to SITE_BRANCHES[0] printed 麗都分行 on agents based
+  // elsewhere. A missing branch renders nothing rather than a wrong one.
+  const branch = profile.branch;
   const phone = profile.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
   const whatsapp = profile.whatsapp ?? profile.phone ?? SITE_CONTACT.whatsappPhone;
   const phoneHref = toTelHref(phone);
@@ -81,7 +83,7 @@ function AgentProfilePage() {
               ) : null}
               <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
                 {profile.job_title ? <span>{profile.job_title}</span> : null}
-                <span>{branch}</span>
+                {branch ? <span>{branch}</span> : null}
                 {profile.licence_no ? <span>牌照：{profile.licence_no}</span> : null}
               </div>
               {profile.bio ? (

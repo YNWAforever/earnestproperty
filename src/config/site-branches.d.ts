@@ -7,6 +7,11 @@ export type SiteBranch = {
   districtSlugs: string[];
   /** Shop-front photo path under `public/`, if supplied. */
   photo?: string;
+  /** Intrinsic width of `photo` in pixels — the shopfronts are not all the same
+   * orientation, so each card has to declare its own box. */
+  photoWidth?: number;
+  /** Intrinsic height of `photo` in pixels. */
+  photoHeight?: number;
   /** Opening hours — only set once confirmed by the client. */
   hours?: string;
   /** Google Maps link — only set once confirmed by the client. */

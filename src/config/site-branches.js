@@ -6,7 +6,14 @@ export const SITE_BRANCHES = [
     phone: "26882988",
     estateSlugs: ["bellagio", "sea-crest-villa", "lido-garden"],
     districtSlugs: ["sham-tseng"],
+    // TODO(client): 麗都舖轉相 (docx p40) — the replacement shopfront photo has not
+    // been supplied, so the original ships until it arrives.
     photo: "/branches/lido.jpg",
+    // Intrinsic pixel size of the file above. The shopfront photos are not all the
+    // same orientation, so a single hardcoded width/height in the cards reserved an
+    // inverted box for the two portrait ones before the stylesheet landed.
+    photoWidth: 1600,
+    photoHeight: 1200,
     // TODO: confirm opening hours with client (`hours`).
     // TODO: confirm Google Maps link with client (`mapUrl`).
   },
@@ -18,6 +25,8 @@ export const SITE_BRANCHES = [
     estateSlugs: ["rhine-garden", "sea-pearl-garden"],
     districtSlugs: [],
     photo: "/branches/rhine.jpg",
+    photoWidth: 1200,
+    photoHeight: 1600,
     // TODO: confirm opening hours with client (`hours`).
     // TODO: confirm Google Maps link with client (`mapUrl`).
   },
@@ -29,6 +38,8 @@ export const SITE_BRANCHES = [
     estateSlugs: ["hong-kong-garden"],
     districtSlugs: ["ting-kau"],
     photo: "/branches/hong-kong-garden.jpg",
+    photoWidth: 1200,
+    photoHeight: 1600,
     // TODO: confirm opening hours with client (`hours`).
     // TODO: confirm Google Maps link with client (`mapUrl`).
   },
