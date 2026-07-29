@@ -23,6 +23,7 @@ import {
   type FaqItem,
   type ListingRow,
 } from "@/lib/queries";
+import { renderableFaqs } from "@/lib/faq";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
@@ -82,10 +83,10 @@ function EstatePage() {
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
   type VisibleFaq = { question: string; answer: string };
-  const visibleFaqs: VisibleFaq[] = [
+  const visibleFaqs: VisibleFaq[] = renderableFaqs([
     ...(content?.faqs ?? []),
     ...faqs.filter((faq) => !(content?.faqs ?? []).some((item) => item.question === faq.question)),
-  ];
+  ]);
   const ctaContext = {
     estateName: seo?.nameZh ?? estate.name_zh,
     districtName: "深井 / 青山公路",
@@ -178,7 +179,7 @@ function EstatePage() {
             <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
               {(content?.buyerFit ?? [seo?.fit ?? "適合想比較深井核心屋苑的買家。"]).map((item) => (
                 <li key={item} className="flex gap-2">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span>{item}</span>
                 </li>
               ))}
@@ -193,7 +194,7 @@ function EstatePage() {
               <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
                 {content.pros.map((item) => (
                   <li key={item} className="flex gap-2">
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     <span>{item}</span>
                   </li>
                 ))}

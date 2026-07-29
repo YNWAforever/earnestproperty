@@ -10,7 +10,13 @@ export function SiteFooter() {
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <img src={logoMark} alt="" className="h-10 w-10 object-contain" />
+              <img
+                src={logoMark}
+                alt=""
+                width={48}
+                height={48}
+                className="h-12 w-12 object-contain"
+              />
               <div className="flex flex-col leading-none">
                 <span className="text-base font-bold">晉誠地產</span>
                 <span className="text-[10px] tracking-widest opacity-70">EARNEST PROPERTY</span>
@@ -30,23 +36,24 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gold">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
               地區 Districts
             </h3>
+            {/*
+              Client kept only 深井 / 青山公路 / 汀九 here. The estate links that
+              used to share this column are not districts, so they moved to their
+              own group below rather than being deleted — deleting them would
+              leave /estate/rhine-garden and friends with no site-wide entry point.
+            */}
             <ul className="mt-4 space-y-2 text-sm">
               <li>
                 <Link to="/district/sham-tseng" className="opacity-80 hover:opacity-100">
-                  深井 Sham Tseng
-                </Link>
-              </li>
-              <li>
-                <Link to="/district/tsuen-wan" className="opacity-80 hover:opacity-100">
-                  荃灣 Tsuen Wan
+                  深井區買樓租樓
                 </Link>
               </li>
               <li>
                 <Link to="/castle-peak-road" className="opacity-80 hover:opacity-100">
-                  青山公路 Castle Peak Road
+                  青山公路區買樓租樓
                 </Link>
               </li>
               <li>
@@ -55,9 +62,15 @@ export function SiteFooter() {
                   params={{ segment: "ting-kau" }}
                   className="opacity-80 hover:opacity-100"
                 >
-                  汀九 Ting Kau
+                  汀九豪宅區買樓租樓
                 </Link>
               </li>
+            </ul>
+
+            <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
+              屋苑 Estates
+            </h3>
+            <ul className="mt-4 space-y-2 text-sm">
               <li>
                 <Link
                   to="/estate/$slug"
@@ -107,7 +120,7 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gold">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
               公司 Company
             </h3>
             <ul className="mt-4 space-y-2 text-sm">
@@ -160,7 +173,7 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gold">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
               聯絡 Contact
             </h3>
             <ul className="mt-4 space-y-3 text-sm">
@@ -168,17 +181,17 @@ export function SiteFooter() {
                 <li key={branch.phone} className="space-y-1 opacity-80">
                   <p className="font-semibold text-background">{branch.name}</p>
                   <p className="flex items-start gap-2">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
                     <span>{branch.address}</span>
                   </p>
                   <p className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-gold" />
+                    <Phone className="h-4 w-4 text-brand-bright" />
                     <a href={`tel:${branch.phone}`}>{branch.phone}</a>
                   </p>
                 </li>
               ))}
               <li className="flex items-center gap-2 opacity-80">
-                <Mail className="h-4 w-4 text-gold" />
+                <Mail className="h-4 w-4 text-brand-bright" />
                 <a href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a>
               </li>
             </ul>

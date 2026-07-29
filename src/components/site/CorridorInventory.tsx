@@ -168,7 +168,7 @@ export function CorridorInventory({
               全部放盤
             </Link>
           </Button>
-          <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
+          <Button asChild className="bg-coral text-coral-foreground hover:bg-primary-hover">
             <a href={whatsappUrl(inquiryText)} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp 查詢

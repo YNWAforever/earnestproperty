@@ -49,21 +49,28 @@ const megaMenus: MegaMenuGroup[] = [
     id: "districts",
     label: "地區與屋苑",
     purpose: "按深井、青山公路、汀九或屋苑入口瀏覽。",
+    // Client pruned the district entries to 深井 / 青山公路 / 汀九, so all three
+    // sit in `featured` and `links` carries estate entry points only — an estate
+    // is not a district.
     featured: [
       {
         to: "/district/sham-tseng",
-        label: "深井買樓租樓",
+        label: "深井區買樓租樓",
         description: "集中瀏覽深井區內買賣、租盤及生活配套。",
+      },
+      {
+        to: "/castle-peak-road",
+        label: "青山公路區買樓租樓",
+        description: "沿線屋苑與生活圈樓市資訊。",
       },
       {
         // Param route, so it goes through href like the estate links below.
         href: "/castle-peak-road/ting-kau",
-        label: "汀九地區頁",
+        label: "汀九豪宅區買樓租樓",
         description: "查看汀九筍盤、海景屋苑及區內成交資訊。",
       },
     ],
     links: [
-      { to: "/castle-peak-road", label: "青山公路", description: "沿線屋苑與分段樓市資訊。" },
       { href: "/estate/bellagio", label: "屋苑入口", description: "直接前往重點屋苑頁面。" },
       { to: "/estate-reviews", label: "屋苑開箱", description: "用開箱內容比較屋苑特色。" },
     ],
@@ -213,7 +220,7 @@ function MegaMenuLink({
 }) {
   const className =
     variant === "cta"
-      ? "inline-flex w-full items-center justify-between rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 sm:w-auto"
+      ? "inline-flex w-full items-center justify-between rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover sm:w-auto"
       : variant === "featured"
         ? "block rounded-md px-3 py-3 transition-colors hover:bg-accent"
         : "block rounded-md px-3 py-2.5 transition-colors hover:bg-accent";
@@ -322,7 +329,7 @@ export function SiteHeader() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2.5" onClick={() => setActiveMegaMenu(null)}>
-          <img src={logoMark} alt="" className="h-10 w-10 object-contain" />
+          <img src={logoMark} alt="" width={48} height={48} className="h-12 w-12 object-contain" />
           <div className="flex flex-col leading-none">
             <span className="text-base font-bold tracking-tight text-primary">晉誠地產</span>
             <span className="text-[10px] font-medium tracking-widest text-muted-foreground">
