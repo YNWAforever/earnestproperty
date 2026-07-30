@@ -37,7 +37,7 @@ function VideosPage() {
           <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
             官方頻道影片、屋苑開箱及附影片樓盤集中一頁，睇樓前先了解景觀、間隔和屋苑環境。
           </p>
-          <Button asChild className="mt-6 bg-coral text-coral-foreground hover:bg-coral/90">
+          <Button asChild className="mt-6 bg-coral text-coral-foreground hover:bg-primary-hover">
             <a href={SITE_YOUTUBE_CHANNEL.url} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4" />
               開啟 {SITE_YOUTUBE_CHANNEL.handleLabel}
@@ -81,7 +81,7 @@ function VideosPage() {
                   開啟 YouTube 頻道
                 </a>
               </Button>
-              <Button asChild className="bg-coral text-coral-foreground hover:bg-coral/90">
+              <Button asChild className="bg-coral text-coral-foreground hover:bg-primary-hover">
                 <a href={inquiryUrl} target="_blank" rel="noopener noreferrer">
                   <MessageCircle className="h-4 w-4" />
                   WhatsApp 索取影片

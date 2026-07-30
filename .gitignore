@@ -35,3 +35,9 @@ supabase/.temp/
 *.sln
 *.sw?
 .vercel
+.env*
+
+# Client hand-off material: 24 namecards carrying personal phone numbers, emails
+# and individual licence numbers, plus ~37 MB of raw photos. Only the derived,
+# resized web assets under public/ belong in history.
+docs/client-feedback/

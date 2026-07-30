@@ -41,7 +41,7 @@ function TransactionsPage() {
           <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
             集中近期屋苑成交資料，配合即時放盤和前線業主叫價，幫你判斷買樓租樓節奏。
           </p>
-          <Button asChild className="mt-6 bg-coral text-coral-foreground hover:bg-coral/90">
+          <Button asChild className="mt-6 bg-coral text-coral-foreground hover:bg-primary-hover">
             <a href={inquiryUrl} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp 查成交及估價

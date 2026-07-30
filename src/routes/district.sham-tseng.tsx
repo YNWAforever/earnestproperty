@@ -24,6 +24,7 @@ import {
   type FaqItem,
   type DistrictTransaction,
 } from "@/lib/queries";
+import { renderableFaqs } from "@/lib/faq";
 import { SITE_URL, pageSeo } from "@/content/seo";
 
 type LoaderData = {
@@ -120,7 +121,8 @@ function aggregateByMonth(rows: DistrictTransaction[]) {
 }
 
 function ShamTsengPage() {
-  const { estates, faqs, transactions } = Route.useLoaderData() as LoaderData;
+  const { estates, faqs: faqRows, transactions } = Route.useLoaderData() as LoaderData;
+  const faqs = renderableFaqs(faqRows);
   const chartData = aggregateByMonth(transactions);
   const latestPsf = chartData.length ? chartData[chartData.length - 1].psf : 0;
   const firstPsf = chartData.length ? chartData[0].psf : 0;

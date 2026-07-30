@@ -9,7 +9,10 @@ const staticPaths = [
   pageSeo.listings.path,
   pageSeo.castlePeakRoad.path,
   pageSeo.shamTseng.path,
-  pageSeo.tsuenWan.path,
+  // /district/tsuen-wan is intentionally absent: the client pruned 荃灣 from the
+  // district navigation, so the page has no inbound internal link. Advertising
+  // an orphan in the sitemap invites a soft-404; the URL still resolves for
+  // anyone arriving from an external link.
   pageSeo.blog.path,
   pageSeo.about.path,
   pageSeo.contact.path,

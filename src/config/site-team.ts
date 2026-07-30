@@ -29,98 +29,10 @@ export type TeamMemberPlaceholder = {
 
 const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
   {
-    slug: "andy-hah",
-    nameEn: "Andy Hah",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/andy-hah.jpg",
-  },
-  {
-    slug: "dickson-wong",
-    nameEn: "Dickson Wong",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/dickson-wong.jpg",
-  },
-  {
-    slug: "eric-lai",
-    nameEn: "Eric Lai",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/eric-lai.jpg",
-  },
-  {
-    slug: "eunice-yau",
-    nameEn: "Eunice Yau",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/eunice-yau.jpg",
-  },
-  {
-    slug: "george-chau",
-    nameEn: "George Chau",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/george-chau.jpg",
-  },
-  {
-    slug: "joanna-tang",
-    nameEn: "Joanna Tang",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/joanna-tang.jpg",
-  },
-  {
-    slug: "joe-yuen",
-    nameEn: "Joe Yuen",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/joe-yuen.jpg",
-  },
-  {
-    slug: "kelvin-lee",
-    nameEn: "Kelvin Lee",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/kelvin-lee.jpg",
-  },
-  {
     slug: "kenneth",
-    nameEn: "Kenneth",
+    nameEn: "Kenneth Chang",
     nameZh: null, // TODO: confirm Traditional Chinese name + surname (filename has first name only)
-    jobTitle: null, // TODO: confirm job title
+    jobTitle: "董事", // TODO: confirm job title
     branch: null, // TODO: confirm branch assignment
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
@@ -128,169 +40,246 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     photo: "/team/kenneth.jpg",
   },
   {
-    slug: "king-lau",
-    nameEn: "King Lau",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/king-lau.jpg",
-  },
-  {
-    slug: "michael-wong",
-    nameEn: "Michael Wong",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/michael-wong.jpg",
-  },
-  {
-    slug: "mike-cheung",
-    nameEn: "Mike Cheung",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/mike-cheung.jpg",
-  },
-  {
-    slug: "mon-lau",
-    nameEn: "Mon Lau",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/mon-lau.jpg",
-  },
-  {
-    slug: "mun-chu",
-    nameEn: "Mun Chu",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/mun-chu.jpg",
-  },
-  {
-    slug: "raymond-tam",
-    nameEn: "Raymond Tam",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/raymond-tam.jpg",
-  },
-  {
-    slug: "ruby-lee",
-    nameEn: "Ruby Lee",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/ruby-lee.jpg",
-  },
-  {
-    slug: "sam-lee",
-    nameEn: "Sam Lee",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/sam-lee.jpg",
-  },
-  {
-    slug: "shadow-cheung",
-    nameEn: "Shadow Cheung",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/shadow-cheung.jpg",
-  },
-  {
-    slug: "terence-tang",
-    nameEn: "Terence Tang",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/terence-tang.jpg",
-  },
-  {
-    slug: "terry-chan",
-    nameEn: "Terry Chan",
-    nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
-    phone: null, // TODO: confirm direct phone number
-    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
-    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/terry-chan.jpg",
-  },
-  {
     slug: "tommy-yiu",
     nameEn: "Tommy Yiu",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
+    jobTitle: "高級營業經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
     photo: "/team/tommy-yiu.jpg",
   },
   {
-    slug: "vincy-lam",
-    nameEn: "Vincy Lam",
+    slug: "terence-tang",
+    nameEn: "Terence Tang",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
+    jobTitle: "高級營業經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
-    photo: "/team/vincy-lam.jpg",
+    photo: "/team/terence-tang.jpg",
+  },
+  {
+    slug: "sam-lee",
+    nameEn: "Sam Lee",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級營業經理", // TODO: confirm job title
+    branch: "海韻分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/sam-lee.jpg",
+  },
+  {
+    slug: "king-lau",
+    nameEn: "King Lau",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/king-lau.jpg",
+  },
+  {
+    slug: "ruby-lee",
+    nameEn: "Ruby Lee",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/ruby-lee.jpg",
+  },
+  {
+    slug: "mike-cheung",
+    nameEn: "Mike Cheung",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "海韻分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/mike-cheung.jpg",
+  },
+  {
+    slug: "joe-yuen",
+    nameEn: "Joe Yuen",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/joe-yuen.jpg",
+  },
+  {
+    slug: "mun-chu",
+    nameEn: "Mun Chu",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/mun-chu.jpg",
+  },
+  {
+    slug: "george-chau",
+    nameEn: "George Chau",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "海韻分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/george-chau.jpg",
+  },
+  {
+    slug: "mon-lau",
+    nameEn: "Mon Lau",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/mon-lau.jpg",
   },
   {
     slug: "wendy-lu",
     nameEn: "Wendy Lu",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
     photo: "/team/wendy-lu.jpg",
   },
   {
+    slug: "vincy-lam",
+    nameEn: "Vincy Lam",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "海韻分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/vincy-lam.jpg",
+  },
+  {
+    slug: "kelvin-lee",
+    nameEn: "Kelvin Lee",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/kelvin-lee.jpg",
+  },
+  {
+    slug: "raymond-tam",
+    nameEn: "Raymond Tam",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/raymond-tam.jpg",
+  },
+  {
+    slug: "eric-lai",
+    nameEn: "Eric Lai",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "海韻分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/eric-lai.jpg",
+  },
+  {
+    slug: "shadow-cheung",
+    nameEn: "Shadow Cheung",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/shadow-cheung.jpg",
+  },
+  {
+    slug: "terry-chan",
+    nameEn: "Terry Chan",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/terry-chan.jpg",
+  },
+  {
+    slug: "dickson-wong",
+    nameEn: "Dickson Wong",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "海韻分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/dickson-wong.jpg",
+  },
+  {
+    slug: "andy-hah",
+    nameEn: "Andy Han",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/andy-hah.jpg",
+  },
+  {
     slug: "winnie-cheung",
     nameEn: "Winnie Cheung",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: null, // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
     photo: "/team/winnie-cheung.jpg",
+  },
+  {
+    slug: "joanna-tang",
+    nameEn: "Joanna Tang",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "高級客戶經理", // TODO: confirm job title
+    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/joanna-tang.jpg",
+  },
+  {
+    slug: "eunice-yau",
+    nameEn: "Eunice Yau",
+    nameZh: null, // TODO: confirm Traditional Chinese name
+    jobTitle: "客戶經理", // TODO: confirm job title
+    branch: "麗都分行", // TODO: confirm branch assignment
+    phone: null, // TODO: confirm direct phone number
+    whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
+    licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
+    photo: "/team/eunice-yau.jpg",
   },
 ];
 

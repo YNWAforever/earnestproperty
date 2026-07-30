@@ -13,7 +13,7 @@ import { authClient } from "@/auth";
 import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
-import { pageSeo, SITE_NAME, SITE_OG_IMAGE } from "@/content/seo";
+import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR } from "@/content/seo";
 
 function NotFoundComponent() {
   return (
@@ -27,7 +27,7 @@ function NotFoundComponent() {
         <div className="mt-6">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
           >
             Go home
           </Link>
@@ -42,6 +42,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "theme-color", content: SITE_THEME_COLOR },
       { title: pageSeo.home.title },
       {
         name: "description",
