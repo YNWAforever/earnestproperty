@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { test } from "node:test";
 
-import {
-  CORE_ESTATES_PREVIEW_COUNT,
-  coreEstates,
-  estateFigure,
-} from "./core-estates.ts";
+import { CORE_ESTATES_PREVIEW_COUNT, coreEstates, estateFigure } from "./core-estates.ts";
 
 const CLIENT_ORDER = [
   "碧堤半島",

@@ -36,11 +36,7 @@ import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import heroImage from "@/assets/hero-front.jpg";
 import logoMark from "@/assets/logo-earnest-mark.png";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
-import {
-  coreEstates,
-  estateFigure,
-  CORE_ESTATES_PREVIEW_COUNT,
-} from "@/content/core-estates";
+import { coreEstates, estateFigure, CORE_ESTATES_PREVIEW_COUNT } from "@/content/core-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { resolveDisplayAgents } from "@/lib/agent-directory";
 import { toTelHref } from "@/lib/contact-links";
