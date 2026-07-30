@@ -329,7 +329,18 @@ export function SiteHeader() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2.5" onClick={() => setActiveMegaMenu(null)}>
-          <img src={logoMark} alt="" width={48} height={48} className="h-12 w-12 object-contain" />
+          {/* 公司logo要大啲 (docx p1): 40px -> 56px on mobile (+40%) and 60px from sm
+              up (+50%), the range the brief asked for, set separately per breakpoint.
+              width/height carry the largest rendered size so the box is reserved
+              before CSS lands — the header grows a little but nothing shifts. */}
+          <img
+            src={logoMark}
+            alt=""
+            width={60}
+            height={60}
+            fetchPriority="high"
+            className="h-14 w-14 object-contain sm:h-[60px] sm:w-[60px]"
+          />
           <div className="flex flex-col leading-none">
             <span className="text-base font-bold tracking-tight text-primary">晉誠地產</span>
             <span className="text-[10px] font-medium tracking-widest text-muted-foreground">
