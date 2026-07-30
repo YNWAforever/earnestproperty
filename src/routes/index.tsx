@@ -36,6 +36,11 @@ import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import heroImage from "@/assets/hero-front.jpg";
 import logoMark from "@/assets/logo-earnest-mark.png";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
+import {
+  coreEstates,
+  estateFigure,
+  CORE_ESTATES_PREVIEW_COUNT,
+} from "@/content/core-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { resolveDisplayAgents } from "@/lib/agent-directory";
 import { toTelHref } from "@/lib/contact-links";
@@ -273,51 +278,7 @@ function HomePage() {
           title="Sham Tseng Signature Estates"
           desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉"
         />
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {estates.map((estate: EstateSummary) => {
-            const listingCount = counts[estate.slug] ?? 0;
-            return (
-              <Link
-                key={estate.slug}
-                to="/estate/$slug"
-                params={{ slug: estate.slug }}
-                className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant"
-              >
-                <div
-                  className="relative h-48 overflow-hidden"
-                  style={{
-                    background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio,
-                  }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
-                  <div className="absolute bottom-4 left-5 text-primary-foreground">
-                    <h3 className="text-2xl font-bold">{estate.name_zh}</h3>
-                    <p className="text-xs opacity-80">
-                      深井 · {(estate.total_units ?? 0).toLocaleString()} 個單位
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 p-5">
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">平均實呎</p>
-                    <p className="text-base font-semibold text-primary">
-                      ${Number(estate.avg_saleable_psf ?? 0).toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">最新放盤</p>
-                    <p className="text-base font-semibold text-primary">{listingCount} 個</p>
-                  </div>
-                  <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
-                    <span>瀏覽屋苑詳情</span>
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        <CoreEstateGrid estates={estates} counts={counts} />
       </section>
 
       {/* WHY US */}
@@ -594,6 +555,121 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="mt-1 text-sm text-muted-foreground">{label}</div>
       {sub && <div className="text-xs text-muted-foreground/70">{sub}</div>}
     </div>
+  );
+}
+
+/**
+ * The client's ten approved estates (docx p13/p15), not just the five the DB
+ * knows about. Live figures are merged in by slug; the five the client added
+ * have none, so their cards show 「—」 and do not link — they have no page, and
+ * linking to an empty one is worse than not linking at all.
+ */
+function CoreEstateGrid({
+  estates,
+  counts,
+}: {
+  estates: EstateSummary[];
+  counts: Record<string, number>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const live = new Map(estates.map((estate) => [estate.slug, estate]));
+  const visible = expanded ? coreEstates : coreEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
+
+  return (
+    <>
+      <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {visible.map((estate, index) => {
+          const dbRow = live.get(estate.slug);
+          const units = dbRow?.total_units ?? estate.units;
+          const psf = dbRow ? Number(dbRow.avg_saleable_psf) : estate.avgPsf;
+          const listingCount = dbRow ? counts[estate.slug] : estate.listingCount;
+          const meta = [estate.district, `${estateFigure(units)} 個單位`]
+            .filter(Boolean)
+            .join(" · ");
+
+          const card = (
+            <>
+              <div
+                className="relative h-48 overflow-hidden"
+                style={
+                  estate.photo
+                    ? undefined
+                    : { background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio }
+                }
+              >
+                {estate.photo ? (
+                  <img
+                    src={estate.photo}
+                    alt={`${estate.name} 深井 放盤`}
+                    width={1600}
+                    height={900}
+                    // The first row is above the fold on desktop; the rest are not.
+                    loading={index < 4 ? "eager" : "lazy"}
+                    className="h-full w-full object-cover"
+                  />
+                ) : null}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
+                <div className="absolute bottom-4 left-5 text-primary-foreground">
+                  <h3 className="text-2xl font-bold">{estate.name}</h3>
+                  <p className="text-xs opacity-80">{meta}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 p-5">
+                <div>
+                  <p className="text-[11px] text-muted-foreground">平均實呎</p>
+                  <p className="text-base font-semibold text-primary">
+                    {psf === null || psf === undefined || !Number.isFinite(psf)
+                      ? "—"
+                      : `$${estateFigure(psf)}`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-muted-foreground">最新放盤</p>
+                  <p className="text-base font-semibold text-primary">
+                    {listingCount === null || listingCount === undefined
+                      ? "—"
+                      : `${listingCount} 個`}
+                  </p>
+                </div>
+                {estate.hasPage ? (
+                  <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
+                    <span>瀏覽屋苑詳情</span>
+                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </div>
+                ) : null}
+              </div>
+            </>
+          );
+
+          const shell =
+            "group relative overflow-hidden rounded-2xl border border-border bg-card shadow-card";
+
+          return estate.hasPage ? (
+            <Link
+              key={estate.slug}
+              to="/estate/$slug"
+              params={{ slug: estate.slug }}
+              className={`${shell} transition-all hover:-translate-y-1 hover:shadow-elegant`}
+            >
+              {card}
+            </Link>
+          ) : (
+            <div key={estate.slug} className={shell}>
+              {card}
+            </div>
+          );
+        })}
+      </div>
+
+      {coreEstates.length > CORE_ESTATES_PREVIEW_COUNT && !expanded ? (
+        <div className="mt-8 flex justify-center">
+          <Button variant="outline" onClick={() => setExpanded(true)}>
+            查看更多屋苑
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
 }
 
