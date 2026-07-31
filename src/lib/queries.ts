@@ -18,6 +18,7 @@ import {
   searchNeonListings,
 } from "@/lib/neon/public-data";
 import type { NeonPropertyRow } from "@/lib/neon/public-data.types";
+import { isWithinCorridorRegion } from "@/content/castle-peak-road";
 
 const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
   bellagio: "belvedere-garden",
@@ -48,6 +49,7 @@ function withCanonicalSlug<T extends { slug?: string }>(estate: T, requestedSlug
 export type EstateSummary = {
   slug: string;
   name_zh: string;
+  district_slug: string | null;
   total_units: number | null;
   avg_saleable_psf: number | null;
   hero_image: string | null;
@@ -58,6 +60,8 @@ export type FeaturedProperty = {
   listing_no: string;
   title_zh: string;
   deal_type: string;
+  district_slug: string;
+  address: string | null;
   price: number | null;
   rent: number | null;
   saleable_area: number | null;
@@ -65,7 +69,7 @@ export type FeaturedProperty = {
   bathrooms: number | null;
   features: string[] | null;
   images: string[] | null;
-  estates: { name_zh: string; slug: string } | null;
+  estates: { name_zh: string; slug: string; district_slug: string } | null;
 };
 
 export type FaqItem = { question: string; answer: string };
@@ -76,7 +80,15 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
 
 export async function fetchEstatesByDistrict(districtSlug: string): Promise<EstateSummary[]> {
   const rows = await fetchNeonEstates({ data: { districtSlug } });
-  return (rows as EstateSummary[]).map((estate) => withCanonicalSlug(estate));
+  return (rows as EstateSummary[])
+    .map((estate) => withCanonicalSlug(estate))
+    .filter((estate) =>
+      isWithinCorridorRegion({
+        districtSlug: estate.district_slug,
+        estateSlug: estate.slug,
+        text: [estate.name_zh],
+      }),
+    );
 }
 
 export async function fetchEstateBySlug(slug: string) {
@@ -105,8 +117,27 @@ export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
   return fallback ? fetchFaqsByScope(`estate:${fallback}`) : rows;
 }
 
+const FEATURED_DISPLAY_LIMIT = 6;
+// The featured query carries no region predicate and the listing API is out of
+// scope to change, so the filter lives here in the consumer. Over-fetch so the
+// homepage still fills six cards after out-of-corridor rows are dropped.
+const FEATURED_FETCH_LIMIT = 24;
+
 export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
-  return (await fetchNeonFeaturedProperties({ data: { limit: 6 } })) as FeaturedProperty[];
+  const rows = (await fetchNeonFeaturedProperties({
+    data: { limit: FEATURED_FETCH_LIMIT },
+  })) as FeaturedProperty[];
+
+  return rows
+    .filter((row) =>
+      isWithinCorridorRegion({
+        districtSlug: row.district_slug,
+        estateSlug: row.estates?.slug,
+        estateDistrictSlug: row.estates?.district_slug,
+        text: [row.title_zh, row.address, row.estates?.name_zh],
+      }),
+    )
+    .slice(0, FEATURED_DISPLAY_LIMIT);
 }
 
 export type DistrictTransaction = {

@@ -147,15 +147,21 @@ test("public profile projection and routes exclude auth and role fields", () => 
   assert.doesNotMatch(publicRoutes, sensitive);
 });
 
-test("public cards provide stable branch and general contact fallbacks", () => {
+test("branch is never defaulted, but contact details still fall back", () => {
   for (const file of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
     const source = readExisting(file);
     assert.match(source, /SITE_BRANCHES/);
     assert.match(source, /DEFAULT_AGENT_BRANCH/);
-    // The list route maps rows through resolveDisplayAgents and names the
-    // receiver `agent`; the detail route reads the raw `profile`. Either way the
-    // branch and phone must fall back to the default branch.
-    assert.match(source, /(?:profile|agent)\.branch\s*\?\?/);
+
+    // This assertion is inverted from what it used to require. Defaulting a missing
+    // branch to SITE_BRANCHES[0] printed 麗都分行 on the 15 agents based at 海韻 or
+    // 青山公路豪景 — a confident wrong answer about named real people. A blank is the
+    // correct rendering, and 董事 has no branch at all.
+    assert.doesNotMatch(source, /(?:profile|agent)\.branch\s*\?\?/);
+    assert.match(source, /\{branch \? </, `${file} must render branch conditionally`);
+
+    // Phone is different: routing an enquiry to the main line is a useful fallback,
+    // not a false claim, so it keeps its default.
     assert.match(source, /(?:profile|agent)\.phone\s*\?\?/);
   }
 });

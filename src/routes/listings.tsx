@@ -53,12 +53,12 @@ export const Route = createFileRoute("/listings")({
       { title: "搜尋放盤｜深井買樓租樓 — 晉誠地產" },
       {
         name: "description",
-        content: "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢堅盤源。",
+        content: "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢全部真盤。",
       },
       { property: "og:title", content: "搜尋放盤｜晉誠地產" },
       {
         property: "og:description",
-        content: "深井區堅盤源篩選，按價錢、房數、屋苑搜尋。",
+        content: "深井區全部真盤篩選，按價錢、房數、屋苑搜尋。",
       },
     ],
   }),

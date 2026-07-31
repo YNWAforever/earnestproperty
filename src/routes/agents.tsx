@@ -64,7 +64,10 @@ function AgentDirectoryHeader() {
 
 function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
   const name = agent.nameZh || agent.nameEn || "晉誠地產代理";
-  const branch = agent.branch ?? DEFAULT_AGENT_BRANCH.name;
+  // No fallback: this used to default to SITE_BRANCHES[0] (麗都分行), which printed a
+  // real branch name on agents who work elsewhere. A missing branch now renders
+  // nothing — 董事 legitimately has none, and a blank beats a confident wrong answer.
+  const branch = agent.branch;
   const phone = agent.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
   const whatsapp = agent.whatsapp ?? agent.phone ?? SITE_CONTACT.whatsappPhone;
   const phoneHref = toTelHref(phone);
@@ -97,7 +100,7 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
               <p className="mt-1 text-sm text-muted-foreground">{agent.nameEn}</p>
             ) : null}
           </div>
-          <span className="text-sm text-muted-foreground">{branch}</span>
+          {branch ? <span className="text-sm text-muted-foreground">{branch}</span> : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {agent.jobTitle ? <span>{agent.jobTitle}</span> : null}

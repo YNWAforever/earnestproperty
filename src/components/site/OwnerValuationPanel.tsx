@@ -22,7 +22,7 @@ export function OwnerValuationPanel({
         </div>
         <div className="rounded-lg border bg-background p-5">
           <div className="flex items-start gap-3">
-            <ClipboardCheck className="mt-1 h-5 w-5 text-gold" />
+            <ClipboardCheck className="mt-1 h-5 w-5 text-primary" />
             <div>
               <p className="font-semibold text-primary">WhatsApp-first，不用填長表格</p>
               <p className="mt-1 text-sm text-muted-foreground">

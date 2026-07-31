@@ -21,9 +21,9 @@ export const Route = createFileRoute("/contact")({
                 src={branch.photo}
                 alt={`${branch.name}舖面`}
                 loading="lazy"
-                width={640}
-                height={480}
-                className="h-40 w-full object-cover"
+                width={branch.photoWidth}
+                height={branch.photoHeight}
+                className="h-64 w-full object-cover sm:h-72"
               />
             ) : null}
             <div className="p-5">

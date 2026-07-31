@@ -7,10 +7,15 @@
 
 /*
  * Earnest Property 晉誠地產 — Design System
- * Brand: Company Green (sampled from the shop signage / logo), Gold accent.
- * All colors in oklch. Use semantic tokens only.
+ * Brand: client-approved forest green #1F7A4D, which replaces the olive/khaki
+ * scale previously sampled from the shop signage. Every neutral and chart token
+ * is re-derived onto the same hue so the palette reads as one family.
+ * All colors in oklch; the approved hex sits beside each value below so the
+ * source of truth stays traceable. Use semantic tokens only.
  * `--coral` is kept only for backward compatibility with existing className
  * usage and now resolves to the brand green — new code should use `--primary`.
+ * The gold accent is retired: `--brand-bright` replaced it and carries the
+ * on-dark step of the green scale (`text-gold` → `text-brand-bright`).
  */
 
 @theme inline {
@@ -33,14 +38,14 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
-  --color-gold: var(--gold);
-  --color-gold-foreground: var(--gold-foreground);
+  --color-brand-bright: var(--brand-bright);
   --color-coral: var(--coral);
   --color-coral-foreground: var(--coral-foreground);
   --color-destructive: var(--destructive);
@@ -61,27 +66,28 @@
 :root {
   --radius: 0.5rem;
 
-  /* Brand palette — sampled from 公司LOGO (shop signage / logo artwork)
-     #6B7A16 brand green (accessible, 4.75:1 on white)  -> oklch(0.549 0.120 118.3)
-     #556310 brand green, darker (hover/active)         -> oklch(0.472 0.104 119.3)
-     #41500C brand green, deepest (footer/headings)     -> oklch(0.404 0.091 121.8)
-     #CADB2A signature lime (logo/signage, fills only)  -> oklch(0.850 0.183 115.4)
-     #F4F7DD lime tint (light chips/badges)             -> oklch(0.967 0.034 112.4)
-     #C9A96E gold sand (logo wordmark, accent)          -> oklch(0.74 0.09 80)
-     #FBFBF8 warm off-white bg                          -> oklch(0.985 0.003 90)
+  /* Brand palette — client-approved forest green (2026-07-27 revision)
+     #1F7A4D brand green (5.32:1 on white)              -> oklch(0.515 0.110 156.8)
+     #155C39 brand green, deep (hover/active)           -> oklch(0.422 0.090 156.9)
+     #0E3D26 brand green, ink (footer/headings)         -> oklch(0.322 0.065 157.8)
+     #E8F4EE brand green tint (light chips/badges)      -> oklch(0.957 0.015 164.7)
+     #76E9A9 brand green, bright (dark surfaces only)   -> oklch(0.850 0.140 157.0)
+     #F8FBF9 cool off-white bg                          -> oklch(0.985 0.003 157)
      #2B2B2B ink text                                   -> oklch(0.27 0 0)
-     #E3E3D6 warm-neutral border                        -> oklch(0.912 0.017 106.7) */
+     #D9E6DD cool-neutral border                        -> oklch(0.912 0.017 157) */
 
   /* Reusable brand aliases (see redesign brief) */
-  --brand-primary: oklch(0.549 0.12 118.3);
-  --brand-primary-dark: oklch(0.472 0.104 119.3);
-  --brand-primary-deep: oklch(0.404 0.091 121.8);
-  --brand-primary-light: oklch(0.967 0.034 112.4);
-  --brand-lime: oklch(0.85 0.183 115.4);
-  --brand-accent: oklch(0.74 0.09 80);
-  --surface: oklch(0.985 0.003 90);
+  --brand-primary: oklch(0.515 0.11 156.8);
+  --brand-primary-dark: oklch(0.422 0.09 156.9);
+  --brand-primary-deep: oklch(0.322 0.065 157.8);
+  --brand-primary-light: oklch(0.957 0.015 164.7);
+  /* On-dark step of the same scale. --brand-primary measures ~1.4:1 over the
+     hero scrim and the dark footer, so those surfaces need a light green rather
+     than the primary. Replaces the retired --brand-lime and --brand-accent. */
+  --brand-primary-bright: oklch(0.85 0.14 157);
+  --surface: oklch(0.985 0.003 157);
   --text-primary: oklch(0.27 0 0);
-  --text-secondary: oklch(0.535 0.017 107);
+  --text-secondary: oklch(0.535 0.017 157);
 
   --background: var(--surface);
   --foreground: var(--text-primary);
@@ -94,65 +100,70 @@
 
   --primary: var(--brand-primary);
   --primary-foreground: var(--surface);
+  /* Solid darken on hover: alpha-mixing --primary toward the page background
+     lands at 4.22:1 for `bg-primary/90`, under the 4.5:1 AA floor. */
+  --primary-hover: var(--brand-primary-dark);
 
-  --secondary: oklch(0.95 0.025 118);
+  --secondary: oklch(0.95 0.025 157);
   --secondary-foreground: var(--brand-primary-dark);
 
-  --muted: oklch(0.96 0.008 100);
+  --muted: oklch(0.96 0.008 157);
   --muted-foreground: var(--text-secondary);
 
   --accent: var(--brand-primary-light);
   --accent-foreground: var(--brand-primary-deep);
 
-  --gold: var(--brand-accent);
-  --gold-foreground: oklch(0.27 0 0);
+  /* Retired gold accent — now the on-dark step of the brand green, see file
+     header note. Only legible on dark surfaces (footer, hero scrim), and every
+     consumer sits on one, so unlike --gold it needs no .dark override: the
+     surface underneath it is dark in both themes. */
+  --brand-bright: var(--brand-primary-bright);
 
   /* Retired CTA colour — now resolves to brand green, see file header note. */
   --coral: var(--brand-primary);
   --coral-foreground: var(--surface);
 
   --destructive: oklch(0.6 0.22 27);
-  --destructive-foreground: oklch(0.985 0.003 90);
+  --destructive-foreground: oklch(0.985 0.003 157);
 
-  --border: oklch(0.912 0.017 106.7);
-  --input: oklch(0.912 0.017 106.7);
+  --border: oklch(0.912 0.017 157);
+  --input: oklch(0.912 0.017 157);
   --ring: var(--brand-primary);
 
   --chart-1: var(--brand-primary);
-  --chart-2: var(--brand-accent);
+  --chart-2: var(--brand-primary-bright);
   --chart-3: var(--brand-primary-deep);
   --chart-4: oklch(0.595 0.066 182.4);
   --chart-5: oklch(0.6 0.06 60);
 }
 
 .dark {
-  --surface: oklch(0.17 0.02 120);
-  --text-primary: oklch(0.97 0.01 100);
-  --text-secondary: oklch(0.7 0.02 110);
+  --surface: oklch(0.17 0.02 157);
+  --text-primary: oklch(0.97 0.01 157);
+  --text-secondary: oklch(0.7 0.02 157);
 
   --background: var(--surface);
   --foreground: var(--text-primary);
-  --card: oklch(0.21 0.03 120);
+  --card: oklch(0.21 0.03 157);
   --card-foreground: var(--text-primary);
-  --popover: oklch(0.21 0.03 120);
+  --popover: oklch(0.21 0.03 157);
   --popover-foreground: var(--text-primary);
-  --primary: var(--brand-accent);
+  --primary: var(--brand-primary-bright);
   --primary-foreground: var(--surface);
-  --secondary: oklch(0.28 0.04 120);
+  --primary-hover: oklch(0.78 0.13 157);
+  --secondary: oklch(0.28 0.04 157);
   --secondary-foreground: var(--text-primary);
-  --muted: oklch(0.28 0.04 120);
+  --muted: oklch(0.28 0.04 157);
   --muted-foreground: var(--text-secondary);
-  --accent: oklch(0.28 0.04 120);
+  --accent: oklch(0.28 0.04 157);
   --accent-foreground: var(--text-primary);
-  --gold: oklch(0.78 0.1 80);
-  --gold-foreground: oklch(0.18 0.02 120);
   --coral: var(--primary);
   --coral-foreground: var(--surface);
   --destructive: oklch(0.65 0.2 27);
-  --destructive-foreground: oklch(0.985 0.003 90);
+  --destructive-foreground: oklch(0.985 0.003 157);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.78 0.1 80);
+  --ring: var(--brand-primary-bright);
 }
 
 @layer base {

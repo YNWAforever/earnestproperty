@@ -74,7 +74,7 @@ test("homepage and navigation include Ting Kau content entry points", () => {
     "屋苑開箱",
     "成交快訊",
     "深井 青山公路 汀九買樓租樓",
-    "準備搵深井 青山公路 汀九筍盤",
+    "準備搵深井 青山公路筍盤",
     "深井 青山公路 汀九我哋比你更熟",
     "/district/ting-kau",
     "/videos",
@@ -85,6 +85,49 @@ test("homepage and navigation include Ting Kau content entry points", () => {
   }
 });
 
+// 精選筍盤置頂 (client p2). This regressed once already because the copy edits
+// landed and the move did not, and nothing failed — so the order is pinned here.
+test("homepage puts 精選筍盤 above 深井核心屋苑", () => {
+  const source = readFileSync("src/routes/index.tsx", "utf8");
+
+  const featured = source.indexOf('eyebrow="精選筍盤"');
+  const estates = source.indexOf('eyebrow="深井核心屋苑"');
+  const whyUs = source.indexOf('eyebrow="為何選晉誠"');
+
+  assert.notEqual(featured, -1, "homepage should still have a 精選筍盤 section");
+  assert.notEqual(estates, -1, "homepage should still have a 深井核心屋苑 section");
+  assert.ok(featured < estates, "精選筍盤 must render before 深井核心屋苑");
+  assert.ok(estates < whyUs, "深井核心屋苑 must stay above 為何選晉誠");
+
+  // DOM order is only visual order while nothing reorders with CSS.
+  assert.doesNotMatch(source, /\border-\d\b|flex-col-reverse|flex-row-reverse/);
+
+  // The anchor and the two WhatsApp attribution strings carry no other coverage
+  // and are easy to lose when sections move.
+  assert.match(source, /id="owner-valuation"/);
+  assert.match(source, /source: "homepage-owner-valuation"/);
+  assert.match(source, /source: "homepage-final-cta"/);
+});
+
+test("homepage share card uses an absolute image and the shared meta registry", () => {
+  const source = readFileSync("src/routes/index.tsx", "utf8");
+  const seo = readFileSync("src/content/seo.ts", "utf8");
+
+  // og:image must be absolute; the Vite import alone is a hashed relative path.
+  assert.match(source, /const HERO_OG_IMAGE = new URL\(heroImage, SITE_URL\)\.href/);
+  assert.match(source, /property: "og:image", content: HERO_OG_IMAGE/);
+  assert.match(source, /name: "twitter:image", content: HERO_OG_IMAGE/);
+  assert.doesNotMatch(source, /"og:image", content: heroImage/);
+
+  // The description used to be duplicated here with a divergent tail, so the
+  // homepage and the sitemap advertised two different strings.
+  assert.match(source, /content: pageSeo\.home\.description/);
+  assert.match(seo, /home: \{/);
+  const homeDescriptions = [...seo.matchAll(/持牌代理 C-018613。/g)];
+  assert.ok(homeDescriptions.length > 0, "registry keeps the canonical licence tail");
+  assert.equal(source.includes("Licence C-018613。"), false);
+});
+
 test("header exposes approved mega menu structure and controls", () => {
   const source = readFileSync("src/components/site/SiteHeader.tsx", "utf8");
 
@@ -92,9 +135,9 @@ test("header exposes approved mega menu structure and controls", () => {
     "地區與屋苑",
     "買租服務",
     "市場資訊",
-    "深井買樓租樓",
-    "汀九地區頁",
-    "青山公路",
+    "深井區買樓租樓",
+    "青山公路區買樓租樓",
+    "汀九豪宅區買樓租樓",
     "屋苑入口",
     "查看全部放盤",
     "買樓",
@@ -345,8 +388,15 @@ test("valuation whatsapp intent includes search summary context", () => {
   assert.match(valuationMessage, /contextLine\("搜尋條件", context\.searchSummary\)/);
 });
 
+// The banned phrases are spelled with char codes, not literals: a plain literal
+// here would itself show up in the repo-wide grep this guard exists to keep clean.
 test("source files avoid the older disallowed listing wording", () => {
-  const forbidden = String.fromCharCode(30495, 30436, 28304);
+  const forbidden = [
+    String.fromCharCode(30495, 30436, 28304),
+    String.fromCharCode(22533, 30436, 28304),
+    String.fromCharCode(21313, 22810, 24180),
+  ];
+  const required = String.fromCharCode(20840, 37096, 30495, 30436);
   const files = [
     "src/config/site.ts",
     "src/content/seo.ts",
@@ -357,5 +407,8 @@ test("source files avoid the older disallowed listing wording", () => {
     "src/components/site/SiteFooter.tsx",
   ];
   const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
-  assert.equal(combined.includes(forbidden), false);
+  for (const phrase of forbidden) {
+    assert.equal(combined.includes(phrase), false, `${phrase} is no longer approved copy`);
+  }
+  assert.equal(combined.includes(required), true, `${required} should be the listing wording`);
 });

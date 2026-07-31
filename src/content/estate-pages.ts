@@ -152,7 +152,7 @@ export const estatePageContent = {
       },
     ],
     relatedLinks: [
-      { href: "/castle-peak-road/tsing-lung-tau", label: "青龍頭生活圈" },
+      { href: "/castle-peak-road/sham-tseng", label: "深井 / 青山公路生活圈" },
       { href: "/estate/sea-crest-villa", label: "比較浪翠園" },
       { href: "/listings?deal=all&estate=hong-kong-garden&page=1", label: "豪景花園放盤" },
     ],
@@ -234,6 +234,33 @@ export const estatePageContent = {
     ],
   },
 } satisfies Record<string, EstatePageContent>;
+
+/**
+ * 加返屋苑相片 (docx p6) — asset side.
+ *
+ * The client supplied four photos in `docs/client-feedback/屋苑相/`; they are
+ * committed under `public/estates/` normalised to lowercase `.jpg` (two arrived
+ * as `.JPG` and one as `.jpeg`, which 404 on Vercel's case-sensitive filesystem)
+ * and downscaled from 4032px originals, because this stack has no image
+ * optimiser. Registered here rather than in the card component so the photo can
+ * come from one place once the cards start rendering it.
+ */
+export const estatePhotos: Record<string, string | null> = {
+  bellagio: "/estates/bellagio.jpg",
+  "rhine-garden": "/estates/rhine-garden.jpg",
+  "lido-garden": "/estates/lido-garden.jpg",
+  // TODO(client): the supplied 浪翠園 photo is 600×357 and captioned 三期 only —
+  // too small for a card at 2× DPR. Awaiting a higher-resolution estate-level shot.
+  "sea-crest-villa": "/estates/sea-crest-villa.jpg",
+  // TODO(client): 豪景花園 photo not supplied. Do NOT substitute
+  // public/branches/hong-kong-garden.jpg — that is the 青山公路豪景分行 shopfront
+  // at 青龍頭村11號地下, not the estate.
+  "hong-kong-garden": null,
+};
+
+export function getEstatePhoto(slug: string): string | null {
+  return estatePhotos[slug] ?? null;
+}
 
 export function getEstatePageContent(slug: string): EstatePageContent | null {
   if (!Object.prototype.hasOwnProperty.call(estatePageContent, slug)) return null;

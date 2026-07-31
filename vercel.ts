@@ -23,14 +23,23 @@ const detailRedirects = importedRedirects.map((redirect) =>
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
+  // Vercel Hobby allows one run per day per cron, so anything more frequent fails
+  // the deploy outright. These three are the once-a-day floor; the every-5-and-10
+  // minute cadence the job queue actually needs comes from a Cloudflare Worker
+  // (workers/cron/ — Cron Triggers are on Cloudflare's free plan).
+  //
+  // Keeping the daily entries alongside the Worker is deliberate: if the Worker is
+  // ever unconfigured or down, queued jobs still drain within 24h instead of
+  // sitting forever. Both endpoints claim jobs under a lease, so two schedulers
+  // calling them is safe.
   crons: [
     { path: "/api/mls-sync", schedule: "0 20 * * *" },
     // runClaimedJobs is only reachable from these two routes, so without them
     // nothing drains ops_jobs: queued WhatsApp campaigns and AI knowledge
     // rebuilds return 202 and then sit forever. Both authenticate with
     // Bearer ${CRON_SECRET}.
-    { path: "/api/admin/control-plane/worker", schedule: "*/5 * * * *" },
-    { path: "/api/admin/jobs/send-queue", schedule: "*/10 * * * *" },
+    { path: "/api/admin/control-plane/worker", schedule: "10 20 * * *" },
+    { path: "/api/admin/jobs/send-queue", schedule: "20 20 * * *" },
   ],
   redirects: [
     ...detailRedirects,
@@ -39,6 +48,14 @@ export const config: VercelConfig = {
     }),
     redirectEntry("/district/ting-kau", "/castle-peak-road/ting-kau", true),
     redirectEntry("/district/ting-kau/", "/castle-peak-road/ting-kau", true),
+    // Five lifestyle zones collapsed to three. Both retired URLs are already
+    // indexed, and /castle-peak-road/$segment throws notFound() on an unknown
+    // slug, so without these 301s they become hard 404s. Successor zones:
+    // 油柑頭 → 汀九, 青龍頭 → 深井 / 青山公路.
+    redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau/", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/castle-peak-road/tsing-lung-tau", "/castle-peak-road/sham-tseng", true),
+    redirectEntry("/castle-peak-road/tsing-lung-tau/", "/castle-peak-road/sham-tseng", true),
     redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
     redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
     redirectEntry("/property-detail/:oldId.html", "/listings", true),
