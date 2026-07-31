@@ -18,7 +18,7 @@ export const Route = createFileRoute("/agents")({
       { title: "專業代理｜晉誠地產" },
       {
         name: "description",
-        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及荃灣西放盤。",
+        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
       },
     ],
   }),
@@ -55,7 +55,7 @@ function AgentDirectoryHeader() {
         <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
         <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-          持牌代理團隊熟悉深井、青山公路及荃灣西市場，為買家、租客及業主提供直接、可靠的地產服務。
+          持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。
         </p>
       </div>
     </section>
@@ -68,7 +68,13 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
   // real branch name on agents who work elsewhere. A missing branch now renders
   // nothing — 董事 legitimately has none, and a blank beats a confident wrong answer.
   const branch = agent.branch;
-  const phone = agent.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
+  // Route an enquiry to the agent's OWN branch. This used to fall back to
+  // SITE_BRANCHES[0] for everyone, so a 海韻 agent's card told the visitor their
+  // call would be handled by 麗都 — true of the phone number dialled, but not the
+  // office the agent actually works in.
+  const homeBranch =
+    SITE_BRANCHES.find((entry) => entry.name === agent.branch) ?? DEFAULT_AGENT_BRANCH;
+  const phone = agent.phone ?? (homeBranch.phone || SITE_CONTACT.phoneTel);
   const whatsapp = agent.whatsapp ?? agent.phone ?? SITE_CONTACT.whatsappPhone;
   const phoneHref = toTelHref(phone);
   const whatsappHref = toWhatsAppHref(whatsapp);
@@ -111,7 +117,7 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
         ) : null}
         {usesGeneralContact ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            代理未有提供直接聯絡方式，電話查詢將由{DEFAULT_AGENT_BRANCH.name}跟進。
+            代理未有提供直接聯絡方式，電話查詢將由{homeBranch.name}跟進。
           </p>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
