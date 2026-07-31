@@ -231,3 +231,17 @@ test("admin navigation includes agent management", () => {
   assert.match(shell, /經紀管理/);
   assert.match(shell, /to: "\/admin\/agents"/);
 });
+
+// PHASE 4 of the client revision supplied this description verbatim. It was applied
+// to the homepage team section but not to /agents, which kept naming 荃灣西 — a
+// district the client pruned from scope in PHASE 6. The two pages disagreed about
+// where the agency operates.
+test("the agents page uses the client's approved team description", () => {
+  const source = readExisting("src/routes/agents.tsx");
+
+  assert.match(
+    source,
+    /持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。/,
+  );
+  assert.doesNotMatch(source, /荃灣西/);
+});

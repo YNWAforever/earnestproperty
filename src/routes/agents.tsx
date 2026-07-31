@@ -18,7 +18,7 @@ export const Route = createFileRoute("/agents")({
       { title: "專業代理｜晉誠地產" },
       {
         name: "description",
-        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及荃灣西放盤。",
+        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
       },
     ],
   }),
@@ -55,7 +55,7 @@ function AgentDirectoryHeader() {
         <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
         <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
         <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-          持牌代理團隊熟悉深井、青山公路及荃灣西市場，為買家、租客及業主提供直接、可靠的地產服務。
+          持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。
         </p>
       </div>
     </section>
