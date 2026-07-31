@@ -160,9 +160,19 @@ test("branch is never defaulted, but contact details still fall back", () => {
     assert.doesNotMatch(source, /(?:profile|agent)\.branch\s*\?\?/);
     assert.match(source, /\{branch \? </, `${file} must render branch conditionally`);
 
-    // Phone is different: routing an enquiry to the main line is a useful fallback,
+    // Phone is different: routing an enquiry to a real line is a useful fallback,
     // not a false claim, so it keeps its default.
     assert.match(source, /(?:profile|agent)\.phone\s*\?\?/);
+  }
+
+  // ...but the fallback must point at the agent's OWN branch. It used to name
+  // SITE_BRANCHES[0] for everyone, so a 海韻 agent's card said their call would be
+  // handled by 麗都 — with no phone numbers seeded yet, that note renders on all 23.
+  {
+    const source = readExisting("src/routes/agents.tsx");
+    assert.match(source, /SITE_BRANCHES\.find\(\(entry\) => entry\.name === agent\.branch\)/);
+    assert.match(source, /電話查詢將由\{homeBranch\.name\}跟進/);
+    assert.doesNotMatch(source, /電話查詢將由\{DEFAULT_AGENT_BRANCH\.name\}跟進/);
   }
 });
 

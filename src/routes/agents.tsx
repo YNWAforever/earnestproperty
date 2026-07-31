@@ -68,7 +68,13 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
   // real branch name on agents who work elsewhere. A missing branch now renders
   // nothing — 董事 legitimately has none, and a blank beats a confident wrong answer.
   const branch = agent.branch;
-  const phone = agent.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
+  // Route an enquiry to the agent's OWN branch. This used to fall back to
+  // SITE_BRANCHES[0] for everyone, so a 海韻 agent's card told the visitor their
+  // call would be handled by 麗都 — true of the phone number dialled, but not the
+  // office the agent actually works in.
+  const homeBranch =
+    SITE_BRANCHES.find((entry) => entry.name === agent.branch) ?? DEFAULT_AGENT_BRANCH;
+  const phone = agent.phone ?? (homeBranch.phone || SITE_CONTACT.phoneTel);
   const whatsapp = agent.whatsapp ?? agent.phone ?? SITE_CONTACT.whatsappPhone;
   const phoneHref = toTelHref(phone);
   const whatsappHref = toWhatsAppHref(whatsapp);
@@ -111,7 +117,7 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
         ) : null}
         {usesGeneralContact ? (
           <p className="mt-3 text-xs text-muted-foreground">
-            代理未有提供直接聯絡方式，電話查詢將由{DEFAULT_AGENT_BRANCH.name}跟進。
+            代理未有提供直接聯絡方式，電話查詢將由{homeBranch.name}跟進。
           </p>
         ) : null}
         <div className="mt-5 flex flex-wrap gap-2">
