@@ -59,11 +59,60 @@ function fromPlaceholder(member: TeamMemberPlaceholder): DisplayAgent {
  * manifest — so the directory and homepage preview never render empty while
  * real profiles are still being entered in the admin panel.
  */
+/** A non-null database value wins; null falls through to the static entry. */
+function preferLive(live: DisplayAgent, fallback: DisplayAgent): DisplayAgent {
+  const merged = { ...fallback };
+  for (const key of Object.keys(live) as (keyof DisplayAgent)[]) {
+    const value = live[key];
+    if (value !== null && value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  return merged;
+}
+
 export function resolveDisplayAgents(
   dbProfiles: NeonPublicAgentProfile[],
   limit?: number,
 ): DisplayAgent[] {
-  const source =
-    dbProfiles.length > 0 ? dbProfiles.map(fromDbProfile) : SITE_TEAM.map(fromPlaceholder);
+  // This used to pick one source wholesale: any published profile meant the static
+  // manifest was ignored entirely. With 23 agents in the manifest and 2 rows in the
+  // database, publishing a single agent in the admin panel would have dropped the
+  // public team page to one person. Merging per agent and per field means the
+  // rendered roster can never be shorter than the static one.
+  //
+  // Rows without a public_slug — the admin account, and a leftover test row — have
+  // no static counterpart to merge onto and are skipped rather than rendered as
+  // phantom agents.
+  const bySlug = new Map<string, NeonPublicAgentProfile>();
+  for (const profile of dbProfiles) {
+    if (profile.public_slug) bySlug.set(profile.public_slug, profile);
+  }
+
+  const ordered = SITE_TEAM.map((member, index) => {
+    const profile = bySlug.get(member.slug);
+    if (!profile) return { agent: fromPlaceholder(member), order: index };
+    return {
+      agent: preferLive(fromDbProfile(profile), fromPlaceholder(member)),
+      order: profile.display_order ?? index,
+    };
+  });
+
+  // An agent present only in the database still renders: a new hire must not need
+  // a code change to appear.
+  const extras = dbProfiles
+    .filter(
+      (profile) =>
+        profile.public_slug && !SITE_TEAM.some((member) => member.slug === profile.public_slug),
+    )
+    .map((profile, index) => ({
+      agent: fromDbProfile(profile),
+      order: profile.display_order ?? SITE_TEAM.length + index,
+    }));
+
+  const source = [...ordered, ...extras]
+    .sort((a, b) => a.order - b.order)
+    .map((entry) => entry.agent);
+
   return typeof limit === "number" ? source.slice(0, limit) : source;
 }
