@@ -148,10 +148,7 @@ test("public profile projection and routes exclude auth and role fields", () => 
 });
 
 test("branch is never defaulted in either agent route", () => {
-  // Task 5 extends this loop to src/routes/agents_.$slug.tsx. It is scoped to one
-  // file here so this task leaves the suite green -- the profile route still has
-  // DEFAULT_AGENT_BRANCH until Task 5 migrates it.
-  for (const file of ["src/routes/agents.tsx"]) {
+  for (const file of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
     const source = readExisting(file);
 
     // Defaulting a missing branch to SITE_BRANCHES[0] printed 麗都分行 on the 15

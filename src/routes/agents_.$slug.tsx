@@ -2,13 +2,11 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { SITE_NAME } from "@/content/seo";
 import { fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
-
-const DEFAULT_AGENT_BRANCH = SITE_BRANCHES[0];
 
 export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
@@ -37,14 +35,13 @@ export const Route = createFileRoute("/agents_/$slug")({
 function AgentProfilePage() {
   const { profile } = Route.useLoaderData();
   const name = profile.name_zh || profile.name_en || "晉誠地產代理";
-  // See agents.tsx: defaulting to SITE_BRANCHES[0] printed 麗都分行 on agents based
-  // elsewhere. A missing branch renders nothing rather than a wrong one.
+  // See agents.tsx: defaulting to the first configured branch printed 麗都分行 on
+  // agents based elsewhere. A missing branch renders nothing rather than a wrong one.
   const branch = profile.branch;
-  const phone = profile.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone);
-  const whatsapp = profile.whatsapp ?? profile.phone ?? SITE_CONTACT.whatsappPhone;
-  const phoneHref = toTelHref(phone);
-  const whatsappHref = toWhatsAppHref(whatsapp);
-  const usesGeneralContact = !profile.phone && !profile.whatsapp;
+  const contact = resolveAgentContact(profile);
+  const note = agentContactNote(contact);
+  const phoneHref = toTelHref(contact.phone);
+  const whatsappHref = toWhatsAppHref(contact.whatsapp);
 
   return (
     <main className="bg-background">
@@ -94,11 +91,7 @@ function AgentProfilePage() {
 
           <aside className="border-t pt-6 md:border-l md:border-t-0 md:pl-6 md:pt-0">
             <h2 className="text-base font-semibold">直接聯絡</h2>
-            {usesGeneralContact ? (
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                代理未有提供直接聯絡方式，查詢將由{DEFAULT_AGENT_BRANCH.name}跟進。
-              </p>
-            ) : null}
+            {note ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{note}</p> : null}
             <div className="mt-4 grid gap-2">
               {phoneHref ? (
                 <Button asChild variant="outline" className="w-full justify-start">
@@ -116,7 +109,7 @@ function AgentProfilePage() {
                   </a>
                 </Button>
               ) : null}
-              {usesGeneralContact ? (
+              {contact.whatsappIsFallback ? (
                 <Button asChild className="w-full justify-start">
                   <Link to="/contact">一般查詢</Link>
                 </Button>
