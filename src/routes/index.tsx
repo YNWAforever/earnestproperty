@@ -38,7 +38,6 @@ import logoMark from "@/assets/logo-earnest-mark.png";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import { coreEstates, estateFigure, CORE_ESTATES_PREVIEW_COUNT } from "@/content/core-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
-import { resolveDisplayAgents } from "@/lib/agent-directory";
 import { toTelHref } from "@/lib/contact-links";
 import { SITE_URL, SITE_LOGO_URL, pageSeo } from "@/content/seo";
 import {
@@ -72,7 +71,7 @@ export const Route = createFileRoute("/")({
       featured,
       faqs,
       counts: Object.fromEntries(counts),
-      agents: resolveDisplayAgents(agentProfiles, 6),
+      agents: agentProfiles.slice(0, 6),
     };
   },
   errorComponent: ({ error }) => (
@@ -324,13 +323,13 @@ function HomePage() {
 
           <div className="mt-8 grid gap-5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             {agents.map((agent) => {
-              const name = agent.nameZh || agent.nameEn || "晉誠地產代理";
+              const name = agent.name_zh || agent.name_en || "晉誠地產代理";
               return (
                 <div key={agent.id} className="text-center">
                   <div className="mx-auto aspect-square w-full overflow-hidden rounded-full bg-muted">
-                    {agent.photo ? (
+                    {agent.avatar_url ? (
                       <img
-                        src={agent.photo}
+                        src={agent.avatar_url}
                         alt={`${name} 個人相片`}
                         loading="lazy"
                         width={160}
@@ -340,8 +339,8 @@ function HomePage() {
                     ) : null}
                   </div>
                   <p className="mt-2 text-sm font-semibold">{name}</p>
-                  {agent.jobTitle ? (
-                    <p className="text-xs text-muted-foreground">{agent.jobTitle}</p>
+                  {agent.job_title ? (
+                    <p className="text-xs text-muted-foreground">{agent.job_title}</p>
                   ) : null}
                 </div>
               );
