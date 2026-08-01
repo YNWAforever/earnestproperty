@@ -34,7 +34,12 @@ export const agentProfileSchema = z
       .trim()
       .max(500)
       .refine(
-        (value) => value === "" || value.startsWith("/") || /^https?:\/\/\S+$/.test(value),
+        // `//host/x.jpg` is protocol-relative and loads from an arbitrary origin,
+        // so a leading `/` alone is not enough to keep this same-origin.
+        (value) =>
+          value === "" ||
+          (value.startsWith("/") && !value.startsWith("//")) ||
+          /^https?:\/\/\S+$/.test(value),
         "請輸入有效相片網址，或以 / 開頭的路徑",
       ),
     branch: optionalText(120),

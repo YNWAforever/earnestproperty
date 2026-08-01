@@ -1,4 +1,5 @@
 import { SITE_BRANCHES, SITE_CONTACT, type SiteBranch } from "@/config/site";
+import { normaliseWhatsapp } from "@/lib/staff/licence";
 
 export type AgentContact = {
   /** null when the agent has no branch, or when their branch matches no configured one. */
@@ -25,15 +26,21 @@ export function resolveAgentContact(profile: {
   whatsapp: string | null;
 }): AgentContact {
   const homeBranch = SITE_BRANCHES.find((entry) => entry.name === profile.branch) ?? null;
+  // Only a mobile number can receive WhatsApp. Both columns are free text in the
+  // admin form, and `phone` is promoted to WhatsApp when the agent has no
+  // WhatsApp of their own -- so without this check a branch DID typed into 電話
+  // renders a wa.me link that answers "not on WhatsApp", presented as the
+  // agent's own number with the disclosure suppressed.
+  const ownWhatsapp = normaliseWhatsapp(profile.whatsapp) ?? normaliseWhatsapp(profile.phone);
   return {
     homeBranch,
     // `||` not `??`: SITE_CONTACT.phoneTel is `import.meta.env.VITE_CONTACT_PHONE_TEL ?? ""`,
     // so it is an empty string when unset. `??` would pass "" through and produce a
     // `tel:+` href with no number behind it.
     phone: profile.phone || homeBranch?.phone || SITE_CONTACT.phoneTel || null,
-    whatsapp: profile.whatsapp || profile.phone || SITE_CONTACT.whatsappPhone || null,
+    whatsapp: ownWhatsapp || SITE_CONTACT.whatsappPhone || null,
     phoneIsFallback: !profile.phone,
-    whatsappIsFallback: !profile.whatsapp && !profile.phone,
+    whatsappIsFallback: !ownWhatsapp,
   };
 }
 

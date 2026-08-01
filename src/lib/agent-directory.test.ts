@@ -40,6 +40,23 @@ describe("resolveAgentContact", () => {
     expect(contact.whatsapp).toBe("91234567");
   });
 
+  test("a landline is never promoted to WhatsApp", () => {
+    // 26882883 is the 青山公路豪景分行 switchboard. Promoting it would render a
+    // wa.me link that answers "not on WhatsApp", shown as the agent's own number
+    // with the disclosure suppressed.
+    const contact = resolveAgentContact(contactInput({ phone: "26882883" }));
+    expect(contact.phone).toBe("26882883");
+    expect(contact.phoneIsFallback).toBe(false);
+    expect(contact.whatsappIsFallback).toBe(true);
+    expect(contact.whatsapp).not.toBe("26882883");
+  });
+
+  test("a landline typed straight into the WhatsApp field is rejected too", () => {
+    const contact = resolveAgentContact(contactInput({ whatsapp: "26886996" }));
+    expect(contact.whatsappIsFallback).toBe(true);
+    expect(contact.whatsapp).not.toBe("26886996");
+  });
+
   test("WhatsApp falls back to the agent's own phone and is not a fallback", () => {
     const contact = resolveAgentContact(contactInput({ phone: "91234567" }));
     expect(contact.whatsapp).toBe("91234567");

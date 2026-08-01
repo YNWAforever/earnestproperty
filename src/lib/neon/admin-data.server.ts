@@ -1138,16 +1138,28 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
          WHERE id=$5 RETURNING id`,
         [input.scope, input.question, input.answer, input.sort_order, input.id],
       )
-    : await queryRows(
-        `INSERT INTO faqs (scope, question, answer, sort_order)
+    : input.upsert
+      ? await queryRows(
+          `INSERT INTO faqs (scope, question, answer, sort_order)
          VALUES ($1,$2,$3,$4)
          ON CONFLICT (scope, question) DO UPDATE
            SET answer = EXCLUDED.answer
          RETURNING id, (xmax = 0) AS inserted`,
-        [input.scope, input.question, input.answer, input.sort_order],
-      );
+          [input.scope, input.question, input.answer, input.sort_order],
+        )
+      : // The single-FAQ form must not silently replace a different row's answer
+        // and report it as a create. DO NOTHING returns no row on conflict, which
+        // becomes a refusal below.
+        await queryRows(
+          `INSERT INTO faqs (scope, question, answer, sort_order)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (scope, question) DO NOTHING
+         RETURNING id, true AS inserted`,
+          [input.scope, input.question, input.answer, input.sort_order],
+        );
 
   if (input.id && !rows[0]) return { id: "", error: "Not found" };
+  if (!input.id && !rows[0]) return { id: "", error: "此範圍已有相同問題，請改用編輯。" };
   const id = stringOrEmpty(rows[0]?.id);
   // An upsert that resolved to an update is a faq.update, not a faq.create --
   // the audit trail should say what actually happened to the row.

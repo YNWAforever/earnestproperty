@@ -222,6 +222,11 @@ export type AdminFaqInput = {
   question: string;
   answer: string;
   sort_order: number;
+  /**
+   * Bulk import only. Without it, creating a question that already exists in the
+   * scope is refused rather than silently overwriting the existing row's answer.
+   */
+  upsert?: boolean;
 };
 
 export type AdminMediaAssetRow = {

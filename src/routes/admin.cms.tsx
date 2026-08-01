@@ -321,6 +321,9 @@ function AdminCms() {
               question: row.question,
               answer: row.answer,
               sort_order: index + 1,
+              // Bulk re-import of the same file is expected and must update in
+              // place. The single-FAQ form deliberately does not set this.
+              upsert: true,
             },
           }),
         );

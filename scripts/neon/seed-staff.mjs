@@ -108,22 +108,33 @@ for (const [index, member] of SITE_TEAM.entries()) {
 
 await sql.transaction(statements);
 
+// Scoped to roster slugs. Counting every published row would fail the moment an
+// admin unpublishes an agent or adds a 24th through the panel -- both of which
+// are supported, so neither is an error this script should report.
+const rosterSlugs = SITE_TEAM.map((member) => member.slug);
 const [counts] = await sql`
-  SELECT count(*) FILTER (WHERE active AND show_on_website)::int AS published,
+  SELECT count(*)::int AS roster_rows,
+         count(*) FILTER (WHERE active AND show_on_website)::int AS published,
          count(*) FILTER (WHERE active AND show_on_website AND branch IS NOT NULL)::int AS with_branch,
          count(*) FILTER (WHERE active AND show_on_website AND whatsapp IS NOT NULL)::int AS with_whatsapp
-  FROM staff_users`;
+  FROM staff_users WHERE public_slug = ANY(${rosterSlugs})`;
 
 console.log(
-  `published=${counts.published} with_branch=${counts.with_branch} with_whatsapp=${counts.with_whatsapp}`,
+  `roster_rows=${counts.roster_rows}/${SITE_TEAM.length} published=${counts.published} with_branch=${counts.with_branch} with_whatsapp=${counts.with_whatsapp}`,
 );
 if (rejected.length) console.log("rejected (left null):\n  " + rejected.join("\n  "));
 
-// active AND show_on_website is the predicate listPublicAgentProfiles uses, so
-// this counts what the public page will actually render.
-if (counts.published !== SITE_TEAM.length) {
+// A missing row means an upsert did not land -- that is a real failure. A roster
+// row that exists but is unpublished is an admin decision, so it is reported
+// rather than treated as an error.
+if (counts.roster_rows !== SITE_TEAM.length) {
   console.error(
-    `EXPECTED ${SITE_TEAM.length} published rows, got ${counts.published}. A different count means a row without a roster slug got published, or a roster row is inactive.`,
+    `EXPECTED ${SITE_TEAM.length} roster rows, got ${counts.roster_rows}. An upsert did not land.`,
   );
   process.exit(1);
+}
+if (counts.published !== SITE_TEAM.length) {
+  console.log(
+    `note: ${SITE_TEAM.length - counts.published} roster agent(s) are unpublished or inactive — leaving them alone.`,
+  );
 }

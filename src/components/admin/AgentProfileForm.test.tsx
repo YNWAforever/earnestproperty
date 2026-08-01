@@ -94,7 +94,7 @@ test("accepts the root-relative photo paths the seed script writes", () => {
 });
 
 test("rejects a photo value that is neither a path nor an http(s) URL", () => {
-  for (const input of ["javascript:alert(1)", "team/tommy-yiu.jpg", "ftp://x/a.jpg"]) {
+  for (const input of ["javascript:alert(1)", "team/tommy-yiu.jpg", "ftp://x/a.jpg", "//evil.example/x.jpg"]) {
     expect(avatarUrlSchema.safeParse(input).success).toBe(false);
   }
 });
