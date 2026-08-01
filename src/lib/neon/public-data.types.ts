@@ -39,7 +39,6 @@ export type NeonPublicAgentProfile = {
   avatar_url: string | null;
   branch: string | null;
   bio: string | null;
-  display_order: number | null;
 };
 
 export type NeonStaffProfile = NeonPublicAgentProfile;
