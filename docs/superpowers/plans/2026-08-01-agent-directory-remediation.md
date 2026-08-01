@@ -27,7 +27,7 @@ You will not have seen this codebase. Read these before starting:
 1. **`.ts`/`.tsx` tests run under `bun test`; `.mjs` tests run under `node --test`.** They are different runners with different assertion APIs, and `package.json` chains them with `&&`. There is no `npm test` script — use `npm run test:property-experience`.
 2. **Public SQL must never reference `s.public_slug`, `s.job_title`, `s.show_on_website` or `s.display_order` directly.** A contract test (`src/lib/neon/agent-profiles.contract.test.mjs:92`) bans it, so the queries stay valid against a database that predates the `20260710090000` migration. Those columns are read via `to_jsonb(s)->>'name'`. Do not "clean this up".
 
-**Typecheck baseline:** `npx tsc --noEmit` reports 56 pre-existing errors, 10 of which are `Cannot find module 'bun:test'`. The gate is **no new errors**, not zero.
+**Typecheck baseline:** `npx tsc --noEmit` reports **58** pre-existing errors, 10 of which are `Cannot find module 'bun:test'`. The gate is **no new errors**, not zero. (The spec and CHANGELOG say 56 — that figure is from PR #30 and two more have accrued since. Verify the count on a clean tree before you start if it matters to your task.)
 
 ---
 
@@ -589,7 +589,7 @@ And the profile link's condition changes from `agent.slug` to `agent.public_slug
 - [ ] **Step 5: Run the tests**
 
 Run: `node --test src/routes/agents.contract.test.mjs && npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: contract test PASS; error count `56`
+Expected: contract test PASS; error count `58`
 
 - [ ] **Step 6: Commit**
 
@@ -669,7 +669,7 @@ The 一般查詢 button at lines 119–123 becomes:
 - [ ] **Step 4: Run the tests**
 
 Run: `node --test src/routes/agents.contract.test.mjs && npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: contract test PASS; error count `56`
+Expected: contract test PASS; error count `58`
 
 - [ ] **Step 5: Commit**
 
@@ -718,7 +718,7 @@ In the `agents.map` block around line 326, apply these renames:
 - [ ] **Step 3: Verify**
 
 Run: `npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: `56`
+Expected: `58`
 
 - [ ] **Step 4: Commit**
 
@@ -857,7 +857,7 @@ Run:
 grep -rn "TeamMemberPlaceholder\|getTeamPreview\|isPlaceholder" --include="*.ts" --include="*.tsx" --include="*.mjs" src scripts
 npx tsc --noEmit 2>&1 | grep -c "error TS"
 ```
-Expected: no grep output; error count `56`
+Expected: no grep output; error count `58`
 
 - [ ] **Step 5: Commit**
 
@@ -920,7 +920,7 @@ In `mapPublicAgentProfile`, delete `    display_order: numberOrNull(row.agent_di
 - [ ] **Step 5: Verify**
 
 Run: `node --test src/lib/neon/agent-profiles.contract.test.mjs && npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: PASS; error count `56`
+Expected: PASS; error count `58`
 
 - [ ] **Step 6: Commit**
 
@@ -1017,7 +1017,7 @@ again matching the positional parameter used in each statement.
 - [ ] **Step 5: Verify**
 
 Run: `npm run test:property-experience && npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: PASS; error count `56`
+Expected: PASS; error count `58`
 
 - [ ] **Step 6: Commit**
 
@@ -1077,7 +1077,7 @@ Replace the function's tail:
 - [ ] **Step 3: Verify**
 
 Run: `npm run test:content-copilot && npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: PASS; error count `56`
+Expected: PASS; error count `58`
 
 - [ ] **Step 4: Commit**
 
@@ -1422,7 +1422,7 @@ Expected: PASS (covers the FAQ import path and admin data contracts)
 - [ ] **Step 3: Typecheck against the baseline**
 
 Run: `npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: `56`. If higher, the new errors are yours — fix them. Do not "fix" pre-existing ones.
+Expected: `58`. If higher, the new errors are yours — fix them. Do not "fix" pre-existing ones.
 
 - [ ] **Step 4: Build**
 
