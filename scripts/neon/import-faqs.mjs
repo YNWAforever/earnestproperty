@@ -33,17 +33,39 @@ if (!rows.length) {
 
 const [before] = await sql`SELECT count(*)::int AS n FROM faqs`;
 
-for (const [index, row] of rows.entries()) {
+for (const row of rows) {
   await sql`
     INSERT INTO faqs (scope, question, answer, sort_order)
-    VALUES (${row.scope}, ${row.question}, ${row.answer}, ${index + 1})
+    VALUES (${row.scope}, ${row.question}, ${row.answer},
+            (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM faqs WHERE scope = ${row.scope}))
     ON CONFLICT (scope, question) DO UPDATE
-      SET answer = EXCLUDED.answer, sort_order = EXCLUDED.sort_order
+      -- sort_order is deliberately not updated. It used to be set to the row's
+      -- position in the whole parsed file, which silently reverted any ordering
+      -- an admin had set through the CMS reorder.
+      SET answer = EXCLUDED.answer
   `;
 }
 
 const [after] = await sql`SELECT count(*)::int AS n FROM faqs`;
 console.log(`parsed ${rows.length} | faqs ${before.n} -> ${after.n}`);
+
+// Add-only: a question retracted from the seed file stays published, and the
+// row count only grows, so nothing surfaces it. Report rather than delete --
+// an admin may have authored the extra FAQ deliberately.
+const scopes = [...new Set(rows.map((row) => row.scope))];
+const seeded = new Set(rows.map((row) => `${row.scope} ${row.question}`));
+const existing = await sql`
+  SELECT scope, question FROM faqs
+  WHERE scope = ANY(${scopes})
+  ORDER BY scope, question
+`;
+const orphans = existing.filter((row) => !seeded.has(`${row.scope} ${row.question}`));
+if (orphans.length) {
+  console.log(
+    `in the database but not in ${SOURCE} (left published):\n  ` +
+      orphans.map((row) => `${row.scope}: ${row.question}`).join("\n  "),
+  );
+}
 
 // The rebuild payload validator requires exactly one key holding a real staff
 // UUID, so the job has to be attributed to an actual admin.

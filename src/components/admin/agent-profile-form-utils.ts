@@ -14,7 +14,12 @@ export type AgentProfilePayloadData = {
   bio: string;
   public_slug: string;
   show_on_website: boolean;
-  display_order: number;
+  // Matches agentProfileSchema's post-parse output (z.union([z.literal(""), z.coerce.number()...])):
+  // "" means the field was left blank, a number means the user set an explicit value. This is
+  // neither the raw form state (strings) nor the mutation payload (number | null) -- it's what
+  // zod produces from the form state, which buildAgentProfilePayload below then maps to the
+  // mutation payload's number | null.
+  display_order: number | "";
   active: boolean;
 };
 
@@ -40,7 +45,7 @@ export function buildAgentProfilePayload({
     bio: data.bio || null,
     public_slug: data.public_slug || null,
     show_on_website: data.show_on_website,
-    display_order: data.display_order,
+    display_order: data.display_order === "" ? null : Number(data.display_order),
     ...(canManageIdentity
       ? {
           auth_user_id: data.auth_user_id || null,

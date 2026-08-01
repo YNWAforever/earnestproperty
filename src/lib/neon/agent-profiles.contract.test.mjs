@@ -200,3 +200,29 @@ test("agent CMS deployment note requires migrations before full profile enableme
   assert.match(source, /before/i);
   assert.match(source, /agent CMS|agent profiles/i);
 });
+
+test("the unique-constraint migration is idempotent", () => {
+  const sql = read("neon/migrations/20260801090000_staff_public_slug_unique.sql");
+
+  // apply-migrations.mjs runs statements one at a time with no transaction and only
+  // records the version after all succeed. A bare ADD CONSTRAINT that collides with
+  // 20260622060000's inline faqs_scope_question_key therefore commits statement 1,
+  // fails statement 2, and wedges every retry on statement 1.
+  //
+  // Strip the guarded blocks, then assert nothing is left unguarded. A naive
+  // /^\s*ALTER TABLE/m matches at any indentation -- including inside the DO
+  // block -- so it cannot tell a wrapped statement from a bare one.
+  const unguarded = sql.replace(/DO \$\$[\s\S]*?END \$\$;/g, "");
+  assert.doesNotMatch(
+    unguarded,
+    /ALTER TABLE/,
+    "every ALTER TABLE must sit inside a DO $$ ... EXCEPTION guard",
+  );
+  assert.equal(sql.match(/WHEN duplicate_object THEN NULL/g)?.length, 2);
+  assert.equal(sql.match(/WHEN duplicate_table THEN NULL/g)?.length, 2);
+
+  // A unique_violation from real duplicate rows must still fail loudly rather than
+  // silently skipping constraint creation.
+  assert.doesNotMatch(sql, /WHEN unique_violation/);
+  assert.doesNotMatch(sql, /WHEN others/);
+});

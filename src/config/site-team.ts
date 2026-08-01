@@ -1,20 +1,19 @@
 /**
- * Placeholder team manifest.
+ * Seed input for scripts/neon/seed-staff.mjs.
  *
- * These 24 entries come from studio headshots supplied by the client
- * (`同事P好相片/1024x1024/*.png`) but are NOT yet linked to real staff
- * records — the English name is guessed from the photo filename only.
- * Chinese name, job title, branch, phone, WhatsApp number and licence number
- * are all unconfirmed (`// TODO`) and MUST be verified with the client before
- * this manifest is treated as authoritative.
+ * These 23 entries were reconciled against the client's roster in PR #30
+ * (CHANGELOG PHASE 4): the job titles and branches below are client-supplied and
+ * confirmed, and Michael Wong was removed to reach 23. They were seeded into
+ * Neon `staff_users` by commit c5ff3bb and Neon is now the source of truth --
+ * /agents and the homepage read the database directly and never consult this file.
  *
- * `/agents` and the homepage team preview render real Neon `staff_users`
- * profiles first; this manifest is only a fallback so agent faces show up
- * immediately instead of an empty directory. Once real profiles exist in
- * Neon (via the admin panel), this file becomes unused and can be deleted.
+ * Still outstanding, tracked in TODO-ASSETS.md: Traditional Chinese names, direct
+ * phone and WhatsApp numbers, and individual EAA licence numbers. Supply them via
+ * the optional contacts JSON that seed-staff.mjs accepts, not by editing here --
+ * the seed is additive and will not overwrite a value an admin has since entered.
  */
 
-export type TeamMemberPlaceholder = {
+export type TeamSeedMember = {
   slug: string;
   nameEn: string;
   nameZh: string | null;
@@ -24,16 +23,15 @@ export type TeamMemberPlaceholder = {
   whatsapp: string | null;
   licenceNo: string | null;
   photo: string;
-  isPlaceholder: true;
 };
 
-const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
+const RAW_TEAM: TeamSeedMember[] = [
   {
     slug: "kenneth",
     nameEn: "Kenneth Chang",
     nameZh: null, // TODO: confirm Traditional Chinese name + surname (filename has first name only)
-    jobTitle: "董事", // TODO: confirm job title
-    branch: null, // TODO: confirm branch assignment
+    jobTitle: "董事",
+    branch: null,
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -43,8 +41,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "tommy-yiu",
     nameEn: "Tommy Yiu",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級營業經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級營業經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -54,8 +52,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "terence-tang",
     nameEn: "Terence Tang",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級營業經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級營業經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -65,8 +63,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "sam-lee",
     nameEn: "Sam Lee",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級營業經理", // TODO: confirm job title
-    branch: "海韻分行", // TODO: confirm branch assignment
+    jobTitle: "高級營業經理",
+    branch: "海韻分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -76,8 +74,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "king-lau",
     nameEn: "King Lau",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -87,8 +85,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "ruby-lee",
     nameEn: "Ruby Lee",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -98,8 +96,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "mike-cheung",
     nameEn: "Mike Cheung",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "海韻分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "海韻分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -109,8 +107,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "joe-yuen",
     nameEn: "Joe Yuen",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -120,8 +118,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "mun-chu",
     nameEn: "Mun Chu",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -131,8 +129,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "george-chau",
     nameEn: "George Chau",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "海韻分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "海韻分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -142,8 +140,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "mon-lau",
     nameEn: "Mon Lau",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -153,8 +151,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "wendy-lu",
     nameEn: "Wendy Lu",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -164,8 +162,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "vincy-lam",
     nameEn: "Vincy Lam",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "海韻分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "海韻分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -175,8 +173,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "kelvin-lee",
     nameEn: "Kelvin Lee",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -186,8 +184,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "raymond-tam",
     nameEn: "Raymond Tam",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -197,8 +195,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "eric-lai",
     nameEn: "Eric Lai",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "海韻分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "海韻分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -208,8 +206,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "shadow-cheung",
     nameEn: "Shadow Cheung",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -219,8 +217,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "terry-chan",
     nameEn: "Terry Chan",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -230,8 +228,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "dickson-wong",
     nameEn: "Dickson Wong",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "海韻分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "海韻分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -241,8 +239,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "andy-hah",
     nameEn: "Andy Han",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -252,8 +250,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "winnie-cheung",
     nameEn: "Winnie Cheung",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -263,8 +261,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "joanna-tang",
     nameEn: "Joanna Tang",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "高級客戶經理", // TODO: confirm job title
-    branch: "青山公路豪景分行", // TODO: confirm branch assignment
+    jobTitle: "高級客戶經理",
+    branch: "青山公路豪景分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -274,8 +272,8 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
     slug: "eunice-yau",
     nameEn: "Eunice Yau",
     nameZh: null, // TODO: confirm Traditional Chinese name
-    jobTitle: "客戶經理", // TODO: confirm job title
-    branch: "麗都分行", // TODO: confirm branch assignment
+    jobTitle: "客戶經理",
+    branch: "麗都分行",
     phone: null, // TODO: confirm direct phone number
     whatsapp: null, // TODO: confirm WhatsApp number (if different from phone)
     licenceNo: null, // TODO: confirm individual estate agent licence number, if applicable
@@ -283,11 +281,4 @@ const RAW_TEAM: Omit<TeamMemberPlaceholder, "isPlaceholder">[] = [
   },
 ];
 
-export const SITE_TEAM: TeamMemberPlaceholder[] = RAW_TEAM.map((member) => ({
-  ...member,
-  isPlaceholder: true,
-}));
-
-export function getTeamPreview(count: number): TeamMemberPlaceholder[] {
-  return SITE_TEAM.slice(0, count);
-}
+export const SITE_TEAM: TeamSeedMember[] = RAW_TEAM;

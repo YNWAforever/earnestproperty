@@ -38,8 +38,7 @@ const publicAgentProfileColumns = `
   s.licence_no AS agent_licence_no,
   s.avatar_url AS agent_avatar_url,
   s.branch AS agent_branch,
-  s.bio AS agent_bio,
-  (to_jsonb(s)->>'display_order')::integer AS agent_display_order
+  s.bio AS agent_bio
 `;
 
 const listingColumns = `
@@ -173,7 +172,6 @@ function mapPublicAgentProfile(row: DbRow): NeonPublicAgentProfile | null {
     avatar_url: stringOrNull(row.agent_avatar_url),
     branch: stringOrNull(row.agent_branch),
     bio: stringOrNull(row.agent_bio),
-    display_order: numberOrNull(row.agent_display_order),
   };
 }
 

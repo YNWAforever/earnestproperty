@@ -649,7 +649,27 @@ export async function saveAdminAgentProfile(
     return { id: "", error: error instanceof Error ? error.message : "Invalid public slug." };
   }
 
-  const displayOrder = Number.isInteger(input.display_order) ? input.display_order : 0;
+  // Resolved here rather than in SQL: the two branches below use different
+  // positional-parameter offsets, so a subquery inline in the statements would be
+  // one off-by-one away from writing a value into the wrong column.
+  let displayOrder: number;
+  if (Number.isInteger(input.display_order)) {
+    displayOrder = input.display_order as number;
+  } else if (input.id) {
+    // Blank on an existing profile means "leave it alone".
+    const [current] = await queryRows("SELECT display_order FROM staff_users WHERE id = $1", [
+      input.id,
+    ]);
+    displayOrder = Number(current?.display_order ?? 0);
+  } else {
+    // Blank on a new profile means "append", so a new hire never displaces one of
+    // the client-approved 23. The column is NOT NULL DEFAULT 0, so without this a
+    // new agent ties with Kenneth Chang at the top of the roster.
+    const [max] = await queryRows(
+      "SELECT COALESCE(MAX(display_order), -1) + 1 AS next FROM staff_users",
+    );
+    displayOrder = Number(max?.next ?? 0);
+  }
   const identityAndProfileParams = [
     nullableTrim(identity.auth_user_id),
     nullableTrim(identity.email),
@@ -1118,17 +1138,34 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
          WHERE id=$5 RETURNING id`,
         [input.scope, input.question, input.answer, input.sort_order, input.id],
       )
-    : await queryRows(
-        `INSERT INTO faqs (scope, question, answer, sort_order)
+    : input.upsert
+      ? await queryRows(
+          `INSERT INTO faqs (scope, question, answer, sort_order)
          VALUES ($1,$2,$3,$4)
-         RETURNING id`,
-        [input.scope, input.question, input.answer, input.sort_order],
-      );
+         ON CONFLICT (scope, question) DO UPDATE
+           SET answer = EXCLUDED.answer
+         RETURNING id, (xmax = 0) AS inserted`,
+          [input.scope, input.question, input.answer, input.sort_order],
+        )
+      : // The single-FAQ form must not silently replace a different row's answer
+        // and report it as a create. DO NOTHING returns no row on conflict, which
+        // becomes a refusal below.
+        await queryRows(
+          `INSERT INTO faqs (scope, question, answer, sort_order)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (scope, question) DO NOTHING
+         RETURNING id, true AS inserted`,
+          [input.scope, input.question, input.answer, input.sort_order],
+        );
 
   if (input.id && !rows[0]) return { id: "", error: "Not found" };
+  if (!input.id && !rows[0]) return { id: "", error: "此範圍已有相同問題，請改用編輯。" };
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "faq.update" : "faq.create", "faq", id);
-  return { id };
+  // An upsert that resolved to an update is a faq.update, not a faq.create --
+  // the audit trail should say what actually happened to the row.
+  const inserted = input.id ? false : rows[0]?.inserted !== false;
+  await writeAudit(actor.staffId, inserted ? "faq.create" : "faq.update", "faq", id);
+  return { id, inserted };
 }
 
 export async function deleteAdminFaq(id: string, actor: StaffAccess) {

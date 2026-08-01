@@ -3,8 +3,13 @@ import { load } from "cheerio";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { AgentProfileForm } from "./AgentProfileForm";
+import { AgentProfileForm, agentProfileSchema } from "./AgentProfileForm";
 import { buildAgentProfilePayload } from "./agent-profile-form-utils";
+
+// agentProfileSchema is `z.object({...}).superRefine(...)`, which wraps the object in
+// ZodEffects -- ZodEffects has no `.shape` of its own, so we unwrap with `.innerType()`
+// to reach the underlying ZodObject's field schemas.
+const avatarUrlSchema = agentProfileSchema.innerType().shape.avatar_url;
 
 const formData = {
   auth_user_id: "11111111-1111-4111-8111-111111111111",
@@ -77,4 +82,19 @@ describe("AgentProfileForm identity capability", () => {
       active: false,
     });
   });
+});
+
+test("accepts the root-relative photo paths the seed script writes", () => {
+  expect(avatarUrlSchema.safeParse("/team/tommy-yiu.jpg").success).toBe(true);
+  expect(avatarUrlSchema.safeParse("https://cdn.example.com/a.jpg").success).toBe(true);
+  expect(avatarUrlSchema.safeParse("").success).toBe(true);
+  // Every other optional field in this schema (see `optionalText`) trims first and treats
+  // whitespace-only input as empty, so avatar_url does the same for consistency.
+  expect(avatarUrlSchema.safeParse("  ").success).toBe(true);
+});
+
+test("rejects a photo value that is neither a path nor an http(s) URL", () => {
+  for (const input of ["javascript:alert(1)", "team/tommy-yiu.jpg", "ftp://x/a.jpg", "//evil.example/x.jpg"]) {
+    expect(avatarUrlSchema.safeParse(input).success).toBe(false);
+  }
 });

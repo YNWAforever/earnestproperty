@@ -15,7 +15,7 @@ type AgentProfile = Partial<AdminAgentProfileInput> & { id?: string };
 
 const optionalText = (max: number) => z.string().trim().max(max).or(z.literal(""));
 
-const schema = z
+export const agentProfileSchema = z
   .object({
     auth_user_id: z.string().trim().uuid("請輸入有效 Neon Auth 使用者 ID").or(z.literal("")),
     email: z.string().trim().email("請輸入有效電郵").max(320).or(z.literal("")),
@@ -25,7 +25,23 @@ const schema = z
     phone: optionalText(40),
     whatsapp: optionalText(40),
     licence_no: optionalText(80),
-    avatar_url: z.string().trim().url("請輸入有效相片網址").max(500).or(z.literal("")),
+    // seed-staff.mjs writes root-relative paths (/team/<slug>.jpg) for all 23
+    // roster agents, and z.url() rejects them -- which blocked every admin edit to
+    // every seeded agent, because safeParse validates the whole object. Schemes are
+    // still restricted so an <img src> cannot be pointed anywhere arbitrary.
+    avatar_url: z
+      .string()
+      .trim()
+      .max(500)
+      .refine(
+        // `//host/x.jpg` is protocol-relative and loads from an arbitrary origin,
+        // so a leading `/` alone is not enough to keep this same-origin.
+        (value) =>
+          value === "" ||
+          (value.startsWith("/") && !value.startsWith("//")) ||
+          /^https?:\/\/\S+$/.test(value),
+        "請輸入有效相片網址，或以 / 開頭的路徑",
+      ),
     branch: optionalText(120),
     bio: optionalText(2000),
     public_slug: z
@@ -35,7 +51,7 @@ const schema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "請使用小寫英文、數字及連字號")
       .or(z.literal("")),
     show_on_website: z.boolean(),
-    display_order: z.coerce.number().int().min(0).max(9999),
+    display_order: z.union([z.literal(""), z.coerce.number().int().min(0).max(9999)]),
     active: z.boolean(),
   })
   .superRefine((data, context) => {
@@ -63,7 +79,7 @@ function createInitialForm(profile?: AgentProfile) {
     bio: profile?.bio ?? "",
     public_slug: profile?.public_slug ?? "",
     show_on_website: profile?.show_on_website ?? false,
-    display_order: profile?.display_order?.toString() ?? "0",
+    display_order: profile?.display_order?.toString() ?? "",
     active: profile?.active ?? true,
   };
 }
@@ -104,7 +120,7 @@ export function AgentProfileForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const parsed = schema.safeParse(
+    const parsed = agentProfileSchema.safeParse(
       canManageIdentity ? form : { ...form, auth_user_id: "", email: "", active: true },
     );
     if (!parsed.success) {
@@ -208,6 +224,7 @@ export function AgentProfileForm({
             max="9999"
             value={form.display_order}
             onChange={(event) => set("display_order", event.target.value)}
+            placeholder="留空自動排在最後"
           />
         </Field>
         <Field label="個人簡介" htmlFor="bio" error={fieldErrors.bio} full>
