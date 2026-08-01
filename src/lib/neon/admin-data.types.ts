@@ -161,7 +161,8 @@ export type AdminAgentProfileInput = {
   bio: string | null;
   public_slug: string | null;
   show_on_website: boolean;
-  display_order: number;
+  /** null means "append to the end" on create, and "leave unchanged" on update. */
+  display_order: number | null;
   active: boolean;
 };
 

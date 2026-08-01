@@ -649,7 +649,27 @@ export async function saveAdminAgentProfile(
     return { id: "", error: error instanceof Error ? error.message : "Invalid public slug." };
   }
 
-  const displayOrder = Number.isInteger(input.display_order) ? input.display_order : 0;
+  // Resolved here rather than in SQL: the two branches below use different
+  // positional-parameter offsets, so a subquery inline in the statements would be
+  // one off-by-one away from writing a value into the wrong column.
+  let displayOrder: number;
+  if (Number.isInteger(input.display_order)) {
+    displayOrder = input.display_order as number;
+  } else if (input.id) {
+    // Blank on an existing profile means "leave it alone".
+    const [current] = await queryRows("SELECT display_order FROM staff_users WHERE id = $1", [
+      input.id,
+    ]);
+    displayOrder = Number(current?.display_order ?? 0);
+  } else {
+    // Blank on a new profile means "append", so a new hire never displaces one of
+    // the client-approved 23. The column is NOT NULL DEFAULT 0, so without this a
+    // new agent ties with Kenneth Chang at the top of the roster.
+    const [max] = await queryRows(
+      "SELECT COALESCE(MAX(display_order), -1) + 1 AS next FROM staff_users",
+    );
+    displayOrder = Number(max?.next ?? 0);
+  }
   const identityAndProfileParams = [
     nullableTrim(identity.auth_user_id),
     nullableTrim(identity.email),

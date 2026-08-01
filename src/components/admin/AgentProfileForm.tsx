@@ -46,7 +46,7 @@ export const agentProfileSchema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "請使用小寫英文、數字及連字號")
       .or(z.literal("")),
     show_on_website: z.boolean(),
-    display_order: z.coerce.number().int().min(0).max(9999),
+    display_order: z.union([z.literal(""), z.coerce.number().int().min(0).max(9999)]),
     active: z.boolean(),
   })
   .superRefine((data, context) => {
@@ -74,7 +74,7 @@ function createInitialForm(profile?: AgentProfile) {
     bio: profile?.bio ?? "",
     public_slug: profile?.public_slug ?? "",
     show_on_website: profile?.show_on_website ?? false,
-    display_order: profile?.display_order?.toString() ?? "0",
+    display_order: profile?.display_order?.toString() ?? "",
     active: profile?.active ?? true,
   };
 }
@@ -219,6 +219,7 @@ export function AgentProfileForm({
             max="9999"
             value={form.display_order}
             onChange={(event) => set("display_order", event.target.value)}
+            placeholder="留空自動排在最後"
           />
         </Field>
         <Field label="個人簡介" htmlFor="bio" error={fieldErrors.bio} full>
