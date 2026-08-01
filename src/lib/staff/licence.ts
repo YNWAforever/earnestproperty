@@ -28,3 +28,15 @@ export function normaliseLicence(input: string | null | undefined): string | nul
   if (match[1] === "C") return null;
   return `${match[1]}-${match[2]}`;
 }
+
+/**
+ * WhatsApp needs a mobile number. normalisePhone accepts fixed-line prefixes 2
+ * and 3, so an office DID transcribed off a namecard would otherwise be written
+ * to the whatsapp column and rendered as a wa.me link that does not resolve.
+ */
+const HK_MOBILE = /^[569]\d{7}$/;
+
+export function normaliseWhatsapp(input: string | null | undefined): string | null {
+  const digits = normalisePhone(input);
+  return digits && HK_MOBILE.test(digits) ? digits : null;
+}

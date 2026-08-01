@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { normaliseLicence, normalisePhone } from "./licence";
+import { normaliseLicence, normalisePhone, normaliseWhatsapp } from "./licence";
 
 describe("normalisePhone", () => {
   test("accepts an 8-digit HK number and strips formatting", () => {
@@ -43,5 +43,26 @@ describe("normaliseLicence", () => {
     for (const input of ["1233", "E-12345", "E-1234567", "", "TBC", "EE-123456"]) {
       expect(normaliseLicence(input)).toBeNull();
     }
+  });
+});
+
+describe("normaliseWhatsapp", () => {
+  test("accepts a mobile number", () => {
+    expect(normaliseWhatsapp("9123 4567")).toBe("91234567");
+    expect(normaliseWhatsapp("+852 6123 4567")).toBe("61234567");
+  });
+
+  test("rejects a fixed line, which cannot receive WhatsApp", () => {
+    // 26882883 is the 青山公路豪景分行 switchboard. Writing it into the WhatsApp
+    // column produces a wa.me link that answers "not on WhatsApp", presented on
+    // the card as the agent's own number.
+    for (const input of ["2688 2883", "26886996", "3123 4567"]) {
+      expect(normaliseWhatsapp(input)).toBeNull();
+    }
+  });
+
+  test("handles null and undefined without throwing", () => {
+    expect(normaliseWhatsapp(null)).toBeNull();
+    expect(normaliseWhatsapp(undefined)).toBeNull();
   });
 });
