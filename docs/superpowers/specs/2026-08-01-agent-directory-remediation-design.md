@@ -297,9 +297,10 @@ are accurate, and only the wording is at issue.
 
 The current file's ordering test (`resolveDisplayAgents([], 3)`) passes zero DB profiles and so
 cannot fail; it is removed along with the function it tests. Ordering becomes the query's
-responsibility, so add an assertion to `src/lib/neon/agent-profiles.contract.test.mjs` that
-`listPublicAgentProfiles` orders by `display_order` — there is no such assertion today, which is
-part of why the reordering defect shipped green.
+responsibility, which `src/lib/neon/agent-profiles.contract.test.mjs:88-93` already asserts —
+it pins `ORDER BY COALESCE((to_jsonb(s)->>'display_order')::integer, 0) ASC`. No new assertion is
+needed there, and that test keeps passing after the projection column is dropped, because the
+`ORDER BY` computes its own separate expression.
 
 ### Contract test surgery
 
