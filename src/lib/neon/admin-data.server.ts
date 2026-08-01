@@ -1141,14 +1141,19 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
     : await queryRows(
         `INSERT INTO faqs (scope, question, answer, sort_order)
          VALUES ($1,$2,$3,$4)
-         RETURNING id`,
+         ON CONFLICT (scope, question) DO UPDATE
+           SET answer = EXCLUDED.answer
+         RETURNING id, (xmax = 0) AS inserted`,
         [input.scope, input.question, input.answer, input.sort_order],
       );
 
   if (input.id && !rows[0]) return { id: "", error: "Not found" };
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "faq.update" : "faq.create", "faq", id);
-  return { id };
+  // An upsert that resolved to an update is a faq.update, not a faq.create --
+  // the audit trail should say what actually happened to the row.
+  const inserted = input.id ? false : rows[0]?.inserted !== false;
+  await writeAudit(actor.staffId, inserted ? "faq.create" : "faq.update", "faq", id);
+  return { id, inserted };
 }
 
 export async function deleteAdminFaq(id: string, actor: StaffAccess) {
