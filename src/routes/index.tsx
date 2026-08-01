@@ -15,6 +15,7 @@ import {
   Newspaper,
   Store,
   TrendingUp,
+  PlayCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,11 +46,20 @@ import {
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
+  fetchCmsVideos,
+  fetchRecentTransactions,
   type EstateSummary,
   type FeaturedProperty,
   type FaqItem,
+  type CmsVideo,
+  type RecentTransaction,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
+import { getYouTubeVideoId } from "@/lib/youtube-video-url.js";
+
+/** Videos and transactions shown on the homepage before linking to the full page. */
+const HOME_VIDEO_COUNT = 3;
+const HOME_TRANSACTION_COUNT = 6;
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
 // reject a relative og:image outright, so it is absolutised here rather than in
@@ -59,19 +69,27 @@ const HERO_OG_IMAGE = new URL(heroImage, SITE_URL).href;
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [estates, featured, faqs, counts, agentProfiles] = await Promise.all([
-      fetchEstates(),
-      fetchFeaturedProperties(),
-      fetchFaqs("district:sham-tseng"),
-      fetchListingCountsByEstate(),
-      fetchNeonPublicAgentProfiles(),
-    ]);
+    const [estates, featured, faqs, counts, agentProfiles, videos, transactions] =
+      await Promise.all([
+        fetchEstates(),
+        fetchFeaturedProperties(),
+        fetchFaqs("district:sham-tseng"),
+        fetchListingCountsByEstate(),
+        fetchNeonPublicAgentProfiles(),
+        // Both sections are previews, so they must never take the homepage down:
+        // the CMS videos table is still being rolled out, and the transactions
+        // query fans out across three districts.
+        fetchCmsVideos().catch(() => []),
+        fetchRecentTransactions(HOME_TRANSACTION_COUNT).catch(() => []),
+      ]);
     return {
       estates,
       featured,
       faqs,
       counts: Object.fromEntries(counts),
       agents: agentProfiles.slice(0, 6),
+      videos: videos.slice(0, HOME_VIDEO_COUNT),
+      transactions: transactions.slice(0, HOME_TRANSACTION_COUNT),
     };
   },
   errorComponent: ({ error }) => (
@@ -110,20 +128,19 @@ const ESTATE_GRADIENTS: Record<string, string> = {
 };
 
 function HomePage() {
-  const { estates, featured, faqs: faqRows, counts, agents } = Route.useLoaderData();
+  const {
+    estates,
+    featured,
+    faqs: faqRows,
+    counts,
+    agents,
+    videos,
+    transactions,
+  } = Route.useLoaderData();
   const faqs = renderableFaqs(faqRows as FaqItem[]);
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
-
-  const totalUnits = estates.reduce((s: number, e: EstateSummary) => s + (e.total_units ?? 0), 0);
-  const avgPsf =
-    estates.length > 0
-      ? Math.round(
-          estates.reduce((s: number, e: EstateSummary) => s + Number(e.avg_saleable_psf ?? 0), 0) /
-            estates.length,
-        )
-      : 0;
 
   function submitHeroSearch() {
     navigate({
@@ -224,15 +241,6 @@ function HomePage() {
         </div>
       </section>
 
-      {/* DISTRICT STATS */}
-      <section className="border-y border-border bg-card">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:grid-cols-3 sm:px-6 lg:px-8">
-          <Stat label="深井住宅單位" value={totalUnits.toLocaleString()} />
-          <Stat label="即時放盤" value={`${featured.length} 個精選`} />
-          <Stat label="平均實用呎價" value={`$${avgPsf.toLocaleString()}`} sub="近 12 個月" />
-        </div>
-      </section>
-
       {/* FEATURED LISTINGS — 精選筍盤置頂 (client p2): live stock is the first
           thing after the hero, ahead of the evergreen estate directory. It keeps
           bg-muted/40 so it still reads as a band against the white stats strip
@@ -266,6 +274,36 @@ function HomePage() {
         </div>
       </section>
 
+      {/* YOUTUBE VIDEOS — sits directly under 精選筍盤 per the client. Renders
+          thumbnails rather than embeds: three YouTube iframes above the fold
+          would cost far more than the section is worth, and the brief forbids
+          regressing Lighthouse/CLS. The section hides itself when the CMS has no
+          videos rather than shipping an empty band. */}
+      {videos.length > 0 ? (
+        <section className="border-y border-border bg-muted/40">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <SectionHeader
+              eyebrow="YouTube影片"
+              title="Video Tours"
+              desc="睇片了解屋苑實景、座向同周邊配套。"
+            />
+            <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {videos.map((video: CmsVideo) => (
+                <HomeVideoCard key={video.id} video={video} />
+              ))}
+            </div>
+            <div className="mt-8">
+              <Button asChild variant="outline">
+                <Link to="/videos">
+                  查看全部影片
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {/* CORE ESTATES */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader
@@ -275,6 +313,36 @@ function HomePage() {
         />
         <CoreEstateGrid estates={estates} counts={counts} />
       </section>
+
+      {/* RECENT TRANSACTIONS — under 深井核心屋苑 per the client. Same
+          hide-when-empty rule as the video section above. */}
+      {transactions.length > 0 ? (
+        <section className="border-y border-border bg-muted/40">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <SectionHeader
+              eyebrow="成交快訊"
+              title="Recent Transactions"
+              desc="追蹤近期成交及區內價格走勢。"
+            />
+            <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {transactions.map((transaction: RecentTransaction, index: number) => (
+                <HomeTransactionCard
+                  key={`${transaction.estates?.slug ?? "unknown"}-${transaction.unit ?? index}`}
+                  transaction={transaction}
+                />
+              ))}
+            </div>
+            <div className="mt-8">
+              <Button asChild variant="outline">
+                <Link to="/transactions">
+                  查看全部成交
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* WHY US */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -543,16 +611,6 @@ function HomePage() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="text-center">
-      <div className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">{value}</div>
-      <div className="mt-1 text-sm text-muted-foreground">{label}</div>
-      {sub && <div className="text-xs text-muted-foreground/70">{sub}</div>}
-    </div>
-  );
-}
-
 /**
  * The client's ten approved estates (docx p13/p15), not just the five the DB
  * knows about. Live figures are merged in by slug; the five the client added
@@ -665,6 +723,83 @@ function CoreEstateGrid({
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * A YouTube thumbnail linking to /videos, not an embed. Three iframes here would
+ * pull in the YouTube player on every homepage load; the thumbnail is one image
+ * off a CDN that already has to be warm for the video page anyway.
+ */
+function HomeVideoCard({ video }: { video: CmsVideo }) {
+  const videoId = getYouTubeVideoId(video.video_url);
+  return (
+    <Link
+      to="/videos"
+      className="group overflow-hidden rounded-2xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant"
+    >
+      <div className="relative aspect-video overflow-hidden bg-muted">
+        {videoId ? (
+          <img
+            src={`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`}
+            alt={`${video.title} 影片縮圖`}
+            loading="lazy"
+            width={480}
+            height={360}
+            className="h-full w-full object-cover"
+          />
+        ) : null}
+        <span className="absolute inset-0 flex items-center justify-center">
+          <span className="rounded-full bg-primary/90 p-3 text-primary-foreground">
+            <PlayCircle className="h-6 w-6" aria-hidden="true" />
+          </span>
+        </span>
+      </div>
+      <div className="p-5">
+        <h3 className="font-semibold leading-snug">{video.title}</h3>
+        {video.description ? (
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{video.description}</p>
+        ) : null}
+      </div>
+    </Link>
+  );
+}
+
+function HomeTransactionCard({ transaction }: { transaction: RecentTransaction }) {
+  // Every figure is nullable in the source table, so each one is guarded
+  // individually — a partially-recorded deal still renders the parts it has.
+  const psf = transaction.saleable_psf;
+  const price = transaction.price;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="truncate font-semibold">{transaction.estates?.name_zh ?? "區內成交"}</h3>
+          {transaction.unit ? (
+            <p className="mt-1 text-sm text-muted-foreground">{transaction.unit}</p>
+          ) : null}
+        </div>
+        {transaction.deal_date ? (
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {transaction.deal_date.slice(0, 10)}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3">
+        <div>
+          <p className="text-[11px] text-muted-foreground">成交價</p>
+          <p className="text-base font-semibold text-primary">
+            {price === null || price === undefined ? "—" : `$${price.toLocaleString()}`}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] text-muted-foreground">實用呎價</p>
+          <p className="text-base font-semibold text-primary">
+            {psf === null || psf === undefined ? "—" : `$${Math.round(psf).toLocaleString()}`}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
