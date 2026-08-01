@@ -466,7 +466,10 @@ In `src/routes/agents.contract.test.mjs`, replace the whole `test("branch is nev
 
 ```js
 test("branch is never defaulted in either agent route", () => {
-  for (const file of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
+  // Task 5 extends this loop to src/routes/agents_.$slug.tsx. It is scoped to one
+  // file here so this task leaves the suite green -- the profile route still has
+  // DEFAULT_AGENT_BRANCH until Task 5 migrates it.
+  for (const file of ["src/routes/agents.tsx"]) {
     const source = readExisting(file);
 
     // Defaulting a missing branch to SITE_BRANCHES[0] printed 麗都分行 on the 15
@@ -619,9 +622,22 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 **Background:** This route was absent from PR #32's diff entirely. It still computes `profile.phone ?? (SITE_CONTACT.phoneTel || DEFAULT_AGENT_BRANCH.phone)` and renders `查詢將由{DEFAULT_AGENT_BRANCH.name}跟進`, so for Sam Lee (branch 海韻分行, no phone) `/agents` dials 26886996 and names 海韻分行 while `/agents/sam-lee` dials 26882988 and names 麗都分行.
 
-- [ ] **Step 1: Replace the imports**
+- [ ] **Step 1: Extend the contract test to both routes**
 
-In `src/routes/agents_.$slug.tsx`, replace lines 1–11:
+In `src/routes/agents.contract.test.mjs`, change the loop Task 4 scoped to one file so it covers both, and drop the now-obsolete comment above it:
+
+```js
+  for (const file of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
+```
+
+- [ ] **Step 2: Run the contract test to verify it fails**
+
+Run: `node --test src/routes/agents.contract.test.mjs`
+Expected: FAIL — `src/routes/agents_.$slug.tsx must not hardcode a default branch`
+
+- [ ] **Step 3: Replace the imports**
+
+In `src/routes/agents_.$slug.tsx`, replace lines 1-11:
 
 ```tsx
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
@@ -637,9 +653,25 @@ import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 
 `SITE_BRANCHES`, `SITE_CONTACT` and the `DEFAULT_AGENT_BRANCH` constant are all deleted from this file.
 
-- [ ] **Step 2: Replace the derivation**
+- [ ] **Step 4: Reword the stale branch comment**
 
-Replace lines 42–47 (from `const phone =` through `const usesGeneralContact =`):
+The file already carries this comment above `const branch = profile.branch;`:
+
+```tsx
+  // See agents.tsx: defaulting to SITE_BRANCHES[0] printed 麗都分行 on agents based
+  // elsewhere. A missing branch renders nothing rather than a wrong one.
+```
+
+The literal `SITE_BRANCHES[0]` trips the Step 1 assertion, which greps raw source and cannot tell a comment from code. Reword it, keeping the meaning:
+
+```tsx
+  // See agents.tsx: defaulting to the first configured branch printed 麗都分行 on
+  // agents based elsewhere. A missing branch renders nothing rather than a wrong one.
+```
+
+- [ ] **Step 5: Replace the derivation**
+
+Replace lines 42-47 (from `const phone =` through `const usesGeneralContact =`):
 
 ```tsx
   const contact = resolveAgentContact(profile);
@@ -648,15 +680,15 @@ Replace lines 42–47 (from `const phone =` through `const usesGeneralContact =`
   const whatsappHref = toWhatsAppHref(contact.whatsapp);
 ```
 
-- [ ] **Step 3: Replace the two `usesGeneralContact` render sites**
+- [ ] **Step 6: Replace the two `usesGeneralContact` render sites**
 
-The note block at lines 97–101 becomes:
+The note block at lines 97-101 becomes:
 
 ```tsx
             {note ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{note}</p> : null}
 ```
 
-The 一般查詢 button at lines 119–123 becomes:
+The 一般查詢 button at lines 119-123 becomes:
 
 ```tsx
               {contact.whatsappIsFallback ? (
@@ -666,15 +698,17 @@ The 一般查詢 button at lines 119–123 becomes:
               ) : null}
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 7: Run the tests**
 
-Run: `node --test src/routes/agents.contract.test.mjs && npx tsc --noEmit 2>&1 | grep -c "error TS"`
-Expected: contract test PASS; error count `58`
+Run: `node --test src/routes/agents.contract.test.mjs`
+Expected: PASS
 
-- [ ] **Step 5: Commit**
+Then `npm run test:property-experience` (PASS both halves) and `npx tsc --noEmit 2>&1 | grep -c "error TS"` (expected `58`).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/routes/agents_.\$slug.tsx
+git add src/routes/agents_.\$slug.tsx src/routes/agents.contract.test.mjs
 git commit -m "fix(agents): give the profile page the same contact derivation
 
 This route was absent from PR #32's diff, so it kept the old hardcoded
@@ -946,6 +980,14 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Modify: `src/components/admin/AgentProfileForm.tsx:38, 66`
 - Modify: `src/lib/admin/agent-profile-form-utils.ts`
 - Modify: `src/lib/neon/admin-data.server.ts:652, 692, 706, 727, 744`
+
+> **Implemented differently, deliberately.** The steps below edit positional
+> parameters inside four INSERT/UPDATE statements. The two write branches use
+> different offsets (`publicProfileParams` is `identityAndProfileParams.slice(2, 14)`,
+> so everything shifts by two), and an off-by-one there silently writes a value into
+> the wrong column. As shipped in `4046424`, `display_order` is instead resolved to a
+> concrete number in JavaScript *before* the params array is built, so no SQL
+> statement text changed at all. Same behaviour, no parameter-shift risk.
 
 **Background:** `staff_users.display_order` is `INTEGER NOT NULL DEFAULT 0` and the form defaults to `"0"`, so an agent published through the admin panel ties with Kenneth Chang at position 0 and sorts to second place ahead of 22 approved agents — pushing the sixth off the homepage preview.
 
