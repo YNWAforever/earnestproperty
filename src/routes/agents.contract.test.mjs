@@ -147,32 +147,32 @@ test("public profile projection and routes exclude auth and role fields", () => 
   assert.doesNotMatch(publicRoutes, sensitive);
 });
 
-test("branch is never defaulted, but contact details still fall back", () => {
-  for (const file of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
+test("branch is never defaulted in either agent route", () => {
+  // Task 5 extends this loop to src/routes/agents_.$slug.tsx. It is scoped to one
+  // file here so this task leaves the suite green -- the profile route still has
+  // DEFAULT_AGENT_BRANCH until Task 5 migrates it.
+  for (const file of ["src/routes/agents.tsx"]) {
     const source = readExisting(file);
-    assert.match(source, /SITE_BRANCHES/);
-    assert.match(source, /DEFAULT_AGENT_BRANCH/);
 
-    // This assertion is inverted from what it used to require. Defaulting a missing
-    // branch to SITE_BRANCHES[0] printed 麗都分行 on the 15 agents based at 海韻 or
-    // 青山公路豪景 — a confident wrong answer about named real people. A blank is the
-    // correct rendering, and 董事 has no branch at all.
+    // Defaulting a missing branch to SITE_BRANCHES[0] printed 麗都分行 on the 15
+    // agents based at 海韻 or 青山公路豪景 -- a confident wrong answer about named
+    // real people. A blank is the correct rendering, and 董事 has no branch at all.
     assert.doesNotMatch(source, /(?:profile|agent)\.branch\s*\?\?/);
     assert.match(source, /\{branch \? </, `${file} must render branch conditionally`);
 
-    // Phone is different: routing an enquiry to a real line is a useful fallback,
-    // not a false claim, so it keeps its default.
-    assert.match(source, /(?:profile|agent)\.phone\s*\?\?/);
-  }
-
-  // ...but the fallback must point at the agent's OWN branch. It used to name
-  // SITE_BRANCHES[0] for everyone, so a 海韻 agent's card said their call would be
-  // handled by 麗都 — with no phone numbers seeded yet, that note renders on all 23.
-  {
-    const source = readExisting("src/routes/agents.tsx");
-    assert.match(source, /SITE_BRANCHES\.find\(\(entry\) => entry\.name === agent\.branch\)/);
-    assert.match(source, /電話查詢將由\{homeBranch\.name\}跟進/);
-    assert.doesNotMatch(source, /電話查詢將由\{DEFAULT_AGENT_BRANCH\.name\}跟進/);
+    // The derivation lives in resolveAgentContact so both routes cannot drift
+    // again. No route may reintroduce a hardcoded branch fallback.
+    assert.doesNotMatch(
+      source,
+      /DEFAULT_AGENT_BRANCH/,
+      `${file} must not hardcode a default branch`,
+    );
+    assert.doesNotMatch(
+      source,
+      /SITE_BRANCHES\s*\[\s*0\s*\]/,
+      `${file} must not fall back to the first configured branch`,
+    );
+    assert.match(source, /resolveAgentContact/, `${file} must derive contact details centrally`);
   }
 });
 

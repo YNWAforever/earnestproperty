@@ -3,13 +3,10 @@ import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
-import { resolveDisplayAgents, type DisplayAgent } from "@/lib/agent-directory";
+import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
-
-const DEFAULT_AGENT_BRANCH = SITE_BRANCHES[0];
 
 export const Route = createFileRoute("/agents")({
   loader: async () => (await fetchNeonPublicAgentProfiles()) as NeonPublicAgentProfile[],
@@ -28,8 +25,7 @@ export const Route = createFileRoute("/agents")({
 });
 
 function AgentsPage() {
-  const profiles = Route.useLoaderData();
-  const agents = resolveDisplayAgents(profiles);
+  const agents = Route.useLoaderData();
 
   return (
     <main className="bg-background">
@@ -62,30 +58,23 @@ function AgentDirectoryHeader() {
   );
 }
 
-function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
-  const name = agent.nameZh || agent.nameEn || "晉誠地產代理";
-  // No fallback: this used to default to SITE_BRANCHES[0] (麗都分行), which printed a
-  // real branch name on agents who work elsewhere. A missing branch now renders
+function AgentDirectoryCard({ agent }: { agent: NeonPublicAgentProfile }) {
+  const name = agent.name_zh || agent.name_en || "晉誠地產代理";
+  // No fallback: this used to default to the first configured branch (麗都分行), which
+  // printed a real branch name on agents who work elsewhere. A missing branch renders
   // nothing — 董事 legitimately has none, and a blank beats a confident wrong answer.
   const branch = agent.branch;
-  // Route an enquiry to the agent's OWN branch. This used to fall back to
-  // SITE_BRANCHES[0] for everyone, so a 海韻 agent's card told the visitor their
-  // call would be handled by 麗都 — true of the phone number dialled, but not the
-  // office the agent actually works in.
-  const homeBranch =
-    SITE_BRANCHES.find((entry) => entry.name === agent.branch) ?? DEFAULT_AGENT_BRANCH;
-  const phone = agent.phone ?? (homeBranch.phone || SITE_CONTACT.phoneTel);
-  const whatsapp = agent.whatsapp ?? agent.phone ?? SITE_CONTACT.whatsappPhone;
-  const phoneHref = toTelHref(phone);
-  const whatsappHref = toWhatsAppHref(whatsapp);
-  const usesGeneralContact = !agent.phone && !agent.whatsapp;
+  const contact = resolveAgentContact(agent);
+  const note = agentContactNote(contact);
+  const phoneHref = toTelHref(contact.phone);
+  const whatsappHref = toWhatsAppHref(contact.whatsapp);
 
   return (
     <article className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-[104px_1fr]">
       <div className="aspect-square overflow-hidden rounded-md bg-muted">
-        {agent.photo ? (
+        {agent.avatar_url ? (
           <img
-            src={agent.photo}
+            src={agent.avatar_url}
             alt={`${name} 個人相片`}
             loading="lazy"
             width={104}
@@ -102,28 +91,21 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 className="text-xl font-semibold">{name}</h2>
-            {agent.nameZh && agent.nameEn ? (
-              <p className="mt-1 text-sm text-muted-foreground">{agent.nameEn}</p>
+            {agent.name_zh && agent.name_en ? (
+              <p className="mt-1 text-sm text-muted-foreground">{agent.name_en}</p>
             ) : null}
           </div>
           {branch ? <span className="text-sm text-muted-foreground">{branch}</span> : null}
         </div>
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          {agent.jobTitle ? <span>{agent.jobTitle}</span> : null}
-          {agent.licenceNo ? <span>牌照：{agent.licenceNo}</span> : null}
+          {agent.job_title ? <span>{agent.job_title}</span> : null}
+          {agent.licence_no ? <span>牌照：{agent.licence_no}</span> : null}
         </div>
-        {agent.isPlaceholder ? (
-          <p className="mt-3 text-xs text-muted-foreground">資料整理中，詳情稍後更新。</p>
-        ) : null}
-        {usesGeneralContact ? (
-          <p className="mt-3 text-xs text-muted-foreground">
-            代理未有提供直接聯絡方式，電話查詢將由{homeBranch.name}跟進。
-          </p>
-        ) : null}
+        {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
         <div className="mt-5 flex flex-wrap gap-2">
-          {agent.slug ? (
+          {agent.public_slug ? (
             <Button asChild variant="outline" size="sm">
-              <Link to="/agents/$slug" params={{ slug: agent.slug }}>
+              <Link to="/agents/$slug" params={{ slug: agent.public_slug }}>
                 <Building2 className="mr-2 h-4 w-4" />
                 查看資料
               </Link>
@@ -145,7 +127,7 @@ function AgentDirectoryCard({ agent }: { agent: DisplayAgent }) {
               </a>
             </Button>
           ) : null}
-          {usesGeneralContact ? (
+          {contact.whatsappIsFallback ? (
             <Button asChild size="sm">
               <Link to="/contact">一般查詢</Link>
             </Button>
