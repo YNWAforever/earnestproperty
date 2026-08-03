@@ -334,18 +334,26 @@ function AdminWhatsapp() {
       <AdminToolbar
         filters={
           <>
-            <Badge variant="outline" className="h-9 gap-1.5 px-3">
+            <Badge variant="outline" className="h-11 gap-1.5 px-3 lg:h-9">
               <Clock3 className="h-3.5 w-3.5" />
               24 小時回覆窗口
             </Badge>
+            {/* Staff-facing wording: this used to read "WOZTELL_ENABLED: false",
+                which tells a non-technical agent neither what is wrong nor what
+                to do. The variable name stays in the title for support. */}
             <Badge
               variant={
                 woztellEnabled ? "secondary" : woztellEnabled === false ? "destructive" : "outline"
               }
-              className="h-9 px-3"
+              className="h-11 px-3 lg:h-9"
+              title="WOZTELL_ENABLED"
             >
-              WOZTELL_ENABLED:{" "}
-              {woztellEnabled === null ? "檢查中" : woztellEnabled ? "true" : "false"}
+              WhatsApp 發送：
+              {woztellEnabled === null
+                ? "檢查中"
+                : woztellEnabled
+                  ? "可用"
+                  : "暫停（請聯絡技術支援）"}
             </Badge>
           </>
         }
@@ -354,7 +362,7 @@ function AdminWhatsapp() {
             type="button"
             variant="outline"
             size="sm"
-            className="h-9"
+            className="h-11 lg:h-9"
             disabled={loadingRows}
             onClick={refreshConversations}
           >

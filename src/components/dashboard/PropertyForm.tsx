@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,47 +37,57 @@ const blankToNull = (value: unknown) => {
   return value;
 };
 
-const optionalNumber = z.preprocess(blankToNull, z.coerce.number().nonnegative().nullable());
+const optionalNumber = z.preprocess(
+  blankToNull,
+  z.coerce
+    .number({ invalid_type_error: "請輸入數字" })
+    .nonnegative("請輸入 0 或以上的數字")
+    .nullable(),
+);
 
 function optionalInteger(max?: number) {
-  const base = z.coerce.number().int().min(0);
-  return z.preprocess(blankToNull, (max === undefined ? base : base.max(max)).nullable());
+  const base = z.coerce
+    .number({ invalid_type_error: "請輸入數字" })
+    .int("請輸入整數，不要小數點")
+    .min(0, "請輸入 0 或以上的數字");
+  return z.preprocess(
+    blankToNull,
+    (max === undefined ? base : base.max(max, `請輸入 ${max} 或以下的數字`)).nullable(),
+  );
 }
 
 const schema = z.object({
-  listing_no: z.string().trim().min(1, "請輸入編號").max(40),
-  title_zh: z.string().trim().min(1, "請輸入標題").max(200),
-  title_en: z.string().trim().max(200).optional().or(z.literal("")),
-  deal_type: z.enum(["sale", "rent"]),
-  estate_id: z.string().uuid().optional().or(z.literal("")),
-  district_slug: z.string().trim().min(1).max(60),
-  address: z.string().trim().max(300).optional().or(z.literal("")),
+  listing_no: z.string().trim().min(1, "請輸入編號").max(40, "編號最多 40 個字"),
+  title_zh: z.string().trim().min(1, "請輸入標題").max(200, "標題最多 200 個字"),
+  title_en: z.string().trim().max(200, "英文標題最多 200 個字").optional().or(z.literal("")),
+  deal_type: z.enum(["sale", "rent"], { message: "請選擇售盤或租盤" }),
+  estate_id: z.string().uuid("請重新選擇屋苑").optional().or(z.literal("")),
+  district_slug: z.string().trim().min(1, "請輸入地區 slug").max(60, "地區 slug 最多 60 個字"),
+  address: z.string().trim().max(300, "地址最多 300 個字").optional().or(z.literal("")),
   price: optionalNumber,
   rent: optionalNumber,
   saleable_area: optionalInteger(),
   bedrooms: optionalInteger(20),
   bathrooms: optionalInteger(20),
-  floor: z.string().trim().max(40).optional().or(z.literal("")),
-  description: z.string().trim().max(4000).optional().or(z.literal("")),
-  features: z.string().trim().max(3000).optional().or(z.literal("")),
-  video_url: z.string().trim().url("請輸入有效影片連結").max(500).optional().or(z.literal("")),
-  seo_title: z.string().trim().max(200).optional().or(z.literal("")),
-  seo_description: z.string().trim().max(300).optional().or(z.literal("")),
-  agent_id: z.string().uuid().optional().or(z.literal("")),
-  status: z.enum(["draft", "active", "sold", "rented", "offline"]),
-  featured: z.boolean(),
+  floor: z.string().trim().max(40, "樓層最多 40 個字").optional().or(z.literal("")),
+  description: z.string().trim().max(4000, "描述最多 4000 個字").optional().or(z.literal("")),
+  features: z.string().trim().max(3000, "設施最多 3000 個字").optional().or(z.literal("")),
+  video_url: z
+    .string()
+    .trim()
+    .url("請輸入有效影片連結")
+    .max(500, "影片連結最多 500 個字")
+    .optional()
+    .or(z.literal("")),
+  seo_title: z.string().trim().max(200, "SEO 標題最多 200 個字").optional().or(z.literal("")),
+  seo_description: z.string().trim().max(300, "SEO 描述最多 300 個字").optional().or(z.literal("")),
+  agent_id: z.string().uuid("請重新選擇負責代理").optional().or(z.literal("")),
+  status: z.enum(["draft", "active", "sold", "rented", "offline"], { message: "請選擇狀態" }),
+  featured: z.boolean({ message: "請選擇是否精選" }),
 });
 
-type Props = {
-  property?: Property;
-  onSaved: (id: string) => void;
-};
-
-export function PropertyForm({ property, onSaved }: Props) {
-  const [estates, setEstates] = useState<Estate[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
+function createInitialForm(property?: Property) {
+  return {
     listing_no: property?.listing_no ?? "",
     title_zh: property?.title_zh ?? "",
     title_en: property?.title_en ?? "",
@@ -99,7 +109,23 @@ export function PropertyForm({ property, onSaved }: Props) {
     agent_id: property?.agent_id ?? "",
     status: (property?.status ?? "draft") as "draft" | "active" | "sold" | "rented" | "offline",
     featured: property?.featured ?? false,
-  });
+  };
+}
+
+type FormState = ReturnType<typeof createInitialForm>;
+
+type Props = {
+  property?: Property;
+  onSaved: (id: string) => void;
+};
+
+export function PropertyForm({ property, onSaved }: Props) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [estates, setEstates] = useState<Estate[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState(() => createInitialForm(property));
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [images, setImages] = useState<string[]>(property?.images ?? []);
 
   useEffect(() => {
@@ -111,17 +137,60 @@ export function PropertyForm({ property, onSaved }: Props) {
       .catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
   }, []);
 
-  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
+  // Editing a field (by hand or via the copilot) has to drop its stale inline
+  // error, otherwise the message from the last failed submit stays under a value
+  // the staff member has already corrected.
+  function clearErrors(keys: readonly string[]) {
+    setFieldErrors((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const key of keys) {
+        if (next[key as keyof FormState]) {
+          delete next[key as keyof FormState];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }
+
+  function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+    clearErrors([k]);
+  }
+
+  function fieldProps(k: keyof FormState) {
+    const error = fieldErrors[k];
+    return {
+      name: k,
+      "aria-invalid": Boolean(error),
+      "aria-describedby": error ? `${k}-error` : undefined,
+    };
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "請檢查輸入");
+      const nextErrors: Partial<Record<keyof FormState, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0];
+        if (typeof key === "string" && key in form && !nextErrors[key as keyof FormState]) {
+          nextErrors[key as keyof FormState] = issue.message;
+        }
+      }
+      setFieldErrors(nextErrors);
+      toast.error("請檢查輸入資料");
+
+      // 20-plus fields means the offending one is usually off-screen; focusing it
+      // scrolls it into view and tells a screen reader which field to fix.
+      const firstField = String(parsed.error.issues[0]?.path[0] ?? "");
+      const firstControl = formRef.current?.elements.namedItem(firstField);
+      if (firstControl instanceof HTMLElement) firstControl.focus();
       return;
     }
+
+    setFieldErrors({});
     const d = parsed.data;
 
     const payload: AdminPropertyInput = {
@@ -166,30 +235,34 @@ export function PropertyForm({ property, onSaved }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       <Section title="基本資料">
-        <Field label="放盤編號 *">
+        <Field label="放盤編號 *" htmlFor="listing_no" error={fieldErrors.listing_no}>
           <Input
+            id="listing_no"
+            {...fieldProps("listing_no")}
             value={form.listing_no}
             onChange={(e) => set("listing_no", e.target.value)}
             required
             maxLength={40}
           />
         </Field>
-        <Field label="標題 *">
+        <Field label="標題 *" htmlFor="title_zh" error={fieldErrors.title_zh}>
           <Input
+            id="title_zh"
+            {...fieldProps("title_zh")}
             value={form.title_zh}
             onChange={(e) => set("title_zh", e.target.value)}
             required
             maxLength={200}
           />
         </Field>
-        <Field label="類型 *">
+        <Field label="類型 *" htmlFor="deal_type" error={fieldErrors.deal_type}>
           <Select
             value={form.deal_type}
             onValueChange={(v) => set("deal_type", v as "sale" | "rent")}
           >
-            <SelectTrigger>
+            <SelectTrigger id="deal_type" {...fieldProps("deal_type")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -198,9 +271,9 @@ export function PropertyForm({ property, onSaved }: Props) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="狀態">
+        <Field label="狀態" htmlFor="status" error={fieldErrors.status}>
           <Select value={form.status} onValueChange={(v) => set("status", v as typeof form.status)}>
-            <SelectTrigger>
+            <SelectTrigger id="status" {...fieldProps("status")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -212,12 +285,12 @@ export function PropertyForm({ property, onSaved }: Props) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="負責代理">
+        <Field label="負責代理" htmlFor="agent_id" error={fieldErrors.agent_id}>
           <Select
             value={form.agent_id || "none"}
             onValueChange={(v) => set("agent_id", v === "none" ? "" : v)}
           >
-            <SelectTrigger>
+            <SelectTrigger id="agent_id" {...fieldProps("agent_id")}>
               <SelectValue placeholder="選擇代理" />
             </SelectTrigger>
             <SelectContent>
@@ -234,7 +307,7 @@ export function PropertyForm({ property, onSaved }: Props) {
       </Section>
 
       <Section title="位置">
-        <Field label="屋苑">
+        <Field label="屋苑" htmlFor="estate_id" error={fieldErrors.estate_id}>
           <Select
             value={form.estate_id || "none"}
             onValueChange={(v) => {
@@ -244,7 +317,7 @@ export function PropertyForm({ property, onSaved }: Props) {
               if (est) set("district_slug", est.district_slug);
             }}
           >
-            <SelectTrigger>
+            <SelectTrigger id="estate_id" {...fieldProps("estate_id")}>
               <SelectValue placeholder="選擇屋苑" />
             </SelectTrigger>
             <SelectContent>
@@ -257,16 +330,20 @@ export function PropertyForm({ property, onSaved }: Props) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="地區 slug *">
+        <Field label="地區 slug *" htmlFor="district_slug" error={fieldErrors.district_slug}>
           <Input
+            id="district_slug"
+            {...fieldProps("district_slug")}
             value={form.district_slug}
             onChange={(e) => set("district_slug", e.target.value)}
             required
             maxLength={60}
           />
         </Field>
-        <Field label="地址" full>
+        <Field label="地址" htmlFor="address" error={fieldErrors.address} full>
           <Input
+            id="address"
+            {...fieldProps("address")}
             value={form.address}
             onChange={(e) => set("address", e.target.value)}
             maxLength={300}
@@ -275,35 +352,49 @@ export function PropertyForm({ property, onSaved }: Props) {
       </Section>
 
       <Section title="價格 / 規格">
-        <Field label="售價（HKD）">
+        <Field label="售價（HKD）" htmlFor="price" error={fieldErrors.price}>
           <Input
+            id="price"
+            {...fieldProps("price")}
             type="number"
             min="0"
             value={form.price}
             onChange={(e) => set("price", e.target.value)}
           />
         </Field>
-        <Field label="月租（HKD）">
+        <Field label="月租（HKD）" htmlFor="rent" error={fieldErrors.rent}>
           <Input
+            id="rent"
+            {...fieldProps("rent")}
             type="number"
             min="0"
             value={form.rent}
             onChange={(e) => set("rent", e.target.value)}
           />
         </Field>
-        <Field label="實用面積（呎）">
+        <Field label="實用面積（呎）" htmlFor="saleable_area" error={fieldErrors.saleable_area}>
           <Input
+            id="saleable_area"
+            {...fieldProps("saleable_area")}
             type="number"
             min="0"
             value={form.saleable_area}
             onChange={(e) => set("saleable_area", e.target.value)}
           />
         </Field>
-        <Field label="樓層">
-          <Input value={form.floor} onChange={(e) => set("floor", e.target.value)} maxLength={40} />
-        </Field>
-        <Field label="房">
+        <Field label="樓層" htmlFor="floor" error={fieldErrors.floor}>
           <Input
+            id="floor"
+            {...fieldProps("floor")}
+            value={form.floor}
+            onChange={(e) => set("floor", e.target.value)}
+            maxLength={40}
+          />
+        </Field>
+        <Field label="房" htmlFor="bedrooms" error={fieldErrors.bedrooms}>
+          <Input
+            id="bedrooms"
+            {...fieldProps("bedrooms")}
             type="number"
             min="0"
             max="20"
@@ -311,8 +402,10 @@ export function PropertyForm({ property, onSaved }: Props) {
             onChange={(e) => set("bedrooms", e.target.value)}
           />
         </Field>
-        <Field label="廁">
+        <Field label="廁" htmlFor="bathrooms" error={fieldErrors.bathrooms}>
           <Input
+            id="bathrooms"
+            {...fieldProps("bathrooms")}
             type="number"
             min="0"
             max="20"
@@ -323,16 +416,20 @@ export function PropertyForm({ property, onSaved }: Props) {
       </Section>
 
       <Section title="內容">
-        <Field label="描述" full>
+        <Field label="描述" htmlFor="description" error={fieldErrors.description} full>
           <Textarea
+            id="description"
+            {...fieldProps("description")}
             rows={4}
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             maxLength={4000}
           />
         </Field>
-        <Field label="YouTube影片連結" full>
+        <Field label="YouTube影片連結" htmlFor="video_url" error={fieldErrors.video_url} full>
           <Input
+            id="video_url"
+            {...fieldProps("video_url")}
             type="url"
             value={form.video_url}
             onChange={(e) => set("video_url", e.target.value)}
@@ -340,42 +437,62 @@ export function PropertyForm({ property, onSaved }: Props) {
             placeholder="https://www.youtube.com/watch?v=..."
           />
         </Field>
-        <Field label="English title" full>
+        <Field label="English title" htmlFor="title_en" error={fieldErrors.title_en} full>
           <Input
+            id="title_en"
+            {...fieldProps("title_en")}
             value={form.title_en}
             onChange={(e) => set("title_en", e.target.value)}
             maxLength={200}
           />
         </Field>
-        <Field label="Features (one per line)" full>
+        <Field label="Features (one per line)" htmlFor="features" error={fieldErrors.features} full>
           <Textarea
+            id="features"
+            {...fieldProps("features")}
             rows={4}
             value={form.features}
             onChange={(e) => set("features", e.target.value)}
             maxLength={3000}
           />
         </Field>
-        <Field label="SEO 標題" full>
+        <Field label="SEO 標題" htmlFor="seo_title" error={fieldErrors.seo_title} full>
           <Input
+            id="seo_title"
+            {...fieldProps("seo_title")}
             value={form.seo_title}
             onChange={(e) => set("seo_title", e.target.value)}
             maxLength={200}
           />
         </Field>
-        <Field label="SEO 描述" full>
+        <Field label="SEO 描述" htmlFor="seo_description" error={fieldErrors.seo_description} full>
           <Textarea
+            id="seo_description"
+            {...fieldProps("seo_description")}
             rows={3}
             value={form.seo_description}
             onChange={(e) => set("seo_description", e.target.value)}
             maxLength={300}
           />
         </Field>
-        <Field label="相片" full>
-          <ImageUploader ownerType="property" value={images} onChange={setImages} />
+        {/* The uploader's own control is its hidden file input, so the 相片 label
+            points there -- clicking the label opens the file picker. */}
+        <Field label="相片" htmlFor="property_images" full>
+          <ImageUploader
+            inputId="property_images"
+            ownerType="property"
+            value={images}
+            onChange={setImages}
+          />
         </Field>
-        <Field label="精選">
+        <Field label="精選" htmlFor="featured" error={fieldErrors.featured}>
           <div className="flex h-10 items-center">
-            <Switch checked={form.featured} onCheckedChange={(v) => set("featured", v)} />
+            <Switch
+              id="featured"
+              {...fieldProps("featured")}
+              checked={form.featured}
+              onCheckedChange={(v) => set("featured", v)}
+            />
           </div>
         </Field>
       </Section>
@@ -394,7 +511,10 @@ export function PropertyForm({ property, onSaved }: Props) {
           seo_title: form.seo_title,
           seo_description: form.seo_description,
         })}
-        onApply={(patch) => setForm((current) => applyPropertyContentCopilotPatch(current, patch))}
+        onApply={(patch) => {
+          setForm((current) => applyPropertyContentCopilotPatch(current, patch));
+          clearErrors(Object.keys(patch));
+        }}
       />
       <div className="flex justify-end gap-2 border-t pt-4">
         <Button type="submit" disabled={submitting}>
@@ -416,17 +536,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Field({
   label,
+  htmlFor,
   children,
+  error,
   full,
 }: {
   label: string;
+  htmlFor: string;
   children: React.ReactNode;
+  error?: string;
   full?: boolean;
 }) {
   return (
     <div className={full ? "sm:col-span-2" : ""}>
-      <Label className="mb-1.5 block">{label}</Label>
+      <Label htmlFor={htmlFor} className="mb-1.5 block">
+        {label}
+      </Label>
       {children}
+      {error ? (
+        <p id={`${htmlFor}-error`} className="mt-1.5 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

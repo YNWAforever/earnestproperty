@@ -145,7 +145,7 @@ function AdminListings() {
         filters={
           <>
             <Select value={filters.status} onValueChange={(value) => setFilter("status", value)}>
-              <SelectTrigger className="h-9 w-[8.5rem]" aria-label="狀態">
+              <SelectTrigger className="h-11 w-[8.5rem] lg:h-9" aria-label="狀態">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -163,7 +163,7 @@ function AdminListings() {
                 setFilter("deal_type", value as ListingFilters["deal_type"])
               }
             >
-              <SelectTrigger className="h-9 w-[7rem]" aria-label="類型">
+              <SelectTrigger className="h-11 w-[7rem] lg:h-9" aria-label="類型">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -177,7 +177,7 @@ function AdminListings() {
               value={filters.estate_id}
               onValueChange={(value) => setFilter("estate_id", value)}
             >
-              <SelectTrigger className="h-9 w-[10rem]" aria-label="屋苑">
+              <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="屋苑">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -194,7 +194,7 @@ function AdminListings() {
               value={filters.featured}
               onValueChange={(value) => setFilter("featured", value as ListingFilters["featured"])}
             >
-              <SelectTrigger className="h-9 w-[8rem]" aria-label="精選">
+              <SelectTrigger className="h-11 w-[8rem] lg:h-9" aria-label="精選">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -208,7 +208,7 @@ function AdminListings() {
               value={filters.agent_id}
               onValueChange={(value) => setFilter("agent_id", value)}
             >
-              <SelectTrigger className="h-9 w-[10rem]" aria-label="代理">
+              <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="代理">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -225,7 +225,7 @@ function AdminListings() {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-9"
+              className="h-11 lg:h-9"
               onClick={() => setFilters(defaultFilters)}
             >
               重設
@@ -233,7 +233,7 @@ function AdminListings() {
           </>
         }
         actions={
-          <Button asChild size="sm" className="h-9">
+          <Button asChild size="sm" className="h-11 lg:h-9">
             <Link to="/admin/listings/new">
               <Plus className="mr-2 h-4 w-4" />
               新增放盤
@@ -339,13 +339,13 @@ function ListingRow({
       </TableCell>
       <TableCell>
         <div className="flex flex-wrap justify-end gap-1.5">
-          <Button asChild variant="outline" size="sm" className="h-8 px-2">
+          <Button asChild variant="outline" size="sm" className="h-11 px-2 lg:h-8">
             <Link to="/admin/listings/$id" params={{ id: listing.id }}>
               <Pencil className="mr-1 h-3.5 w-3.5" />
               編輯
             </Link>
           </Button>
-          <Button asChild variant="outline" size="sm" className="h-8 px-2">
+          <Button asChild variant="outline" size="sm" className="h-11 px-2 lg:h-8">
             <Link to="/property/$listingNo" params={{ listingNo: listing.listing_no }}>
               <ExternalLink className="mr-1 h-3.5 w-3.5" />
               公開預覽
@@ -355,7 +355,7 @@ function ListingRow({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 px-2"
+            className="h-11 px-2 lg:h-8"
             disabled={listing.status === "offline" || rowMutating || mutatingId === offlineMutation}
             onClick={() => onStatusChange(listing, "offline", "已下架")}
           >
@@ -365,7 +365,7 @@ function ListingRow({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 px-2"
+            className="h-11 px-2 lg:h-8"
             disabled={
               listing.status === terminalStatus || rowMutating || mutatingId === terminalMutation
             }

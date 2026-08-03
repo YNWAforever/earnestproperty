@@ -26,13 +26,20 @@ export function AdminDetailPanel({
 }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-4 overflow-y-auto sm:max-w-xl">
-        <SheetHeader>
+      {/* The scroll container is the children wrapper, not SheetContent: when
+          the whole column scrolled, the footer's 儲存 / 標記成交 buttons scrolled
+          away with it, so on a lead with a long AI section and activity history
+          the save controls were unreachable without scrolling back down. The
+          footer now stays pinned to the bottom of the panel. */}
+      <SheetContent className="flex w-full flex-col gap-4 overflow-hidden sm:max-w-xl">
+        <SheetHeader className="shrink-0">
           <SheetTitle>{title}</SheetTitle>
           <SheetDescription>{description}</SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1">{children}</div>
-        {footer ? <SheetFooter>{footer}</SheetFooter> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        {footer ? (
+          <SheetFooter className="shrink-0 border-t bg-background pt-4">{footer}</SheetFooter>
+        ) : null}
       </SheetContent>
     </Sheet>
   );

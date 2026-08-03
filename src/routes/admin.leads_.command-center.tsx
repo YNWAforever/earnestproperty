@@ -146,7 +146,7 @@ function CommandCenter() {
                 type="button"
                 size="sm"
                 variant={filter === item.key ? "default" : "outline"}
-                className="h-9"
+                className="h-11 lg:h-9"
                 onClick={() => setFilter(item.key)}
               >
                 {item.label}
@@ -155,7 +155,7 @@ function CommandCenter() {
           </>
         }
         actions={
-          <Button asChild variant="outline" size="sm" className="h-9">
+          <Button asChild variant="outline" size="sm" className="h-11 lg:h-9">
             <Link to="/admin/leads">返回 CRM 列表</Link>
           </Button>
         }

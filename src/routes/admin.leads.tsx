@@ -123,6 +123,11 @@ export const Route = createFileRoute("/admin/leads")({
   component: AdminLeads,
 });
 
+// Mirrors the `LIMIT 100` in `listAdminLeads` (src/lib/neon/admin-data.server.ts).
+// Only used to label the row count honestly -- raising it here alone changes
+// nothing, the query is the source of truth.
+const LEAD_ROW_LIMIT = 100;
+
 function AdminLeads() {
   const { user } = useNeonAuth();
   const [rows, setRows] = useState<AdminLeadRow[] | null>(null);
@@ -441,14 +446,14 @@ function AdminLeads() {
               <Input
                 value={filters.query}
                 onChange={(event) => setFilter("query", event.target.value)}
-                className="h-9 pl-9"
+                className="h-11 pl-9 lg:h-9"
                 placeholder="搜尋客戶、電話、放盤"
                 aria-label="搜尋 leads"
               />
             </div>
 
             <Select value={filters.stage} onValueChange={(value) => setFilter("stage", value)}>
-              <SelectTrigger className="h-9 w-[8.5rem]" aria-label="階段">
+              <SelectTrigger className="h-11 w-[8.5rem] lg:h-9" aria-label="階段">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -462,7 +467,7 @@ function AdminLeads() {
             </Select>
 
             <Select value={filters.intent} onValueChange={(value) => setFilter("intent", value)}>
-              <SelectTrigger className="h-9 w-[8rem]" aria-label="意圖">
+              <SelectTrigger className="h-11 w-[8rem] lg:h-9" aria-label="意圖">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -476,7 +481,7 @@ function AdminLeads() {
             </Select>
 
             <Select value={filters.source} onValueChange={(value) => setFilter("source", value)}>
-              <SelectTrigger className="h-9 w-[8rem]" aria-label="來源">
+              <SelectTrigger className="h-11 w-[8rem] lg:h-9" aria-label="來源">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -493,7 +498,7 @@ function AdminLeads() {
               value={filters.agent_id}
               onValueChange={(value) => setFilter("agent_id", value)}
             >
-              <SelectTrigger className="h-9 w-[10rem]" aria-label="負責代理">
+              <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="負責代理">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -511,7 +516,7 @@ function AdminLeads() {
               value={filters.optIn}
               onValueChange={(value) => setFilter("optIn", value as OptInFilter)}
             >
-              <SelectTrigger className="h-9 w-[9rem]" aria-label="WhatsApp opt-in">
+              <SelectTrigger className="h-11 w-[9rem] lg:h-9" aria-label="WhatsApp opt-in">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -525,7 +530,7 @@ function AdminLeads() {
               type="button"
               variant="ghost"
               size="sm"
-              className="h-9"
+              className="h-11 lg:h-9"
               onClick={() => setFilters(defaultFilters)}
             >
               <RotateCcw className="h-4 w-4" />
@@ -535,11 +540,17 @@ function AdminLeads() {
         }
         actions={
           <>
-            <Button asChild size="sm" className="h-9">
+            <Button asChild size="sm" className="h-11 lg:h-9">
               <Link to="/admin/leads/command-center">前往 Command Center</Link>
             </Button>
-            <Badge variant="secondary" className="h-9 rounded-md px-3">
-              {filteredRows.length} Leads
+            {/* `listAdminLeads` is capped at LIMIT 100 server-side and every
+                filter here runs client-side over that slice, so a bare
+                "{n} Leads" read as a total and made filtering look like it had
+                deleted older leads. Say what the number actually is, and admit
+                the cap when we are sitting on it. */}
+            <Badge variant="secondary" className="h-11 rounded-md px-3 lg:h-9">
+              顯示 {filteredRows.length} 筆
+              {rows.length >= LEAD_ROW_LIMIT ? `（最近 ${LEAD_ROW_LIMIT} 筆內）` : ""}
             </Badge>
           </>
         }
