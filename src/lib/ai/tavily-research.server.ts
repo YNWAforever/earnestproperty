@@ -26,7 +26,13 @@ export function createTavilyResearchClient({
   apiKey: string | null | undefined;
 }) {
   return {
-    async search({ query, maxResults }: { query: string; maxResults: number }): Promise<TavilyResearchResult> {
+    async search({
+      query,
+      maxResults,
+    }: {
+      query: string;
+      maxResults: number;
+    }): Promise<TavilyResearchResult> {
       const configuredApiKey = apiKey?.trim();
       if (!configuredApiKey) return failedResult("TAVILY_NOT_CONFIGURED");
 
@@ -49,7 +55,7 @@ export function createTavilyResearchClient({
 
         if (!response.ok) return failedResult("TAVILY_SEARCH_FAILED");
 
-        const body = await response.json() as { results?: unknown };
+        const body = (await response.json()) as { results?: unknown };
         return { ok: true, evidence: extractEvidence(body.results), error: null };
       } catch {
         return failedResult("TAVILY_SEARCH_FAILED");
@@ -71,7 +77,8 @@ function extractEvidence(results: unknown): ContentCopilotEvidence[] {
     if (evidence.length === TAVILY_MAX_RESULTS || !item || typeof item !== "object") continue;
 
     const { title, url, content } = item as Record<string, unknown>;
-    if (typeof title !== "string" || typeof url !== "string" || typeof content !== "string") continue;
+    if (typeof title !== "string" || typeof url !== "string" || typeof content !== "string")
+      continue;
 
     const normalizedUrl = normalizeCitationUrl(url);
     const normalizedTitle = cleanText(title, TAVILY_MAX_TITLE_CHARS);
@@ -91,7 +98,10 @@ function extractEvidence(results: unknown): ContentCopilotEvidence[] {
 }
 
 function cleanText(value: string, maxLength: number) {
-  return value.replace(/[\u0000-\u001F\u007F-\u009F]/g, "").trim().slice(0, maxLength);
+  return value
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+    .trim()
+    .slice(0, maxLength);
 }
 
 function failedResult(error: TavilyResearchError): TavilyResearchResult {

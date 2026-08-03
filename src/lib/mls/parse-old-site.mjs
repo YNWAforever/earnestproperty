@@ -134,7 +134,7 @@ function extractLegacyImageUrls($) {
   return [...new Set(urls)];
 }
 
-function splitFeatureText(text) {
+export function splitFeatureText(text) {
   return normalizeText(text)
     .split(/[,，、]/)
     .map(normalizeText)

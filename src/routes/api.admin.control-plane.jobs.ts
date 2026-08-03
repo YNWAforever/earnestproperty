@@ -31,8 +31,10 @@ export const Route = createFileRoute("/api/admin/control-plane/jobs")({
           const [page, summary] = await Promise.all([listJobs(parsed.data), getJobSummary()]);
           return successResponse({ ...page, summary }, context.requestId);
         } catch (error) {
-          const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
-          const status = error instanceof Response ? error.status : code === "VALIDATION_ERROR" ? 400 : 500;
+          const code =
+            error && typeof error === "object" && "code" in error ? String(error.code) : "";
+          const status =
+            error instanceof Response ? error.status : code === "VALIDATION_ERROR" ? 400 : 500;
           return errorResponse(error, context.requestId, status);
         }
       },

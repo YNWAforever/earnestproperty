@@ -46,6 +46,13 @@ export const fetchNeonListingsForEstate = createServerFn({ method: "GET" })
     return neonData.fetchListingsForEstate(data);
   });
 
+export const fetchNeonListingsForAgent = createServerFn({ method: "GET" })
+  .inputValidator((data: { agentId: string; limit: number }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchListingsForAgent(data);
+  });
+
 export const fetchNeonPropertyByListingNo = createServerFn({ method: "GET" })
   .inputValidator((data: { listingNo: string }) => data)
   .handler(async ({ data }) => {

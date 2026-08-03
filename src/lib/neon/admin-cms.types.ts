@@ -25,7 +25,11 @@ export type CmsDraftSaveInput = {
   restoredFromRevisionId?: string | null;
 };
 
-export type CmsPublishInput = { resourceType: CmsResourceType; resourceId: string; revisionId: string };
+export type CmsPublishInput = {
+  resourceType: CmsResourceType;
+  resourceId: string;
+  revisionId: string;
+};
 export type CmsRestoreInput = { revisionId: string };
 export type CmsArchiveInput = { resourceType: CmsResourceType; resourceId: string };
 export type CmsEditorResult = { row: CmsHubRow | null; revisions: CmsRevisionSummary[] };

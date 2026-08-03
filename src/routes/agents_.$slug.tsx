@@ -1,18 +1,22 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
+import { ArrowLeft, Bed, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SITE_NAME } from "@/content/seo";
+import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
 import { fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
+import { fetchListingsForAgent, type ListingRow } from "@/lib/queries";
+import { agentPersonSchema } from "@/lib/schema";
 
 export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
     const profile = await fetchNeonPublicAgentProfileBySlug({ data: { slug: params.slug } });
     if (!profile) throw notFound();
-    return { profile: profile as NeonPublicAgentProfile };
+    const listings = await fetchListingsForAgent(profile.id, 6).catch(() => []);
+    return { profile: profile as NeonPublicAgentProfile, listings };
   },
   head: ({ loaderData }) => {
     const profile = loaderData?.profile;
@@ -25,6 +29,7 @@ export const Route = createFileRoute("/agents_/$slug")({
           content: `${name} ${profile?.job_title ?? "晉誠地產專業代理"}，直接聯絡了解放盤、買樓及租樓服務。`,
         },
       ],
+      links: profile?.public_slug ? [canonicalLink(`/agents/${profile.public_slug}`)] : [],
     };
   },
   errorComponent: AgentProfileError,
@@ -33,7 +38,7 @@ export const Route = createFileRoute("/agents_/$slug")({
 });
 
 function AgentProfilePage() {
-  const { profile } = Route.useLoaderData();
+  const { profile, listings } = Route.useLoaderData();
   const name = profile.name_zh || profile.name_en || "晉誠地產代理";
   // See agents.tsx: defaulting to the first configured branch printed 麗都分行 on
   // agents based elsewhere. A missing branch renders nothing rather than a wrong one.
@@ -42,9 +47,22 @@ function AgentProfilePage() {
   const note = agentContactNote(contact);
   const phoneHref = toTelHref(contact.phone);
   const whatsappHref = toWhatsAppHref(contact.whatsapp);
+  const personSchema = agentPersonSchema({
+    name,
+    jobTitle: profile.job_title,
+    telephone: contact.phone,
+    image: profile.avatar_url,
+    url: profile.public_slug ? `${SITE_URL}/agents/${profile.public_slug}` : SITE_URL,
+  });
 
   return (
     <main className="bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({ "@context": "https://schema.org", ...personSchema }),
+        }}
+      />
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <Link
           to="/agents"
@@ -86,6 +104,30 @@ function AgentProfilePage() {
               {profile.bio ? (
                 <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">{profile.bio}</p>
               ) : null}
+              {profile.specialties.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-1.5">
+                  {profile.specialties.map((specialty) => (
+                    <Badge key={specialty} variant="secondary">
+                      {specialty}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+              {profile.served_estate_slugs.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2 text-sm">
+                  <span className="text-muted-foreground">熟悉屋苑：</span>
+                  {profile.served_estate_slugs.map((slug) => (
+                    <Link
+                      key={slug}
+                      to="/estate/$slug"
+                      params={{ slug }}
+                      className="text-primary underline underline-offset-2"
+                    >
+                      {slug}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -118,6 +160,17 @@ function AgentProfilePage() {
           </aside>
         </section>
 
+        {listings.length > 0 ? (
+          <section className="py-8">
+            <h2 className="text-2xl font-semibold">{name} 的放盤</h2>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {listings.map((listing) => (
+                <AgentListingCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
         <section className="py-8">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-5">
             <div>
@@ -136,6 +189,50 @@ function AgentProfilePage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function AgentListingCard({ listing }: { listing: ListingRow }) {
+  const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
+  const isRent = listing.deal_type === "rent";
+  const price = isRent
+    ? listing.rent
+      ? `$${Number(listing.rent).toLocaleString()} / 月`
+      : "—"
+    : listing.price
+      ? `$${(Number(listing.price) / 1_000_000).toFixed(2)}M`
+      : "—";
+
+  return (
+    <Link
+      to="/property/$listingNo"
+      params={{ listingNo: listing.listing_no }}
+      className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
+    >
+      <div className="aspect-[4/3] overflow-hidden bg-muted">
+        <img
+          src={img}
+          alt={listing.title_zh}
+          loading="lazy"
+          width={400}
+          height={300}
+          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+        />
+      </div>
+      <div className="p-3">
+        <p className="line-clamp-1 text-sm font-medium">{listing.title_zh}</p>
+        <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+          {listing.bedrooms !== null ? (
+            <>
+              <Bed className="h-3 w-3" />
+              {listing.bedrooms}
+            </>
+          ) : null}
+          {listing.saleable_area ? ` · ${listing.saleable_area} 呎` : ""}
+        </p>
+        <p className="mt-1 font-semibold text-primary">{price}</p>
+      </div>
+    </Link>
   );
 }
 

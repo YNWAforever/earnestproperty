@@ -170,9 +170,11 @@ function ShamTsengPage() {
       {/* Price chart */}
       <section className="mt-12">
         <h2 className="text-2xl font-semibold">12 個月實呎成交走勢</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          資料來源：本行成交記錄（{transactions.length} 宗買賣）
-        </p>
+        {transactions.length > 0 ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            資料來源：本行成交記錄（{transactions.length} 宗買賣）
+          </p>
+        ) : null}
         <Card className="mt-4">
           <CardContent className="pt-6">
             {chartData.length === 0 ? (

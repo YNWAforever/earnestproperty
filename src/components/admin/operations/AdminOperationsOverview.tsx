@@ -167,7 +167,9 @@ export function AdminOperationsOverview({
               Operations health
             </h2>
             <p className="text-sm text-muted-foreground">
-              {health.status === "healthy" ? "All reported checks are healthy." : "Review reported checks."}
+              {health.status === "healthy"
+                ? "All reported checks are healthy."
+                : "Review reported checks."}
             </p>
           </div>
         </div>
@@ -176,7 +178,13 @@ export function AdminOperationsOverview({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button type="button" variant="outline" size="icon" onClick={onRefresh} aria-label="Refresh overview">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={onRefresh}
+                  aria-label="Refresh overview"
+                >
                   <RefreshCw className="size-4" aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
@@ -203,7 +211,9 @@ export function AdminOperationsOverview({
         </ul>
       </section>
 
-      {jobsSummary !== null ? <JobSummarySection summary={jobsSummary} onOpenJobs={onOpenJobs} /> : null}
+      {jobsSummary !== null ? (
+        <JobSummarySection summary={jobsSummary} onOpenJobs={onOpenJobs} />
+      ) : null}
       {migrations !== null ? <MigrationSummarySection migrations={migrations} /> : null}
     </div>
   );

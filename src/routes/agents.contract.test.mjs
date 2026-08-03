@@ -209,6 +209,8 @@ test("agent avatars and profile form include required accessibility details", ()
     "avatar_url",
     "branch",
     "bio",
+    "specialties",
+    "served_estate_slugs",
     "public_slug",
     "show_on_website",
     "display_order",

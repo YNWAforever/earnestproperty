@@ -3,11 +3,8 @@ import test from "node:test";
 
 import * as staffSecurityPolicy from "./staff-security-policy.ts";
 
-const {
-  decideAgentProfileMutation,
-  shouldBootstrapFirstAdmin,
-  isFirstAdminBootstrapEligible,
-} = staffSecurityPolicy;
+const { decideAgentProfileMutation, shouldBootstrapFirstAdmin, isFirstAdminBootstrapEligible } =
+  staffSecurityPolicy;
 
 const manager = ["manager"];
 const admin = ["admin"];
@@ -41,11 +38,7 @@ test("manager may publish ordinary public profile fields without changing identi
 
 test("manager may create a profile-only row when target is null", () => {
   assert.deepEqual(
-    decideAgentProfileMutation(
-      manager,
-      { auth_user_id: null, email: null, active: true },
-      null,
-    ),
+    decideAgentProfileMutation(manager, { auth_user_id: null, email: null, active: true }, null),
     { allowed: true, mode: "public-profile-only" },
   );
 });

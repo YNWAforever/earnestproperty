@@ -1,10 +1,12 @@
 export type NeonListingFiltersInput = {
   deal: "sale" | "rent" | "all";
+  keyword?: string;
   minPrice?: number;
   maxPrice?: number;
   bedrooms?: number;
   estateSlug?: string;
   districtSlug?: string;
+  agentId?: string;
   page: number;
   pageSize: number;
 };
@@ -39,6 +41,8 @@ export type NeonPublicAgentProfile = {
   avatar_url: string | null;
   branch: string | null;
   bio: string | null;
+  specialties: string[];
+  served_estate_slugs: string[];
 };
 
 export type NeonStaffProfile = NeonPublicAgentProfile;

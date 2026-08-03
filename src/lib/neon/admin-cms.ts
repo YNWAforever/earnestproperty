@@ -22,14 +22,16 @@ export const fetchAdminCmsHub = async (options: { data: { view: CmsHubView; quer
 const fetchAdminCmsCategoryServer = createServerFn({ method: "GET" })
   .inputValidator((data: { resourceType: CmsResourceType; query?: string }) => data)
   .handler(async ({ data }) => (await cmsServer()).fetchAdminCmsCategory(data));
-export const fetchAdminCmsCategory = async (options: { data: { resourceType: CmsResourceType; query?: string } }) =>
-  fetchAdminCmsCategoryServer(await withStaffAuthHeaders(options));
+export const fetchAdminCmsCategory = async (options: {
+  data: { resourceType: CmsResourceType; query?: string };
+}) => fetchAdminCmsCategoryServer(await withStaffAuthHeaders(options));
 
 const fetchAdminCmsEditorServer = createServerFn({ method: "GET" })
   .inputValidator((data: { resourceType: CmsResourceType; resourceId: string }) => data)
   .handler(async ({ data }) => (await cmsServer()).fetchAdminCmsEditor(data));
-export const fetchAdminCmsEditor = async (options: { data: { resourceType: CmsResourceType; resourceId: string } }) =>
-  fetchAdminCmsEditorServer(await withStaffAuthHeaders(options));
+export const fetchAdminCmsEditor = async (options: {
+  data: { resourceType: CmsResourceType; resourceId: string };
+}) => fetchAdminCmsEditorServer(await withStaffAuthHeaders(options));
 
 const saveAdminCmsDraftServer = createServerFn({ method: "POST" })
   .inputValidator((data: CmsDraftSaveInput) => data)

@@ -36,7 +36,10 @@ export function createOpenCodeGoClient({
   config: ContentCopilotConfig;
 }) {
   return {
-    async generateProposal(input: { system: string; prompt: string }): Promise<OpenCodeGoProposalResult> {
+    async generateProposal(input: {
+      system: string;
+      prompt: string;
+    }): Promise<OpenCodeGoProposalResult> {
       if (!config.enabled || !config.baseUrl || !config.apiKey || !config.model) {
         return failedResult(null, 0, "OPENCODE_GO_NOT_CONFIGURED");
       }
@@ -66,10 +69,16 @@ export function createOpenCodeGoClient({
           sleepImpl,
         );
 
-        if (!response.ok) return failedResult(config.model, elapsedSince(startedAt), "OPENCODE_GO_HTTP_ERROR");
+        if (!response.ok)
+          return failedResult(config.model, elapsedSince(startedAt), "OPENCODE_GO_HTTP_ERROR");
 
         const providerResult = await parseProviderResponse(response);
-        if (!providerResult) return failedResult(config.model, elapsedSince(startedAt), "OPENCODE_GO_RESPONSE_INVALID");
+        if (!providerResult)
+          return failedResult(
+            config.model,
+            elapsedSince(startedAt),
+            "OPENCODE_GO_RESPONSE_INVALID",
+          );
 
         return {
           ok: true,
@@ -104,7 +113,10 @@ async function fetchWithRetry(
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= OPENCODE_GO_MAX_RETRIES; attempt += 1) {
     try {
-      const response = await fetchImpl(url, { ...init, signal: AbortSignal.timeout(OPENCODE_GO_TIMEOUT_MS) });
+      const response = await fetchImpl(url, {
+        ...init,
+        signal: AbortSignal.timeout(OPENCODE_GO_TIMEOUT_MS),
+      });
       if (isRetryableStatus(response.status) && attempt < OPENCODE_GO_MAX_RETRIES) {
         await cancelResponseBody(response);
         await sleepImpl(OPENCODE_GO_RETRY_BASE_DELAY_MS * 2 ** attempt);
@@ -173,7 +185,11 @@ function elapsedSince(startedAt: number) {
   return Math.max(0, Date.now() - startedAt);
 }
 
-function failedResult(model: string | null, latencyMs: number, error: OpenCodeGoError): OpenCodeGoProposalResult {
+function failedResult(
+  model: string | null,
+  latencyMs: number,
+  error: OpenCodeGoError,
+): OpenCodeGoProposalResult {
   return { ok: false, value: null, model, latencyMs, usageMetadata: {}, error };
 }
 

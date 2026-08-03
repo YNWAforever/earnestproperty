@@ -39,7 +39,7 @@ import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import { coreEstates, estateFigure, CORE_ESTATES_PREVIEW_COUNT } from "@/content/core-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
-import { SITE_URL, SITE_LOGO_URL, pageSeo } from "@/content/seo";
+import { SITE_URL, SITE_LOGO_URL, canonicalLink, pageSeo } from "@/content/seo";
 import {
   fetchEstates,
   fetchFeaturedProperties,
@@ -95,6 +95,7 @@ export const Route = createFileRoute("/")({
       { property: "og:image", content: HERO_OG_IMAGE },
       { name: "twitter:image", content: HERO_OG_IMAGE },
     ],
+    links: [canonicalLink(pageSeo.home.path)],
   }),
   component: HomePage,
 });
@@ -568,7 +569,14 @@ function CoreEstateGrid({
 }) {
   const [expanded, setExpanded] = useState(false);
   const live = new Map(estates.map((estate) => [estate.slug, estate]));
-  const visible = expanded ? coreEstates : coreEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
+  // Estates without a detail page (hasPage: false) also have no figures and no
+  // photo, so rendering them left a dead, non-clickable gradient box next to
+  // real cards. Filter them out of the homepage grid entirely rather than
+  // shipping five thin pages just to make them clickable -- core-estates.ts
+  // itself is untouched, so the full client-approved list is ready the
+  // moment real slugs and pages exist for the rest.
+  const linkableEstates = coreEstates.filter((estate) => estate.hasPage);
+  const visible = expanded ? linkableEstates : linkableEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
 
   return (
     <>
@@ -657,7 +665,7 @@ function CoreEstateGrid({
         })}
       </div>
 
-      {coreEstates.length > CORE_ESTATES_PREVIEW_COUNT && !expanded ? (
+      {linkableEstates.length > CORE_ESTATES_PREVIEW_COUNT && !expanded ? (
         <div className="mt-8 flex justify-center">
           <Button variant="outline" onClick={() => setExpanded(true)}>
             查看更多屋苑

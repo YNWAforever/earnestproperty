@@ -11,6 +11,18 @@ export type PageSeo = {
   path: string;
 };
 
+/**
+ * Only 4 routes had a canonical link before this (castle-peak-road.index,
+ * castle-peak-road.$segment, district.sham-tseng, district.tsuen-wan); most
+ * public pages had none. Deliberately not root-level: a canonical declared on
+ * __root.tsx would stamp the homepage URL onto every page. Pass the bare path
+ * with no query string -- /listings must canonicalise to `/listings`, not
+ * whatever filter combination the visitor arrived with.
+ */
+export function canonicalLink(path: string) {
+  return { rel: "canonical", href: `${SITE_URL}${path}` } as const;
+}
+
 export const pageSeo = {
   home: {
     path: "/",
@@ -67,6 +79,21 @@ export const pageSeo = {
     title: "聯絡晉誠地產｜深井睇樓預約．WhatsApp 即時查詢",
     description:
       "WhatsApp 即時聯絡晉誠地產持牌代理，深井麗都花園地舖門市，歡迎預約睇樓及樓盤估價。",
+  },
+  privacy: {
+    path: "/privacy",
+    title: "私隱政策｜晉誠地產 Earnest Property",
+    description: "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
+  },
+  disclaimer: {
+    path: "/disclaimer",
+    title: "免責聲明｜晉誠地產 Earnest Property",
+    description: "晉誠地產網站樓盤資訊及內容的免責聲明。",
+  },
+  terms: {
+    path: "/terms",
+    title: "使用條款｜晉誠地產 Earnest Property",
+    description: "使用晉誠地產網站的條款及細則。",
   },
 } satisfies Record<string, PageSeo>;
 

@@ -11,11 +11,13 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VideosRouteImport } from './routes/videos'
 import { Route as TransactionsRouteImport } from './routes/transactions'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as MortgageRouteImport } from './routes/mortgage'
 import { Route as ListingsRouteImport } from './routes/listings'
 import { Route as EstateReviewsRouteImport } from './routes/estate-reviews'
-import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DisclaimerRouteImport } from './routes/disclaimer'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as CastlePeakRoadRouteImport } from './routes/castle-peak-road'
 import { Route as BlogRouteImport } from './routes/blog'
@@ -30,9 +32,8 @@ import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
 import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
-import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
 import { Route as CastlePeakRoadSegmentRouteImport } from './routes/castle-peak-road.$segment'
-import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
+import { Route as BlogSlugRouteImport } from './routes/blog_.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
@@ -46,8 +47,6 @@ import { Route as AdminCmsRouteImport } from './routes/admin.cms'
 import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
 import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
 import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
-import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
-import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
 import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webhook'
 import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
 import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
@@ -82,9 +81,19 @@ const TransactionsRoute = TransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MortgageRoute = MortgageRouteImport.update({
@@ -102,9 +111,9 @@ const EstateReviewsRoute = EstateReviewsRouteImport.update({
   path: '/estate-reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const DisclaimerRoute = DisclaimerRouteImport.update({
+  id: '/disclaimer',
+  path: '/disclaimer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -177,20 +186,15 @@ const DistrictShamTsengRoute = DistrictShamTsengRouteImport.update({
   path: '/district/sham-tseng',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardInquiriesRoute = DashboardInquiriesRouteImport.update({
-  id: '/inquiries',
-  path: '/inquiries',
-  getParentRoute: () => DashboardRoute,
-} as any)
 const CastlePeakRoadSegmentRoute = CastlePeakRoadSegmentRouteImport.update({
   id: '/$segment',
   path: '/$segment',
   getParentRoute: () => CastlePeakRoadRoute,
 } as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => BlogRoute,
+  id: '/blog_/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
@@ -256,16 +260,6 @@ const AccountPathnameRoute = AccountPathnameRouteImport.update({
   id: '/account/$pathname',
   path: '/account/$pathname',
   getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardPropertyNewRoute = DashboardPropertyNewRouteImport.update({
-  id: '/property/new',
-  path: '/property/new',
-  getParentRoute: () => DashboardRoute,
-} as any)
-const DashboardPropertyIdRoute = DashboardPropertyIdRouteImport.update({
-  id: '/property/$id',
-  path: '/property/$id',
-  getParentRoute: () => DashboardRoute,
 } as any)
 const ApiWoztellWebhookRoute = ApiWoztellWebhookRouteImport.update({
   id: '/api/woztell/webhook',
@@ -399,14 +393,16 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
   '/agents': typeof AgentsRoute
-  '/blog': typeof BlogRouteWithChildren
+  '/blog': typeof BlogRoute
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/disclaimer': typeof DisclaimerRoute
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
   '/mortgage': typeof MortgageRoute
+  '/privacy': typeof PrivacyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
@@ -424,7 +420,6 @@ export interface FileRoutesByFullPath {
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
-  '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -441,8 +436,6 @@ export interface FileRoutesByFullPath {
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
-  '/dashboard/property/$id': typeof DashboardPropertyIdRoute
-  '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
@@ -462,13 +455,15 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/agents': typeof AgentsRoute
-  '/blog': typeof BlogRouteWithChildren
+  '/blog': typeof BlogRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/disclaimer': typeof DisclaimerRoute
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
   '/mortgage': typeof MortgageRoute
+  '/privacy': typeof PrivacyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
@@ -486,7 +481,6 @@ export interface FileRoutesByTo {
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
-  '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -503,8 +497,6 @@ export interface FileRoutesByTo {
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
-  '/dashboard/property/$id': typeof DashboardPropertyIdRoute
-  '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
@@ -526,14 +518,16 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/admin': typeof AdminRouteWithChildren
   '/agents': typeof AgentsRoute
-  '/blog': typeof BlogRouteWithChildren
+  '/blog': typeof BlogRoute
   '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/disclaimer': typeof DisclaimerRoute
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
   '/mortgage': typeof MortgageRoute
+  '/privacy': typeof PrivacyRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
@@ -549,9 +543,8 @@ export interface FileRoutesById {
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
-  '/blog/$slug': typeof BlogSlugRoute
+  '/blog_/$slug': typeof BlogSlugRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
-  '/dashboard/inquiries': typeof DashboardInquiriesRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
@@ -568,8 +561,6 @@ export interface FileRoutesById {
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
-  '/dashboard/property/$id': typeof DashboardPropertyIdRoute
-  '/dashboard/property/new': typeof DashboardPropertyNewRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
@@ -595,11 +586,13 @@ export interface FileRouteTypes {
     | '/blog'
     | '/castle-peak-road'
     | '/contact'
-    | '/dashboard'
+    | '/disclaimer'
     | '/estate-reviews'
     | '/listings'
     | '/mortgage'
+    | '/privacy'
     | '/sitemap.xml'
+    | '/terms'
     | '/transactions'
     | '/videos'
     | '/account/$pathname'
@@ -617,7 +610,6 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/blog/$slug'
     | '/castle-peak-road/$segment'
-    | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/ting-kau'
     | '/district/tsuen-wan'
@@ -634,8 +626,6 @@ export interface FileRouteTypes {
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/woztell/webhook'
-    | '/dashboard/property/$id'
-    | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
@@ -657,11 +647,13 @@ export interface FileRouteTypes {
     | '/agents'
     | '/blog'
     | '/contact'
-    | '/dashboard'
+    | '/disclaimer'
     | '/estate-reviews'
     | '/listings'
     | '/mortgage'
+    | '/privacy'
     | '/sitemap.xml'
+    | '/terms'
     | '/transactions'
     | '/videos'
     | '/account/$pathname'
@@ -679,7 +671,6 @@ export interface FileRouteTypes {
     | '/auth/login'
     | '/blog/$slug'
     | '/castle-peak-road/$segment'
-    | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/ting-kau'
     | '/district/tsuen-wan'
@@ -696,8 +687,6 @@ export interface FileRouteTypes {
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/woztell/webhook'
-    | '/dashboard/property/$id'
-    | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
@@ -721,11 +710,13 @@ export interface FileRouteTypes {
     | '/blog'
     | '/castle-peak-road'
     | '/contact'
-    | '/dashboard'
+    | '/disclaimer'
     | '/estate-reviews'
     | '/listings'
     | '/mortgage'
+    | '/privacy'
     | '/sitemap.xml'
+    | '/terms'
     | '/transactions'
     | '/videos'
     | '/account/$pathname'
@@ -741,9 +732,8 @@ export interface FileRouteTypes {
     | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
-    | '/blog/$slug'
+    | '/blog_/$slug'
     | '/castle-peak-road/$segment'
-    | '/dashboard/inquiries'
     | '/district/sham-tseng'
     | '/district/ting-kau'
     | '/district/tsuen-wan'
@@ -760,8 +750,6 @@ export interface FileRouteTypes {
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/woztell/webhook'
-    | '/dashboard/property/$id'
-    | '/dashboard/property/new'
     | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
@@ -783,14 +771,16 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AdminRoute: typeof AdminRouteWithChildren
   AgentsRoute: typeof AgentsRoute
-  BlogRoute: typeof BlogRouteWithChildren
+  BlogRoute: typeof BlogRoute
   CastlePeakRoadRoute: typeof CastlePeakRoadRouteWithChildren
   ContactRoute: typeof ContactRoute
-  DashboardRoute: typeof DashboardRouteWithChildren
+  DisclaimerRoute: typeof DisclaimerRoute
   EstateReviewsRoute: typeof EstateReviewsRoute
   ListingsRoute: typeof ListingsRoute
   MortgageRoute: typeof MortgageRoute
+  PrivacyRoute: typeof PrivacyRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TermsRoute: typeof TermsRoute
   TransactionsRoute: typeof TransactionsRoute
   VideosRoute: typeof VideosRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
@@ -798,6 +788,7 @@ export interface RootRouteChildren {
   ApiMlsSyncRoute: typeof ApiMlsSyncRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
+  BlogSlugRoute: typeof BlogSlugRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
   DistrictTingKauRoute: typeof DistrictTingKauRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
@@ -835,11 +826,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TransactionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mortgage': {
@@ -863,11 +868,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstateReviewsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/disclaimer': {
+      id: '/disclaimer'
+      path: '/disclaimer'
+      fullPath: '/disclaimer'
+      preLoaderRoute: typeof DisclaimerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -968,13 +973,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DistrictShamTsengRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/inquiries': {
-      id: '/dashboard/inquiries'
-      path: '/inquiries'
-      fullPath: '/dashboard/inquiries'
-      preLoaderRoute: typeof DashboardInquiriesRouteImport
-      parentRoute: typeof DashboardRoute
-    }
     '/castle-peak-road/$segment': {
       id: '/castle-peak-road/$segment'
       path: '/$segment'
@@ -982,12 +980,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CastlePeakRoadSegmentRouteImport
       parentRoute: typeof CastlePeakRoadRoute
     }
-    '/blog/$slug': {
-      id: '/blog/$slug'
-      path: '/$slug'
+    '/blog_/$slug': {
+      id: '/blog_/$slug'
+      path: '/blog/$slug'
       fullPath: '/blog/$slug'
       preLoaderRoute: typeof BlogSlugRouteImport
-      parentRoute: typeof BlogRoute
+      parentRoute: typeof rootRouteImport
     }
     '/auth/login': {
       id: '/auth/login'
@@ -1079,20 +1077,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/account/$pathname'
       preLoaderRoute: typeof AccountPathnameRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/dashboard/property/new': {
-      id: '/dashboard/property/new'
-      path: '/property/new'
-      fullPath: '/dashboard/property/new'
-      preLoaderRoute: typeof DashboardPropertyNewRouteImport
-      parentRoute: typeof DashboardRoute
-    }
-    '/dashboard/property/$id': {
-      id: '/dashboard/property/$id'
-      path: '/property/$id'
-      fullPath: '/dashboard/property/$id'
-      preLoaderRoute: typeof DashboardPropertyIdRouteImport
-      parentRoute: typeof DashboardRoute
     }
     '/api/woztell/webhook': {
       id: '/api/woztell/webhook'
@@ -1294,16 +1278,6 @@ const AdminRouteChildren: AdminRouteChildren = {
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 
-interface BlogRouteChildren {
-  BlogSlugRoute: typeof BlogSlugRoute
-}
-
-const BlogRouteChildren: BlogRouteChildren = {
-  BlogSlugRoute: BlogSlugRoute,
-}
-
-const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
-
 interface CastlePeakRoadRouteChildren {
   CastlePeakRoadSegmentRoute: typeof CastlePeakRoadSegmentRoute
   CastlePeakRoadIndexRoute: typeof CastlePeakRoadIndexRoute
@@ -1316,22 +1290,6 @@ const CastlePeakRoadRouteChildren: CastlePeakRoadRouteChildren = {
 
 const CastlePeakRoadRouteWithChildren = CastlePeakRoadRoute._addFileChildren(
   CastlePeakRoadRouteChildren,
-)
-
-interface DashboardRouteChildren {
-  DashboardInquiriesRoute: typeof DashboardInquiriesRoute
-  DashboardPropertyIdRoute: typeof DashboardPropertyIdRoute
-  DashboardPropertyNewRoute: typeof DashboardPropertyNewRoute
-}
-
-const DashboardRouteChildren: DashboardRouteChildren = {
-  DashboardInquiriesRoute: DashboardInquiriesRoute,
-  DashboardPropertyIdRoute: DashboardPropertyIdRoute,
-  DashboardPropertyNewRoute: DashboardPropertyNewRoute,
-}
-
-const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
-  DashboardRouteChildren,
 )
 
 interface ApiAdminControlPlaneJobsRouteChildren {
@@ -1374,14 +1332,16 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AdminRoute: AdminRouteWithChildren,
   AgentsRoute: AgentsRoute,
-  BlogRoute: BlogRouteWithChildren,
+  BlogRoute: BlogRoute,
   CastlePeakRoadRoute: CastlePeakRoadRouteWithChildren,
   ContactRoute: ContactRoute,
-  DashboardRoute: DashboardRouteWithChildren,
+  DisclaimerRoute: DisclaimerRoute,
   EstateReviewsRoute: EstateReviewsRoute,
   ListingsRoute: ListingsRoute,
   MortgageRoute: MortgageRoute,
+  PrivacyRoute: PrivacyRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TermsRoute: TermsRoute,
   TransactionsRoute: TransactionsRoute,
   VideosRoute: VideosRoute,
   AccountPathnameRoute: AccountPathnameRoute,
@@ -1389,6 +1349,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMlsSyncRoute: ApiMlsSyncRoute,
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
+  BlogSlugRoute: BlogSlugRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
   DistrictTingKauRoute: DistrictTingKauRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,

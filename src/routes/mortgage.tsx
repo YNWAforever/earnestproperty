@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { MortgageCalculator } from "@/components/site/MortgageCalculator";
+import { canonicalLink } from "@/content/seo";
 import { parseMortgageSearch } from "@/lib/mortgage";
 
 export const Route = createFileRoute("/mortgage")({
@@ -18,6 +19,8 @@ export const Route = createFileRoute("/mortgage")({
         content: "快速估算香港置業的首期、供款、壓力測試及住宅印花稅。",
       },
     ],
+    // Bare path -- ?price=X must not fork the canonical per query value.
+    links: [canonicalLink("/mortgage")],
   }),
   component: MortgageRoute,
 });

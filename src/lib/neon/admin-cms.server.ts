@@ -97,11 +97,14 @@ async function staffForRead() {
   return requireStaffAccess(getRequest(), [...ALL_CMS_ROLES]);
 }
 
-async function listHubRows(input: {
-  view?: CmsHubView;
-  query?: string;
-  resourceType?: CmsResourceType;
-}, actor: StaffAccess) {
+async function listHubRows(
+  input: {
+    view?: CmsHubView;
+    query?: string;
+    resourceType?: CmsResourceType;
+  },
+  actor: StaffAccess,
+) {
   const params: unknown[] = [];
   const filters: string[] = [];
   if (input.resourceType) {
@@ -119,7 +122,9 @@ async function listHubRows(input: {
   const query = input.query?.trim();
   if (query) {
     params.push(`%${query}%`);
-    filters.push(`(COALESCE(latest.payload->>'title', latest.payload->>'name_zh', latest.payload->>'question', latest.payload->>'pathname', '') ILIKE $${params.length} OR COALESCE(latest.payload->>'slug', '') ILIKE $${params.length})`);
+    filters.push(
+      `(COALESCE(latest.payload->>'title', latest.payload->>'name_zh', latest.payload->>'question', latest.payload->>'pathname', '') ILIKE $${params.length} OR COALESCE(latest.payload->>'slug', '') ILIKE $${params.length})`,
+    );
   }
   const where = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
   return queryRows(
@@ -199,13 +204,22 @@ export async function fetchAdminCmsEditor(input: {
   const row = latest
     ? hubRow({
         ...latest,
-        title: String(latest.payload && typeof latest.payload === "object"
-          ? ((latest.payload as Record<string, unknown>).title ?? (latest.payload as Record<string, unknown>).name_zh ?? (latest.payload as Record<string, unknown>).question ?? "Untitled")
-          : "Untitled"),
-        slug: latest.payload && typeof latest.payload === "object" ? (latest.payload as Record<string, unknown>).slug : null,
+        title: String(
+          latest.payload && typeof latest.payload === "object"
+            ? ((latest.payload as Record<string, unknown>).title ??
+                (latest.payload as Record<string, unknown>).name_zh ??
+                (latest.payload as Record<string, unknown>).question ??
+                "Untitled")
+            : "Untitled",
+        ),
+        slug:
+          latest.payload && typeof latest.payload === "object"
+            ? (latest.payload as Record<string, unknown>).slug
+            : null,
         latest_revision_id: latest.id,
         latest_version: latest.version_number,
-        published_version: rows.find((entry) => entry.state === "published")?.version_number ?? null,
+        published_version:
+          rows.find((entry) => entry.state === "published")?.version_number ?? null,
         updated_at: latest.created_at,
         updated_by: latest.created_by,
       })
@@ -244,7 +258,12 @@ async function saveDraftForActor(input: CmsDraftSaveInput, actor: StaffAccess) {
            base_published_version = $2, restored_from_revision_id = $3, created_at = now()
          WHERE id = $4
          RETURNING id, version_number, created_at`,
-        [payloadJson, input.basePublishedVersion ?? null, input.restoredFromRevisionId ?? null, existing[0].id],
+        [
+          payloadJson,
+          input.basePublishedVersion ?? null,
+          input.restoredFromRevisionId ?? null,
+          existing[0].id,
+        ],
       )
     : await queryRows(
         `INSERT INTO cms_content_revisions (
@@ -256,7 +275,14 @@ async function saveDraftForActor(input: CmsDraftSaveInput, actor: StaffAccess) {
          FROM cms_content_revisions
          WHERE resource_type = $1 AND resource_id = $2
          RETURNING id, version_number, created_at`,
-        [input.resourceType, resourceId, payloadJson, input.basePublishedVersion ?? null, actor.staffId, input.restoredFromRevisionId ?? null],
+        [
+          input.resourceType,
+          resourceId,
+          payloadJson,
+          input.basePublishedVersion ?? null,
+          actor.staffId,
+          input.restoredFromRevisionId ?? null,
+        ],
       );
   const saved = rows[0];
   await writeAudit(actor.staffId, "cms_draft_saved", input.resourceType, resourceId, {
@@ -297,7 +323,8 @@ function projectorSql(resourceType: CmsResourceType) {
       WHERE id = $1 AND EXISTS (SELECT 1 FROM eligible)
       RETURNING id
     )`;
-  if (resourceType === "estate") return `${common}
+  if (resourceType === "estate")
+    return `${common}
     INSERT INTO estates (id, slug, name_zh, name_en, district_slug, developer, year_completed,
       phases, total_units, area_min, area_max, description, hero_image, facilities,
       seo_title, seo_description, published)
@@ -313,7 +340,8 @@ function projectorSql(resourceType: CmsResourceType) {
       area_min=EXCLUDED.area_min, area_max=EXCLUDED.area_max, description=EXCLUDED.description,
       hero_image=EXCLUDED.hero_image, facilities=EXCLUDED.facilities, seo_title=EXCLUDED.seo_title,
       seo_description=EXCLUDED.seo_description, published=true, updated_at=now() RETURNING id`;
-  if (resourceType === "article") return `${common}
+  if (resourceType === "article")
+    return `${common}
     INSERT INTO articles (id, slug, title, excerpt, content, cover_image, category,
       reading_minutes, published, published_at, seo_title, seo_description)
     SELECT resource_id, payload->>'slug', payload->>'title', payload->>'excerpt', payload->>'content',
@@ -323,14 +351,16 @@ function projectorSql(resourceType: CmsResourceType) {
       content=EXCLUDED.content, cover_image=EXCLUDED.cover_image, category=EXCLUDED.category,
       reading_minutes=EXCLUDED.reading_minutes, published=true, published_at=now(),
       seo_title=EXCLUDED.seo_title, seo_description=EXCLUDED.seo_description, updated_at=now() RETURNING id`;
-  if (resourceType === "video") return `${common}
+  if (resourceType === "video")
+    return `${common}
     INSERT INTO cms_videos (id, title, video_url, description, sort_order, published)
     SELECT resource_id, payload->>'title', payload->>'video_url', payload->>'description',
       COALESCE((payload->>'sort_order')::int, 0), true FROM eligible
     ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, video_url=EXCLUDED.video_url,
       description=EXCLUDED.description, sort_order=EXCLUDED.sort_order, published=true, updated_at=now()
     RETURNING id`;
-  if (resourceType === "faq") return `${common}
+  if (resourceType === "faq")
+    return `${common}
     INSERT INTO faqs (id, scope, question, answer, sort_order, published)
     SELECT resource_id, payload->>'scope', payload->>'question', payload->>'answer',
       COALESCE((payload->>'sort_order')::int, 0), true FROM eligible
@@ -358,7 +388,10 @@ export async function publishAdminCmsRevision(input: CmsPublishInput, request: R
   const revision = revisionRows[0];
   if (!revision || revision.state !== "draft") throw new Error("CMS_REVISION_NOT_FOUND");
   assertResourceType(revision.resource_type);
-  if (revision.resource_type !== input.resourceType || String(revision.resource_id) !== input.resourceId) {
+  if (
+    revision.resource_type !== input.resourceType ||
+    String(revision.resource_id) !== input.resourceId
+  ) {
     throw new Error("CMS_REVISION_MISMATCH");
   }
   validatePayload(revision.resource_type, payloadRecord(revision.payload));

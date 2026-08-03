@@ -118,7 +118,8 @@ export async function verifyMigrationApproval(
     const payloadBytes = decodeBase64Url(parts[0]);
     const signature = decodeBase64Url(parts[1]);
     const key = await importHmacKey(secret, ["verify"]);
-    if (!(await crypto.subtle.verify("HMAC", key, signature, payloadBytes))) return invalidApproval();
+    if (!(await crypto.subtle.verify("HMAC", key, signature, payloadBytes)))
+      return invalidApproval();
 
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as unknown;
     if (!isApprovalPayload(payload)) return invalidApproval();

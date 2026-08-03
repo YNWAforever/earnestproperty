@@ -181,6 +181,10 @@ function mapAdminAgentProfile(row: Record<string, unknown>): AdminAgentProfileRo
     avatar_url: stringOrNull(row.avatar_url),
     branch: stringOrNull(row.branch),
     bio: stringOrNull(row.bio),
+    specialties: Array.isArray(row.specialties) ? row.specialties.map(String) : [],
+    served_estate_slugs: Array.isArray(row.served_estate_slugs)
+      ? row.served_estate_slugs.map(String)
+      : [],
     public_slug: stringOrNull(row.public_slug),
     show_on_website: row.show_on_website === true,
     display_order: numberOrNull(row.display_order) ?? 0,
@@ -591,6 +595,8 @@ export async function fetchAdminAgentProfiles(): Promise<AdminAgentProfileRow[]>
       s.avatar_url,
       s.branch,
       s.bio,
+      s.specialties,
+      s.served_estate_slugs,
       s.public_slug,
       s.show_on_website,
       s.display_order,
@@ -619,6 +625,8 @@ export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProf
       s.avatar_url,
       s.branch,
       s.bio,
+      s.specialties,
+      s.served_estate_slugs,
       s.public_slug,
       s.show_on_website,
       s.display_order,
@@ -670,6 +678,10 @@ export async function saveAdminAgentProfile(
     );
     displayOrder = Number(max?.next ?? 0);
   }
+  const specialties = Array.isArray(input.specialties) ? input.specialties : [];
+  const servedEstateSlugs = Array.isArray(input.served_estate_slugs)
+    ? input.served_estate_slugs
+    : [];
   const identityAndProfileParams = [
     nullableTrim(identity.auth_user_id),
     nullableTrim(identity.email),
@@ -686,8 +698,19 @@ export async function saveAdminAgentProfile(
     input.show_on_website === true,
     displayOrder,
     identity.active,
+    specialties,
+    servedEstateSlugs,
   ];
-  const publicProfileParams = identityAndProfileParams.slice(2, 14);
+  // Appended after identity.active rather than inserted mid-array so the
+  // existing .slice(2, 14) below (name_zh..display_order, excluding the
+  // identity-only auth_user_id/email/active fields) keeps working unchanged;
+  // both new fields are profile-level like job_title/bio, so they belong in
+  // publicProfileParams too.
+  const publicProfileParams = [
+    ...identityAndProfileParams.slice(2, 14),
+    specialties,
+    servedEstateSlugs,
+  ];
 
   try {
     let rows;
@@ -711,8 +734,10 @@ export async function saveAdminAgentProfile(
             show_on_website = $13,
             display_order = $14,
             active = $15,
+            specialties = $16::text[],
+            served_estate_slugs = $17::text[],
             updated_at = now()
-          WHERE id = $16
+          WHERE id = $18
           RETURNING id
           `,
             [...identityAndProfileParams, input.id],
@@ -721,9 +746,13 @@ export async function saveAdminAgentProfile(
             `
           INSERT INTO staff_users (
             auth_user_id, email, name_zh, name_en, job_title, phone, whatsapp, licence_no,
-            avatar_url, branch, bio, public_slug, show_on_website, display_order, active
+            avatar_url, branch, bio, public_slug, show_on_website, display_order, active,
+            specialties, served_estate_slugs
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          VALUES (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+            $16::text[], $17::text[]
+          )
           RETURNING id
           `,
             identityAndProfileParams,
@@ -745,8 +774,10 @@ export async function saveAdminAgentProfile(
               public_slug = $10,
               show_on_website = $11,
               display_order = $12,
+              specialties = $13::text[],
+              served_estate_slugs = $14::text[],
               updated_at = now()
-            WHERE target.id = $13
+            WHERE target.id = $15
               AND NOT EXISTS (
                 SELECT 1
                 FROM staff_roles privileged_role
@@ -761,9 +792,10 @@ export async function saveAdminAgentProfile(
             `
             INSERT INTO staff_users (
               name_zh, name_en, job_title, phone, whatsapp, licence_no,
-              avatar_url, branch, bio, public_slug, show_on_website, display_order
+              avatar_url, branch, bio, public_slug, show_on_website, display_order,
+              specialties, served_estate_slugs
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::text[], $14::text[])
             RETURNING id
             `,
             publicProfileParams,
@@ -1000,16 +1032,16 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
         WHERE id = $6
         RETURNING id
         `,
-        [...params, input.id],
-      )
+          [...params, input.id],
+        )
       : await queryRows(
           `
         INSERT INTO cms_videos (title, video_url, description, sort_order, published)
         VALUES ($1, $2, $3, $4, $5)
         RETURNING id
         `,
-        params,
-      );
+          params,
+        );
   } catch (error) {
     if (isMissingCmsVideosTableError(error)) {
       return { id: "", error: "影片資料表尚未建立，請先執行資料庫 migration" };

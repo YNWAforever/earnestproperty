@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Clock } from "lucide-react";
 
-import { SITE_NAME, SITE_URL, blogArticles } from "@/content/seo";
+import { SITE_NAME, SITE_URL, blogArticles, canonicalLink } from "@/content/seo";
 import { fetchArticleBySlug } from "@/lib/queries";
 
 type ArticleDetail = {
@@ -41,11 +41,20 @@ function paragraphsFor(content: ArticleDetail["content"]) {
     .filter(Boolean);
 }
 
-export const Route = createFileRoute("/blog/$slug")({
+// `blog_` (not `blog`) opts this route out of nesting under /blog. The list page
+// in blog.tsx is a full page, not a layout -- it renders no <Outlet/> -- so as a
+// child this route's loader and head() ran while its component never mounted:
+// the article's title and meta resolved correctly and the visible body stayed
+// stuck on the blog list. Same shape as agents.tsx + agents_.$slug.tsx. The
+// public path is unchanged (/blog/$slug), so no redirect is needed.
+export const Route = createFileRoute("/blog_/$slug")({
   loader: async ({ params }) => {
     const registryArticle = fallbackArticle(params.slug);
     const dbArticle = await fetchArticleBySlug(params.slug).catch(() => null);
-    return { article: dbArticle ? { ...registryArticle, ...dbArticle } : registryArticle };
+    return {
+      article: dbArticle ? { ...registryArticle, ...dbArticle } : registryArticle,
+      slug: params.slug,
+    };
   },
   head: ({ loaderData }) => {
     const article = loaderData?.article;
@@ -57,6 +66,7 @@ export const Route = createFileRoute("/blog/$slug")({
           content: article?.excerpt ?? "深井 / 荃灣樓市分析文章。",
         },
       ],
+      links: loaderData?.slug ? [canonicalLink(`/blog/${loaderData.slug}`)] : [],
     };
   },
   component: BlogArticlePage,

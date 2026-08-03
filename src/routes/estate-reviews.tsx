@@ -3,6 +3,7 @@ import { BookOpen, Building2, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
+import { canonicalLink } from "@/content/seo";
 import {
   fetchEstateOptions,
   fetchPublishedArticlesByCategory,
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/estate-reviews")({
     ]);
     return { articles, estates };
   },
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
       { title: "屋苑開箱｜深井 青山公路 汀九屋苑指南｜晉誠地產" },
       {
@@ -25,7 +26,15 @@ export const Route = createFileRoute("/estate-reviews")({
         content:
           "屋苑開箱入口，集中深井、青山公路、汀九屋苑文章與屋苑頁，方便比較碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園等。",
       },
+      // The page renders a graceful empty state rather than 404ing when no
+      // 屋苑開箱 articles are published yet, but an indexed empty page is a
+      // soft-404 risk. sitemap.xml also drops this path under the same
+      // condition; both self-heal once an article publishes, no deploy needed.
+      ...(!loaderData || loaderData.articles.length === 0
+        ? [{ name: "robots", content: "noindex,follow" }]
+        : []),
     ],
+    links: [canonicalLink("/estate-reviews")],
   }),
   component: EstateReviewsPage,
 });

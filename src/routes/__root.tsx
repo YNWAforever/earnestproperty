@@ -13,6 +13,7 @@ import { authClient } from "@/auth";
 import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
+import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
 import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR } from "@/content/seo";
 
 function NotFoundComponent() {
@@ -52,7 +53,6 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { property: "og:locale", content: "zh_HK" },
       { name: "twitter:card", content: "summary_large_image" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" } as never,
       { property: "og:title", content: pageSeo.home.title },
       { name: "twitter:title", content: pageSeo.home.title },
       { property: "og:description", content: pageSeo.home.description },
@@ -93,16 +93,18 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const location = useLocation();
   const showLiveAgentWidget = isPublicWidgetPath(location.pathname);
+  const showStickyWhatsAppBar = shouldShowStickyWhatsAppBar(location.pathname);
 
   return (
     <NeonAuthUIProvider authClient={authClient} defaultTheme="light">
-      <div className="flex min-h-screen flex-col">
+      <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-16 lg:pb-0" : ""}`}>
         <SiteHeader />
         <main className="flex-1">
           <Outlet />
         </main>
         <SiteFooter />
       </div>
+      {showStickyWhatsAppBar ? <StickyWhatsAppBar /> : null}
       {showLiveAgentWidget ? <LiveAgentWidget /> : null}
     </NeonAuthUIProvider>
   );
@@ -110,6 +112,17 @@ function RootComponent() {
 
 function isPublicWidgetPath(pathname: string) {
   return !["/admin", "/auth", "/account"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+// /property/$listingNo has its own listing-aware mobile action bar
+// (PropertyDecisionActions) with the same wa.me + bottom-16 convention, so the
+// generic bar would duplicate it. /admin, /auth, /account, /dashboard are
+// staff/system surfaces, not conversion pages.
+function shouldShowStickyWhatsAppBar(pathname: string) {
+  if (pathname.startsWith("/property/")) return false;
+  return !["/admin", "/auth", "/account", "/dashboard"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }

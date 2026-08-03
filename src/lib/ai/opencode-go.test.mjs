@@ -16,10 +16,13 @@ test("OpenCode client posts to normalized chat completions endpoint", async () =
     sleepImpl: async () => undefined,
     fetchImpl: async (url, init) => {
       requests.push({ url, init });
-      return new Response(JSON.stringify({
-        choices: [{ message: { content: '{"patches":[{"claimType":"subjective"}]}' } }],
-        usage: { total_tokens: 9 },
-      }), { status: 200 });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '{"patches":[{"claimType":"subjective"}]}' } }],
+          usage: { total_tokens: 9 },
+        }),
+        { status: 200 },
+      );
     },
   });
 
@@ -29,7 +32,10 @@ test("OpenCode client posts to normalized chat completions endpoint", async () =
   assert.equal(requests[0].init.headers.authorization, "Bearer secret");
   assert.deepEqual(JSON.parse(requests[0].init.body), {
     model: "go-content",
-    messages: [{ role: "system", content: "rules" }, { role: "user", content: "record" }],
+    messages: [
+      { role: "system", content: "rules" },
+      { role: "user", content: "record" },
+    ],
     temperature: 0.1,
     stream: false,
     response_format: { type: "json_object" },
@@ -43,11 +49,16 @@ test("OpenCode client retries 429 twice", async () => {
   const delays = [];
   const client = createOpenCodeGoClient({
     config: enabledConfig,
-    sleepImpl: async (ms) => { delays.push(ms); },
+    sleepImpl: async (ms) => {
+      delays.push(ms);
+    },
     fetchImpl: async () => {
       attempts += 1;
       if (attempts < 3) return new Response("", { status: 429 });
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }), { status: 200 });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
+        { status: 200 },
+      );
     },
   });
 
@@ -67,10 +78,20 @@ test("OpenCode cancels retryable response bodies", async () => {
     fetchImpl: async () => {
       attempts += 1;
       if (attempts < 3) {
-        const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("provider detail")); }, cancel() { cancelled += 1; } });
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("provider detail"));
+          },
+          cancel() {
+            cancelled += 1;
+          },
+        });
         return new Response(body, { status: 503 });
       }
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }), { status: 200 });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
+        { status: 200 },
+      );
     },
   });
 
@@ -106,7 +127,10 @@ test("OpenCode client retries 5xx twice", async () => {
     fetchImpl: async () => {
       attempts += 1;
       if (attempts < 3) return new Response("provider detail", { status: 503 });
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }), { status: 200 });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
+        { status: 200 },
+      );
     },
   });
 
@@ -120,7 +144,10 @@ test("disabled configuration returns OPENCODE_GO_NOT_CONFIGURED without fetch", 
   const client = createOpenCodeGoClient({
     config: { baseUrl: null, apiKey: null, model: null, enabled: false },
     sleepImpl: async () => undefined,
-    fetchImpl: async () => { called = true; throw new Error("must not run"); },
+    fetchImpl: async () => {
+      called = true;
+      throw new Error("must not run");
+    },
   });
 
   const result = await client.generateProposal({ system: "rules", prompt: "record" });
@@ -140,7 +167,10 @@ test("OpenCode client keeps malformed provider responses behind a stable error",
   const client = createOpenCodeGoClient({
     config: enabledConfig,
     sleepImpl: async () => undefined,
-    fetchImpl: async () => new Response(JSON.stringify({ choices: [{ message: { content: "not json" } }] }), { status: 200 }),
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: "not json" } }] }), {
+        status: 200,
+      }),
   });
 
   const result = await client.generateProposal({ system: "rules", prompt: "record" });

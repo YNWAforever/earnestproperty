@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock } from "lucide-react";
 
-import { blogArticles, pageSeo } from "@/content/seo";
+import { blogArticles, canonicalLink, pageSeo } from "@/content/seo";
 import { fetchPublishedArticles, type ArticleSummary } from "@/lib/queries";
 
 type BlogCard = ArticleSummary & {
@@ -33,6 +33,7 @@ export const Route = createFileRoute("/blog")({
       { property: "og:title", content: pageSeo.blog.title },
       { property: "og:description", content: pageSeo.blog.description },
     ],
+    links: [canonicalLink(pageSeo.blog.path)],
   }),
   component: BlogPage,
 });

@@ -1,3 +1,5 @@
+import { splitFeatureText } from "./parse-old-site.mjs";
+
 const ESTATE_PATTERNS = [
   ["bellagio", [/碧堤半島/i, /BELLAGIO/i]],
   ["sea-crest-villa", [/浪翠園/i, /SEA CREST VILLA/i]],
@@ -54,11 +56,43 @@ function dealTypesFor(detail) {
 }
 
 function featuresFor(detail) {
-  const features = [detail.roomText, detail.orientation, detail.decoration, detail.remarks].filter(
-    Boolean,
-  );
+  // detail.orientation is dropped here -- it already has its own dedicated
+  // column below (`orientation: cleanNull(detail.orientation)`), so including
+  // it here just duplicated it inside the free-text feature list.
+  //
+  // detail.remarks (備註) is dropped entirely, not just unsplit: on the old
+  // site this field sometimes holds the company licence number instead of a
+  // genuine property feature -- see the 備註 field in
+  // scripts/old-site-migration/__fixtures__/property-detail-6709182.html,
+  // which is literally "C-018613" -- and there is no way to tell a real
+  // remark from that case here, so 物業特點 must not render it at all.
+  //
+  // roomText and decoration are each a comma/、-joined blob (e.g. "2房2廳，開放式廚房"),
+  // so each is split into individual tags via the same splitFeatureText already
+  // used by the other (legacy) parse path in parse-old-site.mjs -- previously
+  // this function pushed the whole unsplit blob as a single "feature".
+  const features = [...splitFeatureText(detail.roomText), ...splitFeatureText(detail.decoration)];
 
   return features.length ? [...new Set(features)] : null;
+}
+
+function descriptionFor(detail, dealType) {
+  const raw = detail.metaDescription;
+  if (!raw) return detail.title;
+
+  // normalizeListingDetail emits one row PER deal type from a single scraped
+  // page (see dealTypesFor/dealTypes.map below), but the scraped og:description
+  // is one fact list built once for the whole page -- e.g.
+  // "麗都花園 第03座, 荃灣, #B054805,售$590萬, 實用570呎, ..." (see
+  // property-detail-6709182.html). Reusing it unmodified put a sale price
+  // directly inside a rental's own description (and vice versa for a
+  // sale-and-rent listing). Strip whichever price token does not belong to
+  // this row's own deal type; the rest of the fact list (district, property
+  // no, area, orientation, rooms) is still accurate for both rows.
+  const opposingPricePattern =
+    dealType === "rent" ? /售\$[\d,]+萬,?\s*/g : /租\$[\d,]+(?:\/月)?,?\s*/g;
+  const stripped = raw.replace(opposingPricePattern, "").trim();
+  return stripped || detail.title;
 }
 
 export function normalizeListingDetail(detail, options = {}) {
@@ -96,7 +130,7 @@ export function normalizeListingDetail(detail, options = {}) {
     floor: cleanNull(detail.floor),
     orientation: cleanNull(detail.orientation),
     features: featuresFor(detail),
-    description: detail.metaDescription || detail.title,
+    description: descriptionFor(detail, dealType),
     images: detail.images?.length ? detail.images : null,
     status: "active",
     featured: false,
