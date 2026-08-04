@@ -90,23 +90,71 @@ non-interactive but height-matched for row alignment.
 
 ---
 
+## Fixed in the follow-up pass (4 Aug 2026)
+
+**Shared foundation:** `src/hooks/use-unsaved-changes-guard.tsx` (new) — `useRouteLeaveGuard`
+wraps TanStack Router's `useBlocker` for full page/tab-close navigation, `useDirtyCloseGuard`
+is the local-state equivalent for dialogs and sheets. Both render an `AdminConfirmDialog` and
+return a `requestClose()` to swap in for a raw `onClose`.
+
+- **P8 Unsaved work destroyed silently — fixed for the admin.cms.tsx and admin.leads.tsx
+  surfaces.** All five CMS editor dialogs (estate/article/FAQ/video/media) and their Cancel
+  buttons now route through `useDirtyCloseGuard`, comparing the editing object's shape at
+  open time against its current value. The lead detail panel does the same, comparing
+  `draft` against `leadToDraft(detail)` plus a non-empty `noteBody`. **Still open:**
+  `PropertyForm.tsx` (the listing form) has no guard yet — not touched this pass.
+- **P1/P2 Command Center keyboard-unreachable rows — fixed.** Row click moved into a real
+  focusable `<button>` in the Lead cell (native `<tr>` restored); the active-queue segmented
+  control now has `aria-pressed` plus a check-icon cue, not colour alone.
+- **P9 Filter/search state lost on navigation — fixed for `/admin/leads` and Command
+  Center.** Both now use `validateSearch` + `Route.useSearch()`/`useNavigate()`, mirroring
+  the working pattern already in `admin.operations.tsx`/`admin.cms.tsx`. **Still open:**
+  `admin.listings.tsx`, `admin.whatsapp.tsx`, and lead-detail/conversation deep-linking —
+  none of those files were touched this pass.
+- **P8 Destructive actions — FAQ delete, FAQ import confirm, and lead stage-change confirm
+  all fixed.** `deleteAdminFaq` (already existed, was never imported) is now a per-row 刪除
+  action behind `AdminConfirmDialog`. FAQ bulk import now requires an explicit confirm
+  showing the overwrite count plus a new/overwrite preview table before writing, and reports
+  `已匯入 X／N，第 N+1 條失敗：…` on a mid-loop failure instead of a bare error (this closes
+  out a dead-code gap found during review: an earlier partial fix left
+  `handleImportFaqsSubmit`/`faqImportConfirmOpen` defined but never wired to the dialog's
+  `onSubmit`, so submitting still imported immediately with no confirm at all).
+  標記失敗/標記成交 now confirm first when there are other unsaved field edits, since both
+  submit the whole draft (server type `AdminLeadUpdateInput` has no partial-update path, so
+  the fix is an honest confirmation rather than a `{id, stage}`-only payload). **Still open:**
+  `admin.listings.tsx`'s 下架/已售/已租 buttons — not touched this pass.
+- **P8 AI copilot accept-all-by-default — fixed.** `acceptedFields` now starts empty
+  (opt-in); patch cards show current vs proposed side by side; a 捨棄建議/重新產生 action
+  exists so a disliked proposal no longer forces closing (and losing) the draft; error codes
+  map to Chinese cause+fix text.
+- **P3 admin.cms.tsx row cap — fixed.** Search/filter added to all five tabs (was
+  estates-only), plus a scope filter on FAQs. **Still open:** `admin.listings.tsx` (80 of
+  ~398 listings, no keyword box) and `admin.segments.tsx` — not touched this pass.
+- **P1 Headings — fixed.** `CardTitle` accepts an `as` prop; every CMS tab panel now renders
+  as `<h2>` (existing call sites are unaffected, `as` defaults to `div`).
+- **P1 `admin.leads.tsx:644` role="button" on `<tr>` — fixed**, same pattern as Command
+  Center above.
+- **P6 Numeric/truncated cells in admin.leads.tsx and command-center.tsx — fixed**
+  (`tabular-nums` on budget/score cells, `title` on truncated property/reason text, 下一步
+  and WhatsApp status columns promoted off `text-xs`). **Still open:** `admin.listings.tsx`,
+  `AdminOperationsJobs.tsx`.
+- **P8/P10 smaller items — fixed:** `admin.cms.tsx` article body now has a 預覽 toggle and
+  helper text about the blank-line-separator format; 發布時間 is `type="datetime-local"`;
+  a failed knowledge-status fetch now renders a distinct 「狀態未知」 state instead of
+  collapsing into 「AI 未啟用」; jargon metrics renamed to Chinese; 意圖 is now a select over
+  the same label set the filter dropdown uses, instead of free text that could drift from
+  it; Command Center's AI panel now derives from live data (`useMemo` over `data.rows`), so
+  重新 AI 分析 actually updates what's on screen; the filtered-empty state has a 清除篩選
+  action. **Still open:** KPI strip polish (Command Center), bulk workflow (`admin.leads.tsx`).
+- A `prefers-reduced-motion` block was added to `src/styles.css` (there was none anywhere in
+  the repo) — global, so it also covers the `animate-spin` polling churn noted below.
+
+Also fixed in passing: a null-deref (`rows.length` where `rows: AdminLeadRow[] | null`)
+introduced by the previous pass's own leads-badge fix.
+
+---
+
 ## Open — highest value first
-
-### P8 · Unsaved work is destroyed silently (no guard anywhere in the repo)
-
-`grep -rn "useBlocker\|beforeunload" src` returns **zero hits**. Three separate places lose
-staff work with no warning:
-
-- `admin.cms.tsx:1147` (and :941, :1017, :1263, :1336, :1386) — every editor dialog is
-  `onOpenChange={(open) => (!open ? onClose() : undefined)}`, so one stray click on the dim
-  overlay or an Esc wipes a long article body. No confirm, no autosave.
-- `PropertyForm.tsx:169` — a half-filled 20-field listing dies on any sidebar click, the
-  返回 button, or browser back.
-- `admin.leads.tsx:297` — `handlePanelOpenChange(false)` unconditionally clears `draft`,
-  `noteBody` and `detail`, discarding typed edits and an unwritten follow-up note.
-
-Fix: TanStack Router `useBlocker` + `beforeunload` gated on a dirty flag, surfaced through
-the existing `AdminConfirmDialog`; ideally a `localStorage` draft keyed by record id.
 
 ### P8 · Blast sending is one unconfirmed click
 
@@ -144,34 +192,18 @@ conversations are likewise not deep-linkable, which is why Command Center's
 ### P8 · Destructive actions with no confirm and no undo
 
 - `admin.listings.tsx:360` — 下架 and 已售/已租 fire on one click on 32px buttons adjacent
-  to 編輯.
-- `admin.leads.tsx:591` — 標記失敗/標記成交 also silently commit every unsaved panel edit,
-  because they submit `{ ...draft, stage }` under a label that reads as a one-field action.
-- `admin.cms.tsx:751` — **nothing on the CMS page can be deleted at all**, so a wrongly
-  imported FAQ is stuck in the public AI agent's knowledge base forever. `deleteAdminFaq`
-  exists and is tested but never imported.
-- `admin.cms.tsx:316` — FAQ bulk import silently overwrites answers
-  (`ON CONFLICT DO UPDATE`) with no preview, no confirm, no undo, and a mid-loop failure
-  leaves a half-written database with no count of what landed.
-
-### P8 · AI copilot defaults to accepting all rewrites
-
-`AdminContentCopilot.tsx:174` pre-checks every patch on arrival, so the default gesture is
-"replace all my copy". `:443` shows only the proposed text, never the current value, so
-staff can't see what it overwrites; after 套用 the AI text is indistinguishable from
-human-authored content with no revert. `:371` offers no way to dismiss or regenerate a
-proposal without closing the dialog — which discards the draft.
+  to 編輯. (`admin.leads.tsx`'s 標記失敗/標記成交 and `admin.cms.tsx`'s FAQ delete/import are
+  now fixed — see the follow-up pass above.)
 
 ### P3 · Silent row caps presented as complete data
 
 - `admin.listings.tsx:94` shows at most 80 of ~398 listings with no pagination, no count,
   no notice. There is also **no keyword search box**, though the server already supports
   `q` end to end.
-- `admin.cms.tsx:720` — no search/filter/sort/pagination on any tab; the FAQ table renders
-  every row, and the bulk importer is what produces hundreds.
 - `admin.segments.tsx:385` — `preview.contacts.slice(0, 20)` renders 20 rows under a header
   saying "Top 200" and a summary saying `eligible/total`: three different numbers, no
-  indication rows were dropped.
+  indication rows were dropped. (`admin.cms.tsx` is now search/filterable on all five tabs —
+  see the follow-up pass above.)
 
 ### P3 · Operations polling fights the operator
 
@@ -204,26 +236,24 @@ entirely without permission. Render them disabled with the required permission n
 
 ### P1 · Headings and landmarks
 
-`CardTitle` renders a plain `<div>` (`card.tsx:23`), so on the largest admin pages the only
-headings are the shell `<h1>` and strays inside empty states — no navigable structure
-across five CMS tabs (`admin.cms.tsx:466`, `admin.index.tsx:62`). `AdminOperationsJobs.tsx:206`
-and `AdminOperationsAudit.tsx:217` have no heading at all while Migrations has an `<h2>`.
+`CardTitle` renders a plain `<div>` (`card.tsx:23`) — now takes an optional `as` prop and
+`admin.cms.tsx`'s five tab panels use it (see follow-up pass above). **Still open:**
+`admin.index.tsx:62`, `AdminOperationsJobs.tsx:206`, `AdminOperationsAudit.tsx:217` have no
+heading at all while Migrations has an `<h2>` — none of the operations files were touched.
 
 ### P1 · Misc accessibility
 
 - `admin.cms.tsx:689` — the 上載 FAQ 檔案 control is a `<Button asChild><label>`, so Tab
   lands on the clipped `sr-only` input and the focus ring never fires.
-- `admin.leads.tsx:644` — `role="button"` + `aria-label` on the `<tr>` replaces row/cell
-  semantics, so a screen reader hears only "開啟 陳大文 詳情, button" and never the
-  意圖/來源/預算/階段 cells.
 - `admin.whatsapp.tsx:731` — `text-xs opacity-80` white-on-primary composites to ~4.05:1,
   under the 4.5:1 floor, and this is exactly where send status lives.
 - `admin.operations.tsx:166` — a `failed` control plane renders neutral grey in the header
   badge while the Overview renders the same status `destructive`.
 - `admin.operations.tsx:165` — `aria-live="polite"` wraps a timestamp, so screen readers
   re-announce the region every 30s even when nothing changed.
-- No `prefers-reduced-motion` guard anywhere in the repo (`grep` → no matches), while
-  `animate-spin` runs on every 30s poll tick.
+
+(`admin.leads.tsx:644`'s `role="button"` on `<tr>` is fixed, and a `prefers-reduced-motion`
+block now exists globally in `src/styles.css` — both covered in the follow-up pass above.)
 
 ### P8 · Failed WhatsApp sends are near-invisible and can't be retried
 
@@ -235,11 +265,9 @@ the inbox never auto-refreshes and shows no "last updated" (so agents silently b
 
 ### P6 · Numeric columns and truncation
 
-No `tabular-nums` anywhere in the codebase, so money/date/score columns jitter and
-misalign across `admin.leads.tsx:669`, `admin.listings.tsx:334`,
-`AdminOperationsJobs.tsx:295`. Truncated cells lack `title`, so long HK estate names, SEO
-titles, alt text and AI justifications are permanently unreadable
-(`admin.cms.tsx:497`, `admin.leads.tsx:664`).
+No `tabular-nums` on `admin.listings.tsx:334` or `AdminOperationsJobs.tsx:295`; truncated
+cells lack `title` on `admin.cms.tsx:497`. (`admin.leads.tsx` and `admin.leads_.command-
+center.tsx` are fixed — see the follow-up pass above.)
 
 ### P9 · Two nav entries, one route
 
@@ -260,28 +288,22 @@ search param on the auth route plus the matching post-auth callback on `AuthView
 
 ### P8/P10 · Smaller items
 
-- `admin.cms.tsx:1208` — article body is an 8-row raw textarea with no preview; the public
-  renderer only splits on blank lines, so typed markdown publishes literal `##` and `**`.
-- `admin.cms.tsx:1184` — 發布時間 is free text feeding `datePublished` JSON-LD; "3/8/2026"
-  silently ships broken structured data.
-- `admin.cms.tsx:183` — a failed knowledge-status fetch is swallowed and renders as
-  「AI 未啟用」, telling staff the AI is off when the status call merely failed.
-- `admin.cms.tsx:425` — metrics labelled "Chunks/Public/Stale/Last indexed": untranslated
-  jargon, and a non-zero Stale count implies nothing actionable.
-- `admin.leads.tsx:777` — 意圖 is a free-text input bound to the raw enum, so agents see
-  English "buyer" and can type anything, breaking the 意圖 filter.
-- `admin.leads.tsx:573` — no bulk workflow: reassigning 30 leads is 30 open→save cycles,
-  each serially refetching the whole list.
-- `admin.leads_.command-center.tsx:115` — `setSelected(row)` snapshots, and
-  「重新 AI 分析」 never reconciles it, so the panel still shows 未分析 after a successful
-  refresh.
 - `admin.leads_.command-center.tsx:289` — KPI tiles are undefined bare numbers
   ("Hot leads" never says what qualifies) that aren't clickable to their matching queue,
   and they pop in after load, shifting the table.
+- `admin.leads.tsx:573` — no bulk workflow: reassigning 30 leads is 30 open→save cycles,
+  each serially refetching the whole list. Deliberately not attempted without a real bulk
+  server function — a client-side loop calling the single-lead update N times would just
+  move the serial-refetch problem around, not fix it.
 - `admin.index.tsx:36` — a single `h-64` skeleton stands in for a ~90px metric row, so the
   page jumps ~170px when data arrives.
-- `AdminEmptyState` accepts an `action` prop that most callers omit, leaving dead-end
-  「沒有資料」 panels with no next step.
+- `AdminEmptyState` accepts an `action` prop that some callers still omit (e.g.
+  `admin.whatsapp.tsx`, `admin.segments.tsx` — not touched this pass), leaving dead-end
+  「沒有資料」 panels with no next step. `admin.leads.tsx`'s is now fixed.
+
+(Article preview toggle, `datetime-local` 發布時間, the swallowed knowledge-status fetch,
+jargon metrics, 意圖 free-text, and Command Center's stale-snapshot panel are all fixed —
+see the follow-up pass above.)
 
 ---
 
