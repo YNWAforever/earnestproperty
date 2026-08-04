@@ -187,4 +187,21 @@
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
+
+  /* The codebase had no prefers-reduced-motion handling anywhere, while
+     `animate-spin` ran on every 30s admin polling tick -- constant unrequested
+     motion for anyone who has asked the OS to reduce it. Spinners paired with
+     text ("處理中…", "回覆中…") stay legible when frozen, so stopping the motion
+     loses no information. `scroll-behavior: auto` also disables smooth-scroll
+     jumps for the same users. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }

@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
@@ -39,6 +40,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
   analyzeAdminLeadAiProfile,
   approveAdminAiTag,
@@ -108,6 +110,10 @@ const intentLabels: Record<string, string> = {
   valuation: "估價",
 };
 
+const intentOptions: { value: string; label: string }[] = Object.entries(intentLabels).map(
+  ([value, label]) => ({ value, label }),
+);
+
 const sourceLabels: Record<string, string> = {
   website: "網站",
   whatsapp: "WhatsApp",
@@ -116,7 +122,35 @@ const sourceLabels: Record<string, string> = {
   walk_in: "到店",
 };
 
+// Filters used to live in local useState, so reload, browser Back from a lead,
+// or a round trip to Command Center reset the agent's whole working view and
+// scroll position, and no filtered view was shareable. Only non-default values
+// are kept in the URL, so a plain /admin/leads stays clean.
+function parseLeadFilters(search: Record<string, unknown>): Partial<LeadFilters> {
+  const result: Partial<LeadFilters> = {};
+  if (typeof search.stage === "string" && search.stage !== defaultFilters.stage) {
+    result.stage = search.stage;
+  }
+  if (typeof search.intent === "string" && search.intent !== defaultFilters.intent) {
+    result.intent = search.intent;
+  }
+  if (typeof search.source === "string" && search.source !== defaultFilters.source) {
+    result.source = search.source;
+  }
+  if (typeof search.agent_id === "string" && search.agent_id !== defaultFilters.agent_id) {
+    result.agent_id = search.agent_id;
+  }
+  if (search.optIn === "yes" || search.optIn === "no") {
+    result.optIn = search.optIn;
+  }
+  if (typeof search.query === "string" && search.query.trim()) {
+    result.query = search.query;
+  }
+  return result;
+}
+
 export const Route = createFileRoute("/admin/leads")({
+  validateSearch: parseLeadFilters,
   head: () => ({
     meta: [{ title: "CRM｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
@@ -130,9 +164,15 @@ const LEAD_ROW_LIMIT = 100;
 
 function AdminLeads() {
   const { user } = useNeonAuth();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [rows, setRows] = useState<AdminLeadRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
-  const [filters, setFilters] = useState<LeadFilters>(defaultFilters);
+  const filters: LeadFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
+  function setFilters(updater: LeadFilters | ((current: LeadFilters) => LeadFilters)) {
+    const next = typeof updater === "function" ? updater(filters) : updater;
+    void navigate({ search: parseLeadFilters(next), resetScroll: false });
+  }
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -142,6 +182,7 @@ function AdminLeads() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [noteBody, setNoteBody] = useState("");
+  const [noteError, setNoteError] = useState<string | null>(null);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<AdminLeadAiProfile | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
@@ -314,6 +355,22 @@ function AdminLeads() {
     }
   }
 
+  // `handlePanelOpenChange(false)` used to run unconditionally, so Esc, an
+  // overlay click, or opening another row silently discarded typed edits
+  // (budget, 負責代理, 備註, 意圖) and an unwritten follow-up note. `draft` is
+  // compared against the loaded server value, not a captured-at-open baseline,
+  // since the panel already has that value in `detail`.
+  const isLeadDetailDirty = Boolean(
+    draft &&
+    detail &&
+    (JSON.stringify(draft) !== JSON.stringify(leadToDraft(detail)) || noteBody.trim() !== ""),
+  );
+  const { requestClose: requestPanelClose, dialog: unsavedLeadDialog } = useDirtyCloseGuard({
+    isDirty: isLeadDetailDirty,
+    onClose: () => handlePanelOpenChange(false),
+    description: "你有未儲存的 Lead 修改或跟進備註，離開後會遺失。",
+  });
+
   function updateDraft<K extends keyof LeadDraft>(key: K, value: LeadDraft[K]) {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
@@ -342,9 +399,13 @@ function AdminLeads() {
     if (!detail) return;
     const body = noteBody.trim();
     if (!body) {
-      toast.error("請輸入跟進內容");
+      // A distant toast gave no pointer to the field itself. The inline error
+      // (rendered next to the Textarea in LeadDetailEditor) plus focusing it
+      // is what actually gets the user's cursor where the fix needs to happen.
+      setNoteError("請輸入跟進內容");
       return;
     }
+    setNoteError(null);
 
     const targetLeadId = detail.id;
     setMutatingAction("note");
@@ -374,6 +435,24 @@ function AdminLeads() {
   async function markStage(stage: LeadStage, label: string) {
     if (!draft) return;
     await saveLead({ ...draft, stage }, `Lead 已標記為${label}`);
+  }
+
+  // `markStage` submits the whole draft (budget/負責代理/備註/意圖 included), not
+  // just the stage, because `AdminLeadUpdateInput` requires every field on this
+  // update path. A button labelled "標記失敗"/"標記成交" silently committing every
+  // other pending edit is a surprise worth confirming -- but only when there is
+  // something extra to warn about, so the common one-click case stays one click.
+  const [pendingStageAction, setPendingStageAction] = useState<{
+    stage: LeadStage;
+    label: string;
+  } | null>(null);
+
+  function requestMarkStage(stage: LeadStage, label: string) {
+    if (isLeadDetailDirty) {
+      setPendingStageAction({ stage, label });
+      return;
+    }
+    void markStage(stage, label);
   }
 
   async function refreshAiProfile() {
@@ -550,7 +629,7 @@ function AdminLeads() {
                 the cap when we are sitting on it. */}
             <Badge variant="secondary" className="h-11 rounded-md px-3 lg:h-9">
               顯示 {filteredRows.length} 筆
-              {rows.length >= LEAD_ROW_LIMIT ? `（最近 ${LEAD_ROW_LIMIT} 筆內）` : ""}
+              {(rows?.length ?? 0) >= LEAD_ROW_LIMIT ? `（最近 ${LEAD_ROW_LIMIT} 筆內）` : ""}
             </Badge>
           </>
         }
@@ -562,6 +641,14 @@ function AdminLeads() {
         <AdminEmptyState
           title={rows.length === 0 ? "未有 Leads" : "沒有符合條件的 Leads"}
           description={rows.length === 0 ? "新的網站查詢會在這裡出現。" : "調整篩選條件再查看。"}
+          action={
+            rows.length > 0 ? (
+              <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>
+                <RotateCcw className="h-4 w-4" />
+                清除篩選
+              </Button>
+            ) : undefined
+          }
         />
       ) : null}
       {filteredRows.length > 0 ? (
@@ -595,7 +682,7 @@ function AdminLeads() {
         open={panelOpen}
         title={panelTitle}
         description={panelDescription}
-        onOpenChange={handlePanelOpenChange}
+        onOpenChange={(open) => (open ? handlePanelOpenChange(true) : requestPanelClose())}
         footer={
           detail && draft ? (
             <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
@@ -603,7 +690,7 @@ function AdminLeads() {
                 type="button"
                 variant="outline"
                 disabled={isMutating || draft.stage === "closed_lost"}
-                onClick={() => markStage("closed_lost", "失敗")}
+                onClick={() => requestMarkStage("closed_lost", "失敗")}
               >
                 <XCircle className="h-4 w-4" />
                 標記失敗
@@ -612,7 +699,7 @@ function AdminLeads() {
                 type="button"
                 variant="outline"
                 disabled={isMutating || draft.stage === "closed_won"}
-                onClick={() => markStage("closed_won", "成交")}
+                onClick={() => requestMarkStage("closed_won", "成交")}
               >
                 <Trophy className="h-4 w-4" />
                 標記成交
@@ -633,12 +720,16 @@ function AdminLeads() {
             draft={draft}
             agents={agents}
             noteBody={noteBody}
+            noteError={noteError}
             aiProfile={aiProfile}
             aiLoading={aiLoading}
             aiMutatingTagId={aiMutatingTagId}
             disabled={isMutating}
             onDraftChange={updateDraft}
-            onNoteChange={setNoteBody}
+            onNoteChange={(value) => {
+              setNoteBody(value);
+              if (noteError) setNoteError(null);
+            }}
             onAddNote={addNote}
             onRefreshAiProfile={refreshAiProfile}
             onAiTagDecision={decideAiTag}
@@ -646,38 +737,55 @@ function AdminLeads() {
           />
         ) : null}
       </AdminDetailPanel>
+      {unsavedLeadDialog}
+      <AdminConfirmDialog
+        open={pendingStageAction !== null}
+        title={`標記為${pendingStageAction?.label ?? ""}`}
+        description="此 Lead 有其他未儲存的修改（預算、負責代理、備註或意圖），會一併儲存。確定要繼續嗎？"
+        confirmLabel="確定並儲存"
+        onOpenChange={(open) => {
+          if (!open) setPendingStageAction(null);
+        }}
+        onConfirm={() => {
+          if (pendingStageAction)
+            void markStage(pendingStageAction.stage, pendingStageAction.label);
+          setPendingStageAction(null);
+        }}
+      />
     </AdminShell>
   );
 }
 
 function LeadRow({ lead, onOpen }: { lead: AdminLeadRow; onOpen: (id: string) => void }) {
+  // `role="button"` on the whole `<tr>` used to replace its cell semantics, so a
+  // screen reader announced only "開啟 X 詳情, button" and never the 意向/來源/
+  // 預算/階段/opt-in cells. A real focusable control inside the Lead cell keeps
+  // every column reachable by keyboard while still announcing per-column.
   return (
-    <TableRow
-      role="button"
-      tabIndex={0}
-      className="cursor-pointer focus-visible:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-      aria-label={`開啟 ${lead.name ?? lead.phone ?? "Lead"} 詳情`}
-      onClick={() => onOpen(lead.id)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onOpen(lead.id);
-        }
-      }}
-    >
+    <TableRow className="hover:bg-muted/40">
       <TableCell>
-        <p className="font-medium">{lead.name ?? "未命名"}</p>
+        <button
+          type="button"
+          onClick={() => onOpen(lead.id)}
+          className="rounded-sm text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {lead.name ?? "未命名"}
+        </button>
         <p className="text-xs text-muted-foreground">{lead.phone ?? lead.email ?? "—"}</p>
       </TableCell>
       <TableCell>{formatIntent(lead.intent)}</TableCell>
       <TableCell>{formatSource(lead.source)}</TableCell>
       <TableCell>
-        <p className="line-clamp-1">{lead.property_title ?? lead.listing_no ?? "—"}</p>
+        <p className="line-clamp-1" title={lead.property_title ?? undefined}>
+          {lead.property_title ?? lead.listing_no ?? "—"}
+        </p>
         {lead.listing_no ? (
           <p className="text-xs text-muted-foreground">#{lead.listing_no}</p>
         ) : null}
       </TableCell>
-      <TableCell className="whitespace-nowrap text-right">{formatBudget(lead)}</TableCell>
+      <TableCell className="whitespace-nowrap text-right tabular-nums">
+        {formatBudget(lead)}
+      </TableCell>
       <TableCell>
         <Badge variant={lead.stage === "new" ? "default" : "outline"}>
           {stageLabels[lead.stage] ?? lead.stage}
@@ -702,6 +810,7 @@ function LeadDetailEditor({
   draft,
   agents,
   noteBody,
+  noteError,
   aiProfile,
   aiLoading,
   aiMutatingTagId,
@@ -717,6 +826,7 @@ function LeadDetailEditor({
   draft: LeadDraft;
   agents: AdminAgentRow[];
   noteBody: string;
+  noteError: string | null;
   aiProfile: AdminLeadAiProfile | null;
   aiLoading: boolean;
   aiMutatingTagId: string | null;
@@ -728,6 +838,11 @@ function LeadDetailEditor({
   onRefreshAiProfile: () => void;
   onAiTagDecision: (tagId: string, approve: boolean) => void;
 }) {
+  const noteInputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (noteError) noteInputRef.current?.focus();
+  }, [noteError]);
+
   return (
     <div className="space-y-6">
       <section className="rounded-lg border p-4">
@@ -786,10 +901,22 @@ function LeadDetailEditor({
           </Field>
 
           <Field label="意圖">
-            <Input
+            {/* Was a free-text Input bound to the raw enum: agents saw English
+                "buyer" where the list shows 買樓, could type anything (breaking
+                the CRM's 意圖 filter dropdown), and clearing it silently rewrote
+                the lead to 買樓 (draftToInput's `|| "buyer"` fallback). An extra
+                option covers a current value outside the known set so it is
+                never silently discarded. */}
+            <AdminStatusSelect
+              ariaLabel="意圖"
               value={draft.intent}
+              options={
+                intentLabels[draft.intent]
+                  ? intentOptions
+                  : [...intentOptions, { value: draft.intent, label: draft.intent }]
+              }
               disabled={disabled}
-              onChange={(event) => onDraftChange("intent", event.target.value)}
+              onChange={(value) => onDraftChange("intent", value)}
             />
           </Field>
 
@@ -920,7 +1047,12 @@ function LeadDetailEditor({
                     </span>
                   </div>
                   {tag.reason ? (
-                    <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{tag.reason}</p>
+                    <p
+                      className="mt-1 line-clamp-2 text-xs text-muted-foreground"
+                      title={tag.reason ?? undefined}
+                    >
+                      {tag.reason}
+                    </p>
                   ) : null}
                 </div>
                 {tag.status === "suggested" ? (
@@ -961,13 +1093,21 @@ function LeadDetailEditor({
 
         <div className="mt-4 grid gap-3">
           <Textarea
+            ref={noteInputRef}
             aria-label="新增跟進 note"
+            aria-invalid={Boolean(noteError)}
+            aria-describedby={noteError ? "note-error" : undefined}
             value={noteBody}
             rows={3}
             disabled={disabled}
             placeholder="新增內部跟進 note"
             onChange={(event) => onNoteChange(event.target.value)}
           />
+          {noteError ? (
+            <p id="note-error" role="alert" className="text-sm text-destructive">
+              {noteError}
+            </p>
+          ) : null}
           <Button
             type="button"
             variant="outline"
