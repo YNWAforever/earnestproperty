@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Video,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -55,7 +56,7 @@ import {
   type FaqItem,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
-import { getYouTubeVideoId } from "@/lib/youtube-video-url.js";
+import { getYouTubeVideoId, isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
 // reject a relative og:image outright, so it is absolutised here rather than in
@@ -75,7 +76,10 @@ export const Route = createFileRoute("/")({
       fetchFaqs("district:sham-tseng"),
       fetchListingCountsByEstate(),
       fetchNeonPublicAgentProfiles(),
-      fetchCmsVideos(),
+      // Decorative video section: a real DB error here (fetchCmsVideos only
+      // special-cases the missing-table case and rethrows everything else)
+      // must not take down the whole homepage.
+      fetchCmsVideos().catch(() => []),
     ]);
     return {
       estates,
@@ -124,6 +128,20 @@ type HomeVideo = {
   listingNo: string | null;
 };
 
+// Staff sometimes promote a listing's own walkthrough to the official channel,
+// so the same YouTube video can appear once via `featured` and once via
+// `cmsVideos` -- dedupe by video id (falling back to the raw URL for anything
+// that isn't a recognised YouTube link) before the section is capped to three.
+function dedupeVideosByUrl(videos: HomeVideo[]): HomeVideo[] {
+  const seen = new Set<string>();
+  return videos.filter((video) => {
+    const id = getYouTubeVideoId(video.url) ?? video.url;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 // Card placeholders until 屋苑相片 land. Hues sit in a ±13° band around the brand
 // green (157°) so each estate stays distinguishable without drifting off-palette.
 const ESTATE_GRADIENTS: Record<string, string> = {
@@ -144,9 +162,9 @@ function HomePage() {
   // 精選樓盤影片 prefers real listing walkthroughs (derived free from `featured`,
   // which already selects video_url) and tops up from the curated channel videos,
   // so the section stays populated whichever of the two the client has filled in.
-  const homeVideos: HomeVideo[] = [
+  const homeVideos: HomeVideo[] = dedupeVideosByUrl([
     ...featured
-      .filter((p: FeaturedProperty) => Boolean(p.video_url))
+      .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
       .map((p: FeaturedProperty) => ({
         key: `listing-${p.id}`,
         title: p.title_zh,
@@ -161,7 +179,7 @@ function HomePage() {
       eyebrow: "官方頻道",
       listingNo: null,
     })),
-  ].slice(0, HOME_VIDEO_COUNT);
+  ]).slice(0, HOME_VIDEO_COUNT);
 
   function submitHeroSearch() {
     navigate({
@@ -793,9 +811,11 @@ function HomeVideoCard({ video }: { video: HomeVideo }) {
   const media = (
     <div className="relative aspect-video overflow-hidden bg-primary/10">
       {thumbnail ? (
+        // Decorative: the card's own title/eyebrow/CTA text already labels the
+        // link, so a repeated "<title> 影片預覽" alt would be announced twice.
         <img
           src={thumbnail}
-          alt={`${video.title} 影片預覽`}
+          alt=""
           loading="lazy"
           width={480}
           height={360}
@@ -807,7 +827,10 @@ function HomeVideoCard({ video }: { video: HomeVideo }) {
           response to the pointer instead of drawing the eye unprompted. */}
       <span className="absolute inset-0 flex items-center justify-center">
         <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-background/90 text-primary shadow-lg transition-transform duration-300 group-hover:scale-110">
-          <span className="absolute inset-0 rounded-full ring-2 ring-background/70 opacity-0 transition-opacity duration-300 group-hover:animate-ping group-hover:opacity-100" />
+          {/* No transition-opacity here: animate-ping's own keyframes drive
+              opacity, and a transition on the same property fought it for the
+              first 300ms, producing a flash instead of a smooth pulse. */}
+          <span className="absolute inset-0 rounded-full ring-2 ring-background/70 opacity-0 group-hover:animate-ping group-hover:opacity-100" />
           <PlayCircle className="h-8 w-8" />
         </span>
       </span>
@@ -837,11 +860,15 @@ function HomeVideoCard({ video }: { video: HomeVideo }) {
     );
   }
 
+  // A curated channel video has no listing to deep-link to. Point straight at
+  // the video itself (same pattern /videos' own VideoFrame fallback uses)
+  // instead of a bare /videos link that would put every such card at the same
+  // undifferentiated destination.
   return (
-    <Link to="/videos" className={cardClass}>
+    <a href={video.url} target="_blank" rel="noopener noreferrer" className={cardClass}>
       {media}
       {body}
-    </Link>
+    </a>
   );
 }
 
@@ -877,19 +904,28 @@ function PropertyCard({ property }: { property: PropertyItem }) {
   // cover shot with a media count is the credibility win; the gradient stays as
   // the fallback for listings the MLS import left without photos.
   const photoCount = property.images?.length ?? 0;
-  const cover = property.images?.[0] ?? null;
-  const hasVideo = Boolean(property.video_url);
+  // Falls back to the gradient/Building2 placeholder if the photo host 404s or
+  // blocks hotlinking -- without this, `cover` stayed truthy forever and the
+  // fallback below could never render.
+  const [coverFailed, setCoverFailed] = useState(false);
+  const cover = coverFailed ? null : (property.images?.[0] ?? null);
+  // `video_url` is shared with VR-tour links (matterport/kuula) elsewhere in
+  // this codebase (see property.$listingNo.tsx's isVrUrl) -- a bare truthiness
+  // check badged those as "影片" too, promising a video tab the listing page
+  // doesn't have.
+  const hasVideo = isYouTubeVideoUrl(property.video_url);
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant">
-      {/* Until now the only link on this card was the WhatsApp button, so a
-          visitor could not reach the listing itself from the homepage at all --
-          which also made the "查看更多相片、影片" hint below undeliverable. */}
+      {/* Decorative/mouse-only: the title link below is the sole keyboard and
+          screen-reader path to the listing, so this photo doesn't need (and
+          shouldn't have) its own focus stop or announced name. */}
       <Link
         to="/property/$listingNo"
         params={{ listingNo: property.listing_no }}
-        aria-label={`查看 ${property.title_zh} 詳情`}
-        className="relative block h-48 overflow-hidden bg-gradient-to-br from-primary/40 to-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        tabIndex={-1}
+        aria-hidden="true"
+        className="relative block h-48 overflow-hidden bg-gradient-to-br from-primary/40 to-primary"
       >
         {cover ? (
           <img
@@ -899,20 +935,24 @@ function PropertyCard({ property }: { property: PropertyItem }) {
             width={640}
             height={480}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            onError={() => setCoverFailed(true)}
           />
         ) : null}
-        {/* Scrim only where text sits, so the photo stays legible without being
-            dimmed overall. */}
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
+        {/* Scrim strong enough to hold text contrast regardless of how bright
+            the underlying photo is. */}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
           <span className="rounded-full bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background">
             {isRent ? "租 Rent" : "售 Sale"}
           </span>
-          <span className="rounded-full bg-card/90 px-2.5 py-1 text-[11px] font-semibold text-primary backdrop-blur">
+          {/* Opaque: this used to be bg-card/90 over a fixed gradient, but now
+              sits over an arbitrary photo, where the 90%-alpha fill could drop
+              its contrast below AA on a dark cover. */}
+          <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-primary">
             {tag}
           </span>
         </div>
-        {cover ? null : (
+        {cover || photoCount > 0 || hasVideo ? null : (
           <Building2 className="absolute right-3 top-3 h-7 w-7 text-primary-foreground/30" />
         )}
         {/* Media affordance: badges are always visible (they carry the count, so
@@ -921,23 +961,29 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         {photoCount > 0 || hasVideo ? (
           <div className="absolute right-3 top-3 flex items-center gap-1.5">
             {photoCount > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-foreground/80 px-2 py-1 text-[11px] font-semibold text-background backdrop-blur">
+              <Badge
+                variant="outline"
+                className="gap-1 rounded-full border-transparent bg-foreground/80 px-2 py-1 text-[11px] font-semibold text-background backdrop-blur"
+              >
                 <Camera className="h-3 w-3" aria-hidden="true" />
                 {photoCount}
-              </span>
+              </Badge>
             ) : null}
             {hasVideo ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-coral px-2 py-1 text-[11px] font-semibold text-coral-foreground">
+              <Badge
+                variant="outline"
+                className="gap-1 rounded-full border-transparent bg-coral px-2 py-1 text-[11px] font-semibold text-coral-foreground"
+              >
                 <Video className="h-3 w-3" aria-hidden="true" />
                 影片
-              </span>
+              </Badge>
             ) : null}
           </div>
         ) : null}
         <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2 text-primary-foreground">
-          <p className="text-xs opacity-90">{property.estates?.name_zh ?? ""}</p>
+          <p className="text-xs">{property.estates?.name_zh ?? ""}</p>
           {photoCount > 1 || hasVideo ? (
-            <span className="translate-y-1 text-[11px] font-medium opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+            <span className="text-[11px] font-medium">
               查看更多{photoCount > 1 ? "相片" : ""}
               {photoCount > 1 && hasVideo ? "、" : ""}
               {hasVideo ? "影片" : ""}
@@ -950,7 +996,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           <Link
             to="/property/$listingNo"
             params={{ listingNo: property.listing_no }}
-            className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="rounded-sm underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {property.title_zh}
           </Link>

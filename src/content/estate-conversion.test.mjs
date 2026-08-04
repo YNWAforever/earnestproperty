@@ -244,7 +244,10 @@ test("homepage featured listings show real media and link to the listing", () =>
   // listing page at all.
   assert.match(home, /property\.images\?\.\[0\]/);
   assert.match(home, /const photoCount = property\.images\?\.length \?\? 0/);
-  assert.match(home, /const hasVideo = Boolean\(property\.video_url\)/);
+  // Not a bare Boolean(...): video_url is shared with VR-tour links elsewhere
+  // in the codebase, so this must go through the same YouTube check used to
+  // build the video carousel above.
+  assert.match(home, /const hasVideo = isYouTubeVideoUrl\(property\.video_url\)/);
   assert.match(home, /to="\/property\/\$listingNo"/);
   assert.match(home, /params=\{\{ listingNo: property\.listing_no \}\}/);
 
