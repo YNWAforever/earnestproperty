@@ -10,11 +10,14 @@ import {
   ArrowRight,
   Bed,
   Bath,
+  Camera,
   Maximize,
+  PlayCircle,
   Users,
   Newspaper,
   Store,
   TrendingUp,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,15 +44,18 @@ import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
 import { SITE_URL, SITE_LOGO_URL, canonicalLink, pageSeo } from "@/content/seo";
 import {
+  fetchCmsVideos,
   fetchEstates,
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
+  type CmsVideo,
   type EstateSummary,
   type FeaturedProperty,
   type FaqItem,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
+import { getYouTubeVideoId } from "@/lib/youtube-video-url.js";
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
 // reject a relative og:image outright, so it is absolutised here rather than in
@@ -59,12 +65,17 @@ const HERO_OG_IMAGE = new URL(heroImage, SITE_URL).href;
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const [estates, featured, faqs, counts, agentProfiles] = await Promise.all([
+    // `fetchCmsVideos` reads the small curated cms_videos table. Deliberately NOT
+    // `fetchVideosPageData()` (what /videos uses) -- that also runs a 36-row
+    // searchListings pass to find listing videos, and the homepage can derive
+    // those for free from `featured`, which already selects `video_url`.
+    const [estates, featured, faqs, counts, agentProfiles, cmsVideos] = await Promise.all([
       fetchEstates(),
       fetchFeaturedProperties(),
       fetchFaqs("district:sham-tseng"),
       fetchListingCountsByEstate(),
       fetchNeonPublicAgentProfiles(),
+      fetchCmsVideos(),
     ]);
     return {
       estates,
@@ -72,6 +83,7 @@ export const Route = createFileRoute("/")({
       faqs,
       counts: Object.fromEntries(counts),
       agents: agentProfiles.slice(0, 6),
+      cmsVideos,
     };
   },
   errorComponent: ({ error }) => (
@@ -100,6 +112,18 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
+// One row of three on desktop; more than that belongs on /videos.
+const HOME_VIDEO_COUNT = 3;
+
+type HomeVideo = {
+  key: string;
+  title: string;
+  url: string;
+  eyebrow: string;
+  /** Set for listing walkthroughs, so the card can deep-link to the property. */
+  listingNo: string | null;
+};
+
 // Card placeholders until 屋苑相片 land. Hues sit in a ±13° band around the brand
 // green (157°) so each estate stays distinguishable without drifting off-palette.
 const ESTATE_GRADIENTS: Record<string, string> = {
@@ -111,20 +135,33 @@ const ESTATE_GRADIENTS: Record<string, string> = {
 };
 
 function HomePage() {
-  const { estates, featured, faqs: faqRows, counts, agents } = Route.useLoaderData();
+  const { estates, featured, faqs: faqRows, counts, agents, cmsVideos } = Route.useLoaderData();
   const faqs = renderableFaqs(faqRows as FaqItem[]);
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
 
-  const totalUnits = estates.reduce((s: number, e: EstateSummary) => s + (e.total_units ?? 0), 0);
-  const avgPsf =
-    estates.length > 0
-      ? Math.round(
-          estates.reduce((s: number, e: EstateSummary) => s + Number(e.avg_saleable_psf ?? 0), 0) /
-            estates.length,
-        )
-      : 0;
+  // 精選樓盤影片 prefers real listing walkthroughs (derived free from `featured`,
+  // which already selects video_url) and tops up from the curated channel videos,
+  // so the section stays populated whichever of the two the client has filled in.
+  const homeVideos: HomeVideo[] = [
+    ...featured
+      .filter((p: FeaturedProperty) => Boolean(p.video_url))
+      .map((p: FeaturedProperty) => ({
+        key: `listing-${p.id}`,
+        title: p.title_zh,
+        url: p.video_url as string,
+        eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${p.deal_type === "rent" ? "租" : "售"}`,
+        listingNo: p.listing_no,
+      })),
+    ...cmsVideos.map((video: CmsVideo) => ({
+      key: `cms-${video.id}`,
+      title: video.title || "晉誠地產 YouTube影片",
+      url: video.video_url,
+      eyebrow: "官方頻道",
+      listingNo: null,
+    })),
+  ].slice(0, HOME_VIDEO_COUNT);
 
   function submitHeroSearch() {
     navigate({
@@ -225,18 +262,10 @@ function HomePage() {
         </div>
       </section>
 
-      {/* DISTRICT STATS */}
-      <section className="border-y border-border bg-card">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:grid-cols-3 sm:px-6 lg:px-8">
-          <Stat label="深井住宅單位" value={totalUnits.toLocaleString()} />
-          <Stat label="即時放盤" value={`${featured.length} 個精選`} />
-          <Stat label="平均實用呎價" value={`$${avgPsf.toLocaleString()}`} sub="近 12 個月" />
-        </div>
-      </section>
-
       {/* FEATURED LISTINGS — 精選筍盤置頂 (client p2): live stock is the first
-          thing after the hero, ahead of the evergreen estate directory. It keeps
-          bg-muted/40 so it still reads as a band against the white stats strip
+          thing after the hero, ahead of the evergreen estate directory. The
+          district-stats strip that used to sit above this was removed at the
+          client's request; bg-muted/40 still reads as a band against the hero
           above and the plain estates section below. */}
       <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -266,6 +295,35 @@ function HomePage() {
           )}
         </div>
       </section>
+
+      {/* FEATURED VIDEOS — sits directly after 精選筍盤 so a buyer who just
+          scanned the live stock can immediately see the same listings walked
+          through on video. Hidden entirely when neither the CMS videos nor any
+          featured listing has a video, rather than shipping an empty band. */}
+      {homeVideos.length > 0 ? (
+        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+            <SectionHeader
+              eyebrow="精選樓盤影片"
+              title="Featured Property Videos"
+              desc="睇樓前先睇片，了解實際景觀、間隔同屋苑環境。"
+              className="text-left"
+            />
+            <Button asChild variant="outline">
+              <Link to="/videos">
+                所有影片
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {homeVideos.map((video) => (
+              <HomeVideoCard key={video.key} video={video} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {/* CORE ESTATES */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
@@ -544,16 +602,6 @@ function HomePage() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="text-center">
-      <div className="text-3xl font-bold tracking-tight text-primary sm:text-4xl">{value}</div>
-      <div className="mt-1 text-sm text-muted-foreground">{label}</div>
-      {sub && <div className="text-xs text-muted-foreground/70">{sub}</div>}
-    </div>
-  );
-}
-
 /**
  * The client's ten approved estates (docx p13/p15), not just the five the DB
  * knows about. Live figures are merged in by slug; the five the client added
@@ -731,6 +779,72 @@ function Feature({
   return <div className="rounded-xl border border-border bg-card p-6 shadow-card">{content}</div>;
 }
 
+/**
+ * Thumbnail facade rather than an embedded player: three YouTube iframes on the
+ * homepage would each pull in the full player bundle before the visitor has
+ * asked for any video. The card links out to where the video actually plays
+ * (the listing page for a walkthrough, /videos for a channel clip), so the
+ * homepage cost is three images.
+ */
+function HomeVideoCard({ video }: { video: HomeVideo }) {
+  const videoId = getYouTubeVideoId(video.url);
+  const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+
+  const media = (
+    <div className="relative aspect-video overflow-hidden bg-primary/10">
+      {thumbnail ? (
+        <img
+          src={thumbnail}
+          alt={`${video.title} 影片預覽`}
+          loading="lazy"
+          width={480}
+          height={360}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+        />
+      ) : null}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
+      {/* The ring pulses only while hovered, so the affordance animates in
+          response to the pointer instead of drawing the eye unprompted. */}
+      <span className="absolute inset-0 flex items-center justify-center">
+        <span className="relative flex h-14 w-14 items-center justify-center rounded-full bg-background/90 text-primary shadow-lg transition-transform duration-300 group-hover:scale-110">
+          <span className="absolute inset-0 rounded-full ring-2 ring-background/70 opacity-0 transition-opacity duration-300 group-hover:animate-ping group-hover:opacity-100" />
+          <PlayCircle className="h-8 w-8" />
+        </span>
+      </span>
+    </div>
+  );
+
+  const body = (
+    <div className="p-5">
+      <p className="text-xs font-semibold text-coral">{video.eyebrow}</p>
+      <h3 className="mt-2 line-clamp-2 text-base font-semibold text-primary">{video.title}</h3>
+      <span className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary">
+        {video.listingNo ? "睇片睇樓" : "觀看影片"}
+        <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
+      </span>
+    </div>
+  );
+
+  const cardClass =
+    "group block overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+  if (video.listingNo) {
+    return (
+      <Link to="/property/$listingNo" params={{ listingNo: video.listingNo }} className={cardClass}>
+        {media}
+        {body}
+      </Link>
+    );
+  }
+
+  return (
+    <Link to="/videos" className={cardClass}>
+      {media}
+      {body}
+    </Link>
+  );
+}
+
 type PropertyItem = {
   id: string;
   listing_no: string;
@@ -742,6 +856,8 @@ type PropertyItem = {
   bedrooms: number | null;
   bathrooms: number | null;
   features: string[] | null;
+  images?: string[] | null;
+  video_url?: string | null;
   estates?: { name_zh: string; slug: string } | null;
 };
 
@@ -756,9 +872,38 @@ function PropertyCard({ property }: { property: PropertyItem }) {
       : null;
   const tag = property.features?.[0] ?? "精選";
 
+  // The card used to render a bare gradient and ignore `images` entirely, so
+  // listings with real photography still looked like placeholders. Showing the
+  // cover shot with a media count is the credibility win; the gradient stays as
+  // the fallback for listings the MLS import left without photos.
+  const photoCount = property.images?.length ?? 0;
+  const cover = property.images?.[0] ?? null;
+  const hasVideo = Boolean(property.video_url);
+
   return (
-    <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all hover:-translate-y-1 hover:shadow-elegant">
-      <div className="relative h-48 bg-gradient-to-br from-primary/40 to-primary">
+    <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant">
+      {/* Until now the only link on this card was the WhatsApp button, so a
+          visitor could not reach the listing itself from the homepage at all --
+          which also made the "查看更多相片、影片" hint below undeliverable. */}
+      <Link
+        to="/property/$listingNo"
+        params={{ listingNo: property.listing_no }}
+        aria-label={`查看 ${property.title_zh} 詳情`}
+        className="relative block h-48 overflow-hidden bg-gradient-to-br from-primary/40 to-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      >
+        {cover ? (
+          <img
+            src={cover}
+            alt={`${property.title_zh} 相片`}
+            loading="lazy"
+            width={640}
+            height={480}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : null}
+        {/* Scrim only where text sits, so the photo stays legible without being
+            dimmed overall. */}
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
           <span className="rounded-full bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background">
             {isRent ? "租 Rent" : "售 Sale"}
@@ -767,13 +912,49 @@ function PropertyCard({ property }: { property: PropertyItem }) {
             {tag}
           </span>
         </div>
-        <Building2 className="absolute right-3 top-3 h-7 w-7 text-primary-foreground/30" />
-        <div className="absolute bottom-3 left-3 text-primary-foreground">
-          <p className="text-xs opacity-80">{property.estates?.name_zh ?? ""}</p>
+        {cover ? null : (
+          <Building2 className="absolute right-3 top-3 h-7 w-7 text-primary-foreground/30" />
+        )}
+        {/* Media affordance: badges are always visible (they carry the count, so
+            they must survive touch, where there is no hover), and only the
+            "查看更多" hint animates in on hover. */}
+        {photoCount > 0 || hasVideo ? (
+          <div className="absolute right-3 top-3 flex items-center gap-1.5">
+            {photoCount > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-foreground/80 px-2 py-1 text-[11px] font-semibold text-background backdrop-blur">
+                <Camera className="h-3 w-3" aria-hidden="true" />
+                {photoCount}
+              </span>
+            ) : null}
+            {hasVideo ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-coral px-2 py-1 text-[11px] font-semibold text-coral-foreground">
+                <Video className="h-3 w-3" aria-hidden="true" />
+                影片
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2 text-primary-foreground">
+          <p className="text-xs opacity-90">{property.estates?.name_zh ?? ""}</p>
+          {photoCount > 1 || hasVideo ? (
+            <span className="translate-y-1 text-[11px] font-medium opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+              查看更多{photoCount > 1 ? "相片" : ""}
+              {photoCount > 1 && hasVideo ? "、" : ""}
+              {hasVideo ? "影片" : ""}
+            </span>
+          ) : null}
         </div>
-      </div>
+      </Link>
       <div className="flex flex-1 flex-col p-5">
-        <h3 className="text-base font-semibold text-primary">{property.title_zh}</h3>
+        <h3 className="text-base font-semibold text-primary">
+          <Link
+            to="/property/$listingNo"
+            params={{ listingNo: property.listing_no }}
+            className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {property.title_zh}
+          </Link>
+        </h3>
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">

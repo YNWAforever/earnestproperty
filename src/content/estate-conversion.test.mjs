@@ -223,3 +223,57 @@ test("public search and homepage expose lead capture paths", () => {
   assert.match(footer, /查看持牌代理團隊/);
   assert.equal(/28hse/i.test(footer), false);
 });
+
+test("homepage drops the district stats strip", () => {
+  const home = read("src/routes/index.tsx");
+
+  // Removed at the client's request. The derived values and the `Stat` component
+  // existed only to feed this strip, so none of them should linger as dead code.
+  for (const gone of [/深井住宅單位/, /平均實用呎價/, /近 12 個月/, /個精選/, /function Stat\(/]) {
+    assert.doesNotMatch(home, gone);
+  }
+  assert.doesNotMatch(home, /const totalUnits =/);
+  assert.doesNotMatch(home, /const avgPsf =/);
+});
+
+test("homepage featured listings show real media and link to the listing", () => {
+  const home = read("src/routes/index.tsx");
+
+  // The card used to render only a gradient and never read `images`, and its
+  // sole link was the WhatsApp button -- so the homepage could not reach a
+  // listing page at all.
+  assert.match(home, /property\.images\?\.\[0\]/);
+  assert.match(home, /const photoCount = property\.images\?\.length \?\? 0/);
+  assert.match(home, /const hasVideo = Boolean\(property\.video_url\)/);
+  assert.match(home, /to="\/property\/\$listingNo"/);
+  assert.match(home, /params=\{\{ listingNo: property\.listing_no \}\}/);
+
+  // Media count badges must not depend on hover -- they carry the count, and
+  // there is no hover on touch. Only the "查看更多" hint is hover-revealed.
+  assert.match(home, /group-hover:scale-105/);
+  assert.match(home, /查看更多/);
+});
+
+test("homepage shows featured property videos after featured listings", () => {
+  const home = read("src/routes/index.tsx");
+
+  assert.match(home, /精選樓盤影片/);
+  assert.match(home, /fetchCmsVideos/);
+  // Cheaper than /videos' fetchVideosPageData, which also runs a listing scan.
+  // Matched against the import list, not the whole file -- the name legitimately
+  // appears in a comment explaining why it is *not* used.
+  assert.doesNotMatch(home, /^\s+fetchVideosPageData,$/m);
+  // Thumbnail facade, not three embedded players on the landing page.
+  assert.match(home, /i\.ytimg\.com/);
+  assert.doesNotMatch(home, /youtube\.com\/embed/);
+  assert.match(home, /to="\/videos"/);
+
+  // The video band must come after 精選筍盤, which is the whole point of where
+  // the client asked for it. Compared on the rendered section eyebrows rather
+  // than bare text, so a comment mentioning either name cannot skew the order.
+  const featuredAt = home.indexOf('eyebrow="精選筍盤"');
+  const videosAt = home.indexOf('eyebrow="精選樓盤影片"');
+  assert.ok(featuredAt > -1, "featured listings section should carry its eyebrow");
+  assert.ok(videosAt > -1, "video section should carry its eyebrow");
+  assert.ok(featuredAt < videosAt, "精選樓盤影片 must render after 精選筍盤");
+});
