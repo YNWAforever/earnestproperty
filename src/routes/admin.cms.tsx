@@ -1276,8 +1276,51 @@ function AdminCms() {
             onScopeChange={setFaqImportScope}
             onTextChange={setFaqImportText}
             onClose={() => setFaqImportOpen(false)}
-            onSubmit={handleImportFaqs}
+            onSubmit={handleImportFaqsSubmit}
           />
+          <AdminConfirmDialog
+            open={faqImportConfirmOpen}
+            title="確認匯入 FAQ"
+            description={
+              faqImportOverwriteCount > 0
+                ? `共 ${faqImportPreview.length} 條，其中 ${faqImportOverwriteCount} 條會覆寫現有答案（相同分組及問題視為同一條）。此操作無法復原。`
+                : `共 ${faqImportPreview.length} 條，全部為新增，不會覆寫現有 FAQ。`
+            }
+            confirmLabel="確認匯入"
+            confirmVariant={faqImportOverwriteCount > 0 ? "destructive" : "default"}
+            isPending={faqImportSaving}
+            onOpenChange={setFaqImportConfirmOpen}
+            onConfirm={handleImportFaqs}
+          >
+            {faqImportOverwriteCount > 0 ? (
+              <div className="max-h-48 overflow-y-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>問題</TableHead>
+                      <TableHead>狀態</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {faqImportPreview.map((row) => (
+                      <TableRow key={`${row.scope}::${row.question}`}>
+                        <TableCell className="max-w-xs truncate" title={row.question}>
+                          {row.question}
+                        </TableCell>
+                        <TableCell>
+                          {row.overwrite ? (
+                            <Badge variant="destructive">覆寫</Badge>
+                          ) : (
+                            <Badge variant="outline">新增</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+          </AdminConfirmDialog>
           <MediaDialog
             media={editingMedia}
             saving={saving}
