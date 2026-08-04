@@ -3,6 +3,7 @@ import { MessageCircle, ReceiptText } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
+import { canonicalLink } from "@/content/seo";
 import { fetchRecentTransactions, type RecentTransaction } from "@/lib/queries";
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -13,7 +14,7 @@ const DISTRICT_LABELS: Record<string, string> = {
 
 export const Route = createFileRoute("/transactions")({
   loader: async () => fetchRecentTransactions(24),
-  head: () => ({
+  head: ({ loaderData }) => ({
     meta: [
       { title: "成交快訊｜深井 青山公路 汀九近期成交｜晉誠地產" },
       {
@@ -21,7 +22,15 @@ export const Route = createFileRoute("/transactions")({
         content:
           "深井、青山公路、汀九成交快訊，查看近期屋苑成交價、實用面積及呎價，配合晉誠地產前線市場資訊。",
       },
+      // The page renders a graceful empty state rather than 404ing when there is
+      // no transaction data yet, but an indexed empty page is a soft-404 risk.
+      // sitemap.xml also drops this path under the same condition; both self-heal
+      // once real rows land, with no further deploy needed.
+      ...(!loaderData || loaderData.length === 0
+        ? [{ name: "robots", content: "noindex,follow" }]
+        : []),
     ],
+    links: [canonicalLink("/transactions")],
   }),
   component: TransactionsPage,
 });

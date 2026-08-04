@@ -70,7 +70,7 @@ export const castlePeakRoadHub = {
     {
       question: "青山公路買樓應先比較哪些地段？",
       answer:
-        "可以先由油柑頭/汀九，深井/青龍頭段，小欖/掃管笏/三聖段入手，再按交通、校網、樓齡、海景和放盤量收窄選擇。",
+        "可以先由油柑頭/汀九，深井/青龍頭段入手，再按交通、校網、樓齡、海景和放盤量收窄選擇。",
     },
     {
       question: "放盤數量是否即時更新？",
@@ -163,7 +163,6 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     ],
     links: [
       { href: "/castle-peak-road/sham-tseng", label: "比較深井 / 青山公路" },
-      { href: "/castle-peak-road/so-kwun-wat-gold-coast", label: "比較小欖 / 掃管笏 / 三聖" },
       { href: "/listings?deal=all&district=ting-kau&page=1", label: "搜尋汀九放盤" },
     ],
   },
@@ -242,75 +241,10 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       { href: "/listings?deal=all&district=sham-tseng&page=1", label: "搜尋深井放盤" },
     ],
   },
-  {
-    // Slug stays so-kwun-wat-gold-coast: this zone was renamed and widened (to
-    // take in 小欖 and 三聖), not created fresh, so changing the slug would throw
-    // away an already-indexed URL for nothing.
-    slug: "so-kwun-wat-gold-coast",
-    path: "/castle-peak-road/so-kwun-wat-gold-coast",
-    nameZh: "小欖/掃管笏/三聖區",
-    nameEn: "Siu Lam / So Kwun Wat / Sam Shing",
-    eyebrow: "青山公路西段",
-    title: "小欖・掃管笏・三聖樓盤｜青山公路西段新樓及臨海洋房",
-    description:
-      "小欖、掃管笏及三聖一帶樓盤指南，涵蓋新樓入伙盤、低密度住宅、黃金海岸及臨海洋房，即時全部真盤查詢。",
-    h1: "小欖 / 掃管笏 / 三聖 · 青山公路西段臨海生活",
-    intro: [
-      "小欖、掃管笏與三聖屬青山公路西段，近年新式屋苑供應較多，兼具臨海生活、會所和較完整家庭配套。",
-      "這段適合願意接受較長通勤，換取新式屋苑、海景或較大生活空間的買家。",
-    ],
-    zoneSummary: ["提供大量新樓入伙盤及比較多低密度的住宅，亦有比較多的新型或臨海洋房可選擇"],
-    buyerFit: "適合追求新式屋苑、會所、海濱生活和較大空間的家庭與換樓客。",
-    transport: "主要靠巴士、小巴和自駕往屯門、荃灣、九龍及港島，實際車程受繁忙時間影響。",
-    schoolNet: "校網需按實際地址核實，以教育局最新公布為準。",
-    housingProfile: "新式大型屋苑、臨海住宅、會所屋苑和部分低密度選擇。",
-    featuredEstates: [
-      "Aegean Coast 愛琴海岸",
-      "Gold Coast 黃金海岸",
-      "帝濤灣",
-      "滿名山",
-      "星堤",
-      "NAPA",
-      "OMA by the Sea",
-      "瑜翠園",
-    ],
-    districtSlugs: ["so-kwun-wat", "gold-coast", "castle-peak-road"],
-    estateSlugs: [],
-    textAliases: [
-      "小欖",
-      "Siu Lam",
-      "掃管笏",
-      "So Kwun Wat",
-      "三聖",
-      "Sam Shing",
-      "黃金海岸",
-      "Gold Coast",
-      "Aegean Coast",
-      "愛琴海岸",
-      "帝濤灣",
-      "滿名山",
-      "星堤",
-      "NAPA",
-      "OMA by the Sea",
-      "瑜翠園",
-    ],
-    faqs: [
-      {
-        question: "小欖、掃管笏同三聖適合邊類家庭？",
-        answer: "適合想要新式屋苑、會所、臨海生活和較大居住空間，並能接受巴士或自駕通勤的家庭。",
-      },
-      {
-        question: "這段同深井有咩分別？",
-        answer:
-          "深井較接近荃灣和成熟生活圈，小欖 / 掃管笏 / 三聖一帶新樓入伙盤較多，生活節奏更偏度假式。",
-      },
-    ],
-    links: [
-      { href: "/castle-peak-road/sham-tseng", label: "比較深井 / 青山公路" },
-      { href: "/castle-peak-road/ting-kau", label: "比較油柑頭 / 汀九" },
-      { href: "/listings?deal=all&district=castle-peak-road&page=1", label: "搜尋青山公路放盤" },
-    ],
-  },
+  // so-kwun-wat-gold-coast (小欖/掃管笏/三聖, including Gold Coast 黃金海岸) removed:
+  // out of the client's agreed 深井/青山公路/汀九 scope. The URL 301s to
+  // /castle-peak-road/sham-tseng (see vercel.ts); its listings were already
+  // excluded from every other page via corridorRegionScope.outOfScopeTextAliases.
 ];
 
 export function getCastlePeakRoadSegment(slug: string): CorridorSegment | null {

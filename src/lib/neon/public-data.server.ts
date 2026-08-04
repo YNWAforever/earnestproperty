@@ -38,7 +38,11 @@ const publicAgentProfileColumns = `
   s.licence_no AS agent_licence_no,
   s.avatar_url AS agent_avatar_url,
   s.branch AS agent_branch,
-  s.bio AS agent_bio
+  s.bio AS agent_bio,
+  ARRAY(SELECT jsonb_array_elements_text(COALESCE(to_jsonb(s)->'specialties', '[]'::jsonb)))
+    AS agent_specialties,
+  ARRAY(SELECT jsonb_array_elements_text(COALESCE(to_jsonb(s)->'served_estate_slugs', '[]'::jsonb)))
+    AS agent_served_estate_slugs
 `;
 
 const listingColumns = `
@@ -172,6 +176,8 @@ function mapPublicAgentProfile(row: DbRow): NeonPublicAgentProfile | null {
     avatar_url: stringOrNull(row.agent_avatar_url),
     branch: stringOrNull(row.agent_branch),
     bio: stringOrNull(row.agent_bio),
+    specialties: textArrayOrNull(row.agent_specialties) ?? [],
+    served_estate_slugs: textArrayOrNull(row.agent_served_estate_slugs) ?? [],
   };
 }
 
@@ -237,6 +243,15 @@ function addParam(params: unknown[], value: unknown) {
   return `$${params.length}`;
 }
 
+// Long enough for a full estate name plus a street; anything past this is
+// paste noise and only widens the scan.
+const KEYWORD_MAX_LENGTH = 80;
+
+function normalizeKeyword(value: string | undefined) {
+  const trimmed = (value ?? "").trim().slice(0, KEYWORD_MAX_LENGTH);
+  return trimmed ? escapeLikeTerm(trimmed) : null;
+}
+
 function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   const where = ["p.status = 'active'"];
 
@@ -245,20 +260,21 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   }
   if (input.districtSlug) where.push(`p.district_slug = ${addParam(params, input.districtSlug)}`);
 
-  // For deal="all" both sale and rent listings are returned, so compare against
-  // whichever price applies to each row (sale rows have p.price, rent rows have
-  // p.rent). Using COALESCE keeps a single column comparison while still matching
-  // rentals (whose p.price is NULL). The sale/rent cases stay on their own column.
-  const priceColumn =
-    input.deal === "rent"
-      ? "p.rent"
-      : input.deal === "sale"
-        ? "p.price"
-        : "COALESCE(p.price, p.rent)";
-  if (input.minPrice !== undefined)
-    where.push(`${priceColumn} >= ${addParam(params, input.minPrice)}`);
-  if (input.maxPrice !== undefined)
-    where.push(`${priceColumn} <= ${addParam(params, input.maxPrice)}`);
+  // Price only means something once the deal type is known -- sale prices are
+  // in millions, rents in thousands. Under deal="all" the previous
+  // COALESCE(p.price, p.rent) made a sale budget match every rental (rent <=
+  // 8,000,000 is always true) and a rent budget exclude every sale, silently
+  // deleting half the inventory. No single number can mean both, so the bound
+  // is dropped entirely when the deal type isn't chosen; the filter panel
+  // disables the price inputs under "all" so this combination can't be
+  // produced from the UI, and this guard covers a hand-edited URL.
+  if (input.deal !== "all") {
+    const priceColumn = input.deal === "rent" ? "p.rent" : "p.price";
+    if (input.minPrice !== undefined)
+      where.push(`${priceColumn} >= ${addParam(params, input.minPrice)}`);
+    if (input.maxPrice !== undefined)
+      where.push(`${priceColumn} <= ${addParam(params, input.maxPrice)}`);
+  }
 
   if (input.bedrooms !== undefined) {
     where.push(
@@ -269,6 +285,36 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   }
 
   if (input.estateSlug) where.push(`e.slug = ${addParam(params, input.estateSlug)}`);
+  if (input.agentId) where.push(`p.agent_id = ${addParam(params, input.agentId)}`);
+
+  // Matched as one whole term, not split on whitespace: the primary search
+  // language is Chinese, which has no word boundaries, so tokenising buys
+  // nothing and only introduces surprising OR/AND semantics.
+  //
+  // p.description and p.features are deliberately excluded.
+  // normalize-old-site.mjs fills description from the old site's meta
+  // description, which routinely name-drops neighbouring estates --
+  // including it would make a search for one estate return a different one.
+  // p.title_zh and p.address always carry the building name (see
+  // normalize-old-site.mjs's titleFor/address builders), so the estate is
+  // findable even on the many rows whose estate_id is still NULL because the
+  // importer only links an estate via a handful of hardcoded regexes.
+  const keyword = normalizeKeyword(input.keyword);
+  if (keyword) {
+    where.push(`lower(
+      concat_ws(' ',
+        p.title_zh,
+        p.title_en,
+        p.address,
+        p.listing_no,
+        p.district_slug,
+        e.name_zh,
+        e.name_en,
+        e.slug
+      )
+    ) LIKE '%' || lower(${addParam(params, keyword)}) || '%' ESCAPE '\\'`);
+  }
+
   return where.join(" AND ");
 }
 
@@ -458,14 +504,21 @@ export async function fetchCorridorInventory(
 
 export async function fetchFeaturedProperties(limit: number): Promise<NeonPropertyRow[]> {
   const pageSize = Math.min(Math.max(1, limit), 100);
+  // p.featured is manually flagged and the MLS importer always writes it false
+  // (see normalize-old-site.mjs), so a strict `featured = true` filter showed
+  // only the handful of listings someone had hand-flagged -- 1 of 398 at audit
+  // time. Sorting featured-first instead of filtering on it surfaces any
+  // hand-picked listings ahead of the rest while always backfilling the
+  // section from the newest active inventory (sale + rent mixed), so 精選筍盤
+  // never shows fewer than `limit` cards while any active listings exist.
   const rows = await sql().query(
     `
     SELECT ${listingColumns}
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
     ${publicAgentJoin}
-    WHERE p.status = 'active' AND p.featured = true
-    ORDER BY p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    WHERE p.status = 'active'
+    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
     LIMIT $1
     `,
     [pageSize],
@@ -480,6 +533,19 @@ export async function fetchListingsForEstate(input: {
   const result = await searchListings({
     deal: "all",
     estateSlug: input.estateSlug,
+    page: 1,
+    pageSize: input.limit,
+  });
+  return result.rows;
+}
+
+export async function fetchListingsForAgent(input: {
+  agentId: string;
+  limit: number;
+}): Promise<NeonPropertyRow[]> {
+  const result = await searchListings({
+    deal: "all",
+    agentId: input.agentId,
     page: 1,
     pageSize: input.limit,
   });

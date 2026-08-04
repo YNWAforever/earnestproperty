@@ -4,6 +4,27 @@ const whatsappPhone = import.meta.env.VITE_CONTACT_WHATSAPP_PHONE ?? "";
 const phoneDisplay = import.meta.env.VITE_CONTACT_PHONE_DISPLAY ?? "";
 const phoneTel = import.meta.env.VITE_CONTACT_PHONE_TEL ?? "";
 
+// True once VITE_CONTACT_WHATSAPP_PHONE is configured. Components should check
+// this explicitly rather than compare a built URL against the literal string
+// "/contact" -- that comparison only ever worked by coincidence (see the
+// SiteHeader mobile-menu dedupe, which relied on two independently-built
+// wa.me messages happening to both degrade to the same fallback string).
+export const hasWhatsAppPhone = Boolean(whatsappPhone);
+
+if (!hasWhatsAppPhone) {
+  // Not a throw: this module is imported by nearly every route (via
+  // SiteHeader/SiteFooter), so throwing here would 500 the entire site on
+  // first request rather than just leaving WhatsApp CTAs pointed at /contact.
+  // A misconfigured production/preview deploy is instead caught before it
+  // ships by scripts/check-required-env.mjs (wired as the `prebuild` step),
+  // which fails the Vercel build outright. This warning is the local-dev
+  // signal for the same problem.
+  console.warn(
+    "[site.ts] VITE_CONTACT_WHATSAPP_PHONE is not set -- every WhatsApp CTA will fall back " +
+      "to /contact instead of opening WhatsApp. See .env.example.",
+  );
+}
+
 export const SITE_CONTACT = {
   id: "general",
   name: "晉誠地產",
@@ -98,4 +119,33 @@ export function whatsappIntentMessage(intent: WhatsAppIntent, context: WhatsAppI
 
 export function whatsappIntentUrl(intent: WhatsAppIntent, context: WhatsAppIntentContext = {}) {
   return whatsappUrl(whatsappIntentMessage(intent, context));
+}
+
+function formatWhatsAppPrice(dealType: "sale" | "rent", price: number | null) {
+  if (price === null) return "";
+  const amount =
+    dealType === "rent"
+      ? `$${price.toLocaleString("zh-HK")}/月`
+      : `$${price.toLocaleString("zh-HK")}`;
+  return `（${amount}）`;
+}
+
+/**
+ * The listing-detail-page enquiry prefill. Distinct from whatsappIntentMessage
+ * (which drives the site-wide buy/rent/valuation CTAs): this one is a single
+ * short line carrying enough context for an agent to recognise the property
+ * without opening the site, per the audit's example:
+ * 「你好，想查詢 麗都花園 第03座 售盤 #C024131（$600萬）」.
+ *
+ * `title` is expected to be the listing's `title_zh`, which
+ * src/lib/mls/normalize-old-site.mjs already builds as
+ * `${building} ${售盤|租盤} #${listingNo}` -- so the deal label and listing
+ * number are already inside it. Re-adding them here would duplicate them.
+ */
+export function propertyEnquiryMessage(input: {
+  title: string;
+  dealType: "sale" | "rent";
+  price: number | null;
+}) {
+  return `你好，想查詢 ${input.title}${formatWhatsAppPrice(input.dealType, input.price)}`;
 }

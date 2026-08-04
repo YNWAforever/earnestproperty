@@ -14,7 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
+import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
+import { itemListSchema } from "@/lib/schema";
 
 const PAGE_SIZE = 12;
 
@@ -36,6 +38,7 @@ export const Route = createFileRoute("/listings")({
     const [result, estates] = await Promise.all([
       searchListings({
         deal: deps.deal,
+        keyword: deps.keyword?.trim() || undefined,
         districtSlug: deps.district === "all" ? undefined : deps.district,
         minPrice: deps.minPrice,
         maxPrice: deps.maxPrice,
@@ -61,6 +64,8 @@ export const Route = createFileRoute("/listings")({
         content: "深井區全部真盤篩選，按價錢、房數、屋苑搜尋。",
       },
     ],
+    // Bare path -- the canonical must not fork per filter combination.
+    links: [canonicalLink(pageSeo.listings.path)],
   }),
   component: ListingsPage,
 });
@@ -73,12 +78,21 @@ function describeListingSearch(
     search.deal === "sale" ? "售盤" : search.deal === "rent" ? "租盤" : "全部租售",
     search.estate ? estates.find((estate) => estate.slug === search.estate)?.name_zh : undefined,
     search.district,
-    search.minPrice ? `最低 $${search.minPrice.toLocaleString()}` : undefined,
-    search.maxPrice ? `最高 $${search.maxPrice.toLocaleString()}` : undefined,
+    // Price bounds are only ever sent to the server when a deal type is
+    // chosen (see listingWhere in public-data.server.ts -- deal="all" mixes
+    // sale prices in millions with rents in thousands, so no bound can be
+    // applied). Suppressing them here too keeps the summary from claiming a
+    // filter that wasn't actually applied.
+    search.deal !== "all" && search.minPrice
+      ? `最低 $${search.minPrice.toLocaleString()}`
+      : undefined,
+    search.deal !== "all" && search.maxPrice
+      ? `最高 $${search.maxPrice.toLocaleString()}`
+      : undefined,
     search.bedrooms !== undefined
       ? `${search.bedrooms === 4 ? "4+" : search.bedrooms} 房`
       : undefined,
-    search.keyword ? `補充：${search.keyword}` : undefined,
+    search.keyword ? `關鍵字：${search.keyword}` : undefined,
   ].filter(Boolean);
   return parts.join(" / ") || "未指定條件";
 }
@@ -89,9 +103,26 @@ function ListingsPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const searchSummary = describeListingSearch(search, estates);
   const fallbackIntent = search.deal === "rent" ? "rent" : "buy";
+  const listSchema =
+    rows.length > 0
+      ? itemListSchema({
+          items: rows.map((row) => ({
+            url: `${SITE_URL}/property/${row.listing_no}`,
+            name: row.title_zh,
+          })),
+        })
+      : null;
 
   return (
     <div className="bg-background">
+      {listSchema ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({ "@context": "https://schema.org", ...listSchema }),
+          }}
+        />
+      ) : null}
       <div className="border-b bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">搜尋放盤</h1>
@@ -166,6 +197,7 @@ function FiltersPanel({
 }) {
   const navigate = useNavigate({ from: "/listings" });
   const [deal, setDeal] = useState<"all" | "sale" | "rent">(initial.deal);
+  const [keyword, setKeyword] = useState(initial.keyword ?? "");
   const [district, setDistrict] = useState<string>(initial.district ?? "all");
   const [minPrice, setMinPrice] = useState(initial.minPrice?.toString() ?? "");
   const [maxPrice, setMaxPrice] = useState(initial.maxPrice?.toString() ?? "");
@@ -177,6 +209,7 @@ function FiltersPanel({
   // Resync if user navigates via Pagination/Link
   useEffect(() => {
     setDeal(initial.deal);
+    setKeyword(initial.keyword ?? "");
     setDistrict(initial.district ?? "all");
     setMinPrice(initial.minPrice?.toString() ?? "");
     setMaxPrice(initial.maxPrice?.toString() ?? "");
@@ -184,6 +217,7 @@ function FiltersPanel({
     setEstate(initial.estate ?? "any");
   }, [
     initial.deal,
+    initial.keyword,
     initial.district,
     initial.minPrice,
     initial.maxPrice,
@@ -191,16 +225,22 @@ function FiltersPanel({
     initial.estate,
   ]);
 
+  const isAllDeals = deal === "all";
+
   function apply() {
     navigate({
       search: {
         deal,
+        keyword: keyword.trim() || undefined,
         district: district === "all" ? undefined : district,
-        minPrice: minPrice ? Number(minPrice) : undefined,
-        maxPrice: maxPrice ? Number(maxPrice) : undefined,
+        // Price is meaningless without a deal type (sale prices are in
+        // millions, rents in thousands) -- the inputs are disabled under
+        // "all" below, this guards a value left over from switching deal
+        // types after typing a price.
+        minPrice: !isAllDeals && minPrice ? Number(minPrice) : undefined,
+        maxPrice: !isAllDeals && maxPrice ? Number(maxPrice) : undefined,
         bedrooms: bedrooms === "any" ? undefined : Number(bedrooms),
         estate: estate === "any" ? undefined : estate,
-        keyword: initial.keyword,
         page: 1,
       },
     });
@@ -211,13 +251,30 @@ function FiltersPanel({
   }
 
   const isRent = deal === "rent";
-  const priceLabel = isRent ? "月租 (HKD)" : "售價 (HKD)";
+  const priceLabel = isAllDeals ? "價格 (先揀售或租)" : isRent ? "月租 (HKD)" : "售價 (HKD)";
 
   return (
     <div className="rounded-lg border bg-card p-5">
       <h2 className="mb-4 text-sm font-semibold">篩選條件</h2>
 
       <div className="space-y-4">
+        <div>
+          <Label className="mb-2 block text-xs" htmlFor="listing-keyword">
+            關鍵字
+          </Label>
+          <Input
+            id="listing-keyword"
+            type="search"
+            placeholder="屋苑、街道或樓盤編號"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") apply();
+            }}
+            className="h-11"
+          />
+        </div>
+
         <div>
           <Label className="mb-2 block text-xs">類型</Label>
           <div className="grid grid-cols-3 gap-1.5">
@@ -247,6 +304,7 @@ function FiltersPanel({
               placeholder="最低"
               value={minPrice}
               onChange={(e) => setMinPrice(e.target.value)}
+              disabled={isAllDeals}
               className="h-11"
             />
             <span className="text-muted-foreground">—</span>
@@ -256,9 +314,15 @@ function FiltersPanel({
               placeholder="最高"
               value={maxPrice}
               onChange={(e) => setMaxPrice(e.target.value)}
+              disabled={isAllDeals}
               className="h-11"
             />
           </div>
+          {isAllDeals && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              售價同月租唔同單位，揀「售盤」或「租盤」先可以設定價格。
+            </p>
+          )}
         </div>
 
         <div>

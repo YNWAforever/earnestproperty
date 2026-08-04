@@ -40,6 +40,16 @@ type MegaMenuGroup = {
   featured: NavItem[];
   links: NavItem[];
   cta: NavItem;
+  // True when `cta` is the same general WhatsApp enquiry already rendered as
+  // the header's own WhatsApp button, so the mobile sheet must not repeat it.
+  // This used to be inferred by directly comparing the two built href strings,
+  // which only ever worked because both happened to be built from the
+  // identical hardcoded message string and so produced byte-identical URLs
+  // (wa.me or "/contact") by coincidence -- any
+  // future change to either message (e.g. adding a distinct `source` tag)
+  // would silently reintroduce a duplicate mobile menu entry with no error.
+  // Declaring it explicitly can't drift.
+  ctaMirrorsGlobalWhatsapp?: boolean;
 };
 
 const listingNavItem: NavItem = { to: "/listings", label: "搜尋放盤" };
@@ -103,6 +113,7 @@ const megaMenus: MegaMenuGroup[] = [
       { to: "/contact", label: "聯絡門市", description: "查看麗都、海韻及青山公路豪景分行資料。" },
     ],
     cta: { href: whatsappUrl("你好，我想查詢深井／青山公路／汀九物業"), label: "WhatsApp 查詢" },
+    ctaMirrorsGlobalWhatsapp: true,
   },
   {
     id: "market",
@@ -156,14 +167,13 @@ function menuMatchesLocation(menu: MegaMenuGroup, href: string) {
   return [...menu.featured, ...menu.links].some((item) => itemMatchesLocation(item, href));
 }
 
-function menuMobileItems(menu: MegaMenuGroup, whatsappHref: string) {
+function menuMobileItems(menu: MegaMenuGroup) {
   const base = [...menu.featured, ...menu.links];
-  const ctaIsWhatsapp = "href" in menu.cta && menu.cta.href === whatsappHref;
   // Skip the cta if it points to the same route as an item already listed
   // above (e.g. market's "/videos" featured item and cta) to avoid duplicate
   // React keys and a redundant link.
   const ctaIsDuplicate = base.some((item) => itemKey(item) === itemKey(menu.cta));
-  return ctaIsWhatsapp || ctaIsDuplicate ? base : [...base, menu.cta];
+  return menu.ctaMirrorsGlobalWhatsapp || ctaIsDuplicate ? base : [...base, menu.cta];
 }
 
 function HeaderNavLink({
@@ -440,7 +450,7 @@ export function SiteHeader() {
                           {menu.label}
                         </h2>
                         <div className="mt-2 grid gap-1">
-                          {menuMobileItems(menu, WHATSAPP_URL).map((item) => (
+                          {menuMobileItems(menu).map((item) => (
                             <MegaMenuLink
                               key={`${menu.id}-${itemKey(item)}`}
                               item={item}

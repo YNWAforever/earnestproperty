@@ -341,8 +341,7 @@ export async function requireStaffAccess(request: Request, allowed: StaffRole[] 
 
   const email = session.user.email?.trim().toLowerCase() ?? "";
   const allowlist = bootstrapAllowlist();
-  const bootstrapRows =
-    email && allowlist.has(email) ? await bootstrapStaffRows() : [];
+  const bootstrapRows = email && allowlist.has(email) ? await bootstrapStaffRows() : [];
   const staff = await findStaff(session.user.id, session.user.email);
   let access: StaffAccess | null = staff;
   if (

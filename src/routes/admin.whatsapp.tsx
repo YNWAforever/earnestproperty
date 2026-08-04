@@ -50,7 +50,6 @@ const statusLabels: Record<string, string> = {
   closed: "已關閉",
 };
 
-
 const messageStatusLabels: Record<string, string> = {
   received: "已接收",
   sending: "傳送中",
@@ -720,11 +719,7 @@ function MessageTimeline({ messages }: { messages: AdminConversationMessageRow[]
 function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
   const outbound = message.direction === "outbound";
   const statusClass =
-    message.status === "failed"
-      ? "font-semibold"
-      : message.status === "sending"
-        ? "italic"
-        : "";
+    message.status === "failed" ? "font-semibold" : message.status === "sending" ? "italic" : "";
   return (
     <article className={`flex ${outbound ? "justify-end" : "justify-start"}`}>
       <div

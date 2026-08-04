@@ -27,7 +27,7 @@ export function SiteFooter() {
               <br />
               Your Sham Tseng Property Expert.
             </p>
-            <p className="mt-4 text-xs opacity-60">牌照號 Licence No.: C-018613</p>
+            <p className="mt-4 text-xs opacity-60">牌照號 Licence No.: {SITE_CONTACT.licenceNo}</p>
             <p className="mt-3 text-xs opacity-60">
               <Link to="/agents" className="underline underline-offset-2">
                 查看持牌代理團隊
@@ -170,6 +170,27 @@ export function SiteFooter() {
                 </Link>
               </li>
             </ul>
+
+            <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
+              法律 Legal
+            </h3>
+            <ul className="mt-4 space-y-2 text-sm">
+              <li>
+                <Link to="/privacy" className="opacity-80 hover:opacity-100">
+                  私隱政策
+                </Link>
+              </li>
+              <li>
+                <Link to="/disclaimer" className="opacity-80 hover:opacity-100">
+                  免責聲明
+                </Link>
+              </li>
+              <li>
+                <Link to="/terms" className="opacity-80 hover:opacity-100">
+                  使用條款
+                </Link>
+              </li>
+            </ul>
           </div>
 
           <div>
@@ -184,15 +205,27 @@ export function SiteFooter() {
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-bright" />
                     <span>{branch.address}</span>
                   </p>
-                  <p className="flex items-center gap-2">
+                  {/* A bare inline <a> here rendered as a ~69x20px tap target,
+                      well under the 44px guideline -- inline-flex + min-h-11
+                      expands the tappable box without changing the visual size
+                      of the text itself. */}
+                  <a
+                    href={`tel:${branch.phone}`}
+                    className="inline-flex min-h-11 items-center gap-2"
+                  >
                     <Phone className="h-4 w-4 text-brand-bright" />
-                    <a href={`tel:${branch.phone}`}>{branch.phone}</a>
-                  </p>
+                    {branch.phone}
+                  </a>
                 </li>
               ))}
-              <li className="flex items-center gap-2 opacity-80">
-                <Mail className="h-4 w-4 text-brand-bright" />
-                <a href={`mailto:${SITE_CONTACT.email}`}>{SITE_CONTACT.email}</a>
+              <li className="opacity-80">
+                <a
+                  href={`mailto:${SITE_CONTACT.email}`}
+                  className="inline-flex min-h-11 items-center gap-2"
+                >
+                  <Mail className="h-4 w-4 text-brand-bright" />
+                  {SITE_CONTACT.email}
+                </a>
               </li>
             </ul>
           </div>
@@ -200,7 +233,17 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-background/15 pt-6 text-xs opacity-70 md:flex-row">
           <p>© {new Date().getFullYear()} Earnest Property 晉誠地產. All rights reserved.</p>
-          <p>Licence {SITE_CONTACT.licenceNo} · Estate Agents Authority HK</p>
+          <p>
+            Licence {SITE_CONTACT.licenceNo} ·{" "}
+            <a
+              href="https://www.eaa.org.hk/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+            >
+              Estate Agents Authority HK
+            </a>
+          </p>
         </div>
       </div>
     </footer>

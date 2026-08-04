@@ -44,6 +44,8 @@ export const agentProfileSchema = z
       ),
     branch: optionalText(120),
     bio: optionalText(2000),
+    specialties: optionalText(2000),
+    served_estate_slugs: optionalText(2000),
     public_slug: z
       .string()
       .trim()
@@ -77,6 +79,8 @@ function createInitialForm(profile?: AgentProfile) {
     avatar_url: profile?.avatar_url ?? "",
     branch: profile?.branch ?? "",
     bio: profile?.bio ?? "",
+    specialties: (profile?.specialties ?? []).join("\n"),
+    served_estate_slugs: (profile?.served_estate_slugs ?? []).join("\n"),
     public_slug: profile?.public_slug ?? "",
     show_on_website: profile?.show_on_website ?? false,
     display_order: profile?.display_order?.toString() ?? "",
@@ -236,6 +240,35 @@ export function AgentProfileForm({
             value={form.bio}
             onChange={(event) => set("bio", event.target.value)}
             maxLength={2000}
+          />
+        </Field>
+        <Field label="專長（每行一項）" htmlFor="specialties" error={fieldErrors.specialties} full>
+          <Textarea
+            id="specialties"
+            {...fieldProps("specialties")}
+            autoComplete="off"
+            rows={3}
+            value={form.specialties}
+            onChange={(event) => set("specialties", event.target.value)}
+            maxLength={2000}
+            placeholder={"上車盤\n海景大單位\n租務"}
+          />
+        </Field>
+        <Field
+          label="熟悉屋苑（每行一個 slug）"
+          htmlFor="served_estate_slugs"
+          error={fieldErrors.served_estate_slugs}
+          full
+        >
+          <Textarea
+            id="served_estate_slugs"
+            {...fieldProps("served_estate_slugs")}
+            autoComplete="off"
+            rows={3}
+            value={form.served_estate_slugs}
+            onChange={(event) => set("served_estate_slugs", event.target.value)}
+            maxLength={2000}
+            placeholder={"bellagio\nrhine-garden"}
           />
         </Field>
         <Field label="相片網址" htmlFor="avatar_url" error={fieldErrors.avatar_url} full>

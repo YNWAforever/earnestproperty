@@ -1,17 +1,7 @@
-export const CMS_RESOURCE_TYPES = [
-  "estate",
-  "article",
-  "video",
-  "faq",
-  "media",
-] as const;
+export const CMS_RESOURCE_TYPES = ["estate", "article", "video", "faq", "media"] as const;
 
 export type CmsResourceType = (typeof CMS_RESOURCE_TYPES)[number];
-export type CmsRevisionState =
-  | "draft"
-  | "published"
-  | "superseded"
-  | "archived";
+export type CmsRevisionState = "draft" | "published" | "superseded" | "archived";
 
 export function canPublishCmsRevision(roles: readonly string[]) {
   return roles.includes("admin") || roles.includes("manager");
@@ -36,4 +26,3 @@ export function makeRestoreDraft(revision: {
     restoredFromRevisionId: revision.id,
   };
 }
-

@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  canPublishCmsRevision,
-  makeRestoreDraft,
-  nextCmsVersion,
-} from "./cms-revisions.ts";
+import { canPublishCmsRevision, makeRestoreDraft, nextCmsVersion } from "./cms-revisions.ts";
 
 test("only admin and manager can publish or restore CMS revisions", () => {
   assert.equal(canPublishCmsRevision(["admin"]), true);
@@ -50,4 +46,3 @@ test("restore creates a new draft without rewriting the source revision", () => 
     meta: { slug: "lido-garden" },
   });
 });
-

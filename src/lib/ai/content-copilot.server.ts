@@ -26,9 +26,17 @@ type ResearchResult = { ok: boolean; evidence: ContentCopilotEvidence[]; error: 
 type ProposalRecord = Record<string, any>;
 
 export type ContentCopilotServiceDeps = {
-  loadContext?: (request: ContentCopilotRequest, actor: StaffAccess) => Promise<LoadedContentContext>;
+  loadContext?: (
+    request: ContentCopilotRequest,
+    actor: StaffAccess,
+  ) => Promise<LoadedContentContext>;
   research?: (input: { query: string; maxResults: number }) => Promise<ResearchResult>;
-  generate?: (input: { system: string; prompt: string; context: LoadedContentContext; evidence: ContentCopilotEvidence[] }) => Promise<GenerationResult>;
+  generate?: (input: {
+    system: string;
+    prompt: string;
+    context: LoadedContentContext;
+    evidence: ContentCopilotEvidence[];
+  }) => Promise<GenerationResult>;
   startProposal?: (input: Record<string, unknown>) => Promise<ProposalRecord>;
   completeProposal?: (input: Record<string, unknown>) => Promise<ProposalRecord>;
   failProposal?: (input: Record<string, unknown>) => Promise<ProposalRecord | undefined>;
@@ -90,12 +98,38 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
           evidence,
         });
         if (!generated.ok || !generated.value) {
-          await failProposal({ staffId: actor.staffId, proposalId: proposalRecord.id, errorCode: stableError(generated.error, "COPILOT_GENERATION_FAILED"), latencyMs: generated.latencyMs, usageMetadata: generated.usageMetadata });
-          await writeAudit({ actorId: actor.staffId, action: "content_copilot.failed", proposalId: proposalRecord.id, resourceType: normalized.resourceType, resourceId: normalized.resourceId, metadata: { provider: "opencode_go", model: generated.model ?? "", latencyMs: generated.latencyMs, researchMode: normalized.researchMode, status: "failed", errorCode: stableError(generated.error, "COPILOT_GENERATION_FAILED") } });
+          await failProposal({
+            staffId: actor.staffId,
+            proposalId: proposalRecord.id,
+            errorCode: stableError(generated.error, "COPILOT_GENERATION_FAILED"),
+            latencyMs: generated.latencyMs,
+            usageMetadata: generated.usageMetadata,
+          });
+          await writeAudit({
+            actorId: actor.staffId,
+            action: "content_copilot.failed",
+            proposalId: proposalRecord.id,
+            resourceType: normalized.resourceType,
+            resourceId: normalized.resourceId,
+            metadata: {
+              provider: "opencode_go",
+              model: generated.model ?? "",
+              latencyMs: generated.latencyMs,
+              researchMode: normalized.researchMode,
+              status: "failed",
+              errorCode: stableError(generated.error, "COPILOT_GENERATION_FAILED"),
+            },
+          });
           return failure(stableError(generated.error, "COPILOT_GENERATION_FAILED"));
         }
 
-        const checked = validateGeneratedProposal(generated.value, normalized, sourceFingerprint, context.resource, evidence);
+        const checked = validateGeneratedProposal(
+          generated.value,
+          normalized,
+          sourceFingerprint,
+          context.resource,
+          evidence,
+        );
         if (!checked.ok) throw copilotError(checked.error);
         const finalProposal: ContentCopilotProposal = {
           ...checked.value,
@@ -114,7 +148,22 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
           model: generated.model,
         });
         try {
-          await writeAudit({ actorId: actor.staffId, action: "content_copilot.generated", proposalId: proposalRecord.id, resourceType: normalized.resourceType, resourceId: normalized.resourceId, metadata: { provider: "opencode_go", model: generated.model ?? "", latencyMs: generated.latencyMs, researchMode: normalized.researchMode, status: "generated", citationCount: finalProposal.evidence.length, warningsCount: finalProposal.warnings.length } });
+          await writeAudit({
+            actorId: actor.staffId,
+            action: "content_copilot.generated",
+            proposalId: proposalRecord.id,
+            resourceType: normalized.resourceType,
+            resourceId: normalized.resourceId,
+            metadata: {
+              provider: "opencode_go",
+              model: generated.model ?? "",
+              latencyMs: generated.latencyMs,
+              researchMode: normalized.researchMode,
+              status: "generated",
+              citationCount: finalProposal.evidence.length,
+              warningsCount: finalProposal.warnings.length,
+            },
+          });
         } catch {
           // A completed proposal remains reviewable even if audit persistence is unavailable.
         }
@@ -122,20 +171,44 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
       } catch (error) {
         if (proposalRecord) {
           const errorCode = stableError(errorCodeOf(error), "COPILOT_GENERATION_FAILED");
-          try { await failProposal({ staffId: actor.staffId, proposalId: proposalRecord.id, errorCode }); } catch { /* preserve the original stable result */ }
           try {
-            await writeAudit({ actorId: actor.staffId, action: "content_copilot.failed", proposalId: proposalRecord.id, resourceType: normalized.resourceType, resourceId: normalized.resourceId, metadata: { provider: "opencode_go", status: "failed", errorCode } });
-          } catch { /* preserve the original stable result */ }
+            await failProposal({
+              staffId: actor.staffId,
+              proposalId: proposalRecord.id,
+              errorCode,
+            });
+          } catch {
+            /* preserve the original stable result */
+          }
+          try {
+            await writeAudit({
+              actorId: actor.staffId,
+              action: "content_copilot.failed",
+              proposalId: proposalRecord.id,
+              resourceType: normalized.resourceType,
+              resourceId: normalized.resourceId,
+              metadata: { provider: "opencode_go", status: "failed", errorCode },
+            });
+          } catch {
+            /* preserve the original stable result */
+          }
         }
         if (isResponseError(error)) throw error;
         return failure(stableError(errorCodeOf(error), "COPILOT_GENERATION_FAILED"));
       }
     },
 
-    async decideContentProposal(input: { proposalId: string; decision: "apply" | "reject"; acceptedFields: string[] }, actor: StaffAccess) {
+    async decideContentProposal(
+      input: { proposalId: string; decision: "apply" | "reject"; acceptedFields: string[] },
+      actor: StaffAccess,
+    ) {
       const record = await getProposal({ proposalId: input.proposalId, staffId: actor.staffId });
       if (!record) return failure("COPILOT_PROPOSAL_NOT_FOUND");
-      if (record.status === "expired" || (record.expiresAt && Date.parse(record.expiresAt) <= now())) return failure("COPILOT_PROPOSAL_EXPIRED");
+      if (
+        record.status === "expired" ||
+        (record.expiresAt && Date.parse(record.expiresAt) <= now())
+      )
+        return failure("COPILOT_PROPOSAL_EXPIRED");
 
       const request = proposalRequest(record);
       let context: LoadedContentContext;
@@ -148,17 +221,45 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
         return failure(stableError(errorCodeOf(error), "COPILOT_CONTEXT_FAILED"));
       }
       if (currentFingerprint !== record.sourceFingerprint) {
-        await writeAudit({ actorId: actor.staffId, action: "content_copilot.stale", proposalId: record.id, resourceType: record.resourceType, resourceId: record.resourceId, metadata: { status: "generated", errorCode: "COPILOT_STALE_PROPOSAL" } });
+        await writeAudit({
+          actorId: actor.staffId,
+          action: "content_copilot.stale",
+          proposalId: record.id,
+          resourceType: record.resourceType,
+          resourceId: record.resourceId,
+          metadata: { status: "generated", errorCode: "COPILOT_STALE_PROPOSAL" },
+        });
         return failure("COPILOT_STALE_PROPOSAL");
       }
 
       const allowed = new Set<string>(allowedContentCopilotFields(record.resourceType));
       const acceptedFields = input.decision === "reject" ? [] : [...new Set(input.acceptedFields)];
-      if (acceptedFields.some((field) => !allowed.has(field) || !record.selectedFields.includes(field))) return failure("COPILOT_UNKNOWN_FIELD");
+      if (
+        acceptedFields.some(
+          (field) => !allowed.has(field) || !record.selectedFields.includes(field),
+        )
+      )
+        return failure("COPILOT_UNKNOWN_FIELD");
       try {
-        const decided = await decideProposal({ staffId: actor.staffId, proposalId: record.id, acceptedFields });
-        const action = input.decision === "reject" ? "content_copilot.rejected" : acceptedFields.length ? "content_copilot.applied" : "content_copilot.rejected";
-        await writeAudit({ actorId: actor.staffId, action, proposalId: record.id, resourceType: record.resourceType, resourceId: record.resourceId, metadata: { status: decided.status ?? "rejected", acceptedFields } });
+        const decided = await decideProposal({
+          staffId: actor.staffId,
+          proposalId: record.id,
+          acceptedFields,
+        });
+        const action =
+          input.decision === "reject"
+            ? "content_copilot.rejected"
+            : acceptedFields.length
+              ? "content_copilot.applied"
+              : "content_copilot.rejected";
+        await writeAudit({
+          actorId: actor.staffId,
+          action,
+          proposalId: record.id,
+          resourceType: record.resourceType,
+          resourceId: record.resourceId,
+          metadata: { status: decided.status ?? "rejected", acceptedFields },
+        });
         return { ok: true, proposal: decided, error: null };
       } catch (error) {
         return failure(stableError(errorCodeOf(error), "COPILOT_DECISION_FAILED"));
@@ -167,16 +268,29 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
   };
 }
 
-function validateGeneratedProposal(value: unknown, request: ContentCopilotRequest, fingerprint: string, resource: Record<string, unknown>, trustedEvidence: ContentCopilotEvidence[]) {
+function validateGeneratedProposal(
+  value: unknown,
+  request: ContentCopilotRequest,
+  fingerprint: string,
+  resource: Record<string, unknown>,
+  trustedEvidence: ContentCopilotEvidence[],
+) {
   const result = validateContentCopilotProposal(value);
   if (!result.ok) return result;
-  if (result.value.resourceType !== request.resourceType || result.value.sourceFingerprint !== fingerprint) return { ok: false as const, value: null, error: "COPILOT_PROPOSAL_CONTEXT_MISMATCH" };
+  if (
+    result.value.resourceType !== request.resourceType ||
+    result.value.sourceFingerprint !== fingerprint
+  )
+    return { ok: false as const, value: null, error: "COPILOT_PROPOSAL_CONTEXT_MISMATCH" };
   const selected = new Set(request.selectedFields);
   const trustedEvidenceIds = new Set(trustedEvidence.map((item) => item.id));
   for (const patch of result.value.patches) {
-    if (!selected.has(patch.field)) return { ok: false as const, value: null, error: "COPILOT_UNKNOWN_FIELD" };
-    if (patch.evidenceIds.some((id) => !trustedEvidenceIds.has(id))) return { ok: false as const, value: null, error: "COPILOT_EVIDENCE_MISSING" };
-    if (JSON.stringify(resource[patch.field] ?? null) !== JSON.stringify(patch.before)) return { ok: false as const, value: null, error: "COPILOT_PATCH_CONFLICT" };
+    if (!selected.has(patch.field))
+      return { ok: false as const, value: null, error: "COPILOT_UNKNOWN_FIELD" };
+    if (patch.evidenceIds.some((id) => !trustedEvidenceIds.has(id)))
+      return { ok: false as const, value: null, error: "COPILOT_EVIDENCE_MISSING" };
+    if (JSON.stringify(resource[patch.field] ?? null) !== JSON.stringify(patch.before))
+      return { ok: false as const, value: null, error: "COPILOT_PATCH_CONFLICT" };
   }
   return result;
 }
@@ -192,16 +306,37 @@ function buildSystemPrompt(request: ContentCopilotRequest) {
   ].join("\n");
 }
 
-function buildUserPrompt(request: ContentCopilotRequest, context: LoadedContentContext, evidence: ContentCopilotEvidence[]) {
-  return JSON.stringify({
-    request: { resourceType: request.resourceType, action: request.action, selectedFields: request.selectedFields, targetLanguage: request.targetLanguage, tone: request.tone },
-    authoritativeResource: context.resource,
-    evidence: evidence.map((item) => ({ id: item.id, type: item.type, title: item.title, url: item.url, excerpt: item.excerpt })),
-  }, null, 2);
+function buildUserPrompt(
+  request: ContentCopilotRequest,
+  context: LoadedContentContext,
+  evidence: ContentCopilotEvidence[],
+) {
+  return JSON.stringify(
+    {
+      request: {
+        resourceType: request.resourceType,
+        action: request.action,
+        selectedFields: request.selectedFields,
+        targetLanguage: request.targetLanguage,
+        tone: request.tone,
+      },
+      authoritativeResource: context.resource,
+      evidence: evidence.map((item) => ({
+        id: item.id,
+        type: item.type,
+        title: item.title,
+        url: item.url,
+        excerpt: item.excerpt,
+      })),
+    },
+    null,
+    2,
+  );
 }
 
 function proposalRequest(record: ProposalRecord): ContentCopilotRequest {
-  const context = record.requestContext && typeof record.requestContext === "object" ? record.requestContext : {};
+  const context =
+    record.requestContext && typeof record.requestContext === "object" ? record.requestContext : {};
   return {
     resourceType: record.resourceType,
     resourceId: record.resourceId,
@@ -213,18 +348,59 @@ function proposalRequest(record: ProposalRecord): ContentCopilotRequest {
   };
 }
 
-function failure(error: string) { return { ok: false, proposal: null, error }; }
-function errorCodeOf(error: unknown) { return error && typeof error === "object" && "code" in error ? String(error.code) : null; }
-function stableError(error: string | null, fallback: string) { return error && /^[A-Z0-9_]{1,100}$/.test(error) ? error : fallback; }
-function isResponseError(error: unknown): error is Response { return error instanceof Response; }
-function copilotError(code: string) { return Object.assign(new Error(code), { code }); }
+function failure(error: string) {
+  return { ok: false, proposal: null, error };
+}
+function errorCodeOf(error: unknown) {
+  return error && typeof error === "object" && "code" in error ? String(error.code) : null;
+}
+function stableError(error: string | null, fallback: string) {
+  return error && /^[A-Z0-9_]{1,100}$/.test(error) ? error : fallback;
+}
+function isResponseError(error: unknown): error is Response {
+  return error instanceof Response;
+}
+function copilotError(code: string) {
+  return Object.assign(new Error(code), { code });
+}
 
-async function defaultLoadContext(request: ContentCopilotRequest, actor: StaffAccess) { const module = await import("./content-copilot-context.server.ts"); return module.loadContentCopilotContext(request, actor); }
-async function defaultResearch(input: { query: string; maxResults: number }) { const config = process.env.TAVILY_API_KEY ?? null; const module = await import("./tavily-research.server.ts"); return module.createTavilyResearchClient({ apiKey: config }).search(input); }
-async function defaultGenerate(input: { system: string; prompt: string }) { const configModule = await import("./content-copilot-config.server.ts"); const module = await import("./opencode-go.server.ts"); return module.createOpenCodeGoClient({ config: configModule.getContentCopilotConfig() }).generateProposal(input); }
-async function defaultStartProposal(input: Record<string, unknown>) { const module = await import("./content-copilot-repository.server.ts"); return module.startContentProposal(input as never); }
-async function defaultCompleteProposal(input: Record<string, unknown>) { const module = await import("./content-copilot-repository.server.ts"); return module.completeContentProposal(input as never); }
-async function defaultFailProposal(input: Record<string, unknown>) { const module = await import("./content-copilot-repository.server.ts"); return module.failContentProposal(input as never); }
-async function defaultGetProposal(input: Record<string, unknown>) { const module = await import("./content-copilot-repository.server.ts"); return module.getContentProposal(input as never); }
-async function defaultDecideProposal(input: Record<string, unknown>) { const module = await import("./content-copilot-repository.server.ts"); return module.decideContentProposal(input as never); }
-async function defaultWriteAudit(input: Record<string, unknown>) { const module = await import("./content-copilot-repository.server.ts"); await module.writeContentCopilotAudit(input as never); }
+async function defaultLoadContext(request: ContentCopilotRequest, actor: StaffAccess) {
+  const module = await import("./content-copilot-context.server.ts");
+  return module.loadContentCopilotContext(request, actor);
+}
+async function defaultResearch(input: { query: string; maxResults: number }) {
+  const config = process.env.TAVILY_API_KEY ?? null;
+  const module = await import("./tavily-research.server.ts");
+  return module.createTavilyResearchClient({ apiKey: config }).search(input);
+}
+async function defaultGenerate(input: { system: string; prompt: string }) {
+  const configModule = await import("./content-copilot-config.server.ts");
+  const module = await import("./opencode-go.server.ts");
+  return module
+    .createOpenCodeGoClient({ config: configModule.getContentCopilotConfig() })
+    .generateProposal(input);
+}
+async function defaultStartProposal(input: Record<string, unknown>) {
+  const module = await import("./content-copilot-repository.server.ts");
+  return module.startContentProposal(input as never);
+}
+async function defaultCompleteProposal(input: Record<string, unknown>) {
+  const module = await import("./content-copilot-repository.server.ts");
+  return module.completeContentProposal(input as never);
+}
+async function defaultFailProposal(input: Record<string, unknown>) {
+  const module = await import("./content-copilot-repository.server.ts");
+  return module.failContentProposal(input as never);
+}
+async function defaultGetProposal(input: Record<string, unknown>) {
+  const module = await import("./content-copilot-repository.server.ts");
+  return module.getContentProposal(input as never);
+}
+async function defaultDecideProposal(input: Record<string, unknown>) {
+  const module = await import("./content-copilot-repository.server.ts");
+  return module.decideContentProposal(input as never);
+}
+async function defaultWriteAudit(input: Record<string, unknown>) {
+  const module = await import("./content-copilot-repository.server.ts");
+  await module.writeContentCopilotAudit(input as never);
+}

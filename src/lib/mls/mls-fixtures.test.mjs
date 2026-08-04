@@ -125,6 +125,80 @@ test("normalizeListingDetail creates a sale property row", () => {
   assert.equal(rows[0].source_url, "https://www.earnestproperty.com/property-detail/6709182.html");
   assert.equal(rows[0].last_seen_at, "2026-06-22T00:00:00.000Z");
   assert.equal(rows[0].status, "active");
+
+  // This fixture's 備註 (remarks) field is literally "C-018613" -- the company
+  // licence number, not a genuine property feature -- and 座向 "西南" already
+  // has its own dedicated `orientation` column. Neither belongs in 物業特點.
+  assert.deepEqual(rows[0].features, ["2房2廳"]);
+  assert.doesNotMatch(rows[0].description, /租\$/);
+});
+
+test("normalizeListingDetail keeps each deal-type row's own description and drops the licence number from features", () => {
+  // A hand-built detail rather than a new HTML fixture: both committed
+  // fixtures have 出租價 "--" (no rent price), so neither ever exercises the
+  // dual-deal-type path (dealTypesFor emits ["sale", "rent"] only when both
+  // salePriceHkd and rentHkd are set). This is the shape parseListingDetail
+  // produces, just with both prices present.
+  const detail = {
+    sourceUrl: "https://www.earnestproperty.com/property-detail/9999999.html",
+    legacyDetailId: "9999999",
+    legacyPropertyNo: "B999999",
+    title: "麗都花園 第03座, 荃灣, #B999999 - 晉誠地產",
+    metaDescription:
+      "麗都花園 第03座, 荃灣, #B999999,售$590萬,租$19,500, 實用570呎, 建築683呎, 西南,2房2廳, ",
+    sourceUpdatedAt: "2026-06-21",
+    streetZh: "青山公路41-63號深井段",
+    buildingZh: "麗都花園 第03座",
+    buildingEn: "LIDO GDN BLK 03",
+    grossArea: 683,
+    saleableArea: 570,
+    salePriceHkd: 5_900_000,
+    rentHkd: 19_500,
+    orientation: "西南",
+    decoration: "開放式廚房，environment-friendly",
+    remarks: "C-018613",
+    bedrooms: 2,
+    livingRooms: 2,
+    roomText: "2房2廳，主人套房",
+    images: [],
+  };
+
+  const rows = normalizeListingDetail(detail, {
+    estateIdsBySlug: new Map([["lido-garden", "estate-lido"]]),
+    nowIso: "2026-06-22T00:00:00.000Z",
+  });
+
+  assert.equal(rows.length, 2, "a listing with both a sale and a rent price emits two rows");
+  const sale = rows.find((row) => row.deal_type === "sale");
+  const rent = rows.find((row) => row.deal_type === "rent");
+
+  // Each row's own price is correct and the OTHER deal type's price is absent
+  // from that row -- the original bug baked the sale price into the rental's
+  // description regardless of which row was actually being rendered.
+  assert.equal(sale.price, 5_900_000);
+  assert.equal(rent.rent, 19_500);
+  assert.doesNotMatch(
+    rent.description,
+    /售\$590萬/,
+    "a rental's description must not carry the sale price",
+  );
+  assert.doesNotMatch(
+    sale.description,
+    /租\$19,500/,
+    "a sale listing's description must not carry the rent price",
+  );
+  assert.match(rent.description, /實用570呎/, "the rest of the fact list must survive the strip");
+
+  // Neither row's features contain the licence number or a duplicate of the
+  // dedicated orientation column; the comma-joined blobs are split into tags.
+  for (const row of rows) {
+    assert.ok(!row.features.includes("C-018613"), "features must never include the licence number");
+    assert.ok(!row.features.includes("西南"), "orientation must not be duplicated into features");
+    assert.ok(row.features.includes("2房2廳"));
+    assert.ok(row.features.includes("主人套房"), "roomText must be split, not pushed as one blob");
+    assert.ok(row.features.includes("開放式廚房"));
+    assert.ok(row.features.includes("environment-friendly"));
+  }
 });
 
 test("createMlsImporter dry run reports discovered, parsed, and upsertable rows", async () => {

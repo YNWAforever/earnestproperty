@@ -26,10 +26,13 @@ function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-// The five-zone structure shipped with these slugs. Two of them no longer have a
-// page, and both were live URLs, so they are the redirect contract this suite
-// guards rather than an implementation detail.
-const RETIRED_SEGMENT_SLUGS = ["tsuen-wan-yau-kom-tau", "tsing-lung-tau"];
+// The five-zone structure shipped with these slugs. Three of them no longer
+// have a page, and all three were live URLs, so they are the redirect
+// contract this suite guards rather than an implementation detail.
+// so-kwun-wat-gold-coast (小欖/掃管笏/三聖, including Gold Coast) was retired
+// separately from the original five-to-three collapse: it further narrowed
+// scope to just 深井/青山公路/汀九.
+const RETIRED_SEGMENT_SLUGS = ["tsuen-wan-yau-kom-tau", "tsing-lung-tau", "so-kwun-wat-gold-coast"];
 
 const surviving = castlePeakRoadSegments.map((segment) => segment.slug);
 const survivingPaths = castlePeakRoadSegments.map((segment) => segment.path);
@@ -53,11 +56,11 @@ function collectFiles(dir, files = []) {
   return files;
 }
 
-test("the corridor is split into exactly the three client-approved lifestyle zones", () => {
-  assert.deepEqual(surviving, ["ting-kau", "sham-tseng", "so-kwun-wat-gold-coast"]);
+test("the corridor is split into exactly the two client-approved lifestyle zones", () => {
+  assert.deepEqual(surviving, ["ting-kau", "sham-tseng"]);
   assert.deepEqual(
     castlePeakRoadSegments.map((segment) => segment.nameZh),
-    ["油柑頭 汀九", "深井 / 青山公路", "小欖/掃管笏/三聖區"],
+    ["油柑頭 汀九", "深井 / 青山公路"],
   );
 
   for (const segment of castlePeakRoadSegments) {
@@ -163,13 +166,15 @@ test("every FAQ surface filters blanks and gates its FAQPage schema", () => {
   }
 });
 
-test("the hub guidance sentence routes buyers into all three zones", () => {
+test("the hub guidance sentence routes buyers into both surviving zones", () => {
   const guidance = castlePeakRoadHub.faqs.map((faq) => faq.answer).join("\n");
 
   assert.match(
     guidance,
-    /可以先由油柑頭\/汀九，深井\/青龍頭段，小欖\/掃管笏\/三聖段入手，再按交通、校網、樓齡、海景和放盤量收窄選擇。/,
+    /可以先由油柑頭\/汀九，深井\/青龍頭段入手，再按交通、校網、樓齡、海景和放盤量收窄選擇。/,
   );
+  // so-kwun-wat-gold-coast is retired; the guidance must not still send buyers there.
+  assert.doesNotMatch(guidance, /小欖|掃管笏|三聖/);
 
   // Every zone must be reachable from the sentence: take the leading place name
   // off each zone title and require it to appear, so renaming a zone without
@@ -354,10 +359,9 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   assert.ok(shamTseng.districtSlugs.includes("tsing-lung-tau"));
   assert.ok(shamTseng.estateSlugs.includes("hong-kong-garden"));
 
-  const west = getCastlePeakRoadSegment("so-kwun-wat-gold-coast");
-  for (const alias of ["小欖", "掃管笏", "三聖"]) {
-    assert.ok(west.textAliases.includes(alias), `west zone should match ${alias}`);
-  }
+  // so-kwun-wat-gold-coast (小欖/掃管笏/三聖) is retired -- see the
+  // "retired zone URLs 301" test for its redirect/sitemap/getCastlePeakRoadSegment
+  // coverage.
 });
 
 test("corridor inventory uses Neon alias query with public query wrapper", () => {

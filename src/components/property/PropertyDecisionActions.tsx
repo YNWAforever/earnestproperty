@@ -3,7 +3,8 @@ import { Calculator, MapPin, MessageCircle, Phone } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { PropertyBranchContact } from "@/config/site";
+import { propertyEnquiryMessage, type PropertyBranchContact } from "@/config/site";
+import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { calculateMortgage } from "@/lib/mortgage";
 
 import { getPropertyDecision } from "./property-decision.js";
@@ -29,11 +30,7 @@ type PropertyDecisionActionsProps = {
   onInquiry: () => void;
 };
 
-type PropertyMobileContactSummaryProps = Omit<PropertyDecisionActionsProps, "price">;
-
-function digits(value: string) {
-  return value.replace(/[^\d]/g, "");
-}
+type PropertyMobileContactSummaryProps = PropertyDecisionActionsProps;
 
 function formatMoney(value: number) {
   return `$${Math.round(value).toLocaleString("zh-HK")}`;
@@ -46,19 +43,28 @@ export function PropertyMobileContactSummary({
   listingNo,
   title,
   dealType,
+  price,
   onInquiry,
 }: PropertyMobileContactSummaryProps) {
-  const decision = getPropertyDecision({ dealType, price: null });
+  const decision = getPropertyDecision({ dealType, price });
   const branchPhone = "phone" in branchContact ? branchContact.phone : branchContact.phoneTel;
   const phone = agent?.phone || branchPhone;
-  const whatsapp = agent?.whatsapp || fallbackWhatsapp;
-  const phoneHref = phone ? `tel:${digits(phone)}` : "/contact";
-  const whatsappHref = whatsapp
-    ? `https://wa.me/${digits(whatsapp)}?text=${encodeURIComponent(`你好，我想查詢編號 ${listingNo} ${title}`)}`
-    : "/contact";
+  // Branch WhatsApp numbers are all null until the client confirms them (the
+  // phone numbers on file are landlines that cannot receive WhatsApp), so this
+  // resolves exactly like before -- agent's own number, then the company
+  // fallback -- until that data lands, at which point it becomes agent →
+  // branch → company automatically with no further code change.
+  const branchWhatsapp = "phone" in branchContact ? branchContact.whatsapp : null;
+  const enquiryMessage = propertyEnquiryMessage({ title, dealType, price });
+  const phoneHref = toTelHref(phone) ?? "/contact";
+  const whatsappHref = toWhatsAppHref(
+    agent?.whatsapp || branchWhatsapp || fallbackWhatsapp,
+    enquiryMessage,
+  );
+  const hasWhatsapp = whatsappHref !== null;
 
   return (
-    <Card>
+    <Card data-listing-no={listingNo}>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{agent ? "負責經紀" : "負責分行"}</CardTitle>
       </CardHeader>
@@ -100,8 +106,8 @@ export function PropertyMobileContactSummary({
           </Button>
           <Button asChild>
             <a
-              href={whatsappHref}
-              target={whatsapp ? "_blank" : undefined}
+              href={whatsappHref ?? "/contact"}
+              target={hasWhatsapp ? "_blank" : undefined}
               rel="noopener noreferrer"
             >
               <MessageCircle className="mr-2 h-4 w-4" />
@@ -134,11 +140,19 @@ export function PropertyDecisionActions({
   const decision = getPropertyDecision({ dealType, price });
   const branchPhone = "phone" in branchContact ? branchContact.phone : branchContact.phoneTel;
   const phone = agent?.phone || branchPhone;
-  const whatsapp = agent?.whatsapp || fallbackWhatsapp;
-  const phoneHref = phone ? `tel:${digits(phone)}` : "/contact";
-  const whatsappHref = whatsapp
-    ? `https://wa.me/${digits(whatsapp)}?text=${encodeURIComponent(`你好，我想查詢編號 ${listingNo} ${title}`)}`
-    : "/contact";
+  // Branch WhatsApp numbers are all null until the client confirms them (the
+  // phone numbers on file are landlines that cannot receive WhatsApp), so this
+  // resolves exactly like before -- agent's own number, then the company
+  // fallback -- until that data lands, at which point it becomes agent →
+  // branch → company automatically with no further code change.
+  const branchWhatsapp = "phone" in branchContact ? branchContact.whatsapp : null;
+  const enquiryMessage = propertyEnquiryMessage({ title, dealType, price });
+  const phoneHref = toTelHref(phone) ?? "/contact";
+  const whatsappHref = toWhatsAppHref(
+    agent?.whatsapp || branchWhatsapp || fallbackWhatsapp,
+    enquiryMessage,
+  );
+  const hasWhatsapp = whatsappHref !== null;
   const mortgage =
     decision.hasMortgagePrice && price !== null ? calculateMortgage({ price }) : null;
   const callLabel = decision.mobileCommands[0];
@@ -147,7 +161,7 @@ export function PropertyDecisionActions({
 
   return (
     <>
-      <div className="hidden lg:block">
+      <div className="hidden lg:block" data-listing-no={listingNo}>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">{agent ? "負責經紀" : "負責分行"}</CardTitle>
@@ -191,8 +205,8 @@ export function PropertyDecisionActions({
               </Button>
               <Button asChild>
                 <a
-                  href={whatsappHref}
-                  target={whatsapp ? "_blank" : undefined}
+                  href={whatsappHref ?? "/contact"}
+                  target={hasWhatsapp ? "_blank" : undefined}
                   rel="noopener noreferrer"
                 >
                   <MessageCircle className="mr-2 h-4 w-4" />
@@ -265,8 +279,8 @@ export function PropertyDecisionActions({
           </Button>
           <Button asChild size="sm" className="bg-[#25D366] text-white hover:bg-[#1ebe57]">
             <a
-              href={whatsappHref}
-              target={whatsapp ? "_blank" : undefined}
+              href={whatsappHref ?? "/contact"}
+              target={hasWhatsapp ? "_blank" : undefined}
               rel="noopener noreferrer"
             >
               <MessageCircle className="mr-1 h-4 w-4" />

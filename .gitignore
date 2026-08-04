@@ -36,6 +36,8 @@ supabase/.temp/
 *.sw?
 .vercel
 .env*
+# Documentation only -- no secrets, must stay tracked.
+!.env.example
 
 # Client hand-off material: 24 namecards carrying personal phone numbers, emails
 # and individual licence numbers, plus ~37 MB of raw photos. Only the derived,

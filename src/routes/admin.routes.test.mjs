@@ -69,10 +69,7 @@ test("CMS and AI Agent sidebar entries keep independent active states", () => {
 
   assert.match(shell, /to: "\/admin\/cms", label: "CMS \/ FAQ"/);
   assert.match(shell, /label: "CMS \/ FAQ",[\s\S]*?search: \{ tab: undefined \}/);
-  assert.match(
-    shell,
-    /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/,
-  );
+  assert.match(shell, /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/);
   assert.match(shell, /includeSearch: false/);
   const navLinkOpening = shell.match(
     /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
@@ -429,10 +426,7 @@ test("AI CRM, segment, and live-agent routes are wired", () => {
     ["src/routes/api.live-agent.session.ts", ["createLiveAgentSession"]],
     ["src/routes/api.live-agent.message.ts", ["answerLiveAgentMessage"]],
     ["src/routes/api.live-agent.handoff.ts", ["requestLiveAgentHandoff"]],
-    [
-      "src/routes/api.admin.ai.rebuild-knowledge.ts",
-      ["enqueueJob", "ai.knowledge.rebuild"],
-    ],
+    ["src/routes/api.admin.ai.rebuild-knowledge.ts", ["enqueueJob", "ai.knowledge.rebuild"]],
   ];
 
   for (const [file, requiredNames] of expectations) {

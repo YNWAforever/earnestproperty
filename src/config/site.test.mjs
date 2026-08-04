@@ -1,8 +1,103 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
+import ts from "typescript";
 
 import { getYouTubeEmbedUrl, isYouTubeVideoUrl } from "../lib/youtube-video-url.js";
+
+const root = process.cwd();
+const dataUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+const transpile = (source) =>
+  ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+/**
+ * Loads the real src/config/site.ts as an executable data: URL module, with
+ * VITE_CONTACT_WHATSAPP_PHONE injected as a literal (site.ts reads it via
+ * import.meta.env, which only exists under Vite -- plain `node --test` has no
+ * import.meta.env at all, so every other test in this file source-greps site.ts
+ * as text instead of importing it). This is the one behavior that text-matching
+ * cannot verify: whether whatsappUrl() actually returns a wa.me URL versus
+ * silently falling back to "/contact" -- which is exactly the bug this suite
+ * exists to catch (see the audit correction in the remediation plan).
+ *
+ * console.warn is silenced for the phone==="" case: that branch intentionally
+ * logs a warning (see site.ts), which would otherwise spam `node --test` output.
+ */
+async function importSiteWithInjectedPhone(phone) {
+  const branchesUrl = dataUrl(
+    transpile(readFileSync(join(root, "src/config/site-branches.js"), "utf8")),
+  );
+  const source = transpile(readFileSync(join(root, "src/config/site.ts"), "utf8"))
+    .replace('from "./site-branches.js"', `from "${branchesUrl}"`)
+    .replace(
+      'const whatsappPhone = import.meta.env.VITE_CONTACT_WHATSAPP_PHONE ?? "";',
+      `const whatsappPhone = ${JSON.stringify(phone)};`,
+    )
+    .replace(
+      'const phoneDisplay = import.meta.env.VITE_CONTACT_PHONE_DISPLAY ?? "";',
+      'const phoneDisplay = "";',
+    )
+    .replace(
+      'const phoneTel = import.meta.env.VITE_CONTACT_PHONE_TEL ?? "";',
+      'const phoneTel = "";',
+    );
+
+  const originalWarn = console.warn;
+  if (!phone) console.warn = () => {};
+  try {
+    return await import(dataUrl(source));
+  } finally {
+    console.warn = originalWarn;
+  }
+}
+
+test("whatsappUrl returns a real wa.me link once the phone is configured", async () => {
+  const site = await importSiteWithInjectedPhone("85261234567");
+
+  assert.equal(site.hasWhatsAppPhone, true);
+  assert.equal(
+    site.whatsappUrl("你好，我想查詢深井物業"),
+    "https://wa.me/85261234567?text=" + encodeURIComponent("你好，我想查詢深井物業"),
+  );
+  assert.equal(site.whatsappIntentUrl("buy").startsWith("https://wa.me/85261234567?text="), true);
+});
+
+test("whatsappUrl falls back to /contact when the phone is not configured, and hasWhatsAppPhone says so", async () => {
+  const site = await importSiteWithInjectedPhone("");
+
+  assert.equal(site.hasWhatsAppPhone, false);
+  assert.equal(site.whatsappUrl("你好，我想查詢深井物業"), "/contact");
+  assert.equal(site.whatsappIntentUrl("rent"), "/contact");
+});
+
+test("propertyEnquiryMessage carries deal-aware price and does not repeat the listing number already in title", () => {
+  return importSiteWithInjectedPhone("85261234567").then((site) => {
+    const sale = site.propertyEnquiryMessage({
+      title: "麗都花園 售盤 #C024131",
+      dealType: "sale",
+      price: 6_000_000,
+    });
+    assert.equal(sale, "你好，想查詢 麗都花園 售盤 #C024131（$6,000,000）");
+    assert.equal((sale.match(/C024131/g) ?? []).length, 1);
+
+    const rent = site.propertyEnquiryMessage({
+      title: "海韻花園 租盤 #R013153",
+      dealType: "rent",
+      price: 19_500,
+    });
+    assert.equal(rent, "你好，想查詢 海韻花園 租盤 #R013153（$19,500/月）");
+
+    const noPrice = site.propertyEnquiryMessage({
+      title: "麗都花園 售盤 #C024131",
+      dealType: "sale",
+      price: null,
+    });
+    assert.equal(noPrice, "你好，想查詢 麗都花園 售盤 #C024131");
+  });
+});
 
 const files = [
   "src/config/site.ts",
@@ -65,6 +160,53 @@ test("site config exposes all public branch contact details", () => {
   }
 });
 
+// Audit finding: footer phone links rendered as ~69x20px tap targets, well
+// under the 44px guideline, because the <a> only wrapped the bare text inside
+// a <p>. The fix makes the link itself the tappable element.
+test("footer phone and email links meet the 44px tap-target guideline", () => {
+  const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
+
+  const phoneLink = footer.match(/<a\s+href=\{`tel:\$\{branch\.phone\}`\}[^>]*>/)?.[0] ?? "";
+  assert.match(phoneLink, /className="inline-flex min-h-11 items-center/);
+
+  const mailLink =
+    footer.match(/<a\s+href=\{`mailto:\$\{SITE_CONTACT\.email\}`\}[^>]*>/)?.[0] ?? "";
+  assert.match(mailLink, /className="inline-flex min-h-11 items-center/);
+});
+
+// Audit finding: "no sticky WhatsApp/bottom conversion bar — the only
+// persistent element is the 問樓助手 AI chat bubble, which doesn't hand off to
+// WhatsApp".
+test("a sticky mobile WhatsApp bar is mounted site-wide, suppressed where a page has its own", () => {
+  const bar = readFileSync("src/components/site/StickyWhatsAppBar.tsx", "utf8");
+  assert.match(bar, /whatsappUrl\(/);
+  assert.match(
+    bar,
+    /bottom-16/,
+    "must sit above the 問樓助手 bubble (fixed at bottom-4/5), not on top of it",
+  );
+  assert.match(
+    bar,
+    /lg:hidden/,
+    "desktop already has the header WhatsApp button and mega-menu CTA",
+  );
+
+  const root = readFileSync("src/routes/__root.tsx", "utf8");
+  assert.match(
+    root,
+    /import \{ StickyWhatsAppBar \} from "@\/components\/site\/StickyWhatsAppBar"/,
+  );
+  assert.match(root, /\{showStickyWhatsAppBar \? <StickyWhatsAppBar \/> : null\}/);
+  assert.match(root, /function shouldShowStickyWhatsAppBar/);
+  // /property/$listingNo has its own listing-aware bar (PropertyDecisionActions);
+  // showing both would duplicate the CTA.
+  assert.match(root, /pathname\.startsWith\("\/property\/"\)/);
+  assert.match(root, /"\/admin", "\/auth", "\/account", "\/dashboard"/);
+  // The bar is `fixed`, so a page needs bottom padding reserved or its own
+  // last content (e.g. footer) sits underneath it with no way to scroll clear.
+  assert.match(root, /showStickyWhatsAppBar \? "pb-16 lg:pb-0" : ""/);
+});
+
 test("homepage and navigation include Ting Kau content entry points", () => {
   const combined = files.map((file) => readFileSync(file, "utf8")).join("\n");
 
@@ -107,6 +249,26 @@ test("homepage puts 精選筍盤 above 深井核心屋苑", () => {
   assert.match(source, /id="owner-valuation"/);
   assert.match(source, /source: "homepage-owner-valuation"/);
   assert.match(source, /source: "homepage-final-cta"/);
+});
+
+// Audit finding: 海雲軒/帝華軒/海韻台/縉皇居/龍騰閣 (core-estates.ts's hasPage:false
+// entries) rendered as non-clickable gradient boxes next to real cards. The fix
+// filters them out of the homepage grid entirely rather than shipping five thin
+// pages -- core-estates.ts itself keeps all ten client-approved entries.
+test("homepage estate grid only renders estates with a detail page", () => {
+  const source = readFileSync("src/routes/index.tsx", "utf8");
+
+  assert.match(
+    source,
+    /const linkableEstates = coreEstates\.filter\(\(estate\) => estate\.hasPage\)/,
+  );
+  assert.match(source, /const visible = expanded\s*\n?\s*\?\s*linkableEstates/);
+  assert.match(source, /linkableEstates\.length > CORE_ESTATES_PREVIEW_COUNT/);
+  assert.doesNotMatch(
+    source,
+    /const visible = expanded \? coreEstates :/,
+    "visible must be derived from the hasPage-filtered list, not the raw client list",
+  );
 });
 
 test("homepage share card uses an absolute image and the shared meta registry", () => {
@@ -183,11 +345,17 @@ test("header exposes approved mega menu structure and controls", () => {
   }
 
   assert.equal(source.includes("...menu.featured, ...menu.links, menu.cta"), false);
-  // The mobile cta is deduped both against the header WhatsApp link and
-  // against any featured/link item that already points to the same route
-  // (e.g. market's "/videos" featured item and cta), to avoid duplicate keys.
-  assert.equal(source.includes('"href" in menu.cta && menu.cta.href === whatsappHref'), true);
+  // The mobile cta is deduped both against the header's own general WhatsApp
+  // button and against any featured/link item that already points to the same
+  // route (e.g. market's "/videos" featured item and cta), to avoid duplicate
+  // keys. The whatsapp side is an explicit `ctaMirrorsGlobalWhatsapp` marker,
+  // not a URL string comparison -- comparing built URLs only ever worked
+  // because both happened to be built from the identical hardcoded message
+  // and so produced byte-identical strings by coincidence.
+  assert.equal(source.includes("ctaMirrorsGlobalWhatsapp?: boolean"), true);
+  assert.equal(source.includes("menu.ctaMirrorsGlobalWhatsapp || ctaIsDuplicate"), true);
   assert.equal(source.includes("base.some((item) => itemKey(item) === itemKey(menu.cta))"), true);
+  assert.equal(source.includes("menu.cta.href === whatsappHref"), false);
   assert.equal(source.includes('split("?")[0].split("#")[0]'), false);
 });
 
@@ -196,7 +364,7 @@ test("property experience navigation exposes the mortgage calculator everywhere"
   const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
 
   assert.match(header, /to: "\/mortgage", label: "按揭計算機"/);
-  assert.match(header, /menuMobileItems\(menu, WHATSAPP_URL\)/);
+  assert.match(header, /menuMobileItems\(menu\)/);
   assert.match(footer, /<Link to="\/mortgage"[\s\S]*?按揭計算機/);
 });
 
@@ -214,7 +382,82 @@ test("sitemap includes property experience routes and only discovered public age
     sitemap,
     /profile\.public_slug \? \[`\/agents\/\$\{profile\.public_slug\}`\] : \[\]/,
   );
-  assert.match(sitemap, /\.catch\(\(\) => \[\]\)/);
+  // A DB blip used to silently ship a sitemap with zero agent URLs -- still
+  // degrade gracefully (a missing sitemap is worse than one missing 23 agent
+  // URLs), but the failure must be logged, not swallowed outright.
+  assert.match(sitemap, /catch\(\(error: unknown\) => \{/);
+  assert.match(sitemap, /console\.error\(/);
+
+  assert.match(sitemap, /<lastmod>\$\{lastmod\}<\/lastmod>/);
+});
+
+// Both pages render a graceful empty state instead of 404ing, which is correct
+// UX, but an *indexed* empty page is a soft-404 risk. Both conditions must
+// self-heal (no path listed / no noindex) the moment real rows land, with no
+// further deploy -- so the sitemap and the two routes' own head() must gate on
+// the actual fetched length, never a hardcoded true/false.
+test("empty /transactions and /estate-reviews are dropped from the sitemap and noindexed", () => {
+  const sitemap = readFileSync("src/routes/sitemap[.]xml.ts", "utf8");
+  const transactions = readFileSync("src/routes/transactions.tsx", "utf8");
+  const estateReviews = readFileSync("src/routes/estate-reviews.tsx", "utf8");
+
+  assert.match(sitemap, /transactions\.length > 0 \? "\/transactions" : null/);
+  assert.match(sitemap, /estateReviewArticles\.length > 0 \? "\/estate-reviews" : null/);
+  assert.doesNotMatch(
+    sitemap,
+    /^\s*"\/transactions",\s*$/m,
+    "/transactions must not be an unconditional static path anymore",
+  );
+  assert.doesNotMatch(
+    sitemap,
+    /^\s*"\/estate-reviews",\s*$/m,
+    "/estate-reviews must not be an unconditional static path anymore",
+  );
+
+  assert.match(transactions, /head:\s*\(\{\s*loaderData\s*\}\)\s*=>/);
+  assert.match(transactions, /loaderData\.length === 0/);
+  assert.match(transactions, /name: "robots", content: "noindex,follow"/);
+
+  assert.match(estateReviews, /head:\s*\(\{\s*loaderData\s*\}\)\s*=>/);
+  assert.match(estateReviews, /loaderData\.articles\.length === 0/);
+  assert.match(estateReviews, /name: "robots", content: "noindex,follow"/);
+});
+
+// Audit item 8: /privacy, /disclaimer, /terms all 404'd, and the EAA credential
+// in the footer was plain text a visitor could not verify.
+test("privacy, disclaimer and terms pages exist and are linked from the footer, and the licence is verifiable", () => {
+  for (const route of ["privacy", "disclaimer", "terms"]) {
+    assert.equal(
+      existsSync(`src/routes/${route}.tsx`),
+      true,
+      `src/routes/${route}.tsx should exist`,
+    );
+  }
+
+  const seo = readFileSync("src/content/seo.ts", "utf8");
+  for (const key of ["privacy", "disclaimer", "terms"]) {
+    assert.match(seo, new RegExp(`${key}: \\{`));
+  }
+
+  const sitemap = readFileSync("src/routes/sitemap[.]xml.ts", "utf8");
+  assert.match(sitemap, /pageSeo\.privacy\.path/);
+  assert.match(sitemap, /pageSeo\.disclaimer\.path/);
+  assert.match(sitemap, /pageSeo\.terms\.path/);
+
+  const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
+  assert.match(footer, /法律 Legal/);
+  assert.match(footer, /<Link to="\/privacy"/);
+  assert.match(footer, /<Link to="\/disclaimer"/);
+  assert.match(footer, /<Link to="\/terms"/);
+
+  // The licence number appeared twice -- once from SITE_CONTACT.licenceNo, once
+  // hardcoded as a literal "C-018613" -- so the two could silently drift apart.
+  assert.doesNotMatch(footer, /C-018613/, "the footer must not hardcode the licence number");
+  assert.match(footer, /牌照號 Licence No\.: \{SITE_CONTACT\.licenceNo\}/);
+
+  // The EAA credit was plain text with no way for a visitor to verify it.
+  assert.match(footer, /href="https:\/\/www\.eaa\.org\.hk\/"/);
+  assert.match(footer, /Estate Agents Authority HK/);
 });
 
 // The sitemap's static list is hand-maintained, so a new public page ships

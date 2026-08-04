@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SITE_URL } from "@/content/seo";
+import { SITE_URL, canonicalLink } from "@/content/seo";
 import {
   fetchPropertyByListingNo,
   fetchSimilarListings,
@@ -56,7 +56,7 @@ type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListi
 type PropertyHeadData = {
   property?: Pick<
     PropertyDetail,
-    "title_zh" | "deal_type" | "rent" | "price" | "description" | "images"
+    "listing_no" | "title_zh" | "deal_type" | "rent" | "price" | "description" | "images"
   >;
 };
 
@@ -77,6 +77,7 @@ export const Route = createFileRoute("/property/$listingNo")({
   head: ({ loaderData }) => {
     const p = (loaderData as PropertyHeadData | undefined)?.property;
     if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
+    const canonical = canonicalLink(`/property/${p.listing_no}`);
     const priceStr =
       p.deal_type === "rent"
         ? p.rent
@@ -97,6 +98,7 @@ export const Route = createFileRoute("/property/$listingNo")({
         ...(img ? [{ property: "og:image", content: img }] : []),
         ...(img ? [{ name: "twitter:image", content: img }] : []),
       ],
+      links: [canonical],
     };
   },
   errorComponent: PropertyErrorComponent,
@@ -180,6 +182,13 @@ function PropertyPage() {
     property.price && property.gross_area
       ? Math.round(Number(property.price) / property.gross_area)
       : null;
+  // WhatsApp/mortgage-widget price, deal-aware: property.price is only ever set
+  // on sale rows and property.rent only on rent rows (see normalize-old-site.mjs),
+  // so a rental's enquiry prefill needs property.rent, not the always-null
+  // property.price. getPropertyDecision still gates hasMortgagePrice on
+  // dealType !== "rent", so passing the rent amount here doesn't turn on the
+  // mortgage widget for rentals.
+  const dealPrice = isRent ? property.rent : property.price;
 
   const agent = property.profiles;
   const estate = property.estates;
@@ -393,11 +402,7 @@ function PropertyPage() {
             label="實用面積"
             value={property.saleable_area ? `${property.saleable_area} 呎` : "—"}
           />
-          <Spec
-            icon={<Bed className="h-4 w-4" />}
-            label="房間"
-            value={property.bedrooms ?? "—"}
-          />
+          <Spec icon={<Bed className="h-4 w-4" />} label="房間" value={property.bedrooms ?? "—"} />
           <Spec
             icon={<Bath className="h-4 w-4" />}
             label="浴室"
@@ -408,17 +413,12 @@ function PropertyPage() {
             label="樓層"
             value={property.floor ?? "—"}
           />
-          <Spec
-            label="建築面積"
-            value={property.gross_area ? `${property.gross_area} 呎` : "—"}
-          />
+          <Spec label="建築面積" value={property.gross_area ? `${property.gross_area} 呎` : "—"} />
           <Spec label="座向" value={property.orientation ?? "—"} />
           <Spec
             label="管理費"
             value={
-              property.management_fee
-                ? `$${Number(property.management_fee).toLocaleString()}`
-                : "—"
+              property.management_fee ? `$${Number(property.management_fee).toLocaleString()}` : "—"
             }
           />
           <Spec
@@ -560,191 +560,191 @@ function PropertyPage() {
             listingNo={property.listing_no}
             title={property.title_zh}
             dealType={property.deal_type}
+            price={dealPrice}
             onInquiry={focusInquiry}
           />
         }
         details={
           <>
+            {/* Description */}
+            {property.description && (
+              <section className="mt-6">
+                <h2 className="text-xl font-semibold">物業描述</h2>
+                <p className="mt-3 whitespace-pre-line text-muted-foreground">
+                  {property.description}
+                </p>
+              </section>
+            )}
 
-          {/* Description */}
-          {property.description && (
-            <section className="mt-6">
-              <h2 className="text-xl font-semibold">物業描述</h2>
-              <p className="mt-3 whitespace-pre-line text-muted-foreground">
-                {property.description}
-              </p>
-            </section>
-          )}
-
-          {/* Features */}
-          {property.features?.length > 0 && (
-            <section className="mt-6">
-              <h2 className="text-xl font-semibold">物業特點</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {property.features.map((f: string) => (
-                  <Badge key={f} variant="secondary">
-                    {f}
-                  </Badge>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Estate info */}
-          {estate && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle className="text-base">屋苑資料</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <Spec label="屋苑" value={estate.name_zh} />
-                  <Spec label="發展商" value={estate.developer ?? "—"} />
-                  <Spec label="入伙年份" value={estate.year_completed ?? "—"} />
-                  <Spec label="總單位" value={estate.total_units ?? "—"} />
+            {/* Features */}
+            {property.features?.length > 0 && (
+              <section className="mt-6">
+                <h2 className="text-xl font-semibold">物業特點</h2>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {property.features.map((f: string) => (
+                    <Badge key={f} variant="secondary">
+                      {f}
+                    </Badge>
+                  ))}
                 </div>
-                <div className="mt-4">
-                  <Link
-                    to="/estate/$slug"
-                    params={{ slug: estate.slug }}
-                    className="text-sm text-primary underline"
-                  >
-                    查看屋苑詳情 →
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              </section>
+            )}
 
-          {/* Recent transactions */}
-          {txns.length > 0 && (
-            <section className="mt-6">
-              <h2 className="text-xl font-semibold">屋苑近期成交</h2>
-              <div className="mt-3 overflow-hidden rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>成交日期</TableHead>
-                      <TableHead>單位</TableHead>
-                      <TableHead className="text-right">實用面積</TableHead>
-                      <TableHead className="text-right">成交價</TableHead>
-                      <TableHead className="text-right">實呎</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {txns.map((t, i) => (
-                      <TableRow key={i}>
-                        <TableCell>
-                          {t.deal_date ? new Date(t.deal_date).toLocaleDateString("zh-HK") : "—"}
-                        </TableCell>
-                        <TableCell>{t.unit ?? "—"}</TableCell>
-                        <TableCell className="text-right">
-                          {t.saleable_area ? `${t.saleable_area} 呎` : "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {t.price ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M` : "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {t.saleable_psf
-                            ? `$${Math.round(Number(t.saleable_psf)).toLocaleString()}`
-                            : "—"}
-                        </TableCell>
+            {/* Estate info */}
+            {estate && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="text-base">屋苑資料</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    <Spec label="屋苑" value={estate.name_zh} />
+                    <Spec label="發展商" value={estate.developer ?? "—"} />
+                    <Spec label="入伙年份" value={estate.year_completed ?? "—"} />
+                    <Spec label="總單位" value={estate.total_units ?? "—"} />
+                  </div>
+                  <div className="mt-4">
+                    <Link
+                      to="/estate/$slug"
+                      params={{ slug: estate.slug }}
+                      className="text-sm text-primary underline"
+                    >
+                      查看屋苑詳情 →
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recent transactions */}
+            {txns.length > 0 && (
+              <section className="mt-6">
+                <h2 className="text-xl font-semibold">屋苑近期成交</h2>
+                <div className="mt-3 overflow-hidden rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>成交日期</TableHead>
+                        <TableHead>單位</TableHead>
+                        <TableHead className="text-right">實用面積</TableHead>
+                        <TableHead className="text-right">成交價</TableHead>
+                        <TableHead className="text-right">實呎</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </section>
-          )}
+                    </TableHeader>
+                    <TableBody>
+                      {txns.map((t, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            {t.deal_date ? new Date(t.deal_date).toLocaleDateString("zh-HK") : "—"}
+                          </TableCell>
+                          <TableCell>{t.unit ?? "—"}</TableCell>
+                          <TableCell className="text-right">
+                            {t.saleable_area ? `${t.saleable_area} 呎` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {t.price ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {t.saleable_psf
+                              ? `$${Math.round(Number(t.saleable_psf)).toLocaleString()}`
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </section>
+            )}
 
-          {/* Similar listings */}
-          {similar.length > 0 && (
-            <section className="mt-6">
-              <h2 className="text-xl font-semibold">同類放盤</h2>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
-                {similar.map((s) => (
-                  <SimilarCard key={s.id} listing={s} />
-                ))}
-              </div>
-            </section>
-          )}
+            {/* Similar listings */}
+            {similar.length > 0 && (
+              <section className="mt-6">
+                <h2 className="text-xl font-semibold">同類放盤</h2>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  {similar.map((s) => (
+                    <SimilarCard key={s.id} listing={s} />
+                  ))}
+                </div>
+              </section>
+            )}
 
-          {/* Disclaimer */}
-          <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
-            免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
-          </p>
+            {/* Disclaimer */}
+            <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+              免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
+            </p>
           </>
         }
         sidebar={
           <>
             <PropertyDecisionActions
-            agent={agent}
-            branchContact={branchContact}
-            fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
-            listingNo={property.listing_no}
-            title={property.title_zh}
-            dealType={property.deal_type}
-            price={property.price}
-            onInquiry={focusInquiry}
-          />
+              agent={agent}
+              branchContact={branchContact}
+              fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
+              listingNo={property.listing_no}
+              title={property.title_zh}
+              dealType={property.deal_type}
+              price={dealPrice}
+              onInquiry={focusInquiry}
+            />
 
             <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-3">
-                <div>
-                  <Label htmlFor="name">姓名 *</Label>
-                  <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
-                </div>
-                <div>
-                  <Label htmlFor="phone">電話 *</Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    required
-                    type="tel"
-                    maxLength={30}
-                    placeholder="9123 4567"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">電郵</Label>
-                  <Input id="email" name="email" type="email" maxLength={255} />
-                </div>
-                <div>
-                  <Label htmlFor="message">訊息</Label>
-                  <Textarea
-                    id="message"
-                    name="message"
-                    maxLength={1000}
-                    rows={3}
-                    placeholder={`想查詢編號 ${property.listing_no}`}
-                  />
-                </div>
-                <div className="flex items-start gap-2">
-                  <Checkbox
-                    id="consentWhatsapp"
-                    checked={consentWhatsapp}
-                    onCheckedChange={(checked) => setConsentWhatsapp(checked === true)}
-                    className="mt-0.5"
-                  />
-                  <Label
-                    htmlFor="consentWhatsapp"
-                    className="text-xs font-normal leading-snug text-muted-foreground"
-                  >
-                    我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
-                  </Label>
-                </div>
-                <Button type="submit" className="w-full" disabled={submitting}>
-                  {submitting ? "提交中…" : "提交查詢"}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  按提交即表示同意我們透過上述聯絡方式回覆查詢。
-                </p>
-              </form>
-            </CardContent>
+              <CardHeader>
+                <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-3">
+                  <div>
+                    <Label htmlFor="name">姓名 *</Label>
+                    <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">電話 *</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      required
+                      type="tel"
+                      maxLength={30}
+                      placeholder="9123 4567"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="email">電郵</Label>
+                    <Input id="email" name="email" type="email" maxLength={255} />
+                  </div>
+                  <div>
+                    <Label htmlFor="message">訊息</Label>
+                    <Textarea
+                      id="message"
+                      name="message"
+                      maxLength={1000}
+                      rows={3}
+                      placeholder={`想查詢編號 ${property.listing_no}`}
+                    />
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="consentWhatsapp"
+                      checked={consentWhatsapp}
+                      onCheckedChange={(checked) => setConsentWhatsapp(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <Label
+                      htmlFor="consentWhatsapp"
+                      className="text-xs font-normal leading-snug text-muted-foreground"
+                    >
+                      我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
+                    </Label>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={submitting}>
+                    {submitting ? "提交中…" : "提交查詢"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    按提交即表示同意我們透過上述聯絡方式回覆查詢。
+                  </p>
+                </form>
+              </CardContent>
             </Card>
           </>
         }

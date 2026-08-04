@@ -159,6 +159,8 @@ export type AdminAgentProfileInput = {
   avatar_url: string | null;
   branch: string | null;
   bio: string | null;
+  specialties: string[];
+  served_estate_slugs: string[];
   public_slug: string | null;
   show_on_website: boolean;
   /** null means "append to the end" on create, and "leave unchanged" on update. */

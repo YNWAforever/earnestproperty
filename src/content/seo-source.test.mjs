@@ -72,7 +72,7 @@ test("seo content registry contains required full-content routes", () => {
 
 test("blog routes render real indexed articles", () => {
   const blog = read("src/routes/blog.tsx");
-  const detail = read("src/routes/blog.$slug.tsx");
+  const detail = read("src/routes/blog_.$slug.tsx");
   const queries = read("src/lib/queries.ts");
 
   assert.match(queries, /fetchPublishedArticles/);

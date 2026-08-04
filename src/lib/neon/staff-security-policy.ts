@@ -15,10 +15,7 @@ export type AgentProfileMutationDecision =
   | { allowed: true; mode: "identity-and-profile" | "public-profile-only" }
   | {
       allowed: false;
-      reason:
-        | "insufficient-role"
-        | "identity-access-admin-only"
-        | "privileged-target-admin-only";
+      reason: "insufficient-role" | "identity-access-admin-only" | "privileged-target-admin-only";
     };
 
 type BootstrapStaffRow = {
@@ -79,9 +76,7 @@ export function decideAgentProfileMutation(
 }
 
 export function isFirstAdminBootstrapEligible(rows: readonly BootstrapStaffRow[]) {
-  return !rows.some(
-    (row) => normalizedNullable(row.authUserId) !== null || row.roles.length > 0,
-  );
+  return !rows.some((row) => normalizedNullable(row.authUserId) !== null || row.roles.length > 0);
 }
 
 export function shouldBootstrapFirstAdmin(input: {
@@ -92,10 +87,7 @@ export function shouldBootstrapFirstAdmin(input: {
 }) {
   const email = normalizedEmail(input.email);
   if (!email || !input.allowlistedEmails.has(email)) return false;
-  if (
-    input.access &&
-    (!input.access.matchedProfileOnly || input.access.roles.length > 0)
-  ) {
+  if (input.access && (!input.access.matchedProfileOnly || input.access.roles.length > 0)) {
     return false;
   }
   return isFirstAdminBootstrapEligible(input.staffRows);

@@ -13,6 +13,10 @@ export type AgentProfilePayloadData = {
   branch: string;
   bio: string;
   public_slug: string;
+  // Newline/comma-separated free text in form state, same convention as
+  // admin.cms.tsx's estate facilities field -- split into an array below.
+  specialties: string;
+  served_estate_slugs: string;
   show_on_website: boolean;
   // Matches agentProfileSchema's post-parse output (z.union([z.literal(""), z.coerce.number()...])):
   // "" means the field was left blank, a number means the user set an explicit value. This is
@@ -22,6 +26,13 @@ export type AgentProfilePayloadData = {
   display_order: number | "";
   active: boolean;
 };
+
+function splitList(value: string) {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export function buildAgentProfilePayload({
   profileId,
@@ -44,6 +55,8 @@ export function buildAgentProfilePayload({
     branch: data.branch || null,
     bio: data.bio || null,
     public_slug: data.public_slug || null,
+    specialties: splitList(data.specialties),
+    served_estate_slugs: splitList(data.served_estate_slugs),
     show_on_website: data.show_on_website,
     display_order: data.display_order === "" ? null : Number(data.display_order),
     ...(canManageIdentity

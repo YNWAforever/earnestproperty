@@ -61,6 +61,6 @@ test("Operations route integration contracts gate protected reads and remain acc
   assert.match(shellSource, /to: "\/admin\/operations",[\s\S]*?includeSearch: false/);
   assert.match(
     shellSource,
-    /includeSearch:\s*\("includeSearch" in item \? item\.includeSearch : true\)/,
+    /includeSearch:\s*\(?"includeSearch" in item \? item\.includeSearch : true\)?/,
   );
 });

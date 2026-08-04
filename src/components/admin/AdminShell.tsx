@@ -101,7 +101,7 @@ export function AdminShell({
                   {...("search" in item ? { search: item.search } : {})}
                   activeOptions={{
                     exact: true,
-                    includeSearch: ("includeSearch" in item ? item.includeSearch : true),
+                    includeSearch: "includeSearch" in item ? item.includeSearch : true,
                     explicitUndefined: true,
                   }}
                   className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"

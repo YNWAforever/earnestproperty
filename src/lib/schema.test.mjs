@@ -1,0 +1,42 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+
+const read = (path) => readFileSync(path, "utf8");
+
+test("schema.ts exports the builders the audit's structured-data gaps need", () => {
+  const source = read("src/lib/schema.ts");
+  assert.match(source, /export function agentPersonSchema/);
+  assert.match(source, /"@type": \["Person", "RealEstateAgent"\]/);
+  assert.match(source, /export function itemListSchema/);
+  assert.match(source, /"@type": "ItemList"/);
+  assert.match(source, /export function branchLocalBusinessSchema/);
+  assert.match(source, /export function videoObjectSchema/);
+  assert.match(source, /"@type": "VideoObject"/);
+});
+
+// Article on blog posts and listing-level Offer schema already existed before
+// this audit (the audit was stale on those two) -- this only checks the gaps
+// it actually named: Person/RealEstateAgent on agent pages, ItemList on
+// /agents + /listings, LocalBusiness per branch on /contact, VideoObject on
+// /videos.
+test("every named structured-data gap is wired into its route", () => {
+  const agentDetail = read("src/routes/agents_.$slug.tsx");
+  assert.match(agentDetail, /agentPersonSchema\(\{/);
+  assert.match(agentDetail, /"@context": "https:\/\/schema\.org", \.\.\.personSchema/);
+
+  const agentsList = read("src/routes/agents.tsx");
+  assert.match(agentsList, /itemListSchema\(\{/);
+
+  const listings = read("src/routes/listings.tsx");
+  assert.match(listings, /itemListSchema\(\{/);
+  assert.match(listings, /rows\.map\(\(row\) => \(\{/);
+
+  const contact = read("src/routes/contact.tsx");
+  assert.match(contact, /branchLocalBusinessSchema\(\{/);
+  assert.match(contact, /SITE_BRANCHES\.map\(\(branch\) =>/);
+
+  const videos = read("src/routes/videos.tsx");
+  assert.match(videos, /videoObjectSchema\(\{/);
+  assert.match(videos, /uploadDate=\{video\.created_at\}/);
+});

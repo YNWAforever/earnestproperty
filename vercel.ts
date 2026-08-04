@@ -56,6 +56,17 @@ export const config: VercelConfig = {
     redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau/", "/castle-peak-road/ting-kau", true),
     redirectEntry("/castle-peak-road/tsing-lung-tau", "/castle-peak-road/sham-tseng", true),
     redirectEntry("/castle-peak-road/tsing-lung-tau/", "/castle-peak-road/sham-tseng", true),
+    // Client narrowed scope to 深井 / 青山公路 / 汀九 only; 小欖/掃管笏/三聖
+    // (incl. Gold Coast 黃金海岸) is out of scope even though the corridor
+    // inventory filter (corridorRegionScope.outOfScopeTextAliases) already
+    // excludes its listings from every other page. This retires the segment
+    // page itself, which stayed indexable and cross-linked from Ting Kau.
+    redirectEntry("/castle-peak-road/so-kwun-wat-gold-coast", "/castle-peak-road/sham-tseng", true),
+    redirectEntry(
+      "/castle-peak-road/so-kwun-wat-gold-coast/",
+      "/castle-peak-road/sham-tseng",
+      true,
+    ),
     redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
     redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
     redirectEntry("/property-detail/:oldId.html", "/listings", true),

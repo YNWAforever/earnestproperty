@@ -7,8 +7,7 @@ import ts from "typescript";
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
 
-const dataUrl = (source) =>
-  `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+const dataUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 
 const transpile = (source) =>
   ts.transpileModule(source, {

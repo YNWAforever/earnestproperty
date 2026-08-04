@@ -43,9 +43,7 @@ function bytesToHex(bytes: Uint8Array) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-export async function computeMigrationChecksum(
-  statements: RegisteredMigration["statements"],
-) {
+export async function computeMigrationChecksum(statements: RegisteredMigration["statements"]) {
   const serialized = JSON.stringify(
     statements.map(({ statement, params = [] }) => ({
       statement,

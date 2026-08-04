@@ -33,7 +33,9 @@ export async function generateAdminContentProposal(options: { data: ContentCopil
   return callStaffServerFn(async () => generateServer(await withStaffAuthHeaders(options)));
 }
 
-export async function decideAdminContentProposal(options: { data: z.infer<typeof decisionSchema> }) {
+export async function decideAdminContentProposal(options: {
+  data: z.infer<typeof decisionSchema>;
+}) {
   return callStaffServerFn(async () => decideServer(await withStaffAuthHeaders(options)));
 }
 
@@ -46,13 +48,18 @@ async function callStaffServerFn<T>(call: () => Promise<T>) {
   try {
     return await call();
   } catch (error) {
-    const status = error instanceof Response
-      ? error.status
-      : error && typeof error === "object" && "status" in error
-        ? Number((error as { status?: unknown }).status)
-        : 0;
+    const status =
+      error instanceof Response
+        ? error.status
+        : error && typeof error === "object" && "status" in error
+          ? Number((error as { status?: unknown }).status)
+          : 0;
     if (status === 401 || status === 403) {
-      return { ok: false, proposal: null, error: status === 401 ? "COPILOT_UNAUTHORIZED" : "COPILOT_FORBIDDEN" } as T;
+      return {
+        ok: false,
+        proposal: null,
+        error: status === 401 ? "COPILOT_UNAUTHORIZED" : "COPILOT_FORBIDDEN",
+      } as T;
     }
     throw error;
   }

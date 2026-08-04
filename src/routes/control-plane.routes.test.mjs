@@ -46,10 +46,7 @@ test("migration and audit routes enforce exact permissions and bounded inputs", 
   assert.match(auditSource, /requireStaffPermission\(request, "audit\.read"\)/);
 
   assert.match(planSource, /z\.object\(\{\}\)\.strict\(\)/);
-  assert.match(
-    applySource,
-    /approvalToken:\s*z\.string\(\)\.min\(20\)/,
-  );
+  assert.match(applySource, /approvalToken:\s*z\.string\(\)\.min\(20\)/);
   for (const source of [planSource, applySource]) {
     assert.doesNotMatch(source, /(?:sql|statement|query)\s*:/i);
   }
@@ -83,10 +80,7 @@ test("control-plane worker requires cron authorization and returns counts only",
 
 test("job management routes validate IDs, permissions, and safe summaries", () => {
   const listSource = readFileSync("src/routes/api.admin.control-plane.jobs.ts", "utf8");
-  const retrySource = readFileSync(
-    "src/routes/api.admin.control-plane.jobs.$id.retry.ts",
-    "utf8",
-  );
+  const retrySource = readFileSync("src/routes/api.admin.control-plane.jobs.$id.retry.ts", "utf8");
   const cancelSource = readFileSync(
     "src/routes/api.admin.control-plane.jobs.$id.cancel.ts",
     "utf8",
@@ -145,10 +139,7 @@ test("WozTell queue routes enqueue durable campaign jobs and delegate to the wor
 
 test("job and migration overview routes compose safe read models", () => {
   const jobsSource = readFileSync("src/routes/api.admin.control-plane.jobs.ts", "utf8");
-  const migrationsSource = readFileSync(
-    "src/routes/api.admin.control-plane.migrations.ts",
-    "utf8",
-  );
+  const migrationsSource = readFileSync("src/routes/api.admin.control-plane.migrations.ts", "utf8");
 
   assert.match(jobsSource, /Promise\.all\(\[listJobs\(parsed\.data\), getJobSummary\(\)\]\)/);
   assert.match(jobsSource, /summary/);

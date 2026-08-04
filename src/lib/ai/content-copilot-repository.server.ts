@@ -88,8 +88,10 @@ export async function startContentProposal(input: StartContentProposalInput) {
   const requestsPerStaffPerHour = 20;
   const requestResult = contentCopilotRequestSchema.safeParse(input.request);
   if (!requestResult.success) throw contentCopilotError("COPILOT_REQUEST_INVALID");
-  if (input.provider && input.provider !== "opencode_go") throw contentCopilotError("COPILOT_PROVIDER_UNSUPPORTED");
-  if (!/^[0-9a-f]{64}$/.test(input.sourceFingerprint)) throw contentCopilotError("COPILOT_FINGERPRINT_INVALID");
+  if (input.provider && input.provider !== "opencode_go")
+    throw contentCopilotError("COPILOT_PROVIDER_UNSUPPORTED");
+  if (!/^[0-9a-f]{64}$/.test(input.sourceFingerprint))
+    throw contentCopilotError("COPILOT_FINGERPRINT_INVALID");
 
   await expireGeneratingProposal(input.staffId);
 
@@ -129,8 +131,10 @@ export async function startContentProposal(input: StartContentProposalInput) {
     if (!rows[0]) throw contentCopilotError("COPILOT_RATE_LIMITED");
     return mapProposal(requireProposal(rows[0]));
   } catch (error) {
-    if (isGeneratingProposalConflict(error)) throw contentCopilotError("COPILOT_GENERATION_IN_PROGRESS");
-    if (postgresErrorCode(error) === "23505") throw contentCopilotError("COPILOT_DATABASE_CONFLICT");
+    if (isGeneratingProposalConflict(error))
+      throw contentCopilotError("COPILOT_GENERATION_IN_PROGRESS");
+    if (postgresErrorCode(error) === "23505")
+      throw contentCopilotError("COPILOT_DATABASE_CONFLICT");
     throw error;
   }
 }
@@ -138,7 +142,8 @@ export async function startContentProposal(input: StartContentProposalInput) {
 export async function completeContentProposal(input: CompleteContentProposalInput) {
   const proposalResult = validateContentCopilotProposal(input.proposal);
   if (!proposalResult.ok) throw contentCopilotError(proposalResult.error);
-  if (proposalResult.value.resourceType !== input.resourceType) throw contentCopilotError("COPILOT_PROPOSAL_CONTEXT_MISMATCH");
+  if (proposalResult.value.resourceType !== input.resourceType)
+    throw contentCopilotError("COPILOT_PROPOSAL_CONTEXT_MISMATCH");
 
   await expireOwnedProposal(input.proposalId, input.staffId);
   const rows = await queryRows(
@@ -191,7 +196,13 @@ export async function failContentProposal(input: FailContentProposalInput) {
        AND status = 'generating'
        AND expires_at > now()
      RETURNING *`,
-    [errorCode, input.latencyMs ?? null, JSON.stringify(sanitizeContentCopilotUsageMetadata(input.usageMetadata)), input.proposalId, input.staffId],
+    [
+      errorCode,
+      input.latencyMs ?? null,
+      JSON.stringify(sanitizeContentCopilotUsageMetadata(input.usageMetadata)),
+      input.proposalId,
+      input.staffId,
+    ],
   );
   return requireTransition(rows[0], input.proposalId, input.staffId);
 }
@@ -244,27 +255,79 @@ export type ContentCopilotAuditMetadata = Partial<{
   warningsCount: number;
 }>;
 
-const CONTENT_COPILOT_RESOURCE_TYPES = new Set<ContentCopilotResourceType>(["estate", "article", "faq", "video", "listing"]);
-const CONTENT_PROPOSAL_STATUSES = new Set<ContentProposalStatus>(["generating", "generated", "partially_applied", "applied", "rejected", "expired", "failed"]);
+const CONTENT_COPILOT_RESOURCE_TYPES = new Set<ContentCopilotResourceType>([
+  "estate",
+  "article",
+  "faq",
+  "video",
+  "listing",
+]);
+const CONTENT_PROPOSAL_STATUSES = new Set<ContentProposalStatus>([
+  "generating",
+  "generated",
+  "partially_applied",
+  "applied",
+  "rejected",
+  "expired",
+  "failed",
+]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const CONTENT_COPILOT_AUDIT_ACTIONS = new Set(["content_copilot.generated", "content_copilot.failed", "content_copilot.applied", "content_copilot.rejected", "content_copilot.stale"]);
+const CONTENT_COPILOT_AUDIT_ACTIONS = new Set([
+  "content_copilot.generated",
+  "content_copilot.failed",
+  "content_copilot.applied",
+  "content_copilot.rejected",
+  "content_copilot.stale",
+]);
 
-export function sanitizeContentCopilotAuditMetadata(metadata: Record<string, unknown> | undefined, resourceType?: ContentCopilotResourceType): ContentCopilotAuditMetadata {
-  const allowed = new Set(["provider", "model", "latencyMs", "researchMode", "status", "errorCode", "acceptedFields", "citationCount", "warningsCount"]);
+export function sanitizeContentCopilotAuditMetadata(
+  metadata: Record<string, unknown> | undefined,
+  resourceType?: ContentCopilotResourceType,
+): ContentCopilotAuditMetadata {
+  const allowed = new Set([
+    "provider",
+    "model",
+    "latencyMs",
+    "researchMode",
+    "status",
+    "errorCode",
+    "acceptedFields",
+    "citationCount",
+    "warningsCount",
+  ]);
   const result: ContentCopilotAuditMetadata = {};
   for (const [key, value] of Object.entries(metadata ?? {})) {
     if (!allowed.has(key)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
-    if (key === "provider" && value !== "opencode_go") throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
-    if (key === "researchMode" && value !== "internal" && value !== "web") throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
-    if (key === "status" && (typeof value !== "string" || !CONTENT_PROPOSAL_STATUSES.has(value as ContentProposalStatus))) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
-    if (key === "errorCode" && (typeof value !== "string" || !/^[A-Z0-9_]{1,80}$/.test(value))) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "provider" && value !== "opencode_go")
+      throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "researchMode" && value !== "internal" && value !== "web")
+      throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (
+      key === "status" &&
+      (typeof value !== "string" || !CONTENT_PROPOSAL_STATUSES.has(value as ContentProposalStatus))
+    )
+      throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+    if (key === "errorCode" && (typeof value !== "string" || !/^[A-Z0-9_]{1,80}$/.test(value)))
+      throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
     if (key === "acceptedFields") {
-      if (!Array.isArray(value) || value.length > 20 || !value.every((item) => typeof item === "string" && (resourceType ? allowedContentCopilotFields(resourceType).includes(item) : /^[a-z_]{1,40}$/.test(item)))) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+      if (
+        !Array.isArray(value) ||
+        value.length > 20 ||
+        !value.every(
+          (item) =>
+            typeof item === "string" &&
+            (resourceType
+              ? allowedContentCopilotFields(resourceType).includes(item)
+              : /^[a-z_]{1,40}$/.test(item)),
+        )
+      )
+        throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
       (result as Record<string, unknown>)[key] = value;
       continue;
     }
     if (["latencyMs", "citationCount", "warningsCount"].includes(key)) {
-      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100000) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+      if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100000)
+        throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
       (result as Record<string, unknown>)[key] = value;
       continue;
     }
@@ -283,33 +346,73 @@ function sanitizeContentCopilotErrorCode(value: string) {
 }
 
 export function sanitizeContentCopilotUsageMetadata(metadata: Record<string, unknown> | undefined) {
-  const allowed = new Set(["inputTokens", "outputTokens", "totalTokens", "cachedTokens", "retryCount"]);
+  const allowed = new Set([
+    "inputTokens",
+    "outputTokens",
+    "totalTokens",
+    "cachedTokens",
+    "retryCount",
+  ]);
   const result: Record<string, number> = {};
   for (const [key, value] of Object.entries(metadata ?? {})) {
-    if (!allowed.has(key) || typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 10000000) throw contentCopilotError("COPILOT_USAGE_METADATA_INVALID");
+    if (
+      !allowed.has(key) ||
+      typeof value !== "number" ||
+      !Number.isInteger(value) ||
+      value < 0 ||
+      value > 10000000
+    )
+      throw contentCopilotError("COPILOT_USAGE_METADATA_INVALID");
     result[key] = value;
   }
   return result;
 }
 
-function assertContentCopilotAuditIdentity(input: { actorId: string; proposalId: string; resourceType: string; resourceId: string; action: string }) {
-  if (!CONTENT_COPILOT_AUDIT_ACTIONS.has(input.action) || !UUID_PATTERN.test(input.actorId) || !UUID_PATTERN.test(input.proposalId) || !UUID_PATTERN.test(input.resourceId) || !CONTENT_COPILOT_RESOURCE_TYPES.has(input.resourceType as ContentCopilotResourceType)) throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
+function assertContentCopilotAuditIdentity(input: {
+  actorId: string;
+  proposalId: string;
+  resourceType: string;
+  resourceId: string;
+  action: string;
+}) {
+  if (
+    !CONTENT_COPILOT_AUDIT_ACTIONS.has(input.action) ||
+    !UUID_PATTERN.test(input.actorId) ||
+    !UUID_PATTERN.test(input.proposalId) ||
+    !UUID_PATTERN.test(input.resourceId) ||
+    !CONTENT_COPILOT_RESOURCE_TYPES.has(input.resourceType as ContentCopilotResourceType)
+  )
+    throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");
 }
 
 export async function writeContentCopilotAudit(input: {
   actorId: string;
-  action: "content_copilot.generated" | "content_copilot.failed" | "content_copilot.applied" | "content_copilot.rejected" | "content_copilot.stale";
+  action:
+    | "content_copilot.generated"
+    | "content_copilot.failed"
+    | "content_copilot.applied"
+    | "content_copilot.rejected"
+    | "content_copilot.stale";
   proposalId: string;
   resourceType: string;
   resourceId: string;
   metadata?: ContentCopilotAuditMetadata;
 }) {
   assertContentCopilotAuditIdentity(input);
-  const metadata = sanitizeContentCopilotAuditMetadata(input.metadata, input.resourceType as ContentCopilotResourceType);
+  const metadata = sanitizeContentCopilotAuditMetadata(
+    input.metadata,
+    input.resourceType as ContentCopilotResourceType,
+  );
   await queryRows(
     `INSERT INTO ai_audit_logs (actor_type, actor_id, action, subject_type, subject_id, metadata)
      VALUES ('staff',$1,$2,$3,$4,$5::jsonb)`,
-    [input.actorId, input.action, input.resourceType, input.resourceId, JSON.stringify({ proposalId: input.proposalId, ...metadata })],
+    [
+      input.actorId,
+      input.action,
+      input.resourceType,
+      input.resourceId,
+      JSON.stringify({ proposalId: input.proposalId, ...metadata }),
+    ],
   );
 }
 
@@ -397,11 +500,13 @@ function uniqueFields(fields: string[]) {
 }
 
 function objectRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function jsonArray<T>(value: unknown): T[] {
-  return Array.isArray(value) ? value as T[] : [];
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
 function stringArray(value: unknown): string[] {
@@ -430,7 +535,8 @@ function postgresErrorCode(error: unknown) {
 function postgresErrorConstraint(error: unknown) {
   if (!error || typeof error !== "object") return null;
   if ("constraint" in error && typeof error.constraint === "string") return error.constraint;
-  if ("constraint_name" in error && typeof error.constraint_name === "string") return error.constraint_name;
+  if ("constraint_name" in error && typeof error.constraint_name === "string")
+    return error.constraint_name;
   return null;
 }
 

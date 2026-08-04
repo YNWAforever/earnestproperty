@@ -13,7 +13,7 @@ import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { getEstatePageContent } from "@/content/estate-pages";
-import { SITE_URL, estateSeo } from "@/content/seo";
+import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
 import {
   fetchEstateBySlug,
   fetchEstateTransactions,
@@ -51,6 +51,7 @@ export const Route = createFileRoute("/estate/$slug")({
             `${loaderData?.estate.name_zh ?? ""} ${loaderData?.estate.total_units ?? ""} 個單位，平均實呎 $${loaderData?.estate.avg_saleable_psf ?? ""}。即時放盤、成交、FAQ。`,
         },
       ],
+      links: loaderData?.estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
     };
   },
   errorComponent: ({ error }) => (

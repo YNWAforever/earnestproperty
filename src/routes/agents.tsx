@@ -3,6 +3,8 @@ import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { canonicalLink, SITE_URL } from "@/content/seo";
+import { itemListSchema } from "@/lib/schema";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
@@ -18,6 +20,7 @@ export const Route = createFileRoute("/agents")({
         content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
       },
     ],
+    links: [canonicalLink("/agents")],
   }),
   pendingComponent: AgentDirectoryPending,
   errorComponent: AgentDirectoryError,
@@ -26,9 +29,27 @@ export const Route = createFileRoute("/agents")({
 
 function AgentsPage() {
   const agents = Route.useLoaderData();
+  const listedAgents = agents.filter((agent) => agent.public_slug);
+  const listSchema =
+    listedAgents.length > 0
+      ? itemListSchema({
+          items: listedAgents.map((agent) => ({
+            url: `${SITE_URL}/agents/${agent.public_slug}`,
+            name: agent.name_zh || agent.name_en || "晉誠地產代理",
+          })),
+        })
+      : null;
 
   return (
     <main className="bg-background">
+      {listSchema ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({ "@context": "https://schema.org", ...listSchema }),
+          }}
+        />
+      ) : null}
       <AgentDirectoryHeader />
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         {agents.length === 0 ? <DirectoryEmptyState /> : null}
@@ -101,6 +122,9 @@ function AgentDirectoryCard({ agent }: { agent: NeonPublicAgentProfile }) {
           {agent.job_title ? <span>{agent.job_title}</span> : null}
           {agent.licence_no ? <span>牌照：{agent.licence_no}</span> : null}
         </div>
+        {agent.bio ? (
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{agent.bio}</p>
+        ) : null}
         {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
         <div className="mt-5 flex flex-wrap gap-2">
           {agent.public_slug ? (

@@ -10,6 +10,7 @@ import {
   fetchNeonFaqs,
   fetchNeonFeaturedProperties,
   fetchNeonListingCountsByEstate,
+  fetchNeonListingsForAgent,
   fetchNeonListingsForEstate,
   fetchNeonPropertyByLegacyDetailId,
   fetchNeonPropertyByListingNo,
@@ -17,7 +18,7 @@ import {
   fetchNeonSimilarListings,
   searchNeonListings,
 } from "@/lib/neon/public-data";
-import type { NeonPropertyRow } from "@/lib/neon/public-data.types";
+import type { NeonEstateOption, NeonPropertyRow } from "@/lib/neon/public-data.types";
 import { isWithinCorridorRegion } from "@/content/castle-peak-road";
 
 const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
@@ -168,6 +169,7 @@ export async function fetchListingCountsByEstate() {
 
 export type ListingFilters = {
   deal: "sale" | "rent" | "all";
+  keyword?: string;
   minPrice?: number;
   maxPrice?: number;
   bedrooms?: number;
@@ -327,6 +329,10 @@ export async function fetchListingsForEstate(estateSlug: string, limit = 6): Pro
   return [];
 }
 
+export async function fetchListingsForAgent(agentId: string, limit = 6): Promise<ListingRow[]> {
+  return (await fetchNeonListingsForAgent({ data: { agentId, limit } })) as ListingRow[];
+}
+
 export async function fetchPropertyByLegacyDetailId(oldId: string) {
   return fetchNeonPropertyByLegacyDetailId({ data: { oldId } });
 }
@@ -371,7 +377,24 @@ export async function fetchEstateTransactions(
 
 export async function fetchEstateOptions() {
   const estates = await fetchNeonEstateOptions();
-  return estates.map((estate) => withCanonicalSlug(estate));
+
+  // estates.slug is UNIQUE in the DB, but withCanonicalSlug collapses legacy
+  // slugs (belvedere-garden, sea-pearl-garden) onto their canonical ones
+  // (bellagio, rhine-garden) -- see ESTATE_DB_SLUG_FALLBACKS above. A database
+  // that still holds a legacy row alongside the seeded canonical one (which is
+  // exactly why ESTATE_DB_SLUG_FALLBACKS exists) would otherwise yield two
+  // dropdown options with the same value and the same React key. Prefer the
+  // already-canonical row so the surviving option is the one the rest of the
+  // app resolves against.
+  const byCanonicalSlug = new Map<string, ReturnType<typeof withCanonicalSlug<NeonEstateOption>>>();
+  for (const estate of estates as NeonEstateOption[]) {
+    const option = withCanonicalSlug(estate);
+    const isAlreadyCanonical = estate.slug === option.slug;
+    if (isAlreadyCanonical || !byCanonicalSlug.has(option.slug)) {
+      byCanonicalSlug.set(option.slug, option);
+    }
+  }
+  return [...byCanonicalSlug.values()];
 }
 
 export type ArticleSummary = {

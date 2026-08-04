@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SITE_YOUTUBE_CHANNEL, whatsappUrl } from "@/config/site";
+import { canonicalLink } from "@/content/seo";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
+import { videoObjectSchema } from "@/lib/schema";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-video-url.js";
 
 export const Route = createFileRoute("/videos")({
@@ -17,6 +19,7 @@ export const Route = createFileRoute("/videos")({
         content: "晉誠地產 YouTube影片入口，集中官方頻道影片及附影片的深井、青山公路、汀九樓盤。",
       },
     ],
+    links: [canonicalLink("/videos")],
   }),
   component: VideosPage,
 });
@@ -111,6 +114,7 @@ function CmsVideoCard({ video }: { video: CmsVideo }) {
       url={video.video_url}
       eyebrow="官方頻道"
       description={video.description}
+      uploadDate={video.created_at}
     />
   );
 }
@@ -143,17 +147,30 @@ function VideoFrame({
   eyebrow,
   description,
   footer,
+  uploadDate,
 }: {
   title: string;
   url: string;
   eyebrow: string;
   description?: string | null;
   footer?: ReactNode;
+  uploadDate?: string | null;
 }) {
   const embedUrl = getYouTubeEmbedUrl(url);
+  const videoSchema = embedUrl
+    ? videoObjectSchema({ name: title, description, embedUrl, uploadDate })
+    : null;
 
   return (
     <article className="overflow-hidden rounded-lg border bg-card shadow-card">
+      {videoSchema ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({ "@context": "https://schema.org", ...videoSchema }),
+          }}
+        />
+      ) : null}
       {embedUrl ? (
         <iframe
           src={embedUrl}

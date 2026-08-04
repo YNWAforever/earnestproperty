@@ -3,6 +3,10 @@ export type SiteBranch = {
   name: string;
   address: string;
   phone: string;
+  /** WhatsApp-capable mobile for this branch, distinct from `phone` -- the
+   * three branch numbers on file today are landlines and cannot receive
+   * WhatsApp. Only set once confirmed by the client. */
+  whatsapp?: string | null;
   estateSlugs: string[];
   districtSlugs: string[];
   /** Shop-front photo path under `public/`, if supplied. */
