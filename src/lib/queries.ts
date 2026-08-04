@@ -70,6 +70,9 @@ export type FeaturedProperty = {
   bathrooms: number | null;
   features: string[] | null;
   images: string[] | null;
+  // Already selected by `listingColumns`; surfaced here so the homepage's
+  // featured cards can badge which listings have a walkthrough video.
+  video_url: string | null;
   estates: { name_zh: string; slug: string; district_slug: string } | null;
 };
 
