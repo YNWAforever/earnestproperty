@@ -1,9 +1,21 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Brain, FileText, Pencil, Plus, RefreshCw, Save, Upload } from "lucide-react";
+import {
+  Brain,
+  FileText,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
@@ -19,6 +31,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -32,9 +51,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
 import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
+  deleteAdminFaq,
   fetchAdminCms,
   fetchAdminAiKnowledgeStatus,
   fetchAdminCmsVideos,
@@ -133,6 +154,21 @@ const emptyCmsVideo: AdminCmsVideoInput = {
   published: true,
 };
 
+// Captures the editing object's shape at the moment a dialog opens (the ref
+// only resets when the tracked value transitions to null, i.e. on close), so
+// any later field edit flips `isDirty`. Backs the dirty-close guard on every
+// editor dialog below -- before this, one stray click on the dim overlay or
+// Esc silently discarded a half-written article/estate/FAQ/video/media edit.
+function useEditingDirty<T>(value: T | null): boolean {
+  const baselineRef = useRef<string | null>(null);
+  if (value === null) {
+    baselineRef.current = null;
+  } else if (baselineRef.current === null) {
+    baselineRef.current = JSON.stringify(value);
+  }
+  return value !== null && JSON.stringify(value) !== baselineRef.current;
+}
+
 function AdminCms() {
   const { user } = useNeonAuth();
   const search = Route.useSearch();
@@ -141,6 +177,10 @@ function AdminCms() {
   const [mediaAssets, setMediaAssets] = useState<AdminMediaAssetRow[] | null>(null);
   const [knowledgeStatus, setKnowledgeStatus] = useState<AdminAiKnowledgeStatus | null>(null);
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
+  // A failed status fetch used to be swallowed, leaving `knowledgeStatus` null --
+  // which the badge rendered as 「AI 未啟用」, i.e. a read failure looked like the
+  // AI being switched off. Tracked separately so it can say so.
+  const [knowledgeError, setKnowledgeError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const activeTab = search.tab ?? "estates";
   const [saving, setSaving] = useState(false);
@@ -153,7 +193,22 @@ function AdminCms() {
   const [faqImportText, setFaqImportText] = useState("");
   const [faqImportScope, setFaqImportScope] = useState(emptyFaq.scope);
   const [faqImportSaving, setFaqImportSaving] = useState(false);
+  const [faqImportConfirmOpen, setFaqImportConfirmOpen] = useState(false);
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
+  const [deletingFaq, setDeletingFaq] = useState<AdminFaqCmsRow | null>(null);
+  const [faqDeleting, setFaqDeleting] = useState(false);
+  const [faqDeleteError, setFaqDeleteError] = useState<string | null>(null);
+  // One box per tab, not one shared box: staff move between tabs mid-task and a
+  // shared query would silently filter the tab they just landed on.
+  const [searchByTab, setSearchByTab] = useState<Record<AdminCmsTab, string>>({
+    estates: "",
+    articles: "",
+    videos: "",
+    faqs: "",
+    media: "",
+  });
+  const [faqScopeFilter, setFaqScopeFilter] = useState("all");
+  const faqFileInputRef = useRef<HTMLInputElement>(null);
 
   const refreshCmsData = useCallback(async () => {
     const [cms, media, videos] = await Promise.all([
@@ -172,6 +227,12 @@ function AdminCms() {
     setKnowledgeLoading(true);
     try {
       setKnowledgeStatus((await fetchAdminAiKnowledgeStatus()) as AdminAiKnowledgeStatus);
+      setKnowledgeError(null);
+    } catch (err) {
+      // Deliberately not rethrown: a status read failing must not report the
+      // rebuild that just succeeded as a failure.
+      setKnowledgeStatus(null);
+      setKnowledgeError(errorText(err));
     } finally {
       setKnowledgeLoading(false);
     }
@@ -180,23 +241,98 @@ function AdminCms() {
   useEffect(() => {
     if (!user) return;
     refreshCmsData().catch((err) => setError(errorText(err)));
-    refreshKnowledgeStatus().catch(() => undefined);
+    void refreshKnowledgeStatus();
   }, [refreshCmsData, refreshKnowledgeStatus, user]);
+
+  const filteredEstates = useMemo(
+    () =>
+      (data?.estates ?? []).filter((estate) =>
+        matchesSearch(searchByTab.estates, [
+          estate.name_zh,
+          estate.name_en,
+          estate.slug,
+          estate.district_slug,
+          estate.seo_title,
+        ]),
+      ),
+    [data?.estates, searchByTab.estates],
+  );
+
+  const filteredArticles = useMemo(
+    () =>
+      (data?.articles ?? []).filter((article) =>
+        matchesSearch(searchByTab.articles, [
+          article.title,
+          article.slug,
+          article.category,
+          article.seo_title,
+        ]),
+      ),
+    [data?.articles, searchByTab.articles],
+  );
+
+  const filteredCmsVideos = useMemo(
+    () =>
+      (cmsVideos ?? []).filter((video) =>
+        matchesSearch(searchByTab.videos, [video.title, video.description, video.video_url]),
+      ),
+    [cmsVideos, searchByTab.videos],
+  );
+
+  const filteredMediaAssets = useMemo(
+    () =>
+      (mediaAssets ?? []).filter((asset) =>
+        matchesSearch(searchByTab.media, [asset.pathname, asset.alt_text, asset.owner_id]),
+      ),
+    [mediaAssets, searchByTab.media],
+  );
+
+  const faqScopes = useMemo(
+    () => Array.from(new Set((data?.faqs ?? []).map((faq) => faq.scope))),
+    [data?.faqs],
+  );
 
   const faqsByScope = useMemo(() => {
     const groups = new Map<string, AdminFaqCmsRow[]>();
     for (const faq of data?.faqs ?? []) {
+      if (faqScopeFilter !== "all" && faq.scope !== faqScopeFilter) continue;
+      if (!matchesSearch(searchByTab.faqs, [faq.question, faq.answer, faq.scope])) continue;
       const existing = groups.get(faq.scope) ?? [];
       existing.push(faq);
       groups.set(faq.scope, existing);
     }
     return Array.from(groups.entries());
-  }, [data?.faqs]);
+  }, [data?.faqs, faqScopeFilter, searchByTab.faqs]);
 
   const parsedFaqImportRows = useMemo(
     () => parseAdminFaqImport(faqImportText, faqImportScope),
     [faqImportScope, faqImportText],
   );
+
+  /**
+   * The importer writes with `upsert: true` (`ON CONFLICT (scope, question) DO
+   * UPDATE SET answer`), so a re-import silently replaces answers. Diffing the
+   * parsed rows against the loaded FAQs is what turns that into a decision staff
+   * can actually make before submitting.
+   */
+  const faqImportPreview = useMemo(() => {
+    const existing = new Map(
+      (data?.faqs ?? []).map((faq) => [faqImportKey(faq.scope, faq.question), faq]),
+    );
+    return parsedFaqImportRows.map((row) => {
+      const scope = row.scope ?? faqImportScope;
+      const current = existing.get(faqImportKey(scope, row.question));
+      return {
+        scope,
+        question: row.question,
+        answer: row.answer,
+        previousAnswer: current?.answer ?? null,
+        overwrite: Boolean(current),
+      };
+    });
+  }, [data?.faqs, faqImportScope, parsedFaqImportRows]);
+
+  const faqImportOverwriteCount = faqImportPreview.filter((row) => row.overwrite).length;
 
   async function handleSaveEstate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -265,6 +401,23 @@ function AdminCms() {
     }
   }
 
+  async function handleDeleteFaq() {
+    if (!deletingFaq) return;
+    setFaqDeleting(true);
+    setFaqDeleteError(null);
+    try {
+      assertNoServerError(await deleteAdminFaq({ data: { id: deletingFaq.id } }));
+      await refreshCmsData();
+      toast.success("已刪除");
+      setDeletingFaq(null);
+    } catch (err) {
+      const message = errorText(err);
+      setFaqDeleteError(message === "Not found" ? "此 FAQ 已被刪除，請重新載入頁面。" : message);
+    } finally {
+      setFaqDeleting(false);
+    }
+  }
+
   async function handleSaveCmsVideo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingCmsVideo) return;
@@ -304,40 +457,66 @@ function AdminCms() {
     }
   }
 
-  async function handleImportFaqs(event: FormEvent<HTMLFormElement>) {
+  function handleImportFaqsSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!parsedFaqImportRows.length) {
       toast.error("未能從檔案內容解析 FAQ");
       return;
     }
+    setFaqImportConfirmOpen(true);
+  }
+
+  async function handleImportFaqs() {
+    if (!faqImportPreview.length) return;
 
     setFaqImportSaving(true);
+    const total = faqImportPreview.length;
+    let imported = 0;
+    let failure: { position: number; message: string } | null = null;
     try {
-      for (const [index, row] of parsedFaqImportRows.entries()) {
-        assertNoServerError(
-          await saveAdminFaq({
-            data: {
-              scope: row.scope ?? faqImportScope,
-              question: row.question,
-              answer: row.answer,
-              sort_order: index + 1,
-              // Bulk re-import of the same file is expected and must update in
-              // place. The single-FAQ form deliberately does not set this.
-              upsert: true,
-            },
-          }),
-        );
+      for (const [index, row] of faqImportPreview.entries()) {
+        try {
+          assertNoServerError(
+            await saveAdminFaq({
+              data: {
+                scope: row.scope,
+                question: row.question,
+                answer: row.answer,
+                sort_order: index + 1,
+                // Bulk re-import of the same file is expected and must update in
+                // place. The single-FAQ form deliberately does not set this.
+                upsert: true,
+              },
+            }),
+          );
+          imported += 1;
+        } catch (err) {
+          // Stop at the first failure and report how far it got: the loop is not
+          // transactional, so silently continuing left staff with no idea which
+          // rows landed in the live agent's knowledge base.
+          failure = { position: index + 1, message: errorText(err) };
+          break;
+        }
       }
+
       await refreshCmsData();
+      if (failure) {
+        setFaqImportConfirmOpen(false);
+        toast.error(
+          `已匯入 ${imported}／${total}，第 ${failure.position} 條失敗：${failure.message}`,
+        );
+        return;
+      }
+
       const result = await rebuildAdminAiKnowledge();
       await refreshKnowledgeStatus();
-      toast.success(
-        `已匯入 ${parsedFaqImportRows.length} 條 FAQ，AI 知識庫已重建 ${result.indexedChunks} 段內容`,
-      );
+      toast.success(`已匯入 ${total} 條 FAQ，AI 知識庫已重建 ${result.indexedChunks} 段內容`);
+      setFaqImportConfirmOpen(false);
       setFaqImportOpen(false);
       setFaqImportText("");
     } catch (err) {
-      toast.error(errorText(err));
+      setFaqImportConfirmOpen(false);
+      toast.error(`已匯入 ${imported}／${total}，其後失敗：${errorText(err)}`);
     } finally {
       setFaqImportSaving(false);
     }
@@ -397,7 +576,9 @@ function AdminCms() {
                   <Brain className="h-4 w-4 text-muted-foreground" />
                 </div>
                 <div>
-                  <CardTitle className="text-base">AI Agent FAQ Knowledge</CardTitle>
+                  <CardTitle as="h2" className="text-base">
+                    AI Agent FAQ Knowledge
+                  </CardTitle>
                   <CardDescription>
                     FAQ、屋苑、文章及放盤會被索引成前台 live agent 的回答來源。
                   </CardDescription>
@@ -414,8 +595,16 @@ function AdminCms() {
             </CardHeader>
             <CardContent className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-6">
               <div className="flex items-center gap-2">
-                <Badge variant={knowledgeStatus?.enabled ? "default" : "secondary"}>
-                  {knowledgeStatus?.enabled ? "AI 已啟用" : "AI 未啟用"}
+                <Badge
+                  variant={
+                    knowledgeError ? "outline" : knowledgeStatus?.enabled ? "default" : "secondary"
+                  }
+                >
+                  {knowledgeError
+                    ? "狀態未知"
+                    : knowledgeStatus?.enabled
+                      ? "AI 已啟用"
+                      : "AI 未啟用"}
                 </Badge>
               </div>
               <KnowledgeMetric
@@ -423,21 +612,57 @@ function AdminCms() {
                 value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.sources}
               />
               <KnowledgeMetric
-                label="Chunks"
+                label="內容段數"
                 value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.chunks}
               />
               <KnowledgeMetric
-                label="Public"
+                label="公開段數"
                 value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.publicChunks}
               />
               <KnowledgeMetric
-                label="Stale"
+                label="待重建段數"
                 value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.staleChunks}
               />
               <KnowledgeMetric
-                label="Last indexed"
+                label="最後索引時間"
                 value={formatDateTime(knowledgeStatus?.lastIndexedAt)}
               />
+              {knowledgeError ? (
+                <div
+                  className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6"
+                  role="alert"
+                >
+                  <p className="text-sm text-muted-foreground">
+                    狀態未知 — 未能讀取 AI 知識庫狀態，請重新載入。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void refreshKnowledgeStatus()}
+                    disabled={knowledgeLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
+                    重新載入狀態
+                  </Button>
+                </div>
+              ) : null}
+              {knowledgeStatus && knowledgeStatus.staleChunks > 0 ? (
+                <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6">
+                  <p className="text-sm text-muted-foreground">
+                    有 {knowledgeStatus.staleChunks} 段內容已過時，前台 AI
+                    仍會引用舊資料，請重建索引。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRebuildKnowledge}
+                    disabled={knowledgeLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
+                    重建索引
+                  </Button>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
@@ -445,9 +670,11 @@ function AdminCms() {
             value={activeTab}
             onValueChange={(tab) => {
               const nextTab = tab as AdminCmsTab;
+              // A real history entry per tab: `replace: true` made browser Back
+              // exit the CMS entirely instead of stepping back one tab.
               void navigate({
                 search: { tab: nextTab === "estates" ? undefined : nextTab },
-                replace: true,
+                resetScroll: false,
               });
             }}
           >
@@ -463,16 +690,27 @@ function AdminCms() {
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-base">屋苑 SEO</CardTitle>
+                    <CardTitle as="h2" className="text-base">
+                      屋苑 SEO
+                    </CardTitle>
                     <CardDescription>SEO 標題、描述、設施及屋苑頁內容。</CardDescription>
                   </div>
-                  <Button onClick={() => setEditingEstate({ ...emptyEstate })}>
-                    <Plus className="h-4 w-4" />
-                    新增屋苑
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TableSearch
+                      label="搜尋屋苑名稱、slug 或地區"
+                      value={searchByTab.estates}
+                      onChange={(value) =>
+                        setSearchByTab((current) => ({ ...current, estates: value }))
+                      }
+                    />
+                    <Button onClick={() => setEditingEstate({ ...emptyEstate })}>
+                      <Plus className="h-4 w-4" />
+                      新增屋苑
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {data.estates.length ? (
+                  {filteredEstates.length ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -484,17 +722,19 @@ function AdminCms() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {data.estates.map((estate) => (
+                        {filteredEstates.map((estate) => (
                           <TableRow key={estate.id}>
                             <TableCell>
-                              <p className="font-medium">{estate.name_zh}</p>
+                              <p className="font-medium" title={estate.name_zh}>
+                                {estate.name_zh}
+                              </p>
                               <p className="text-xs text-muted-foreground">{estate.slug}</p>
                             </TableCell>
                             <TableCell>{estate.district_slug}</TableCell>
                             <TableCell className="text-right">
                               {estate.total_units?.toLocaleString() ?? "—"}
                             </TableCell>
-                            <TableCell className="max-w-xs truncate">
+                            <TableCell className="max-w-xs truncate" title={estate.seo_title ?? ""}>
                               {estate.seo_title ?? "—"}
                             </TableCell>
                             <TableCell className="text-right">
@@ -513,16 +753,24 @@ function AdminCms() {
                     </Table>
                   ) : (
                     <div className="p-6">
-                      <AdminEmptyState
-                        title="未有屋苑"
-                        description="新增第一個屋苑後即可管理 SEO 及頁面內容。"
-                        action={
-                          <Button onClick={() => setEditingEstate({ ...emptyEstate })}>
-                            <Plus className="h-4 w-4" />
-                            新增屋苑
-                          </Button>
-                        }
-                      />
+                      {searchByTab.estates.trim() ? (
+                        <NoSearchMatch
+                          label="屋苑"
+                          query={searchByTab.estates}
+                          onClear={() => setSearchByTab((current) => ({ ...current, estates: "" }))}
+                        />
+                      ) : (
+                        <AdminEmptyState
+                          title="未有屋苑"
+                          description="新增第一個屋苑後即可管理 SEO 及頁面內容。"
+                          action={
+                            <Button onClick={() => setEditingEstate({ ...emptyEstate })}>
+                              <Plus className="h-4 w-4" />
+                              新增屋苑
+                            </Button>
+                          }
+                        />
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -533,16 +781,27 @@ function AdminCms() {
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-base">文章編輯</CardTitle>
+                    <CardTitle as="h2" className="text-base">
+                      文章編輯
+                    </CardTitle>
                     <CardDescription>管理文章內容、分類、發布狀態及 SEO。</CardDescription>
                   </div>
-                  <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
-                    <Plus className="h-4 w-4" />
-                    新增文章
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TableSearch
+                      label="搜尋標題、slug 或分類"
+                      value={searchByTab.articles}
+                      onChange={(value) =>
+                        setSearchByTab((current) => ({ ...current, articles: value }))
+                      }
+                    />
+                    <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
+                      <Plus className="h-4 w-4" />
+                      新增文章
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {data.articles.length ? (
+                  {filteredArticles.length ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -554,7 +813,7 @@ function AdminCms() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {data.articles.map((article) => (
+                        {filteredArticles.map((article) => (
                           <TableRow key={article.id}>
                             <TableCell>
                               <p className="font-medium">{article.title}</p>
@@ -585,16 +844,26 @@ function AdminCms() {
                     </Table>
                   ) : (
                     <div className="p-6">
-                      <AdminEmptyState
-                        title="未有文章"
-                        description="新增文章後即可管理內容及發布狀態。"
-                        action={
-                          <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
-                            <Plus className="h-4 w-4" />
-                            新增文章
-                          </Button>
-                        }
-                      />
+                      {searchByTab.articles.trim() ? (
+                        <NoSearchMatch
+                          label="文章"
+                          query={searchByTab.articles}
+                          onClear={() =>
+                            setSearchByTab((current) => ({ ...current, articles: "" }))
+                          }
+                        />
+                      ) : (
+                        <AdminEmptyState
+                          title="未有文章"
+                          description="新增文章後即可管理內容及發布狀態。"
+                          action={
+                            <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
+                              <Plus className="h-4 w-4" />
+                              新增文章
+                            </Button>
+                          }
+                        />
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -605,16 +874,27 @@ function AdminCms() {
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-base">YouTube影片</CardTitle>
+                    <CardTitle as="h2" className="text-base">
+                      YouTube影片
+                    </CardTitle>
                     <CardDescription>管理 /videos 顯示的官方頻道影片連結。</CardDescription>
                   </div>
-                  <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
-                    <Plus className="h-4 w-4" />
-                    新增影片
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TableSearch
+                      label="搜尋影片標題或描述"
+                      value={searchByTab.videos}
+                      onChange={(value) =>
+                        setSearchByTab((current) => ({ ...current, videos: value }))
+                      }
+                    />
+                    <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
+                      <Plus className="h-4 w-4" />
+                      新增影片
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {cmsVideos?.length ? (
+                  {filteredCmsVideos.length ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -625,7 +905,7 @@ function AdminCms() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {cmsVideos.map((video) => (
+                        {filteredCmsVideos.map((video) => (
                           <TableRow key={video.id}>
                             <TableCell>
                               <p className="font-medium">{video.title}</p>
@@ -660,16 +940,24 @@ function AdminCms() {
                     </Table>
                   ) : (
                     <div className="p-6">
-                      <AdminEmptyState
-                        title="未有 YouTube 影片"
-                        description="新增影片連結後，/videos 會顯示官方頻道影片。"
-                        action={
-                          <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
-                            <Plus className="h-4 w-4" />
-                            新增影片
-                          </Button>
-                        }
-                      />
+                      {searchByTab.videos.trim() ? (
+                        <NoSearchMatch
+                          label="影片"
+                          query={searchByTab.videos}
+                          onClear={() => setSearchByTab((current) => ({ ...current, videos: "" }))}
+                        />
+                      ) : (
+                        <AdminEmptyState
+                          title="未有 YouTube 影片"
+                          description="新增影片連結後，/videos 會顯示官方頻道影片。"
+                          action={
+                            <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
+                              <Plus className="h-4 w-4" />
+                              新增影片
+                            </Button>
+                          }
+                        />
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -680,12 +968,34 @@ function AdminCms() {
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <CardTitle className="text-base">FAQ / AI Agent 配置</CardTitle>
+                    <CardTitle as="h2" className="text-base">
+                      FAQ / AI Agent 配置
+                    </CardTitle>
                     <CardDescription>
                       上載或貼上 FAQ 檔案，儲存後會自動重建 AI live agent 知識庫。
                     </CardDescription>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select value={faqScopeFilter} onValueChange={setFaqScopeFilter}>
+                      <SelectTrigger className="w-40" aria-label="依分組篩選">
+                        <SelectValue placeholder="全部分組" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">全部分組</SelectItem>
+                        {faqScopes.map((scope) => (
+                          <SelectItem key={scope} value={scope}>
+                            {scope}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <TableSearch
+                      label="搜尋問題或答案"
+                      value={searchByTab.faqs}
+                      onChange={(value) =>
+                        setSearchByTab((current) => ({ ...current, faqs: value }))
+                      }
+                    />
                     <Button variant="outline" asChild>
                       <label>
                         <Upload className="h-4 w-4" />
@@ -723,7 +1033,7 @@ function AdminCms() {
                           <TableHead>分組</TableHead>
                           <TableHead>問題</TableHead>
                           <TableHead className="text-right">排序</TableHead>
-                          <TableHead className="w-28 text-right">操作</TableHead>
+                          <TableHead className="w-40 text-right">操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -742,20 +1052,30 @@ function AdminCms() {
                                 <TableCell>{faq.scope}</TableCell>
                                 <TableCell>
                                   <p className="font-medium">{faq.question}</p>
-                                  <p className="line-clamp-1 text-xs text-muted-foreground">
+                                  <p className="line-clamp-2 text-xs text-muted-foreground">
                                     {faq.answer}
                                   </p>
                                 </TableCell>
                                 <TableCell className="text-right">{faq.sort_order}</TableCell>
                                 <TableCell className="text-right">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setEditingFaq(faqToInput(faq))}
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                    編輯
-                                  </Button>
+                                  <div className="flex justify-end gap-1.5">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setEditingFaq(faqToInput(faq))}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                      編輯
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setDeletingFaq(faq)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      刪除
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -765,16 +1085,24 @@ function AdminCms() {
                     </Table>
                   ) : (
                     <div className="p-6">
-                      <AdminEmptyState
-                        title="未有 FAQ"
-                        description="新增 FAQ 後即可在對應頁面顯示常見問題。"
-                        action={
-                          <Button onClick={() => setEditingFaq({ ...emptyFaq })}>
-                            <Plus className="h-4 w-4" />
-                            新增 FAQ
-                          </Button>
-                        }
-                      />
+                      {searchByTab.faqs.trim() ? (
+                        <NoSearchMatch
+                          label="FAQ"
+                          query={searchByTab.faqs}
+                          onClear={() => setSearchByTab((current) => ({ ...current, faqs: "" }))}
+                        />
+                      ) : (
+                        <AdminEmptyState
+                          title="未有 FAQ"
+                          description="新增 FAQ 後即可在對應頁面顯示常見問題。"
+                          action={
+                            <Button onClick={() => setEditingFaq({ ...emptyFaq })}>
+                              <Plus className="h-4 w-4" />
+                              新增 FAQ
+                            </Button>
+                          }
+                        />
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -783,13 +1111,26 @@ function AdminCms() {
 
             <TabsContent value="media">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">媒體庫</CardTitle>
-                  <CardDescription>更新圖片替代文字，改善搜尋及無障礙內容。</CardDescription>
+                <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <CardTitle as="h2" className="text-base">
+                      媒體庫
+                    </CardTitle>
+                    <CardDescription>更新圖片替代文字，改善搜尋及無障礙內容。</CardDescription>
+                  </div>
+                  {mediaAssets ? (
+                    <TableSearch
+                      label="搜尋檔案路徑或替代文字"
+                      value={searchByTab.media}
+                      onChange={(value) =>
+                        setSearchByTab((current) => ({ ...current, media: value }))
+                      }
+                    />
+                  ) : null}
                 </CardHeader>
                 <CardContent className="p-0">
                   {!mediaAssets ? <Skeleton className="m-6 h-48 w-auto" /> : null}
-                  {mediaAssets?.length ? (
+                  {filteredMediaAssets.length ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -801,7 +1142,7 @@ function AdminCms() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {mediaAssets.map((asset) => (
+                        {filteredMediaAssets.map((asset) => (
                           <TableRow key={asset.id}>
                             <TableCell>
                               <a
@@ -841,12 +1182,20 @@ function AdminCms() {
                       </TableBody>
                     </Table>
                   ) : null}
-                  {mediaAssets && !mediaAssets.length ? (
+                  {mediaAssets && !filteredMediaAssets.length ? (
                     <div className="p-6">
-                      <AdminEmptyState
-                        title="未有媒體"
-                        description="上載相片後即可在媒體庫管理替代文字。"
-                      />
+                      {searchByTab.media.trim() ? (
+                        <NoSearchMatch
+                          label="媒體"
+                          query={searchByTab.media}
+                          onClear={() => setSearchByTab((current) => ({ ...current, media: "" }))}
+                        />
+                      ) : (
+                        <AdminEmptyState
+                          title="未有媒體"
+                          description="上載相片後即可在媒體庫管理替代文字。"
+                        />
+                      )}
                     </div>
                   ) : null}
                 </CardContent>
@@ -898,6 +1247,26 @@ function AdminCms() {
             onClose={() => setEditingFaq(null)}
             onSubmit={handleSaveFaq}
           />
+          <AdminConfirmDialog
+            open={deletingFaq !== null}
+            title="刪除 FAQ"
+            description={
+              deletingFaq
+                ? `確定要刪除「${deletingFaq.question}」？此操作無法復原，公開頁面及 AI Agent 知識庫會即時移除此問答。`
+                : ""
+            }
+            confirmLabel="刪除"
+            confirmVariant="destructive"
+            isPending={faqDeleting}
+            error={faqDeleteError}
+            onOpenChange={(open) => {
+              if (!open) {
+                setDeletingFaq(null);
+                setFaqDeleteError(null);
+              }
+            }}
+            onConfirm={handleDeleteFaq}
+          />
           <FaqImportDialog
             open={faqImportOpen}
             scope={faqImportScope}
@@ -907,8 +1276,51 @@ function AdminCms() {
             onScopeChange={setFaqImportScope}
             onTextChange={setFaqImportText}
             onClose={() => setFaqImportOpen(false)}
-            onSubmit={handleImportFaqs}
+            onSubmit={handleImportFaqsSubmit}
           />
+          <AdminConfirmDialog
+            open={faqImportConfirmOpen}
+            title="確認匯入 FAQ"
+            description={
+              faqImportOverwriteCount > 0
+                ? `共 ${faqImportPreview.length} 條，其中 ${faqImportOverwriteCount} 條會覆寫現有答案（相同分組及問題視為同一條）。此操作無法復原。`
+                : `共 ${faqImportPreview.length} 條，全部為新增，不會覆寫現有 FAQ。`
+            }
+            confirmLabel="確認匯入"
+            confirmVariant={faqImportOverwriteCount > 0 ? "destructive" : "default"}
+            isPending={faqImportSaving}
+            onOpenChange={setFaqImportConfirmOpen}
+            onConfirm={handleImportFaqs}
+          >
+            {faqImportOverwriteCount > 0 ? (
+              <div className="max-h-48 overflow-y-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>問題</TableHead>
+                      <TableHead>狀態</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {faqImportPreview.map((row) => (
+                      <TableRow key={`${row.scope}::${row.question}`}>
+                        <TableCell className="max-w-xs truncate" title={row.question}>
+                          {row.question}
+                        </TableCell>
+                        <TableCell>
+                          {row.overwrite ? (
+                            <Badge variant="destructive">覆寫</Badge>
+                          ) : (
+                            <Badge variant="outline">新增</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : null}
+          </AdminConfirmDialog>
           <MediaDialog
             media={editingMedia}
             saving={saving}
@@ -937,64 +1349,72 @@ function CmsVideoDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { requestClose, dialog } = useDirtyCloseGuard({
+    isDirty: useEditingDirty(video),
+    onClose,
+    description: "你未儲存的影片修改會遺失。",
+  });
   return (
-    <Dialog open={!!video} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
-        <DialogHeader>
-          <DialogTitle>{video?.id ? "編輯 YouTube 影片" : "新增 YouTube 影片"}</DialogTitle>
-          <DialogDescription>影片會顯示於 /videos。關閉發布即可隱藏。</DialogDescription>
-        </DialogHeader>
-        {video ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-            <form className="grid gap-4" onSubmit={onSubmit}>
-              <TextField
-                label="標題"
-                value={video.title}
-                onChange={(value) => onChange({ ...video, title: value })}
-                required
+    <>
+      <Dialog open={!!video} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{video?.id ? "編輯 YouTube 影片" : "新增 YouTube 影片"}</DialogTitle>
+            <DialogDescription>影片會顯示於 /videos。關閉發布即可隱藏。</DialogDescription>
+          </DialogHeader>
+          {video ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+              <form className="grid gap-4" onSubmit={onSubmit}>
+                <TextField
+                  label="標題"
+                  value={video.title}
+                  onChange={(value) => onChange({ ...video, title: value })}
+                  required
+                />
+                <TextField
+                  label="YouTube 連結"
+                  value={video.video_url}
+                  onChange={(value) => onChange({ ...video, video_url: value })}
+                  required
+                />
+                <TextAreaField
+                  label="描述"
+                  value={video.description ?? ""}
+                  onChange={(value) => onChange({ ...video, description: nullIfBlank(value) })}
+                  rows={3}
+                />
+                <NumberField
+                  label="排序"
+                  value={video.sort_order}
+                  onChange={(value) => onChange({ ...video, sort_order: value ?? 0 })}
+                />
+                <Field label="發布">
+                  <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
+                    <Switch
+                      checked={video.published}
+                      onCheckedChange={(checked) => onChange({ ...video, published: checked })}
+                      aria-label="切換影片發布狀態"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {video.published ? "已發布" : "已隱藏"}
+                    </span>
+                  </div>
+                </Field>
+                <EditorFooter saving={saving} onClose={requestClose} />
+              </form>
+              <AdminContentCopilot
+                resourceType="video"
+                resourceId={video.id ?? null}
+                fingerprintValues={fingerprintValues}
+                values={{ title: video.title, description: video.description }}
+                onApply={(patch) => onChange({ ...video, ...patch })}
               />
-              <TextField
-                label="YouTube 連結"
-                value={video.video_url}
-                onChange={(value) => onChange({ ...video, video_url: value })}
-                required
-              />
-              <TextAreaField
-                label="描述"
-                value={video.description ?? ""}
-                onChange={(value) => onChange({ ...video, description: nullIfBlank(value) })}
-                rows={3}
-              />
-              <NumberField
-                label="排序"
-                value={video.sort_order}
-                onChange={(value) => onChange({ ...video, sort_order: value ?? 0 })}
-              />
-              <Field label="發布">
-                <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
-                  <Switch
-                    checked={video.published}
-                    onCheckedChange={(checked) => onChange({ ...video, published: checked })}
-                    aria-label="切換影片發布狀態"
-                  />
-                  <span className="text-sm text-muted-foreground">
-                    {video.published ? "已發布" : "已隱藏"}
-                  </span>
-                </div>
-              </Field>
-              <EditorFooter saving={saving} onClose={onClose} />
-            </form>
-            <AdminContentCopilot
-              resourceType="video"
-              resourceId={video.id ?? null}
-              fingerprintValues={fingerprintValues}
-              values={{ title: video.title, description: video.description }}
-              onApply={(patch) => onChange({ ...video, ...patch })}
-            />
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      {dialog}
+    </>
   );
 }
 
@@ -1013,118 +1433,126 @@ function EstateDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { requestClose, dialog } = useDirtyCloseGuard({
+    isDirty: useEditingDirty(estate),
+    onClose,
+    description: "你未儲存的屋苑 SEO 修改會遺失。",
+  });
   return (
-    <Dialog open={!!estate} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
-        <DialogHeader>
-          <DialogTitle>{estate?.id ? "編輯屋苑 SEO" : "新增屋苑 SEO"}</DialogTitle>
-          <DialogDescription>完整欄位會一併儲存，避免覆寫未載入資料。</DialogDescription>
-        </DialogHeader>
-        {estate ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-            <form className="grid gap-4" onSubmit={onSubmit}>
-              <div className="grid gap-4 md:grid-cols-3">
-                <TextField
-                  label="Slug"
-                  value={estate.slug}
-                  onChange={(value) => onChange({ ...estate, slug: value })}
-                  required
+    <>
+      <Dialog open={!!estate} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{estate?.id ? "編輯屋苑 SEO" : "新增屋苑 SEO"}</DialogTitle>
+            <DialogDescription>完整欄位會一併儲存，避免覆寫未載入資料。</DialogDescription>
+          </DialogHeader>
+          {estate ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+              <form className="grid gap-4" onSubmit={onSubmit}>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <TextField
+                    label="Slug"
+                    value={estate.slug}
+                    onChange={(value) => onChange({ ...estate, slug: value })}
+                    required
+                  />
+                  <TextField
+                    label="中文名"
+                    value={estate.name_zh}
+                    onChange={(value) => onChange({ ...estate, name_zh: value })}
+                    required
+                  />
+                  <TextField
+                    label="英文名"
+                    value={estate.name_en ?? ""}
+                    onChange={(value) => onChange({ ...estate, name_en: nullIfBlank(value) })}
+                  />
+                  <TextField
+                    label="地區"
+                    value={estate.district_slug}
+                    onChange={(value) => onChange({ ...estate, district_slug: value })}
+                    required
+                  />
+                  <TextField
+                    label="發展商"
+                    value={estate.developer ?? ""}
+                    onChange={(value) => onChange({ ...estate, developer: nullIfBlank(value) })}
+                  />
+                  <TextField
+                    label="Hero 圖片"
+                    value={estate.hero_image ?? ""}
+                    onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
+                  />
+                  <NumberField
+                    label="落成年份"
+                    value={estate.year_completed}
+                    onChange={(value) => onChange({ ...estate, year_completed: value })}
+                  />
+                  <NumberField
+                    label="期數"
+                    value={estate.phases}
+                    onChange={(value) => onChange({ ...estate, phases: value })}
+                  />
+                  <NumberField
+                    label="伙數"
+                    value={estate.total_units}
+                    onChange={(value) => onChange({ ...estate, total_units: value })}
+                  />
+                  <NumberField
+                    label="面積下限"
+                    value={estate.area_min}
+                    onChange={(value) => onChange({ ...estate, area_min: value })}
+                  />
+                  <NumberField
+                    label="面積上限"
+                    value={estate.area_max}
+                    onChange={(value) => onChange({ ...estate, area_max: value })}
+                  />
+                </div>
+                <TextAreaField
+                  label="設施"
+                  value={estate.facilities.join("\n")}
+                  onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
+                  rows={4}
+                />
+                <TextAreaField
+                  label="描述"
+                  value={estate.description ?? ""}
+                  onChange={(value) => onChange({ ...estate, description: nullIfBlank(value) })}
+                  rows={5}
                 />
                 <TextField
-                  label="中文名"
-                  value={estate.name_zh}
-                  onChange={(value) => onChange({ ...estate, name_zh: value })}
-                  required
+                  label="SEO 標題"
+                  value={estate.seo_title ?? ""}
+                  onChange={(value) => onChange({ ...estate, seo_title: nullIfBlank(value) })}
                 />
-                <TextField
-                  label="英文名"
-                  value={estate.name_en ?? ""}
-                  onChange={(value) => onChange({ ...estate, name_en: nullIfBlank(value) })}
+                <TextAreaField
+                  label="SEO 描述"
+                  value={estate.seo_description ?? ""}
+                  onChange={(value) => onChange({ ...estate, seo_description: nullIfBlank(value) })}
+                  rows={3}
                 />
-                <TextField
-                  label="地區"
-                  value={estate.district_slug}
-                  onChange={(value) => onChange({ ...estate, district_slug: value })}
-                  required
-                />
-                <TextField
-                  label="發展商"
-                  value={estate.developer ?? ""}
-                  onChange={(value) => onChange({ ...estate, developer: nullIfBlank(value) })}
-                />
-                <TextField
-                  label="Hero 圖片"
-                  value={estate.hero_image ?? ""}
-                  onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
-                />
-                <NumberField
-                  label="落成年份"
-                  value={estate.year_completed}
-                  onChange={(value) => onChange({ ...estate, year_completed: value })}
-                />
-                <NumberField
-                  label="期數"
-                  value={estate.phases}
-                  onChange={(value) => onChange({ ...estate, phases: value })}
-                />
-                <NumberField
-                  label="伙數"
-                  value={estate.total_units}
-                  onChange={(value) => onChange({ ...estate, total_units: value })}
-                />
-                <NumberField
-                  label="面積下限"
-                  value={estate.area_min}
-                  onChange={(value) => onChange({ ...estate, area_min: value })}
-                />
-                <NumberField
-                  label="面積上限"
-                  value={estate.area_max}
-                  onChange={(value) => onChange({ ...estate, area_max: value })}
-                />
-              </div>
-              <TextAreaField
-                label="設施"
-                value={estate.facilities.join("\n")}
-                onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
-                rows={4}
+                <EditorFooter saving={saving} onClose={requestClose} />
+              </form>
+              <AdminContentCopilot
+                resourceType="estate"
+                resourceId={estate.id ?? null}
+                fingerprintValues={fingerprintValues}
+                values={{
+                  name_zh: estate.name_zh,
+                  name_en: estate.name_en,
+                  description: estate.description,
+                  seo_title: estate.seo_title,
+                  seo_description: estate.seo_description,
+                }}
+                onApply={(patch) => onChange({ ...estate, ...patch })}
               />
-              <TextAreaField
-                label="描述"
-                value={estate.description ?? ""}
-                onChange={(value) => onChange({ ...estate, description: nullIfBlank(value) })}
-                rows={5}
-              />
-              <TextField
-                label="SEO 標題"
-                value={estate.seo_title ?? ""}
-                onChange={(value) => onChange({ ...estate, seo_title: nullIfBlank(value) })}
-              />
-              <TextAreaField
-                label="SEO 描述"
-                value={estate.seo_description ?? ""}
-                onChange={(value) => onChange({ ...estate, seo_description: nullIfBlank(value) })}
-                rows={3}
-              />
-              <EditorFooter saving={saving} onClose={onClose} />
-            </form>
-            <AdminContentCopilot
-              resourceType="estate"
-              resourceId={estate.id ?? null}
-              fingerprintValues={fingerprintValues}
-              values={{
-                name_zh: estate.name_zh,
-                name_en: estate.name_en,
-                description: estate.description,
-                seo_title: estate.seo_title,
-                seo_description: estate.seo_description,
-              }}
-              onApply={(patch) => onChange({ ...estate, ...patch })}
-            />
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      {dialog}
+    </>
   );
 }
 
@@ -1143,104 +1571,114 @@ function ArticleDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { requestClose, dialog } = useDirtyCloseGuard({
+    isDirty: useEditingDirty(article),
+    onClose,
+    description: "你未儲存的文章修改會遺失。",
+  });
   return (
-    <Dialog open={!!article} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
-        <DialogHeader>
-          <DialogTitle>{article?.id ? "文章編輯" : "新增文章"}</DialogTitle>
-          <DialogDescription>內容、發布狀態及 SEO 欄位會一併儲存。</DialogDescription>
-        </DialogHeader>
-        {article ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-            <form className="grid gap-4" onSubmit={onSubmit}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <TextField
-                  label="Slug"
-                  value={article.slug}
-                  onChange={(value) => onChange({ ...article, slug: value })}
-                  required
-                />
-                <TextField
-                  label="標題"
-                  value={article.title}
-                  onChange={(value) => onChange({ ...article, title: value })}
-                  required
-                />
-                <TextField
-                  label="分類"
-                  value={article.category ?? ""}
-                  onChange={(value) => onChange({ ...article, category: nullIfBlank(value) })}
-                />
-                <NumberField
-                  label="閱讀分鐘"
-                  value={article.reading_minutes}
-                  onChange={(value) => onChange({ ...article, reading_minutes: value })}
-                />
-                <TextField
-                  label="封面圖片"
-                  value={article.cover_image ?? ""}
-                  onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
-                />
-                <TextField
-                  label="發布時間"
-                  value={article.published_at ?? ""}
-                  onChange={(value) => onChange({ ...article, published_at: nullIfBlank(value) })}
-                />
-              </div>
-              <Field label="發布">
-                <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
-                  <Switch
-                    checked={article.published}
-                    onCheckedChange={(checked) => onChange({ ...article, published: checked })}
-                    aria-label="切換文章發布狀態"
+    <>
+      <Dialog open={!!article} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{article?.id ? "文章編輯" : "新增文章"}</DialogTitle>
+            <DialogDescription>內容、發布狀態及 SEO 欄位會一併儲存。</DialogDescription>
+          </DialogHeader>
+          {article ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+              <form className="grid gap-4" onSubmit={onSubmit}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextField
+                    label="Slug"
+                    value={article.slug}
+                    onChange={(value) => onChange({ ...article, slug: value })}
+                    required
                   />
-                  <span className="text-sm text-muted-foreground">
-                    {article.published ? "已發布" : "草稿"}
-                  </span>
+                  <TextField
+                    label="標題"
+                    value={article.title}
+                    onChange={(value) => onChange({ ...article, title: value })}
+                    required
+                  />
+                  <TextField
+                    label="分類"
+                    value={article.category ?? ""}
+                    onChange={(value) => onChange({ ...article, category: nullIfBlank(value) })}
+                  />
+                  <NumberField
+                    label="閱讀分鐘"
+                    value={article.reading_minutes}
+                    onChange={(value) => onChange({ ...article, reading_minutes: value })}
+                  />
+                  <TextField
+                    label="封面圖片"
+                    value={article.cover_image ?? ""}
+                    onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
+                  />
+                  <TextField
+                    label="發布時間"
+                    value={article.published_at ?? ""}
+                    onChange={(value) => onChange({ ...article, published_at: nullIfBlank(value) })}
+                  />
                 </div>
-              </Field>
-              <TextAreaField
-                label="摘要"
-                value={article.excerpt ?? ""}
-                onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
-                rows={3}
+                <Field label="發布">
+                  <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
+                    <Switch
+                      checked={article.published}
+                      onCheckedChange={(checked) => onChange({ ...article, published: checked })}
+                      aria-label="切換文章發布狀態"
+                    />
+                    <span className="text-sm text-muted-foreground">
+                      {article.published ? "已發布" : "草稿"}
+                    </span>
+                  </div>
+                </Field>
+                <TextAreaField
+                  label="摘要"
+                  value={article.excerpt ?? ""}
+                  onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
+                  rows={3}
+                />
+                <TextAreaField
+                  label="內容"
+                  value={article.content ?? ""}
+                  onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
+                  rows={8}
+                />
+                <TextField
+                  label="SEO 標題"
+                  value={article.seo_title ?? ""}
+                  onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
+                />
+                <TextAreaField
+                  label="SEO 描述"
+                  value={article.seo_description ?? ""}
+                  onChange={(value) =>
+                    onChange({ ...article, seo_description: nullIfBlank(value) })
+                  }
+                  rows={3}
+                />
+                <EditorFooter saving={saving} onClose={requestClose} />
+              </form>
+              <AdminContentCopilot
+                resourceType="article"
+                resourceId={article.id ?? null}
+                fingerprintValues={fingerprintValues}
+                values={{
+                  title: article.title,
+                  excerpt: article.excerpt,
+                  content: article.content,
+                  seo_title: article.seo_title,
+                  seo_description: article.seo_description,
+                }}
+                onApply={(patch) => onChange({ ...article, ...patch })}
               />
-              <TextAreaField
-                label="內容"
-                value={article.content ?? ""}
-                onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
-                rows={8}
-              />
-              <TextField
-                label="SEO 標題"
-                value={article.seo_title ?? ""}
-                onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
-              />
-              <TextAreaField
-                label="SEO 描述"
-                value={article.seo_description ?? ""}
-                onChange={(value) => onChange({ ...article, seo_description: nullIfBlank(value) })}
-                rows={3}
-              />
-              <EditorFooter saving={saving} onClose={onClose} />
-            </form>
-            <AdminContentCopilot
-              resourceType="article"
-              resourceId={article.id ?? null}
-              fingerprintValues={fingerprintValues}
-              values={{
-                title: article.title,
-                excerpt: article.excerpt,
-                content: article.content,
-                seo_title: article.seo_title,
-                seo_description: article.seo_description,
-              }}
-              onApply={(patch) => onChange({ ...article, ...patch })}
-            />
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      {dialog}
+    </>
   );
 }
 
@@ -1259,55 +1697,63 @@ function FaqDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { requestClose, dialog } = useDirtyCloseGuard({
+    isDirty: useEditingDirty(faq),
+    onClose,
+    description: "你未儲存的 FAQ 修改會遺失。",
+  });
   return (
-    <Dialog open={!!faq} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
-        <DialogHeader>
-          <DialogTitle>{faq?.id ? "FAQ 編輯" : "新增 FAQ"}</DialogTitle>
-          <DialogDescription>FAQ 會按 scope 分組並依排序值顯示。</DialogDescription>
-        </DialogHeader>
-        {faq ? (
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-            <form className="grid gap-4" onSubmit={onSubmit}>
-              <div className="grid gap-4 md:grid-cols-2">
+    <>
+      <Dialog open={!!faq} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle>{faq?.id ? "FAQ 編輯" : "新增 FAQ"}</DialogTitle>
+            <DialogDescription>FAQ 會按 scope 分組並依排序值顯示。</DialogDescription>
+          </DialogHeader>
+          {faq ? (
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
+              <form className="grid gap-4" onSubmit={onSubmit}>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextField
+                    label="Scope"
+                    value={faq.scope}
+                    onChange={(value) => onChange({ ...faq, scope: value })}
+                    required
+                  />
+                  <NumberField
+                    label="排序"
+                    value={faq.sort_order}
+                    onChange={(value) => onChange({ ...faq, sort_order: value ?? 0 })}
+                  />
+                </div>
                 <TextField
-                  label="Scope"
-                  value={faq.scope}
-                  onChange={(value) => onChange({ ...faq, scope: value })}
+                  label="問題"
+                  value={faq.question}
+                  onChange={(value) => onChange({ ...faq, question: value })}
                   required
                 />
-                <NumberField
-                  label="排序"
-                  value={faq.sort_order}
-                  onChange={(value) => onChange({ ...faq, sort_order: value ?? 0 })}
+                <TextAreaField
+                  label="答案"
+                  value={faq.answer}
+                  onChange={(value) => onChange({ ...faq, answer: value })}
+                  rows={6}
+                  required
                 />
-              </div>
-              <TextField
-                label="問題"
-                value={faq.question}
-                onChange={(value) => onChange({ ...faq, question: value })}
-                required
+                <EditorFooter saving={saving} onClose={requestClose} />
+              </form>
+              <AdminContentCopilot
+                resourceType="faq"
+                resourceId={faq.id ?? null}
+                fingerprintValues={fingerprintValues}
+                values={{ question: faq.question, answer: faq.answer }}
+                onApply={(patch) => onChange({ ...faq, ...patch })}
               />
-              <TextAreaField
-                label="答案"
-                value={faq.answer}
-                onChange={(value) => onChange({ ...faq, answer: value })}
-                rows={6}
-                required
-              />
-              <EditorFooter saving={saving} onClose={onClose} />
-            </form>
-            <AdminContentCopilot
-              resourceType="faq"
-              resourceId={faq.id ?? null}
-              fingerprintValues={fingerprintValues}
-              values={{ question: faq.question, answer: faq.answer }}
-              onApply={(patch) => onChange({ ...faq, ...patch })}
-            />
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      {dialog}
+    </>
   );
 }
 
@@ -1382,40 +1828,48 @@ function MediaDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const { requestClose, dialog } = useDirtyCloseGuard({
+    isDirty: useEditingDirty(media),
+    onClose,
+    description: "你未儲存的替代文字修改會遺失。",
+  });
   return (
-    <Dialog open={!!media} onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>媒體庫</DialogTitle>
-          <DialogDescription>{media?.pathname ?? "更新媒體資料"}</DialogDescription>
-        </DialogHeader>
-        {media ? (
-          <form className="grid gap-4" onSubmit={onSubmit}>
-            <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <a
-                href={media.url}
-                target="_blank"
-                rel="noreferrer"
-                className="break-all font-medium hover:underline"
-              >
-                {media.url}
-              </a>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {media.owner_type}
-                {media.owner_id ? ` · ${media.owner_id}` : ""}
-              </p>
-            </div>
-            <TextAreaField
-              label="替代文字"
-              value={media.alt_text ?? ""}
-              onChange={(value) => onChange({ ...media, alt_text: value })}
-              rows={4}
-            />
-            <EditorFooter saving={saving} onClose={onClose} />
-          </form>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+    <>
+      <Dialog open={!!media} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>媒體庫</DialogTitle>
+            <DialogDescription>{media?.pathname ?? "更新媒體資料"}</DialogDescription>
+          </DialogHeader>
+          {media ? (
+            <form className="grid gap-4" onSubmit={onSubmit}>
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <a
+                  href={media.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="break-all font-medium hover:underline"
+                >
+                  {media.url}
+                </a>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {media.owner_type}
+                  {media.owner_id ? ` · ${media.owner_id}` : ""}
+                </p>
+              </div>
+              <TextAreaField
+                label="替代文字"
+                value={media.alt_text ?? ""}
+                onChange={(value) => onChange({ ...media, alt_text: value })}
+                rows={4}
+              />
+              <EditorFooter saving={saving} onClose={requestClose} />
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+      {dialog}
+    </>
   );
 }
 
@@ -1445,6 +1899,65 @@ function KnowledgeMetric({
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="truncate text-sm font-medium">{value ?? "—"}</p>
     </div>
+  );
+}
+
+function TableSearch({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="relative">
+      <Search
+        className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <Input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={label}
+        aria-label={label}
+        className="w-56 pl-8 pr-8"
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="清除搜尋"
+          className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function NoSearchMatch({
+  label,
+  query,
+  onClear,
+}: {
+  label: string;
+  query: string;
+  onClear: () => void;
+}) {
+  return (
+    <AdminEmptyState
+      title={`找不到符合「${query}」的${label}`}
+      description="請檢查關鍵字，或清除搜尋查看全部。"
+      action={
+        <Button variant="outline" size="sm" onClick={onClear}>
+          清除搜尋
+        </Button>
+      }
+    />
   );
 }
 
@@ -1670,6 +2183,20 @@ function mediaToInput(asset: AdminMediaAssetRow): EditingMediaAsset {
 function nullIfBlank(value: string) {
   const text = value.trim();
   return text ? text : null;
+}
+
+// Case/whitespace-insensitive substring match across whichever fields a tab
+// wants searchable. Blank query matches everything (no query = no filter).
+function matchesSearch(query: string, fields: Array<string | null | undefined>) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return fields.some((field) => (field ?? "").toLowerCase().includes(needle));
+}
+
+// Composite key for diffing an import row against an already-loaded FAQ --
+// must match the (scope, question) uniqueness the upsert's ON CONFLICT relies on.
+function faqImportKey(scope: string, question: string) {
+  return `${scope}::${question.trim().toLowerCase()}`;
 }
 
 function splitList(value: string) {

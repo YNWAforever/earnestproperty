@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ExternalLink, FileText, Sparkles, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Sparkles,
+  TriangleAlert,
+  Undo2,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +75,38 @@ const languageOptions = [
   { value: "en", label: "English" },
 ] as const;
 
+/**
+ * Staff on this page read Chinese only, so a bare `COPILOT_*` code told them
+ * nothing about what to do next. Each message states the cause and the fix; the
+ * raw code stays available under 技術詳情 for bug reports.
+ */
+const errorMessages: Record<string, string> = {
+  COPILOT_GENERATION_FAILED: "AI 未能產生建議，可能是服務暫時中斷。請稍後再按「產生建議」。",
+  COPILOT_GENERATION_IN_PROGRESS: "上一個建議仍在產生中，請等待完成後再試。",
+  COPILOT_DECISION_FAILED: "未能記錄你的決定，建議並未套用。請重試一次。",
+  COPILOT_STALE_PROPOSAL: "表單內容在產生建議後已改動，請重新產生建議再套用。",
+  COPILOT_PATCH_CONFLICT: "建議與表單現有內容衝突，請重新產生建議。",
+  COPILOT_FINGERPRINT_INVALID: "未能核對表單內容，請儲存一次後重新產生建議。",
+  COPILOT_PROPOSAL_EXPIRED: "建議已過期，請重新產生。",
+  COPILOT_PROPOSAL_INVALID: "AI 回覆格式不正確，請重新產生建議。",
+  COPILOT_PROPOSAL_CONTEXT_MISMATCH: "建議屬於另一筆資料，請重新產生建議。",
+  COPILOT_UNKNOWN_FIELD: "建議包含不可編輯的欄位，請減少選擇欄位後重試。",
+  COPILOT_EVIDENCE_MISSING: "建議缺少資料來源，請改用「內部資料及網頁研究」後重試。",
+  COPILOT_EVIDENCE_REQUIRED: "建議缺少資料來源，請改用「內部資料及網頁研究」後重試。",
+  COPILOT_CITATION_REQUIRED: "網頁研究建議缺少可引用連結，請重新產生建議。",
+  COPILOT_SAVE_FIRST: "請先儲存一次，才可產生 AI 建議。",
+  COPILOT_RATE_LIMITED: "AI 請求太頻密，請稍等一兩分鐘再試。",
+  COPILOT_UNAUTHORIZED: "登入狀態已過期，請重新登入後再試。",
+  COPILOT_FORBIDDEN: "你的帳戶未獲授權使用 AI 內容助手，請聯絡管理員。",
+  COPILOT_PROVIDER_UNSUPPORTED: "AI 服務尚未設定，請通知技術同事啟用。",
+  COPILOT_DATABASE_CONFLICT: "資料庫忙碌未能儲存建議紀錄，請稍後再試。",
+};
+
+const fallbackErrorMessage = "AI 內容助手未能完成，請稍後再試；如持續失敗請通知技術同事。";
+
+/** Tooltips never open on touch, so this also sits permanently in the intro. */
+const blastRadiusNote = "只會處理可編輯的內容欄位，不會修改售價、狀態或已發佈資料。";
+
 const fieldLabels: Record<string, string> = {
   name_zh: "中文名稱",
   name_en: "英文名稱",
@@ -109,6 +149,11 @@ export function AdminContentCopilot({
   const [researchMode, setResearchMode] = useState<ContentCopilotResearchMode>("internal");
   const [proposal, setProposal] = useState<ReviewProposal | null>(null);
   const [acceptedFields, setAcceptedFields] = useState<string[]>([]);
+  const [applying, setApplying] = useState(false);
+  // Snapshot of the fields the last 套用 overwrote, so the banner can put the
+  // human-written copy back. Without it AI text is indistinguishable from
+  // staff-written text the moment it lands.
+  const [undoValues, setUndoValues] = useState<Record<string, ContentCopilotValue> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const displayState = resourceId
@@ -116,11 +161,14 @@ export function AdminContentCopilot({
       ? "ready"
       : state
     : "disabled-unsaved";
+  const errorCode =
+    error ?? (state === "stale" ? "COPILOT_STALE_PROPOSAL" : "COPILOT_GENERATION_FAILED");
 
   useEffect(() => {
     setState(resourceId ? "ready" : "disabled-unsaved");
     setProposal(null);
     setAcceptedFields([]);
+    setUndoValues(null);
     setError(null);
     setSelectedFields((current) => {
       const retained = current.filter((field) => new Set<string>(availableFields).has(field));
@@ -143,6 +191,22 @@ export function AdminContentCopilot({
         ? current.filter((field) => field !== patch.field)
         : [...current, patch.field],
     );
+  }
+
+  function acceptAllPatches() {
+    if (!proposal) return;
+    setAcceptedFields(
+      proposal.patches
+        .filter((patch) => patch.unsupportedClaims.length === 0)
+        .map((patch) => patch.field),
+    );
+  }
+
+  function discardProposal() {
+    setProposal(null);
+    setAcceptedFields([]);
+    setError(null);
+    setState("ready");
   }
 
   async function generate() {
@@ -171,11 +235,9 @@ export function AdminContentCopilot({
         return;
       }
       setProposal(result.proposal);
-      setAcceptedFields(
-        result.proposal.patches
-          .filter((patch) => patch.unsupportedClaims.length === 0)
-          .map((patch) => patch.field),
-      );
+      // Opt-in, not opt-out: pre-checking every patch made "replace all my copy"
+      // the default one-click gesture. 全選 is one extra click when wanted.
+      setAcceptedFields([]);
       setState("review");
     } catch {
       setError("COPILOT_GENERATION_FAILED");
@@ -184,8 +246,9 @@ export function AdminContentCopilot({
   }
 
   async function apply() {
-    if (!proposal) return;
+    if (!proposal || applying) return;
     setError(null);
+    setApplying(true);
     try {
       const patchResult = applySelectedContentPatches(values, proposal.patches, acceptedFields, {
         resourceType,
@@ -207,12 +270,26 @@ export function AdminContentCopilot({
         setState(decision.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "failed");
         return;
       }
+      setUndoValues(
+        Object.fromEntries(
+          Object.keys(patchResult.value).map((field) => [field, values[field] ?? null]),
+        ),
+      );
       onApply(patchResult.value);
       setState("applied");
     } catch {
       setError("COPILOT_DECISION_FAILED");
       setState("failed");
+    } finally {
+      setApplying(false);
     }
+  }
+
+  function undoApply() {
+    if (!undoValues) return;
+    onApply(undoValues);
+    setUndoValues(null);
+    setState("ready");
   }
   return (
     <aside
@@ -225,22 +302,25 @@ export function AdminContentCopilot({
         <div>
           <div className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" aria-hidden="true" />
-            <h2 className="text-sm font-semibold">AI 內容助手</h2>
+            <h3 className="text-sm font-semibold">AI 內容助手</h3>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             建議只會套用到目前表單，仍需由你儲存或發佈。
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">{blastRadiusNote}</p>
         </div>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button type="button" className="text-muted-foreground" aria-label="內容助手說明">
+              <button
+                type="button"
+                className="-mr-2 -mt-2 flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"
+                aria-label="內容助手說明"
+              >
                 <FileText className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>
-              只會處理可編輯的內容欄位，不會修改售價、狀態或已發佈資料。
-            </TooltipContent>
+            <TooltipContent>{blastRadiusNote}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
@@ -255,27 +335,41 @@ export function AdminContentCopilot({
       ) : null}
       {displayState === "generating" ? (
         <div className="space-y-2" aria-live="polite">
-          <Skeleton className="h-5 w-2/5" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
+          {/* The live region needs text: skeletons alone announced nothing for
+              the 10s+ the LLM call takes. */}
+          <p className="text-sm text-muted-foreground">AI 正在產生建議，通常需要十多秒…</p>
+          <Skeleton className="h-16 w-full" aria-hidden="true" />
+          <Skeleton className="h-16 w-full" aria-hidden="true" />
         </div>
       ) : null}
       {displayState === "failed" || displayState === "stale" ? (
-        <p
+        <div
           className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
           role="alert"
         >
-          <TriangleAlert className="mr-2 inline size-4" aria-hidden="true" />
-          {displayState === "stale"
-            ? "內容已更新，請重新產生建議。"
-            : `未能完成：${error ?? "COPILOT_GENERATION_FAILED"}`}
-        </p>
+          <p>
+            <TriangleAlert className="mr-2 inline size-4" aria-hidden="true" />
+            {errorMessages[errorCode] ?? fallbackErrorMessage}
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-xs">技術詳情</summary>
+            <code className="text-xs">{errorCode}</code>
+          </details>
+        </div>
       ) : null}
       {displayState === "applied" ? (
-        <p className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
-          <Check className="mr-2 inline size-4" aria-hidden="true" />
-          已套用到目前表單，請使用原有儲存功能提交變更。
-        </p>
+        <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-sm">
+          <p>
+            <Check className="mr-2 inline size-4" aria-hidden="true" />
+            已套用到目前表單，請使用原有儲存功能提交變更。
+          </p>
+          {undoValues ? (
+            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={undoApply}>
+              <Undo2 aria-hidden="true" />
+              復原為套用前內容
+            </Button>
+          ) : null}
+        </div>
       ) : null}
 
       <fieldset
@@ -383,7 +477,11 @@ export function AdminContentCopilot({
         <Review
           proposal={proposal}
           acceptedFields={acceptedFields}
+          applying={applying}
           onTogglePatch={toggleAcceptedPatch}
+          onAcceptAll={acceptAllPatches}
+          onDiscard={discardProposal}
+          onRegenerate={generate}
           onApply={apply}
         />
       ) : null}
@@ -403,19 +501,45 @@ function Control({ label, children }: { label: string; children: React.ReactNode
 function Review({
   proposal,
   acceptedFields,
+  applying,
   onTogglePatch,
+  onAcceptAll,
+  onDiscard,
+  onRegenerate,
   onApply,
 }: {
   proposal: ReviewProposal;
   acceptedFields: string[];
+  applying: boolean;
   onTogglePatch: (patch: ContentCopilotPatch) => void;
+  onAcceptAll: () => void;
+  onDiscard: () => void;
+  onRegenerate: () => void;
   onApply: () => void;
 }) {
+  const acceptableFields = proposal.patches
+    .filter((patch) => patch.unsupportedClaims.length === 0)
+    .map((patch) => patch.field);
+  const allAccepted =
+    acceptableFields.length > 0 &&
+    acceptableFields.every((field) => acceptedFields.includes(field));
+
   return (
     <div className="space-y-3" aria-live="polite">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">建議內容</h3>
-        <Badge variant="outline">請先覆核</Badge>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold">建議內容</h4>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onAcceptAll}
+            disabled={allAccepted}
+          >
+            全選
+          </Button>
+          <Badge variant="outline">請先覆核</Badge>
+        </div>
       </div>
       <ScrollArea className="max-h-72 pr-3">
         <div className="space-y-3">
@@ -440,7 +564,22 @@ function Review({
                         {patch.confidence}
                       </Badge>
                     </div>
-                    <p className="mt-2 whitespace-pre-wrap text-sm">{formatValue(patch.after)}</p>
+                    {/* Both sides, always: staff could not previously see what
+                        the suggestion was about to overwrite. */}
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-md bg-muted/40 p-2">
+                        <p className="text-xs font-medium text-muted-foreground">目前內容</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">
+                          {formatValue(patch.before)}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
+                        <p className="text-xs font-medium text-muted-foreground">建議內容</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">
+                          {formatValue(patch.after)}
+                        </p>
+                      </div>
+                    </div>
                     <p className="mt-2 text-xs text-muted-foreground">{patch.reason}</p>
                     {patch.unsupportedClaims.length ? (
                       <p className="mt-2 text-xs text-destructive">
@@ -477,10 +616,43 @@ function Review({
           )}
         </div>
       ) : null}
-      <Button type="button" className="w-full" onClick={onApply} disabled={!acceptedFields.length}>
-        <Check aria-hidden="true" />
-        套用已選建議
+      <Button
+        type="button"
+        className="w-full"
+        onClick={onApply}
+        disabled={applying || !acceptedFields.length}
+        aria-busy={applying ? true : undefined}
+      >
+        {applying ? (
+          <Loader2 className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        ) : (
+          <Check aria-hidden="true" />
+        )}
+        {applying ? "套用中…" : "套用已選建議"}
       </Button>
+      {/* Without these the only way out of review was closing the dialog, which
+          discarded the whole draft. */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          onClick={onDiscard}
+          disabled={applying}
+        >
+          捨棄建議
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="flex-1"
+          onClick={onRegenerate}
+          disabled={applying}
+        >
+          <Sparkles aria-hidden="true" />
+          重新產生
+        </Button>
+      </div>
     </div>
   );
 }

@@ -301,7 +301,9 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
                   <Button
                     type="button"
                     variant="link"
-                    className="h-auto max-w-48 truncate p-0 font-mono text-xs"
+                    className="h-auto min-h-11 max-w-48 truncate p-0 font-mono text-xs"
+                    title={row.request_id}
+                    aria-label={`Filter audit by request ID ${row.request_id}`}
                     onClick={() => filterByRequestId(row.request_id)}
                   >
                     {row.request_id}

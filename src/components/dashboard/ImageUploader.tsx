@@ -2,18 +2,25 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Upload, X, GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Upload, X, GripVertical } from "lucide-react";
 
 type Props = {
   ownerType?: string;
   value: string[];
   onChange: (urls: string[]) => void;
+  /** Lets the calling form's label point at the hidden file input. */
+  inputId?: string;
 };
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 const ACCEPT = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 
-export function ImageUploader({ ownerType = "property", value, onChange }: Props) {
+// Thumbnail controls stay visible instead of appearing on hover: hover never
+// happens on a tablet, and a keyboard user used to tab into a transparent button.
+const THUMB_BUTTON_CLASS =
+  "rounded bg-background/90 p-1 text-foreground opacity-70 transition hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30";
+
+export function ImageUploader({ ownerType = "property", value, onChange, inputId }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -92,6 +99,7 @@ export function ImageUploader({ ownerType = "property", value, onChange }: Props
         </Button>
         <Input
           ref={inputRef}
+          id={inputId}
           type="file"
           accept={ACCEPT.join(",")}
           multiple
@@ -99,7 +107,7 @@ export function ImageUploader({ ownerType = "property", value, onChange }: Props
           onChange={(e) => handleFiles(e.target.files)}
         />
         <p className="text-xs text-muted-foreground">
-          JPG / PNG / WEBP / AVIF，每張 ≤ 5MB。第一張為封面。
+          JPG / PNG / WEBP / AVIF，每張 ≤ 5MB。第一張為封面，可拖曳或用上移／下移調整次序。
         </p>
       </div>
 
@@ -134,14 +142,36 @@ export function ImageUploader({ ownerType = "property", value, onChange }: Props
                 <button
                   type="button"
                   onClick={() => removeAt(i)}
-                  className="rounded bg-background/90 p-1 text-foreground opacity-0 transition group-hover:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
-                  aria-label="移除"
+                  className={`${THUMB_BUTTON_CLASS} hover:bg-destructive hover:text-destructive-foreground`}
+                  aria-label={`移除相片 ${i + 1}`}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
               </span>
-              <span className="absolute bottom-1.5 left-1.5 cursor-grab rounded bg-background/90 p-1 text-muted-foreground opacity-0 transition group-hover:opacity-100">
-                <GripVertical className="h-3.5 w-3.5" />
+              {/* Drag is mouse-only, so the order that decides the public cover
+                  image also needs buttons that work by keyboard and by touch. */}
+              <span className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
+                <span className="cursor-grab rounded bg-background/90 p-1 text-muted-foreground">
+                  <GripVertical className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => reorder(i, i - 1)}
+                  disabled={i === 0}
+                  className={THUMB_BUTTON_CLASS}
+                  aria-label={`將相片 ${i + 1} 上移`}
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => reorder(i, i + 1)}
+                  disabled={i === value.length - 1}
+                  className={THUMB_BUTTON_CLASS}
+                  aria-label={`將相片 ${i + 1} 下移`}
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </button>
               </span>
             </li>
           ))}

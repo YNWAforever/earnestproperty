@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Check } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
@@ -17,13 +18,6 @@ import type {
   CommandCenterRow,
 } from "@/lib/neon/admin-data.types";
 
-export const Route = createFileRoute("/admin/leads_/command-center")({
-  head: () => ({
-    meta: [{ title: "Lead Command Center｜Earnest Admin" }, { name: "robots", content: "noindex" }],
-  }),
-  component: CommandCenter,
-});
-
 const FILTERS: { key: CommandCenterFilterKey; label: string }[] = [
   { key: "today", label: "今日要跟" },
   { key: "high_score", label: "高分 Leads" },
@@ -32,6 +26,27 @@ const FILTERS: { key: CommandCenterFilterKey; label: string }[] = [
   { key: "whatsapp", label: "WhatsApp" },
   { key: "all", label: "全部" },
 ];
+
+const DEFAULT_QUEUE: CommandCenterFilterKey = "today";
+
+// The active queue lives in the URL, so a reload, a browser Back from a lead, or a
+// link pasted to a colleague all land on the same queue instead of silently
+// resetting to 今日要跟. The default is normalised away to keep the URL clean.
+function parseCommandCenterSearch(search: Record<string, unknown>): {
+  queue?: CommandCenterFilterKey;
+} {
+  if (typeof search.queue !== "string") return {};
+  const match = FILTERS.find((item) => item.key === search.queue);
+  return match && match.key !== DEFAULT_QUEUE ? { queue: match.key } : {};
+}
+
+export const Route = createFileRoute("/admin/leads_/command-center")({
+  validateSearch: parseCommandCenterSearch,
+  head: () => ({
+    meta: [{ title: "Lead Command Center｜Earnest Admin" }, { name: "robots", content: "noindex" }],
+  }),
+  component: CommandCenter,
+});
 
 const STAGE_LABELS: Record<string, string> = {
   new: "新客",
@@ -82,11 +97,22 @@ function matchesFilter(row: CommandCenterRow, key: CommandCenterFilterKey): bool
 
 function CommandCenter() {
   const { user } = useNeonAuth();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [data, setData] = useState<CommandCenterData | null>(null);
-  const [filter, setFilter] = useState<CommandCenterFilterKey>("today");
+  const filter = search.queue ?? DEFAULT_QUEUE;
+  const setFilter = (next: CommandCenterFilterKey) =>
+    void navigate({
+      search: { queue: next === DEFAULT_QUEUE ? undefined : next },
+      resetScroll: false,
+    });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selected, setSelected] = useState<CommandCenterRow | null>(null);
+  // Storing the id (not a snapshot of the row) is what lets the panel pick up a
+  // reanalysis: `runAnalysis` refreshes `data`, and previously the panel kept
+  // rendering the stale snapshot it was opened with -- the success toast fired
+  // while the score/summary on screen still said 未分析, reading as a failure.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const requestIdRef = useRef(0);
 
@@ -130,6 +156,11 @@ function CommandCenter() {
     [data, filter],
   );
 
+  const selected = useMemo(
+    () => data?.rows.find((row) => row.lead_id === selectedId) ?? null,
+    [data, selectedId],
+  );
+
   return (
     <AdminShell
       title="Lead Command Center"
@@ -146,16 +177,18 @@ function CommandCenter() {
                 type="button"
                 size="sm"
                 variant={filter === item.key ? "default" : "outline"}
-                className="h-9"
+                className="h-11 lg:h-9"
+                aria-pressed={filter === item.key}
                 onClick={() => setFilter(item.key)}
               >
+                {filter === item.key ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                 {item.label}
               </Button>
             ))}
           </>
         }
         actions={
-          <Button asChild variant="outline" size="sm" className="h-9">
+          <Button asChild variant="outline" size="sm" className="h-11 lg:h-9">
             <Link to="/admin/leads">返回 CRM 列表</Link>
           </Button>
         }
@@ -187,18 +220,32 @@ function CommandCenter() {
                 </thead>
                 <tbody>
                   {visibleRows.map((row) => (
+                    // A bare `<tr onClick>` was mouse-only, with no role, tabIndex or
+                    // key handler, so the whole triage queue was unreachable from a
+                    // keyboard or screen reader. `role="button"` on the row itself
+                    // was tried in admin.leads.tsx and made it worse -- it replaces
+                    // the row's cell semantics, so a screen reader hears only "開啟
+                    // 詳情, button" and never the 意向/階段/分數/下一步 cells. A real
+                    // focusable control inside one cell keeps every column announced.
                     <tr
                       key={row.lead_id}
-                      className="cursor-pointer border-b align-top last:border-b-0 hover:bg-accent/40"
-                      onClick={() => setSelected(row)}
+                      className="border-b align-top last:border-b-0 hover:bg-accent/40"
                     >
                       <td className="p-3">
-                        <p className="font-medium">{row.name ?? "未命名"}</p>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(row.lead_id)}
+                          className="rounded-sm text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {row.name ?? "未命名"}
+                        </button>
                         <p className="text-xs text-muted-foreground">{row.phone ?? "—"}</p>
                       </td>
                       <td className="p-3">
                         <p>{row.intent ?? "—"}</p>
-                        <p className="text-xs text-muted-foreground">{formatBudget(row)}</p>
+                        <p className="text-xs tabular-nums text-muted-foreground">
+                          {formatBudget(row)}
+                        </p>
                       </td>
                       <td className="p-3">{STAGE_LABELS[row.stage] ?? row.stage}</td>
                       <td className="p-3">{row.assigned_agent_name ?? "未分配"}</td>
@@ -210,8 +257,13 @@ function CommandCenter() {
                           {REASON_LABELS[row.priority.reasonCode] ?? row.priority.reasonCode}
                         </p>
                       </td>
-                      <td className="max-w-[16rem] p-3 text-xs">{row.next_best_action ?? "—"}</td>
-                      <td className="p-3 text-xs">{whatsappLabel(row)}</td>
+                      <td
+                        className="max-w-[16rem] p-3 text-sm"
+                        title={row.next_best_action ?? undefined}
+                      >
+                        {row.next_best_action ?? "—"}
+                      </td>
+                      <td className="p-3 text-sm">{whatsappLabel(row)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -224,7 +276,7 @@ function CommandCenter() {
       <AdminDetailPanel
         open={selected != null}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) setSelectedId(null);
         }}
         title={selected?.name ?? "Lead"}
         description={
