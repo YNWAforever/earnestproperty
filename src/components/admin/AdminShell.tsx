@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useRouter } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -7,8 +8,8 @@ import {
   FileQuestion,
   Gauge,
   Home,
-  ListChecks,
   LogOut,
+  Menu,
   MessageCircle,
   Send,
   ServerCog,
@@ -17,15 +18,23 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 
+// `activeExact: false` opts an entry into prefix matching so the section stays
+// highlighted on its own child routes -- without it, editing a listing
+// (/admin/listings/123) or creating an agent (/admin/agents/new) left the whole
+// sidebar unlit, so staff on a detail page could not tell which section they
+// were in. Only entries that actually own child routes get this; /admin must
+// stay exact or it would match every admin page, and /admin/leads must stay
+// exact so it does not bleed into the separate Command Center entry.
 const navItems = [
   { to: "/admin", label: "總覽", icon: BarChart3 },
   { to: "/admin/cms", label: "CMS / FAQ", icon: BookOpen, search: { tab: undefined } },
   { to: "/admin/cms", label: "AI Agent", icon: FileQuestion, search: { tab: "faqs" } },
-  { to: "/admin/listings", label: "放盤", icon: Building2 },
-  { to: "/admin/agents", label: "經紀管理", icon: UserRoundCog },
+  { to: "/admin/listings", label: "放盤", icon: Building2, activeExact: false },
+  { to: "/admin/agents", label: "經紀管理", icon: UserRoundCog, activeExact: false },
   { to: "/admin/leads", label: "CRM", icon: ContactRound },
   { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
   { to: "/admin/operations", label: "系統營運", icon: ServerCog, includeSearch: false },
@@ -34,17 +43,80 @@ const navItems = [
   { to: "/admin/blasts", label: "群發", icon: Send },
 ] as const;
 
+const navLinkClassName =
+  "flex min-h-11 items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+// The active entry gets weight + a left indicator bar on top of the colour
+// change, so "you are here" survives greyscale/colour-blind viewing, and
+// aria-current announces it to screen readers.
+const navLinkActiveProps = {
+  className: "border-primary bg-primary/10 font-semibold text-primary",
+  "aria-current": "page" as const,
+};
+
+function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <nav aria-label="後台選單" className="grid gap-2">
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Link
+            key={`${item.to}-${item.label}`}
+            to={item.to}
+            {...("search" in item ? { search: item.search } : {})}
+            activeOptions={{
+              exact: "activeExact" in item ? item.activeExact : true,
+              includeSearch: "includeSearch" in item ? item.includeSearch : true,
+              explicitUndefined: true,
+            }}
+            className={navLinkClassName}
+            activeProps={navLinkActiveProps}
+            onClick={onNavigate}
+          >
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function AdminIdentity({ email }: { email: string | null | undefined }) {
+  return (
+    <div className="flex items-center gap-2 px-2 py-2">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <Home className="h-4 w-4" aria-hidden="true" />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-semibold">Earnest Admin</p>
+        <p className="truncate text-xs text-muted-foreground" title={email ?? undefined}>
+          {email}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function AdminShell({
   title,
   description,
+  breadcrumb,
+  actions,
   children,
 }: {
   title: string;
   description: string;
+  /** Optional "後台 › 放盤 › 編輯" style context for sub-pages. */
+  breadcrumb?: React.ReactNode;
+  /** Page-specific primary action(s). Replaces the old hard-coded 管理放盤 button,
+   * which duplicated the sidebar's 放盤 entry and was irrelevant on CRM/WhatsApp/群發. */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const { loading, user, signOut } = useNeonAuth();
   const router = useRouter();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   async function handleSignOut() {
     await signOut();
@@ -61,8 +133,14 @@ export function AdminShell({
   }
 
   if (!user) {
+    // TODO(auth): this drops the requested admin path -- a deep link to
+    // /admin/whatsapp sends staff to sign-in and then to the public site, so
+    // they must re-navigate by hand. Fixing it needs a `redirect` search param
+    // on /auth/$pathname plus the matching post-auth callback on AuthView
+    // (@neondatabase/auth-ui), so it is deliberately left alone here rather
+    // than shipping a param nothing honours.
     return (
-      <main className="mx-auto flex min-h-[70vh] max-w-md items-center px-4">
+      <div className="mx-auto flex min-h-[70vh] max-w-md items-center px-4">
         <div className="w-full rounded-lg border bg-card p-6 text-center shadow-sm">
           <h1 className="text-xl font-semibold">職員登入</h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -74,68 +152,81 @@ export function AdminShell({
             </Link>
           </Button>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50/70">
-      <div className="mx-auto grid max-w-7xl gap-0 px-4 py-4 lg:grid-cols-[240px_1fr]">
-        <aside className="rounded-lg border bg-background p-3 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
-          <div className="flex items-center gap-2 px-2 py-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Home className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">Earnest Admin</p>
-              <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-            </div>
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
+        {/* lg:top-20 clears the 64px sticky public SiteHeader, which previously
+            overlapped the sidebar's identity block and first nav item once
+            scrolled. overflow-y-auto lets the last nav items and 登出 be
+            reached on short laptop viewports. */}
+        <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-20 lg:block lg:h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <AdminIdentity email={user.email} />
+          <div className="mt-4">
+            <AdminNav />
           </div>
-          <nav className="mt-4 grid gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={`${item.to}-${item.label}`}
-                  to={item.to}
-                  {...("search" in item ? { search: item.search } : {})}
-                  activeOptions={{
-                    exact: true,
-                    includeSearch: "includeSearch" in item ? item.includeSearch : true,
-                    explicitUndefined: true,
-                  }}
-                  className="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground"
-                  activeProps={{ className: "bg-primary/10 text-primary" }}
-                >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
           <div className="mt-4 border-t pt-3">
             <Button variant="ghost" className="w-full justify-start" onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
+              <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
               登出
             </Button>
           </div>
         </aside>
 
-        <main className="min-w-0 px-0 py-4 lg:px-6 lg:py-0">
-          <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-normal">{title}</h1>
-              <p className="text-sm text-muted-foreground">{description}</p>
+        <div className="min-w-0 py-4 lg:px-6 lg:py-0">
+          <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                {/* Below lg the sidebar is a drawer: previously the 11-item nav
+                    stacked above every page, pushing the actual content ~600px
+                    down on any phone or tablet visit. */}
+                <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="lg:hidden"
+                      aria-label="開啟後台選單"
+                    >
+                      <Menu className="h-5 w-5" aria-hidden="true" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)]">
+                    <SheetTitle className="sr-only">後台選單</SheetTitle>
+                    <div className="flex h-full flex-col">
+                      <div className="mt-8">
+                        <AdminIdentity email={user.email} />
+                      </div>
+                      <div className="mt-4 flex-1 overflow-y-auto pr-1">
+                        <AdminNav onNavigate={() => setMobileNavOpen(false)} />
+                      </div>
+                      <div className="border-t pt-3">
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                          onClick={handleSignOut}
+                        >
+                          <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
+                          登出
+                        </Button>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                <h1 className="truncate text-2xl font-semibold tracking-normal">{title}</h1>
+              </div>
+              {breadcrumb ? (
+                <div className="mt-1 text-xs text-muted-foreground">{breadcrumb}</div>
+              ) : null}
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
             </div>
-            <Button asChild variant="outline">
-              <Link to="/admin/listings">
-                <ListChecks className="mr-2 h-4 w-4" />
-                管理放盤
-              </Link>
-            </Button>
+            {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
           </header>
           {children}
-        </main>
+        </div>
       </div>
     </div>
   );
@@ -143,7 +234,12 @@ export function AdminShell({
 
 export function AdminError({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+    // role="alert" so a failed load/save is announced instead of appearing
+    // silently -- this component is the error surface for every admin page.
+    <div
+      role="alert"
+      className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+    >
       {message}
     </div>
   );
