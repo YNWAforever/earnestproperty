@@ -98,10 +98,15 @@ function extractEvidence(results: unknown): ContentCopilotEvidence[] {
 }
 
 function cleanText(value: string, maxLength: number) {
-  return value
-    .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
-    .trim()
-    .slice(0, maxLength);
+  return (
+    value
+      // Stripping control characters is the whole point here -- this text comes
+      // from scraped third-party pages and is rendered in the admin UI.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+      .trim()
+      .slice(0, maxLength)
+  );
 }
 
 function failedResult(error: TavilyResearchError): TavilyResearchResult {

@@ -198,9 +198,15 @@ function PropertyPage() {
     districtSlug: estate?.district_slug ?? property.district_slug,
   });
 
-  const hasVideo = !!property.video_url && !isVrUrl(property.video_url);
-  const hasVR = isVrUrl(property.video_url);
-  const hasFloorplan = !!property.floorplan_url;
+  // Narrowed values rather than booleans: TypeScript cannot carry a
+  // `!!property.video_url` guard through a separate const into the JSX below,
+  // so the nullable field was being passed straight into src/toEmbed.
+  const videoUrl = property.video_url && !isVrUrl(property.video_url) ? property.video_url : null;
+  const vrUrl = property.video_url && isVrUrl(property.video_url) ? property.video_url : null;
+  const floorplanUrl = property.floorplan_url ?? null;
+  const hasVideo = videoUrl !== null;
+  const hasVR = vrUrl !== null;
+  const hasFloorplan = floorplanUrl !== null;
   const hasMap = !!(estate?.lat && estate?.lng) || !!property.address;
 
   async function handleShare() {
@@ -495,11 +501,11 @@ function PropertyPage() {
               )}
             </TabsContent>
 
-            {hasVideo && (
+            {videoUrl && (
               <TabsContent value="video">
                 <div className="aspect-video overflow-hidden rounded-lg border bg-muted">
                   <iframe
-                    src={toEmbed(property.video_url)}
+                    src={toEmbed(videoUrl)}
                     title="物業影片"
                     className="h-full w-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -509,11 +515,11 @@ function PropertyPage() {
               </TabsContent>
             )}
 
-            {hasVR && (
+            {vrUrl && (
               <TabsContent value="vr">
                 <div className="aspect-video overflow-hidden rounded-lg border bg-muted">
                   <iframe
-                    src={property.video_url}
+                    src={vrUrl}
                     title="VR睇樓"
                     className="h-full w-full"
                     allow="xr-spatial-tracking; gyroscope; accelerometer; fullscreen"
@@ -524,11 +530,11 @@ function PropertyPage() {
               </TabsContent>
             )}
 
-            {hasFloorplan && (
+            {floorplanUrl && (
               <TabsContent value="floorplan">
                 <div className="overflow-hidden rounded-lg border bg-muted">
                   <img
-                    src={property.floorplan_url}
+                    src={floorplanUrl}
                     alt={`${property.title_zh} 平面圖`}
                     className="w-full object-contain"
                     loading="lazy"
@@ -577,11 +583,11 @@ function PropertyPage() {
             )}
 
             {/* Features */}
-            {property.features?.length > 0 && (
+            {(property.features?.length ?? 0) > 0 && (
               <section className="mt-6">
                 <h2 className="text-xl font-semibold">物業特點</h2>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {property.features.map((f: string) => (
+                  {(property.features ?? []).map((f: string) => (
                     <Badge key={f} variant="secondary">
                       {f}
                     </Badge>

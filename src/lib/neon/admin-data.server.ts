@@ -27,11 +27,14 @@ import type {
   AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
+  AdminCampaignRow,
   AdminConversationAiAssist,
+  AdminConversationRow,
   AdminConversationUpdateInput,
   AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
+  AdminLeadRow,
   AdminLeadUpdateInput,
   AdminListingFiltersInput,
   AdminAudiencePreview,
@@ -431,8 +434,19 @@ export async function listAdminListings(input: AdminListingInput = {}, actor?: S
   }));
 }
 
-export async function getAdminProperty(id: string) {
-  const rows = await queryRows("SELECT * FROM properties WHERE id = $1 LIMIT 1", [id]);
+/** `SELECT *` on `properties`, as the edit form consumes it. */
+export type AdminPropertyRecord = Partial<AdminPropertyInput> & { id: string };
+
+// The four list/get helpers below declare their row types rather than leaking
+// `DbRow` (= Record<string, unknown>). TanStack Start rejects `unknown` values
+// in a server function's return type -- it cannot prove them serializable -- and
+// every call site was casting to these exact types anyway, so the cast was
+// hiding the contract instead of expressing it.
+export async function getAdminProperty(id: string): Promise<AdminPropertyRecord | null> {
+  const rows = await queryRows<AdminPropertyRecord>(
+    "SELECT * FROM properties WHERE id = $1 LIMIT 1",
+    [id],
+  );
   return rows[0] ?? null;
 }
 
@@ -1290,12 +1304,12 @@ export async function updateAdminMediaAsset(
   return { ok: true };
 }
 
-export async function listAdminLeads(actor?: StaffAccess) {
+export async function listAdminLeads(actor?: StaffAccess): Promise<AdminLeadRow[]> {
   const scope = actor ? agentScope(actor) : null;
   const params: unknown[] = [];
   const where =
     scope !== null ? `WHERE l.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
-  const rows = await queryRows(
+  const rows = await queryRows<AdminLeadRow>(
     `
     SELECT
       l.id,
@@ -1725,12 +1739,12 @@ export async function listCommandCenter(actor: StaffAccess): Promise<CommandCent
   };
 }
 
-export async function listAdminConversations(actor?: StaffAccess) {
+export async function listAdminConversations(actor?: StaffAccess): Promise<AdminConversationRow[]> {
   const params: unknown[] = [];
   const scope = actor ? agentScope(actor) : null;
   const where =
     scope !== null ? `WHERE wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
-  const rows = await queryRows(
+  const rows = await queryRows<AdminConversationRow>(
     `
     SELECT
       wc.id,
@@ -1953,8 +1967,8 @@ function parseConversationAiMessages(value: unknown) {
   });
 }
 
-export async function listAdminCampaigns() {
-  const rows = await queryRows(
+export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
+  const rows = await queryRows<AdminCampaignRow>(
     `
     SELECT
       c.id,

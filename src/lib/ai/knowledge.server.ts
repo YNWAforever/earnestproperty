@@ -653,7 +653,9 @@ function knowledgeSearchTokens(query: string) {
 }
 
 function scoreKnowledgeChunk(chunk: AiKnowledgeChunk, tokens: string[]) {
-  const title = chunk.title.toLowerCase();
+  // `title` is optional on AiKnowledgeChunk, so this threw on any chunk stored
+  // without one -- taking down the whole live-agent retrieval scoring pass.
+  const title = (chunk.title ?? "").toLowerCase();
   const body = chunk.chunk_text.toLowerCase();
   const slug = [chunk.estate_slug, chunk.district_slug, chunk.metadata?.listing_no]
     .filter(Boolean)

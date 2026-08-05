@@ -135,7 +135,20 @@ export async function listAuditLogs(
   const { queryRows } = await import("../neon/db.server.ts");
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? 20), 1), 100);
   const cursor = decodeAuditCursor(input.cursor);
-  const rows = await queryRows(
+  // Typed explicitly: spreading an untyped DbRow into an object literal drops
+  // the index signature, so `last.id` below stopped resolving.
+  const rows = await queryRows<{
+    id: string;
+    actor_staff_id: string | null;
+    permission: string | null;
+    action: string;
+    resource_type: string | null;
+    resource_id: string | null;
+    outcome: string;
+    request_id: string | null;
+    metadata: unknown;
+    created_at: unknown;
+  }>(
     `SELECT
        id::text AS id,
        actor_staff_id::text AS actor_staff_id,
