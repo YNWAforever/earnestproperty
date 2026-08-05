@@ -10,12 +10,12 @@
   "workers_dev": false,
 
   "triggers": {
-    "crons": ["*/5 * * * *", "*/10 * * * *"]
+    "crons": ["*/5 * * * *", "*/10 * * * *"],
   },
 
   "vars": {
-    "SITE_ORIGIN": "https://earnestproperty.vercel.app"
-  }
+    "SITE_ORIGIN": "https://earnestproperty.vercel.app",
+  },
 
   // CRON_SECRET is a secret, not a var. Set it with:
   //   wrangler secret put CRON_SECRET --config workers/cron/wrangler.jsonc

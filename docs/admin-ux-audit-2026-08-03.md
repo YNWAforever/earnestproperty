@@ -217,7 +217,7 @@ conversations are likewise not deep-linkable, which is why Command Center's
 
 ### P8 · Migration apply is under-specified and gives no in-flight feedback
 
-- `AdminOperationsMigrations.tsx:132` — `runApply` calls `setPlan(null)` *before* awaiting,
+- `AdminOperationsMigrations.tsx:132` — `runApply` calls `setPlan(null)` _before_ awaiting,
   and the dialog requires `plan !== null`, so the dialog vanishes the instant Apply is
   clicked and an irreversible schema change runs with zero feedback. The dialog's own
   `isPending` state is dead code.

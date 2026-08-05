@@ -11,20 +11,20 @@ loudly, it just does nothing. Per-feature setup steps live in
 
 ## Environment variables
 
-| Variable | Production | Blocks |
-|---|---|---|
-| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | ✅ | — |
-| `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL`, `VITE_NEON_AUTH_URL`, `NEON_BRANCH` | ✅ | — |
-| `ADMIN_BOOTSTRAP_EMAILS`, `CRON_SECRET` | ✅ | — |
-| `AI_GATEWAY_API_KEY` | ❌ | AI FAQ answers, knowledge embeddings |
-| `AI_GATEWAY_MODEL` | ❌ | AI FAQ answers |
-| `AI_GATEWAY_EMBEDDING_MODEL` | ❌ | Knowledge embeddings |
-| `WOZTELL_ENABLED` | ❌ | All WhatsApp send paths |
-| `WOZTELL_BOT_ACCESS_TOKEN`, `WOZTELL_CHANNEL_ID` | ❌ | Outbound WhatsApp |
-| `WOZTELL_CHANNEL_SECRET` | ❌ | Inbound webhook (401s every event) |
-| `BLOB_READ_WRITE_TOKEN` | ❌ | Admin media upload |
-| `CONTROL_PLANE_APPROVAL_SECRET` | ❌ | Migration approvals |
-| `TAVILY_API_KEY`, `OPENCODE_GO_*` | ❌ | Content copilot research |
+| Variable                                                                        | Production | Blocks                               |
+| ------------------------------------------------------------------------------- | ---------- | ------------------------------------ |
+| `DATABASE_URL`, `DATABASE_URL_UNPOOLED`                                         | ✅         | —                                    |
+| `NEON_AUTH_BASE_URL`, `NEON_AUTH_JWKS_URL`, `VITE_NEON_AUTH_URL`, `NEON_BRANCH` | ✅         | —                                    |
+| `ADMIN_BOOTSTRAP_EMAILS`, `CRON_SECRET`                                         | ✅         | —                                    |
+| `AI_GATEWAY_API_KEY`                                                            | ❌         | AI FAQ answers, knowledge embeddings |
+| `AI_GATEWAY_MODEL`                                                              | ❌         | AI FAQ answers                       |
+| `AI_GATEWAY_EMBEDDING_MODEL`                                                    | ❌         | Knowledge embeddings                 |
+| `WOZTELL_ENABLED`                                                               | ❌         | All WhatsApp send paths              |
+| `WOZTELL_BOT_ACCESS_TOKEN`, `WOZTELL_CHANNEL_ID`                                | ❌         | Outbound WhatsApp                    |
+| `WOZTELL_CHANNEL_SECRET`                                                        | ❌         | Inbound webhook (401s every event)   |
+| `BLOB_READ_WRITE_TOKEN`                                                         | ❌         | Admin media upload                   |
+| `CONTROL_PLANE_APPROVAL_SECRET`                                                 | ❌         | Migration approvals                  |
+| `TAVILY_API_KEY`, `OPENCODE_GO_*`                                               | ❌         | Content copilot research             |
 
 Five `*SUPABASE*` variables are still set in production and are unused since the
 Neon migration. Safe to delete.
@@ -57,10 +57,10 @@ indexed. At audit time `ai_knowledge_chunks` held 420 chunks with **0
 embeddings**, last built 2026-07-13:
 
 | Source type | Sources |
-|---|---|
-| listing | 412 |
-| estate | 5 |
-| faq | 3 |
+| ----------- | ------- |
+| listing     | 412     |
+| estate      | 5       |
+| faq         | 3       |
 
 With 98% of the corpus being property listings and no embeddings, retrieval
 degrades to an ILIKE substring match over listing text — so a question like

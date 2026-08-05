@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
-import { useBlocker, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { RouteLeaveBlocker } from "@/components/admin/RouteLeaveBlocker";
 
 /**
  * Guards against silently destroying half-entered work.
@@ -36,31 +37,6 @@ export function useRouteLeaveGuard(isDirty: boolean) {
   const router = useRouter({ warn: false });
   const dialog = router ? <RouteLeaveBlocker isDirty={isDirty} /> : null;
   return { dialog };
-}
-
-function RouteLeaveBlocker({ isDirty }: { isDirty: boolean }) {
-  const blocker = useBlocker({
-    shouldBlockFn: () => isDirty,
-    enableBeforeUnload: () => isDirty,
-    disabled: !isDirty,
-    withResolver: true,
-  });
-
-  if (blocker.status !== "blocked") return null;
-
-  return (
-    <AdminConfirmDialog
-      open
-      title={LEAVE_TITLE}
-      description={LEAVE_DESCRIPTION}
-      confirmLabel={LEAVE_CONFIRM}
-      confirmVariant="destructive"
-      onOpenChange={(open) => {
-        if (!open) blocker.reset();
-      }}
-      onConfirm={blocker.proceed}
-    />
-  );
 }
 
 /**
