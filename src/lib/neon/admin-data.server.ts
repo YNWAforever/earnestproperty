@@ -1207,6 +1207,39 @@ export async function deleteAdminFaq(id: string, actor: StaffAccess) {
   return { ok: true };
 }
 
+/** Which of the supplied (scope, question) pairs already exist.
+ *
+ * The import preview used to diff against `listAdminCms()`'s FAQ page, which is
+ * capped at 120 rows. On a site with more FAQs than that -- exactly the site
+ * that needs bulk import -- every unloaded question showed as 新增 and the
+ * confirm asserted 「全部為新增，不會覆寫現有 FAQ。」 while the write path's
+ * ON CONFLICT DO UPDATE overwrote live answers in place. The diff has to be
+ * resolved against the whole table, so it belongs here. */
+export async function checkAdminFaqConflicts(
+  keys: Array<{ scope: string; question: string }>,
+  _actor: StaffAccess,
+) {
+  if (!keys.length) return { existing: [] as Array<{ scope: string; question: string }> };
+
+  const scopes = keys.map((key) => key.scope);
+  const questions = keys.map((key) => key.question);
+  const rows = await queryRows(
+    `SELECT scope, question
+     FROM faqs
+     WHERE (scope, question) IN (
+       SELECT UNNEST($1::text[]), UNNEST($2::text[])
+     )`,
+    [scopes, questions],
+  );
+
+  return {
+    existing: rows.map((row) => ({
+      scope: stringOrEmpty(row.scope),
+      question: stringOrEmpty(row.question),
+    })),
+  };
+}
+
 export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess) {
   // NOTE: the faqs table has no updated_at column in this schema, so the
   // batched UPDATE only sets sort_order (matching the previous per-row loop).

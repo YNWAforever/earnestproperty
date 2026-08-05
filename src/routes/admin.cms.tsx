@@ -55,6 +55,7 @@ import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
 import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
+  checkAdminFaqConflicts,
   deleteAdminFaq,
   fetchAdminCms,
   fetchAdminAiKnowledgeStatus,
@@ -106,6 +107,11 @@ type EditingMediaAsset = Pick<
   AdminMediaAssetRow,
   "id" | "url" | "pathname" | "alt_text" | "owner_type" | "owner_id"
 >;
+
+// Mirrors the LIMITs in listAdminCms() (admin-data.server.ts). Kept here so the
+// tables can state the cap rather than presenting a truncated page as the whole
+// dataset.
+const CMS_ROW_LIMITS = { estates: 40, articles: 40, faqs: 120 } as const;
 
 const emptyEstate: AdminEstateInput = {
   slug: "",
@@ -194,6 +200,11 @@ function AdminCms() {
   const [faqImportScope, setFaqImportScope] = useState(emptyFaq.scope);
   const [faqImportSaving, setFaqImportSaving] = useState(false);
   const [faqImportConfirmOpen, setFaqImportConfirmOpen] = useState(false);
+  // Server-resolved (scope|question) keys that already exist. `null` means "not
+  // checked yet"; the confirm must not claim anything about overwrites until
+  // this is populated, because the loaded FAQ page is capped at 120 rows.
+  const [faqImportConflicts, setFaqImportConflicts] = useState<Set<string> | null>(null);
+  const [faqImportChecking, setFaqImportChecking] = useState(false);
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
   const [deletingFaq, setDeletingFaq] = useState<AdminFaqCmsRow | null>(null);
   const [faqDeleting, setFaqDeleting] = useState(false);
@@ -316,23 +327,43 @@ function AdminCms() {
    * can actually make before submitting.
    */
   const faqImportPreview = useMemo(() => {
-    const existing = new Map(
+    // `data.faqs` is only used for the previous-answer text, which is a nicety.
+    // Whether a row overwrites is decided by the server-resolved conflict set,
+    // because the loaded page cannot see past its LIMIT.
+    const loaded = new Map(
       (data?.faqs ?? []).map((faq) => [faqImportKey(faq.scope, faq.question), faq]),
     );
     return parsedFaqImportRows.map((row) => {
       const scope = row.scope ?? faqImportScope;
-      const current = existing.get(faqImportKey(scope, row.question));
+      const key = faqImportKey(scope, row.question);
       return {
         scope,
         question: row.question,
         answer: row.answer,
-        previousAnswer: current?.answer ?? null,
-        overwrite: Boolean(current),
+        previousAnswer: loaded.get(key)?.answer ?? null,
+        overwrite: faqImportConflicts ? faqImportConflicts.has(key) : false,
       };
     });
-  }, [data?.faqs, faqImportScope, parsedFaqImportRows]);
+  }, [data?.faqs, faqImportConflicts, faqImportScope, parsedFaqImportRows]);
 
   const faqImportOverwriteCount = faqImportPreview.filter((row) => row.overwrite).length;
+
+  /** Refresh the tables after a write that already succeeded.
+   *
+   * The five editors used to `await refreshCmsData()` inside the same try as
+   * the write, so a refetch failure surfaced as a red toast with the dialog
+   * still open and the table still showing pre-save data -- every signal saying
+   * "it did not save". Staff pressed 儲存 again, and for a new estate/article/
+   * video with no `id` that created a second row or hit a raw Postgres unique
+   * violation. A failed refresh is now reported as exactly what it is. */
+  async function refreshAfterWrite(successMessage: string) {
+    try {
+      await refreshCmsData();
+      toast.success(successMessage);
+    } catch {
+      toast.success(`${successMessage}（列表未能更新，請重新載入頁面）`);
+    }
+  }
 
   async function handleSaveEstate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -349,9 +380,8 @@ function AdminCms() {
     setSaving(true);
     try {
       assertNoServerError(await saveAdminEstate({ data: editingEstate }));
-      await refreshCmsData();
-      toast.success(editingEstate.id ? "屋苑 SEO 已更新" : "屋苑 SEO 已新增");
       setEditingEstate(null);
+      await refreshAfterWrite(editingEstate.id ? "屋苑 SEO 已更新" : "屋苑 SEO 已新增");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -370,9 +400,8 @@ function AdminCms() {
     setSaving(true);
     try {
       assertNoServerError(await saveAdminArticle({ data: editingArticle }));
-      await refreshCmsData();
-      toast.success(editingArticle.id ? "文章編輯已儲存" : "文章已新增");
       setEditingArticle(null);
+      await refreshAfterWrite(editingArticle.id ? "文章編輯已儲存" : "文章已新增");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -391,9 +420,8 @@ function AdminCms() {
     setSaving(true);
     try {
       assertNoServerError(await saveAdminFaq({ data: editingFaq }));
-      await refreshCmsData();
-      toast.success(editingFaq.id ? "FAQ 編輯已儲存" : "FAQ 已新增");
       setEditingFaq(null);
+      await refreshAfterWrite(editingFaq.id ? "FAQ 編輯已儲存" : "FAQ 已新增");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -407,9 +435,8 @@ function AdminCms() {
     setFaqDeleteError(null);
     try {
       assertNoServerError(await deleteAdminFaq({ data: { id: deletingFaq.id } }));
-      await refreshCmsData();
-      toast.success("已刪除");
       setDeletingFaq(null);
+      await refreshAfterWrite("已刪除");
     } catch (err) {
       const message = errorText(err);
       setFaqDeleteError(message === "Not found" ? "此 FAQ 已被刪除，請重新載入頁面。" : message);
@@ -433,9 +460,8 @@ function AdminCms() {
     setSaving(true);
     try {
       assertNoServerError(await saveAdminCmsVideo({ data: editingCmsVideo }));
-      await refreshCmsData();
-      toast.success(editingCmsVideo.id ? "影片已更新" : "影片已新增");
       setEditingCmsVideo(null);
+      await refreshAfterWrite(editingCmsVideo.id ? "影片已更新" : "影片已新增");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -457,13 +483,32 @@ function AdminCms() {
     }
   }
 
-  function handleImportFaqsSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleImportFaqsSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!parsedFaqImportRows.length) {
       toast.error("未能從檔案內容解析 FAQ");
       return;
     }
-    setFaqImportConfirmOpen(true);
+
+    setFaqImportChecking(true);
+    try {
+      const keys = parsedFaqImportRows.map((row) => ({
+        scope: row.scope ?? faqImportScope,
+        question: row.question,
+      }));
+      const result = await checkAdminFaqConflicts({ data: { keys } });
+      setFaqImportConflicts(
+        new Set(result.existing.map((row) => faqImportKey(row.scope, row.question))),
+      );
+      setFaqImportConfirmOpen(true);
+    } catch (err) {
+      // Never fall through to the confirm on failure: without the conflict set
+      // it would assert 「全部為新增」 with no basis.
+      setFaqImportConflicts(null);
+      toast.error(`未能檢查是否會覆寫現有 FAQ：${errorText(err)}`);
+    } finally {
+      setFaqImportChecking(false);
+    }
   }
 
   async function handleImportFaqs() {
@@ -502,8 +547,13 @@ function AdminCms() {
       await refreshCmsData();
       if (failure) {
         setFaqImportConfirmOpen(false);
+        // The table now shows the imported rows, but the live agent still
+        // answers from the pre-import index. Refresh the status so the AI card
+        // shows the outstanding rebuild, and say so explicitly.
+        await refreshKnowledgeStatus();
         toast.error(
-          `已匯入 ${imported}／${total}，第 ${failure.position} 條失敗：${failure.message}`,
+          `已匯入 ${imported}／${total}，第 ${failure.position} 條失敗：${failure.message}。` +
+            `AI 知識庫尚未重建，請修正後重新匯入，或按「重建索引」。`,
         );
         return;
       }
@@ -516,7 +566,10 @@ function AdminCms() {
       setFaqImportText("");
     } catch (err) {
       setFaqImportConfirmOpen(false);
-      toast.error(`已匯入 ${imported}／${total}，其後失敗：${errorText(err)}`);
+      await refreshKnowledgeStatus().catch(() => undefined);
+      toast.error(
+        `已匯入 ${imported}／${total}，其後失敗：${errorText(err)}。AI 知識庫可能尚未重建。`,
+      );
     } finally {
       setFaqImportSaving(false);
     }
@@ -538,9 +591,8 @@ function AdminCms() {
           },
         }),
       );
-      await refreshCmsData();
-      toast.success("媒體庫資料已更新");
       setEditingMedia(null);
+      await refreshAfterWrite("媒體庫資料已更新");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -710,6 +762,12 @@ function AdminCms() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
+                  <RowCapNotice
+                    shown={filteredEstates.length}
+                    loaded={data?.estates.length ?? 0}
+                    limit={CMS_ROW_LIMITS.estates}
+                    label="屋苑"
+                  />
                   {filteredEstates.length ? (
                     <Table>
                       <TableHeader>
@@ -801,6 +859,12 @@ function AdminCms() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
+                  <RowCapNotice
+                    shown={filteredArticles.length}
+                    loaded={data?.articles.length ?? 0}
+                    limit={CMS_ROW_LIMITS.articles}
+                    label="文章"
+                  />
                   {filteredArticles.length ? (
                     <Table>
                       <TableHeader>
@@ -996,18 +1060,27 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, faqs: value }))
                       }
                     />
-                    <Button variant="outline" asChild>
-                      <label>
-                        <Upload className="h-4 w-4" />
-                        上載 FAQ 檔案
-                        <input
-                          className="sr-only"
-                          type="file"
-                          accept=".txt,.md,.csv,.tsv,text/plain,text/markdown,text/csv"
-                          onChange={handleFaqFileChange}
-                        />
-                      </label>
+                    {/* Was a <Button asChild><label> wrapping an sr-only input:
+                        Tab landed on the clipped input, so the focus ring never
+                        rendered and the control was effectively invisible to
+                        keyboard users. A real button now forwards the click. */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => faqFileInputRef.current?.click()}
+                    >
+                      <Upload className="h-4 w-4" />
+                      上載 FAQ 檔案
                     </Button>
+                    <input
+                      ref={faqFileInputRef}
+                      className="hidden"
+                      type="file"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      accept=".txt,.md,.csv,.tsv,text/plain,text/markdown,text/csv"
+                      onChange={handleFaqFileChange}
+                    />
                     <Button variant="outline" onClick={() => setFaqImportOpen(true)}>
                       <FileText className="h-4 w-4" />
                       貼上 FAQ
@@ -1026,6 +1099,12 @@ function AdminCms() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
+                  <RowCapNotice
+                    shown={faqsByScope.reduce((total, [, rows]) => total + rows.length, 0)}
+                    loaded={data?.faqs.length ?? 0}
+                    limit={CMS_ROW_LIMITS.faqs}
+                    label="條 FAQ"
+                  />
                   {faqsByScope.length ? (
                     <Table>
                       <TableHeader>
@@ -1272,7 +1351,7 @@ function AdminCms() {
             scope={faqImportScope}
             text={faqImportText}
             parsedCount={parsedFaqImportRows.length}
-            saving={faqImportSaving}
+            saving={faqImportSaving || faqImportChecking}
             onScopeChange={setFaqImportScope}
             onTextChange={setFaqImportText}
             onClose={() => setFaqImportOpen(false)}
@@ -1289,7 +1368,12 @@ function AdminCms() {
             confirmLabel="確認匯入"
             confirmVariant={faqImportOverwriteCount > 0 ? "destructive" : "default"}
             isPending={faqImportSaving}
-            onOpenChange={setFaqImportConfirmOpen}
+            onOpenChange={(open) => {
+              setFaqImportConfirmOpen(open);
+              // Force a fresh conflict check next time: the table can change
+              // between attempts.
+              if (!open) setFaqImportConflicts(null);
+            }}
             onConfirm={handleImportFaqs}
           >
             {faqImportOverwriteCount > 0 ? (
@@ -1615,10 +1699,17 @@ function ArticleDialog({
                     value={article.cover_image ?? ""}
                     onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
                   />
+                  {/* Was free text holding a raw ISO string like
+                      2026-08-05T09:12:33.000Z, which staff had to hand-edit with
+                      no picker and no format hint; anything else came back as a
+                      raw Postgres timestamp syntax error in a toast. */}
                   <TextField
                     label="發布時間"
-                    value={article.published_at ?? ""}
-                    onChange={(value) => onChange({ ...article, published_at: nullIfBlank(value) })}
+                    type="datetime-local"
+                    value={toDateTimeLocal(article.published_at)}
+                    onChange={(value) =>
+                      onChange({ ...article, published_at: fromDateTimeLocal(value) })
+                    }
                   />
                 </div>
                 <Field label="發布">
@@ -1939,6 +2030,34 @@ function TableSearch({
   );
 }
 
+/** Server LIMITs are presented honestly instead of as the complete set.
+ *
+ * listAdminCms() caps estates and articles at 40 and FAQs at 120. Adding
+ * client-side search on top of that made the cap worse, not better: searching
+ * for an estate outside the window returned a confident "not found", so an
+ * editor would create a duplicate rather than editing the real row. */
+function RowCapNotice({
+  shown,
+  loaded,
+  limit,
+  label,
+}: {
+  shown: number;
+  loaded: number;
+  limit: number;
+  label: string;
+}) {
+  const capped = loaded >= limit;
+  if (!capped && shown === loaded) return null;
+  return (
+    <p className="border-b px-4 py-2 text-xs text-muted-foreground">
+      顯示 {shown} 個{label}
+      {shown !== loaded ? `（已載入 ${loaded} 個）` : ""}
+      {capped ? `，本頁上限為最近更新的 ${limit} 個，較舊的記錄未有載入` : ""}
+    </p>
+  );
+}
+
 function NoSearchMatch({
   label,
   query,
@@ -1950,8 +2069,8 @@ function NoSearchMatch({
 }) {
   return (
     <AdminEmptyState
-      title={`找不到符合「${query}」的${label}`}
-      description="請檢查關鍵字，或清除搜尋查看全部。"
+      title={`在已載入的${label}中找不到符合「${query}」的項目`}
+      description="搜尋只涵蓋本頁已載入的資料，較舊的記錄可能未有載入。請檢查關鍵字，或清除搜尋查看全部。"
       action={
         <Button variant="outline" size="sm" onClick={onClear}>
           清除搜尋
@@ -1975,17 +2094,42 @@ function TextField({
   value,
   onChange,
   required,
+  type = "text",
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   required?: boolean;
+  type?: string;
 }) {
   return (
     <Field label={label}>
-      <Input value={value} onChange={(event) => onChange(event.target.value)} required={required} />
+      <Input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        required={required}
+      />
     </Field>
   );
+}
+
+/** `datetime-local` wants `YYYY-MM-DDTHH:mm` in local time; the column holds an
+ * ISO timestamp. Round-tripping through these keeps the stored value an ISO
+ * string while giving staff a real picker. */
+function toDateTimeLocal(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function fromDateTimeLocal(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const date = new Date(trimmed);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function NumberField({
