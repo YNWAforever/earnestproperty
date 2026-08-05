@@ -57,7 +57,7 @@ test("Operations route integration contracts gate protected reads and remain acc
   assert.match(routeSource, /AdminOperationsOverview/);
   assert.match(routeSource, /AdminOperationsJobs/);
   assert.match(routeSource, /aria-live="polite"/);
-  assert.match(routeSource, /<Tabs\.List[^>]*aria-label="Operations tabs"/);
+  assert.match(routeSource, /<Tabs\.List[^>]*aria-label="營運工具分頁"/);
   assert.match(shellSource, /to: "\/admin\/operations",[\s\S]*?includeSearch: false/);
   assert.match(
     shellSource,

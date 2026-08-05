@@ -104,14 +104,41 @@ function safeMetadataValue(value: unknown) {
 }
 
 export function safeAuditMetadataEntries(metadata: Record<string, unknown>) {
-  return boundedMetadataEntries(metadata)
-    .filter(([key]) => !isSensitiveMetadataKey(key))
-    .map(([key, value]) => [safeMetadataKey(key), safeMetadataValue(value)] as [string, string]);
+  // Sensitive keys are redacted, not dropped. Dropping them meant an
+  // investigator on this compliance surface could not tell "the field was never
+  // recorded" from "the field is hidden from you" -- and the count rendered
+  // beside the table was the post-filter count, so nothing hinted anything was
+  // missing. This now matches the nested behaviour, which already substituted
+  // [REDACTED] rather than removing the key.
+  return boundedMetadataEntries(metadata).map(
+    ([key, value]) =>
+      [
+        safeMetadataKey(key),
+        isSensitiveMetadataKey(key) ? "[REDACTED]" : safeMetadataValue(value),
+      ] as [string, string],
+  );
+}
+
+/** How many top-level keys the display caps withheld, so the table can say so
+ * instead of presenting a truncated view as the whole record. */
+export function auditMetadataOmittedCount(metadata: Record<string, unknown>) {
+  const total = Object.keys(metadata).length;
+  return Math.max(0, total - boundedMetadataEntries(metadata).length);
 }
 
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+const AUDIT_OUTCOME_LABELS: Record<string, string> = {
+  success: "成功",
+  failure: "失敗",
+  denied: "拒絕",
+};
+
+function auditOutcomeLabel(outcome: AuditOutcome) {
+  return AUDIT_OUTCOME_LABELS[outcome] ?? outcome;
 }
 
 function outcomeVariant(outcome: AuditOutcome) {
@@ -277,24 +304,27 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Time</TableHead>
-            <TableHead>Action</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Staff ID</TableHead>
-            <TableHead>Request ID</TableHead>
-            <TableHead>Metadata</TableHead>
+            <TableHead>時間</TableHead>
+            <TableHead>操作</TableHead>
+            <TableHead>結果</TableHead>
+            <TableHead>職員 ID</TableHead>
+            <TableHead>請求 ID</TableHead>
+            <TableHead>中繼資料</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((row) => {
             const entries = safeAuditMetadataEntries(row.metadata);
+            const omitted = auditMetadataOmittedCount(row.metadata);
             const isOpen = expanded.has(row.id);
             return (
               <TableRow key={row.id}>
                 <TableCell>{formatDate(row.created_at)}</TableCell>
                 <TableCell className="font-medium">{row.action}</TableCell>
                 <TableCell>
-                  <Badge variant={outcomeVariant(row.outcome)}>{row.outcome}</Badge>
+                  <Badge variant={outcomeVariant(row.outcome)}>
+                    {auditOutcomeLabel(row.outcome)}
+                  </Badge>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{row.actor_staff_id}</TableCell>
                 <TableCell>
@@ -303,7 +333,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
                     variant="link"
                     className="h-auto min-h-11 max-w-48 truncate p-0 font-mono text-xs"
                     title={row.request_id}
-                    aria-label={`Filter audit by request ID ${row.request_id}`}
+                    aria-label={`以請求 ID ${row.request_id} 篩選審計記錄`}
                     onClick={() => filterByRequestId(row.request_id)}
                   >
                     {row.request_id}
@@ -320,9 +350,9 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
                           type="button"
                           variant="ghost"
                           size="sm"
-                          aria-label={"Toggle metadata for " + row.action}
+                          aria-label={"展開／收起 " + row.action + " 的中繼資料"}
                         >
-                          {entries.length} fields{" "}
+                          {entries.length} 個欄位{omitted > 0 ? `（另有 ${omitted} 個未顯示）` : ""}{" "}
                           <ChevronDown className="ml-1 size-4" aria-hidden="true" />
                         </Button>
                       </CollapsibleTrigger>
@@ -334,11 +364,17 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
                               <dd className="break-words text-muted-foreground">{value}</dd>
                             </div>
                           ))}
+                          {omitted > 0 ? (
+                            <p className="text-muted-foreground">
+                              另有 {omitted}{" "}
+                              個欄位因顯示上限未能列出。如需完整記錄，請聯絡系統管理員查閱資料庫。
+                            </p>
+                          ) : null}
                         </dl>
                       </CollapsibleContent>
                     </Collapsible>
                   ) : (
-                    <span className="text-muted-foreground">None</span>
+                    <span className="text-muted-foreground">無</span>
                   )}
                 </TableCell>
               </TableRow>
@@ -347,7 +383,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
           {!rows.length && !loading ? (
             <TableRow>
               <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                No audit events found.
+                沒有符合條件的審計記錄。
               </TableCell>
             </TableRow>
           ) : null}
@@ -357,7 +393,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
       {loading ? (
         <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
-          Loading audit events
+          正在載入審計記錄
         </p>
       ) : null}
       {nextCursor ? (
@@ -368,7 +404,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
             disabled={loading}
             onClick={() => void loadAudit({ append: true, cursor: nextCursor })}
           >
-            Load more
+            載入更多
           </Button>
         </div>
       ) : null}
