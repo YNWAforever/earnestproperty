@@ -4,6 +4,7 @@ import { Brain, RefreshCw, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +70,7 @@ function AdminSegments() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [materializing, setMaterializing] = useState(false);
+  const [materializeOpen, setMaterializeOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRequestRef = useRef(0);
   const editorContextRef = useRef({ prompt: defaultPrompt, segmentId: "" });
@@ -134,7 +136,7 @@ function AdminSegments() {
 
   const previewSummary = useMemo(() => {
     if (!preview) return "No preview";
-    return `${preview.eligible}/${preview.total} eligible`;
+    return `${preview.total} 位符合條件，其中 ${preview.eligible} 位可接收訊息`;
   }, [preview]);
 
   function selectSegment(segmentId: string) {
@@ -240,7 +242,7 @@ function AdminSegments() {
 
   async function materializeSegment() {
     if (!canMaterializeSegment) {
-      toast.error("請先選擇並儲存 segment");
+      toast.error("請先選擇並儲存客戶分群");
       return;
     }
 
@@ -250,7 +252,13 @@ function AdminSegments() {
         data: { segmentId: selectedSegmentId },
       })) as SegmentMutationResult;
       await refreshSegments();
-      toast.success(`Materialized ${result.materialized ?? 0} contacts`);
+      setMaterializeOpen(false);
+      // The old copy counted every contact enrolled, including those who cannot
+      // be messaged, so a segment reported far more reach than it had.
+      toast.success(
+        `已建立名單：${result.materialized ?? 0} 位客戶` +
+          (typeof result.eligible === "number" ? `，其中 ${result.eligible} 位合資格接收訊息` : ""),
+      );
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -260,8 +268,8 @@ function AdminSegments() {
 
   return (
     <AdminShell
-      title="AI Segments"
-      description="CRM audience builder for reviewed WhatsApp blasts."
+      title="AI 客戶分群"
+      description="用自然語言描述條件，建立可供 WhatsApp 群發使用的客戶名單。"
     >
       {error ? <AdminError message={error} /> : null}
 
@@ -269,11 +277,11 @@ function AdminSegments() {
         filters={
           <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(220px,340px)_auto]">
             <Select value={selectedSegmentId || "new"} onValueChange={selectSegment}>
-              <SelectTrigger aria-label="Saved segment">
-                <SelectValue placeholder="Saved segment" />
+              <SelectTrigger aria-label="已儲存的客戶分群">
+                <SelectValue placeholder="選擇已儲存的分群" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="new">New segment</SelectItem>
+                <SelectItem value="new">新增分群</SelectItem>
                 {segments?.map((segment) => (
                   <SelectItem key={segment.id} value={segment.id}>
                     {segment.name}
@@ -281,9 +289,15 @@ function AdminSegments() {
                 ))}
               </SelectContent>
             </Select>
-            <Button type="button" variant="outline" onClick={refreshSegments} disabled={loading}>
+            <Button
+              type="button"
+              variant="outline" // refreshSegments takes an optional preferredSegmentId; passed
+              // directly, React hands it the MouseEvent as that argument.
+              onClick={() => void refreshSegments()}
+              disabled={loading}
+            >
               <RefreshCw className={loading ? "animate-spin" : ""} />
-              Refresh
+              重新整理
             </Button>
           </div>
         }
@@ -291,20 +305,20 @@ function AdminSegments() {
           <>
             <Button type="button" variant="outline" onClick={runPreview} disabled={previewLoading}>
               <Brain />
-              Preview
+              預覽
             </Button>
             <Button type="button" onClick={saveSegment} disabled={!canSaveSegment || saving}>
               <Save />
-              Save
+              儲存
             </Button>
             <Button
               type="button"
               variant="outline"
-              onClick={materializeSegment}
+              onClick={() => setMaterializeOpen(true)}
               disabled={!canMaterializeSegment || materializing}
             >
               <Users />
-              Materialize
+              建立名單…
             </Button>
           </>
         }
@@ -315,9 +329,9 @@ function AdminSegments() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Segment builder</CardTitle>
+            <CardTitle className="text-base">分群條件</CardTitle>
             <CardDescription>
-              Prompt, preview, save, then materialize before campaign use.
+              先描述條件、預覽結果、儲存，再建立名單供 campaign 使用。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -368,26 +382,28 @@ function AdminSegments() {
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
                   <div>
                     <p className="text-sm font-medium">{previewSummary}</p>
-                    <p className="text-xs text-muted-foreground">Top 200 CRM lead matches</p>
+                    <p className="text-xs text-muted-foreground">
+                      最多顯示 20 行，名單上限為 200 位客戶
+                    </p>
                   </div>
-                  <EligibilityBadge status="eligible" label={`${preview.eligible} eligible`} />
+                  <EligibilityBadge status="eligible" label={`${preview.eligible} 位合資格`} />
                 </div>
                 <div className="max-h-[420px] overflow-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Eligibility</TableHead>
-                        <TableHead>Reason</TableHead>
+                        <TableHead>客戶</TableHead>
+                        <TableHead>可否接收</TableHead>
+                        <TableHead>原因</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {preview.contacts.slice(0, 20).map((contact) => (
                         <TableRow key={`${contact.contact_id}:${contact.lead_id ?? "contact"}`}>
                           <TableCell className="min-w-44">
-                            <div className="font-medium">{contact.name ?? "Unnamed"}</div>
+                            <div className="font-medium">{contact.name ?? "未有姓名"}</div>
                             <div className="text-xs text-muted-foreground">
-                              {contact.phone ?? "No phone"}
+                              {contact.phone ?? "未有電話"}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -429,7 +445,7 @@ function AdminSegments() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{segment.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {segment.eligible_members}/{segment.members} eligible
+                        {segment.members} 位客戶，其中 {segment.eligible_members} 位合資格
                       </p>
                     </div>
                     <Badge variant={segment.status === "active" ? "default" : "secondary"}>
@@ -447,9 +463,94 @@ function AdminSegments() {
           </CardContent>
         </Card>
       </div>
+      {/* Materialize destroys and rewrites the segment's membership for up to
+          50,000 contacts, and the resulting list is what a WhatsApp blast sends
+          to -- it fired on one unconfirmed click. The confirm also surfaces the
+          parsed filters, because an unrecognised prompt yields an empty filter
+          set that quietly matches the entire CRM. */}
+      <AdminConfirmDialog
+        open={materializeOpen}
+        title="確認建立客戶名單？"
+        description="這會重新產生此分群的客戶名單，覆蓋原有內容。名單會用於 WhatsApp 群發。"
+        confirmLabel="確認建立名單"
+        confirmVariant="destructive"
+        isPending={materializing}
+        onOpenChange={(open) => {
+          if (!materializing) setMaterializeOpen(open);
+        }}
+        onConfirm={() => void materializeSegment()}
+      >
+        <div className="space-y-3 text-sm">
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3">
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt className="text-muted-foreground">分群名稱</dt>
+              <dd className="font-medium">{name || "未命名"}</dd>
+            </div>
+            {preview ? (
+              <>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-muted-foreground">符合條件</dt>
+                  <dd className="tabular-nums">{preview.total} 位</dd>
+                </div>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <dt className="text-muted-foreground">可接收訊息</dt>
+                  <dd className="font-semibold tabular-nums">{preview.eligible} 位</dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
+          <SegmentFilterSummary filters={preview?.filters} />
+        </div>
+      </AdminConfirmDialog>
     </AdminShell>
   );
 }
+
+/** The prompt is parsed by regex server-side and the resulting filters were
+ * never shown. An unrecognised prompt such as 「屯門上車客，30 歲以下」 produces an
+ * empty filter object, which matches the entire CRM -- and the panel reported
+ * that as a healthy-looking "183/200 eligible". */
+function SegmentFilterSummary({ filters }: { filters?: Record<string, unknown> | null }) {
+  const entries = Object.entries(filters ?? {}).filter(
+    ([, value]) => value !== undefined && value !== null && value !== "",
+  );
+
+  if (!entries.length) {
+    return (
+      <p
+        role="alert"
+        className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+      >
+        未能從描述中辨識任何篩選條件，此名單將會包含<strong>所有客戶</strong>。
+        請修改描述後重新預覽，或確認你確實想向全部客戶發送。
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground">已辨識的篩選條件</p>
+      <ul className="mt-1 flex flex-wrap gap-1.5">
+        {entries.map(([key, value]) => (
+          <li key={key} className="rounded-md border bg-background px-2 py-1 text-xs">
+            {SEGMENT_FILTER_LABELS[key] ?? key}：{String(value)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const SEGMENT_FILTER_LABELS: Record<string, string> = {
+  intent: "意向",
+  district: "地區",
+  estate: "屋苑",
+  source: "來源",
+  stage: "階段",
+  budget_min: "預算下限",
+  budget_max: "預算上限",
+  assigned_agent_id: "負責代理",
+};
 
 function EligibilityBadge({
   status,
@@ -462,11 +563,11 @@ function EligibilityBadge({
   const text =
     label ??
     ({
-      eligible: "Eligible",
-      missing_phone: "Missing phone",
-      not_opted_in: "Not opted in",
-      opted_out: "Opted out",
-      blocked: "Blocked",
+      eligible: "可接收",
+      missing_phone: "沒有電話",
+      not_opted_in: "未同意接收",
+      opted_out: "已拒收",
+      blocked: "已封鎖",
     }[status] ||
       status);
   return <Badge variant={variant}>{text}</Badge>;

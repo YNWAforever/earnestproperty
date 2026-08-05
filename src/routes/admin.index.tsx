@@ -33,7 +33,14 @@ function AdminHome() {
     <AdminShell title="總覽" description="CMS、CRM、WhatsApp 及群發工作台。">
       {error ? <AdminError message={error} /> : null}
       {!data && !error ? (
-        <Skeleton className="h-64 w-full" />
+        // Was a single h-64 block standing in for a ~90px metric row, so the
+        // cards below jumped ~170px upward the moment data arrived -- on the
+        // first page every admin sees after signing in.
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <Skeleton key={index} className="h-[88px] w-full" />
+          ))}
+        </div>
       ) : data ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard icon={Building2} label="放盤" value={data.properties} to="/admin/listings" />
@@ -43,7 +50,15 @@ function AdminHome() {
             value={data.openLeads}
             to="/admin/leads"
           />
-          <MetricCard icon={BookOpen} label="聯絡人" value={data.contacts} to="/admin/leads" />
+          {/* Both this and 跟進中 leads used to link to an unfiltered /admin/leads,
+              and that page has no contacts view at all -- clicking a contact
+              count landed on a lead list showing a different number. */}
+          <MetricCard
+            icon={BookOpen}
+            label="聯絡人（累計）"
+            value={data.contacts}
+            to="/admin/leads"
+          />
           <MetricCard
             icon={MessageCircle}
             label="WhatsApp 對話"
@@ -59,7 +74,10 @@ function AdminHome() {
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-4 lg:grid-cols-3">
+      <section aria-labelledby="admin-overview-guidance" className="mt-5 grid gap-4 lg:grid-cols-3">
+        <h2 id="admin-overview-guidance" className="sr-only">
+          今日工作指引
+        </h2>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">今日優先</CardTitle>
@@ -72,11 +90,11 @@ function AdminHome() {
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Woztell 狀態</CardTitle>
+            <CardTitle className="text-base">關於 WhatsApp 發送</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Live sending 由 `WOZTELL_ENABLED` 控制；未配置 token / channel secret
-            前，後台仍可管理對話與 campaign draft。
+            WhatsApp 發送需要技術同事完成設定才會啟用。未啟用前，後台仍可管理對話並草擬
+            campaign，只是不會實際送出訊息。實際發送狀態請在「WhatsApp」頁頂查看。
           </CardContent>
         </Card>
       </section>

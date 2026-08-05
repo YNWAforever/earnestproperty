@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { useBlocker } from "@tanstack/react-router";
+import { useBlocker, useRouter } from "@tanstack/react-router";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 
@@ -29,6 +29,16 @@ const LEAVE_CONFIRM = "離開並放棄修改";
  * renders the confirm dialog. Mount the returned `dialog` anywhere in the tree.
  */
 export function useRouteLeaveGuard(isDirty: boolean) {
+  // `useBlocker` requires router context and throws without it. Keeping it in a
+  // child component -- mounted only when a router is present -- lets a guarded
+  // form still render standalone (unit tests, isolated previews) with no guard
+  // instead of crashing, without ever calling a hook conditionally.
+  const router = useRouter({ warn: false });
+  const dialog = router ? <RouteLeaveBlocker isDirty={isDirty} /> : null;
+  return { dialog };
+}
+
+function RouteLeaveBlocker({ isDirty }: { isDirty: boolean }) {
   const blocker = useBlocker({
     shouldBlockFn: () => isDirty,
     enableBeforeUnload: () => isDirty,
@@ -36,22 +46,21 @@ export function useRouteLeaveGuard(isDirty: boolean) {
     withResolver: true,
   });
 
-  const dialog =
-    blocker.status === "blocked" ? (
-      <AdminConfirmDialog
-        open
-        title={LEAVE_TITLE}
-        description={LEAVE_DESCRIPTION}
-        confirmLabel={LEAVE_CONFIRM}
-        confirmVariant="destructive"
-        onOpenChange={(open) => {
-          if (!open) blocker.reset();
-        }}
-        onConfirm={blocker.proceed}
-      />
-    ) : null;
+  if (blocker.status !== "blocked") return null;
 
-  return { dialog };
+  return (
+    <AdminConfirmDialog
+      open
+      title={LEAVE_TITLE}
+      description={LEAVE_DESCRIPTION}
+      confirmLabel={LEAVE_CONFIRM}
+      confirmVariant="destructive"
+      onOpenChange={(open) => {
+        if (!open) blocker.reset();
+      }}
+      onConfirm={blocker.proceed}
+    />
+  );
 }
 
 /**

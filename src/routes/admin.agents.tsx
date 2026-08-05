@@ -46,7 +46,7 @@ function AdminAgents() {
           <p className="self-center text-sm text-muted-foreground">代理資料由管理員或經理更新。</p>
         }
         actions={
-          <Button asChild size="sm" className="h-9">
+          <Button asChild size="sm" className="h-11 lg:h-9">
             <Link to="/admin/agents/new">
               <Plus className="mr-2 h-4 w-4" />
               新增代理
@@ -101,7 +101,26 @@ function AgentRow({ profile }: { profile: AdminAgentProfileRow }) {
           {profile.job_title ?? profile.branch ?? "未設定職銜或分行"}
         </p>
       </td>
-      <td className="px-4 py-4 text-muted-foreground">{profile.email ?? "未連結電郵"}</td>
+      {/* The column is 帳戶連結, but it rendered profile.email -- a plain contact
+          field that has nothing to do with whether the profile is attached to a
+          Neon Auth user. An agent with an email and no auth_user_id therefore
+          read as linked, so a staff member who could not sign in looked
+          correctly configured here. */}
+      <td className="px-4 py-4">
+        {profile.auth_user_id ? (
+          <>
+            <Badge variant="secondary">已連結</Badge>
+            <p className="mt-1 text-xs text-muted-foreground">{profile.email ?? "未設定電郵"}</p>
+          </>
+        ) : (
+          <>
+            <Badge variant="outline">未連結帳戶</Badge>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {profile.email ? `${profile.email}（僅聯絡電郵）` : "未設定電郵"}
+            </p>
+          </>
+        )}
+      </td>
       <td className="px-4 py-4">
         <div className="flex flex-wrap gap-1.5">
           <Badge variant={profile.active ? "default" : "outline"}>

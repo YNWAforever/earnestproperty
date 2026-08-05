@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { saveAdminAgentProfile } from "@/lib/neon/admin-data";
 import type { AdminAgentProfileInput } from "@/lib/neon/admin-data.types";
 import { buildAgentProfilePayload } from "./agent-profile-form-utils";
@@ -53,7 +54,17 @@ export const agentProfileSchema = z
       .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "請使用小寫英文、數字及連字號")
       .or(z.literal("")),
     show_on_website: z.boolean(),
-    display_order: z.union([z.literal(""), z.coerce.number().int().min(0).max(9999)]),
+    // Every other rule in this schema carries a Chinese message; without these,
+    // typing "1.5" into 顯示排序 surfaced the raw "Expected integer, received float"
+    // inline, in the file the audit certifies as the reference implementation.
+    display_order: z.union([
+      z.literal(""),
+      z.coerce
+        .number({ invalid_type_error: "請輸入數字" })
+        .int("請輸入整數，不要小數點")
+        .min(0, "請輸入 0 或以上的數字")
+        .max(9999, "請輸入 9999 或以下的數字"),
+    ]),
     active: z.boolean(),
   })
   .superRefine((data, context) => {
@@ -101,6 +112,21 @@ export function AgentProfileForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(() => createInitialForm(profile));
+  const [saved, setSaved] = useState(false);
+
+  // 17 fields including a long bio, and no guard at all: clicking 經紀管理 in the
+  // always-visible sidebar, the 返回 button, or 登出 unmounted the form and lost
+  // everything. Easy to miss because the 3 Aug audit certifies this file as the
+  // codebase's reference implementation.
+  const isDirty = useMemo(() => {
+    if (saved) return false;
+    const pristine = createInitialForm(profile);
+    return (Object.keys(pristine) as Array<keyof typeof pristine>).some(
+      (key) => form[key] !== pristine[key],
+    );
+  }, [form, profile, saved]);
+
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -157,6 +183,9 @@ export function AgentProfileForm({
       const result = await saveAdminAgentProfile({ data: payload });
       if (!result.id || result.error) throw new Error(result.error || "未能儲存代理資料");
       toast.success(profile?.id ? "代理資料已更新" : "代理資料已建立");
+      // Before onSaved(): that navigates, and the guard would otherwise fire on
+      // a clean save.
+      setSaved(true);
       onSaved(result.id);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -167,6 +196,7 @@ export function AgentProfileForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-7" noValidate>
+      {leaveGuardDialog}
       <FormSection title="公開資料">
         <Field label="中文名稱" htmlFor="name_zh" error={fieldErrors.name_zh}>
           <Input
