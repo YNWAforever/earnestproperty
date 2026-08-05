@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ExternalLink,
@@ -95,12 +95,38 @@ const errorMessages: Record<string, string> = {
   COPILOT_EVIDENCE_REQUIRED: "建議缺少資料來源，請改用「內部資料及網頁研究」後重試。",
   COPILOT_CITATION_REQUIRED: "網頁研究建議缺少可引用連結，請重新產生建議。",
   COPILOT_SAVE_FIRST: "請先儲存一次，才可產生 AI 建議。",
-  COPILOT_RATE_LIMITED: "AI 請求太頻密，請稍等一兩分鐘再試。",
+  // The server counts requests over `interval '1 hour'`
+  // (content-copilot-repository.server.ts:111), so "a minute or two" sent staff
+  // back to retry roughly thirty times before it could possibly clear.
+  COPILOT_RATE_LIMITED: "已達到每小時的 AI 請求上限，請稍後（約一小時內）再試，或先手動編輯。",
   COPILOT_UNAUTHORIZED: "登入狀態已過期，請重新登入後再試。",
   COPILOT_FORBIDDEN: "你的帳戶未獲授權使用 AI 內容助手，請聯絡管理員。",
   COPILOT_PROVIDER_UNSUPPORTED: "AI 服務尚未設定，請通知技術同事啟用。",
   COPILOT_DATABASE_CONFLICT: "資料庫忙碌未能儲存建議紀錄，請稍後再試。",
+  COPILOT_RESOURCE_NOT_FOUND: "找不到這筆資料，可能已被刪除，請重新載入頁面。",
+  COPILOT_RESEARCH_UNAVAILABLE: "網頁研究服務暫時無法使用，可改用「只用內部資料」產生建議。",
+  COPILOT_CONTENT_TOO_LONG: "內容過長，AI 未能處理。請先縮短描述後再試。",
+  COPILOT_TIMEOUT: "AI 回應逾時。請重試一次；如持續逾時請減少選擇的欄位。",
+  VALIDATION_ERROR: "提交的資料不正確，請重新載入頁面後再試。",
 };
+
+const confidenceLabels: Record<string, string> = {
+  high: "高",
+  medium: "中",
+  low: "低",
+};
+
+// Server warnings arrive as codes or raw English strings; neither is actionable
+// for a Cantonese-speaking editor deciding whether to publish the copy.
+const warningMessages: Record<string, string> = {
+  RESEARCH_UNAVAILABLE: "網頁研究未能執行，此建議只根據內部資料產生。",
+  RESEARCH_PARTIAL: "網頁研究只取得部分資料，請自行核實外部事實。",
+  EVIDENCE_LIMITED: "可用資料有限，請仔細核對建議內容。",
+};
+
+function copilotWarningText(warning: string) {
+  return warningMessages[warning] ?? warning;
+}
 
 const fallbackErrorMessage = "AI 內容助手未能完成，請稍後再試；如持續失敗請通知技術同事。";
 
@@ -155,6 +181,10 @@ export function AdminContentCopilot({
   // staff-written text the moment it lands.
   const [undoValues, setUndoValues] = useState<Record<string, ContentCopilotValue> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The values as they stood immediately after the last apply.
+  const appliedValuesRef = useRef<Record<string, ContentCopilotValue> | null>(null);
+  // True once the form has drifted from the snapshot the proposal was built on.
+  const [proposalStale, setProposalStale] = useState(false);
 
   const displayState = resourceId
     ? state === "disabled-unsaved"
@@ -257,7 +287,7 @@ export function AdminContentCopilot({
       });
       if (!patchResult.ok) {
         setError(patchResult.error);
-        setState(patchResult.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "failed");
+        setState(patchResult.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "review");
         return;
       }
 
@@ -267,23 +297,52 @@ export function AdminContentCopilot({
       });
       if (!decision.ok) {
         setError(decision.error || "COPILOT_DECISION_FAILED");
-        setState(decision.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "failed");
+        // Only a stale proposal is unrecoverable. Anything else keeps the review
+        // panel and the ticked boxes so a retry does not cost another 10+ second
+        // generation and re-reading five diff cards.
+        setState(decision.error === "COPILOT_STALE_PROPOSAL" ? "stale" : "review");
         return;
       }
+      // Snapshot only the fields actually accepted. Snapshotting every key of
+      // the patched value meant 復原為套用前內容 rewound edits the user made after
+      // the apply -- a hand-fixed 標題 and a rewritten 特色 both silently reverted
+      // even though neither came from the AI.
       setUndoValues(
-        Object.fromEntries(
-          Object.keys(patchResult.value).map((field) => [field, values[field] ?? null]),
-        ),
+        Object.fromEntries(acceptedFields.map((field) => [field, values[field] ?? null])),
       );
+      appliedValuesRef.current = { ...values, ...patchResult.value };
       onApply(patchResult.value);
       setState("applied");
     } catch {
       setError("COPILOT_DECISION_FAILED");
-      setState("failed");
+      setState("review");
     } finally {
       setApplying(false);
     }
   }
+
+  // The proposal is voided the moment any watched field changes -- including
+  // re-typing the same text with a stray space -- but that was only discovered
+  // at apply time, after staff had spent minutes reading diff cards and ticking
+  // boxes. The panel now says so while there is still time to regenerate.
+  useEffect(() => {
+    if (state !== "review" || !proposal) {
+      setProposalStale(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void buildContentFingerprint(fingerprintValues ?? values)
+        .then((current) => {
+          if (!cancelled) setProposalStale(current !== proposal.sourceFingerprint);
+        })
+        .catch(() => undefined);
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [fingerprintValues, proposal, state, values]);
 
   function undoApply() {
     if (!undoValues) return;
@@ -291,6 +350,17 @@ export function AdminContentCopilot({
     setUndoValues(null);
     setState("ready");
   }
+
+  // Once the form diverges from the post-apply state the snapshot no longer
+  // describes "before the apply", so the button is retired rather than left
+  // offering a rewind that would clobber newer work.
+  useEffect(() => {
+    if (!undoValues) return;
+    const stillMatches = Object.keys(undoValues).every(
+      (field) => appliedValuesRef.current?.[field] === values[field],
+    );
+    if (!stillMatches) setUndoValues(null);
+  }, [undoValues, values]);
   return (
     <aside
       className="w-full space-y-4 rounded-md border bg-muted/20 p-4 lg:w-[24rem] lg:flex-none"
@@ -342,7 +412,9 @@ export function AdminContentCopilot({
           <Skeleton className="h-16 w-full" aria-hidden="true" />
         </div>
       ) : null}
-      {displayState === "failed" || displayState === "stale" ? (
+      {displayState === "failed" ||
+      displayState === "stale" ||
+      (displayState === "review" && error) ? (
         <div
           className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
           role="alert"
@@ -478,6 +550,7 @@ export function AdminContentCopilot({
           proposal={proposal}
           acceptedFields={acceptedFields}
           applying={applying}
+          stale={proposalStale}
           onTogglePatch={toggleAcceptedPatch}
           onAcceptAll={acceptAllPatches}
           onDiscard={discardProposal}
@@ -502,6 +575,7 @@ function Review({
   proposal,
   acceptedFields,
   applying,
+  stale,
   onTogglePatch,
   onAcceptAll,
   onDiscard,
@@ -511,6 +585,7 @@ function Review({
   proposal: ReviewProposal;
   acceptedFields: string[];
   applying: boolean;
+  stale: boolean;
   onTogglePatch: (patch: ContentCopilotPatch) => void;
   onAcceptAll: () => void;
   onDiscard: () => void;
@@ -527,7 +602,7 @@ function Review({
   return (
     <div className="space-y-3" aria-live="polite">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold">建議內容</h4>
+        <h4 className="text-sm font-semibold">建議內容（共 {proposal.patches.length} 項）</h4>
         <div className="flex items-center gap-2">
           <Button
             type="button"
@@ -541,7 +616,44 @@ function Review({
           <Badge variant="outline">請先覆核</Badge>
         </div>
       </div>
-      <ScrollArea className="max-h-72 pr-3">
+
+      {/* proposal.warnings was fetched and never rendered. A staff member who
+          chose 內部資料及網頁研究 specifically for externally-sourced facts would
+          see a normal proposal even when the research step had failed and the
+          model fell back to internal evidence only. */}
+      {proposal.warnings?.length ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+        >
+          <p className="font-medium">產生時有以下警告：</p>
+          <ul className="mt-1 list-inside list-disc">
+            {proposal.warnings.map((warning) => (
+              <li key={warning}>{copilotWarningText(warning)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {stale ? (
+        <div
+          role="status"
+          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+        >
+          <p className="font-medium">表單已改動，此建議已過時。</p>
+          <p className="mt-1">套用會被拒絕。請按「重新產生」以目前的表單內容取得新建議。</p>
+        </div>
+      ) : null}
+
+      {proposal.patches.length === 0 ? (
+        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          AI 認為目前內容已符合要求，沒有提出修改建議。你可以調整語氣或選擇其他欄位後重新產生。
+        </p>
+      ) : null}
+      {/* h-72, not max-h-72: with max-h the ScrollArea viewport never gets a
+          definite height, so a proposal of up to 12 patches was clipped after
+          roughly two cards with no affordance that more existed. */}
+      <ScrollArea className="h-72 pr-3">
         <div className="space-y-3">
           {proposal.patches.map((patch) => {
             const selection = getContentCopilotPatchSelection(
@@ -561,7 +673,7 @@ function Review({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-sm">{fieldLabels[patch.field] ?? patch.field}</strong>
                       <Badge variant={patch.confidence === "high" ? "default" : "secondary"}>
-                        {patch.confidence}
+                        信心：{confidenceLabels[patch.confidence] ?? patch.confidence}
                       </Badge>
                     </div>
                     {/* Both sides, always: staff could not previously see what
@@ -620,7 +732,7 @@ function Review({
         type="button"
         className="w-full"
         onClick={onApply}
-        disabled={applying || !acceptedFields.length}
+        disabled={applying || stale || !acceptedFields.length}
         aria-busy={applying ? true : undefined}
       >
         {applying ? (
@@ -628,8 +740,13 @@ function Review({
         ) : (
           <Check aria-hidden="true" />
         )}
-        {applying ? "套用中…" : "套用已選建議"}
+        {applying ? "套用中…" : `套用已選建議（${acceptedFields.length}）`}
       </Button>
+      {/* The button sat disabled by default -- selection starts empty by design
+          -- with no indication that ticking a box was the missing step. */}
+      {!applying && !stale && !acceptedFields.length && proposal.patches.length > 0 ? (
+        <p className="text-xs text-muted-foreground">請先勾選要套用的建議。</p>
+      ) : null}
       {/* Without these the only way out of review was closing the dialog, which
           discarded the whole draft. */}
       <div className="flex gap-2">
