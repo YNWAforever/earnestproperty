@@ -7,7 +7,8 @@ current `main`, every item it claimed **Fixed** was re-checked for completeness,
 the effort went into surfaces and failure paths the earlier pass did not reach.
 
 **161 findings confirmed** — 1 critical, 34 high, 96 medium, 30 low. **126 are new**; 35 are
-prior open items re-verified as still present. 11 candidate findings were refuted on inspection
+prior open items re-verified as still present. **The critical finding and all 34 high
+findings have since been fixed** — see "Fixed in this pass" below. 11 candidate findings were refuted on inspection
 and are listed at the end so they are not re-raised.
 
 Method: eight parallel auditors read every admin route and component in full, then each
@@ -69,75 +70,116 @@ than 120 FAQs the confirm dialog asserts 「全部為新增，不會覆寫現有
 
 ---
 
-## Fixed in this pass — the blast-safety slice
+## Fixed in this pass
 
-All of `/admin/blasts`'s critical + high findings, plus the page's localisation. Server, types,
-UI and tests. Everything else in this document is still open.
+All eight admin surfaces were remediated across eight commits. **The critical
+finding and all 34 high findings are closed**, along with the medium/low items that
+sat on the same code paths. What remains open is listed under "Still open" below.
 
-- **Sending is now behind a confirmation.** Both Queue paths (row action and campaign dialog)
-  route through `AdminConfirmDialog`, which names the campaign, the template and language, the
-  audience, and the eligible count, states that the send cannot be recalled, and keeps a failure
-  inside the dialog via the component's existing `error` slot rather than behind the overlay.
-  The action is now labelled 「發送…」 — the ellipsis marks it as opening a confirmation.
-- **The review gate is real.** `draft` was removed from `canPrepareAdminCampaignQueue`
-  (`admin-workflow.ts`) and from the page's `queueableStatuses`. Because
-  `validateAdminCampaignQueueability` is the single chokepoint for both
-  `materializeCampaignRecipients` and `sendAdminCampaignQueue`, this closes every path, not just
-  the button. The status dropdown now reads 「草稿（不可發送）」 and the disabled send button
-  explains what to do. **Behaviour change:** campaigns sitting in `draft` must be moved to
-  待審核 before they can be sent.
-- **Stale recipient counts can no longer gate a send.** Row previews are stamped with their
-  fetch time, expire after 60s, and a 15s ticker makes the expiry actually engage rather than
-  waiting for an unrelated re-render. The toolbar 重新整理 now passes `clearRowPreviews: true`,
-  so Preview → Refresh → Send can no longer fire against a different audience than the number on
-  screen described.
-- **Delivery outcome is visible per campaign.** `listAdminCampaigns` gained
-  `count(*) FILTER (…)` over the recipient statuses, surfaced in a new 送達狀況 column with
-  failures in destructive styling. A blast where 800 of 1000 sends failed no longer renders
-  identically to a clean one.
-- **Staff can see what the template will carry.** `fetchAdminBlastOptions` now selects
-  `category`, `description` and `components`, rendered in the campaign dialog and inside the send
-  confirmation. **Correction to the finding above:** `whatsapp_templates.components` holds
-  WhatsApp _send-time parameter substitutions_, not the approved body text — the body lives with
-  Woztell and is never mirrored into this database, so it cannot be rendered here. The panel
-  therefore shows every value this system will substitute (via a new tested helper,
-  `src/lib/woztell/template-preview.ts`) and says plainly that the full approved text must be
-  checked in Woztell. Template approval status is shown in Chinese, since an unapproved template
-  is the most common reason a send is refused.
-- **The dialog's Cancel no longer looks like a dismiss.** It is now 「取消整個 Campaign」, styled
-  `destructive`, pushed to the far left away from 關閉, and behind its own confirmation showing
-  how many recipients are still pending and how many were already sent (and cannot be recalled).
-- **Schedule is labelled honestly.** `scheduled_at` is written to the database but no delivery
-  path reads it — `findEligibleCampaigns` in `api.admin.jobs.send-queue.ts` only picks up
-  campaigns already in `queued`/`sending`. The field is now 「預定發送時間（僅作記錄）」 with
-  helper text saying the system will not send by itself. **Real scheduling was deliberately not
-  implemented:** it would mean enabling unattended sending of customer messages, which is the
-  owner's decision, not a silent side effect of a UI fix.
-- **The page is now in Traditional Chinese**, including all new confirmation copy. This was part
-  of the safety fix, not polish — a confirmation nobody can read is not a confirmation.
+**`/admin/blasts` — sending is safe now.** Both Queue paths go through
+`AdminConfirmDialog` naming the campaign, template, audience and eligible count.
+`draft` was removed from `canPrepareAdminCampaignQueue`, which is the single chokepoint
+for both `materializeCampaignRecipients` and `sendAdminCampaignQueue`, so the review gate
+is real on every path rather than just on the button. Row previews expire after 60s with a
+ticker so the expiry actually engages, and the toolbar refresh clears them. A delivery
+breakdown column (`count(*) FILTER` over recipient statuses) means a mostly-failed blast
+no longer renders identically to a clean one. The dialog's "Cancel" is now
+「取消整個 Campaign」, destructive, separated from 關閉 and behind its own confirm.
+**Correction to the finding above:** `whatsapp_templates.components` holds WhatsApp
+send-time _parameter substitutions_, not the approved body — that lives with Woztell and
+is never mirrored locally, so the panel shows every value this system will substitute
+(via the tested `src/lib/woztell/template-preview.ts`) and says where to verify the rest.
+Real scheduling was deliberately **not** implemented: it would enable unattended sending
+of customer messages, which is the owner's decision. `scheduled_at` is now labelled
+「僅作記錄」.
 
-Verification: `npm run build` succeeds; all six admin-relevant suites pass
+**`/admin/operations` — the migration apply bug is fixed.** `runApply()` cleared `plan`
+before the `await` while the dialog's `open` requires `plan !== null`, so the modal
+unmounted the instant Apply was clicked and an irreversible schema change ran with no
+feedback; its `isPending` was unreachable dead code. The plan is now cleared only after
+the request settles, and the confirm displays the summary, checksum, schema fingerprint
+and dependencies it had been fetching and discarding. `transitionOperationsHealthState`
+no longer drops health to `null` on a failed poll — one blip on the 30s tick was
+unmounting every panel and destroying filters, loaded pages and open dialogs. That is
+safe because every `/api/admin/control-plane/*` handler calls `requireStaffPermission`
+per request; the prior test asserted the null-drop as intentional default-deny and was
+replaced with two tests covering both cases. `mergeOperationsJobRows` gained a `refresh`
+mode so a tick can't snap 100 rows back to 25, and ticks no longer set `loading` (which
+was disabling filter inputs mid-word). Audit metadata redacts rather than drops sensitive
+keys, and reports what the caps withheld.
+
+**`/admin/whatsapp` — the inbox is live.** The open conversation is polled and the
+refresh button updates both list and detail. Failed replies refetch, keep the draft, and
+render with the destructive palette plus `role="alert"` rather than differing by
+font-weight. Reassignment detects the conversation leaving scope instead of answering a
+successful handoff with 「找不到 WhatsApp 對話」. Drafts are per-conversation. Added:
+scroll-to-newest, search and status filter, honest cap counts, composer counter, and the
+remaining 24-hour-window clock.
+
+**`/admin/cms` — the FAQ import stops lying.** Its overwrite diff ran against a
+120-row page while the write uses `ON CONFLICT DO UPDATE`; a new server-side
+`checkAdminFaqConflicts` resolves it against the whole table, and a failed check refuses
+to open the confirm. Partial imports now refresh knowledge status and say the rebuild is
+outstanding. A shared `refreshAfterWrite()` stops a failed refetch being reported as a
+failed save (which caused duplicate rows). Row caps are stated on all three capped tables.
+
+**`/admin/listings` + PropertyForm.** `useRouteLeaveGuard` is wired (it had zero call
+sites). Search and paging use the `q`/`limit` the server already supported. 下架 and
+已售/已租 confirm. Photo upload reports partial failure as failure, with a persistent
+list of failed filenames, 44px controls and announced progress. Duplicate 放盤編號 maps
+to a Chinese inline error on the field.
+
+**AI copilot.** A failed apply keeps the reviewed proposal and selection instead of
+discarding minutes of review. Staleness is announced while it still matters rather than
+at apply time. Undo snapshots only accepted fields and retires once the form diverges.
+`proposal.warnings` render. The review list scrolls instead of clipping at ~2 cards. The
+rate-limit message said "a minute or two" for a one-hour window.
+
+**CRM + Command Center.** The search box no longer pushes a history entry per keystroke
+or drops IME input. Command Center polls, refreshes on focus, shows `generated_at` and
+labels its 200-row cap. 儲存 submits the typed follow-up note it used to discard.
+
+**Shell, agents, segments.** AgentProfileForm gained the leave guard;
+`useRouteLeaveGuard` was restructured so `useBlocker` mounts only under router context.
+Segments confirms materialize and shows the parsed filters — an unrecognised prompt
+yields an empty filter set matching the entire CRM, previously reported as a healthy
+"183/200 eligible". The agents 帳戶連結 column reports the real Neon Auth link rather
+than an unrelated email field. 登出 confirms. `AdminError` maps known messages.
+`/admin/blasts`, `/admin/segments`, `/admin/operations` and all four operations
+components are localised — they had almost no Chinese.
+
+**Verification:** `npm run build` succeeds. All six admin suites pass
 (`test:command-center`, `test:operations`, `test:content-copilot`, `test:control-plane`,
-`test:property-experience`, `test:woztell`); ESLint clean on the changed files; `tsc` unchanged
-at its baseline apart from one added `bun:test` resolution error matching the repo's five
-existing bun test files. `admin.routes.test.mjs` assertions were updated to lock in the new
-behaviour (confirmation present, draft not queueable, preview freshness, delivery cell, the
-「僅作記錄」 schedule label), and `admin-workflow.test.mjs` gained a draft-is-rejected case.
+`test:property-experience`, `test:woztell`). ESLint clean on changed files apart from
+pre-existing `react-refresh` warnings. `tsc` is at **57 pre-existing errors, down from
+58** — the `admin.segments.tsx` `onClick` type error is fixed. Test assertions that
+encoded old behaviour were updated deliberately, including two that had locked in bugs
+(the migration `setPlan(null)` ordering and the operations health null-drop).
+
+---
+
+## Still open
+
+Not attempted in this pass, in rough priority order:
+
+- **Real blast scheduling** — needs the owner's decision on unattended sending.
+- **Bulk lead workflow** (`admin.leads.tsx`) — reassigning 30 leads is still 30
+  open→save cycles; needs a real bulk server function, not a client-side loop.
+- **Deep-linking** for lead detail, WhatsApp conversations and listing filters — the
+  Command Center's 開啟完整 Lead still drops the id.
+- **Sign-in return path** (`AdminShell`) — needs a `redirect` search param on the auth
+  route plus a post-auth callback on `AuthView`.
+- **The two-nav-entries-one-route problem** — `admin.routes.test.mjs` asserts that exact
+  shape, so it encodes a deliberate decision and is the owner's call.
+- **`npm ci` lockfile drift** — `package-lock.json` is out of sync with `package.json`.
+- Assorted medium/low polish across the surfaces, listed in full below.
 
 ---
 
 ## Suggested order of work
 
-1. ~~**Blast safety**~~ — **done, see above.**
-2. **Migration apply** — move `setPlan(null)` after the await, keep the dialog open while
-   applying, and show the plan's summary/checksum/dependencies in the confirm.
-3. **Localise `/admin/segments` and `/admin/operations`** — the four operations components have
-   no Chinese at all. (`/admin/blasts` is done.)
-4. **Row caps** — one honest 「顯示 N 筆（上限 M）」 line plus a load-more, applied to the six capped
-   lists. Fix the FAQ import diff server-side.
-5. **Wire `useRouteLeaveGuard`** into `PropertyForm` and `AgentProfileForm`; it already exists.
-6. **WhatsApp inbox refresh** — poll the open conversation, refetch on the failure path, and fix
-   the reassignment flow that reports success as an error.
+All six items in the original plan are done — see "Fixed in this pass" above. The
+remaining work is listed under "Still open".
 
 ---
 
@@ -146,14 +188,14 @@ behaviour (confirmation present, draft not queueable, preview freshness, deliver
 - All 14 admin-relevant test suites pass: `test:command-center` (29), `test:operations` (18 + 8
   bun), `test:woztell` (29), `test:content-copilot` (34 + 14 bun), `test:property-experience`
   (96 bun + 77), `test:control-plane` (30).
-- `npx tsc --noEmit` reports 58 errors. 52 are the pre-existing TanStack Start server-fn typing
-  baseline in `src/lib/neon/admin-data.ts`; 5 are `bun:test` types not resolving under `tsc`.
-  **One is real:** `admin.segments.tsx:284` passes `refreshSegments` — declared
-  `async (preferredSegmentId?: string)` — directly as `onClick`, so React hands it a
-  `MouseEvent` as `preferredSegmentId`. The outcome is benign today (the event never matches a
-  segment id, so `preferredSegment` lands `undefined`, which is the same branch as the no-arg
-  call), but it is a latent trap for anyone who later adds an early-return on that parameter.
-  Fix: `onClick={() => void refreshSegments()}`.
+- `npx tsc --noEmit` reported 58 errors at review time. 52 are the pre-existing TanStack Start
+  server-fn typing baseline in `src/lib/neon/admin-data.ts`; 5 are `bun:test` types not
+  resolving under `tsc`. **One was real and is now fixed:** `admin.segments.tsx:284` passed
+  `refreshSegments` — declared `async (preferredSegmentId?: string)` — directly as `onClick`, so
+  React handed it a `MouseEvent` as `preferredSegmentId`. The outcome was benign (the event
+  never matched a segment id, so `preferredSegment` landed `undefined`, the same branch as the
+  no-arg call), but it was a latent trap for anyone adding an early-return on that parameter.
+  The baseline is now 57.
 - `npm ci` **fails** — `package-lock.json` is out of sync with `package.json`
   (`Missing: @cloudflare/workerd-windows-64@1.20260730.1 from lock file`). `npm install` works.
   Worth regenerating the lockfile so CI and fresh clones are reproducible.
