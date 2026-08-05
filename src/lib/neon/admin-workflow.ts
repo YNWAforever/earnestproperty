@@ -42,7 +42,12 @@ export function canPrepareAdminCampaignQueue(input: {
   campaignStatus: string;
   templateStatus: string | null;
 }) {
-  if (!["draft", "review", "scheduled"].includes(input.campaignStatus)) {
+  // `draft` is deliberately absent. The blasts page promises 「審核後排程發送」 and
+  // offers a Review status, but while draft was queueable that gate was
+  // decorative: a half-written campaign with the wrong template still selected
+  // was one click from reaching customers. Sending now requires an explicit
+  // move to review/scheduled first.
+  if (!["review", "scheduled"].includes(input.campaignStatus)) {
     return { ok: false as const, reason: "INVALID_CAMPAIGN_STATUS" };
   }
   if (!String(input.templateStatus ?? "").startsWith("active")) {

@@ -69,15 +69,70 @@ than 120 FAQs the confirm dialog asserts 「全部為新增，不會覆寫現有
 
 ---
 
+## Fixed in this pass — the blast-safety slice
+
+All of `/admin/blasts`'s critical + high findings, plus the page's localisation. Server, types,
+UI and tests. Everything else in this document is still open.
+
+- **Sending is now behind a confirmation.** Both Queue paths (row action and campaign dialog)
+  route through `AdminConfirmDialog`, which names the campaign, the template and language, the
+  audience, and the eligible count, states that the send cannot be recalled, and keeps a failure
+  inside the dialog via the component's existing `error` slot rather than behind the overlay.
+  The action is now labelled 「發送…」 — the ellipsis marks it as opening a confirmation.
+- **The review gate is real.** `draft` was removed from `canPrepareAdminCampaignQueue`
+  (`admin-workflow.ts`) and from the page's `queueableStatuses`. Because
+  `validateAdminCampaignQueueability` is the single chokepoint for both
+  `materializeCampaignRecipients` and `sendAdminCampaignQueue`, this closes every path, not just
+  the button. The status dropdown now reads 「草稿（不可發送）」 and the disabled send button
+  explains what to do. **Behaviour change:** campaigns sitting in `draft` must be moved to
+  待審核 before they can be sent.
+- **Stale recipient counts can no longer gate a send.** Row previews are stamped with their
+  fetch time, expire after 60s, and a 15s ticker makes the expiry actually engage rather than
+  waiting for an unrelated re-render. The toolbar 重新整理 now passes `clearRowPreviews: true`,
+  so Preview → Refresh → Send can no longer fire against a different audience than the number on
+  screen described.
+- **Delivery outcome is visible per campaign.** `listAdminCampaigns` gained
+  `count(*) FILTER (…)` over the recipient statuses, surfaced in a new 送達狀況 column with
+  failures in destructive styling. A blast where 800 of 1000 sends failed no longer renders
+  identically to a clean one.
+- **Staff can see what the template will carry.** `fetchAdminBlastOptions` now selects
+  `category`, `description` and `components`, rendered in the campaign dialog and inside the send
+  confirmation. **Correction to the finding above:** `whatsapp_templates.components` holds
+  WhatsApp _send-time parameter substitutions_, not the approved body text — the body lives with
+  Woztell and is never mirrored into this database, so it cannot be rendered here. The panel
+  therefore shows every value this system will substitute (via a new tested helper,
+  `src/lib/woztell/template-preview.ts`) and says plainly that the full approved text must be
+  checked in Woztell. Template approval status is shown in Chinese, since an unapproved template
+  is the most common reason a send is refused.
+- **The dialog's Cancel no longer looks like a dismiss.** It is now 「取消整個 Campaign」, styled
+  `destructive`, pushed to the far left away from 關閉, and behind its own confirmation showing
+  how many recipients are still pending and how many were already sent (and cannot be recalled).
+- **Schedule is labelled honestly.** `scheduled_at` is written to the database but no delivery
+  path reads it — `findEligibleCampaigns` in `api.admin.jobs.send-queue.ts` only picks up
+  campaigns already in `queued`/`sending`. The field is now 「預定發送時間（僅作記錄）」 with
+  helper text saying the system will not send by itself. **Real scheduling was deliberately not
+  implemented:** it would mean enabling unattended sending of customer messages, which is the
+  owner's decision, not a silent side effect of a UI fix.
+- **The page is now in Traditional Chinese**, including all new confirmation copy. This was part
+  of the safety fix, not polish — a confirmation nobody can read is not a confirmation.
+
+Verification: `npm run build` succeeds; all six admin-relevant suites pass
+(`test:command-center`, `test:operations`, `test:content-copilot`, `test:control-plane`,
+`test:property-experience`, `test:woztell`); ESLint clean on the changed files; `tsc` unchanged
+at its baseline apart from one added `bun:test` resolution error matching the repo's five
+existing bun test files. `admin.routes.test.mjs` assertions were updated to lock in the new
+behaviour (confirmation present, draft not queueable, preview freshness, delivery cell, the
+「僅作記錄」 schedule label), and `admin-workflow.test.mjs` gained a draft-is-rejected case.
+
+---
+
 ## Suggested order of work
 
-1. **Blast safety** — confirm dialog on both Queue paths, drop `draft` from `queueableStatuses`,
-   render the template body, invalidate stale previews, rename the dialog's Cancel, and either
-   implement Schedule or remove it. (1 critical + 6 high, one screen.)
+1. ~~**Blast safety**~~ — **done, see above.**
 2. **Migration apply** — move `setPlan(null)` after the await, keep the dialog open while
    applying, and show the plan's summary/checksum/dependencies in the confirm.
-3. **Localise `/admin/blasts`, `/admin/segments`, `/admin/operations`** — the four operations
-   components have no Chinese at all.
+3. **Localise `/admin/segments` and `/admin/operations`** — the four operations components have
+   no Chinese at all. (`/admin/blasts` is done.)
 4. **Row caps** — one honest 「顯示 N 筆（上限 M）」 line plus a load-more, applied to the six capped
    lists. Fix the FAQ import diff server-side.
 5. **Wire `useRouteLeaveGuard`** into `PropertyForm` and `AgentProfileForm`; it already exists.
@@ -788,7 +843,7 @@ Ordered by the surface's worst finding. 🆕 = new in this pass · 📌 = confir
 **🆕 [HIGH] A failed 套用 throws away the entire reviewed proposal — no way back to the review list**  
 `src/components/admin/AdminContentCopilot.tsx:476` · data-integrity-ux
 
-- **What happens:** Staff spend minutes reading a 5-patch proposal, tick 3 of them, click 套用已選建議, and the server/patch check returns STALE or PATCH_CONFLICT. The whole review panel — every diff card and every checkbox they ticked — vanishes, replaced by a red box telling them to regenerate. The 捨棄建議/重新產生 escape hatches the 4-Aug pass added live _inside_ Review, so they disappear too. Regenerating costs another 10+ seconds and one of only 20 generations per staff per hour (content-copilot-repository.server.ts:88,131). This is a re-check failure of the audit's claimed fix «a 捨棄建議/重新產生 action exists so a disliked proposal no longer forces closing (and losing) the draft» — it holds only on the happy path.
+- **What happens:** Staff spend minutes reading a 5-patch proposal, tick 3 of them, click 套用已選建議, and the server/patch check returns STALE or PATCH*CONFLICT. The whole review panel — every diff card and every checkbox they ticked — vanishes, replaced by a red box telling them to regenerate. The 捨棄建議/重新產生 escape hatches the 4-Aug pass added live \_inside* Review, so they disappear too. Regenerating costs another 10+ seconds and one of only 20 generations per staff per hour (content-copilot-repository.server.ts:88,131). This is a re-check failure of the audit's claimed fix «a 捨棄建議/重新產生 action exists so a disliked proposal no longer forces closing (and losing) the draft» — it holds only on the happy path.
 - **Fix:** Keep rendering `Review` whenever `proposal` is non-null and surface the error as a banner above it (disabling only the 套用 button), so the selection survives a recoverable failure. Add a 返回覆核 action to the failed/stale block at minimum.
 
 **🆕 [HIGH] Review list is capped at 288px by `max-h` on a ScrollArea, which clips rather than scrolls**  

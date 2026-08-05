@@ -1935,7 +1935,11 @@ export async function listAdminCampaigns() {
       t.language_code,
       t.status AS template_status,
       a.name AS audience_name,
-      count(r.id)::int AS recipients
+      count(r.id)::int AS recipients,
+      count(r.id) FILTER (WHERE r.status = 'sent')::int AS sent,
+      count(r.id) FILTER (WHERE r.status = 'failed')::int AS failed,
+      count(r.id) FILTER (WHERE r.status = 'blocked')::int AS blocked,
+      count(r.id) FILTER (WHERE r.status IN ('queued', 'sending'))::int AS pending
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
@@ -1951,7 +1955,10 @@ export async function listAdminCampaigns() {
 export async function fetchAdminBlastOptions() {
   const [templates, audiences] = await Promise.all([
     queryRows(
-      "SELECT id, element_name, language_code, status FROM whatsapp_templates ORDER BY element_name ASC",
+      // category/description/components are selected so the send confirmation can
+      // show staff everything this system knows about the template. The approved
+      // body text is held by Woztell and is deliberately not mirrored here.
+      "SELECT id, element_name, language_code, status, category, description, components FROM whatsapp_templates ORDER BY element_name ASC",
     ),
     queryRows(
       "SELECT id, name, description FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
@@ -1963,6 +1970,9 @@ export async function fetchAdminBlastOptions() {
       element_name: stringOrEmpty(row.element_name),
       language_code: stringOrEmpty(row.language_code),
       status: stringOrEmpty(row.status),
+      category: stringOrEmpty(row.category),
+      description: stringOrNull(row.description),
+      components: Array.isArray(row.components) ? row.components : [],
     })),
     audiences: audiences.map((row) => ({
       id: stringOrEmpty(row.id),

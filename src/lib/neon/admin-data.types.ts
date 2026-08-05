@@ -136,6 +136,12 @@ export type AdminCampaignRow = {
   template_status: string | null;
   audience_name: string | null;
   recipients: number;
+  /** Per-recipient delivery outcome. Without these a blast where most sends
+   * failed looked identical to a clean one. */
+  sent: number;
+  failed: number;
+  blocked: number;
+  pending: number;
 };
 
 export type AdminAgentRow = {
@@ -350,7 +356,17 @@ export type AdminCampaignInput = {
 };
 
 export type AdminBlastOptions = {
-  templates: Array<{ id: string; element_name: string; language_code: string; status: string }>;
+  templates: Array<{
+    id: string;
+    element_name: string;
+    language_code: string;
+    status: string;
+    category: string;
+    description: string | null;
+    /** WhatsApp send-time parameter substitutions, forwarded verbatim to
+     * Woztell. Not the approved body text — that is never stored locally. */
+    components: unknown;
+  }>;
   audiences: Array<{ id: string; name: string; description: string | null }>;
 };
 
