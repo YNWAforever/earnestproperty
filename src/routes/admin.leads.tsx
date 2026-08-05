@@ -169,9 +169,38 @@ function AdminLeads() {
   const [rows, setRows] = useState<AdminLeadRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const filters: LeadFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
-  function setFilters(updater: LeadFilters | ((current: LeadFilters) => LeadFilters)) {
+  const [queryDraft, setQueryDraft] = useState(filters.query);
+
+  // Keeps the box in step when the URL changes from elsewhere (back/forward, or
+  // the filtered-empty state's 清除篩選) without making every keystroke a
+  // navigation.
+  useEffect(() => {
+    setQueryDraft(filters.query);
+  }, [filters.query]);
+
+  useEffect(() => {
+    if (queryDraft === filters.query) return;
+    const timer = window.setTimeout(() => {
+      setFilters((current) => ({ ...current, query: queryDraft }), { replace: true });
+    }, 300);
+    return () => window.clearTimeout(timer);
+    // setFilters is redeclared each render; depending on it would re-arm the
+    // timer continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDraft, filters.query]);
+  function setFilters(
+    updater: LeadFilters | ((current: LeadFilters) => LeadFilters),
+    options: { replace?: boolean } = {},
+  ) {
     const next = typeof updater === "function" ? updater(filters) : updater;
-    void navigate({ search: parseLeadFilters(next), resetScroll: false });
+    void navigate({
+      search: parseLeadFilters(next),
+      resetScroll: false,
+      // Search keystrokes replace rather than push: one history entry per
+      // character made browser Back walk backwards through a half-typed query
+      // instead of leaving the page.
+      replace: options.replace ?? false,
+    });
   }
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
@@ -383,6 +412,26 @@ function AdminLeads() {
     try {
       const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
       assertNoMutationError(result);
+
+      // 儲存 used to submit only the field draft while reporting 「Lead 已更新」,
+      // so a follow-up note typed just above the button was silently discarded
+      // and the toast said everything had saved.
+      const pendingNote = noteBody.trim();
+      if (pendingNote) {
+        await createAdminLeadActivity({
+          data: {
+            lead_id: targetLeadId,
+            contact_id: detail.contact_id,
+            activity_type: "note",
+            body: pendingNote,
+            due_at: null,
+            completed_at: null,
+          },
+        });
+        setNoteBody("");
+        setNoteError(null);
+      }
+
       await refreshLeads();
       if (!canApplyLeadDetail(targetLeadId)) return;
 
@@ -522,9 +571,14 @@ function AdminLeads() {
           <>
             <div className="relative min-w-[14rem] flex-1 sm:flex-none">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              {/* Bound to local state, not to the router. It used to be
+                  controlled by `filters.query`, so every character round-tripped
+                  through an async navigation and anything typed faster than the
+                  router committed was computed against a stale value and lost --
+                  which a Chinese IME does constantly. */}
               <Input
-                value={filters.query}
-                onChange={(event) => setFilter("query", event.target.value)}
+                value={queryDraft}
+                onChange={(event) => setQueryDraft(event.target.value)}
                 className="h-11 pl-9 lg:h-9"
                 placeholder="搜尋客戶、電話、放盤"
                 aria-label="搜尋 leads"
@@ -639,8 +693,14 @@ function AdminLeads() {
       {loadingRows && !rows ? <Skeleton className="h-72 w-full" /> : null}
       {rows && filteredRows.length === 0 ? (
         <AdminEmptyState
-          title={rows.length === 0 ? "未有 Leads" : "沒有符合條件的 Leads"}
-          description={rows.length === 0 ? "新的網站查詢會在這裡出現。" : "調整篩選條件再查看。"}
+          title={rows.length === 0 ? "未有 Leads" : "已載入的 Leads 中沒有符合條件的項目"}
+          description={
+            rows.length === 0
+              ? "新的網站查詢會在這裡出現。"
+              : rows.length >= LEAD_ROW_LIMIT
+                ? `篩選只涵蓋最近更新的 ${LEAD_ROW_LIMIT} 筆 Lead，較舊的未有載入。請調整條件，或改用搜尋。`
+                : "調整篩選條件再查看。"
+          }
           action={
             rows.length > 0 ? (
               <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>

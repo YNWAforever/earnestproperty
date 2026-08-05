@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
+import { COMMAND_CENTER_ROW_LIMIT } from "@/lib/neon/command-center";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -138,6 +139,24 @@ function CommandCenter() {
     refresh();
   }, [refresh]);
 
+  // 今日要跟 and 逾期跟進 are derived from `now` on the server, so a board opened
+  // at 09:00 and worked from all morning showed 09:00 data at 15:00: leads that
+  // became overdue, new handoffs and new WhatsApp replies simply never appeared,
+  // and nothing on screen said how old the view was.
+  useEffect(() => {
+    if (!user) return;
+    const interval = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      void refresh();
+    }, 120_000);
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refresh, user]);
+
   async function runAnalysis(row: CommandCenterRow) {
     setBusy(true);
     try {
@@ -167,6 +186,11 @@ function CommandCenter() {
       description="每日跟進工作台：誰要跟、為何重要、下一步、WhatsApp 狀態。"
     >
       {data ? <KpiStrip data={data} /> : null}
+      {data && data.rows.length >= COMMAND_CENTER_ROW_LIMIT ? (
+        <p className="mb-3 text-xs text-muted-foreground">
+          只涵蓋最近更新的 {COMMAND_CENTER_ROW_LIMIT} 個 Lead，較舊的未有載入。
+        </p>
+      ) : null}
 
       <AdminToolbar
         filters={
@@ -188,9 +212,27 @@ function CommandCenter() {
           </>
         }
         actions={
-          <Button asChild variant="outline" size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/leads">返回 CRM 列表</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {data ? (
+              <span className="text-xs text-muted-foreground">
+                最後更新 {formatClock(data.generated_at)}
+              </span>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 lg:h-9"
+              disabled={loading}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              重新整理
+            </Button>
+            <Button asChild variant="outline" size="sm" className="h-11 lg:h-9">
+              <Link to="/admin/leads">返回 CRM 列表</Link>
+            </Button>
+          </div>
         }
       />
 
@@ -385,6 +427,12 @@ function Detail({ label, value }: { label: string; value: string }) {
       <p className="mt-0.5">{value}</p>
     </div>
   );
+}
+
+function formatClock(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(date);
 }
 
 function errorText(error: unknown) {
