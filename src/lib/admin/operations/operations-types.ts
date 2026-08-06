@@ -64,6 +64,8 @@ export type MigrationState = {
   summary: string;
   postconditions: Array<{ relation: string; column?: string }>;
   status: "pending" | "applied" | "drift";
+  /** Only present on drift: the checksum recorded when the migration ran. */
+  recordedChecksum?: string | null;
 };
 export type MigrationPlan = {
   migrationId: string;

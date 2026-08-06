@@ -254,9 +254,27 @@ export function AdminOperationsMigrations({
                   {migration.id}
                 </p>
                 {migration.status === "drift" ? (
-                  <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
-                    <AlertTriangle className="size-3" /> 偵測到結構偏移
-                  </p>
+                  <div className="mt-1 space-y-1 text-xs text-destructive">
+                    <p className="flex items-center gap-1">
+                      <AlertTriangle className="size-3" aria-hidden="true" /> 偵測到結構偏移
+                    </p>
+                    <p>
+                      此遷移檔案在套用之後被修改過，資料庫與程式碼的紀錄不一致。請勿再次套用；
+                      交由開發同事核對資料庫實際結構後決定處理方法。
+                    </p>
+                    <dl className="grid gap-0.5 font-mono text-[11px] break-all">
+                      <div>
+                        <dt className="inline text-muted-foreground">目前檔案：</dt>{" "}
+                        <dd className="inline">{migration.checksum}</dd>
+                      </div>
+                      {migration.recordedChecksum ? (
+                        <div>
+                          <dt className="inline text-muted-foreground">套用時紀錄：</dt>{" "}
+                          <dd className="inline">{migration.recordedChecksum}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </div>
                 ) : null}
               </TableCell>
               <TableCell>
@@ -287,6 +305,14 @@ export function AdminOperationsMigrations({
                     </Button>
                   ) : migration.status === "applied" ? (
                     <ShieldCheck className="size-4 text-muted-foreground" aria-label="已套用" />
+                  ) : migration.status === "drift" ? (
+                    // Drift has no safe button: the migration is already applied,
+                    // so it cannot be re-run, and accepting the new checksum would
+                    // assert the database matches the edited file without anyone
+                    // having checked. The row previously rendered nothing at all,
+                    // which read as "no action needed" on the most urgent state
+                    // in the table.
+                    <span className="text-xs text-muted-foreground">需人手處理</span>
                   ) : null}
                 </div>
               </TableCell>

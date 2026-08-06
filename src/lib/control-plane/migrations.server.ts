@@ -102,7 +102,15 @@ export async function listMigrationStates(
       postconditions: migration.postconditions.map((item) => ({ ...item })),
     };
     if (runChecksums.has(migration.id) && runChecksums.get(migration.id) !== migration.checksum) {
-      return { ...record, status: "drift" as const };
+      // The checksum actually recorded when this ran, so the UI can show what
+      // it diverged from. Drift has no safe automated remedy -- it means the
+      // migration file was edited after being applied -- so naming the mismatch
+      // is the whole of what the operator can act on.
+      return {
+        ...record,
+        status: "drift" as const,
+        recordedChecksum: runChecksums.get(migration.id) ?? null,
+      };
     }
     if (applied.has(migration.id) || runChecksums.has(migration.id)) {
       return { ...record, status: "applied" as const };
