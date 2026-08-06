@@ -95,14 +95,30 @@ export async function fetchEstatesByDistrict(districtSlug: string): Promise<Esta
     );
 }
 
-export async function fetchEstateBySlug(slug: string) {
+/** Shape of the `estates` row consumed by /estate/$slug. Declared here because
+ * this is the boundary where an untyped `SELECT *` enters typed code -- without
+ * it every field arrived as `unknown` and callers silently lost type checking. */
+export type EstateRecord = {
+  id: string;
+  slug: string;
+  name_zh: string;
+  name_en: string | null;
+  district_slug: string | null;
+  developer: string | null;
+  description: string | null;
+  year_completed: number | null;
+  phases: number | null;
+  total_units: number | null;
+  avg_saleable_psf: number | string | null;
+  hero_image: string | null;
+  facilities: string[] | null;
+};
+
+export async function fetchEstateBySlug(slug: string): Promise<EstateRecord | null> {
   for (const candidate of estateSlugCandidates(slug)) {
     const estate = await fetchNeonEstateBySlug({ data: { slug: candidate } });
     if (estate) {
-      return withCanonicalSlug(
-        estate as Record<string, unknown> & { slug: string },
-        canonicalEstateSlug(slug),
-      );
+      return withCanonicalSlug(estate as EstateRecord, canonicalEstateSlug(slug));
     }
   }
   return null;

@@ -298,16 +298,37 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "sendAdminCampaignQueue",
     "cancelAdminCampaign",
     "合資格",
-    "Opt-out",
+    "已拒收",
     "savedCampaignDraft",
     "hasUnsavedCampaignChanges",
-    "Save changes before queueing",
+    "請先儲存變更才可發送",
     'aria-label="Campaign template"',
     'aria-label="Campaign audience"',
     'aria-label="Campaign status"',
+    // Sending is irreversible, so it must stay behind a confirmation that names
+    // the campaign, the template and the recipient count.
+    "AdminConfirmDialog",
+    "確認發送 WhatsApp 群發？",
+    "SendConfirmationDetails",
+    // Cancelling a campaign is destructive and must not read like dismissing a
+    // dialog.
+    "取消整個 Campaign",
+    // A count the operator saw minutes ago must not gate a send.
+    "PREVIEW_FRESHNESS_MS",
+    "clearRowPreviews: true",
+    // Per-recipient outcome, so a mostly-failed blast cannot look clean.
+    "CampaignDeliveryCell",
+    // scheduled_at is never read by any delivery path; the label must say so.
+    "僅作記錄",
   ]) {
     assert.match(read("src/routes/admin.blasts.tsx"), new RegExp(text));
   }
+  // draft must not be client-side queueable -- it would desync from
+  // canPrepareAdminCampaignQueue and surface a raw INVALID_CAMPAIGN_STATUS.
+  assert.match(
+    read("src/routes/admin.blasts.tsx"),
+    /const queueableStatuses = new Set\(\["review", "scheduled"\]\)/,
+  );
   assert.doesNotMatch(
     read("src/routes/admin.blasts.tsx"),
     /materializeCampaignRecipients\(\{[\s\S]*queueAdminCampaign\(\{/,

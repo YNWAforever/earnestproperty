@@ -3,8 +3,8 @@ import { load } from "cheerio";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { AgentProfileForm, agentProfileSchema } from "./AgentProfileForm";
-import { buildAgentProfilePayload } from "./agent-profile-form-utils";
+import { AgentProfileForm } from "./AgentProfileForm";
+import { agentProfileSchema, buildAgentProfilePayload } from "./agent-profile-form-utils";
 
 // agentProfileSchema is `z.object({...}).superRefine(...)`, which wraps the object in
 // ZodEffects -- ZodEffects has no `.shape` of its own, so we unwrap with `.innerType()`

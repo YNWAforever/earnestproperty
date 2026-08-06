@@ -518,6 +518,22 @@ export async function deleteAdminFaq(options: { data: { id: string } }) {
   return callStaffServerFn(async () => deleteAdminFaqServer(await withStaffAuthHeaders(options)));
 }
 
+const checkAdminFaqConflictsServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { keys: Array<{ scope: string; question: string }> }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.checkAdminFaqConflicts(data.keys, staff);
+  });
+
+export async function checkAdminFaqConflicts(options: {
+  data: { keys: Array<{ scope: string; question: string }> };
+}) {
+  return callStaffServerFn(async () =>
+    checkAdminFaqConflictsServer(await withStaffAuthHeaders(options)),
+  );
+}
+
 const reorderAdminFaqsServer = createServerFn({ method: "POST" })
   .inputValidator((data: { orderedIds: string[] }) => data)
   .handler(async ({ data }) => {

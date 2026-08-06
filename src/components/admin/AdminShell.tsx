@@ -17,6 +17,10 @@ import {
   Users,
 } from "lucide-react";
 
+import { toast } from "sonner";
+
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { adminErrorText } from "@/components/admin/admin-error-text";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -117,10 +121,23 @@ export function AdminShell({
   const { loading, user, signOut } = useNeonAuth();
   const router = useRouter();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
-    await signOut();
-    await router.invalidate();
+    // Sat one item below 群發 in the sidebar with no confirmation, no pending
+    // state and no failure surface, on all 15 pages: a mis-click ended the
+    // session, and a failed sign-out looked identical to a successful one.
+    setSigningOut(true);
+    try {
+      await signOut();
+      await router.invalidate();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "登出失敗，請再試一次。");
+    } finally {
+      setSigningOut(false);
+      setSignOutOpen(false);
+    }
   }
 
   if (loading) {
@@ -169,7 +186,11 @@ export function AdminShell({
             <AdminNav />
           </div>
           <div className="mt-4 border-t pt-3">
-            <Button variant="ghost" className="w-full justify-start" onClick={handleSignOut}>
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => setSignOutOpen(true)}
+            >
               <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
               登出
             </Button>
@@ -207,7 +228,7 @@ export function AdminShell({
                         <Button
                           variant="ghost"
                           className="w-full justify-start"
-                          onClick={handleSignOut}
+                          onClick={() => setSignOutOpen(true)}
                         >
                           <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
                           登出
@@ -228,6 +249,16 @@ export function AdminShell({
           {children}
         </div>
       </div>
+
+      <AdminConfirmDialog
+        open={signOutOpen}
+        title="確認登出？"
+        description="登出後需要重新使用 Neon Auth 登入才可返回後台。未儲存的修改會遺失。"
+        confirmLabel="登出"
+        isPending={signingOut}
+        onOpenChange={setSignOutOpen}
+        onConfirm={() => void handleSignOut()}
+      />
     </div>
   );
 }
@@ -240,7 +271,7 @@ export function AdminError({ message }: { message: string }) {
       role="alert"
       className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
     >
-      {message}
+      {adminErrorText(message)}
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { Link, createFileRoute } from "@tanstack/react-router";
 import { Eye, Plus, RefreshCw, Save, Send, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
@@ -44,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { describeTemplateParameters } from "@/lib/woztell/template-preview";
 import {
   cancelAdminCampaign,
   fetchAdminBlastOptions,
@@ -68,27 +70,48 @@ type MutationResult = {
   id?: string;
   error?: string;
 };
+type StampedPreview = { preview: AdminAudiencePreview; checkedAt: number };
+/** Everything the send confirmation needs, captured at the moment the operator
+ * asked to send so the dialog cannot describe one campaign while queueing
+ * another. */
+type PendingSend = {
+  campaignId: string;
+  campaignName: string;
+  templateLabel: string;
+  audienceLabel: string;
+  eligible: number;
+  template: AdminBlastOptions["templates"][number] | null;
+};
 
-const queueableStatuses = new Set(["draft", "review", "scheduled"]);
+// `draft` is deliberately excluded, mirroring canPrepareAdminCampaignQueue --
+// the page promises 「審核後排程發送」, so a draft must be moved to 待審核 before it
+// can reach a customer. Keeping the two in sync matters: if the client allowed
+// draft the server would reject it with a raw INVALID_CAMPAIGN_STATUS.
+const queueableStatuses = new Set(["review", "scheduled"]);
 const cancellableStatuses = new Set(["draft", "review", "scheduled", "queued", "sending"]);
 
+// An audience preview older than this is treated as unusable for sending. The
+// server re-materialises recipients at queue time, so a stale count on screen
+// has no relation to who actually receives the blast.
+const PREVIEW_FRESHNESS_MS = 60_000;
+
 const campaignStatusLabels: Record<string, string> = {
-  draft: "Draft",
-  review: "Review",
-  scheduled: "Scheduled",
-  queued: "Queued",
-  sending: "Sending",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
+  draft: "草稿",
+  review: "待審核",
+  scheduled: "已排期",
+  queued: "已排隊",
+  sending: "發送中",
+  completed: "已完成",
+  failed: "失敗",
+  cancelled: "已取消",
 };
 
 const intentOptions = [
-  { value: "any", label: "Any intent" },
-  { value: "buyer", label: "Buyer" },
-  { value: "tenant", label: "Tenant" },
-  { value: "seller", label: "Seller" },
-  { value: "landlord", label: "Landlord" },
+  { value: "any", label: "任何意向" },
+  { value: "buyer", label: "買家" },
+  { value: "tenant", label: "租客" },
+  { value: "seller", label: "業主放售" },
+  { value: "landlord", label: "業主放租" },
 ];
 
 export const Route = createFileRoute("/admin/blasts")({
@@ -112,8 +135,19 @@ function AdminBlasts() {
   const [selectedPreviewAudienceId, setSelectedPreviewAudienceId] = useState("");
   const [preview, setPreview] = useState<AdminAudiencePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [rowPreviews, setRowPreviews] = useState<Record<string, AdminAudiencePreview>>({});
+  // Stamped with the fetch time: Queue must never be enabled by a count the
+  // operator saw minutes ago, because the server materialises a fresh audience
+  // at send time.
+  const [rowPreviews, setRowPreviews] = useState<Record<string, StampedPreview>>({});
+  const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
+  const [pendingCancel, setPendingCancel] = useState<AdminCampaignRow | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  // Staleness is derived from Date.now() at render, so without a tick a preview
+  // would keep looking fresh until some other state change happened to
+  // re-render the table -- and 發送 would stay enabled on an expired count.
+  const [, setStaleTick] = useState(0);
   const previewRequestRef = useRef(0);
+  const hasRowPreviews = Object.keys(rowPreviews).length > 0;
 
   const refreshAdminData = useCallback(
     async (settings: { clearRowPreviews?: boolean } = {}) => {
@@ -147,7 +181,7 @@ function AdminBlasts() {
     if (audienceDraft) {
       return {
         data: { filters: audienceDraft.filters },
-        label: "Draft audience filters",
+        label: "草稿群組篩選條件",
         debounce: true,
       };
     }
@@ -155,7 +189,7 @@ function AdminBlasts() {
       const audienceName = audienceLabel(options, campaignDraft.audience_id);
       return {
         data: { audience_id: campaignDraft.audience_id },
-        label: audienceName ? `Campaign audience: ${audienceName}` : "Campaign audience",
+        label: audienceName ? `Campaign 收件群組：${audienceName}` : "Campaign 收件群組",
         debounce: false,
       };
     }
@@ -163,7 +197,7 @@ function AdminBlasts() {
       const audienceName = audienceLabel(options, selectedPreviewAudienceId);
       return {
         data: { audience_id: selectedPreviewAudienceId },
-        label: audienceName ? `Audience: ${audienceName}` : "Audience preview",
+        label: audienceName ? `收件群組：${audienceName}` : "收件群組預覽",
         debounce: false,
       };
     }
@@ -174,6 +208,12 @@ function AdminBlasts() {
     if (!user) return;
     refreshAdminData();
   }, [refreshAdminData, user]);
+
+  useEffect(() => {
+    if (!hasRowPreviews) return;
+    const interval = window.setInterval(() => setStaleTick((tick) => tick + 1), 15_000);
+    return () => window.clearInterval(interval);
+  }, [hasRowPreviews]);
 
   useEffect(() => {
     if (!user || !activePreview) {
@@ -235,7 +275,7 @@ function AdminBlasts() {
     event.preventDefault();
     if (!audienceDraft) return;
     if (!audienceDraft.name.trim()) {
-      toast.error("請填寫 audience 名稱");
+      toast.error("請填寫收件群組名稱");
       return;
     }
 
@@ -252,7 +292,7 @@ function AdminBlasts() {
       if (result.id) setSelectedPreviewAudienceId(result.id);
       await refreshAdminData({ clearRowPreviews: true });
       setAudienceDraft(null);
-      toast.success("Audience 已儲存");
+      toast.success("收件群組已儲存");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -264,7 +304,7 @@ function AdminBlasts() {
     event.preventDefault();
     if (!campaignDraft) return;
     if (!campaignDraft.name.trim() || !campaignDraft.template_id || !campaignDraft.audience_id) {
-      toast.error("請填寫 campaign 名稱、template 及 audience");
+      toast.error("請填寫 campaign 名稱、範本及收件群組");
       return;
     }
 
@@ -292,7 +332,7 @@ function AdminBlasts() {
 
   async function handlePreviewCampaignAudience(campaign: AdminCampaignRow) {
     if (!campaign.audience_id) {
-      toast.error("此 campaign 未有 audience");
+      toast.error("此 campaign 未設定收件群組");
       return;
     }
 
@@ -302,10 +342,13 @@ function AdminBlasts() {
       const data = (await previewAdminAudience({
         data: { audience_id: campaign.audience_id },
       })) as AdminAudiencePreview;
-      setRowPreviews((current) => ({ ...current, [campaign.id]: data }));
+      setRowPreviews((current) => ({
+        ...current,
+        [campaign.id]: { preview: data, checkedAt: Date.now() },
+      }));
       setSelectedPreviewAudienceId(campaign.audience_id);
       setPreview(data);
-      toast.success("Preview 已更新");
+      toast.success("收件人預覽已更新");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -313,17 +356,36 @@ function AdminBlasts() {
     }
   }
 
-  async function handleQueueCampaign(campaignId: string, eligibleCount: number) {
-    if (eligibleCount <= 0) {
+  /** Opens the send confirmation. Nothing is dispatched here -- this is the
+   * interstitial that used to be missing entirely, so a mis-click on Queue sent
+   * thousands of irreversible WhatsApp messages. */
+  function requestSendCampaign(campaign: AdminCampaignRow, eligible: number) {
+    if (eligible <= 0) {
       toast.error("沒有合資格收件人");
       return;
     }
+    const template = options?.templates.find((item) => item.id === campaign.template_id) ?? null;
+    setConfirmError(null);
+    setPendingSend({
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      templateLabel: template
+        ? `${template.element_name}（${template.language_code}）`
+        : (campaign.element_name ?? "未設定範本"),
+      audienceLabel: campaign.audience_name ?? "未設定收件群組",
+      eligible,
+      template,
+    });
+  }
 
-    const action = `queue:${campaignId}`;
+  async function handleConfirmSend() {
+    if (!pendingSend) return;
+    const action = `queue:${pendingSend.campaignId}`;
     setMutatingAction(action);
+    setConfirmError(null);
     try {
       const result = (await sendAdminCampaignQueue({
-        data: { id: campaignId },
+        data: { id: pendingSend.campaignId },
       })) as MutationResult & {
         materialization?: Partial<AdminAudiencePreview>;
       };
@@ -331,25 +393,34 @@ function AdminBlasts() {
 
       await refreshAdminData({ clearRowPreviews: true });
       setCampaignDraft(null);
-      toast.success(`已排隊 ${result.materialization?.eligible ?? eligibleCount} 位合資格收件人`);
+      setPendingSend(null);
+      toast.success(
+        `已發送給 ${result.materialization?.eligible ?? pendingSend.eligible} 位合資格收件人`,
+      );
     } catch (err) {
-      toast.error(errorText(err));
+      // Kept inside the dialog rather than behind it: the operator needs the
+      // reason next to the action they just authorised.
+      setConfirmError(errorText(err));
     } finally {
       setMutatingAction(null);
     }
   }
 
-  async function handleCancelCampaign(campaignId: string) {
+  async function handleConfirmCancel() {
+    if (!pendingCancel) return;
+    const campaignId = pendingCancel.id;
     const action = `cancel:${campaignId}`;
     setMutatingAction(action);
+    setConfirmError(null);
     try {
       const result = (await cancelAdminCampaign({ data: { id: campaignId } })) as MutationResult;
       assertNoServerError(result);
       await refreshAdminData({ clearRowPreviews: true });
       if (campaignDraft?.id === campaignId) closeCampaignDialog();
+      setPendingCancel(null);
       toast.success("Campaign 已取消");
     } catch (err) {
-      toast.error(errorText(err));
+      setConfirmError(errorText(err));
     } finally {
       setMutatingAction(null);
     }
@@ -363,12 +434,26 @@ function AdminBlasts() {
     (!savedCampaignDraft ||
       campaignDraftSignature(campaignDraft) !== campaignDraftSignature(savedCampaignDraft)),
   );
-  const queueBlockReason = hasUnsavedCampaignChanges ? "Save changes before queueing" : null;
+  const queueBlockReason = hasUnsavedCampaignChanges
+    ? "請先儲存變更才可發送"
+    : campaignDraft && !isQueueableStatus(campaignDraft.status)
+      ? "草稿不可直接發送，請先將狀態改為「待審核」"
+      : null;
   const canQueueDraft =
     canSubmitCampaign && !hasUnsavedCampaignChanges && (preview?.eligible ?? 0) > 0;
 
+  function requestSendCampaignDraft() {
+    if (!campaignDraft?.id) return;
+    const row = campaignRows.find((item) => item.id === campaignDraft.id);
+    if (!row) {
+      toast.error("找不到此 campaign，請重新整理後再試");
+      return;
+    }
+    requestSendCampaign(row, preview?.eligible ?? 0);
+  }
+
   return (
-    <AdminShell title="WhatsApp 群發" description="Template-only、opt-in-only、審核後排程發送。">
+    <AdminShell title="WhatsApp 群發" description="只用已審批範本、只發給已同意接收的客戶。">
       {error ? <AdminError message={error} /> : null}
 
       <AdminToolbar
@@ -382,11 +467,11 @@ function AdminBlasts() {
                 }
                 disabled={!options?.audiences.length}
               >
-                <SelectTrigger aria-label="選擇 audience preview">
-                  <SelectValue placeholder="Audience preview" />
+                <SelectTrigger aria-label="選擇收件群組預覽">
+                  <SelectValue placeholder="收件群組預覽" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No audience</SelectItem>
+                  <SelectItem value="none">未選擇群組</SelectItem>
                   {options?.audiences.map((audience) => (
                     <SelectItem key={audience.id} value={audience.id}>
                       {audience.name}
@@ -398,17 +483,20 @@ function AdminBlasts() {
                 to="/admin/segments"
                 className="text-sm text-primary underline-offset-4 hover:underline"
               >
-                Build AI segment
+                建立 AI 客戶分群
               </Link>
             </div>
             <Button
               type="button"
               variant="outline"
-              onClick={() => refreshAdminData()}
+              // clearRowPreviews: without it the per-row 合資格 counts survived a
+              // refresh, so Preview → Refresh → 發送 could fire against a
+              // different audience than the number on screen described.
+              onClick={() => refreshAdminData({ clearRowPreviews: true })}
               disabled={loading}
             >
               <RefreshCw className={loading ? "animate-spin" : ""} />
-              Refresh
+              重新整理
             </Button>
           </div>
         }
@@ -420,11 +508,11 @@ function AdminBlasts() {
               onClick={() => setAudienceDraft({ name: "", description: null, filters: {} })}
             >
               <Users />
-              New audience
+              新增收件群組
             </Button>
             <Button type="button" onClick={openCampaignDialog}>
               <Plus />
-              New campaign
+              新增 Campaign
             </Button>
           </>
         }
@@ -435,8 +523,8 @@ function AdminBlasts() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Campaign list</CardTitle>
-            <CardDescription>WhatsApp template blasts and delivery status.</CardDescription>
+            <CardTitle className="text-base">Campaign 一覽</CardTitle>
+            <CardDescription>WhatsApp 範本群發及送達狀況。</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             {campaignRows.length ? (
@@ -445,20 +533,30 @@ function AdminBlasts() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Campaign</TableHead>
-                      <TableHead>Template</TableHead>
-                      <TableHead>Audience</TableHead>
-                      <TableHead>Preview</TableHead>
-                      <TableHead>Schedule</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>範本</TableHead>
+                      <TableHead>收件群組</TableHead>
+                      <TableHead>收件人預覽</TableHead>
+                      <TableHead>送達狀況</TableHead>
+                      <TableHead>預定時間</TableHead>
+                      <TableHead>狀態</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {campaignRows.map((campaign) => {
-                      const campaignPreview = rowPreviews[campaign.id];
+                      const stamped = rowPreviews[campaign.id];
+                      const previewStale = stamped
+                        ? Date.now() - stamped.checkedAt > PREVIEW_FRESHNESS_MS
+                        : false;
+                      const eligible = stamped?.preview.eligible ?? 0;
+                      // A stale count must not gate a send: the server
+                      // re-materialises the audience at queue time, so an old
+                      // number describes an audience that may no longer exist.
                       const queueEnabled =
                         isQueueableStatus(campaign.status) &&
-                        (campaignPreview?.eligible ?? 0) > 0 &&
+                        !!stamped &&
+                        !previewStale &&
+                        eligible > 0 &&
                         !mutatingAction;
                       const cancelEnabled =
                         cancellableStatuses.has(campaign.status) && !mutatingAction;
@@ -467,27 +565,35 @@ function AdminBlasts() {
                         <TableRow key={campaign.id}>
                           <TableCell className="min-w-48 font-medium">
                             <div>{campaign.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {campaign.recipients ?? 0} materialized
+                            <div className="text-xs tabular-nums text-muted-foreground">
+                              已建立收件人 {campaign.recipients ?? 0}
                             </div>
                           </TableCell>
                           <TableCell className="min-w-44">
                             {campaign.element_name
-                              ? `${campaign.element_name} (${campaign.language_code})`
+                              ? `${campaign.element_name}（${campaign.language_code}）`
                               : "—"}
                           </TableCell>
                           <TableCell className="min-w-36">
                             {campaign.audience_name ?? "—"}
                           </TableCell>
-                          <TableCell className="min-w-40">
-                            {campaignPreview ? (
-                              <span className="text-sm">
-                                {campaignPreview.eligible} 合資格 / {campaignPreview.optedOut}{" "}
-                                Opt-out
-                              </span>
+                          <TableCell className="min-w-44">
+                            {stamped ? (
+                              <div className="text-sm">
+                                <span className="tabular-nums">
+                                  {stamped.preview.eligible} 合資格 / {stamped.preview.optedOut}{" "}
+                                  已拒收
+                                </span>
+                                {previewStale ? (
+                                  <div className="text-xs text-destructive">已過期，請重新預覽</div>
+                                ) : null}
+                              </div>
                             ) : (
-                              <span className="text-sm text-muted-foreground">Not checked</span>
+                              <span className="text-sm text-muted-foreground">未檢查</span>
                             )}
+                          </TableCell>
+                          <TableCell className="min-w-40">
+                            <CampaignDeliveryCell campaign={campaign} />
                           </TableCell>
                           <TableCell className="min-w-36">
                             {formatDate(campaign.scheduled_at)}
@@ -501,32 +607,41 @@ function AdminBlasts() {
                                 type="button"
                                 variant="outline"
                                 size="sm"
+                                className="h-11 lg:h-9"
                                 onClick={() => handlePreviewCampaignAudience(campaign)}
                                 disabled={!campaign.audience_id || !!mutatingAction}
                               >
                                 <Eye />
-                                Preview
+                                預覽收件人
                               </Button>
                               <Button
                                 type="button"
                                 size="sm"
-                                onClick={() =>
-                                  handleQueueCampaign(campaign.id, campaignPreview?.eligible ?? 0)
-                                }
+                                className="h-11 lg:h-9"
+                                onClick={() => requestSendCampaign(campaign, eligible)}
                                 disabled={!queueEnabled}
+                                title={
+                                  isQueueableStatus(campaign.status)
+                                    ? undefined
+                                    : "草稿不可直接發送，請先將狀態改為「待審核」"
+                                }
                               >
                                 <Send />
-                                Queue
+                                發送…
                               </Button>
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => handleCancelCampaign(campaign.id)}
+                                className="h-11 lg:h-9"
+                                onClick={() => {
+                                  setConfirmError(null);
+                                  setPendingCancel(campaign);
+                                }}
                                 disabled={!cancelEnabled}
                               >
                                 <XCircle />
-                                Cancel
+                                取消 Campaign
                               </Button>
                             </div>
                           </TableCell>
@@ -539,12 +654,12 @@ function AdminBlasts() {
             ) : (
               <div className="p-6">
                 <AdminEmptyState
-                  title="No campaigns"
-                  description="Create a WhatsApp template campaign before queueing recipients."
+                  title="未有 Campaign"
+                  description="先建立一個 WhatsApp 範本 campaign，才可以整理收件人並發送。"
                   action={
                     <Button type="button" onClick={openCampaignDialog}>
                       <Plus />
-                      New campaign
+                      新增 Campaign
                     </Button>
                   }
                 />
@@ -555,8 +670,8 @@ function AdminBlasts() {
 
         <Card className="h-fit">
           <CardHeader>
-            <CardTitle className="text-base">Audience preview</CardTitle>
-            <CardDescription>{activePreview?.label ?? "No audience selected"}</CardDescription>
+            <CardTitle className="text-base">收件人預覽</CardTitle>
+            <CardDescription>{activePreview?.label ?? "未選擇收件群組"}</CardDescription>
           </CardHeader>
           <CardContent>
             <PreviewSummary preview={preview} loading={previewLoading} />
@@ -576,12 +691,12 @@ function AdminBlasts() {
         onChange={setCampaignDraft}
         onClose={closeCampaignDialog}
         onSubmit={handleSaveCampaign}
-        onQueue={() => {
-          if (!campaignDraft?.id) return;
-          handleQueueCampaign(campaignDraft.id, preview?.eligible ?? 0);
-        }}
+        onQueue={requestSendCampaignDraft}
         onCancel={() => {
-          if (campaignDraft?.id) handleCancelCampaign(campaignDraft.id);
+          const row = campaignRows.find((item) => item.id === campaignDraft?.id);
+          if (!row) return;
+          setConfirmError(null);
+          setPendingCancel(row);
         }}
       />
 
@@ -594,6 +709,54 @@ function AdminBlasts() {
         onClose={() => setAudienceDraft(null)}
         onSubmit={handleSaveAudience}
       />
+
+      <AdminConfirmDialog
+        open={!!pendingSend}
+        title="確認發送 WhatsApp 群發？"
+        description="訊息一經發送即無法收回。請先核對範本與收件人數目。"
+        confirmLabel={`確認發送給 ${pendingSend?.eligible ?? 0} 人`}
+        confirmVariant="destructive"
+        isPending={mutatingAction?.startsWith("queue:") ?? false}
+        error={confirmError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingSend(null);
+            setConfirmError(null);
+          }
+        }}
+        onConfirm={() => void handleConfirmSend()}
+      >
+        {pendingSend ? <SendConfirmationDetails send={pendingSend} /> : null}
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
+        open={!!pendingCancel}
+        title="取消整個 Campaign？"
+        description="尚未發出的收件人會被中止，已發出的訊息無法收回。此操作無法復原。"
+        confirmLabel="確認取消 Campaign"
+        confirmVariant="destructive"
+        isPending={mutatingAction?.startsWith("cancel:") ?? false}
+        error={confirmError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingCancel(null);
+            setConfirmError(null);
+          }
+        }}
+        onConfirm={() => void handleConfirmCancel()}
+      >
+        {pendingCancel ? (
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+            <ConfirmRow label="Campaign" value={pendingCancel.name} />
+            <ConfirmRow
+              label="尚待發送"
+              value={`${pendingCancel.pending ?? 0} 人`}
+              emphasis={(pendingCancel.pending ?? 0) > 0}
+            />
+            <ConfirmRow label="已發送" value={`${pendingCancel.sent ?? 0} 人（無法收回）`} />
+          </dl>
+        ) : null}
+      </AdminConfirmDialog>
     </AdminShell>
   );
 }
@@ -633,19 +796,19 @@ function CampaignDialog({
     <Dialog open={!!campaign} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{campaign?.id ? "Campaign" : "New campaign"}</DialogTitle>
-          <DialogDescription>Template, audience, schedule, and status.</DialogDescription>
+          <DialogTitle>{campaign?.id ? "編輯 Campaign" : "新增 Campaign"}</DialogTitle>
+          <DialogDescription>範本、收件群組、預定時間及狀態。</DialogDescription>
         </DialogHeader>
         {campaign ? (
           <form className="grid gap-4" onSubmit={onSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <TextField
-                label="Name"
+                label="Campaign 名稱"
                 value={campaign.name}
                 onChange={(value) => onChange({ ...campaign, name: value })}
                 required
               />
-              <Field label="Template">
+              <Field label="範本">
                 <Select
                   value={campaign.template_id ?? "none"}
                   onValueChange={(value) =>
@@ -653,19 +816,20 @@ function CampaignDialog({
                   }
                 >
                   <SelectTrigger aria-label="Campaign template">
-                    <SelectValue placeholder="Template" />
+                    <SelectValue placeholder="選擇範本" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No template</SelectItem>
+                    <SelectItem value="none">未選擇範本</SelectItem>
                     {options?.templates.map((template) => (
                       <SelectItem key={template.id} value={template.id}>
-                        {template.element_name} ({template.language_code}) · {template.status}
+                        {template.element_name}（{template.language_code}）·{" "}
+                        {templateStatusLabel(template.status)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Audience">
+              <Field label="收件群組">
                 <Select
                   value={campaign.audience_id ?? "none"}
                   onValueChange={(value) =>
@@ -673,10 +837,10 @@ function CampaignDialog({
                   }
                 >
                   <SelectTrigger aria-label="Campaign audience">
-                    <SelectValue placeholder="Audience" />
+                    <SelectValue placeholder="選擇收件群組" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">No audience</SelectItem>
+                    <SelectItem value="none">未選擇收件群組</SelectItem>
                     {options?.audiences.map((audience) => (
                       <SelectItem key={audience.id} value={audience.id}>
                         {audience.name}
@@ -685,7 +849,7 @@ function CampaignDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Status">
+              <Field label="狀態">
                 <Select
                   value={campaign.status}
                   onValueChange={(value) =>
@@ -693,30 +857,43 @@ function CampaignDialog({
                   }
                 >
                   <SelectTrigger aria-label="Campaign status">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder="選擇狀態" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="review">Review</SelectItem>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
+                    <SelectItem value="draft">草稿（不可發送）</SelectItem>
+                    <SelectItem value="review">待審核</SelectItem>
+                    <SelectItem value="scheduled">已排期</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
-              <TextField
-                label="Schedule"
-                type="datetime-local"
-                value={campaign.scheduled_at ?? ""}
-                onChange={(value) => onChange({ ...campaign, scheduled_at: nullIfBlank(value) })}
-              />
+              {/* Labelled 「僅作記錄」 because nothing delivers on it: the cron in
+                  api.admin.jobs.send-queue.ts only picks up campaigns already in
+                  queued/sending, so scheduled_at is never read by any delivery
+                  path. Staff previously set a date here and reasonably expected
+                  the blast to go out then. Implementing real scheduling means
+                  enabling unattended sending, which is the owner's call. */}
+              <div>
+                <TextField
+                  label="預定發送時間（僅作記錄）"
+                  type="datetime-local"
+                  value={campaign.scheduled_at ?? ""}
+                  onChange={(value) => onChange({ ...campaign, scheduled_at: nullIfBlank(value) })}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  系統不會自動發送。到時仍需人手按「發送…」。
+                </p>
+              </div>
             </div>
+
+            <TemplateDetails
+              template={options?.templates.find((item) => item.id === campaign.template_id) ?? null}
+            />
 
             <div className="rounded-md border p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-medium">Preview</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Queue unlocks only when 合資格 is greater than 0.
-                  </p>
+                  <h3 className="text-sm font-medium">收件人預覽</h3>
+                  <p className="text-xs text-muted-foreground">合資格人數大於 0 才可發送。</p>
                 </div>
                 <Badge variant={(preview?.eligible ?? 0) > 0 ? "default" : "outline"}>
                   {preview?.eligible ?? 0} 合資格
@@ -726,30 +903,35 @@ function CampaignDialog({
             </div>
 
             <DialogFooter className="gap-2">
-              {queueBlockReason ? (
-                <p className="text-sm text-muted-foreground sm:mr-auto">{queueBlockReason}</p>
-              ) : null}
-              <Button type="button" variant="outline" onClick={onClose}>
-                Close
-              </Button>
+              {/* 取消整個 Campaign is pushed to the far left, away from 關閉: it used
+                  to read "Cancel" and sit beside "Close", so the button that
+                  kills a possibly mid-send campaign looked like the one that
+                  dismisses the dialog. */}
               {campaign.id ? (
                 <Button
                   type="button"
-                  variant="outline"
+                  variant="destructive"
+                  className="sm:mr-auto"
                   onClick={onCancel}
                   disabled={!canCancel || saving || mutating}
                 >
                   <XCircle />
-                  Cancel
+                  取消整個 Campaign
                 </Button>
               ) : null}
+              {queueBlockReason ? (
+                <p className="self-center text-sm text-muted-foreground">{queueBlockReason}</p>
+              ) : null}
+              <Button type="button" variant="outline" onClick={onClose}>
+                關閉
+              </Button>
               <Button type="submit" disabled={saving || mutating}>
                 <Save />
-                Save
+                儲存
               </Button>
               <Button type="button" onClick={onQueue} disabled={!canQueue || saving || mutating}>
                 <Send />
-                Queue
+                發送…
               </Button>
             </DialogFooter>
           </form>
@@ -780,24 +962,24 @@ function AudienceDialog({
     <Dialog open={!!audience} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Audience editor</DialogTitle>
-          <DialogDescription>Name, description, and contact filters.</DialogDescription>
+          <DialogTitle>收件群組編輯</DialogTitle>
+          <DialogDescription>名稱、說明及客戶篩選條件。</DialogDescription>
         </DialogHeader>
         {audience ? (
           <form className="grid gap-4" onSubmit={onSubmit}>
             <div className="grid gap-4 md:grid-cols-2">
               <TextField
-                label="Name"
+                label="群組名稱"
                 value={audience.name}
                 onChange={(value) => onChange({ ...audience, name: value })}
                 required
               />
               <TextField
-                label="Description"
+                label="說明"
                 value={audience.description ?? ""}
                 onChange={(value) => onChange({ ...audience, description: nullIfBlank(value) })}
               />
-              <Field label="Intent">
+              <Field label="意向">
                 <Select
                   value={audience.filters.intent ?? "any"}
                   onValueChange={(value) =>
@@ -811,7 +993,7 @@ function AudienceDialog({
                   }
                 >
                   <SelectTrigger aria-label="Audience intent">
-                    <SelectValue placeholder="Intent" />
+                    <SelectValue placeholder="選擇意向" />
                   </SelectTrigger>
                   <SelectContent>
                     {intentOptions.map((option) => (
@@ -823,7 +1005,7 @@ function AudienceDialog({
                 </Select>
               </Field>
               <TextField
-                label="Source"
+                label="來源"
                 value={audience.filters.source ?? ""}
                 onChange={(value) =>
                   onChange({
@@ -833,7 +1015,7 @@ function AudienceDialog({
                 }
               />
               <TextField
-                label="Estate slug"
+                label="屋苑 slug"
                 value={audience.filters.estate ?? ""}
                 onChange={(value) =>
                   onChange({
@@ -843,7 +1025,7 @@ function AudienceDialog({
                 }
               />
               <TextField
-                label="Assigned agent ID"
+                label="負責代理 ID"
                 value={audience.filters.assigned_agent_id ?? ""}
                 onChange={(value) =>
                   onChange({
@@ -859,9 +1041,9 @@ function AudienceDialog({
 
             <div className="rounded-md border p-4">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-medium">Preview</h3>
+                <h3 className="text-sm font-medium">收件人預覽</h3>
                 <Badge variant={(preview?.optedOut ?? 0) > 0 ? "outline" : "secondary"}>
-                  {preview?.optedOut ?? 0} Opt-out
+                  {preview?.optedOut ?? 0} 已拒收
                 </Badge>
               </div>
               <PreviewSummary preview={preview} loading={previewLoading} />
@@ -869,11 +1051,11 @@ function AudienceDialog({
 
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={onClose}>
-                Close
+                關閉
               </Button>
               <Button type="submit" disabled={saving}>
                 <Save />
-                Save audience
+                儲存收件群組
               </Button>
             </DialogFooter>
           </form>
@@ -903,17 +1085,17 @@ function PreviewSummary({
   if (!preview) {
     return (
       <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-        No preview selected
+        未選擇收件群組
       </div>
     );
   }
 
   const items = [
-    { label: "Total", value: preview.total },
+    { label: "總數", value: preview.total },
     { label: "合資格", value: preview.eligible },
-    { label: "Opt-out", value: preview.optedOut },
-    { label: "Missing phone", value: preview.missingPhone },
-    { label: "Not opted-in", value: preview.notOptedIn },
+    { label: "已拒收", value: preview.optedOut },
+    { label: "沒有電話", value: preview.missingPhone },
+    { label: "未同意接收", value: preview.notOptedIn },
   ];
 
   return (
@@ -924,6 +1106,115 @@ function PreviewSummary({
           <div className="mt-1 text-2xl font-semibold tracking-normal">{item.value}</div>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Per-recipient outcome for one campaign. Before this, a blast where 800 of
+ * 1000 sends failed rendered identically to a clean one -- the row showed only
+ * the materialised total next to a Completed badge. */
+function CampaignDeliveryCell({ campaign }: { campaign: AdminCampaignRow }) {
+  const sent = campaign.sent ?? 0;
+  const failed = campaign.failed ?? 0;
+  const blocked = campaign.blocked ?? 0;
+  const pending = campaign.pending ?? 0;
+
+  if (!campaign.recipients) {
+    return <span className="text-sm text-muted-foreground">未發送</span>;
+  }
+
+  return (
+    <div className="space-y-1 text-sm tabular-nums">
+      <div>已發送 {sent}</div>
+      {failed > 0 ? <div className="font-semibold text-destructive">失敗 {failed}</div> : null}
+      {blocked > 0 ? <div className="text-muted-foreground">封鎖 {blocked}</div> : null}
+      {pending > 0 ? <div className="text-muted-foreground">待發送 {pending}</div> : null}
+    </div>
+  );
+}
+
+/** Everything this system knows about the selected template. The approved body
+ * text is held by Woztell and never mirrored into this database, so it is named
+ * as absent rather than quietly omitted -- staff were queueing blasts having
+ * seen nothing but an element_name. */
+function TemplateDetails({
+  template,
+}: {
+  template: AdminBlastOptions["templates"][number] | null;
+}) {
+  if (!template) {
+    return (
+      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        未選擇範本。
+      </div>
+    );
+  }
+
+  const parameters = describeTemplateParameters(template.components);
+
+  return (
+    <div className="rounded-md border p-4">
+      <h3 className="text-sm font-medium">範本內容</h3>
+      <dl className="mt-2 grid gap-1 text-sm">
+        <ConfirmRow label="範本名稱" value={template.element_name} />
+        <ConfirmRow label="語言" value={template.language_code} />
+        <ConfirmRow label="分類" value={template.category || "—"} />
+        <ConfirmRow
+          label="審批狀態"
+          value={templateStatusLabel(template.status)}
+          emphasis={!template.status.startsWith("active")}
+        />
+        {template.description ? <ConfirmRow label="說明" value={template.description} /> : null}
+      </dl>
+
+      {parameters.length ? (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-muted-foreground">將會填入的內容</p>
+          <dl className="mt-1 grid gap-1 text-sm">
+            {parameters.map((line, index) => (
+              <ConfirmRow key={`${line.label}-${index}`} label={line.label} value={line.value} />
+            ))}
+          </dl>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-muted-foreground">此範本沒有可變內容。</p>
+      )}
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        已審批的訊息全文由 WhatsApp／Woztell 保存，本系統沒有副本。發送前請在 Woztell
+        後台核對訊息內容。
+      </p>
+    </div>
+  );
+}
+
+function SendConfirmationDetails({ send }: { send: PendingSend }) {
+  return (
+    <div className="space-y-3">
+      <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+        <ConfirmRow label="Campaign" value={send.campaignName} />
+        <ConfirmRow label="範本" value={send.templateLabel} />
+        <ConfirmRow label="收件群組" value={send.audienceLabel} />
+        <ConfirmRow label="合資格收件人" value={`${send.eligible} 人`} emphasis />
+      </dl>
+      <TemplateDetails template={send.template} />
+    </div>
+  );
+}
+
+function ConfirmRow({
+  label,
+  value,
+  emphasis,
+}: {
+  label: string;
+  value: string;
+  emphasis?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap justify-between gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={emphasis ? "font-semibold" : undefined}>{value}</dd>
     </div>
   );
 }
@@ -974,6 +1265,15 @@ function TextField({
       />
     </Field>
   );
+}
+
+/** Mirrors the approval vocabulary used elsewhere; an unapproved template is
+ * the most common reason a send is refused, so it must not read as a code. */
+function templateStatusLabel(status: string) {
+  if (status.startsWith("active")) return "已審批";
+  if (status === "rejected") return "已拒絕";
+  if (status === "pending") return "審批中";
+  return status || "未知";
 }
 
 function isQueueableStatus(status: string) {

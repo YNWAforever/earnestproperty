@@ -47,10 +47,27 @@ export const Route = createFileRoute("/admin/operations")({
 });
 
 const TAB_LABELS: Record<OperationTab, string> = {
-  overview: "Overview",
-  jobs: "Jobs",
-  audit: "Audit",
-  migrations: "Migrations",
+  overview: "總覽",
+  jobs: "背景工作",
+  audit: "審計記錄",
+  migrations: "資料庫遷移",
+};
+
+// Named so a blocked tab can say which permission unlocks it instead of just
+// disappearing, which left staff with no way to know the feature exists.
+const TAB_PERMISSIONS: Record<OperationTab, string | null> = {
+  overview: null,
+  jobs: "system.jobs.read",
+  audit: "system.audit.read",
+  migrations: "system.migrations.plan",
+};
+
+const ALL_OPERATION_TABS: OperationTab[] = ["overview", "jobs", "audit", "migrations"];
+
+const HEALTH_STATUS_LABELS: Record<string, string> = {
+  healthy: "正常",
+  degraded: "降級",
+  failed: "故障",
 };
 
 function AdminOperations() {
@@ -60,12 +77,13 @@ function AdminOperations() {
   const [healthState, setHealthState] = useState<OperationsHealthState>({
     health: null,
     error: null,
+    stale: false,
   });
   const [jobsSummary, setJobsSummary] = useState<JobSummary | null>(null);
   const [migrations, setMigrations] = useState<MigrationState[] | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [mutationRevision, setMutationRevision] = useState(0);
-  const { health, error } = healthState;
+  const { health, error, stale } = healthState;
 
   useEffect(() => {
     let cancelled = false;
@@ -89,8 +107,9 @@ function AdminOperations() {
       const refreshedTab = resolveOperationsRouteState(search.tab, currentHealth).activeTab;
       if (refreshedTab !== "overview") return;
 
-      setJobsSummary(null);
-      setMigrations(null);
+      // Deliberately NOT cleared to null first: doing so unmounted the job and
+      // migration sections on every 30s tick, guaranteeing a flash and a layout
+      // jump mid-read. The values are replaced in place once the fetch resolves.
       setOverviewError(null);
       const jobsPromise = currentHealth.capabilities.jobsRead
         ? fetchOperationsJobs({ limit: 5 })
@@ -157,48 +176,74 @@ function AdminOperations() {
   }, [health, refreshNow]);
 
   return (
-    <AdminShell
-      title="系統營運"
-      description="Control-plane health and capability-aware operations access."
-    >
+    <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div aria-live="polite" className="flex items-center gap-2">
-          <Badge variant={health?.status === "healthy" ? "default" : "secondary"}>
-            {health?.status ?? "Loading"}
+        {/* aria-live sits on the status badge only. It previously wrapped the
+            timestamp too, so screen readers re-announced the whole region every
+            30s even when nothing had changed. */}
+        <div className="flex items-center gap-2">
+          <Badge
+            aria-live="polite"
+            variant={
+              health?.status === "healthy"
+                ? "default"
+                : health?.status === "failed"
+                  ? "destructive"
+                  : "secondary"
+            }
+          >
+            {health ? (HEALTH_STATUS_LABELS[health.status] ?? health.status) : "載入中"}
           </Badge>
           {health ? (
-            <span className="text-sm text-muted-foreground">{health.checkedAt}</span>
+            <span className="text-sm text-muted-foreground">最後檢查：{health.checkedAt}</span>
           ) : null}
         </div>
         <Button
           type="button"
           variant="outline"
-          size="icon"
           onClick={refreshNow}
-          aria-label="Refresh health"
+          aria-label="重新檢查控制平面狀態"
         >
           <RefreshCw className="h-4 w-4" />
+          重新整理
         </Button>
       </div>
 
-      {error ? <AdminError message={error} /> : null}
+      {error ? (
+        <div className="mt-3">
+          <AdminError
+            message={stale ? `${error}／以下資料為最後一次成功讀取的結果，可能已過時。` : error}
+          />
+        </div>
+      ) : null}
       {!health && !error ? <Skeleton className="mt-4 h-48 w-full" /> : null}
 
       {health ? (
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
-          <Tabs.List aria-label="Operations tabs" className="flex flex-wrap gap-2 border-b">
-            {allowedTabs.map((tab) => (
-              <Tabs.Trigger
-                key={tab}
-                value={tab}
-                className="border-b-2 border-transparent px-3 py-2 text-sm data-[state=active]:border-primary"
-              >
-                {TAB_LABELS[tab]}
-              </Tabs.Trigger>
-            ))}
+          {/* Every tab is rendered, not just the permitted ones. Omitting them
+              made the "granted when its capability is available" fallback
+              unreachable dead code and left staff unable to tell a missing
+              feature from a missing permission. */}
+          <Tabs.List aria-label="營運工具分頁" className="flex flex-wrap gap-2 border-b">
+            {ALL_OPERATION_TABS.map((tab) => {
+              const permitted = allowedTabs.includes(tab);
+              return (
+                <Tabs.Trigger
+                  key={tab}
+                  value={tab}
+                  disabled={!permitted}
+                  title={
+                    permitted ? undefined : `需要 ${TAB_PERMISSIONS[tab]} 權限，請聯絡系統管理員`
+                  }
+                  className="min-h-11 border-b-2 border-transparent px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:font-semibold lg:min-h-9"
+                >
+                  {TAB_LABELS[tab]}
+                </Tabs.Trigger>
+              );
+            })}
           </Tabs.List>
 
-          {allowedTabs.map((tab) => (
+          {ALL_OPERATION_TABS.map((tab) => (
             <Tabs.Content key={tab} value={tab} className="pt-4">
               {tab === "overview" ? (
                 <AdminOperationsOverview
@@ -229,7 +274,9 @@ function AdminOperations() {
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {TAB_LABELS[tab]} becomes available when its capability is granted.
+                  你未有存取「{TAB_LABELS[tab]}」的權限
+                  {TAB_PERMISSIONS[tab] ? `（需要 ${TAB_PERMISSIONS[tab]}）` : ""}
+                  。請聯絡系統管理員開通。
                 </p>
               )}
             </Tabs.Content>
@@ -245,6 +292,6 @@ function safeOperationsRefreshError(error: unknown): string {
     typeof error === "object" &&
     "requestId" in error &&
     typeof error.requestId === "string"
-    ? `Unable to refresh operations overview. Request ID: ${error.requestId}`
-    : "Unable to refresh operations overview.";
+    ? `未能重新載入營運總覽，請稍後再試。（支援參考編號：${error.requestId}）`
+    : "未能重新載入營運總覽，請稍後再試。";
 }

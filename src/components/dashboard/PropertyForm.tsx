@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
+import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ImageUploader } from "./ImageUploader";
 import {
   applyPropertyContentCopilotPatch,
@@ -114,6 +115,19 @@ function createInitialForm(property?: Property) {
 
 type FormState = ReturnType<typeof createInitialForm>;
 
+/** Server failures reach staff verbatim otherwise. The two that actually happen
+ * are a duplicate 放盤編號 and a scope/permission miss on edit; both are
+ * actionable once named, and neither is actionable as raw Postgres or English. */
+function mapPropertySaveError(error: string): { message: string; field?: keyof FormState } {
+  if (/properties_listing_no_key|duplicate key/i.test(error)) {
+    return { message: "此放盤編號已被使用，請改用其他編號。", field: "listing_no" };
+  }
+  if (/^not found$/i.test(error.trim())) {
+    return { message: "找不到此放盤，可能已被刪除或你沒有權限編輯。" };
+  }
+  return { message: `儲存失敗，請稍後再試。（${error}）` };
+}
+
 type Props = {
   property?: Property;
   onSaved: (id: string) => void;
@@ -127,6 +141,32 @@ export function PropertyForm({ property, onSaved }: Props) {
   const [form, setForm] = useState(() => createInitialForm(property));
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [images, setImages] = useState<string[]>(property?.images ?? []);
+  const [saved, setSaved] = useState(false);
+
+  // The 20-field listing form had no guard at all: a sidebar click, the browser
+  // Back button or the 返回 link directly above the form destroyed everything
+  // with no prompt. Worse than the CMS dialogs, because uploaded photos are
+  // already written to Vercel Blob and media_assets, so the blobs are orphaned
+  // and the URLs unrecoverable.
+  const isDirty = useMemo(() => {
+    if (saved) return false;
+    const pristine = createInitialForm(property);
+    const formChanged = (Object.keys(pristine) as Array<keyof FormState>).some(
+      (key) => form[key] !== pristine[key],
+    );
+    const baseImages = property?.images ?? [];
+    const imagesChanged =
+      images.length !== baseImages.length || images.some((url, index) => url !== baseImages[index]);
+    return formChanged || imagesChanged;
+  }, [form, images, property, saved]);
+
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
+
+  function focusField(field: string) {
+    if (!field) return;
+    const control = formRef.current?.elements.namedItem(field);
+    if (control instanceof HTMLElement) control.focus();
+  }
 
   useEffect(() => {
     Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
@@ -184,9 +224,7 @@ export function PropertyForm({ property, onSaved }: Props) {
 
       // 20-plus fields means the offending one is usually off-screen; focusing it
       // scrolls it into view and tells a screen reader which field to fix.
-      const firstField = String(parsed.error.issues[0]?.path[0] ?? "");
-      const firstControl = formRef.current?.elements.namedItem(firstField);
-      if (firstControl instanceof HTMLElement) firstControl.focus();
+      focusField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
 
@@ -227,15 +265,30 @@ export function PropertyForm({ property, onSaved }: Props) {
     setSubmitting(false);
 
     if ("error" in result && result.error) {
-      toast.error(result.error);
+      // Raw server text used to reach staff verbatim, including the most common
+      // failure: 'duplicate key value violates unique constraint
+      // "properties_listing_no_key"', with no inline error and no focus.
+      const mapped = mapPropertySaveError(result.error);
+      if (mapped.field) {
+        setFieldErrors((current) => ({
+          ...current,
+          [mapped.field as keyof FormState]: mapped.message,
+        }));
+        focusField(mapped.field);
+      }
+      toast.error(mapped.message);
       return;
     }
+    // Must precede onSaved(): that navigates, and the leave guard would
+    // otherwise fire on a clean save.
+    setSaved(true);
     toast.success(property ? "已更新" : "已新增");
     if (result.id) onSaved(result.id);
   }
 
   return (
-    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {leaveGuardDialog}
       <Section title="基本資料">
         <Field label="放盤編號 *" htmlFor="listing_no" error={fieldErrors.listing_no}>
           <Input

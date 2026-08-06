@@ -21,7 +21,7 @@
     "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs",
     "test:command-center": "node --test src/lib/neon/command-center.test.mjs src/lib/neon/admin-data.contract.test.mjs src/routes/admin.routes.test.mjs",
-    "test:woztell": "node --test src/lib/woztell/woztell.test.mjs src/routes/admin.routes.test.mjs",
+    "test:woztell": "node --test src/lib/woztell/woztell.test.mjs src/routes/admin.routes.test.mjs && bun test src/lib/woztell/template-preview.test.ts",
     "test:operations": "node --test src/lib/admin/operations/operations.test.mjs src/routes/admin.operations.test.mjs && bun test src/components/admin/operations/operations-components.test.tsx",
     "test:control-plane": "node --test src/lib/control-plane/control-plane.test.mjs src/routes/control-plane.routes.test.mjs",
     "test:control-plane:db": "node --test src/lib/control-plane/control-plane.integration.test.mjs",
@@ -101,6 +101,7 @@
   "devDependencies": {
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^1.4.0",
+    "@types/bun": "^1.3.14",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",

@@ -7,8 +7,10 @@ import {
   validateContentCopilotProposal,
   type ContentCopilotEvidence,
   type ContentCopilotProposal,
+  type ContentCopilotAction,
   type ContentCopilotRequest,
   type ContentCopilotResourceType,
+  type ContentCopilotTone,
 } from "./content-copilot.ts";
 import type { StaffAccess } from "../neon/auth.server.ts";
 import type { LoadedContentContext } from "./content-copilot-context.server.ts";
@@ -23,7 +25,38 @@ type GenerationResult = {
 };
 
 type ResearchResult = { ok: boolean; evidence: ContentCopilotEvidence[]; error: string | null };
-type ProposalRecord = Record<string, any>;
+/** A `ai_content_proposals` row as this module consumes it.
+ *
+ * This was `Record<string, any>`, which silently turned off checking for every
+ * field read off a proposal and leaked `any` all the way out to the admin
+ * component's `result`/`decision` values. The columns are enumerable, so they
+ * are named here; anything else on the row stays reachable via the index
+ * signature without infecting callers. */
+/** What a proposal looks like on the wire back to the admin client. The client
+ * still runs its own `isReviewProposal` guard; this exists so the server
+ * function has a return type TanStack can prove serializable -- an `unknown`
+ * index signature made the whole result `unknown` at every call site. */
+export type ContentCopilotProposalPayload = ContentCopilotProposal & {
+  id: string;
+  status: string;
+  selectedFields: string[];
+};
+
+type ProposalRecord = {
+  id?: string;
+  status?: string;
+  expiresAt?: string | null;
+  sourceFingerprint?: string | null;
+  resourceType?: ContentCopilotResourceType;
+  resourceId?: string;
+  action?: ContentCopilotAction;
+  selectedFields?: unknown;
+  requestContext?: {
+    tone?: ContentCopilotTone;
+    targetLanguage?: "zh-HK" | "en" | null;
+  } | null;
+  [key: string]: unknown;
+};
 
 export type ContentCopilotServiceDeps = {
   loadContext?: (
@@ -167,7 +200,11 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
         } catch {
           // A completed proposal remains reviewable even if audit persistence is unavailable.
         }
-        return { ok: true, proposal: completed, error: null };
+        return {
+          ok: true,
+          proposal: completed as unknown as ContentCopilotProposalPayload,
+          error: null,
+        };
       } catch (error) {
         if (proposalRecord) {
           const errorCode = stableError(errorCodeOf(error), "COPILOT_GENERATION_FAILED");
@@ -232,13 +269,16 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
         return failure("COPILOT_STALE_PROPOSAL");
       }
 
+      // Both of these were reached through `any` before, so a proposal row
+      // missing resourceType or with a non-array selectedFields would have
+      // thrown at runtime instead of returning a stable error code.
+      if (!record.resourceType) return failure("COPILOT_PROPOSAL_INVALID");
+      const recordFields = Array.isArray(record.selectedFields)
+        ? record.selectedFields.map((field) => String(field))
+        : [];
       const allowed = new Set<string>(allowedContentCopilotFields(record.resourceType));
       const acceptedFields = input.decision === "reject" ? [] : [...new Set(input.acceptedFields)];
-      if (
-        acceptedFields.some(
-          (field) => !allowed.has(field) || !record.selectedFields.includes(field),
-        )
-      )
+      if (acceptedFields.some((field) => !allowed.has(field) || !recordFields.includes(field)))
         return failure("COPILOT_UNKNOWN_FIELD");
       try {
         const decided = await decideProposal({
@@ -260,7 +300,11 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
           resourceId: record.resourceId,
           metadata: { status: decided.status ?? "rejected", acceptedFields },
         });
-        return { ok: true, proposal: decided, error: null };
+        return {
+          ok: true,
+          proposal: decided as unknown as ContentCopilotProposalPayload,
+          error: null,
+        };
       } catch (error) {
         return failure(stableError(errorCodeOf(error), "COPILOT_DECISION_FAILED"));
       }
@@ -338,10 +382,12 @@ function proposalRequest(record: ProposalRecord): ContentCopilotRequest {
   const context =
     record.requestContext && typeof record.requestContext === "object" ? record.requestContext : {};
   return {
-    resourceType: record.resourceType,
-    resourceId: record.resourceId,
-    action: record.action,
-    selectedFields: Array.isArray(record.selectedFields) ? record.selectedFields : [],
+    resourceType: record.resourceType as ContentCopilotResourceType,
+    resourceId: String(record.resourceId ?? ""),
+    action: record.action as ContentCopilotAction,
+    selectedFields: Array.isArray(record.selectedFields)
+      ? record.selectedFields.map((field) => String(field))
+      : [],
     tone: context.tone ?? "professional_property",
     targetLanguage: context.targetLanguage ?? "zh-HK",
     researchMode: "internal",
@@ -349,7 +395,7 @@ function proposalRequest(record: ProposalRecord): ContentCopilotRequest {
 }
 
 function failure(error: string) {
-  return { ok: false, proposal: null, error };
+  return { ok: false, proposal: null as ContentCopilotProposalPayload | null, error };
 }
 function errorCodeOf(error: unknown) {
   return error && typeof error === "object" && "code" in error ? String(error.code) : null;

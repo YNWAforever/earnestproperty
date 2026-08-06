@@ -31,54 +31,40 @@ import {
 import type { JobListItem, JobStatus } from "@/lib/admin/operations/operations-types";
 import type { OperationsCapabilities } from "@/lib/control-plane/capabilities";
 
-export const canRetryOperationsJob = (status: JobStatus) =>
-  status === "failed" || status === "cancelled";
-
-export const canCancelOperationsJob = (status: JobStatus) =>
-  status === "queued" || status === "running" || status === "failed";
-
-export const mergeOperationsJobRows = (
-  current: JobListItem[],
-  incoming: JobListItem[],
-  append: boolean,
-) => (append ? [...current, ...incoming] : incoming);
-
-export const shouldRefreshOperationsJobs = ({
-  active,
-  jobsRead,
-  pending,
-  previousPulse,
-  pulse,
-}: {
-  active: boolean;
-  jobsRead: boolean;
-  pending: boolean;
-  previousPulse: number;
-  pulse: number;
-}) => active && jobsRead && !pending && pulse !== previousPulse;
+import {
+  canCancelOperationsJob,
+  canRetryOperationsJob,
+  mergeOperationsJobRows,
+  shouldRefreshOperationsJobs,
+  type JobRowMergeMode,
+} from "./operations-jobs-utils";
 
 type JobCommand = { action: "retry" | "cancel"; job: JobListItem };
 
 const statusOptions: Array<{ value: "all" | JobStatus; label: string }> = [
-  { value: "all", label: "All statuses" },
-  { value: "queued", label: "Queued" },
-  { value: "running", label: "Running" },
-  { value: "succeeded", label: "Succeeded" },
-  { value: "failed", label: "Failed" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "all", label: "所有狀態" },
+  { value: "queued", label: "等候中" },
+  { value: "running", label: "執行中" },
+  { value: "succeeded", label: "成功" },
+  { value: "failed", label: "失敗" },
+  { value: "cancelled", label: "已取消" },
 ];
 
 function operationsErrorMessage(error: unknown) {
   if (error instanceof OperationsClientError) {
-    return error.requestId ? `${error.message} Request ID: ${error.requestId}` : error.message;
+    return error.requestId ? `${error.message}（支援參考編號：${error.requestId}）` : error.message;
   }
-  return error instanceof Error ? error.message : "Unable to load jobs.";
+  return error instanceof Error ? error.message : "未能載入背景工作。";
 }
 
 function formatDate(value: string | null) {
   if (!value) return "-";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function jobStatusLabel(status: JobStatus) {
+  return statusOptions.find((option) => option.value === status)?.label ?? status;
 }
 
 function statusVariant(status: JobStatus) {
@@ -106,15 +92,22 @@ export function AdminOperationsJobs({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [command, setCommand] = useState<JobCommand | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [pendingCommand, setPendingCommand] = useState<JobCommand | null>(null);
   const requestSequence = useRef(0);
   const previousPulse = useRef(pulse);
 
   const loadJobs = useCallback(
-    async ({ append = false, cursor }: { append?: boolean; cursor?: string } = {}) => {
+    async ({
+      mode = "replace",
+      cursor,
+      background = false,
+    }: { mode?: JobRowMergeMode; cursor?: string; background?: boolean } = {}) => {
       if (!active || !capabilities.jobsRead) return;
       const request = ++requestSequence.current;
-      setLoading(true);
+      // A background tick must not set `loading`: the filter controls are
+      // disabled on it, so a 30s poll interrupted typing mid-word.
+      if (!background) setLoading(true);
       setError(null);
       try {
         const result = await fetchOperationsJobs({
@@ -124,12 +117,15 @@ export function AdminOperationsJobs({
           limit: 25,
         });
         if (request !== requestSequence.current) return;
-        setRows((current) => mergeOperationsJobRows(current, result.data.rows, append));
-        setNextCursor(result.data.nextCursor);
+        setRows((current) => mergeOperationsJobRows(current, result.data.rows, mode));
+        // A refresh only knows about page 1, so it must not clobber the cursor
+        // the operator has already paged past.
+        if (mode !== "refresh") setNextCursor(result.data.nextCursor);
+        setHasLoadedOnce(true);
       } catch (reason) {
         if (request === requestSequence.current) setError(operationsErrorMessage(reason));
       } finally {
-        if (request === requestSequence.current) setLoading(false);
+        if (request === requestSequence.current && !background) setLoading(false);
       }
     },
     [active, capabilities.jobsRead, jobType, status],
@@ -153,8 +149,8 @@ export function AdminOperationsJobs({
       })
     )
       return;
-    void loadJobs();
-  }, [active, loadJobs, pendingCommand, pulse]);
+    void loadJobs({ mode: "refresh", background: true });
+  }, [active, capabilities.jobsRead, loadJobs, pendingCommand, pulse]);
 
   useEffect(
     () => () => {
@@ -168,6 +164,16 @@ export function AdminOperationsJobs({
     setRows([]);
     setNextCursor(null);
     setJobType(jobTypeDraft.trim());
+  };
+
+  const hasJobFilters = status !== "all" || jobType !== "";
+
+  const clearJobFilters = () => {
+    setRows([]);
+    setNextCursor(null);
+    setJobTypeDraft("");
+    setJobType("");
+    setStatus("all");
   };
 
   const changeStatus = (value: string) => {
@@ -184,14 +190,17 @@ export function AdminOperationsJobs({
       if (current.action === "retry") await retryOperationsJob(current.job.id);
       else await cancelOperationsJob(current.job.id);
       setCommand(null);
-      toast.success(current.action === "retry" ? "Job queued for retry." : "Job cancelled.");
+      toast.success(current.action === "retry" ? "已重新排隊執行此工作。" : "已取消此工作。");
       await onMutationComplete();
       await loadJobs();
     } catch (reason) {
       setCommand(null);
       if (reason instanceof OperationsClientError && reason.status === 409) {
+        // Previously this closed the dialog and set only a quiet status line, so
+        // a rejected command looked exactly like a successful one.
         await loadJobs();
-        setError("工作狀態已更新");
+        toast.error("此工作的狀態已改變，指令未有執行。已重新載入最新狀態。");
+        setError("此工作的狀態已改變，指令未有執行。");
       } else {
         toast.error(operationsErrorMessage(reason));
       }
@@ -207,9 +216,9 @@ export function AdminOperationsJobs({
       <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
         <form onSubmit={applyJobType} className="flex flex-1 flex-wrap items-end gap-2">
           <label className="grid min-w-44 gap-1 text-sm">
-            <span className="text-muted-foreground">Status</span>
-            <Select value={status} onValueChange={changeStatus} disabled={loading}>
-              <SelectTrigger aria-label="Filter jobs by status" className="w-full sm:w-44">
+            <span className="text-muted-foreground">狀態</span>
+            <Select value={status} onValueChange={changeStatus}>
+              <SelectTrigger aria-label="按狀態篩選背景工作" className="w-full sm:w-44">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -222,16 +231,19 @@ export function AdminOperationsJobs({
             </Select>
           </label>
           <label className="grid min-w-52 flex-1 gap-1 text-sm">
-            <span className="text-muted-foreground">Job type</span>
+            <span className="text-muted-foreground">工作類型</span>
             <Input
               value={jobTypeDraft}
               onChange={(event) => setJobTypeDraft(event.target.value)}
-              placeholder="Filter by job type"
-              disabled={loading}
+              placeholder="輸入工作類型篩選"
+              aria-label="按工作類型篩選"
             />
           </label>
-          <Button type="submit" variant="secondary" disabled={loading}>
-            Apply filters
+          {/* Filter controls are no longer disabled on `loading`: that flag was
+              also set by the 30s background poll, so typing was interrupted
+              mid-word. Background ticks now leave `loading` untouched. */}
+          <Button type="submit" variant="secondary">
+            套用篩選
           </Button>
         </form>
         <TooltipProvider>
@@ -241,7 +253,7 @@ export function AdminOperationsJobs({
                 type="button"
                 size="icon"
                 variant="outline"
-                aria-label="Refresh jobs"
+                aria-label="重新載入背景工作"
                 disabled={loading || pendingCommand !== null}
                 onClick={() => void loadJobs()}
               >
@@ -252,7 +264,7 @@ export function AdminOperationsJobs({
                 )}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh jobs</TooltipContent>
+            <TooltipContent>重新載入背景工作</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
@@ -266,12 +278,12 @@ export function AdminOperationsJobs({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Job</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Attempts</TableHead>
-            <TableHead>Run after</TableHead>
-            <TableHead>Updated</TableHead>
-            <TableHead className="w-24 text-right">Actions</TableHead>
+            <TableHead>工作</TableHead>
+            <TableHead>狀態</TableHead>
+            <TableHead>嘗試次數</TableHead>
+            <TableHead>排定執行</TableHead>
+            <TableHead>更新時間</TableHead>
+            <TableHead className="w-24 text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -287,7 +299,7 @@ export function AdminOperationsJobs({
                 </p>
               </TableCell>
               <TableCell>
-                <Badge variant={statusVariant(job.status)}>{job.status}</Badge>
+                <Badge variant={statusVariant(job.status)}>{jobStatusLabel(job.status)}</Badge>
               </TableCell>
               <TableCell className="tabular-nums">
                 {job.attemptCount} / {job.maxAttempts}
@@ -304,14 +316,14 @@ export function AdminOperationsJobs({
                             type="button"
                             size="icon"
                             variant="ghost"
-                            aria-label={`Retry job ${job.id}`}
+                            aria-label={`重試工作 ${job.id}`}
                             disabled={pendingCommand !== null}
                             onClick={() => setCommand({ action: "retry", job })}
                           >
                             <RotateCcw className="size-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Retry job</TooltipContent>
+                        <TooltipContent>重試此工作</TooltipContent>
                       </Tooltip>
                     ) : null}
                     {capabilities.jobsCancel && canCancelOperationsJob(job.status) ? (
@@ -321,14 +333,14 @@ export function AdminOperationsJobs({
                             type="button"
                             size="icon"
                             variant="ghost"
-                            aria-label={`Cancel job ${job.id}`}
+                            aria-label={`取消工作 ${job.id}`}
                             disabled={pendingCommand !== null}
                             onClick={() => setCommand({ action: "cancel", job })}
                           >
                             <XCircle className="size-4" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Cancel job</TooltipContent>
+                        <TooltipContent>取消此工作</TooltipContent>
                       </Tooltip>
                     ) : null}
                   </div>
@@ -336,10 +348,21 @@ export function AdminOperationsJobs({
               </TableCell>
             </TableRow>
           ))}
-          {!rows.length && !loading ? (
+          {!rows.length ? (
             <TableRow>
               <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                No jobs found.
+                {loading || !hasLoadedOnce ? (
+                  "載入中…"
+                ) : hasJobFilters ? (
+                  <span className="inline-flex flex-wrap items-center justify-center gap-2">
+                    沒有符合目前篩選的工作。
+                    <Button type="button" variant="outline" size="sm" onClick={clearJobFilters}>
+                      清除篩選
+                    </Button>
+                  </span>
+                ) : (
+                  "目前沒有背景工作。"
+                )}
               </TableCell>
             </TableRow>
           ) : null}
@@ -352,20 +375,18 @@ export function AdminOperationsJobs({
             type="button"
             variant="outline"
             disabled={loading}
-            onClick={() => void loadJobs({ append: true, cursor: nextCursor })}
+            onClick={() => void loadJobs({ mode: "append", cursor: nextCursor })}
           >
-            {loading ? "Loading..." : "Load more"}
+            {loading ? "載入中…" : "載入更多"}
           </Button>
         </div>
       ) : null}
 
       <AdminConfirmDialog
         open={command !== null}
-        title={command?.action === "retry" ? "Retry job?" : "Cancel job?"}
-        description={
-          command ? `${command.job.jobType} (${command.job.id})` : "Confirm this job command."
-        }
-        confirmLabel={command?.action === "retry" ? "Retry" : "Cancel job"}
+        title={command?.action === "retry" ? "確認重試此工作？" : "確認取消此工作？"}
+        description={command ? `${command.job.jobType}（${command.job.id}）` : "請確認此工作指令。"}
+        confirmLabel={command?.action === "retry" ? "重試" : "取消工作"}
         confirmVariant={command?.action === "cancel" ? "destructive" : "default"}
         isPending={pendingCommand !== null}
         onOpenChange={(open) => {

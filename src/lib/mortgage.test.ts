@@ -183,9 +183,13 @@ describe("calculateMortgage", () => {
       ltv: 100,
       stressRate: 0,
     });
-    expect(
-      Object.values(result).flatMap((value) => (Array.isArray(value) ? value : [value])),
-    ).not.toContain(Number.NaN);
+    // Flattened to unknown[]: `result` is heterogeneous (numbers, inputs, and
+    // the amortization rows), so without the annotation the matcher narrows to
+    // the row type and rejects the numeric members this assertion is about.
+    const flattenedResult = Object.values(result).flatMap<unknown>((value) =>
+      Array.isArray(value) ? value : [value],
+    );
+    expect(flattenedResult).not.toContain(Number.NaN);
     expect(Number.isFinite(result.monthlyPayment)).toBeTrue();
     expect(result.dsr).toBeNull();
     expect(result.stressedDsr).toBeNull();

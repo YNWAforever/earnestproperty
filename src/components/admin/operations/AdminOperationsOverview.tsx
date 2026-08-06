@@ -11,25 +11,31 @@ import type {
 } from "@/lib/admin/operations/operations-types";
 
 const healthLabels: Record<string, string> = {
-  "database.tables": "Database tables",
-  "database.columns": "Database columns",
-  database: "Database",
+  "database.tables": "資料庫表格",
+  "database.columns": "資料庫欄位",
+  database: "資料庫",
   ai: "AI provider",
   woztell: "WozTell",
-  cron: "Worker schedule",
-  migrationApproval: "Migration approval",
+  cron: "排程工作",
+  migrationApproval: "遷移審批",
 };
 
 const jobStatusLabels = {
-  queued: "Queued",
-  running: "Running",
-  succeeded: "Succeeded",
-  failed: "Failed",
-  cancelled: "Cancelled",
+  queued: "等候中",
+  running: "執行中",
+  succeeded: "成功",
+  failed: "失敗",
+  cancelled: "已取消",
 } as const;
 
+const HEALTH_STATUS_LABELS: Record<string, string> = {
+  healthy: "正常",
+  degraded: "降級",
+  failed: "故障",
+};
+
 function healthLabel(key: string) {
-  return healthLabels[key] ?? "System check";
+  return healthLabels[key] ?? "系統檢查";
 }
 
 function healthVariant(status: HealthStatus) {
@@ -46,9 +52,7 @@ function configuredSummary(details: Record<string, boolean> | undefined) {
 
   const values = Object.values(details);
   const present = values.filter(Boolean).length;
-  return present === values.length
-    ? "Configured"
-    : `${present} of ${values.length} configuration checks present`;
+  return present === values.length ? "已完成設定" : `${values.length} 項設定中已完成 ${present} 項`;
 }
 
 function HealthCheckRow({ check }: { check: HealthData["checks"][number] }) {
@@ -61,12 +65,14 @@ function HealthCheckRow({ check }: { check: HealthData["checks"][number] }) {
         <div className="min-w-0">
           <p className="font-medium">{healthLabel(check.key)}</p>
           <p className="text-sm text-muted-foreground">
-            {check.required ? "Required check" : "Optional check"}
+            {check.required ? "必要檢查" : "選用檢查"}
             {detailSummary ? ` · ${detailSummary}` : ""}
           </p>
         </div>
       </div>
-      <Badge variant={healthVariant(check.status)}>{check.status}</Badge>
+      <Badge variant={healthVariant(check.status)}>
+        {HEALTH_STATUS_LABELS[check.status] ?? check.status}
+      </Badge>
     </li>
   );
 }
@@ -82,11 +88,11 @@ function JobSummarySection({
     <section aria-labelledby="operations-job-summary" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="operations-job-summary" className="text-base font-semibold">
-          Job summary
+          背景工作概況
         </h2>
         {summary.attention.length ? (
           <Button type="button" variant="link" className="h-auto p-0" onClick={onOpenJobs}>
-            Open Jobs
+            前往背景工作
           </Button>
         ) : null}
       </div>
@@ -95,14 +101,14 @@ function JobSummarySection({
           <div key={status} className="min-h-20 border-l-2 border-muted px-3 py-2">
             <p className="text-2xl font-semibold tabular-nums">{count}</p>
             <p className="text-sm text-muted-foreground">
-              {jobStatusLabels[status as keyof typeof jobStatusLabels] ?? "Jobs"}
+              {jobStatusLabels[status as keyof typeof jobStatusLabels] ?? "工作"}
             </p>
           </div>
         ))}
       </div>
       {summary.attention.length ? (
         <p className="text-sm text-muted-foreground">
-          {summary.attention.length} job{summary.attention.length === 1 ? "" : "s"} need attention.
+          有 {summary.attention.length} 項工作需要跟進。
         </p>
       ) : null}
     </section>
@@ -117,19 +123,19 @@ function MigrationSummarySection({ migrations }: { migrations: MigrationState[] 
   return (
     <section aria-labelledby="operations-migration-status" className="space-y-3">
       <h2 id="operations-migration-status" className="text-base font-semibold">
-        Migration status
+        遷移狀態
       </h2>
       <dl className="grid grid-cols-3 gap-3">
         <div className="min-h-20 border-l-2 border-muted px-3 py-2">
-          <dt className="text-sm text-muted-foreground">Pending</dt>
+          <dt className="text-sm text-muted-foreground">待處理</dt>
           <dd className="text-2xl font-semibold tabular-nums">{pending}</dd>
         </div>
         <div className="min-h-20 border-l-2 border-muted px-3 py-2">
-          <dt className="text-sm text-muted-foreground">Applied</dt>
+          <dt className="text-sm text-muted-foreground">已套用</dt>
           <dd className="text-2xl font-semibold tabular-nums">{applied}</dd>
         </div>
         <div className="min-h-20 border-l-2 border-muted px-3 py-2">
-          <dt className="text-sm text-muted-foreground">Drift</dt>
+          <dt className="text-sm text-muted-foreground">結構偏移</dt>
           <dd className="text-2xl font-semibold tabular-nums">{drift}</dd>
         </div>
       </dl>
@@ -164,17 +170,17 @@ export function AdminOperationsOverview({
           <HealthStatusIcon status={health.status} />
           <div>
             <h2 id="operations-health-status" className="font-semibold">
-              Operations health
+              營運健康狀態
             </h2>
             <p className="text-sm text-muted-foreground">
               {health.status === "healthy"
-                ? "All reported checks are healthy."
-                : "Review reported checks."}
+                ? "所有檢查項目正常。"
+                : "有檢查項目需要跟進，請查看下方清單。"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {stale ? <Badge variant="secondary">Summary may be stale</Badge> : null}
+          {stale ? <Badge variant="secondary">資料可能已過時</Badge> : null}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -183,12 +189,12 @@ export function AdminOperationsOverview({
                   variant="outline"
                   size="icon"
                   onClick={onRefresh}
-                  aria-label="Refresh overview"
+                  aria-label="重新載入營運總覽"
                 >
                   <RefreshCw className="size-4" aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Refresh overview</TooltipContent>
+              <TooltipContent>重新載入營運總覽</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
@@ -202,7 +208,7 @@ export function AdminOperationsOverview({
 
       <section aria-labelledby="operations-health-checks">
         <h2 id="operations-health-checks" className="mb-2 text-base font-semibold">
-          Health checks
+          檢查項目
         </h2>
         <ul className="border-y">
           {health.checks.map((check) => (

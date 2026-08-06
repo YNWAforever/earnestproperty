@@ -105,6 +105,14 @@ test("canPrepareAdminCampaignQueue validates non-mutating queue preflight gates"
     }).reason,
     "INVALID_CAMPAIGN_STATUS",
   );
+  // A draft must go through review before it can reach a customer.
+  assert.equal(
+    canPrepareAdminCampaignQueue({
+      campaignStatus: "draft",
+      templateStatus: "active",
+    }).reason,
+    "INVALID_CAMPAIGN_STATUS",
+  );
   assert.equal(
     canPrepareAdminCampaignQueue({
       campaignStatus: "review",

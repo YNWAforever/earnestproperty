@@ -49,9 +49,18 @@ async function readStaffAuthToken() {
   return sessionTokenFromValue(session);
 }
 
+// Overloaded so the no-argument form resolves to exactly `{ headers: Headers }`.
+// With a single signature, `TOptions` fell back to the `ServerFnCallOptions`
+// constraint and carried `data?: unknown`, which every server function declared
+// without an input validator rejects (`data` must be `undefined` there) -- that
+// alone accounted for most of the repo's TypeScript baseline.
+export async function withStaffAuthHeaders(): Promise<{ headers: Headers }>;
 export async function withStaffAuthHeaders<TOptions extends ServerFnCallOptions>(
-  options?: TOptions,
-): Promise<TOptions & { headers: Headers }> {
+  options: TOptions,
+): Promise<TOptions & { headers: Headers }>;
+export async function withStaffAuthHeaders(
+  options?: ServerFnCallOptions,
+): Promise<ServerFnCallOptions & { headers: Headers }> {
   const headers = new Headers(options?.headers);
   const token = await readStaffAuthToken();
 
@@ -60,7 +69,7 @@ export async function withStaffAuthHeaders<TOptions extends ServerFnCallOptions>
   }
 
   return {
-    ...(options ?? ({} as TOptions)),
+    ...(options ?? {}),
     headers,
   };
 }

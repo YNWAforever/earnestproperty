@@ -227,14 +227,34 @@ function operationsHealth(capabilities) {
   };
 }
 
-test("Operations health failure clears prior capabilities and default-denies protected tabs", () => {
+test("Operations health failure preserves the last good snapshot and marks it stale", () => {
   const manager = { ...agent, jobsRead: true, auditRead: true };
+  const health = operationsHealth(manager);
   const failed = transitionOperationsHealthState(
-    { health: operationsHealth(manager), error: null },
+    { health, error: null, stale: false },
     { type: "failure", error: "Refresh failed" },
   );
 
-  assert.deepEqual(failed, { health: null, error: "Refresh failed" });
+  // Panels must stay mounted: dropping health to null on a transient 30s-tick
+  // failure destroyed the operator's filters, loaded pages and open dialogs.
+  // Authorization is enforced per request by requireStaffPermission on every
+  // /api/admin/control-plane/* handler, not by these client-side flags.
+  assert.deepEqual(failed, { health, error: "Refresh failed", stale: true });
+  assert.deepEqual(resolveOperationsRouteState("jobs", failed.health).allowedTabs, [
+    "overview",
+    "jobs",
+    "audit",
+  ]);
+  assert.equal(resolveOperationsRouteState("jobs", failed.health).activeTab, "jobs");
+});
+
+test("Operations health failure before any successful load still default-denies", () => {
+  const failed = transitionOperationsHealthState(
+    { health: null, error: null, stale: false },
+    { type: "failure", error: "Refresh failed" },
+  );
+
+  assert.deepEqual(failed, { health: null, error: "Refresh failed", stale: false });
   assert.deepEqual(resolveOperationsRouteState("jobs", failed.health).allowedTabs, ["overview"]);
   assert.equal(resolveOperationsRouteState("jobs", failed.health).activeTab, "overview");
 });
@@ -269,7 +289,7 @@ test("Operations route replaces unauthorized searches once and skips resolved se
 });
 
 test("Operations health loader starts with only the injected health fetch", async () => {
-  let state = { health: null, error: null };
+  let state = { health: null, error: null, stale: false };
   const calls = [];
   const loader = createOperationsHealthLoader({
     fetchHealth: async () => {
@@ -284,7 +304,7 @@ test("Operations health loader starts with only the injected health fetch", asyn
   await loader.load();
 
   assert.deepEqual(calls, ["health"]);
-  assert.deepEqual(state, { health: operationsHealth(agent), error: null });
+  assert.deepEqual(state, { health: operationsHealth(agent), error: null, stale: false });
 });
 
 test("poller ignores retained timer and visibility callbacks after stop", () => {

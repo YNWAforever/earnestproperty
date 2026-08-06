@@ -27,11 +27,14 @@ import type {
   AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
+  AdminCampaignRow,
   AdminConversationAiAssist,
+  AdminConversationRow,
   AdminConversationUpdateInput,
   AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
+  AdminLeadRow,
   AdminLeadUpdateInput,
   AdminListingFiltersInput,
   AdminAudiencePreview,
@@ -431,8 +434,19 @@ export async function listAdminListings(input: AdminListingInput = {}, actor?: S
   }));
 }
 
-export async function getAdminProperty(id: string) {
-  const rows = await queryRows("SELECT * FROM properties WHERE id = $1 LIMIT 1", [id]);
+/** `SELECT *` on `properties`, as the edit form consumes it. */
+export type AdminPropertyRecord = Partial<AdminPropertyInput> & { id: string };
+
+// The four list/get helpers below declare their row types rather than leaking
+// `DbRow` (= Record<string, unknown>). TanStack Start rejects `unknown` values
+// in a server function's return type -- it cannot prove them serializable -- and
+// every call site was casting to these exact types anyway, so the cast was
+// hiding the contract instead of expressing it.
+export async function getAdminProperty(id: string): Promise<AdminPropertyRecord | null> {
+  const rows = await queryRows<AdminPropertyRecord>(
+    "SELECT * FROM properties WHERE id = $1 LIMIT 1",
+    [id],
+  );
   return rows[0] ?? null;
 }
 
@@ -1207,6 +1221,39 @@ export async function deleteAdminFaq(id: string, actor: StaffAccess) {
   return { ok: true };
 }
 
+/** Which of the supplied (scope, question) pairs already exist.
+ *
+ * The import preview used to diff against `listAdminCms()`'s FAQ page, which is
+ * capped at 120 rows. On a site with more FAQs than that -- exactly the site
+ * that needs bulk import -- every unloaded question showed as 新增 and the
+ * confirm asserted 「全部為新增，不會覆寫現有 FAQ。」 while the write path's
+ * ON CONFLICT DO UPDATE overwrote live answers in place. The diff has to be
+ * resolved against the whole table, so it belongs here. */
+export async function checkAdminFaqConflicts(
+  keys: Array<{ scope: string; question: string }>,
+  _actor: StaffAccess,
+) {
+  if (!keys.length) return { existing: [] as Array<{ scope: string; question: string }> };
+
+  const scopes = keys.map((key) => key.scope);
+  const questions = keys.map((key) => key.question);
+  const rows = await queryRows(
+    `SELECT scope, question
+     FROM faqs
+     WHERE (scope, question) IN (
+       SELECT UNNEST($1::text[]), UNNEST($2::text[])
+     )`,
+    [scopes, questions],
+  );
+
+  return {
+    existing: rows.map((row) => ({
+      scope: stringOrEmpty(row.scope),
+      question: stringOrEmpty(row.question),
+    })),
+  };
+}
+
 export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess) {
   // NOTE: the faqs table has no updated_at column in this schema, so the
   // batched UPDATE only sets sort_order (matching the previous per-row loop).
@@ -1257,12 +1304,12 @@ export async function updateAdminMediaAsset(
   return { ok: true };
 }
 
-export async function listAdminLeads(actor?: StaffAccess) {
+export async function listAdminLeads(actor?: StaffAccess): Promise<AdminLeadRow[]> {
   const scope = actor ? agentScope(actor) : null;
   const params: unknown[] = [];
   const where =
     scope !== null ? `WHERE l.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
-  const rows = await queryRows(
+  const rows = await queryRows<AdminLeadRow>(
     `
     SELECT
       l.id,
@@ -1692,12 +1739,12 @@ export async function listCommandCenter(actor: StaffAccess): Promise<CommandCent
   };
 }
 
-export async function listAdminConversations(actor?: StaffAccess) {
+export async function listAdminConversations(actor?: StaffAccess): Promise<AdminConversationRow[]> {
   const params: unknown[] = [];
   const scope = actor ? agentScope(actor) : null;
   const where =
     scope !== null ? `WHERE wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
-  const rows = await queryRows(
+  const rows = await queryRows<AdminConversationRow>(
     `
     SELECT
       wc.id,
@@ -1920,8 +1967,8 @@ function parseConversationAiMessages(value: unknown) {
   });
 }
 
-export async function listAdminCampaigns() {
-  const rows = await queryRows(
+export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
+  const rows = await queryRows<AdminCampaignRow>(
     `
     SELECT
       c.id,
@@ -1935,7 +1982,11 @@ export async function listAdminCampaigns() {
       t.language_code,
       t.status AS template_status,
       a.name AS audience_name,
-      count(r.id)::int AS recipients
+      count(r.id)::int AS recipients,
+      count(r.id) FILTER (WHERE r.status = 'sent')::int AS sent,
+      count(r.id) FILTER (WHERE r.status = 'failed')::int AS failed,
+      count(r.id) FILTER (WHERE r.status = 'blocked')::int AS blocked,
+      count(r.id) FILTER (WHERE r.status IN ('queued', 'sending'))::int AS pending
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
@@ -1951,7 +2002,10 @@ export async function listAdminCampaigns() {
 export async function fetchAdminBlastOptions() {
   const [templates, audiences] = await Promise.all([
     queryRows(
-      "SELECT id, element_name, language_code, status FROM whatsapp_templates ORDER BY element_name ASC",
+      // category/description/components are selected so the send confirmation can
+      // show staff everything this system knows about the template. The approved
+      // body text is held by Woztell and is deliberately not mirrored here.
+      "SELECT id, element_name, language_code, status, category, description, components FROM whatsapp_templates ORDER BY element_name ASC",
     ),
     queryRows(
       "SELECT id, name, description FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
@@ -1963,6 +2017,9 @@ export async function fetchAdminBlastOptions() {
       element_name: stringOrEmpty(row.element_name),
       language_code: stringOrEmpty(row.language_code),
       status: stringOrEmpty(row.status),
+      category: stringOrEmpty(row.category),
+      description: stringOrNull(row.description),
+      components: Array.isArray(row.components) ? row.components : [],
     })),
     audiences: audiences.map((row) => ({
       id: stringOrEmpty(row.id),

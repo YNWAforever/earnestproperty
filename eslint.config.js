@@ -24,5 +24,14 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": "off",
     },
   },
+  {
+    // Vendored shadcn/ui primitives. Upstream deliberately exports variant
+    // helpers (buttonVariants, badgeVariants, useFormField, useSidebar) next to
+    // the components, so this rule fires on every regenerated file. Silencing it
+    // here keeps `eslint .` signal-carrying instead of training people to ignore
+    // 8 permanent warnings, and avoids diverging these files from upstream.
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: { "react-refresh/only-export-components": "off" },
+  },
   eslintPluginPrettier,
 );
