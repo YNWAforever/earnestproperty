@@ -220,6 +220,8 @@ function AdminCms() {
   });
   const [faqScopeFilter, setFaqScopeFilter] = useState("all");
   const faqFileInputRef = useRef<HTMLInputElement>(null);
+  const mediaFileInputRef = useRef<HTMLInputElement>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
 
   const refreshCmsData = useCallback(async () => {
     const [cms, media, videos] = await Promise.all([
@@ -597,6 +599,45 @@ function AdminCms() {
       toast.error(errorText(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** Uploads into the media library.
+   *
+   * /api/admin/media/upload has existed all along but was reachable only from
+   * the property form, so the CMS's own 媒體庫 tab was read-only: staff could
+   * edit alt text on assets that some other screen had happened to create, and
+   * the empty state told them to "upload photos" with nowhere to do it.
+   */
+  async function handleMediaUpload(files: FileList | null) {
+    if (!files?.length) return;
+    const list = Array.from(files);
+    setMediaUploading(true);
+    const failed: string[] = [];
+    let uploaded = 0;
+    try {
+      for (const file of list) {
+        const body = new FormData();
+        body.set("file", file);
+        body.set("ownerType", "cms");
+        try {
+          const res = await fetch("/api/admin/media/upload", { method: "POST", body });
+          const data = (await res.json().catch(() => null)) as { url?: string } | null;
+          if (!res.ok || !data?.url) failed.push(file.name);
+          else uploaded += 1;
+        } catch {
+          failed.push(file.name);
+        }
+      }
+      await refreshCmsData();
+      if (failed.length) {
+        toast.error(`已上載 ${uploaded}／${list.length}，失敗：${failed.join("、")}`);
+      } else {
+        toast.success(`已上載 ${uploaded} 個檔案`);
+      }
+    } finally {
+      setMediaUploading(false);
+      if (mediaFileInputRef.current) mediaFileInputRef.current.value = "";
     }
   }
 
@@ -1197,15 +1238,35 @@ function AdminCms() {
                     </CardTitle>
                     <CardDescription>更新圖片替代文字，改善搜尋及無障礙內容。</CardDescription>
                   </div>
-                  {mediaAssets ? (
-                    <TableSearch
-                      label="搜尋檔案路徑或替代文字"
-                      value={searchByTab.media}
-                      onChange={(value) =>
-                        setSearchByTab((current) => ({ ...current, media: value }))
-                      }
+                  <div className="flex flex-wrap items-center gap-2">
+                    {mediaAssets ? (
+                      <TableSearch
+                        label="搜尋檔案路徑或替代文字"
+                        value={searchByTab.media}
+                        onChange={(value) =>
+                          setSearchByTab((current) => ({ ...current, media: value }))
+                        }
+                      />
+                    ) : null}
+                    <Button
+                      type="button"
+                      disabled={mediaUploading}
+                      onClick={() => mediaFileInputRef.current?.click()}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {mediaUploading ? "上載中…" : "上載媒體"}
+                    </Button>
+                    <input
+                      ref={mediaFileInputRef}
+                      className="hidden"
+                      type="file"
+                      multiple
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      accept="image/jpeg,image/png,image/webp,image/avif"
+                      onChange={(event) => void handleMediaUpload(event.target.files)}
                     />
-                  ) : null}
+                  </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {!mediaAssets ? <Skeleton className="m-6 h-48 w-auto" /> : null}
@@ -1273,6 +1334,16 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有媒體"
                           description="上載相片後即可在媒體庫管理替代文字。"
+                          action={
+                            <Button
+                              type="button"
+                              disabled={mediaUploading}
+                              onClick={() => mediaFileInputRef.current?.click()}
+                            >
+                              <Upload className="h-4 w-4" />
+                              上載媒體
+                            </Button>
+                          }
                         />
                       )}
                     </div>

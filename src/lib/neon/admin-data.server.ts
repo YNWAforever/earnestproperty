@@ -83,6 +83,10 @@ import { woztellEnabled } from "../woztell/woztell.server";
  * own. `properties.agent_id` and `crm_leads.assigned_agent_id` both reference
  * `staff_users.id`, which is `actor.staffId`.
  */
+/** Upper bound on one bulk lead mutation. Keeps a mis-click or a runaway client
+ * from rewriting the entire CRM in a single statement. */
+export const BULK_LEAD_UPDATE_LIMIT = 200;
+
 function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
@@ -1497,6 +1501,71 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
   return { ok: true };
 }
 
+/** Re-stage or reassign many leads in one statement.
+ *
+ * The alternative the UI had was no bulk workflow at all: reassigning 30 leads
+ * meant 30 open -> save -> refetch cycles, each re-fetching the whole list. A
+ * client-side loop over updateAdminLead would not have fixed that -- it would
+ * have moved the serial round-trips around and, because AdminLeadUpdateInput has
+ * no partial-update path, each iteration would rewrite every field of a lead
+ * from a draft the operator never opened.
+ *
+ * Only the fields explicitly supplied are written. `assigned_agent_id` is
+ * nullable and null means "unassign", so presence is signalled by a separate
+ * flag rather than by null-checking the value.
+ *
+ * Returns how many rows actually changed alongside how many were asked for, so
+ * the caller can be honest when agent scoping silently excluded some.
+ */
+export async function bulkUpdateAdminLeads(
+  input: {
+    ids: string[];
+    stage?: string;
+    assigned_agent_id?: string | null;
+    assignAgent?: boolean;
+  },
+  actor: StaffAccess,
+) {
+  const ids = Array.from(new Set(input.ids.filter((id) => typeof id === "string" && id.trim())));
+  if (!ids.length) return { ok: false as const, error: "NO_LEADS_SELECTED" };
+  if (ids.length > BULK_LEAD_UPDATE_LIMIT) {
+    return { ok: false as const, error: "TOO_MANY_LEADS_SELECTED" };
+  }
+
+  const setStage = typeof input.stage === "string" && input.stage.length > 0;
+  const setAgent = input.assignAgent === true;
+  if (!setStage && !setAgent) return { ok: false as const, error: "NO_CHANGES_REQUESTED" };
+
+  const scope = agentScope(actor);
+  const params: unknown[] = [
+    ids,
+    setStage,
+    setStage ? input.stage : null,
+    setAgent,
+    setAgent ? (input.assigned_agent_id ?? null) : null,
+  ];
+  if (scope !== null) params.push(scope);
+
+  const rows = await queryRows<{ id: string }>(
+    `UPDATE crm_leads SET
+       stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+       assigned_agent_id = CASE WHEN $4::boolean THEN $5 ELSE assigned_agent_id END,
+       updated_at = now()
+     WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""}
+     RETURNING id::text AS id`,
+    params,
+  );
+
+  await writeAudit(actor.staffId, "lead.bulk_update", "lead", undefined, {
+    requested: ids.length,
+    updated: rows.length,
+    ...(setStage ? { stage: input.stage } : {}),
+    ...(setAgent ? { assigned_agent_id: input.assigned_agent_id ?? null } : {}),
+  });
+
+  return { ok: true as const, updated: rows.length, requested: ids.length };
+}
+
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {
   const rows = await queryRows(
     `INSERT INTO crm_activities (
@@ -2008,7 +2077,7 @@ export async function fetchAdminBlastOptions() {
       "SELECT id, element_name, language_code, status, category, description, components FROM whatsapp_templates ORDER BY element_name ASC",
     ),
     queryRows(
-      "SELECT id, name, description FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
+      "SELECT id, name, description, filters FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
     ),
   ]);
   return {
@@ -2025,6 +2094,9 @@ export async function fetchAdminBlastOptions() {
       id: stringOrEmpty(row.id),
       name: stringOrEmpty(row.name),
       description: stringOrNull(row.description),
+      // Needed to reopen an audience in the editor; without it "edit" could only
+      // ever rename, silently blanking the filters on save.
+      filters: normalizeAudienceFilters(parseAudienceFilters(row.filters)),
     })),
   };
 }
@@ -2051,6 +2123,45 @@ export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffA
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "audience.update" : "audience.create", "audience", id);
   return { id };
+}
+
+/** Deletes an audience, refusing while a live campaign still points at it.
+ *
+ * whatsapp_campaigns.audience_id is ON DELETE SET NULL, so an unguarded delete
+ * would silently strip the audience off a draft/review/scheduled campaign and
+ * leave it looking configured while having nobody to send to. Historical
+ * campaigns (completed/cancelled/failed) are allowed to lose the reference, but
+ * the count is returned so the caller can say so rather than deleting quietly.
+ */
+export async function deleteAdminAudience(id: string, actor: StaffAccess) {
+  const blocking = await queryRows<{ count: number; names: string[] }>(
+    `SELECT count(*)::int AS count, array_agg(name ORDER BY name) AS names
+     FROM whatsapp_campaigns
+     WHERE audience_id = $1::uuid
+       AND status IN ('draft', 'review', 'scheduled', 'queued', 'sending')`,
+    [id],
+  );
+  const blockingCount = blocking[0]?.count ?? 0;
+  if (blockingCount > 0) {
+    return {
+      ok: false as const,
+      error: "AUDIENCE_IN_USE",
+      campaigns: (blocking[0]?.names ?? []).filter(Boolean).slice(0, 10),
+    };
+  }
+
+  const historical = await queryRows<{ count: number }>(
+    `SELECT count(*)::int AS count FROM whatsapp_campaigns WHERE audience_id = $1::uuid`,
+    [id],
+  );
+
+  const rows = await queryRows("DELETE FROM whatsapp_audiences WHERE id = $1 RETURNING id", [id]);
+  if (!rows[0]) return { ok: false as const, error: "NOT_FOUND" };
+
+  await writeAudit(actor.staffId, "audience.delete", "audience", id, {
+    detachedCampaigns: historical[0]?.count ?? 0,
+  });
+  return { ok: true as const, detachedCampaigns: historical[0]?.count ?? 0 };
 }
 
 export async function previewAdminAudience(input: {

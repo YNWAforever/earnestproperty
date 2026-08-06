@@ -44,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { describeTemplateParameters } from "@/lib/woztell/template-preview";
 import {
@@ -52,6 +53,7 @@ import {
   fetchAdminCampaigns,
   previewAdminAudience,
   sendAdminCampaignQueue,
+  deleteAdminAudience,
   saveAdminAudience,
   saveAdminCampaign,
 } from "@/lib/neon/admin-data";
@@ -142,6 +144,10 @@ function AdminBlasts() {
   const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
   const [pendingCancel, setPendingCancel] = useState<AdminCampaignRow | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [savedAudienceDraft, setSavedAudienceDraft] = useState<AdminAudienceInput | null>(null);
+  const [pendingAudienceDelete, setPendingAudienceDelete] = useState<
+    AdminBlastOptions["audiences"][number] | null
+  >(null);
   // Staleness is derived from Date.now() at render, so without a tick a preview
   // would keep looking fresh until some other state change happened to
   // re-render the table -- and 發送 would stay enabled on an expired count.
@@ -289,9 +295,11 @@ function AdminBlasts() {
       };
       const result = (await saveAdminAudience({ data: payload })) as MutationResult;
       assertNoServerError(result);
+      setSavedAudienceDraft(payload);
       if (result.id) setSelectedPreviewAudienceId(result.id);
       await refreshAdminData({ clearRowPreviews: true });
       setAudienceDraft(null);
+      setSavedAudienceDraft(null);
       toast.success("收件群組已儲存");
     } catch (err) {
       toast.error(errorText(err));
@@ -327,6 +335,62 @@ function AdminBlasts() {
       toast.error(errorText(err));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openAudienceForEdit(audienceId: string) {
+    const audience = options?.audiences.find((item) => item.id === audienceId);
+    if (!audience) return;
+    const draft: AdminAudienceInput = {
+      id: audience.id,
+      name: audience.name,
+      description: audience.description,
+      filters: audience.filters,
+    };
+    setSavedAudienceDraft(draft);
+    setAudienceDraft(draft);
+  }
+
+  async function handleDeleteAudience() {
+    if (!pendingAudienceDelete) return;
+    const target = pendingAudienceDelete;
+    setMutatingAction(`audience-delete:${target.id}`);
+    setConfirmError(null);
+    try {
+      const result = (await deleteAdminAudience({ data: { id: target.id } })) as {
+        ok?: boolean;
+        error?: string;
+        campaigns?: string[];
+        detachedCampaigns?: number;
+      };
+      if (!result.ok) {
+        // AUDIENCE_IN_USE names the campaigns rather than failing vaguely: the
+        // FK is ON DELETE SET NULL, so the operator needs to know exactly what
+        // would have been silently stripped of its audience.
+        if (result.error === "AUDIENCE_IN_USE") {
+          setConfirmError(
+            `此收件群組仍被以下 campaign 使用，請先更改或取消它們：${(result.campaigns ?? []).join("、")}`,
+          );
+          return;
+        }
+        setConfirmError(
+          result.error === "NOT_FOUND"
+            ? "此收件群組已被刪除，請重新整理。"
+            : "刪除失敗，請稍後再試。",
+        );
+        return;
+      }
+      await refreshAdminData({ clearRowPreviews: true });
+      setPendingAudienceDelete(null);
+      toast.success(
+        result.detachedCampaigns
+          ? `收件群組已刪除，另有 ${result.detachedCampaigns} 個已完成的 campaign 不再連結此群組`
+          : "收件群組已刪除",
+      );
+    } catch (err) {
+      setConfirmError(errorText(err));
+    } finally {
+      setMutatingAction(null);
     }
   }
 
@@ -434,6 +498,29 @@ function AdminBlasts() {
     (!savedCampaignDraft ||
       campaignDraftSignature(campaignDraft) !== campaignDraftSignature(savedCampaignDraft)),
   );
+  // hasUnsavedCampaignChanges was computed purely to gate the send button; both
+  // dialogs still threw the draft away on 關閉, Esc or an overlay click.
+  const { requestClose: requestCloseCampaignDialog, dialog: campaignCloseGuard } =
+    useDirtyCloseGuard({
+      isDirty: hasUnsavedCampaignChanges,
+      onClose: closeCampaignDialog,
+      description: "你為此 campaign 輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
+    });
+
+  const hasUnsavedAudienceChanges = Boolean(
+    audienceDraft &&
+    JSON.stringify(audienceDraft) !== JSON.stringify(savedAudienceDraft ?? audienceDraft),
+  );
+  const { requestClose: requestCloseAudienceDialog, dialog: audienceCloseGuard } =
+    useDirtyCloseGuard({
+      isDirty: hasUnsavedAudienceChanges,
+      onClose: () => {
+        setAudienceDraft(null);
+        setSavedAudienceDraft(null);
+      },
+      description: "你為此收件群組輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
+    });
+
   const queueBlockReason = hasUnsavedCampaignChanges
     ? "請先儲存變更才可發送"
     : campaignDraft && !isQueueableStatus(campaignDraft.status)
@@ -505,7 +592,11 @@ function AdminBlasts() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setAudienceDraft({ name: "", description: null, filters: {} })}
+              onClick={() => {
+                const blank = { name: "", description: null, filters: {} };
+                setSavedAudienceDraft(blank);
+                setAudienceDraft(blank);
+              }}
             >
               <Users />
               新增收件群組
@@ -668,15 +759,77 @@ function AdminBlasts() {
           </CardContent>
         </Card>
 
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle className="text-base">收件人預覽</CardTitle>
-            <CardDescription>{activePreview?.label ?? "未選擇收件群組"}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PreviewSummary preview={preview} loading={previewLoading} />
-          </CardContent>
-        </Card>
+        <div className="space-y-4">
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle className="text-base">收件人預覽</CardTitle>
+              <CardDescription>{activePreview?.label ?? "未選擇收件群組"}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PreviewSummary preview={preview} loading={previewLoading} />
+            </CardContent>
+          </Card>
+
+          {/* Audiences could be created and then never touched again: no way to
+              rename one, correct its filters, or remove a mistake. The server's
+              save path has always handled an update via `id`; only the UI to
+              reach it was missing. */}
+          <Card className="h-fit">
+            <CardHeader>
+              <CardTitle className="text-base">收件群組</CardTitle>
+              <CardDescription>編輯名稱、篩選條件，或刪除不再需要的群組。</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              {options?.audiences.length ? (
+                <ul className="divide-y">
+                  {options.audiences.map((audience) => (
+                    <li key={audience.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium" title={audience.name}>
+                          {audience.name}
+                        </p>
+                        {audience.description ? (
+                          <p
+                            className="truncate text-xs text-muted-foreground"
+                            title={audience.description}
+                          >
+                            {audience.description}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-11 lg:h-9"
+                        onClick={() => openAudienceForEdit(audience.id)}
+                      >
+                        編輯
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-11 lg:h-9"
+                        disabled={!!mutatingAction}
+                        onClick={() => {
+                          setConfirmError(null);
+                          setPendingAudienceDelete(audience);
+                        }}
+                      >
+                        刪除
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="px-4 py-6 text-sm text-muted-foreground">
+                  未有收件群組。按上方「新增收件群組」建立第一個。
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <CampaignDialog
@@ -689,7 +842,7 @@ function AdminBlasts() {
         canQueue={canQueueDraft}
         queueBlockReason={queueBlockReason}
         onChange={setCampaignDraft}
-        onClose={closeCampaignDialog}
+        onClose={requestCloseCampaignDialog}
         onSubmit={handleSaveCampaign}
         onQueue={requestSendCampaignDraft}
         onCancel={() => {
@@ -706,9 +859,12 @@ function AdminBlasts() {
         previewLoading={previewLoading}
         saving={saving}
         onChange={setAudienceDraft}
-        onClose={() => setAudienceDraft(null)}
+        onClose={requestCloseAudienceDialog}
         onSubmit={handleSaveAudience}
       />
+
+      {campaignCloseGuard}
+      {audienceCloseGuard}
 
       <AdminConfirmDialog
         open={!!pendingSend}
@@ -727,6 +883,32 @@ function AdminBlasts() {
         onConfirm={() => void handleConfirmSend()}
       >
         {pendingSend ? <SendConfirmationDetails send={pendingSend} /> : null}
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
+        open={!!pendingAudienceDelete}
+        title="確認刪除收件群組？"
+        description="已完成的 campaign 會失去此群組的連結。此操作無法復原。"
+        confirmLabel="刪除收件群組"
+        confirmVariant="destructive"
+        isPending={mutatingAction?.startsWith("audience-delete:") ?? false}
+        error={confirmError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingAudienceDelete(null);
+            setConfirmError(null);
+          }
+        }}
+        onConfirm={() => void handleDeleteAudience()}
+      >
+        {pendingAudienceDelete ? (
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+            <ConfirmRow label="群組名稱" value={pendingAudienceDelete.name} />
+            {pendingAudienceDelete.description ? (
+              <ConfirmRow label="說明" value={pendingAudienceDelete.description} />
+            ) : null}
+          </dl>
+        ) : null}
       </AdminConfirmDialog>
 
       <AdminConfirmDialog

@@ -367,7 +367,12 @@ export type AdminBlastOptions = {
      * Woztell. Not the approved body text — that is never stored locally. */
     components: unknown;
   }>;
-  audiences: Array<{ id: string; name: string; description: string | null }>;
+  audiences: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    filters: AdminAudienceInput["filters"];
+  }>;
 };
 
 export type AdminAiKnowledgeStatus = {

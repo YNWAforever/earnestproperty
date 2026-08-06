@@ -534,6 +534,34 @@ export async function checkAdminFaqConflicts(options: {
   );
 }
 
+const bulkUpdateAdminLeadsServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      ids: string[];
+      stage?: string;
+      assigned_agent_id?: string | null;
+      assignAgent?: boolean;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.bulkUpdateAdminLeads(data, staff);
+  });
+
+export async function bulkUpdateAdminLeads(options: {
+  data: {
+    ids: string[];
+    stage?: string;
+    assigned_agent_id?: string | null;
+    assignAgent?: boolean;
+  };
+}) {
+  return callStaffServerFn(async () =>
+    bulkUpdateAdminLeadsServer(await withStaffAuthHeaders(options)),
+  );
+}
+
 const reorderAdminFaqsServer = createServerFn({ method: "POST" })
   .inputValidator((data: { orderedIds: string[] }) => data)
   .handler(async ({ data }) => {
@@ -789,6 +817,20 @@ const saveAdminAudienceServer = createServerFn({ method: "POST" })
     const adminData = await import("./admin-data.server");
     return adminData.saveAdminAudience(data, staff);
   });
+
+const deleteAdminAudienceServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.deleteAdminAudience(data.id, staff);
+  });
+
+export async function deleteAdminAudience(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    deleteAdminAudienceServer(await withStaffAuthHeaders(options)),
+  );
+}
 
 export async function saveAdminAudience(options: { data: AdminAudienceInput }) {
   return callStaffServerFn(async () =>

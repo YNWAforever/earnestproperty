@@ -10,6 +10,8 @@ import { fetchAdminOverview } from "@/lib/neon/admin-data";
 
 type Overview = Awaited<ReturnType<typeof fetchAdminOverview>>;
 
+type MetricTarget = "/admin/listings" | "/admin/leads" | "/admin/whatsapp" | "/admin/blasts";
+
 export const Route = createFileRoute("/admin/")({
   head: () => ({
     meta: [{ title: "Admin｜Earnest Property" }, { name: "robots", content: "noindex" }],
@@ -44,11 +46,15 @@ function AdminHome() {
       ) : data ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard icon={Building2} label="放盤" value={data.properties} to="/admin/listings" />
+          {/* Each tile lands on a view filtered to the thing it counted --
+              they all pointed at the same unfiltered list before, so clicking
+              「跟進中 leads」 showed a different number than the tile did. */}
           <MetricCard
             icon={ContactRound}
             label="跟進中 leads"
             value={data.openLeads}
             to="/admin/leads"
+            search={{ stage: "new" }}
           />
           {/* Both this and 跟進中 leads used to link to an unfiltered /admin/leads,
               and that page has no contacts view at all -- clicking a contact
@@ -107,14 +113,16 @@ function MetricCard({
   label,
   value,
   to,
+  search,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number;
-  to: "/admin/listings" | "/admin/leads" | "/admin/whatsapp" | "/admin/blasts";
+  to: MetricTarget;
+  search?: Record<string, string>;
 }) {
   return (
-    <Link to={to}>
+    <Link to={to} search={search}>
       <Card className="h-full transition hover:border-primary/50 hover:shadow-sm">
         <CardContent className="flex items-center justify-between gap-3 p-4">
           <div>

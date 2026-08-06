@@ -64,7 +64,25 @@ function EditAdminListingPage() {
   }, [id, loading, user]);
 
   return (
-    <AdminShell title="編輯放盤" description="更新放盤內容、相片、代理、SEO 及發布狀態。">
+    <AdminShell
+      title="編輯放盤"
+      description="更新放盤內容、相片、代理、SEO 及發布狀態。"
+      // AdminShell gained `breadcrumb` for exactly these two child routes and
+      // then had no callers, so a staff member on a detail page had no path
+      // back beyond a lone 返回 button.
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin" className="hover:underline">
+            後台
+          </Link>
+          {" › "}
+          <Link to="/admin/listings" className="hover:underline">
+            放盤
+          </Link>
+          {" › 編輯"}
+        </nav>
+      }
+    >
       <div className="max-w-3xl">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/listings">

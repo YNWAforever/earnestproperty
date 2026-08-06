@@ -133,6 +133,13 @@ function AdminSegments() {
     name.trim() && prompt.trim() && (hasCurrentPreview || selectedSegmentPromptMatches),
   );
   const canMaterializeSegment = Boolean(selectedSegmentId && selectedSegmentPromptMatches);
+  // True when the editor holds edits that loading another segment would discard.
+  const hasUnsavedSegmentEdits = Boolean(
+    selectedSegment
+      ? selectedSegment.natural_language_prompt !== prompt.trim() ||
+          selectedSegment.name !== name.trim()
+      : prompt.trim() || name.trim(),
+  );
 
   const previewSummary = useMemo(() => {
     if (!preview) return "No preview";
@@ -149,8 +156,19 @@ function AdminSegments() {
       return;
     }
     const segment = segments?.find((item) => item.id === segmentId);
+    if (!segment) {
+      setSelectedSegmentId(segmentId);
+      return;
+    }
+    // Loading another segment overwrites name/status/prompt wholesale, so an
+    // unsaved prompt someone was still composing vanished with no warning.
+    if (
+      hasUnsavedSegmentEdits &&
+      !window.confirm("你尚未儲存目前的分群描述，切換後會遺失。確定要切換嗎？")
+    ) {
+      return;
+    }
     setSelectedSegmentId(segmentId);
-    if (!segment) return;
     setName(segment.name);
     setStatus(segment.status);
     setPrompt(segment.natural_language_prompt);

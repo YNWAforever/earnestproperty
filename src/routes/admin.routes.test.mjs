@@ -334,6 +334,41 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     /materializeCampaignRecipients\(\{[\s\S]*queueAdminCampaign\(\{/,
   );
 
+  // Deep-linking: the working view and the open record belong in the URL, so a
+  // reload or a Back from a detail page does not reset it, and Command Center
+  // can link straight to the record it just told the agent to open.
+  for (const [file, param] of [
+    ["src/routes/admin.leads.tsx", "lead"],
+    ["src/routes/admin.whatsapp.tsx", "conversation"],
+    ["src/routes/admin.listings.tsx", "q"],
+  ]) {
+    assert.match(read(file), /validateSearch/, `${file} needs validateSearch`);
+    assert.match(read(file), new RegExp(`search\\.${param}`), `${file} needs a ${param} param`);
+  }
+  // Bulk lead updates must stay a single guarded statement. A client-side loop
+  // over updateAdminLead would reintroduce the serial round-trips this replaced
+  // and, since AdminLeadUpdateInput has no partial-update path, would rewrite
+  // every field of a lead from a draft nobody opened.
+  const adminServer = read("src/lib/neon/admin-data.server.ts");
+  assert.match(adminServer, /export async function bulkUpdateAdminLeads/);
+  assert.match(adminServer, /WHERE id = ANY\(\$1::uuid\[\]\)/);
+  assert.match(adminServer, /BULK_LEAD_UPDATE_LIMIT/);
+  assert.match(
+    adminServer,
+    /agentScope\(actor\)[\s\S]*bulkUpdateAdminLeads|bulkUpdateAdminLeads[\s\S]*agentScope\(actor\)/,
+  );
+  assert.match(adminServer, /lead\.bulk_update/);
+  const leadsRoute = read("src/routes/admin.leads.tsx");
+  assert.match(leadsRoute, /bulkUpdateAdminLeads/);
+  assert.doesNotMatch(leadsRoute, /for \(const .* of selectedVisibleIds\)/);
+  // Selection must be scoped to visible rows, so a filter change cannot leave
+  // invisible leads selected and then acted on from the bulk bar.
+  assert.match(leadsRoute, /selectedVisibleIds/);
+
+  const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(commandCenter, /search=\{\{ lead: selected\.lead_id \}\}/);
+  assert.match(commandCenter, /conversation: selected\.whatsapp\.conversationId/);
+
   const queueApi = read("src/routes/api.admin.campaigns.$id.queue.ts");
   assert.match(queueApi, /sendAdminCampaignQueue/);
   const adminDataServer = read("src/lib/neon/admin-data.server.ts");
