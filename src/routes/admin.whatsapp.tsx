@@ -73,7 +73,23 @@ const replyErrorLabels: Record<string, string> = {
   MISSING_WOZTELL_MEMBER_ID: "缺少 Woztell member ID",
 };
 
+// The open conversation and the inbox filters live in the URL, so a chat is
+// shareable, survives reload, and can be linked to directly -- Command Center's
+// 開啟 WhatsApp 對話 previously dropped the id and left the agent hunting through
+// an unfiltered list. Only non-default values are written, so a plain
+// /admin/whatsapp stays clean.
+function parseWhatsappSearch(search: Record<string, unknown>) {
+  const result: { conversation?: string; q?: string; status?: string } = {};
+  if (typeof search.conversation === "string" && search.conversation.trim()) {
+    result.conversation = search.conversation;
+  }
+  if (typeof search.q === "string" && search.q.trim()) result.q = search.q;
+  if (typeof search.status === "string" && search.status !== "all") result.status = search.status;
+  return result;
+}
+
 export const Route = createFileRoute("/admin/whatsapp")({
+  validateSearch: parseWhatsappSearch,
   head: () => ({
     meta: [{ title: "WhatsApp Inbox｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
@@ -82,6 +98,8 @@ export const Route = createFileRoute("/admin/whatsapp")({
 
 function AdminWhatsapp() {
   const { user } = useNeonAuth();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const isDesktop = useDesktopBreakpoint();
   const [rows, setRows] = useState<AdminConversationRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
@@ -101,8 +119,35 @@ function AdminWhatsapp() {
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
-  const [inboxQuery, setInboxQuery] = useState("");
-  const [inboxStatus, setInboxStatus] = useState("all");
+  const inboxQuery = search.q ?? "";
+  const inboxStatus = search.status ?? "all";
+  const [queryDraft, setQueryDraft] = useState(inboxQuery);
+
+  const setWhatsappSearch = useCallback(
+    (next: { conversation?: string; q?: string; status?: string }, replace = true) => {
+      void navigate({
+        search: (current) => ({ ...current, ...next }),
+        replace,
+        resetScroll: false,
+      });
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    setQueryDraft(inboxQuery);
+  }, [inboxQuery]);
+
+  // Debounced: bound directly to the router, a Chinese IME loses characters
+  // typed faster than the navigation commits.
+  useEffect(() => {
+    if (queryDraft === inboxQuery) return;
+    const timer = window.setTimeout(
+      () => setWhatsappSearch({ q: queryDraft.trim() || undefined }),
+      300,
+    );
+    return () => window.clearTimeout(timer);
+  }, [inboxQuery, queryDraft, setWhatsappSearch]);
   const [replyError, setReplyError] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
@@ -259,6 +304,16 @@ function AdminWhatsapp() {
     if (isDesktop) setPanelOpen(false);
   }, [isDesktop]);
 
+  // Opens a `?conversation=` arriving from the URL -- a shared link, a reload,
+  // or Command Center's 開啟 WhatsApp 對話.
+  useEffect(() => {
+    const requested = search.conversation;
+    if (!requested || requested === selectedIdRef.current) return;
+    selectedIdRef.current = requested;
+    setSelectedId(requested);
+    if (!isDesktop) setPanelOpen(true);
+  }, [isDesktop, search.conversation]);
+
   // The inbox never auto-refreshed and an open conversation was never refetched
   // at all: new customer messages simply never appeared while an agent read the
   // thread, and 重新整理 only updated the left-hand list. On a page whose entire
@@ -279,6 +334,7 @@ function AdminWhatsapp() {
       selectedIdRef.current = id;
       clearConversationDetail(true);
       setSelectedId(id);
+      setWhatsappSearch({ conversation: id });
     }
     if (!isDesktop) setPanelOpen(true);
   }
@@ -301,6 +357,7 @@ function AdminWhatsapp() {
     selectedIdRef.current = null;
     setSelectedId(null);
     clearConversationDetail();
+    setWhatsappSearch({ conversation: undefined });
   }
 
   function handlePanelOpenChange(open: boolean) {
@@ -437,8 +494,8 @@ function AdminWhatsapp() {
         filters={
           <>
             <Input
-              value={inboxQuery}
-              onChange={(event) => setInboxQuery(event.target.value)}
+              value={queryDraft}
+              onChange={(event) => setQueryDraft(event.target.value)}
               placeholder="搜尋姓名、電話或訊息"
               aria-label="搜尋 WhatsApp 對話"
               className="h-11 w-full sm:w-56 lg:h-9"
@@ -447,7 +504,9 @@ function AdminWhatsapp() {
               ariaLabel="按對話狀態篩選"
               value={inboxStatus}
               options={inboxStatusFilterOptions}
-              onChange={setInboxStatus}
+              onChange={(value) =>
+                setWhatsappSearch({ status: value === "all" ? undefined : value })
+              }
             />
             <Badge variant="outline" className="h-11 gap-1.5 px-3 lg:h-9">
               <Clock3 className="h-3.5 w-3.5" />
@@ -511,8 +570,8 @@ function AdminWhatsapp() {
               totalLoaded={rows?.length ?? 0}
               hasFilters={hasInboxFilters}
               onClearFilters={() => {
-                setInboxQuery("");
-                setInboxStatus("all");
+                setQueryDraft("");
+                setWhatsappSearch({ q: undefined, status: undefined });
               }}
               selectedId={selectedId}
               loading={loadingRows}

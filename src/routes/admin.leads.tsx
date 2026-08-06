@@ -64,6 +64,9 @@ type LeadStage = "new" | "contacted" | "viewing" | "negotiating" | "closed_won" 
 type OptInFilter = "all" | "yes" | "no";
 
 type LeadFilters = {
+  /** Lead id of the open detail panel. Not a filter, but it shares the search
+   * schema so one navigate() call can change both. */
+  lead?: string;
   stage: string;
   intent: string;
   source: string;
@@ -145,6 +148,12 @@ function parseLeadFilters(search: Record<string, unknown>): Partial<LeadFilters>
   }
   if (typeof search.query === "string" && search.query.trim()) {
     result.query = search.query;
+  }
+  // The open lead lives in the URL too, so a detail view is shareable and
+  // survives reload -- and so Command Center can link straight to a specific
+  // lead instead of dumping the agent on an unfiltered list.
+  if (typeof search.lead === "string" && search.lead.trim()) {
+    result.lead = search.lead;
   }
   return result;
 }
@@ -367,6 +376,7 @@ function AdminLeads() {
     panelOpenRef.current = true;
     setSelectedId(id);
     setPanelOpen(true);
+    if (filters.lead !== id) setFilters((current) => ({ ...current, lead: id }), { replace: true });
   }
 
   function handlePanelOpenChange(open: boolean) {
@@ -381,8 +391,20 @@ function AdminLeads() {
       setDetailError(null);
       setNoteBody("");
       resetAiProfileState();
+      if (filters.lead)
+        setFilters((current) => ({ ...current, lead: undefined }), { replace: true });
     }
   }
+
+  // Opens the panel for a `?lead=` arriving from the URL -- a shared link, a
+  // reload, or Command Center's 開啟完整 Lead.
+  useEffect(() => {
+    const requested = filters.lead;
+    if (!requested || requested === selectedIdRef.current) return;
+    openLead(requested);
+    // openLead is redeclared each render; depending on it would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.lead]);
 
   // `handlePanelOpenChange(false)` used to run unconditionally, so Esc, an
   // overlay click, or opening another row silently discarded typed edits

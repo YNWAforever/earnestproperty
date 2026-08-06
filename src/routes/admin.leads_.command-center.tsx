@@ -329,12 +329,22 @@ function CommandCenter() {
         footer={
           selected ? (
             <div className="flex flex-wrap gap-2">
+              {/* Both links used to drop the id and land on an unfiltered list,
+                  so the agent had to find the record again by hand -- on the
+                  board whose whole job is telling them which one to open. */}
               <Button asChild variant="outline" size="sm">
-                <Link to="/admin/leads">開啟完整 Lead</Link>
+                <Link to="/admin/leads" search={{ lead: selected.lead_id }}>
+                  開啟完整 Lead
+                </Link>
               </Button>
               {selected.whatsapp.linked ? (
                 <Button asChild size="sm">
-                  <Link to="/admin/whatsapp">開啟 WhatsApp 對話</Link>
+                  <Link
+                    to="/admin/whatsapp"
+                    search={{ conversation: selected.whatsapp.conversationId }}
+                  >
+                    開啟 WhatsApp 對話
+                  </Link>
                 </Button>
               ) : null}
               <Button

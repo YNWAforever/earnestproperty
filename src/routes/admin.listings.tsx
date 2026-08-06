@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ExternalLink, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -74,7 +74,27 @@ const statusLabels: Record<string, string> = {
   offline: "下架",
 };
 
+// Filters used to live in local useState, so a reload or Back from an edit page
+// reset the agent's whole working view, and no filtered list was shareable.
+// Only non-default values are written, so a plain /admin/listings stays clean.
+function parseListingSearch(search: Record<string, unknown>): Partial<ListingFilters> {
+  const result: Partial<ListingFilters> = {};
+  for (const key of ["status", "deal_type", "estate_id", "featured", "agent_id"] as const) {
+    const value = search[key];
+    if (typeof value === "string" && value !== defaultFilters[key]) {
+      result[key] = value as never;
+    }
+  }
+  if (typeof search.q === "string" && search.q.trim()) result.q = search.q;
+  const limit = Number(search.limit);
+  if (Number.isFinite(limit) && limit > LISTING_PAGE_SIZE) {
+    result.limit = Math.min(limit, 200);
+  }
+  return result;
+}
+
 export const Route = createFileRoute("/admin/listings")({
+  validateSearch: parseListingSearch,
   head: () => ({
     meta: [{ title: "放盤｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
@@ -86,13 +106,23 @@ function AdminListings() {
   const [rows, setRows] = useState<AdminListingRow[] | null>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
-  const [filters, setFilters] = useState<ListingFilters>(defaultFilters);
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const filters: ListingFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
+
+  function setFilters(updater: (current: ListingFilters) => ListingFilters, replace = false) {
+    void navigate({
+      search: parseListingSearch(updater(filters)),
+      replace,
+      resetScroll: false,
+    });
+  }
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   // The search box types into this and pushes to `filters.q` debounced, so a
   // keystroke does not fire a server round-trip.
-  const [queryDraft, setQueryDraft] = useState("");
+  const [queryDraft, setQueryDraft] = useState(filters.q);
   const [pendingStatusChange, setPendingStatusChange] = useState<{
     listing: AdminListingRow;
     status: ListingStatus;
@@ -135,19 +165,26 @@ function AdminListings() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      setFilters((current) =>
-        current.q === queryDraft.trim()
-          ? current
-          : { ...current, q: queryDraft.trim(), limit: LISTING_PAGE_SIZE },
+      if (filters.q === queryDraft.trim()) return;
+      setFilters(
+        (current) => ({ ...current, q: queryDraft.trim(), limit: LISTING_PAGE_SIZE }),
+        true,
       );
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [queryDraft]);
+    // setFilters is redeclared each render; depending on it would re-arm the
+    // timer continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDraft, filters.q]);
+
+  useEffect(() => {
+    setQueryDraft(filters.q);
+  }, [filters.q]);
 
   function setFilter<K extends keyof ListingFilters>(key: K, value: ListingFilters[K]) {
     // Any filter change resets paging: keeping an expanded limit across a filter
     // switch would silently show a different slice than the count implies.
-    setFilters((current) => ({ ...current, [key]: value, limit: LISTING_PAGE_SIZE }));
+    setFilters((current) => ({ ...current, [key]: value, limit: LISTING_PAGE_SIZE }), true);
   }
 
   async function handleStatusChange() {
@@ -264,7 +301,7 @@ function AdminListings() {
               variant="ghost"
               size="sm"
               className="h-11 lg:h-9"
-              onClick={() => setFilters(defaultFilters)}
+              onClick={() => setFilters(() => defaultFilters, true)}
             >
               重設
             </Button>
@@ -341,10 +378,13 @@ function AdminListings() {
               variant="outline"
               disabled={loadingRows}
               onClick={() =>
-                setFilters((current) => ({
-                  ...current,
-                  limit: Math.min(current.limit + LISTING_PAGE_SIZE, 200),
-                }))
+                setFilters(
+                  (current) => ({
+                    ...current,
+                    limit: Math.min(current.limit + LISTING_PAGE_SIZE, 200),
+                  }),
+                  true,
+                )
               }
             >
               {loadingRows ? "載入中…" : "載入更多"}
