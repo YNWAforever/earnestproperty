@@ -534,6 +534,34 @@ export async function checkAdminFaqConflicts(options: {
   );
 }
 
+const bulkUpdateAdminLeadsServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      ids: string[];
+      stage?: string;
+      assigned_agent_id?: string | null;
+      assignAgent?: boolean;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.bulkUpdateAdminLeads(data, staff);
+  });
+
+export async function bulkUpdateAdminLeads(options: {
+  data: {
+    ids: string[];
+    stage?: string;
+    assigned_agent_id?: string | null;
+    assignAgent?: boolean;
+  };
+}) {
+  return callStaffServerFn(async () =>
+    bulkUpdateAdminLeadsServer(await withStaffAuthHeaders(options)),
+  );
+}
+
 const reorderAdminFaqsServer = createServerFn({ method: "POST" })
   .inputValidator((data: { orderedIds: string[] }) => data)
   .handler(async ({ data }) => {

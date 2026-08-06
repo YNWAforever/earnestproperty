@@ -83,6 +83,10 @@ import { woztellEnabled } from "../woztell/woztell.server";
  * own. `properties.agent_id` and `crm_leads.assigned_agent_id` both reference
  * `staff_users.id`, which is `actor.staffId`.
  */
+/** Upper bound on one bulk lead mutation. Keeps a mis-click or a runaway client
+ * from rewriting the entire CRM in a single statement. */
+export const BULK_LEAD_UPDATE_LIMIT = 200;
+
 function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
@@ -1495,6 +1499,71 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
     intent: input.intent,
   });
   return { ok: true };
+}
+
+/** Re-stage or reassign many leads in one statement.
+ *
+ * The alternative the UI had was no bulk workflow at all: reassigning 30 leads
+ * meant 30 open -> save -> refetch cycles, each re-fetching the whole list. A
+ * client-side loop over updateAdminLead would not have fixed that -- it would
+ * have moved the serial round-trips around and, because AdminLeadUpdateInput has
+ * no partial-update path, each iteration would rewrite every field of a lead
+ * from a draft the operator never opened.
+ *
+ * Only the fields explicitly supplied are written. `assigned_agent_id` is
+ * nullable and null means "unassign", so presence is signalled by a separate
+ * flag rather than by null-checking the value.
+ *
+ * Returns how many rows actually changed alongside how many were asked for, so
+ * the caller can be honest when agent scoping silently excluded some.
+ */
+export async function bulkUpdateAdminLeads(
+  input: {
+    ids: string[];
+    stage?: string;
+    assigned_agent_id?: string | null;
+    assignAgent?: boolean;
+  },
+  actor: StaffAccess,
+) {
+  const ids = Array.from(new Set(input.ids.filter((id) => typeof id === "string" && id.trim())));
+  if (!ids.length) return { ok: false as const, error: "NO_LEADS_SELECTED" };
+  if (ids.length > BULK_LEAD_UPDATE_LIMIT) {
+    return { ok: false as const, error: "TOO_MANY_LEADS_SELECTED" };
+  }
+
+  const setStage = typeof input.stage === "string" && input.stage.length > 0;
+  const setAgent = input.assignAgent === true;
+  if (!setStage && !setAgent) return { ok: false as const, error: "NO_CHANGES_REQUESTED" };
+
+  const scope = agentScope(actor);
+  const params: unknown[] = [
+    ids,
+    setStage,
+    setStage ? input.stage : null,
+    setAgent,
+    setAgent ? (input.assigned_agent_id ?? null) : null,
+  ];
+  if (scope !== null) params.push(scope);
+
+  const rows = await queryRows<{ id: string }>(
+    `UPDATE crm_leads SET
+       stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+       assigned_agent_id = CASE WHEN $4::boolean THEN $5 ELSE assigned_agent_id END,
+       updated_at = now()
+     WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""}
+     RETURNING id::text AS id`,
+    params,
+  );
+
+  await writeAudit(actor.staffId, "lead.bulk_update", "lead", undefined, {
+    requested: ids.length,
+    updated: rows.length,
+    ...(setStage ? { stage: input.stage } : {}),
+    ...(setAgent ? { assigned_agent_id: input.assigned_agent_id ?? null } : {}),
+  });
+
+  return { ok: true as const, updated: rows.length, requested: ids.length };
 }
 
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {

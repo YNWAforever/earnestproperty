@@ -21,6 +21,7 @@ import { AdminToolbar } from "@/components/admin/AdminToolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -51,6 +52,7 @@ import {
   fetchAdminLeadAiProfile,
   fetchAdminLeads,
   rejectAdminAiTag,
+  bulkUpdateAdminLeads,
   updateAdminLead,
 } from "@/lib/neon/admin-data";
 import type {
@@ -93,6 +95,12 @@ const defaultFilters: LeadFilters = {
   agent_id: "all",
   optIn: "all",
   query: "",
+};
+
+const bulkErrorLabels: Record<string, string> = {
+  NO_LEADS_SELECTED: "請先選擇至少一個 Lead。",
+  TOO_MANY_LEADS_SELECTED: "一次最多只可更新 200 個 Lead，請分批處理。",
+  NO_CHANGES_REQUESTED: "請選擇要套用的階段或負責代理。",
 };
 
 const stageOptions: { value: LeadStage; label: string }[] = [
@@ -180,6 +188,11 @@ function AdminLeads() {
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const filters: LeadFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
   const [queryDraft, setQueryDraft] = useState(filters.query);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStage, setBulkStage] = useState("");
+  const [bulkAgentId, setBulkAgentId] = useState("");
+  const [bulkPending, setBulkPending] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   // Keeps the box in step when the URL changes from elsewhere (back/forward, or
   // the filtered-empty state's 清除篩選) without making every keystroke a
@@ -366,6 +379,69 @@ function AdminLeads() {
   const intentOptions = useMemo(() => uniqueValues(rows, "intent"), [rows]);
   const sourceOptions = useMemo(() => uniqueValues(rows, "source"), [rows]);
   const filteredRows = useMemo(() => filterLeads(rows ?? [], filters), [filters, rows]);
+
+  // Selection is pruned to what is currently visible, so a filter change cannot
+  // leave rows selected that the operator can no longer see -- and then act on
+  // them from the bulk bar.
+  const visibleIds = useMemo(() => filteredRows.map((lead) => lead.id), [filteredRows]);
+  const selectedVisibleIds = useMemo(
+    () => visibleIds.filter((id) => selectedIds.has(id)),
+    [selectedIds, visibleIds],
+  );
+  const allVisibleSelected =
+    visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length;
+
+  function toggleSelected(id: string, next: boolean) {
+    setSelectedIds((current) => {
+      const updated = new Set(current);
+      if (next) updated.add(id);
+      else updated.delete(id);
+      return updated;
+    });
+  }
+
+  function toggleSelectAll(next: boolean) {
+    setSelectedIds(next ? new Set(visibleIds) : new Set());
+  }
+
+  async function runBulkUpdate() {
+    if (!selectedVisibleIds.length) return;
+    const assignAgent = bulkAgentId !== "";
+    setBulkPending(true);
+    try {
+      const result = (await bulkUpdateAdminLeads({
+        data: {
+          ids: selectedVisibleIds,
+          ...(bulkStage ? { stage: bulkStage } : {}),
+          ...(assignAgent
+            ? { assignAgent: true, assigned_agent_id: bulkAgentId === "none" ? null : bulkAgentId }
+            : {}),
+        },
+      })) as { ok?: boolean; error?: string; updated?: number; requested?: number };
+
+      if (!result.ok) throw new Error(bulkErrorLabels[result.error ?? ""] ?? "批量更新失敗");
+
+      await refreshLeads();
+      setSelectedIds(new Set());
+      setBulkStage("");
+      setBulkAgentId("");
+      setBulkConfirmOpen(false);
+      // Agent-scoped staff can only touch leads assigned to them, so the server
+      // may legitimately update fewer rows than were asked for. Saying so beats
+      // a green toast that implies all of them moved.
+      const updated = result.updated ?? 0;
+      const requested = result.requested ?? selectedVisibleIds.length;
+      toast.success(
+        updated === requested
+          ? `已更新 ${updated} 個 Lead`
+          : `已更新 ${updated}／${requested} 個 Lead，其餘沒有權限修改`,
+      );
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setBulkPending(false);
+    }
+  }
 
   function setFilter<K extends keyof LeadFilters>(key: K, value: LeadFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -746,6 +822,52 @@ function AdminLeads() {
           }
         />
       ) : null}
+      {/* Reassigning or re-staging leads was one open -> save -> refetch cycle
+            per lead, each refetching the whole list. */}
+      {selectedVisibleIds.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
+          <span className="text-sm font-medium">已選 {selectedVisibleIds.length} 個 Lead</span>
+          <AdminStatusSelect
+            ariaLabel="批量設定階段"
+            value={bulkStage}
+            placeholder="改為階段…"
+            options={stageOptions.map((stage) => ({ value: stage.value, label: stage.label }))}
+            onChange={setBulkStage}
+          />
+          <Select value={bulkAgentId} onValueChange={setBulkAgentId}>
+            <SelectTrigger className="h-11 w-44 lg:h-9" aria-label="批量指派負責代理">
+              <SelectValue placeholder="指派代理…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">取消指派</SelectItem>
+              {agents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name ?? agent.email ?? agent.id}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            className="h-11 lg:h-9"
+            disabled={(!bulkStage && !bulkAgentId) || bulkPending}
+            onClick={() => setBulkConfirmOpen(true)}
+          >
+            套用
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-11 lg:h-9"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            清除選取
+          </Button>
+        </div>
+      ) : null}
+
       {filteredRows.length > 0 ? (
         <Card>
           <CardContent className="p-0">
@@ -753,18 +875,36 @@ function AdminLeads() {
               <Table className="min-w-[920px]">
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        aria-label="全選本頁 Leads"
+                        checked={allVisibleSelected}
+                        onCheckedChange={(checked) => toggleSelectAll(checked === true)}
+                      />
+                    </TableHead>
                     <TableHead className="w-[28%]">客戶</TableHead>
                     <TableHead>意圖</TableHead>
                     <TableHead>來源</TableHead>
                     <TableHead>相關放盤</TableHead>
                     <TableHead className="text-right">預算</TableHead>
                     <TableHead>階段</TableHead>
+                    {/* The 負責代理 filter existed with no matching column, so an
+                        agent could filter by assignment but never see or verify
+                        it. */}
+                    <TableHead>負責代理</TableHead>
                     <TableHead>WhatsApp</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredRows.map((lead) => (
-                    <LeadRow key={lead.id} lead={lead} onOpen={openLead} />
+                    <LeadRow
+                      key={lead.id}
+                      lead={lead}
+                      agents={agents}
+                      selected={selectedIds.has(lead.id)}
+                      onToggleSelected={toggleSelected}
+                      onOpen={openLead}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -835,6 +975,38 @@ function AdminLeads() {
       {unsavedLeadDialog}
       {leadRouteLeaveGuard}
       <AdminConfirmDialog
+        open={bulkConfirmOpen}
+        title="確認批量更新？"
+        description={`此操作會一次過修改 ${selectedVisibleIds.length} 個 Lead，無法一次過復原。`}
+        confirmLabel={`更新 ${selectedVisibleIds.length} 個 Lead`}
+        confirmVariant="destructive"
+        isPending={bulkPending}
+        onOpenChange={(open) => {
+          if (!bulkPending) setBulkConfirmOpen(open);
+        }}
+        onConfirm={() => void runBulkUpdate()}
+      >
+        <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+          {bulkStage ? (
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt className="text-muted-foreground">階段改為</dt>
+              <dd className="font-medium">{stageLabels[bulkStage] ?? bulkStage}</dd>
+            </div>
+          ) : null}
+          {bulkAgentId ? (
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt className="text-muted-foreground">負責代理改為</dt>
+              <dd className="font-medium">
+                {bulkAgentId === "none"
+                  ? "取消指派"
+                  : (agents.find((agent) => agent.id === bulkAgentId)?.name ?? bulkAgentId)}
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
         open={pendingStageAction !== null}
         title={`標記為${pendingStageAction?.label ?? ""}`}
         description="此 Lead 有其他未儲存的修改（預算、負責代理、備註或意圖），會一併儲存。確定要繼續嗎？"
@@ -852,13 +1024,32 @@ function AdminLeads() {
   );
 }
 
-function LeadRow({ lead, onOpen }: { lead: AdminLeadRow; onOpen: (id: string) => void }) {
+function LeadRow({
+  lead,
+  agents,
+  selected,
+  onToggleSelected,
+  onOpen,
+}: {
+  lead: AdminLeadRow;
+  agents: AdminAgentRow[];
+  selected: boolean;
+  onToggleSelected: (id: string, next: boolean) => void;
+  onOpen: (id: string) => void;
+}) {
   // `role="button"` on the whole `<tr>` used to replace its cell semantics, so a
   // screen reader announced only "開啟 X 詳情, button" and never the 意向/來源/
   // 預算/階段/opt-in cells. A real focusable control inside the Lead cell keeps
   // every column reachable by keyboard while still announcing per-column.
   return (
-    <TableRow className="hover:bg-muted/40">
+    <TableRow className="hover:bg-muted/40" data-state={selected ? "selected" : undefined}>
+      <TableCell>
+        <Checkbox
+          checked={selected}
+          aria-label={`選擇 ${lead.name ?? "未命名"}`}
+          onCheckedChange={(checked) => onToggleSelected(lead.id, checked === true)}
+        />
+      </TableCell>
       <TableCell>
         <button
           type="button"
@@ -886,6 +1077,13 @@ function LeadRow({ lead, onOpen }: { lead: AdminLeadRow; onOpen: (id: string) =>
         <Badge variant={lead.stage === "new" ? "default" : "outline"}>
           {stageLabels[lead.stage] ?? lead.stage}
         </Badge>
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        {lead.assigned_agent_id ? (
+          (agents.find((agent) => agent.id === lead.assigned_agent_id)?.name ?? "未知代理")
+        ) : (
+          <span className="text-muted-foreground">未指派</span>
+        )}
       </TableCell>
       <TableCell>
         {lead.opt_in_whatsapp ? (
