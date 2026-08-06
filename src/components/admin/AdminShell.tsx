@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useRouter } from "@tanstack/react-router";
+import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
   BookOpen,
@@ -120,6 +120,11 @@ export function AdminShell({
 }) {
   const { loading, user, signOut } = useNeonAuth();
   const router = useRouter();
+  // The path the user actually asked for, so the sign-in gate can send them
+  // back to it. Includes the query string, so a filtered view survives too.
+  const requestedPath = useRouterState({
+    select: (state) => `${state.location.pathname}${state.location.searchStr ?? ""}`,
+  });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -150,21 +155,22 @@ export function AdminShell({
   }
 
   if (!user) {
-    // TODO(auth): this drops the requested admin path -- a deep link to
-    // /admin/whatsapp sends staff to sign-in and then to the public site, so
-    // they must re-navigate by hand. Fixing it needs a `redirect` search param
-    // on /auth/$pathname plus the matching post-auth callback on AuthView
-    // (@neondatabase/auth-ui), so it is deliberately left alone here rather
-    // than shipping a param nothing honours.
     return (
       <div className="mx-auto flex min-h-[70vh] max-w-md items-center px-4">
         <div className="w-full rounded-lg border bg-card p-6 text-center shadow-sm">
           <h1 className="text-xl font-semibold">職員登入</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            請先使用 Neon Auth 登入，之後即可進入 Earnest Property 後台。
+            請先使用 Neon Auth 登入，之後即可返回你原本要開啟的頁面。
           </p>
           <Button asChild className="mt-5 w-full">
-            <Link to="/auth/$pathname" params={{ pathname: "sign-in" }}>
+            {/* Carries the requested admin path so sign-in returns here instead
+                of dropping the user on the public homepage. The value is
+                validated on the auth route, not trusted. */}
+            <Link
+              to="/auth/$pathname"
+              params={{ pathname: "sign-in" }}
+              search={{ redirect: requestedPath }}
+            >
               登入後台
             </Link>
           </Button>
