@@ -818,6 +818,20 @@ const saveAdminAudienceServer = createServerFn({ method: "POST" })
     return adminData.saveAdminAudience(data, staff);
   });
 
+const deleteAdminAudienceServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.deleteAdminAudience(data.id, staff);
+  });
+
+export async function deleteAdminAudience(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    deleteAdminAudienceServer(await withStaffAuthHeaders(options)),
+  );
+}
+
 export async function saveAdminAudience(options: { data: AdminAudienceInput }) {
   return callStaffServerFn(async () =>
     saveAdminAudienceServer(await withStaffAuthHeaders(options)),

@@ -2077,7 +2077,7 @@ export async function fetchAdminBlastOptions() {
       "SELECT id, element_name, language_code, status, category, description, components FROM whatsapp_templates ORDER BY element_name ASC",
     ),
     queryRows(
-      "SELECT id, name, description FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
+      "SELECT id, name, description, filters FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
     ),
   ]);
   return {
@@ -2094,6 +2094,9 @@ export async function fetchAdminBlastOptions() {
       id: stringOrEmpty(row.id),
       name: stringOrEmpty(row.name),
       description: stringOrNull(row.description),
+      // Needed to reopen an audience in the editor; without it "edit" could only
+      // ever rename, silently blanking the filters on save.
+      filters: normalizeAudienceFilters(parseAudienceFilters(row.filters)),
     })),
   };
 }
@@ -2120,6 +2123,45 @@ export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffA
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "audience.update" : "audience.create", "audience", id);
   return { id };
+}
+
+/** Deletes an audience, refusing while a live campaign still points at it.
+ *
+ * whatsapp_campaigns.audience_id is ON DELETE SET NULL, so an unguarded delete
+ * would silently strip the audience off a draft/review/scheduled campaign and
+ * leave it looking configured while having nobody to send to. Historical
+ * campaigns (completed/cancelled/failed) are allowed to lose the reference, but
+ * the count is returned so the caller can say so rather than deleting quietly.
+ */
+export async function deleteAdminAudience(id: string, actor: StaffAccess) {
+  const blocking = await queryRows<{ count: number; names: string[] }>(
+    `SELECT count(*)::int AS count, array_agg(name ORDER BY name) AS names
+     FROM whatsapp_campaigns
+     WHERE audience_id = $1::uuid
+       AND status IN ('draft', 'review', 'scheduled', 'queued', 'sending')`,
+    [id],
+  );
+  const blockingCount = blocking[0]?.count ?? 0;
+  if (blockingCount > 0) {
+    return {
+      ok: false as const,
+      error: "AUDIENCE_IN_USE",
+      campaigns: (blocking[0]?.names ?? []).filter(Boolean).slice(0, 10),
+    };
+  }
+
+  const historical = await queryRows<{ count: number }>(
+    `SELECT count(*)::int AS count FROM whatsapp_campaigns WHERE audience_id = $1::uuid`,
+    [id],
+  );
+
+  const rows = await queryRows("DELETE FROM whatsapp_audiences WHERE id = $1 RETURNING id", [id]);
+  if (!rows[0]) return { ok: false as const, error: "NOT_FOUND" };
+
+  await writeAudit(actor.staffId, "audience.delete", "audience", id, {
+    detachedCampaigns: historical[0]?.count ?? 0,
+  });
+  return { ok: true as const, detachedCampaigns: historical[0]?.count ?? 0 };
 }
 
 export async function previewAdminAudience(input: {
