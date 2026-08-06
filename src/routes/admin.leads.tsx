@@ -40,7 +40,8 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
+import { leadBudgetError } from "@/lib/admin/lead-budget";
 import {
   analyzeAdminLeadAiProfile,
   approveAdminAiTag,
@@ -421,6 +422,9 @@ function AdminLeads() {
     onClose: () => handlePanelOpenChange(false),
     description: "你有未儲存的 Lead 修改或跟進備註，離開後會遺失。",
   });
+  // The sheet was guarded but the page was not, so clicking a sidebar entry or
+  // the browser Back button while the panel was open still destroyed the edits.
+  const { dialog: leadRouteLeaveGuard } = useRouteLeaveGuard(isLeadDetailDirty);
 
   function updateDraft<K extends keyof LeadDraft>(key: K, value: LeadDraft[K]) {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
@@ -428,6 +432,15 @@ function AdminLeads() {
 
   async function saveLead(nextDraft = draft, successMessage = "Lead 已更新") {
     if (!detail || !nextDraft) return;
+
+    // Without this the inline error was decorative: 儲存 still wrote a reversed
+    // or negative range straight through to the columns that drive segment
+    // filters and blast audiences.
+    const budgetProblem = leadBudgetError(nextDraft.budget_min, nextDraft.budget_max);
+    if (budgetProblem) {
+      toast.error(budgetProblem);
+      return;
+    }
 
     const targetLeadId = detail.id;
     setMutatingAction("save");
@@ -820,6 +833,7 @@ function AdminLeads() {
         ) : null}
       </AdminDetailPanel>
       {unsavedLeadDialog}
+      {leadRouteLeaveGuard}
       <AdminConfirmDialog
         open={pendingStageAction !== null}
         title={`標記為${pendingStageAction?.label ?? ""}`}
@@ -921,6 +935,7 @@ function LeadDetailEditor({
   onAiTagDecision: (tagId: string, approve: boolean) => void;
 }) {
   const noteInputRef = useRef<HTMLTextAreaElement>(null);
+  const budgetError = leadBudgetError(draft.budget_min, draft.budget_max);
   useEffect(() => {
     if (noteError) noteInputRef.current?.focus();
   }, [noteError]);
@@ -1004,11 +1019,16 @@ function LeadDetailEditor({
 
           <ReadonlyField label="來源" value={formatSource(lead.source)} />
 
-          <Field label="最低預算">
+          {/* A reversed or negative range was accepted and saved silently, then
+              fed straight into the segment/audience filters that decide who
+              receives a WhatsApp blast. */}
+          <Field label="最低預算" error={budgetError}>
             <Input
               type="number"
+              min={0}
               value={draft.budget_min ?? ""}
               disabled={disabled}
+              aria-invalid={budgetError ? true : undefined}
               onChange={(event) =>
                 onDraftChange("budget_min", parseNullableNumber(event.target.value))
               }
@@ -1018,8 +1038,10 @@ function LeadDetailEditor({
           <Field label="最高預算">
             <Input
               type="number"
+              min={0}
               value={draft.budget_max ?? ""}
               disabled={disabled}
+              aria-invalid={budgetError ? true : undefined}
               onChange={(event) =>
                 onDraftChange("budget_max", parseNullableNumber(event.target.value))
               }
@@ -1240,11 +1262,24 @@ function DetailItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  children,
+  error,
+}: {
+  label: string;
+  children: ReactNode;
+  error?: string | null;
+}) {
   return (
     <label className="grid gap-2 text-sm font-medium">
       <span>{label}</span>
       {children}
+      {error ? (
+        <span role="alert" className="text-xs font-normal text-destructive">
+          {error}
+        </span>
+      ) : null}
     </label>
   );
 }

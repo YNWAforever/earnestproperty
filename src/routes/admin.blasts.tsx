@@ -44,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { describeTemplateParameters } from "@/lib/woztell/template-preview";
 import {
@@ -142,6 +143,7 @@ function AdminBlasts() {
   const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
   const [pendingCancel, setPendingCancel] = useState<AdminCampaignRow | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [savedAudienceDraft, setSavedAudienceDraft] = useState<AdminAudienceInput | null>(null);
   // Staleness is derived from Date.now() at render, so without a tick a preview
   // would keep looking fresh until some other state change happened to
   // re-render the table -- and 發送 would stay enabled on an expired count.
@@ -289,9 +291,11 @@ function AdminBlasts() {
       };
       const result = (await saveAdminAudience({ data: payload })) as MutationResult;
       assertNoServerError(result);
+      setSavedAudienceDraft(payload);
       if (result.id) setSelectedPreviewAudienceId(result.id);
       await refreshAdminData({ clearRowPreviews: true });
       setAudienceDraft(null);
+      setSavedAudienceDraft(null);
       toast.success("收件群組已儲存");
     } catch (err) {
       toast.error(errorText(err));
@@ -434,6 +438,29 @@ function AdminBlasts() {
     (!savedCampaignDraft ||
       campaignDraftSignature(campaignDraft) !== campaignDraftSignature(savedCampaignDraft)),
   );
+  // hasUnsavedCampaignChanges was computed purely to gate the send button; both
+  // dialogs still threw the draft away on 關閉, Esc or an overlay click.
+  const { requestClose: requestCloseCampaignDialog, dialog: campaignCloseGuard } =
+    useDirtyCloseGuard({
+      isDirty: hasUnsavedCampaignChanges,
+      onClose: closeCampaignDialog,
+      description: "你為此 campaign 輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
+    });
+
+  const hasUnsavedAudienceChanges = Boolean(
+    audienceDraft &&
+    JSON.stringify(audienceDraft) !== JSON.stringify(savedAudienceDraft ?? audienceDraft),
+  );
+  const { requestClose: requestCloseAudienceDialog, dialog: audienceCloseGuard } =
+    useDirtyCloseGuard({
+      isDirty: hasUnsavedAudienceChanges,
+      onClose: () => {
+        setAudienceDraft(null);
+        setSavedAudienceDraft(null);
+      },
+      description: "你為此收件群組輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
+    });
+
   const queueBlockReason = hasUnsavedCampaignChanges
     ? "請先儲存變更才可發送"
     : campaignDraft && !isQueueableStatus(campaignDraft.status)
@@ -505,7 +532,11 @@ function AdminBlasts() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => setAudienceDraft({ name: "", description: null, filters: {} })}
+              onClick={() => {
+                const blank = { name: "", description: null, filters: {} };
+                setSavedAudienceDraft(blank);
+                setAudienceDraft(blank);
+              }}
             >
               <Users />
               新增收件群組
@@ -689,7 +720,7 @@ function AdminBlasts() {
         canQueue={canQueueDraft}
         queueBlockReason={queueBlockReason}
         onChange={setCampaignDraft}
-        onClose={closeCampaignDialog}
+        onClose={requestCloseCampaignDialog}
         onSubmit={handleSaveCampaign}
         onQueue={requestSendCampaignDraft}
         onCancel={() => {
@@ -706,9 +737,12 @@ function AdminBlasts() {
         previewLoading={previewLoading}
         saving={saving}
         onChange={setAudienceDraft}
-        onClose={() => setAudienceDraft(null)}
+        onClose={requestCloseAudienceDialog}
         onSubmit={handleSaveAudience}
       />
+
+      {campaignCloseGuard}
+      {audienceCloseGuard}
 
       <AdminConfirmDialog
         open={!!pendingSend}
