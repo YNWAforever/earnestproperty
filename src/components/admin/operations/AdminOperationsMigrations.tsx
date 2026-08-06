@@ -24,10 +24,7 @@ import {
 import type { MigrationPlan, MigrationState } from "@/lib/admin/operations/operations-types";
 import type { OperationsCapabilities } from "@/lib/control-plane/capabilities";
 
-export const canConfirmMigrationApply = (migrationId: string, typedId: string) =>
-  migrationId === typedId;
-
-export const migrationPlanShouldClear = (status: number) => status === 409;
+import { canConfirmMigrationApply, migrationPlanShouldClear } from "./operations-migrations-utils";
 
 function migrationErrorMessage(error: unknown, fallback: string) {
   if (error instanceof OperationsClientError) {

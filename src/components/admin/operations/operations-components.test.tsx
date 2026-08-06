@@ -8,21 +8,27 @@ import {
   isValidAuditRequestId,
   safeAuditMetadataEntries,
   shouldApplyAuditRequestId,
-} from "./AdminOperationsAudit";
+} from "./operations-audit-utils";
 import {
   canCancelOperationsJob,
   canRetryOperationsJob,
   mergeOperationsJobRows,
   shouldRefreshOperationsJobs,
-} from "./AdminOperationsJobs";
-import { canConfirmMigrationApply, migrationPlanShouldClear } from "./AdminOperationsMigrations";
+} from "./operations-jobs-utils";
+import { canConfirmMigrationApply, migrationPlanShouldClear } from "./operations-migrations-utils";
 import type { JobListItem, JobStatus } from "@/lib/admin/operations/operations-types";
-const jobsSource = readFileSync(new URL("./AdminOperationsJobs.tsx", import.meta.url), "utf8");
-const auditSource = readFileSync(new URL("./AdminOperationsAudit.tsx", import.meta.url), "utf8");
-const migrationsSource = readFileSync(
-  new URL("./AdminOperationsMigrations.tsx", import.meta.url),
-  "utf8",
-);
+const jobsSource =
+  readFileSync(new URL("./AdminOperationsJobs.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("./operations-jobs-utils.ts", import.meta.url), "utf8");
+// Both halves of the audit panel are read: the sanitiser moved to
+// operations-audit-utils.ts, and the assertion below must follow it or it would
+// still pass while checking a file that no longer holds the logic.
+const auditSource =
+  readFileSync(new URL("./AdminOperationsAudit.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("./operations-audit-utils.ts", import.meta.url), "utf8");
+const migrationsSource =
+  readFileSync(new URL("./AdminOperationsMigrations.tsx", import.meta.url), "utf8") +
+  readFileSync(new URL("./operations-migrations-utils.ts", import.meta.url), "utf8");
 
 const agentCapabilities = {
   jobsRead: false,

@@ -185,9 +185,14 @@ test("agent avatars and profile form include required accessibility details", ()
   }
 
   const form = read("src/components/admin/AgentProfileForm.tsx");
-  assert.match(form, /superRefine/);
-  assert.match(form, /請輸入中文或英文名稱/);
-  assert.match(form, /path:\s*\["name_zh"\]/);
+  // The schema moved to agent-profile-form-utils.ts so the component file
+  // exports only components. The validation assertions follow it rather than
+  // being folded into `form` -- pointing them at the file that actually holds
+  // the rules keeps them from passing vacuously.
+  const formSchema = read("src/components/admin/agent-profile-form-utils.ts");
+  assert.match(formSchema, /superRefine/);
+  assert.match(formSchema, /請輸入中文或英文名稱/);
+  assert.match(formSchema, /path:\s*\["name_zh"\]/);
   assert.match(form, /aria-invalid/);
   assert.match(form, /aria-describedby/);
   assert.match(form, /\.focus\(\)/);
@@ -222,6 +227,7 @@ test("agent avatars and profile form include required accessibility details", ()
   assert.match(form, /saveAdminAgentProfile/);
   assert.match(form, /canManageIdentity/);
   assert.match(form, /buildAgentProfilePayload/);
+  assert.match(form, /agentProfileSchema/);
   assert.doesNotMatch(form, /deleteAdminAgentProfile|hard delete|刪除代理/i);
 });
 
