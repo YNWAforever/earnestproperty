@@ -180,6 +180,24 @@ function isZeroAdminGuardTrip(error: unknown): boolean {
 }
 
 /**
+ * True when Postgres itself detected and refused a write-skew race
+ * (SQLSTATE 40001), rather than our own guard tripping. This is why these two
+ * transactions run at Serializable isolation: the guard's `EXISTS (... some
+ * OTHER active admin ...)` reads a row this statement does not write, and the
+ * other side's transaction writes that exact row while reading this one's --
+ * two admins demoting each other at the same moment. Under the default Read
+ * Committed isolation, each transaction's guard can see the other admin as
+ * still "active" (neither has committed yet), so both pass and both commit --
+ * this is the classic write-skew anomaly Postgres's Serializable mode exists
+ * to catch. It catches it by aborting one side with 40001, which we surface
+ * as a retryable conflict rather than letting the raw driver error escape.
+ */
+function isSerializationConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return String((error as { code?: unknown }).code ?? "") === "40001";
+}
+
+/**
  * Replace a staff member's role set.
  *
  * Roles were previously writable only by the first-admin bootstrap, so
@@ -198,6 +216,13 @@ function isZeroAdminGuardTrip(error: unknown): boolean {
  * anyway -- see isZeroAdminGuardTrip. The pure guard above stays in place
  * unchanged: it is what gives a normal caller a fast, specific 400 without
  * ever reaching the database.
+ *
+ * A live re-check alone is not enough: two admins demoting each other at the
+ * same instant can each read the other as still active before either has
+ * committed (classic write skew), so the transaction also runs at
+ * Serializable isolation whenever this write drops admin -- see
+ * isSerializationConflict -- which is what makes Postgres itself refuse the
+ * anomaly rather than just narrowing the window.
  */
 export async function updateStaffRoles(
   input: { staffId: string; roles: StaffAccessRole[] },
@@ -254,15 +279,16 @@ export async function updateStaffRoles(
   // branches, not for the operands of AND/OR, so the division is written as
   // the CASE's ELSE so it is provably never evaluated on the safe path.
   try {
-    await transactionRows([
-      {
-        statement: `DELETE FROM staff_roles WHERE staff_user_id = $1::uuid AND role <> 'admin'::staff_role`,
-        params: [input.staffId],
-      },
-      ...(losingAdmin
-        ? [
-            {
-              statement: `
+    await transactionRows(
+      [
+        {
+          statement: `DELETE FROM staff_roles WHERE staff_user_id = $1::uuid AND role <> 'admin'::staff_role`,
+          params: [input.staffId],
+        },
+        ...(losingAdmin
+          ? [
+              {
+                statement: `
                 DELETE FROM staff_roles
                 WHERE staff_user_id = $1::uuid
                   AND role = 'admin'::staff_role
@@ -280,19 +306,29 @@ export async function updateStaffRoles(
                     END
                   )
               `,
-              params: [input.staffId] as unknown[],
-            },
-          ]
-        : []),
-      ...nextRoles.map((role) => ({
-        statement: `INSERT INTO staff_roles (staff_user_id, role) VALUES ($1::uuid, $2::staff_role)
+                params: [input.staffId] as unknown[],
+              },
+            ]
+          : []),
+        ...nextRoles.map((role) => ({
+          statement: `INSERT INTO staff_roles (staff_user_id, role) VALUES ($1::uuid, $2::staff_role)
           ON CONFLICT (staff_user_id, role) DO NOTHING`,
-        params: [input.staffId, role] as unknown[],
-      })),
-    ]);
+          params: [input.staffId, role] as unknown[],
+        })),
+      ],
+      // Only the admin-losing path needs Serializable: it is the only case
+      // where this transaction's guard reads a row it does not write while
+      // depending on another transaction not writing it concurrently.
+      losingAdmin ? { isolationLevel: "Serializable" } : {},
+    );
   } catch (error) {
     if (losingAdmin && isZeroAdminGuardTrip(error)) {
       throw new Response("last-admin", { status: 400 });
+    }
+    if (losingAdmin && isSerializationConflict(error)) {
+      throw new Response("Another admin change happened at the same time. Please retry.", {
+        status: 409,
+      });
     }
     throw error;
   }
@@ -325,6 +361,11 @@ export async function updateStaffRoles(
  * isZeroAdminGuardTrip) rather than quietly matching zero rows -- which would
  * otherwise let the ownership handover commit while the account stayed
  * active and admin, silently stranding the very work it was meant to protect.
+ *
+ * When the target is an admin, this transaction also runs at Serializable
+ * isolation (see isSerializationConflict on updateStaffRoles for why a live
+ * re-check alone still allows write skew between two admins deactivating each
+ * other at the same instant).
  */
 export async function setStaffActive(
   input: { staffId: string; active: boolean; reassignToStaffId?: string | null },
@@ -386,12 +427,16 @@ export async function setStaffActive(
   // just match zero rows on the safe-but-blocked path, leaving the
   // reassignment statements above -- sent in the same transactionRows() call
   // -- to commit anyway. Forcing a real Postgres error aborts everything sent
-  // in this call together.
+  // in this call together. Serializable isolation is added whenever the
+  // target currently holds admin, for the same write-skew reason as
+  // updateStaffRoles.
+  const isAdminTarget = summary.roles.includes("admin");
   try {
-    await transactionRows([
-      ...(reassignToStaffId ? staffReassignStatements(input.staffId, reassignToStaffId) : []),
-      {
-        statement: `
+    await transactionRows(
+      [
+        ...(reassignToStaffId ? staffReassignStatements(input.staffId, reassignToStaffId) : []),
+        {
+          statement: `
           UPDATE staff_users
           SET active = false, updated_at = now()
           WHERE id = $1::uuid
@@ -413,12 +458,19 @@ export async function setStaffActive(
               END
             )
         `,
-        params: [input.staffId],
-      },
-    ]);
+          params: [input.staffId],
+        },
+      ],
+      isAdminTarget ? { isolationLevel: "Serializable" } : {},
+    );
   } catch (error) {
     if (isZeroAdminGuardTrip(error)) {
       throw new Response("last-admin", { status: 400 });
+    }
+    if (isAdminTarget && isSerializationConflict(error)) {
+      throw new Response("Another admin change happened at the same time. Please retry.", {
+        status: 409,
+      });
     }
     throw error;
   }
