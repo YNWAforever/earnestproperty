@@ -4,7 +4,7 @@
 
 **Goal:** Let admins grant and revoke staff roles, and deactivate a departing colleague while handing over everything they own, then regroup the admin sidebar so nothing is duplicated or unreachable.
 
-**Architecture:** Decision rules go in `staff-security-policy.ts` as pure functions (it already holds `decideAgentProfileMutation` and has a test file). The list of columns that constitute "ownership" goes in a new pure `staff-ownership.ts` module that generates SQL, so the "all five ownership columns, none of the historical ones" contract is asserted against data structures rather than by regex over SQL strings. Three admin-gated server functions in `admin-data.server.ts` consume both. The UI is a new 權限 section at the bottom of the existing agent form, and the sidebar gains static group headings.
+**Architecture:** Decision rules go in `staff-security-policy.ts` as pure functions (it already holds `decideAgentProfileMutation` and has a test file). The list of columns that constitute "ownership" goes in a new pure `staff-ownership.ts` module that generates SQL, so the "all five ownership columns, none of the historical ones" contract is asserted against data structures rather than by regex over SQL strings. Three admin-gated server functions in `admin-data.server.ts` consume both. Accounts listed in the existing `ADMIN_BOOTSTRAP_EMAILS` env var are protected: they cannot be demoted or deactivated through the UI by anyone, so the owner cannot be locked out of their own system. The UI is a new 權限 section at the bottom of the existing agent form, and the sidebar gains static group headings.
 
 **Tech Stack:** TanStack Start, React 19, Neon serverless Postgres (raw SQL, no ORM), Zod, Tailwind + shadcn/ui. Tests: `node --test` for `.mjs` (which can import `.ts` directly via Node's type stripping), `bun test` for `.ts`/`.tsx`. There is no aggregate `npm test` — new tests must be wired into a named `test:*` script.
 
@@ -35,6 +35,8 @@
 | `src/routes/admin.agents_.$id.tsx` | Load and pass the access summary. |
 | `src/components/admin/AdminShell.tsx` | Group the sidebar; collapse the duplicate CMS entry; rename 經紀管理. |
 | `src/routes/admin.routes.test.mjs` | Assert the three server fns are admin-gated and the nav is well-formed. |
+| `src/lib/neon/auth.server.ts` | Export `bootstrapAllowlist` so protection can reuse it. |
+| `.env.example` | Document `ADMIN_BOOTSTRAP_EMAILS`, which is currently undocumented. |
 | `src/lib/control-plane/permissions.ts` | Delete the unenforced `staff.manage` permission. |
 | `src/lib/control-plane/control-plane.test.mjs` | Update the permission-matrix expectations. |
 | `package.json` | Wire new tests into `test:property-experience`. |
@@ -236,6 +238,7 @@ const roleChangeBase = {
   currentRoles: ["agent"],
   nextRoles: ["manager"],
   otherAdminCount: 1,
+  targetIsProtected: false,
 };
 
 test("only admins may change roles", () => {
@@ -275,6 +278,38 @@ test("an admin cannot remove their own admin role, but may drop their own manage
   );
 });
 
+// Accounts on ADMIN_BOOTSTRAP_EMAILS are the owner's own. Without this, a second
+// admin could strip the owner's role or disable them and take over the system.
+test("an allowlisted account cannot be demoted or deactivated by anyone", () => {
+  const { decideStaffRoleChange, decideStaffDeactivation } = staffSecurityPolicy;
+
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["manager"],
+      targetIsProtected: true,
+    }),
+    { allowed: false, reason: "protected-account" },
+  );
+
+  // Adding a role to a protected account is still fine -- only losing admin is blocked.
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["admin", "manager"],
+      targetIsProtected: true,
+    }),
+    { allowed: true },
+  );
+
+  assert.deepEqual(
+    decideStaffDeactivation({ ...deactivationBase, targetIsProtected: true }),
+    { allowed: false, reason: "protected-account" },
+  );
+});
+
 test("the last admin role in the system cannot be removed", () => {
   const { decideStaffRoleChange } = staffSecurityPolicy;
   assert.deepEqual(
@@ -306,6 +341,7 @@ const deactivationBase = {
   otherAdminCount: 1,
   ownedTotal: 0,
   reassignToStaffId: null,
+  targetIsProtected: false,
 };
 
 test("deactivation requires admin, a different person, and a successor when they own work", () => {
@@ -369,13 +405,22 @@ Append to `src/lib/neon/staff-security-policy.ts`:
 ```typescript
 export type StaffRoleChangeDecision =
   | { allowed: true }
-  | { allowed: false; reason: "not-admin" | "self-admin-removal" | "last-admin" };
+  | {
+      allowed: false;
+      reason: "not-admin" | "self-admin-removal" | "last-admin" | "protected-account";
+    };
 
 export type StaffDeactivationDecision =
   | { allowed: true }
   | {
       allowed: false;
-      reason: "not-admin" | "self" | "last-admin" | "successor-required" | "successor-is-target";
+      reason:
+        | "not-admin"
+        | "self"
+        | "last-admin"
+        | "successor-required"
+        | "successor-is-target"
+        | "protected-account";
     };
 
 function losesAdmin(current: readonly string[], next: readonly string[]) {
@@ -398,10 +443,15 @@ export function decideStaffRoleChange(input: {
   currentRoles: readonly string[];
   nextRoles: readonly string[];
   otherAdminCount: number;
+  /** True when the target's email is in ADMIN_BOOTSTRAP_EMAILS. */
+  targetIsProtected: boolean;
 }): StaffRoleChangeDecision {
   if (!input.actorRoles.includes("admin")) return { allowed: false, reason: "not-admin" };
 
   if (losesAdmin(input.currentRoles, input.nextRoles)) {
+    // Owner accounts cannot be demoted by anyone, including another admin.
+    // Gaining roles is still allowed -- only losing admin is blocked.
+    if (input.targetIsProtected) return { allowed: false, reason: "protected-account" };
     if (input.actorStaffId === input.targetStaffId) {
       return { allowed: false, reason: "self-admin-removal" };
     }
@@ -419,8 +469,11 @@ export function decideStaffDeactivation(input: {
   otherAdminCount: number;
   ownedTotal: number;
   reassignToStaffId: string | null;
+  /** True when the target's email is in ADMIN_BOOTSTRAP_EMAILS. */
+  targetIsProtected: boolean;
 }): StaffDeactivationDecision {
   if (!input.actorRoles.includes("admin")) return { allowed: false, reason: "not-admin" };
+  if (input.targetIsProtected) return { allowed: false, reason: "protected-account" };
   if (input.actorStaffId === input.targetStaffId) return { allowed: false, reason: "self" };
   if (input.targetRoles.includes("admin") && input.otherAdminCount < 1) {
     return { allowed: false, reason: "last-admin" };
@@ -477,6 +530,9 @@ export type StaffAccessSummary = {
   isSelf: boolean;
   /** True when removing this person's admin would leave the system with none. */
   isLastAdmin: boolean;
+  /** True when this email is in ADMIN_BOOTSTRAP_EMAILS -- an owner account that
+   * cannot be demoted or deactivated through the UI by anyone. */
+  isProtected: boolean;
   owned: StaffOwnedCounts;
   ownedTotal: number;
 };
@@ -492,6 +548,67 @@ Expected: exit 0, no output
 ```bash
 git add src/lib/neon/admin-data.types.ts
 git commit -m "feat(staff): add access summary types"
+```
+
+---
+
+### Task 3a: Expose the protected-account allowlist
+
+`ADMIN_BOOTSTRAP_EMAILS` already gates who may become the first admin, but
+`bootstrapAllowlist()` is private and the variable is undocumented. Reuse it as
+the protected-account list rather than hardcoding an address into source.
+
+**Files:**
+- Modify: `src/lib/neon/auth.server.ts`
+- Modify: `.env.example`
+
+- [ ] **Step 1: Export the allowlist and add a membership helper**
+
+In `src/lib/neon/auth.server.ts`, change `function bootstrapAllowlist()` to
+`export function bootstrapAllowlist()`, then add directly below it:
+
+```typescript
+/**
+ * Owner accounts. An email on ADMIN_BOOTSTRAP_EMAILS cannot have its admin role
+ * removed or its account deactivated through the admin UI, by anyone --
+ * including another admin.
+ *
+ * Without this, a second admin could demote the owner and take over the system,
+ * and the owner would have no way back in short of SQL against production. The
+ * list is env-driven rather than hardcoded so it can hold more than one person
+ * and never puts a personal address in shipped source.
+ */
+export function isProtectedStaffEmail(email: string | null | undefined) {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return false;
+  return bootstrapAllowlist().has(normalized);
+}
+```
+
+- [ ] **Step 2: Document the variable**
+
+Append to `.env.example`:
+
+```bash
+# --- Admin bootstrap / owner accounts ---
+# Comma-separated emails allowed to become the first admin when staff_users is
+# empty. These accounts are ALSO protected: their admin role cannot be removed
+# and they cannot be deactivated from the admin UI, so the owner cannot be
+# locked out. Unset disables first-login bootstrap entirely (403 until staff are
+# seeded out-of-band) and leaves no account protected.
+ADMIN_BOOTSTRAP_EMAILS="willylai@fimmick.com"
+```
+
+- [ ] **Step 3: Verify it compiles**
+
+Run: `npx tsc --noEmit`
+Expected: exit 0
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/lib/neon/auth.server.ts .env.example
+git commit -m "feat(staff): expose the bootstrap allowlist as the protected-account list"
 ```
 
 ---
@@ -519,8 +636,11 @@ export async function fetchStaffAccessSummary(
 ): Promise<StaffAccessSummary> {
   const { STAFF_OWNERSHIP_COLUMNS, staffOwnershipCountSql } = await import("./staff-ownership");
 
+  const { isProtectedStaffEmail } = await import("./auth.server");
+
   const roleRows = await queryRows(
     `SELECT s.active,
+            s.email,
             COALESCE(
               array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)),
               '[]'::json
@@ -558,6 +678,7 @@ export async function fetchStaffAccessSummary(
     active: row.active === true,
     isSelf: actor.staffId === input.staffId,
     isLastAdmin: roles.includes("admin") && otherAdminCount < 1,
+    isProtected: isProtectedStaffEmail(stringOrNull(row.email)),
     owned,
     ownedTotal: Object.values(owned).reduce((total, value) => total + value, 0),
   };
@@ -635,9 +756,11 @@ export async function updateStaffRoles(
     currentRoles: summary.roles,
     nextRoles,
     otherAdminCount: Number(otherAdminRows[0]?.count ?? 0),
+    targetIsProtected: summary.isProtected,
   });
   if (!decision.allowed) {
-    throw new Response(decision.reason, { status: decision.reason === "not-admin" ? 403 : 400 });
+    const status = decision.reason === "not-admin" || decision.reason === "protected-account" ? 403 : 400;
+    throw new Response(decision.reason, { status });
   }
 
   // Delete-then-insert inside one transaction: a role set is replaced whole, and
@@ -737,9 +860,11 @@ export async function setStaffActive(
     otherAdminCount: Number(otherAdminRows[0]?.count ?? 0),
     ownedTotal: summary.ownedTotal,
     reassignToStaffId,
+    targetIsProtected: summary.isProtected,
   });
   if (!decision.allowed) {
-    throw new Response(decision.reason, { status: decision.reason === "not-admin" ? 403 : 400 });
+    const status = decision.reason === "not-admin" || decision.reason === "protected-account" ? 403 : 400;
+    throw new Response(decision.reason, { status });
   }
 
   if (reassignToStaffId) {
@@ -894,6 +1019,19 @@ test("staff access management server functions are admin-only", () => {
     const body = client.slice(start, start + 900);
     assert.match(body, /requireStaff\(\["admin"\]\)/, `${name} must require admin`);
   }
+});
+
+// The owner must not be lockable out of their own system by a second admin.
+test("protected accounts are enforced server-side, not just disabled in the UI", () => {
+  const policy = read("src/lib/neon/staff-security-policy.ts");
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const auth = read("src/lib/neon/auth.server.ts");
+
+  assert.match(policy, /reason: "protected-account"/);
+  assert.match(auth, /export function isProtectedStaffEmail/);
+  // Both mutations must pass the flag through; a UI-only guard is bypassable.
+  assert.equal((server.match(/targetIsProtected: summary\.isProtected/g) ?? []).length, 2);
+  assert.match(server, /isProtected: isProtectedStaffEmail\(/);
 });
 
 test("deactivation reassigns and flips active in one transaction", () => {
@@ -1088,7 +1226,11 @@ Add immediately before the form's closing `</form>` tag:
       ))}
     </div>
 
-    {access.isSelf && roleDraft.includes("admin") === false ? (
+    {access.isProtected ? (
+      <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
+        此帳戶已在 ADMIN_BOOTSTRAP_EMAILS 名單內，不可移除管理員權限或停用，以免無人可登入系統。
+      </p>
+    ) : access.isSelf && roleDraft.includes("admin") === false ? (
       <p className="mt-3 text-sm text-destructive">你不能移除自己的管理員權限。</p>
     ) : null}
 
@@ -1096,7 +1238,11 @@ Add immediately before the form's closing `</form>` tag:
       <Button
         type="button"
         variant="outline"
-        disabled={!roleDelta.changed || accessPending}
+        disabled={
+          !roleDelta.changed ||
+          accessPending ||
+          (access.isProtected && !roleDraft.includes("admin"))
+        }
         onClick={() => setRoleConfirmOpen(true)}
       >
         更新權限
@@ -1105,7 +1251,7 @@ Add immediately before the form's closing `</form>` tag:
         <Button
           type="button"
           variant="destructive"
-          disabled={access.isSelf || access.isLastAdmin || accessPending}
+          disabled={access.isSelf || access.isLastAdmin || access.isProtected || accessPending}
           onClick={() => setDeactivateOpen(true)}
         >
           停用帳戶
@@ -1241,6 +1387,7 @@ const accessSummary = {
   active: true,
   isSelf: false,
   isLastAdmin: false,
+  isProtected: false,
   owned: {
     properties: 4,
     crm_contacts: 2,
@@ -1269,6 +1416,24 @@ describe("權限 section", () => {
       expect($(`[aria-label="${label}"]`).length).toBe(1);
     }
     expect(html).toContain("停用帳戶");
+  });
+
+  test("a protected account explains why it cannot be demoted or deactivated", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: true,
+        access: { ...accessSummary, roles: ["admin"], isProtected: true },
+        onSaved: () => {},
+      }),
+    );
+
+    expect(html).toContain("ADMIN_BOOTSTRAP_EMAILS");
+    // The deactivate control is present but disabled rather than hidden, so the
+    // reason is visible instead of the button silently vanishing.
+    const $ = load(html);
+    const deactivate = $("button").filter((_, el) => $(el).text().includes("停用帳戶"));
+    expect(deactivate.attr("disabled")).toBeDefined();
   });
 
   // Managers may edit an agent's public profile but must never see a path to
@@ -1687,6 +1852,8 @@ Start the dev server (`npm run dev`) and confirm, signed in as an admin:
 4. Changing a role and pressing 更新權限 opens a confirm naming the delta.
 5. 停用帳戶 lists the five owned counts and requires a successor before confirming.
 6. Your own record shows 停用帳戶 disabled.
+7. An account listed in `ADMIN_BOOTSTRAP_EMAILS` shows the protection notice, with
+   both 更新權限 (when dropping admin) and 停用帳戶 disabled.
 
 - [ ] **Step 6: Final commit**
 
@@ -1704,5 +1871,10 @@ git commit -m "chore(staff): verify access management and grouped navigation"
 **Guards must be re-read server-side.** `isLastAdmin` and `otherAdminCount` come from the database at decision time. A client-supplied count is a TOCTOU hole: two admins demoting each other simultaneously could otherwise empty the admin set.
 
 **Deactivation is one transaction.** The reassignment `UPDATE`s and the `active = false` flip go through a single `transactionRows` call. Splitting them allows a partial handover with no record of what moved.
+
+**Protection is env-driven, never hardcoded.** `isProtectedStaffEmail` reads
+`ADMIN_BOOTSTRAP_EMAILS`. Do not inline any address into source. If the variable
+is unset, no account is protected and first-login bootstrap is also disabled --
+that is the documented behaviour, not a bug, but it means production must set it.
 
 **This repo has no aggregate `npm test`.** Any new test file must be named in a `test:*` script or it will never run.
