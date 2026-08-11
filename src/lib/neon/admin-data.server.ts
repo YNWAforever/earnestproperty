@@ -304,6 +304,132 @@ export async function updateStaffRoles(
   return { ok: true as const, roles: nextRoles };
 }
 
+/**
+ * Deactivate or reactivate a staff member.
+ *
+ * Deactivating also hands over everything they own. agentScope() hides rows
+ * assigned to another agent, so leaving assignments behind makes a departing
+ * colleague's leads and live WhatsApp threads invisible to everyone who should
+ * now be working them.
+ *
+ * The reassignment and the active flag go in ONE transaction: a partial
+ * handover would leave work stranded on a disabled account with no record of
+ * what moved.
+ *
+ * decideStaffDeactivation() reads otherAdminCount a moment before this
+ * function writes -- the same TOCTOU window as updateStaffRoles above. The
+ * deactivation UPDATE re-checks live, inside the same transaction as the
+ * write and the handover: it only takes effect when the target isn't an
+ * admin, or some OTHER active admin still exists at the instant it runs. A
+ * failed check forces a genuine Postgres error (division by zero, see
+ * isZeroAdminGuardTrip) rather than quietly matching zero rows -- which would
+ * otherwise let the ownership handover commit while the account stayed
+ * active and admin, silently stranding the very work it was meant to protect.
+ */
+export async function setStaffActive(
+  input: { staffId: string; active: boolean; reassignToStaffId?: string | null },
+  actor: StaffAccess,
+) {
+  const { decideStaffDeactivation } = await import("./staff-security-policy");
+  const { staffReassignStatements } = await import("./staff-ownership");
+
+  if (input.active) {
+    if (input.reassignToStaffId) {
+      throw new Response("Reactivation does not take a successor.", { status: 400 });
+    }
+    await queryRows(
+      `UPDATE staff_users SET active = true, updated_at = now() WHERE id = $1::uuid`,
+      [input.staffId],
+    );
+    await writeAudit(actor.staffId, "staff.reactivate", "staff_user", input.staffId, {});
+    return { ok: true as const, reassigned: null };
+  }
+
+  const summary = await fetchStaffAccessSummary({ staffId: input.staffId }, actor);
+  const otherAdminRows = await queryRows(
+    `SELECT count(*)::int AS count
+       FROM staff_roles r
+       JOIN staff_users s ON s.id = r.staff_user_id
+      WHERE r.role = 'admin' AND r.staff_user_id <> $1::uuid AND s.active = true`,
+    [input.staffId],
+  );
+  const reassignToStaffId = input.reassignToStaffId?.trim() || null;
+
+  const decision = decideStaffDeactivation({
+    actorRoles: actor.roles,
+    actorStaffId: actor.staffId,
+    targetStaffId: input.staffId,
+    targetRoles: summary.roles,
+    otherAdminCount: Number(otherAdminRows[0]?.count ?? 0),
+    ownedTotal: summary.ownedTotal,
+    reassignToStaffId,
+    targetIsProtected: summary.isProtected,
+  });
+  if (!decision.allowed) {
+    const status =
+      decision.reason === "not-admin" || decision.reason === "protected-account" ? 403 : 400;
+    throw new Response(decision.reason, { status });
+  }
+
+  if (reassignToStaffId) {
+    const successorRows = await queryRows(
+      `SELECT id FROM staff_users WHERE id = $1::uuid AND active = true`,
+      [reassignToStaffId],
+    );
+    if (!successorRows[0]) {
+      throw new Response("The successor must be an active staff member.", { status: 400 });
+    }
+  }
+
+  // Same CASE-guarded, forced-error technique as updateStaffRoles' admin-role
+  // DELETE, and for the same reason: a plain `WHERE ... AND EXISTS(...)` would
+  // just match zero rows on the safe-but-blocked path, leaving the
+  // reassignment statements above -- sent in the same transactionRows() call
+  // -- to commit anyway. Forcing a real Postgres error aborts everything sent
+  // in this call together.
+  try {
+    await transactionRows([
+      ...(reassignToStaffId ? staffReassignStatements(input.staffId, reassignToStaffId) : []),
+      {
+        statement: `
+          UPDATE staff_users
+          SET active = false, updated_at = now()
+          WHERE id = $1::uuid
+            AND (
+              CASE
+                WHEN NOT EXISTS (
+                  SELECT 1 FROM staff_roles r
+                  WHERE r.staff_user_id = $1::uuid AND r.role = 'admin'::staff_role
+                ) THEN true
+                WHEN EXISTS (
+                  SELECT 1
+                  FROM staff_roles other
+                  JOIN staff_users os ON os.id = other.staff_user_id
+                  WHERE other.role = 'admin'::staff_role
+                    AND other.staff_user_id <> $1::uuid
+                    AND os.active = true
+                ) THEN true
+                ELSE (1 / 0 = 0)
+              END
+            )
+        `,
+        params: [input.staffId],
+      },
+    ]);
+  } catch (error) {
+    if (isZeroAdminGuardTrip(error)) {
+      throw new Response("last-admin", { status: 400 });
+    }
+    throw error;
+  }
+
+  await writeAudit(actor.staffId, "staff.deactivate", "staff_user", input.staffId, {
+    successorStaffId: reassignToStaffId,
+    counts: summary.owned,
+  });
+  return { ok: true as const, reassigned: summary.owned };
+}
+
 function normalizeAgentPublicSlug(value: string | null) {
   const trimmed = value?.trim();
   if (!trimmed) return null;
