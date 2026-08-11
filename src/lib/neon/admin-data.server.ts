@@ -104,16 +104,22 @@ export function agentScope(actor: StaffAccess): string | null {
 }
 
 /**
- * Roles, active flag and per-table owned counts for one staff member.
+ * Roles, active flag, per-table owned counts, AND the raw other-admin count
+ * for one staff member.
  *
- * `isLastAdmin` is computed here rather than on the client: it decides whether
- * a privilege change is allowed, so it must come from the database at decision
- * time.
+ * The raw count is internal-only: `updateStaffRoles` and `setStaffActive`
+ * both need it (as an input to their own fresh decideStaffRoleChange /
+ * decideStaffDeactivation calls, not this call's already-computed
+ * `isLastAdmin`), and previously each re-ran this exact query themselves --
+ * a third round-trip for a number this function already had in hand. Kept
+ * out of the public `StaffAccessSummary` type deliberately: nothing else
+ * needs it, and widening a public type to serve two internal callers is the
+ * wrong direction.
  */
-export async function fetchStaffAccessSummary(
+async function fetchStaffAccessSummaryWithCounts(
   input: { staffId: string },
   actor: StaffAccess,
-): Promise<StaffAccessSummary> {
+): Promise<{ summary: StaffAccessSummary; otherAdminCount: number }> {
   const { STAFF_OWNERSHIP_COLUMNS, staffOwnershipCountSql } = await import("./staff-ownership");
 
   const { isProtectedStaffEmail } = await import("./auth.server");
@@ -153,15 +159,33 @@ export async function fetchStaffAccessSummary(
   ) as StaffOwnedCounts;
 
   return {
-    staffId: input.staffId,
-    roles,
-    active: row.active === true,
-    isSelf: actor.staffId === input.staffId,
-    isLastAdmin: roles.includes("admin") && otherAdminCount < 1,
-    isProtected: isProtectedStaffEmail(stringOrNull(row.email)),
-    owned,
-    ownedTotal: Object.values(owned).reduce((total, value) => total + value, 0),
+    summary: {
+      staffId: input.staffId,
+      roles,
+      active: row.active === true,
+      isSelf: actor.staffId === input.staffId,
+      isLastAdmin: roles.includes("admin") && otherAdminCount < 1,
+      isProtected: isProtectedStaffEmail(stringOrNull(row.email)),
+      owned,
+      ownedTotal: Object.values(owned).reduce((total, value) => total + value, 0),
+    },
+    otherAdminCount,
   };
+}
+
+/**
+ * Roles, active flag and per-table owned counts for one staff member.
+ *
+ * `isLastAdmin` is computed here rather than on the client: it decides whether
+ * a privilege change is allowed, so it must come from the database at decision
+ * time.
+ */
+export async function fetchStaffAccessSummary(
+  input: { staffId: string },
+  actor: StaffAccess,
+): Promise<StaffAccessSummary> {
+  const { summary } = await fetchStaffAccessSummaryWithCounts(input, actor);
+  return summary;
 }
 
 const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent"];
@@ -274,20 +298,20 @@ export async function updateStaffRoles(
 ) {
   const { decideStaffRoleChange } = await import("./staff-security-policy");
 
-  const nextRoles = Array.from(new Set(input.roles)).filter((role) =>
-    STAFF_ROLE_NAMES.includes(role),
-  );
-  if (nextRoles.length !== input.roles.length) {
+  // Membership is checked against the ORIGINAL array, before deduping: a
+  // Set collapses duplicates first, so checking length-after-dedupe against
+  // length-before conflated "has an unknown role" with "has a repeat of a
+  // valid one" -- `{ roles: ["admin","admin"] }` was rejected as "Unknown
+  // staff role" even though every entry was valid. Duplicates are fine and
+  // should just collapse; only an actually-unrecognised role is an error.
+  if (input.roles.some((role) => !STAFF_ROLE_NAMES.includes(role))) {
     throw new Response("Unknown staff role.", { status: 400 });
   }
+  const nextRoles = Array.from(new Set(input.roles));
 
-  const summary = await fetchStaffAccessSummary({ staffId: input.staffId }, actor);
-  const otherAdminRows = await queryRows(
-    `SELECT count(*)::int AS count
-       FROM staff_roles r
-       JOIN staff_users s ON s.id = r.staff_user_id
-      WHERE r.role = 'admin' AND r.staff_user_id <> $1::uuid AND s.active = true`,
-    [input.staffId],
+  const { summary, otherAdminCount } = await fetchStaffAccessSummaryWithCounts(
+    { staffId: input.staffId },
+    actor,
   );
 
   const decision = decideStaffRoleChange({
@@ -296,7 +320,7 @@ export async function updateStaffRoles(
     targetStaffId: input.staffId,
     currentRoles: summary.roles,
     nextRoles,
-    otherAdminCount: Number(otherAdminRows[0]?.count ?? 0),
+    otherAdminCount,
     targetIsProtected: summary.isProtected,
   });
   if (!decision.allowed) {
@@ -326,8 +350,16 @@ export async function updateStaffRoles(
   // of the scanned row, not just the bind parameter -- so Postgres cannot
   // treat the guard as row-independent and hoist it ahead of the scan. Both
   // properties were required; either alone still misfired in testing.
+  //
+  // The final SELECT is part of THIS transaction, not a separate call after
+  // it: appended as the last statement in the same array and read off the
+  // same transactionRows() result, it sees exactly this transaction's own
+  // writes and nothing committed after it -- there is no window between
+  // commit and read for a third party's change to land and be misattributed
+  // to this call in the audit trail / return value.
+  let results;
   try {
-    await transactionRows(
+    results = await transactionRows(
       [
         {
           statement: `DELETE FROM staff_roles WHERE staff_user_id = $1::uuid AND role <> 'admin'::staff_role`,
@@ -365,6 +397,11 @@ export async function updateStaffRoles(
           ON CONFLICT (staff_user_id, role) DO NOTHING`,
           params: [input.staffId, role] as unknown[],
         })),
+        {
+          statement: `SELECT COALESCE(array_to_json(array_agg(role)), '[]'::json) AS roles
+                         FROM staff_roles WHERE staff_user_id = $1::uuid`,
+          params: [input.staffId] as unknown[],
+        },
       ],
       // Only the admin-dropping path needs Serializable: it is the only case
       // where this transaction's guard reads a row it does not write while
@@ -381,17 +418,8 @@ export async function updateStaffRoles(
     throw error;
   }
 
-  // Re-read rather than trust nextRoles: dropsAdmin's own no-op case above
-  // means the write we just ran may not have applied the full requested set
-  // (e.g. a concurrent grant of admin that arrived after our summary read but
-  // survived the guard). The audit trail and the caller both need what the
-  // database actually holds now, not what this call intended to write.
-  const rolesAfterRows = await queryRows(
-    `SELECT COALESCE(array_to_json(array_agg(role)), '[]'::json) AS roles
-       FROM staff_roles WHERE staff_user_id = $1::uuid`,
-    [input.staffId],
-  );
-  const rolesAfter = (Array.isArray(rolesAfterRows[0]?.roles) ? rolesAfterRows[0].roles : []).map(
+  const rolesAfterRow = results[results.length - 1]?.[0];
+  const rolesAfter = (Array.isArray(rolesAfterRow?.roles) ? rolesAfterRow.roles : []).map(
     String,
   ) as StaffAccessRole[];
 
@@ -437,27 +465,34 @@ export async function setStaffActive(
   actor: StaffAccess,
 ) {
   const { decideStaffDeactivation } = await import("./staff-security-policy");
-  const { staffReassignStatements } = await import("./staff-ownership");
+  const { STAFF_OWNERSHIP_COLUMNS, staffOwnershipCountSql, staffReassignStatements } =
+    await import("./staff-ownership");
 
   if (input.active) {
     if (input.reassignToStaffId) {
       throw new Response("Reactivation does not take a successor.", { status: 400 });
     }
-    await queryRows(
-      `UPDATE staff_users SET active = true, updated_at = now() WHERE id = $1::uuid`,
+    // RETURNING id, not a bare UPDATE: the reactivate branch skips
+    // fetchStaffAccessSummary (no lockout risk in gaining active status, so
+    // no need for its 404-on-missing check) -- but that meant a nonexistent
+    // staffId matched zero rows here and STILL audited "staff.reactivate" and
+    // returned { ok: true }, same as a real success. A write path auditing a
+    // change that never happened is exactly the kind of false record item 5
+    // exists to catch.
+    const reactivateRows = await queryRows(
+      `UPDATE staff_users SET active = true, updated_at = now() WHERE id = $1::uuid RETURNING id`,
       [input.staffId],
     );
+    if (!reactivateRows[0]) {
+      throw new Response("Staff member not found.", { status: 404 });
+    }
     await writeAudit(actor.staffId, "staff.reactivate", "staff_user", input.staffId, {});
     return { ok: true as const, reassigned: null };
   }
 
-  const summary = await fetchStaffAccessSummary({ staffId: input.staffId }, actor);
-  const otherAdminRows = await queryRows(
-    `SELECT count(*)::int AS count
-       FROM staff_roles r
-       JOIN staff_users s ON s.id = r.staff_user_id
-      WHERE r.role = 'admin' AND r.staff_user_id <> $1::uuid AND s.active = true`,
-    [input.staffId],
+  const { summary, otherAdminCount } = await fetchStaffAccessSummaryWithCounts(
+    { staffId: input.staffId },
+    actor,
   );
   const reassignToStaffId = input.reassignToStaffId?.trim() || null;
 
@@ -466,7 +501,7 @@ export async function setStaffActive(
     actorStaffId: actor.staffId,
     targetStaffId: input.staffId,
     targetRoles: summary.roles,
-    otherAdminCount: Number(otherAdminRows[0]?.count ?? 0),
+    otherAdminCount,
     ownedTotal: summary.ownedTotal,
     reassignToStaffId,
     targetIsProtected: summary.isProtected,
@@ -506,9 +541,23 @@ export async function setStaffActive(
   // run the deactivation at plain Read Committed. So Serializable is
   // unconditional here, for every deactivation, not just ones summary.roles
   // already knew were admins.
+  //
+  // The ownership-count SELECT below is the first statement, not a read of
+  // `summary.owned` from before this transaction: `summary` can be stale by
+  // the time this write runs (new work could have been assigned to the
+  // target in between), and because this whole transaction is Serializable,
+  // every statement in it shares ONE fixed snapshot -- so a count taken here,
+  // before the reassignment UPDATEs run, is exactly what those UPDATEs are
+  // about to move, not an approximation of it. It has to run before the
+  // reassignment, not after: after, the rows have already been rewritten to
+  // point at the successor, so counting the target's ownership at that point
+  // would just count zero.
+  const countSql = staffOwnershipCountSql(input.staffId);
+  let results;
   try {
-    await transactionRows(
+    results = await transactionRows(
       [
+        { statement: countSql.statement, params: countSql.params },
         ...(reassignToStaffId ? staffReassignStatements(input.staffId, reassignToStaffId) : []),
         {
           statement: `
@@ -550,11 +599,16 @@ export async function setStaffActive(
     throw error;
   }
 
+  const countRow = results[0]?.[0] ?? {};
+  const reassignedCounts = Object.fromEntries(
+    STAFF_OWNERSHIP_COLUMNS.map(({ table }) => [table, Number(countRow[table] ?? 0)]),
+  ) as StaffOwnedCounts;
+
   await writeAudit(actor.staffId, "staff.deactivate", "staff_user", input.staffId, {
     successorStaffId: reassignToStaffId,
-    counts: summary.owned,
+    counts: reassignedCounts,
   });
-  return { ok: true as const, reassigned: summary.owned };
+  return { ok: true as const, reassigned: reassignedCounts };
 }
 
 function normalizeAgentPublicSlug(value: string | null) {
