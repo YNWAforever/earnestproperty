@@ -380,13 +380,29 @@ async function bootstrapFirstStaff(input: {
 // ADMIN_BOOTSTRAP_EMAILS: comma-separated allowlist of emails permitted to become the
 // first admin when staff_users is empty. If unset/empty, first-login bootstrap is disabled
 // and access stays null (403) until staff are seeded out-of-band.
-function bootstrapAllowlist(): Set<string> {
+export function bootstrapAllowlist(): Set<string> {
   return new Set(
     (process.env.ADMIN_BOOTSTRAP_EMAILS ?? "")
       .split(",")
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );
+}
+
+/**
+ * Owner accounts. An email on ADMIN_BOOTSTRAP_EMAILS cannot have its admin role
+ * removed or its account deactivated through the admin UI, by anyone --
+ * including another admin.
+ *
+ * Without this, a second admin could demote the owner and take over the system,
+ * and the owner would have no way back in short of SQL against production. The
+ * list is env-driven rather than hardcoded so it can hold more than one person
+ * and never puts a personal address in shipped source.
+ */
+export function isProtectedStaffEmail(email: string | null | undefined) {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return false;
+  return bootstrapAllowlist().has(normalized);
 }
 
 export async function requireStaffAccess(request: Request, allowed: StaffRole[] = ["admin"]) {
