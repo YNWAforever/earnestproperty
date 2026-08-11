@@ -9,6 +9,7 @@ import {
   queryRows,
   stringOrEmpty,
   stringOrNull,
+  transactionRows,
 } from "./db.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import type { StaffAccess } from "./auth.server";
@@ -161,6 +162,146 @@ export async function fetchStaffAccessSummary(
     owned,
     ownedTotal: Object.values(owned).reduce((total, value) => total + value, 0),
   };
+}
+
+const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent"];
+
+/**
+ * True when a driver error is the division-by-zero that updateStaffRoles and
+ * setStaffActive deliberately trigger inside a guarded SQL statement
+ * (SQLSTATE 22012 -- see the comments on both functions). Postgres aborts the
+ * whole transaction when this fires, so nothing else sent in the same
+ * transactionRows() call -- an earlier DELETE, a later INSERT, an ownership
+ * handover -- is left half-applied.
+ */
+function isZeroAdminGuardTrip(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return String((error as { code?: unknown }).code ?? "") === "22012";
+}
+
+/**
+ * Replace a staff member's role set.
+ *
+ * Roles were previously writable only by the first-admin bootstrap, so
+ * promoting someone required SQL against production. The guards are re-run here
+ * against freshly-read state: the client's view of who is an admin can be stale
+ * or forged.
+ *
+ * decideStaffRoleChange() is a pure, fast, specific guard, but it reads
+ * otherAdminCount a moment before this function writes -- so two concurrent
+ * requests can each read "someone else is still admin" and both proceed. The
+ * DELETE below re-checks that live, inside the same transaction as the write:
+ * when this change drops 'admin' from the role set, the row is only removed
+ * if some OTHER active admin still exists at the instant the statement runs.
+ * A failed check forces a genuine Postgres error (division by zero) instead
+ * of quietly matching zero rows while the rest of the transaction commits
+ * anyway -- see isZeroAdminGuardTrip. The pure guard above stays in place
+ * unchanged: it is what gives a normal caller a fast, specific 400 without
+ * ever reaching the database.
+ */
+export async function updateStaffRoles(
+  input: { staffId: string; roles: StaffAccessRole[] },
+  actor: StaffAccess,
+) {
+  const { decideStaffRoleChange } = await import("./staff-security-policy");
+
+  const nextRoles = Array.from(new Set(input.roles)).filter((role) =>
+    STAFF_ROLE_NAMES.includes(role),
+  );
+  if (nextRoles.length !== input.roles.length) {
+    throw new Response("Unknown staff role.", { status: 400 });
+  }
+
+  const summary = await fetchStaffAccessSummary({ staffId: input.staffId }, actor);
+  const otherAdminRows = await queryRows(
+    `SELECT count(*)::int AS count
+       FROM staff_roles r
+       JOIN staff_users s ON s.id = r.staff_user_id
+      WHERE r.role = 'admin' AND r.staff_user_id <> $1::uuid AND s.active = true`,
+    [input.staffId],
+  );
+
+  const decision = decideStaffRoleChange({
+    actorRoles: actor.roles,
+    actorStaffId: actor.staffId,
+    targetStaffId: input.staffId,
+    currentRoles: summary.roles,
+    nextRoles,
+    otherAdminCount: Number(otherAdminRows[0]?.count ?? 0),
+    targetIsProtected: summary.isProtected,
+  });
+  if (!decision.allowed) {
+    const status =
+      decision.reason === "not-admin" || decision.reason === "protected-account" ? 403 : 400;
+    throw new Response(decision.reason, { status });
+  }
+
+  // Whether this write drops 'admin' from the role set -- the only change
+  // that can ever reduce the admin count. Mirrors losesAdmin() in
+  // staff-security-policy.ts; only this case needs the transactional guard
+  // below.
+  const losingAdmin = summary.roles.includes("admin") && !nextRoles.includes("admin");
+
+  // Delete-then-insert inside one transaction: a role set is replaced whole, and
+  // a half-applied change could leave someone with no roles at all.
+  //
+  // Non-admin roles are always safe to drop outright -- dropping 'manager' or
+  // 'agent' carries no lockout risk. The admin role is only touched when
+  // losingAdmin is true, and even then the DELETE only matches if some OTHER
+  // active admin exists at that moment (EXISTS below, re-evaluated live, not
+  // the otherAdminRows snapshot read above). CASE, not AND/OR, guards the
+  // `1 / 0`: Postgres only guarantees short-circuit evaluation for CASE
+  // branches, not for the operands of AND/OR, so the division is written as
+  // the CASE's ELSE so it is provably never evaluated on the safe path.
+  try {
+    await transactionRows([
+      {
+        statement: `DELETE FROM staff_roles WHERE staff_user_id = $1::uuid AND role <> 'admin'::staff_role`,
+        params: [input.staffId],
+      },
+      ...(losingAdmin
+        ? [
+            {
+              statement: `
+                DELETE FROM staff_roles
+                WHERE staff_user_id = $1::uuid
+                  AND role = 'admin'::staff_role
+                  AND (
+                    CASE
+                      WHEN EXISTS (
+                        SELECT 1
+                        FROM staff_roles other
+                        JOIN staff_users os ON os.id = other.staff_user_id
+                        WHERE other.role = 'admin'::staff_role
+                          AND other.staff_user_id <> $1::uuid
+                          AND os.active = true
+                      ) THEN true
+                      ELSE (1 / 0 = 0)
+                    END
+                  )
+              `,
+              params: [input.staffId] as unknown[],
+            },
+          ]
+        : []),
+      ...nextRoles.map((role) => ({
+        statement: `INSERT INTO staff_roles (staff_user_id, role) VALUES ($1::uuid, $2::staff_role)
+          ON CONFLICT (staff_user_id, role) DO NOTHING`,
+        params: [input.staffId, role] as unknown[],
+      })),
+    ]);
+  } catch (error) {
+    if (losingAdmin && isZeroAdminGuardTrip(error)) {
+      throw new Response("last-admin", { status: 400 });
+    }
+    throw error;
+  }
+
+  await writeAudit(actor.staffId, "staff.roles.update", "staff_user", input.staffId, {
+    before: summary.roles,
+    after: nextRoles,
+  });
+  return { ok: true as const, roles: nextRoles };
 }
 
 function normalizeAgentPublicSlug(value: string | null) {
