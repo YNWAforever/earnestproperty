@@ -223,6 +223,21 @@ arguably wrong. It is included because excluding it would make a departing
 agent's contacts invisible under `agentScope()`. Reviewed and accepted as part
 of this design; revisit if the agency's mental model differs.
 
+## Known limitation: work assigned during deactivation
+
+The handover transaction runs at Serializable isolation, which guarantees the
+counts it reports and the rows it moves agree. It cannot, however, catch work
+*created* for the departing person while the transaction is in flight: a new
+`crm_leads` row inserted after the transaction's snapshot shares no read/write
+set with it, so Postgres has nothing to detect a conflict on. That row stays
+assigned to the now-inactive account.
+
+Consequence is bounded and recoverable — `agentScope()` hides it from other
+agents, but admin and manager still see it and can reassign by hand. The
+durable fix is a database-level rule that `assigned_agent_id` / `agent_id` may
+never reference an inactive staff member, which is a migration across all six
+ownership tables and belongs in its own change.
+
 ## Correction
 
 An earlier revision of this spec listed **five** ownership columns. Spec review
