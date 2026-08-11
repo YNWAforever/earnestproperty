@@ -10,8 +10,20 @@
 
 export type StaffOwnershipColumn = { table: string; column: string };
 
+/**
+ * INVARIANT: every `table` and `column` below must be a compile-time string
+ * literal authored in this file, never a runtime value (user input, a request
+ * param, a DB read). staffOwnershipCountSql and staffReassignStatements
+ * interpolate them directly into SQL text -- Neon's query function only
+ * parameterizes values ($1, $2, ...), not identifiers -- so treating either
+ * field as untrusted would open a SQL injection hole. Dropping the `readonly
+ * StaffOwnershipColumn[]` annotation below and relying on `as const` instead
+ * is what keeps `table`/`column` narrowed to their literal unions rather than
+ * widened to `string`.
+ */
+
 /** Current assignment. These move when someone leaves. */
-export const STAFF_OWNERSHIP_COLUMNS: readonly StaffOwnershipColumn[] = [
+export const STAFF_OWNERSHIP_COLUMNS = [
   { table: "properties", column: "agent_id" },
   { table: "crm_contacts", column: "assigned_agent_id" },
   { table: "crm_leads", column: "assigned_agent_id" },
@@ -28,10 +40,12 @@ export const STAFF_OWNERSHIP_COLUMNS: readonly StaffOwnershipColumn[] = [
  * Authorship and audit. These never move. Listed so tests can assert exclusion.
  *
  * Twelve DISTINCT column names, spanning eighteen occurrences across the
- * schema -- several tables share a name such as `created_by`. Verify with:
- *   grep -rn "REFERENCES staff_users" neon/migrations/*.sql
+ * schema -- several tables share a name such as `created_by`. Kept honest
+ * against neon/migrations/*.sql by the schema-derived test in
+ * staff-ownership.test.mjs (not by manual re-grepping -- that's how the
+ * sixth ownership column got missed the first time).
  */
-export const STAFF_HISTORICAL_COLUMNS: readonly string[] = [
+export const STAFF_HISTORICAL_COLUMNS = [
   "actor_id",
   "actor_staff_id",
   "approved_by",
