@@ -362,10 +362,13 @@ export async function updateStaffRoles(
  * otherwise let the ownership handover commit while the account stayed
  * active and admin, silently stranding the very work it was meant to protect.
  *
- * When the target is an admin, this transaction also runs at Serializable
- * isolation (see isSerializationConflict on updateStaffRoles for why a live
- * re-check alone still allows write skew between two admins deactivating each
- * other at the same instant).
+ * Every deactivation runs at Serializable isolation (see isSerializationConflict
+ * on updateStaffRoles for why a live re-check alone still allows write skew
+ * between two admins deactivating each other at the same instant). This is
+ * unconditional rather than gated on "is the target currently an admin",
+ * because that flag would itself come from a read taken moments earlier and
+ * so could be stale for the one case that matters most: a concurrent grant of
+ * admin to this exact target in between.
  */
 export async function setStaffActive(
   input: { staffId: string; active: boolean; reassignToStaffId?: string | null },
@@ -427,10 +430,16 @@ export async function setStaffActive(
   // just match zero rows on the safe-but-blocked path, leaving the
   // reassignment statements above -- sent in the same transactionRows() call
   // -- to commit anyway. Forcing a real Postgres error aborts everything sent
-  // in this call together. Serializable isolation is added whenever the
-  // target currently holds admin, for the same write-skew reason as
-  // updateStaffRoles.
-  const isAdminTarget = summary.roles.includes("admin");
+  // in this call together.
+  //
+  // Unlike updateStaffRoles' DELETE, this UPDATE always targets the row
+  // (`WHERE id = $1`, not `AND role = 'admin'`), so it is not naturally a
+  // no-op when the target turns out not to be admin. Gating Serializable on
+  // summary.roles (read a moment earlier) would reopen exactly the staleness
+  // gap this function exists to close -- a concurrent grant of admin to this
+  // target, between that read and this write, would run the deactivation at
+  // plain Read Committed. So Serializable is unconditional here, for every
+  // deactivation, not just ones summary.roles already knew were admins.
   try {
     await transactionRows(
       [
@@ -461,13 +470,13 @@ export async function setStaffActive(
           params: [input.staffId],
         },
       ],
-      isAdminTarget ? { isolationLevel: "Serializable" } : {},
+      { isolationLevel: "Serializable" },
     );
   } catch (error) {
     if (isZeroAdminGuardTrip(error)) {
       throw new Response("last-admin", { status: 400 });
     }
-    if (isAdminTarget && isSerializationConflict(error)) {
+    if (isSerializationConflict(error)) {
       throw new Response("Another admin change happened at the same time. Please retry.", {
         status: 409,
       });
