@@ -1,5 +1,13 @@
 import { neon } from "@neondatabase/serverless";
 
+/**
+ * Minimum share of the currently-active inventory a discovery pass must have
+ * seen before it is allowed to deactivate what it did not see. 0.7 leaves room
+ * for a genuinely large delisting round while still catching a discovery pass
+ * that collapsed to a single page.
+ */
+const MIN_DEACTIVATION_COVERAGE = 0.7;
+
 export function createNeonSqlFromEnv() {
   const databaseUrl = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -103,7 +111,64 @@ export function createNeonMlsDb(sql) {
     },
 
     async deactivateMissing({ sourceSite, seenLegacyIds, nowIso }) {
-      if (!seenLegacyIds.length) return { count: 0 };
+      if (!seenLegacyIds.length) {
+        return { count: 0, skipped: "NO_DISCOVERED_IDS" };
+      }
+
+      // A "full sync" is only as trustworthy as its discovery pass, and this
+      // one degrades silently: parseMaxListingPage falls back to page 1 when the
+      // pager markup changes, and the cron's page cap already truncates a source
+      // with ~102 pages. Without this guard a single bad discovery run marked
+      // every listing it failed to see as inactive -- taking the public site's
+      // inventory down -- and still reported ok:true.
+      //
+      // So: refuse to sweep when the discovered set covers less of the current
+      // active inventory than a real delisting round plausibly would. The caller
+      // surfaces the refusal as an error rather than swallowing it, so a genuine
+      // bulk delisting can be re-run deliberately.
+      // Measure real OVERLAP, not set sizes. Dividing seenLegacyIds.length by
+      // the active count compares two unrelated sets: a discovery pass that
+      // returned a large number of ids none of which match the live inventory
+      // would sail past the guard and then deactivate everything. This asks the
+      // only question that matters -- how many currently-active listings did
+      // this pass actually see?
+      //
+      // status = 'active' exactly, not `<> 'inactive'`: draft/sold/rented rows
+      // are not live and are not expected in the discovery set, so counting them
+      // deflated coverage and would have blocked healthy runs.
+      //
+      // count(DISTINCT legacy_detail_id) because one listing can produce more
+      // than one properties row, and legacy_detail_id is the unit the sweep's
+      // own `legacy_detail_id <> ALL($2)` predicate works in.
+      const coverageRows = await sql.query(
+        `
+        SELECT
+          count(DISTINCT legacy_detail_id)::int AS active_count,
+          count(DISTINCT legacy_detail_id)
+            FILTER (WHERE legacy_detail_id = ANY($2::text[]))::int AS seen_count
+        FROM properties
+        WHERE source_site = $1
+          AND legacy_detail_id IS NOT NULL
+          AND status = 'active'
+        `,
+        [sourceSite, seenLegacyIds],
+      );
+      const activeCount = Number(coverageRows[0]?.active_count ?? 0);
+      const seenCount = Number(coverageRows[0]?.seen_count ?? 0);
+      // No active inventory yet (first import) => nothing to protect.
+      const coverage = activeCount === 0 ? 1 : seenCount / activeCount;
+
+      if (coverage < MIN_DEACTIVATION_COVERAGE) {
+        return {
+          count: 0,
+          skipped: "DISCOVERY_COVERAGE_TOO_LOW",
+          coverage,
+          activeCount,
+          seenCount,
+          discovered: seenLegacyIds.length,
+        };
+      }
+
       const rows = await sql.query(
         `
         UPDATE properties

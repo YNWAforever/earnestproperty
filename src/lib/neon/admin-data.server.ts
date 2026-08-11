@@ -87,7 +87,14 @@ import { woztellEnabled } from "../woztell/woztell.server";
  * from rewriting the entire CRM in a single statement. */
 export const BULK_LEAD_UPDATE_LIMIT = 200;
 
-function agentScope(actor: StaffAccess): string | null {
+/**
+ * The row-visibility scope for an actor: null means "all rows" (admin/manager),
+ * otherwise the agent's own staff id. Exported because API routes outside this
+ * module enforce the same scoping -- see api.admin.woztell.send.ts, which sends
+ * real WhatsApp messages and must not let an agent act on another agent's
+ * conversation. Keep one definition; a second copy is how they drift apart.
+ */
+export function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
 }
@@ -446,10 +453,19 @@ export type AdminPropertyRecord = Partial<AdminPropertyInput> & { id: string };
 // in a server function's return type -- it cannot prove them serializable -- and
 // every call site was casting to these exact types anyway, so the cast was
 // hiding the contract instead of expressing it.
-export async function getAdminProperty(id: string): Promise<AdminPropertyRecord | null> {
+export async function getAdminProperty(
+  id: string,
+  actor?: StaffAccess,
+): Promise<AdminPropertyRecord | null> {
+  // listAdminListings, saveAdminProperty and updateAdminPropertyStatus all
+  // restrict agents to p.agent_id = actor.staffId, and saveAdminProperty throws
+  // 403 for an out-of-scope edit. This single-row read took no actor at all, so
+  // an agent could SELECT * any listing -- including drafts and internal columns
+  // the scoped list view withholds -- by supplying its UUID.
+  const scope = actor ? agentScope(actor) : null;
   const rows = await queryRows<AdminPropertyRecord>(
-    "SELECT * FROM properties WHERE id = $1 LIMIT 1",
-    [id],
+    `SELECT * FROM properties WHERE id = $1${scope !== null ? " AND agent_id = $2" : ""} LIMIT 1`,
+    scope !== null ? [id, scope] : [id],
   );
   return rows[0] ?? null;
 }
@@ -1426,11 +1442,47 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
   };
 }
 
+/**
+ * Throw 403 unless the actor may act on this lead.
+ *
+ * fetchAdminLead and updateAdminLead have always scoped agents to their own
+ * rows, but the AI surface around them did not: it took a lead id straight from
+ * the client and never joined back to assigned_agent_id. An agent who kept a
+ * UUID after reassignment (or read one off a crm_ai_tags id) could pull another
+ * agent's enriched profile, overwrite it, and burn a paid LLM call doing it.
+ *
+ * Null scope means admin/manager, who legitimately see every lead.
+ */
+async function assertLeadInScope(leadId: string, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  if (scope === null) return;
+  const rows = await queryRows(
+    `SELECT 1 FROM crm_leads WHERE id = $1::uuid AND assigned_agent_id = $2::uuid LIMIT 1`,
+    [leadId, scope],
+  );
+  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+}
+
+/** Same, reached through the tag's owning lead. */
+async function assertAiTagInScope(tagId: string, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  if (scope === null) return;
+  const rows = await queryRows(
+    `SELECT 1
+       FROM crm_ai_tags t
+       JOIN crm_leads l ON l.id = t.lead_id
+      WHERE t.id = $1::uuid AND l.assigned_agent_id = $2::uuid
+      LIMIT 1`,
+    [tagId, scope],
+  );
+  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+}
+
 export async function fetchAdminLeadAiProfile(
   input: { leadId: string },
   actor: StaffAccess,
 ): Promise<AdminLeadAiProfile> {
-  void actor;
+  await assertLeadInScope(input.leadId, actor);
   return fetchCrmAiProfile({ leadId: input.leadId });
 }
 
@@ -1438,12 +1490,14 @@ export async function analyzeAdminLeadAiProfile(
   input: { leadId: string },
   actor: StaffAccess,
 ): Promise<AdminLeadAiProfile> {
+  await assertLeadInScope(input.leadId, actor);
   const result = await analyzeCrmLead(input.leadId);
   await writeAudit(actor.staffId, "ai.lead.analyze", "lead", input.leadId);
   return result;
 }
 
 export async function approveAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
+  await assertAiTagInScope(input.tagId, actor);
   const result = await approveCrmAiTag({
     tagId: input.tagId,
     staffId: actor.staffId,
@@ -1454,6 +1508,7 @@ export async function approveAdminAiTag(input: { tagId: string }, actor: StaffAc
 }
 
 export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
+  await assertAiTagInScope(input.tagId, actor);
   const result = await approveCrmAiTag({
     tagId: input.tagId,
     staffId: actor.staffId,
@@ -1567,6 +1622,11 @@ export async function bulkUpdateAdminLeads(
 }
 
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {
+  // Every sibling lead mutation scopes agents to their own rows; this one wrote
+  // notes, calls and due-dated follow-ups against any lead_id the client sent.
+  // The rows then surfaced in the real owner's timeline and in the Command
+  // Center's overdue KPI.
+  await assertLeadInScope(input.lead_id, actor);
   const rows = await queryRows(
     `INSERT INTO crm_activities (
       lead_id, contact_id, staff_user_id, activity_type, body, due_at, completed_at
@@ -1908,6 +1968,13 @@ export async function fetchAdminConversation(id: string, actor?: StaffAccess) {
     contact_id: stringOrNull(conversation.contact_id),
     assigned_agent_id: stringOrNull(conversation.assigned_agent_id),
     woztell_member_id: stringOrNull(conversation.woztell_member_id),
+    // Mirrors the requireStaff(["admin","manager"]) gate on
+    // clearContactWhatsappOptOut -- this only decides whether the control is
+    // rendered; the server fn enforces it for real. No actor means an internal
+    // unscoped call with no UI behind it, so deny rather than assume.
+    can_clear_opt_out: actor
+      ? actor.roles.includes("admin") || actor.roles.includes("manager")
+      : false,
     messages: messages.map((message) => ({
       id: stringOrEmpty(message.id),
       direction: stringOrEmpty(message.direction) as "inbound" | "outbound",
@@ -2008,6 +2075,47 @@ export async function updateAdminConversation(
     assigned_agent_id: input.assigned_agent_id,
   });
   return { ok: true };
+}
+
+/**
+ * Clear a contact's WhatsApp opt-out.
+ *
+ * opted_out_whatsapp is written monotonically by the inbound webhook
+ * (`opted_out_whatsapp = opted_out_whatsapp OR $7`), and until this existed
+ * there was no code path anywhere that could set it back to false. A customer
+ * mis-classified as opting out -- which the old substring matcher did to anyone
+ * who wrote 「我想取消今日睇樓約會」 -- was blocked from every staff reply and every
+ * campaign permanently, with no way back short of a manual SQL statement.
+ *
+ * Restricted to admin/manager and always audited: this re-enables marketing
+ * messages to a real person, so it needs to be attributable. Agents can see the
+ * 已拒收 badge but cannot clear it.
+ */
+export async function clearContactWhatsappOptOut(
+  input: { contactId: string; reason: string },
+  actor: StaffAccess,
+) {
+  const reason = input.reason.trim();
+  if (!reason) throw new Response("A reason is required to clear an opt-out.", { status: 400 });
+
+  const rows = await queryRows<{ id: unknown; opted_out_whatsapp: unknown }>(
+    `UPDATE crm_contacts
+        SET opted_out_whatsapp = false, updated_at = now()
+      WHERE id = $1::uuid
+        AND opted_out_whatsapp = true
+      RETURNING id, opted_out_whatsapp`,
+    [input.contactId],
+  );
+
+  if (!rows[0]) {
+    // Either no such contact, or it was not opted out to begin with. Both are
+    // no-ops from the caller's point of view; nothing was changed, so nothing
+    // is audited.
+    return { ok: false as const, error: "NOT_OPTED_OUT" };
+  }
+
+  await writeAudit(actor.staffId, "contact.optout.clear", "contact", input.contactId, { reason });
+  return { ok: true as const };
 }
 
 function parseConversationAiMessages(value: unknown) {
@@ -2218,7 +2326,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
     [campaignId],
   );
   const campaign = campaigns[0];
-  if (!campaign) return { ok: false, error: "Campaign not found" };
+  if (!campaign) return { ok: false as const, error: "Campaign not found" };
 
   const filters = parseAudienceFilters(campaign.filters);
   const rows = await fetchAudienceRecipientRows(filters);
@@ -2234,13 +2342,24 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
       INSERT INTO whatsapp_campaign_recipients (campaign_id, contact_id, status)
       SELECT $1::uuid, contact_id, 'queued'
       FROM unnest($2::uuid[]) AS contact_ids(contact_id)
+      -- 'sent'/'sending' are obviously not re-queueable. WOZTELL_DELIVERY_UNKNOWN
+      -- is the subtle one: it means the provider took the message but never
+      -- confirmed the outcome (a 5xx/timeout, or a 'sending' row reconciled
+      -- after 15 minutes -- see campaign-delivery.server.ts). The customer may
+      -- well have received it, so re-queueing that recipient risks a second,
+      -- billable WhatsApp message to a real person. Treat it as terminal;
+      -- genuine provider rejections (WOZTELL_PROVIDER_REJECTED) still re-queue.
       ON CONFLICT (campaign_id, contact_id) DO UPDATE SET
         status = CASE
-          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending') THEN whatsapp_campaign_recipients.status
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending')
+            OR whatsapp_campaign_recipients.error = 'WOZTELL_DELIVERY_UNKNOWN'
+            THEN whatsapp_campaign_recipients.status
           ELSE EXCLUDED.status
         END,
         error = CASE
-          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending') THEN whatsapp_campaign_recipients.error
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending')
+            OR whatsapp_campaign_recipients.error = 'WOZTELL_DELIVERY_UNKNOWN'
+            THEN whatsapp_campaign_recipients.error
           ELSE NULL
         END
       `,
@@ -2260,7 +2379,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const summary = summarizeAudienceRows(rows);
   await writeAudit(actor.staffId, "campaign.recipients", "campaign", campaignId, summary);
-  return { ok: true, ...summary };
+  return { ok: true as const, ...summary };
 }
 
 export async function validateAdminCampaignQueueability(id: string) {
@@ -2278,14 +2397,14 @@ export async function validateAdminCampaignQueueability(id: string) {
     [id],
   );
   const row = rows[0];
-  if (!row) return { ok: false, error: "Campaign not found" };
+  if (!row) return { ok: false as const, error: "Campaign not found" };
 
   const check = canPrepareAdminCampaignQueue({
     campaignStatus: stringOrEmpty(row.status),
     templateStatus: stringOrNull(row.template_status),
   });
-  if (!check.ok) return { ok: false, error: check.reason };
-  return { ok: true };
+  if (!check.ok) return { ok: false as const, error: check.reason };
+  return { ok: true as const };
 }
 
 export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
@@ -2293,7 +2412,8 @@ export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
   if (!validation.ok) return validation;
 
   const materialization = await materializeCampaignRecipients(id, actor);
-  if (!materialization.ok) return { ok: false, error: materialization.error, materialization };
+  if (!materialization.ok)
+    return { ok: false as const, error: materialization.error, materialization };
 
   const result = await queueAdminCampaign(id, actor);
   return { ...result, materialization };
@@ -2322,14 +2442,14 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
     [id],
   );
   const row = rows[0];
-  if (!row) return { ok: false, error: "Campaign not found" };
+  if (!row) return { ok: false as const, error: "Campaign not found" };
 
   const check = canQueueAdminCampaign({
     campaignStatus: stringOrEmpty(row.status),
     templateStatus: stringOrNull(row.template_status),
     eligibleRecipients: Number(row.eligible_recipients ?? 0),
   });
-  if (!check.ok) return { ok: false, error: check.reason };
+  if (!check.ok) return { ok: false as const, error: check.reason };
 
   // TOCTOU hardening: the eligibility predicate above can go stale between the
   // SELECT and the writes (a concurrent cancel/materialize could change the
@@ -2345,8 +2465,12 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
       SET status = 'queued', reviewed_by = $1, reviewed_at = now(), updated_at = now()
       FROM whatsapp_templates t
       WHERE c.id = $2
+        -- Must match canQueueAdminCampaign's own gate. This previously also
+        -- accepted 'draft', so a concurrent save-back-to-draft mid-queue still
+        -- sent: the re-assert that exists to close the TOCTOU window was
+        -- letting through the exact state the check above rejects.
+        AND c.status IN ('review', 'scheduled')
         AND t.id = c.template_id
-        AND c.status IN ('draft', 'review', 'scheduled')
         AND t.status LIKE 'active%'
         AND EXISTS (
           SELECT 1
@@ -2358,7 +2482,7 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
             AND contact.opt_in_whatsapp = true
             AND contact.opted_out_whatsapp = false
         )
-      RETURNING c.id
+      RETURNING c.id, c.reviewed_at
       `,
       [actor.staffId, id],
     ),
@@ -2379,13 +2503,21 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
   if (!Array.isArray(flipped) || !flipped[0]) {
     // Lost the race (campaign was cancelled/changed concurrently) or no longer
     // eligible. Nothing was committed.
-    return { ok: false, error: "CAMPAIGN_NOT_ELIGIBLE" };
+    return { ok: false as const, error: "CAMPAIGN_NOT_ELIGIBLE" };
   }
 
   await writeAudit(actor.staffId, "campaign.queue", "campaign", id, {
     eligibleRecipients: Number(row.eligible_recipients ?? 0),
   });
-  return { ok: true };
+
+  // reviewed_at is re-stamped on every queue flip, so it identifies THIS queue
+  // run. Callers fold it into the job's idempotency key: two enqueues of the
+  // same run collapse to one job (what idempotency is for), while a later
+  // re-queue of the same campaign gets a fresh key and therefore a fresh job
+  // row. Without it the key was campaign-stable, so once a job reached a
+  // terminal state the ON CONFLICT no-op handed back the dead row forever and
+  // the campaign could never be sent again.
+  return { ok: true as const, queueRunAt: rowDate(flipped[0].reviewed_at) };
 }
 
 export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
@@ -2430,11 +2562,27 @@ export async function createWebsiteInquiry(input: {
   });
 }
 
+const INQUIRY_STATUSES = ["new", "contacted", "qualified", "closed", "spam"] as const;
+
 export async function updateInquiryStatus(id: string, status: string, actor: StaffAccess) {
-  await queryRows("UPDATE inquiries SET status = $1, updated_at = now() WHERE id = $2", [
-    status,
-    id,
-  ]);
+  // Status came straight from the client into the UPDATE with no allowlist.
+  if (!INQUIRY_STATUSES.includes(status as (typeof INQUIRY_STATUSES)[number])) {
+    throw new Response("Unsupported inquiry status.", { status: 400 });
+  }
+
+  // Same agent scoping every other lead/inquiry mutation applies. Without it an
+  // agent could close or mark spam any inquiry in the agency, including ones
+  // routed to a colleague.
+  const scope = agentScope(actor);
+  const rows = await queryRows(
+    `UPDATE inquiries
+        SET status = $1, updated_at = now()
+      WHERE id = $2${scope !== null ? " AND assigned_agent_id = $3" : ""}
+      RETURNING id`,
+    scope !== null ? [status, id, scope] : [status, id],
+  );
+  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+
   await writeAudit(actor.staffId, "inquiry.status", "inquiry", id, { status });
   return { ok: true };
 }

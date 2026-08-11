@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "test:corridor": "node --test src/content/castle-peak-road.test.mjs",
-    "test:seo": "node --test src/content/seo-source.test.mjs src/content/canonical-links.test.mjs src/lib/schema.test.mjs",
+    "test:seo": "node --test src/content/seo-source.test.mjs src/content/canonical-links.test.mjs src/lib/schema.test.mjs && bun test src/lib/schema.test.ts",
     "test:blog": "node --test src/routes/blog.routes.test.mjs",
     "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs",
     "test:listing-search": "node --test src/lib/neon/listing-search.contract.test.mjs",

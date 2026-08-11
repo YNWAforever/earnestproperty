@@ -526,3 +526,26 @@ test("Operations route is present in the generated route tree", () => {
   const routeTree = read("src/routeTree.gen.ts");
   assert.match(routeTree, /['"]\/admin\/operations['"]/);
 });
+
+// An agent-role token could previously send a real WhatsApp message on ANY
+// conversation: the lookup was `WHERE wc.id = $1` with no scope, while every
+// sibling conversation path in admin-data.server.ts filters on
+// assigned_agent_id. The blast radius is a customer receiving a message from an
+// agent who is not allowed to read their thread.
+test("WhatsApp send route scopes the conversation lookup to the acting agent", () => {
+  const route = read("src/routes/api.admin.woztell.send.ts");
+
+  assert.match(route, /import \{ agentScope \} from "@\/lib\/neon\/admin-data\.server"/);
+  assert.match(route, /const scope = agentScope\(staff\)/);
+  assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
+  assert.match(route, /\[conversationId, scope\]/);
+});
+
+test("agentScope is exported once and not redefined per call site", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  assert.match(server, /export function agentScope\(actor: StaffAccess\)/);
+
+  // Any second definition means the two can drift apart.
+  const definitions = (server.match(/function agentScope\(/g) ?? []).length;
+  assert.equal(definitions, 1);
+});

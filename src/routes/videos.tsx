@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SITE_YOUTUBE_CHANNEL, whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
-import { videoObjectSchema } from "@/lib/schema";
+import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
 import { getYouTubeEmbedUrl } from "@/lib/youtube-video-url.js";
 
 export const Route = createFileRoute("/videos")({
@@ -167,7 +167,7 @@ function VideoFrame({
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({ "@context": "https://schema.org", ...videoSchema }),
+            __html: jsonLdScript({ "@context": "https://schema.org", ...videoSchema }),
           }}
         />
       ) : null}

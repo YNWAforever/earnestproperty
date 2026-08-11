@@ -13,6 +13,13 @@ export type MlsSyncSummary = {
   upserted: number;
   deactivated: number;
   deactivationSkipped: boolean;
+  /**
+   * Set when the DB layer REFUSED to deactivate because the discovery pass
+   * covered too little of the live inventory to be trusted. Null on a healthy
+   * run. Callers must not treat a blocked sweep as success.
+   */
+  deactivationBlocked: string | null;
+  deactivationCoverage: number | null;
   errors: Array<{ url?: string; message: string }>;
   dryRunRows: MlsListingRow[];
 };
@@ -24,7 +31,13 @@ export type MlsDb = {
     sourceSite: string;
     seenLegacyIds: string[];
     nowIso: string;
-  }): Promise<{ count: number }>;
+  }): Promise<{
+    count: number;
+    skipped?: string;
+    coverage?: number;
+    activeCount?: number;
+    discovered?: number;
+  }>;
 };
 
 export type MlsImporter = {

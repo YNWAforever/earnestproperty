@@ -57,6 +57,9 @@ export const Route = createFileRoute("/api/live-agent/message")({
           if (err instanceof LiveAgentPublicError) {
             return Response.json({ error: err.message }, { status: err.status });
           }
+          // See the handoff route: the real error was thrown away, so a broken
+          // AI backend looked identical to a visitor asking something odd.
+          console.error("[live-agent] message failed", { sessionId, error: err });
           return Response.json({ error: "Unable to answer live-agent message" }, { status: 500 });
         }
       },

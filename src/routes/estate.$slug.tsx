@@ -24,6 +24,7 @@ import {
   type ListingRow,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
+import { jsonLdScript } from "@/lib/schema";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
@@ -126,12 +127,12 @@ function EstatePage() {
     <div className="bg-background">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd) }}
       />
       {visibleFaqs.length > 0 && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(faqJsonLd) }}
         />
       )}
       <section className="bg-gradient-to-br from-primary to-primary/70 py-16 text-primary-foreground">

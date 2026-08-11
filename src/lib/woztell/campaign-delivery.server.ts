@@ -129,9 +129,21 @@ async function refreshCampaignDeliveryStatus(campaignId: string) {
   );
 }
 
+/**
+ * WOZTELL_DELIVERY_UNKNOWN is now a TERMINAL state: materializeCampaignRecipients
+ * refuses to re-queue a recipient carrying it, because the provider may already
+ * have delivered the message and re-queueing would send (and bill) a second one.
+ *
+ * That makes it important not to over-apply. Only outcomes where delivery is
+ * genuinely ambiguous belong here. A status that proves the request was
+ * rejected BEFORE dispatch -- a 429 rate-limit, or the 4xx set below -- means
+ * nothing was sent, so it stays retryable and the recipient can be re-queued.
+ */
 function providerFailureCode(result: { ok: boolean; status?: number }) {
   if (!result.status) return "WOZTELL_CONFIGURATION_UNAVAILABLE";
-  if ([400, 401, 403, 404, 422].includes(result.status)) return "WOZTELL_PROVIDER_REJECTED";
+  // 429: the provider refused to accept the request at all. Definitively not
+  // delivered, so this must not be misfiled as ambiguous and stranded forever.
+  if ([400, 401, 403, 404, 422, 429].includes(result.status)) return "WOZTELL_PROVIDER_REJECTED";
   return "WOZTELL_DELIVERY_UNKNOWN";
 }
 

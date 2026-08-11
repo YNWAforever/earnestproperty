@@ -8,9 +8,35 @@ import { SITE_URL } from "@/content/seo";
  * ItemList on /agents and /listings, LocalBusiness per branch on /contact,
  * VideoObject on /videos. Callers still render their own
  * `<script type="application/ld+json" dangerouslySetInnerHTML={{ __html:
- * JSON.stringify(...) }} />`, usually wrapping the result in an `@graph`
+ * jsonLdScript(...) }} />`, usually wrapping the result in an `@graph`
  * alongside a page-specific BreadcrumbList -- these just return the node.
  */
+
+/**
+ * Serialise a value for embedding inside `<script type="application/ld+json">`.
+ *
+ * Bare `JSON.stringify` is NOT safe here. `dangerouslySetInnerHTML` bypasses
+ * React's escaping entirely, and JSON.stringify escapes neither `<` nor `/`, so
+ * any string reaching the graph that contains `</script>` closes the element
+ * early and everything after it is parsed as HTML. The values are not
+ * hypothetical: listing title_zh/address/description come from the admin CMS and
+ * from the scraped legacy site (src/lib/mls/), FAQ and article bodies come from
+ * the CMS, and agent names/job titles come from staff profiles. Pages are
+ * server-rendered, so the payload reaches anonymous visitors, and admin auth is
+ * cookie-based with no CSP -- an XSS here escalates an agent-role account to
+ * admin.
+ *
+ * Escaping `<` and `>` as </> is valid JSON and valid JSON-LD (the
+ * parser unescapes them back to the original characters), so consumers such as
+ * Google's Rich Results test see the intended values. `&` is escaped too so the
+ * output cannot be reinterpreted through HTML entity decoding.
+ */
+export function jsonLdScript(value: unknown) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+}
 
 export function agentPersonSchema(input: {
   name: string;

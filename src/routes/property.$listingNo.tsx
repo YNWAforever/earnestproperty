@@ -51,6 +51,7 @@ import {
   getPropertyDecision,
 } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
+import { jsonLdScript } from "@/lib/schema";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
@@ -758,7 +759,7 @@ function PropertyPage() {
 
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
       />
     </div>
   );

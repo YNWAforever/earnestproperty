@@ -238,6 +238,10 @@ function AdminLeads() {
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<AdminLeadAiProfile | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  // A failed fetch used to render the same 「未有 AI profile」 empty state as a lead
+  // that was simply never analysed, so a broken AI backend looked like normal
+  // data and nobody retried.
+  const [aiError, setAiError] = useState<string | null>(null);
   const [aiMutatingTagId, setAiMutatingTagId] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
@@ -253,6 +257,9 @@ function AdminLeads() {
     aiRequestRef.current += 1;
     setAiProfile(null);
     setAiLoading(false);
+    // Clear the error too, or one lead's failure banner outlives it and is
+    // shown against the next lead the agent opens.
+    setAiError(null);
     setAiMutatingTagId(null);
   }
 
@@ -279,15 +286,20 @@ function AdminLeads() {
     async (id: string) => {
       const requestId = aiRequestRef.current + 1;
       aiRequestRef.current = requestId;
+      setAiError(null);
       setAiLoading(true);
 
       try {
         const profile = await fetchAdminLeadAiProfile({ data: { leadId: id } });
         if (requestId !== aiRequestRef.current || !canApplyLeadDetail(id)) return null;
         setAiProfile(profile as AdminLeadAiProfile);
+        setAiError(null);
         return profile as AdminLeadAiProfile;
-      } catch {
-        if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) setAiProfile(null);
+      } catch (err) {
+        if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) {
+          setAiProfile(null);
+          setAiError(errorText(err));
+        }
         return null;
       } finally {
         if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) setAiLoading(false);
@@ -521,12 +533,15 @@ function AdminLeads() {
     const targetLeadId = detail.id;
     setMutatingAction("save");
     try {
-      const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
-      assertNoMutationError(result);
-
       // 儲存 used to submit only the field draft while reporting 「Lead 已更新」,
       // so a follow-up note typed just above the button was silently discarded
       // and the toast said everything had saved.
+      //
+      // Written BEFORE the lead update, not after: the same 儲存 can reassign the
+      // lead to another agent, and createAdminLeadActivity is now scoped to the
+      // caller's own leads. Writing the note second meant an agent handing over
+      // a lead with a parting note got a 403 and lost the note -- after the
+      // reassignment had already committed.
       const pendingNote = noteBody.trim();
       if (pendingNote) {
         await createAdminLeadActivity({
@@ -542,6 +557,9 @@ function AdminLeads() {
         setNoteBody("");
         setNoteError(null);
       }
+
+      const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
+      assertNoMutationError(result);
 
       await refreshLeads();
       if (!canApplyLeadDetail(targetLeadId)) return;
@@ -622,13 +640,20 @@ function AdminLeads() {
     const requestId = aiRequestRef.current + 1;
     aiRequestRef.current = requestId;
     setAiLoading(true);
+    // This is the retry the error banner asks for, so it must clear the banner
+    // on the way in -- otherwise the error and the loading skeleton render at
+    // the same time -- and set it again if the retry also fails.
+    setAiError(null);
     try {
       const profile = await analyzeAdminLeadAiProfile({ data: { leadId: targetLeadId } });
       if (requestId !== aiRequestRef.current || !canApplyLeadDetail(targetLeadId)) return;
       setAiProfile(profile as AdminLeadAiProfile);
       toast.success("AI profile 已更新");
     } catch (err) {
-      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
+      if (canApplyLeadDetail(targetLeadId)) {
+        setAiError(errorText(err));
+        toast.error(errorText(err));
+      }
     } finally {
       if (requestId === aiRequestRef.current && canApplyLeadDetail(targetLeadId)) {
         setAiLoading(false);
@@ -958,6 +983,7 @@ function AdminLeads() {
             noteError={noteError}
             aiProfile={aiProfile}
             aiLoading={aiLoading}
+            aiError={aiError}
             aiMutatingTagId={aiMutatingTagId}
             disabled={isMutating}
             onDraftChange={updateDraft}
@@ -1107,6 +1133,7 @@ function LeadDetailEditor({
   noteError,
   aiProfile,
   aiLoading,
+  aiError,
   aiMutatingTagId,
   disabled,
   noteSaving,
@@ -1123,6 +1150,7 @@ function LeadDetailEditor({
   noteError: string | null;
   aiProfile: AdminLeadAiProfile | null;
   aiLoading: boolean;
+  aiError: string | null;
   aiMutatingTagId: string | null;
   disabled: boolean;
   noteSaving: boolean;
@@ -1328,6 +1356,10 @@ function LeadDetailEditor({
               </p>
             ) : null}
           </div>
+        ) : aiError ? (
+          <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+            載入 AI profile 失敗，請重試。
+          </p>
         ) : !aiLoading ? (
           <p className="mt-4 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             未有 AI profile

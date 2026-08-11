@@ -9,7 +9,7 @@ import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { fetchListingsForAgent, type ListingRow } from "@/lib/queries";
-import { agentPersonSchema } from "@/lib/schema";
+import { agentPersonSchema, jsonLdScript } from "@/lib/schema";
 
 export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
@@ -60,7 +60,7 @@ function AgentProfilePage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({ "@context": "https://schema.org", ...personSchema }),
+          __html: jsonLdScript({ "@context": "https://schema.org", ...personSchema }),
         }}
       />
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">

@@ -242,6 +242,48 @@ async function bootstrapStaffRows() {
   }));
 }
 
+/**
+ * Whether Neon Auth considers this account's email address verified.
+ *
+ * Load-bearing for the email-match branch in findStaff. staff_users rows are
+ * routinely seeded with an email and a blank auth_user_id ("add the colleague,
+ * they log in later" -- see saveAdminAgentProfile), and /auth/sign-up is
+ * publicly reachable. Without this gate, anyone who knew a not-yet-activated
+ * staff address could register it and permanently inherit that row's roles, up
+ * to admin.
+ *
+ * Returns false rather than throwing when the column or row cannot be read:
+ * this decides whether to hand out staff roles, so an unreadable answer must
+ * fail closed. auth_user_id matches are unaffected -- only first-time binding
+ * by email needs the check.
+ */
+async function isNeonAuthEmailVerified(authUserId: string) {
+  try {
+    const rows = await queryRows(
+      `
+      SELECT "emailVerified" AS email_verified
+      FROM neon_auth."user"
+      WHERE id::text = $1
+      LIMIT 1
+      `,
+      [authUserId],
+    );
+    return rows[0]?.email_verified === true;
+  } catch (error) {
+    // Fail closed, but LOUDLY. If neon_auth."user"."emailVerified" is ever
+    // absent or renamed, every first-time staff activation by email stops
+    // working -- and silently, because the caller just sees "no match" and falls
+    // through to the no-staff path. That is indistinguishable from a genuinely
+    // unrecognised account, so without this line the cause would be invisible.
+    console.error(
+      '[auth] Could not read neon_auth."user"."emailVerified"; ' +
+        "email-based staff activation is disabled until this is resolved.",
+      error,
+    );
+    return false;
+  }
+}
+
 async function findStaff(authUserId: string, email: string | null): Promise<StaffLookup | null> {
   const rows = await queryRows(
     `
@@ -267,6 +309,18 @@ async function findStaff(authUserId: string, email: string | null): Promise<Staf
   if (!row) return null;
   const matchedProfileOnly = stringOrNull(row.auth_user_id) === null;
   if (matchedProfileOnly) {
+    // Email verification is checked HERE, not before the query, because it only
+    // matters on this branch: matching on auth_user_id is already proof of
+    // identity. Checking up-front cost every authenticated admin request an
+    // extra serial round-trip for a condition that is false on all but the very
+    // first request a staff member ever makes.
+    //
+    // Without it, /auth/sign-up being public plus staff rows seeded with an
+    // email and a blank auth_user_id (saveAdminAgentProfile) meant anyone who
+    // knew a not-yet-activated staff address could register it and permanently
+    // inherit that row's roles, up to admin.
+    if (!(await isNeonAuthEmailVerified(authUserId))) return null;
+
     await queryRows(
       `
       UPDATE staff_users

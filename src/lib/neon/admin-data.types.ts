@@ -309,6 +309,13 @@ export type AdminConversationDetail = AdminConversationRow & {
   assigned_agent_id: string | null;
   woztell_member_id: string | null;
   messages: AdminConversationMessageRow[];
+  /**
+   * Server-computed: whether the viewer may clear this contact's WhatsApp
+   * opt-out (admin/manager only). Computed here rather than from client-side
+   * roles for the same reason admin.operations.tsx reads health.capabilities --
+   * the client never sees the role list, and the server fn enforces it again.
+   */
+  can_clear_opt_out: boolean;
 };
 
 export type AdminConversationUpdateInput = {

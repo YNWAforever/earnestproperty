@@ -50,6 +50,11 @@ type AdminCrmSegmentPreviewState = {
 };
 
 const defaultPrompt = "深井買家，預算 800-1000 萬，最近 90 日查詢，有 WhatsApp opt-in";
+// Extracted so the unsaved-edits check can compare against the seed rather
+// than against "non-empty" -- both fields ship pre-filled, so a pristine
+// editor looked dirty and the FIRST dropdown selection always warned about
+// discarding work that did not exist.
+const defaultSegmentName = "深井買家 WhatsApp Segment";
 
 export const Route = createFileRoute("/admin/segments")({
   head: () => ({
@@ -62,7 +67,7 @@ function AdminSegments() {
   const { user } = useNeonAuth();
   const [segments, setSegments] = useState<AdminCrmSegmentRow[] | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState("");
-  const [name, setName] = useState("深井買家 WhatsApp Segment");
+  const [name, setName] = useState(defaultSegmentName);
   const [status, setStatus] = useState<AdminCrmSegmentRow["status"]>("active");
   const [prompt, setPrompt] = useState(defaultPrompt);
   const [previewState, setPreviewState] = useState<AdminCrmSegmentPreviewState | null>(null);
@@ -138,7 +143,7 @@ function AdminSegments() {
     selectedSegment
       ? selectedSegment.natural_language_prompt !== prompt.trim() ||
           selectedSegment.name !== name.trim()
-      : prompt.trim() || name.trim(),
+      : prompt.trim() !== defaultPrompt || name.trim() !== defaultSegmentName,
   );
 
   const previewSummary = useMemo(() => {
@@ -147,9 +152,19 @@ function AdminSegments() {
   }, [preview]);
 
   function selectSegment(segmentId: string) {
+    // Gate EVERY path that overwrites the editor, including 新增 segment --
+    // which resets name/status/prompt just as destructively as loading another
+    // segment, but sat above the confirm and so discarded unsaved work silently.
+    if (
+      hasUnsavedSegmentEdits &&
+      !window.confirm("你尚未儲存目前的分群描述，切換後會遺失。確定要切換嗎？")
+    ) {
+      return;
+    }
+
     if (segmentId === "new") {
       setSelectedSegmentId("");
-      setName("深井買家 WhatsApp Segment");
+      setName(defaultSegmentName);
       setStatus("active");
       setPrompt(defaultPrompt);
       clearPreviewState();
@@ -158,14 +173,6 @@ function AdminSegments() {
     const segment = segments?.find((item) => item.id === segmentId);
     if (!segment) {
       setSelectedSegmentId(segmentId);
-      return;
-    }
-    // Loading another segment overwrites name/status/prompt wholesale, so an
-    // unsaved prompt someone was still composing vanished with no warning.
-    if (
-      hasUnsavedSegmentEdits &&
-      !window.confirm("你尚未儲存目前的分群描述，切換後會遺失。確定要切換嗎？")
-    ) {
       return;
     }
     setSelectedSegmentId(segmentId);

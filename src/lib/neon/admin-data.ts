@@ -194,9 +194,9 @@ export async function fetchAdminEstateOptions() {
 const fetchAdminPropertyServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await requireStaff(["admin", "manager", "agent"]);
+    const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.getAdminProperty(data.id);
+    return adminData.getAdminProperty(data.id, staff);
   });
 
 export async function fetchAdminProperty(options: { data: { id: string } }) {
@@ -415,7 +415,17 @@ export async function fetchAdminCampaigns() {
 const websiteInquirySchema = z
   .object({
     name: z.string().trim().min(1).max(120),
-    phone: z.string().trim().max(30),
+    // Mirrors the identical client-side constraint in contact.tsx and
+    // property.$listingNo.tsx. The server previously accepted any string up to
+    // 30 chars, including one with no digits at all -- weaker than the form it
+    // backs, and enough to write junk crm_contacts rows straight past both
+    // forms via a direct server-fn call.
+    phone: z
+      .string()
+      .trim()
+      .min(8)
+      .max(30)
+      .regex(/^[\d+\-\s()]+$/),
     email: z.string().trim().max(254).email().optional().or(z.literal("")),
     message: z.string().trim().max(2000).optional().or(z.literal("")),
     listingNo: z.string().regex(WEBSITE_LISTING_NO_PATTERN).optional(),
@@ -427,9 +437,43 @@ const websiteInquirySchema = z
 
 export type WebsiteInquiryInput = z.infer<typeof websiteInquirySchema>;
 
+// Public, unauthenticated write path -- the only server fn in this file with no
+// requireStaff() gate. Every submission inserts a crm_contacts row, a crm_leads
+// row and an inquiries row, so without a limit a single client can flood the
+// CRM (and the agents' lead queue) as fast as it can POST.
+const WEBSITE_INQUIRY_RATE_LIMIT_PER_IP = 5;
+const WEBSITE_INQUIRY_RATE_LIMIT_PER_IP_PHONE = 3;
+const WEBSITE_INQUIRY_RATE_WINDOW_SECONDS = 60;
+
 export const createWebsiteInquiry = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => websiteInquirySchema.parse(data))
   .handler(async ({ data }) => {
+    const { clientIpFromRequest, enforceRateLimit } = await import("@/lib/ratelimit.server");
+    const request = getRequest();
+    const clientIp = clientIpFromRequest(request);
+
+    await enforceRateLimit({
+      key: `website-inquiry:ip:${clientIp}`,
+      limit: WEBSITE_INQUIRY_RATE_LIMIT_PER_IP,
+      windowSeconds: WEBSITE_INQUIRY_RATE_WINDOW_SECONDS,
+    });
+
+    // Scoped to (ip, phone), NOT to phone alone. A global per-phone bucket is a
+    // weapon: anyone could burn a stranger's quota and lock that specific
+    // person out of the contact form, from any IP, indefinitely. Pairing it
+    // with the IP still stops one client hammering a single number while
+    // leaving a real customer on a different connection unaffected. Skipped
+    // entirely when the phone has no digits, so those submissions do not all
+    // collapse into one shared bucket and block each other.
+    const phoneDigits = data.phone.replace(/\D/g, "");
+    if (phoneDigits) {
+      await enforceRateLimit({
+        key: `website-inquiry:ip-phone:${clientIp}:${phoneDigits}`,
+        limit: WEBSITE_INQUIRY_RATE_LIMIT_PER_IP_PHONE,
+        windowSeconds: WEBSITE_INQUIRY_RATE_WINDOW_SECONDS,
+      });
+    }
+
     const adminData = await import("./admin-data.server");
     return adminData.createWebsiteInquiry(data);
   });
@@ -775,6 +819,29 @@ const updateAdminConversationServer = createServerFn({ method: "POST" })
 export async function updateAdminConversation(options: { data: AdminConversationUpdateInput }) {
   return callStaffServerFn(async () =>
     updateAdminConversationServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+// admin/manager only: clearing an opt-out re-enables marketing messages to a
+// real person, so it is a deliberately narrower grant than the rest of the
+// conversation surface (which agents can use).
+const clearContactWhatsappOptOutServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { contactId: string; reason: string }) =>
+    z
+      .object({ contactId: z.string().trim().uuid(), reason: z.string().trim().min(1).max(500) })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.clearContactWhatsappOptOut(data, staff);
+  });
+
+export async function clearContactWhatsappOptOut(options: {
+  data: { contactId: string; reason: string };
+}) {
+  return callStaffServerFn(async () =>
+    clearContactWhatsappOptOutServer(await withStaffAuthHeaders(options)),
   );
 }
 

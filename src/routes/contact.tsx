@@ -11,7 +11,7 @@ import { MapPin, Phone, MessageCircle, Mail, Clock } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT, whatsappUrl, type SiteBranch } from "@/config/site";
 import { toWhatsAppHref } from "@/lib/contact-links";
 import { canonicalLink, pageSeo } from "@/content/seo";
-import { branchLocalBusinessSchema } from "@/lib/schema";
+import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
 
 const branchesSchema = {
@@ -98,7 +98,7 @@ function ContactPage() {
     <div className="mx-auto max-w-5xl px-6 py-20">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(branchesSchema) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(branchesSchema) }}
       />
       <h1 className="text-3xl font-bold text-primary">聯絡晉誠地產</h1>
       <p className="mt-3 text-muted-foreground">深井．青山公路．汀九我哋比你更熟。</p>

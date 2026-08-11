@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,13 @@ import { ArrowDown, ArrowUp, Loader2, Upload, X, GripVertical } from "lucide-rea
 type Props = {
   ownerType?: string;
   value: string[];
-  onChange: (urls: string[]) => void;
+  /**
+   * Accepts a functional updater as well as a plain array, so an upload that
+   * finishes AFTER the user removed or reordered photos appends to the current
+   * list instead of the list as it was when the batch started. The caller
+   * passes its useState setter straight through.
+   */
+  onChange: Dispatch<SetStateAction<string[]>>;
   /** Lets the calling form's label point at the hidden file input. */
   inputId?: string;
 };
@@ -76,7 +82,12 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
     }
     setUploading(false);
     setProgress(null);
-    if (uploaded.length) onChange([...value, ...uploaded]);
+    // Functional updater, NOT [...value, ...uploaded]: `value` is captured from
+    // the render that started the batch, and remove/reorder stay enabled while
+    // it runs. Deleting a photo mid-upload used to be silently undone when the
+    // batch landed -- and since the first image is the public cover, that could
+    // republish the very photo the agent had just taken down.
+    if (uploaded.length) onChange((current) => [...current, ...uploaded]);
 
     // Previously each failure raised its own toast and the batch still ended on
     // a green 「已上載 N 張相片」. Selecting 12 photos and having 7 fail produced 12

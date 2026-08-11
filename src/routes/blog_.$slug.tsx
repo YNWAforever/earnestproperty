@@ -3,6 +3,7 @@ import { ArrowLeft, Clock } from "lucide-react";
 
 import { SITE_NAME, SITE_URL, blogArticles, canonicalLink } from "@/content/seo";
 import { fetchArticleBySlug } from "@/lib/queries";
+import { jsonLdScript } from "@/lib/schema";
 
 type ArticleDetail = {
   slug: string;
@@ -115,7 +116,7 @@ function BlogArticlePage() {
     <main className="bg-background">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
       />
       <article className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
         <Link

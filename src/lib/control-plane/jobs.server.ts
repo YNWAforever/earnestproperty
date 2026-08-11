@@ -368,6 +368,16 @@ function encodeJobCursor(cursor: JobListCursor) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+/**
+ * Cursors are opaque to the client but arrive as user input. Validating with
+ * Date.parse accepted anything JS could parse -- including
+ * "Tue Aug 11 2026 10:00:00 GMT+0800 (...)" -- and forwarded it raw into
+ * $N::timestamptz, where Postgres rejects it and the route answers 500 instead
+ * of the VALIDATION_ERROR/400 it intends. Match exactly what the encoder now
+ * emits (microsecond, Z-suffixed).
+ */
+const CURSOR_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
 function decodeJobCursor(value: string | undefined): JobListCursor | null {
   if (!value) return null;
   try {
@@ -378,7 +388,7 @@ function decodeJobCursor(value: string | undefined): JobListCursor | null {
     const cursor = parsed as Record<string, unknown>;
     if (
       typeof cursor.createdAt !== "string" ||
-      Number.isNaN(Date.parse(cursor.createdAt)) ||
+      !CURSOR_TIMESTAMP_PATTERN.test(String(cursor.createdAt)) ||
       typeof cursor.id !== "string" ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cursor.id)
     ) {
@@ -447,7 +457,13 @@ export async function listJobs(
   const cursor = decodeJobCursor(input.cursor);
   const rows = await queryRows(
     `SELECT id::text AS id, job_type, payload_version, status, attempt_count, max_attempts,
-            run_after, lease_expires_at, last_error_code, created_at, updated_at
+            run_after, lease_expires_at, last_error_code, created_at, updated_at,
+            -- Full-precision keyset cursor. created_at is timestamptz
+            -- (microseconds) but isoDate() truncates to milliseconds, and
+            -- feeding that back into (created_at, id) < (...) silently skipped
+            -- every job whose timestamp fell between the truncated and true
+            -- value. US = microseconds.
+            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor
      FROM ops_jobs
      WHERE ($1::text IS NULL OR status = $1)
        AND ($2::text IS NULL OR job_type = $2)
@@ -465,7 +481,8 @@ export async function listJobs(
       limit + 1,
     ],
   );
-  const pageRows = rows.slice(0, limit).map((row) => ({
+  const page = rows.slice(0, limit);
+  const pageRows = page.map((row) => ({
     id: String(row.id),
     jobType: String(row.job_type),
     payloadVersion: Number(row.payload_version),
@@ -478,12 +495,17 @@ export async function listJobs(
     createdAt: isoDate(row.created_at),
     updatedAt: isoDate(row.updated_at),
   }));
-  const last = pageRows.at(-1);
+  // Cursor comes from the microsecond-precision column, not the truncated
+  // createdAt used for display.
+  const lastRaw = page.at(-1);
   return {
     rows: pageRows,
     nextCursor:
-      rows.length > limit && last
-        ? encodeJobCursor({ createdAt: last.createdAt, id: last.id })
+      rows.length > limit && lastRaw
+        ? encodeJobCursor({
+            createdAt: String(lastRaw.created_at_cursor),
+            id: String(lastRaw.id),
+          })
         : null,
   };
 }
@@ -493,17 +515,67 @@ function safeJobErrorCode(error: unknown) {
   return /^[A-Z][A-Z0-9_]{0,99}$/.test(code) ? code : "JOB_HANDLER_FAILED";
 }
 
+/**
+ * Upper bound on how many jobs one runClaimedJobs invocation will execute.
+ * Every claimed job runs inline, so this batch must complete within the
+ * serverless function's timeout; the lease + SKIP LOCKED claim means anything
+ * left over is simply picked up by the next tick.
+ */
+const MAX_JOBS_PER_RUN = 5;
+
+/**
+ * Wall-clock budget for one runClaimedJobs invocation. Checked BETWEEN jobs, so
+ * a single long handler still runs to completion (its own heartbeat keeps the
+ * lease alive); this only stops the loop from starting another one it cannot
+ * finish inside the serverless timeout.
+ */
+const RUN_BUDGET_MS = 45_000;
+
 export async function runClaimedJobs(input: {
   workerId: string;
   limit?: number;
   leaseSeconds?: number;
 }) {
   await recoverExpiredLeases();
-  const jobs = await claimJobs({ ...input, limit: 1 });
-  const counts = { claimed: jobs.length, succeeded: 0, retried: 0, failed: 0, cancelled: 0 };
+  // Drain more than one job per invocation -- forcing limit:1 meant a backlog
+  // shrank by one per tick while the response still reported claimed:1, so the
+  // queue looked healthy while it fell further behind.
+  //
+  // Claimed ONE AT A TIME rather than as a batch. claimJobs stamps a single
+  // shared lease_expires_at across every row it returns, but jobs execute
+  // serially here: a batch of 5 with a 60s lease running behind a
+  // woztell.campaign.deliver (which is designed to occupy an entire run) leaves
+  // jobs 2..N with an expired lease before they even start. renewJobLease,
+  // failJob and completeJob all require `lease_expires_at >= now()`, so those
+  // jobs could neither run, fail, nor complete: they stayed status='running'
+  // with a dead lease, were counted as `cancelled`, and recoverExpiredLeases
+  // re-queued them with the attempt already burned -- flipping them to 'failed'
+  // permanently after max_attempts without the handler ever succeeding. Worse,
+  // a handler that does not checkpoint ran to completion, failed completeJob on
+  // the dead lease, and was then re-queued and executed AGAIN, which for
+  // campaign delivery means duplicate billable WhatsApp sends.
+  //
+  // Claiming per iteration gives every job a full lease window starting when it
+  // is about to run, and the wall-clock budget stops the batch before the
+  // serverless timeout instead of relying on a job count.
+  const requested = Math.trunc(input.limit ?? 1);
+  const maxJobs = Math.min(
+    Math.max(Number.isFinite(requested) ? requested : 1, 1),
+    MAX_JOBS_PER_RUN,
+  );
+  const counts = { claimed: 0, succeeded: 0, retried: 0, failed: 0, cancelled: 0 };
   const leaseSeconds = Math.min(Math.max(Math.trunc(input.leaseSeconds ?? 60), 5), 3_600);
+  const startedAt = Date.now();
 
-  for (const job of jobs) {
+  for (let index = 0; index < maxJobs; index += 1) {
+    // Anything still queued is picked up by the next tick; the lease + SKIP
+    // LOCKED claim makes stopping early safe.
+    if (index > 0 && Date.now() - startedAt >= RUN_BUDGET_MS) break;
+
+    const [job] = await claimJobs({ ...input, limit: 1 });
+    if (!job) break;
+    counts.claimed += 1;
+
     const heartbeat = startLeaseHeartbeat({
       jobId: job.id,
       workerId: input.workerId,

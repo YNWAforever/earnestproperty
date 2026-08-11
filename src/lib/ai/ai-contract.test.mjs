@@ -253,8 +253,23 @@ test("AI suggestion flows cannot send WhatsApp, queue blasts, or publish CMS", (
     /sendAdminCampaignQueue|queueAdminCampaign|status\s*=\s*'queued'/,
   );
   assert.doesNotMatch(adminSegments, /sendAdminCampaignQueue|queueAdminCampaign|saveAdminArticle/);
-  assert.match(adminSegments, /onClick=\{materializeSegment\}/);
-  assert.match(adminBlasts, /onClick=\{\(\) =>\s*handleQueueCampaign/);
+
+  // Both actions must be reachable ONLY through an explicit confirmation, never
+  // from a bare onClick. These previously asserted the direct handlers
+  // (onClick={materializeSegment} / onClick={() => handleQueueCampaign}), which
+  // stopped matching when the confirmation gate landed -- the invariant got
+  // STRONGER while the assertions went stale, and because this file is not
+  // wired into any test: script, nobody saw it go red.
+  assert.match(adminSegments, /onClick=\{\(\) => setMaterializeOpen\(true\)\}/);
+  assert.match(
+    adminSegments,
+    /<AdminConfirmDialog[\s\S]*?onConfirm=\{\(\) => void materializeSegment\(\)\}/,
+  );
+  assert.doesNotMatch(adminSegments, /onClick=\{materializeSegment\}/);
+
+  assert.match(adminBlasts, /onClick=\{\(\) => requestSendCampaign\(campaign, eligible\)\}/);
+  assert.match(adminBlasts, /<AdminConfirmDialog/);
+  assert.doesNotMatch(adminBlasts, /onClick=\{handleQueueCampaign\}/);
 });
 
 test("admin data layer exposes staff-guarded AI functions", () => {

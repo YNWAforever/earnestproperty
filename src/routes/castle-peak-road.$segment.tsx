@@ -16,6 +16,7 @@ import {
   type CorridorInventory as CorridorInventoryData,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
+import { jsonLdScript } from "@/lib/schema";
 
 type SegmentLoaderData = {
   segment: CorridorSegment;
@@ -250,18 +251,18 @@ function CastlePeakRoadSegmentPage() {
     <div className="bg-background">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd) }}
       />
       {faqs.length > 0 && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(faqJsonLd) }}
         />
       )}
       {allListings.length > 0 && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(itemListJsonLd) }}
         />
       )}
 
