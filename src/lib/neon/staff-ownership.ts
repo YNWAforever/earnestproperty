@@ -17,6 +17,11 @@ export const STAFF_OWNERSHIP_COLUMNS: readonly StaffOwnershipColumn[] = [
   { table: "crm_leads", column: "assigned_agent_id" },
   { table: "inquiries", column: "assigned_agent_id" },
   { table: "whatsapp_conversations", column: "assigned_agent_id" },
+  // Exists in the schema and in the LiveAgentSession type (src/lib/ai/ai-types.ts)
+  // but is not written by any code path today, so it counts zero. Included
+  // because an ownership-shaped column absent from the handover is a gap
+  // waiting for the first person to wire it.
+  { table: "live_agent_sessions", column: "assigned_agent_id" },
 ] as const;
 
 /**
