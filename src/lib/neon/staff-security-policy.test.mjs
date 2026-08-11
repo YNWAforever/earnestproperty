@@ -114,3 +114,164 @@ test("arbitrary roleless authenticated staff may not bootstrap", () => {
     false,
   );
 });
+
+const roleChangeBase = {
+  actorRoles: ["admin"],
+  actorStaffId: "actor-1",
+  targetStaffId: "target-1",
+  currentRoles: ["agent"],
+  nextRoles: ["manager"],
+  otherAdminCount: 1,
+  targetIsProtected: false,
+};
+
+const deactivationBase = {
+  actorRoles: ["admin"],
+  actorStaffId: "actor-1",
+  targetStaffId: "target-1",
+  targetRoles: ["agent"],
+  otherAdminCount: 1,
+  ownedTotal: 0,
+  reassignToStaffId: null,
+  targetIsProtected: false,
+};
+
+test("only admins may change roles", () => {
+  const { decideStaffRoleChange } = staffSecurityPolicy;
+  assert.deepEqual(decideStaffRoleChange(roleChangeBase), { allowed: true });
+  assert.deepEqual(decideStaffRoleChange({ ...roleChangeBase, actorRoles: ["manager"] }), {
+    allowed: false,
+    reason: "not-admin",
+  });
+  assert.deepEqual(decideStaffRoleChange({ ...roleChangeBase, actorRoles: ["agent"] }), {
+    allowed: false,
+    reason: "not-admin",
+  });
+});
+
+test("an admin cannot remove their own admin role, but may drop their own manager role", () => {
+  const { decideStaffRoleChange } = staffSecurityPolicy;
+  const self = { ...roleChangeBase, targetStaffId: roleChangeBase.actorStaffId };
+
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...self,
+      currentRoles: ["admin", "manager"],
+      nextRoles: ["manager"],
+    }),
+    { allowed: false, reason: "self-admin-removal" },
+  );
+
+  // Dropping your own non-admin role is fine -- the guard is about lockout.
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...self,
+      currentRoles: ["admin", "manager"],
+      nextRoles: ["admin"],
+    }),
+    { allowed: true },
+  );
+});
+
+// Accounts on ADMIN_BOOTSTRAP_EMAILS are the owner's own. Without this, a second
+// admin could strip the owner's role or disable them and take over the system.
+test("an allowlisted account cannot be demoted or deactivated by anyone", () => {
+  const { decideStaffRoleChange, decideStaffDeactivation } = staffSecurityPolicy;
+
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["manager"],
+      targetIsProtected: true,
+    }),
+    { allowed: false, reason: "protected-account" },
+  );
+
+  // Adding a role to a protected account is still fine -- only losing admin is blocked.
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["admin", "manager"],
+      targetIsProtected: true,
+    }),
+    { allowed: true },
+  );
+
+  assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, targetIsProtected: true }), {
+    allowed: false,
+    reason: "protected-account",
+  });
+});
+
+test("the last admin role in the system cannot be removed", () => {
+  const { decideStaffRoleChange } = staffSecurityPolicy;
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["manager"],
+      otherAdminCount: 0,
+    }),
+    { allowed: false, reason: "last-admin" },
+  );
+
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["manager"],
+      otherAdminCount: 1,
+    }),
+    { allowed: true },
+  );
+});
+
+test("deactivation requires admin, a different person, and a successor when they own work", () => {
+  const { decideStaffDeactivation } = staffSecurityPolicy;
+
+  assert.deepEqual(decideStaffDeactivation(deactivationBase), { allowed: true });
+
+  assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, actorRoles: ["manager"] }), {
+    allowed: false,
+    reason: "not-admin",
+  });
+
+  assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, targetStaffId: "actor-1" }), {
+    allowed: false,
+    reason: "self",
+  });
+
+  assert.deepEqual(
+    decideStaffDeactivation({
+      ...deactivationBase,
+      targetRoles: ["admin"],
+      otherAdminCount: 0,
+    }),
+    { allowed: false, reason: "last-admin" },
+  );
+
+  assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, ownedTotal: 3 }), {
+    allowed: false,
+    reason: "successor-required",
+  });
+
+  assert.deepEqual(
+    decideStaffDeactivation({
+      ...deactivationBase,
+      ownedTotal: 3,
+      reassignToStaffId: "target-1",
+    }),
+    { allowed: false, reason: "successor-is-target" },
+  );
+
+  assert.deepEqual(
+    decideStaffDeactivation({
+      ...deactivationBase,
+      ownedTotal: 3,
+      reassignToStaffId: "successor-1",
+    }),
+    { allowed: true },
+  );
+});

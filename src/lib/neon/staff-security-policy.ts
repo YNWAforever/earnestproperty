@@ -92,3 +92,87 @@ export function shouldBootstrapFirstAdmin(input: {
   }
   return isFirstAdminBootstrapEligible(input.staffRows);
 }
+
+export type StaffRoleChangeDecision =
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason: "not-admin" | "self-admin-removal" | "last-admin" | "protected-account";
+    };
+
+export type StaffDeactivationDecision =
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason:
+        | "not-admin"
+        | "self"
+        | "last-admin"
+        | "successor-required"
+        | "successor-is-target"
+        | "protected-account";
+    };
+
+function losesAdmin(current: readonly string[], next: readonly string[]) {
+  return current.includes("admin") && !next.includes("admin");
+}
+
+/**
+ * Role changes are privilege changes, so the guards are about lockout rather
+ * than tidiness: you may drop your own `manager`, but never your own `admin`,
+ * and the system must always retain at least one admin.
+ *
+ * `otherAdminCount` counts admins EXCLUDING the target, and must be read
+ * server-side inside the same transaction as the write -- a client-supplied
+ * count is a TOCTOU hole.
+ */
+export function decideStaffRoleChange(input: {
+  actorRoles: readonly string[];
+  actorStaffId: string;
+  targetStaffId: string;
+  currentRoles: readonly string[];
+  nextRoles: readonly string[];
+  otherAdminCount: number;
+  /** True when the target's email is in ADMIN_BOOTSTRAP_EMAILS. */
+  targetIsProtected: boolean;
+}): StaffRoleChangeDecision {
+  if (!input.actorRoles.includes("admin")) return { allowed: false, reason: "not-admin" };
+
+  if (losesAdmin(input.currentRoles, input.nextRoles)) {
+    // Owner accounts cannot be demoted by anyone, including another admin.
+    // Gaining roles is still allowed -- only losing admin is blocked.
+    if (input.targetIsProtected) return { allowed: false, reason: "protected-account" };
+    if (input.actorStaffId === input.targetStaffId) {
+      return { allowed: false, reason: "self-admin-removal" };
+    }
+    if (input.otherAdminCount < 1) return { allowed: false, reason: "last-admin" };
+  }
+
+  return { allowed: true };
+}
+
+export function decideStaffDeactivation(input: {
+  actorRoles: readonly string[];
+  actorStaffId: string;
+  targetStaffId: string;
+  targetRoles: readonly string[];
+  otherAdminCount: number;
+  ownedTotal: number;
+  reassignToStaffId: string | null;
+  /** True when the target's email is in ADMIN_BOOTSTRAP_EMAILS. */
+  targetIsProtected: boolean;
+}): StaffDeactivationDecision {
+  if (!input.actorRoles.includes("admin")) return { allowed: false, reason: "not-admin" };
+  if (input.targetIsProtected) return { allowed: false, reason: "protected-account" };
+  if (input.actorStaffId === input.targetStaffId) return { allowed: false, reason: "self" };
+  if (input.targetRoles.includes("admin") && input.otherAdminCount < 1) {
+    return { allowed: false, reason: "last-admin" };
+  }
+  if (input.ownedTotal > 0) {
+    if (!input.reassignToStaffId) return { allowed: false, reason: "successor-required" };
+    if (input.reassignToStaffId === input.targetStaffId) {
+      return { allowed: false, reason: "successor-is-target" };
+    }
+  }
+  return { allowed: true };
+}
