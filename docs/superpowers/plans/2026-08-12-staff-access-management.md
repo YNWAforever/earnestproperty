@@ -4,7 +4,7 @@
 
 **Goal:** Let admins grant and revoke staff roles, and deactivate a departing colleague while handing over everything they own, then regroup the admin sidebar so nothing is duplicated or unreachable.
 
-**Architecture:** Decision rules go in `staff-security-policy.ts` as pure functions (it already holds `decideAgentProfileMutation` and has a test file). The list of columns that constitute "ownership" goes in a new pure `staff-ownership.ts` module that generates SQL, so the "all five ownership columns, none of the historical ones" contract is asserted against data structures rather than by regex over SQL strings. Three admin-gated server functions in `admin-data.server.ts` consume both. Accounts listed in the existing `ADMIN_BOOTSTRAP_EMAILS` env var are protected: they cannot be demoted or deactivated through the UI by anyone, so the owner cannot be locked out of their own system. The UI is a new 權限 section at the bottom of the existing agent form, and the sidebar gains static group headings.
+**Architecture:** Decision rules go in `staff-security-policy.ts` as pure functions (it already holds `decideAgentProfileMutation` and has a test file). The list of columns that constitute "ownership" goes in a new pure `staff-ownership.ts` module that generates SQL, so the "all six ownership columns, none of the historical ones" contract is asserted against data structures rather than by regex over SQL strings. Three admin-gated server functions in `admin-data.server.ts` consume both. Accounts listed in the existing `ADMIN_BOOTSTRAP_EMAILS` env var are protected: they cannot be demoted or deactivated through the UI by anyone, so the owner cannot be locked out of their own system. The UI is a new 權限 section at the bottom of the existing agent form, and the sidebar gains static group headings.
 
 **Tech Stack:** TanStack Start, React 19, Neon serverless Postgres (raw SQL, no ORM), Zod, Tailwind + shadcn/ui. Tests: `node --test` for `.mjs` (which can import `.ts` directly via Node's type stripping), `bun test` for `.ts`/`.tsx`. There is no aggregate `npm test` — new tests must be wired into a named `test:*` script.
 
@@ -18,8 +18,8 @@
 
 | File | Responsibility |
 | --- | --- |
-| `src/lib/neon/staff-ownership.ts` | The five ownership columns, the twelve historical column names, and pure SQL builders for counting and reassigning. No DB access. |
-| `src/lib/neon/staff-ownership.test.mjs` | Asserts the generated SQL covers exactly the five ownership columns and mentions none of the historical ones. |
+| `src/lib/neon/staff-ownership.ts` | The six ownership columns, the twelve historical column names, and pure SQL builders for counting and reassigning. No DB access. |
+| `src/lib/neon/staff-ownership.test.mjs` | Asserts the generated SQL covers exactly the six ownership columns and mentions none of the historical ones. |
 
 **Modify**
 
@@ -45,7 +45,7 @@
 
 ### Task 1: Ownership column registry
 
-The five columns that mean "this person currently owns this row", and the twelve distinct column names that only record who did something once. Reassigning a historical column would falsify the record — `sent_by` would claim a different person sent a WhatsApp message.
+The six columns that mean "this person currently owns this row", and the twelve distinct column names that only record who did something once. Reassigning a historical column would falsify the record — `sent_by` would claim a different person sent a WhatsApp message.
 
 **Files:**
 - Create: `src/lib/neon/staff-ownership.ts`
@@ -66,13 +66,14 @@ import {
   staffReassignStatements,
 } from "./staff-ownership.ts";
 
-test("ownership covers exactly the five current-assignment columns", () => {
+test("ownership covers exactly the six current-assignment columns", () => {
   assert.deepEqual(
     STAFF_OWNERSHIP_COLUMNS.map((entry) => `${entry.table}.${entry.column}`).sort(),
     [
       "crm_contacts.assigned_agent_id",
       "crm_leads.assigned_agent_id",
       "inquiries.assigned_agent_id",
+      "live_agent_sessions.assigned_agent_id",
       "properties.agent_id",
       "whatsapp_conversations.assigned_agent_id",
     ],
@@ -151,6 +152,11 @@ export const STAFF_OWNERSHIP_COLUMNS: readonly StaffOwnershipColumn[] = [
   { table: "crm_leads", column: "assigned_agent_id" },
   { table: "inquiries", column: "assigned_agent_id" },
   { table: "whatsapp_conversations", column: "assigned_agent_id" },
+  // Exists in the schema and in the LiveAgentSession type but is not written by
+  // any code path today, so it counts zero. Included because an
+  // ownership-shaped column absent from the handover is a gap waiting for the
+  // first person to wire it.
+  { table: "live_agent_sessions", column: "assigned_agent_id" },
 ] as const;
 
 /**
@@ -204,10 +210,11 @@ Expected: PASS — `# pass 4`, `# fail 0`
 If the `STAFF_HISTORICAL_COLUMNS.length === 12` assertion fails, that is the test doing its job. Recount the DISTINCT names with:
 
 ```bash
-grep -rn "REFERENCES staff_users" neon/migrations/*.sql | sed 's/.*: *//' | awk '{print $1}' | sort -u
+grep -rhoE "^\s*(ADD COLUMN IF NOT EXISTS\s+)?[a-z_]+\s+(UUID|uuid)\s+.*REFERENCES staff_users" neon/migrations/*.sql \
+  | sed -E 's/^\s*(ADD COLUMN IF NOT EXISTS\s+)?([a-z_]+).*/\2/' | sort -u
 ```
 
-That yields `agent_id` and `assigned_agent_id` (the two ownership names) plus the twelve historical ones. Correct the list to match the schema — do not just change the number.
+That yields `agent_id` and `assigned_agent_id` (the two ownership names) plus the twelve historical ones. Note a naive `awk '{print $1}'` mis-parses `ADD COLUMN IF NOT EXISTS` lines and silently swallows `agent_id` and `author_id` into a bogus `ADD` entry — and matching on column NAME is not enough anyway, since `assigned_agent_id` appears on five different tables. Always resolve each match back to its owning table. Correct the list to match the schema — do not just change the number.
 
 - [ ] **Step 5: Commit**
 
@@ -514,12 +521,14 @@ Append to `src/lib/neon/admin-data.types.ts`:
 ```typescript
 export type StaffAccessRole = "admin" | "manager" | "agent";
 
+/** One key per entry in STAFF_OWNERSHIP_COLUMNS, keyed by table name. */
 export type StaffOwnedCounts = {
   properties: number;
   crm_contacts: number;
   crm_leads: number;
   inquiries: number;
   whatsapp_conversations: number;
+  live_agent_sessions: number;
 };
 
 export type StaffAccessSummary = {
@@ -1332,6 +1341,10 @@ Add immediately before the form's closing `</form>` tag:
           <dt className="text-muted-foreground">WhatsApp 對話</dt>
           <dd className="tabular-nums">{access.owned.whatsapp_conversations}</dd>
         </div>
+        <div className="flex justify-between gap-2">
+          <dt className="text-muted-foreground">線上對話</dt>
+          <dd className="tabular-nums">{access.owned.live_agent_sessions}</dd>
+        </div>
       </dl>
       <div className="space-y-1.5">
         <Label htmlFor="successor">接手人</Label>
@@ -1394,6 +1407,7 @@ const accessSummary = {
     crm_leads: 12,
     inquiries: 1,
     whatsapp_conversations: 3,
+    live_agent_sessions: 0,
   },
   ownedTotal: 22,
 };
@@ -1866,7 +1880,7 @@ git commit -m "chore(staff): verify access management and grouped navigation"
 
 ## Notes for the implementer
 
-**Do not reassign historical columns.** `staff-ownership.ts` deliberately separates the five ownership columns from the twelve authorship column names. If you add a table, add it to the right list — `STAFF_HISTORICAL_COLUMNS` exists so the test can prove exclusion, not as documentation.
+**Do not reassign historical columns.** `staff-ownership.ts` deliberately separates the six ownership columns from the twelve authorship column names. If you add a table, add it to the right list — `STAFF_HISTORICAL_COLUMNS` exists so the test can prove exclusion, not as documentation.
 
 **Guards must be re-read server-side.** `isLastAdmin` and `otherAdminCount` come from the database at decision time. A client-supplied count is a TOCTOU hole: two admins demoting each other simultaneously could otherwise empty the admin set.
 

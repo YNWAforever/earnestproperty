@@ -87,7 +87,7 @@ e.g. `陳大文：+管理員 −經紀`. Profile-only saves are unaffected.
 ### Deactivation and reassignment
 
 Deactivating sets `active = false` **and** hands over everything the person
-owns. Five columns reference `staff_users` as current ownership:
+owns. Six columns reference `staff_users` as current ownership:
 
 | Table | Column |
 | --- | --- |
@@ -96,6 +96,13 @@ owns. Five columns reference `staff_users` as current ownership:
 | `crm_leads` | `assigned_agent_id` |
 | `inquiries` | `assigned_agent_id` |
 | `whatsapp_conversations` | `assigned_agent_id` |
+| `live_agent_sessions` | `assigned_agent_id` |
+
+`live_agent_sessions.assigned_agent_id` exists in the schema and in the
+`LiveAgentSession` type but is not written by any code path today, so it counts
+zero until the live-agent handoff starts assigning sessions. It is included
+anyway: a column that is ownership-shaped and absent from the handover is a gap
+waiting for the first person to wire it.
 
 `whatsapp_conversations` is the one most easily missed and the most damaging to
 miss: a departing agent's live customer threads would stay bound to a dormant
@@ -119,7 +126,7 @@ answering them.
 3. If the total is greater than zero, a successor must be chosen from active
    staff, excluding the person being deactivated. If the total is zero the
    picker is skipped and it is a plain confirmation.
-4. Confirming runs all five `UPDATE`s plus `active = false` in a single
+4. Confirming runs all six `UPDATE`s plus `active = false` in a single
    `transactionRows` call, so a partial handover cannot occur.
 5. `writeAudit(actor.staffId, "staff.deactivate", "staff_user", id,
    { successorStaffId, counts })`.
@@ -139,7 +146,7 @@ Three new functions in `src/lib/neon/admin-data.server.ts`, wrapped by
 ```
 fetchStaffAccessSummary({ staffId })
   -> { roles, active, isSelf, isLastAdmin,
-       owned: { properties, contacts, leads, inquiries, conversations } }
+       owned: { one count per ownership table } }
 
 updateStaffRoles({ staffId, roles })
   -> { ok: true } | throws Response 403 / 400
@@ -199,7 +206,7 @@ aggregate `npm test`.
 | Area | Where | What |
 | --- | --- | --- |
 | Role guard rules | `src/lib/neon/staff-security-policy.test.mjs` | last-admin protection, own-admin removal blocked, own-manager removal allowed, manager denied entirely |
-| Reassignment coverage | new contract test | the transaction touches **all five** ownership columns **and none** of the historical ones — the assertion most likely to catch a future regression |
+| Reassignment coverage | new contract test | the transaction touches **all six** ownership columns **and none** of the historical ones — the assertion most likely to catch a future regression |
 | Transaction atomicity | same contract test | all six statements go through one `transactionRows` call, not sequential `queryRows` |
 | Server gating | `src/routes/admin.routes.test.mjs` | all three server fns require `admin` |
 | 權限 section | `src/components/admin/AgentProfileForm.test.tsx` | section hidden for managers; role change opens the confirm; profile-only save does not |
@@ -215,3 +222,10 @@ person rather than a work item, so reassigning contacts alongside leads is
 arguably wrong. It is included because excluding it would make a departing
 agent's contacts invisible under `agentScope()`. Reviewed and accepted as part
 of this design; revisit if the agency's mental model differs.
+
+## Correction
+
+An earlier revision of this spec listed **five** ownership columns. Spec review
+during implementation found a sixth, `live_agent_sessions.assigned_agent_id`;
+the original enumeration collapsed migration filenames and mistakenly attributed
+every match to one file.
