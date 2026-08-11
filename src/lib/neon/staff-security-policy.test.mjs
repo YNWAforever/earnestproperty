@@ -252,6 +252,18 @@ test("the last admin role in the system cannot be removed", () => {
     { allowed: true },
   );
 
+  // A malformed otherAdminCount (e.g. Number() on a non-numeric row) must
+  // fail closed like a count of 0, not silently skip the guard.
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      currentRoles: ["admin"],
+      nextRoles: ["manager"],
+      otherAdminCount: NaN,
+    }),
+    { allowed: false, reason: "last-admin" },
+  );
+
   // Same priority rule: even as the last admin, removing your OWN admin role
   // always reads as self-admin-removal, never last-admin -- another admin
   // could never do this for you either, since self-removal is blocked
@@ -292,6 +304,12 @@ test("deactivation requires admin, a different person, and a successor when they
     { allowed: false, reason: "last-admin" },
   );
 
+  // The last-admin guard requires the TARGET to hold the admin role --
+  // otherAdminCount alone must never be sufficient reason to block.
+  assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, otherAdminCount: 0 }), {
+    allowed: true,
+  });
+
   // Same priority rule: naming a successor would not unblock this -- the
   // system would still lose its only admin -- so last-admin outranks
   // successor-required even when both conditions hold at once.
@@ -307,6 +325,13 @@ test("deactivation requires admin, a different person, and a successor when they
   );
 
   assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, ownedTotal: 3 }), {
+    allowed: false,
+    reason: "successor-required",
+  });
+
+  // A malformed ownedTotal must fail closed too -- assume work is owned
+  // rather than silently allowing deactivation without a successor.
+  assert.deepEqual(decideStaffDeactivation({ ...deactivationBase, ownedTotal: NaN }), {
     allowed: false,
     reason: "successor-required",
   });
