@@ -86,6 +86,65 @@ export async function saveAdminAgentProfile(options: { data: AdminAgentProfileMu
   );
 }
 
+const fetchStaffAccessSummaryServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { staffId: string }) =>
+    z.object({ staffId: z.string().trim().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchStaffAccessSummary(data, staff);
+  });
+
+export async function fetchStaffAccessSummary(options: { data: { staffId: string } }) {
+  return callStaffServerFn(async () =>
+    fetchStaffAccessSummaryServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const updateStaffRolesServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { staffId: string; roles: string[] }) =>
+    z
+      .object({
+        staffId: z.string().trim().uuid(),
+        roles: z.array(z.enum(["admin", "manager", "agent"])).max(3),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.updateStaffRoles(data, staff);
+  });
+
+export async function updateStaffRoles(options: {
+  data: { staffId: string; roles: ("admin" | "manager" | "agent")[] };
+}) {
+  return callStaffServerFn(async () => updateStaffRolesServer(await withStaffAuthHeaders(options)));
+}
+
+const setStaffActiveServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { staffId: string; active: boolean; reassignToStaffId?: string | null }) =>
+    z
+      .object({
+        staffId: z.string().trim().uuid(),
+        active: z.boolean(),
+        reassignToStaffId: z.string().trim().uuid().nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.setStaffActive(data, staff);
+  });
+
+export async function setStaffActive(options: {
+  data: { staffId: string; active: boolean; reassignToStaffId?: string | null };
+}) {
+  return callStaffServerFn(async () => setStaffActiveServer(await withStaffAuthHeaders(options)));
+}
+
 const STALE_SERVER_FN_RELOAD_KEY = "earnest-admin-stale-server-fn-reloaded";
 
 function errorMessage(error: unknown) {
