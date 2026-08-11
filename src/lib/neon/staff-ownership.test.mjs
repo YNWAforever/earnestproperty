@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -75,37 +76,109 @@ test("count SQL pairs each table with its own column, not a copy-pasted one", ()
   }
 });
 
+const DEFAULT_MIGRATIONS_DIR = join(import.meta.dirname, "..", "..", "..", "neon", "migrations");
+
+/**
+ * Strip `--` line comments while staying quote-aware, so a comment marker
+ * inside a string literal doesn't truncate real SQL and a real `--` outside
+ * one does get removed. Mirrors the comment/quote/dollar-tag handling in
+ * `splitSqlStatements` (scripts/neon/apply-migrations.mjs) rather than
+ * reusing it directly: that function is unexported and its module has
+ * top-level side effects (reads .env files, throws without DATABASE_URL,
+ * opens a real Neon connection) that make it unsafe to import into a unit
+ * test. Keeping this repo to one comment-handling algorithm, mirrored here
+ * deliberately, is the point -- not a shortcut around it.
+ *
+ * Unlike `splitSqlStatements`, this returns text (not statements) with line
+ * structure preserved, since the caller below walks the file line by line.
+ */
+function stripSqlComments(text) {
+  let out = "";
+  let singleQuoted = false;
+  let doubleQuoted = false;
+  let dollarTag = null;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (!singleQuoted && !doubleQuoted && !dollarTag && char === "-" && next === "-") {
+      const end = text.indexOf("\n", index + 2);
+      if (end === -1) break; // comment runs to EOF with no trailing newline
+      index = end - 1; // loop's `index += 1` lands on the newline itself, preserving it
+      continue;
+    }
+
+    if (!doubleQuoted && !dollarTag && char === "'" && text[index - 1] !== "\\") {
+      singleQuoted = !singleQuoted;
+      out += char;
+      continue;
+    }
+
+    if (!singleQuoted && !dollarTag && char === '"') {
+      doubleQuoted = !doubleQuoted;
+      out += char;
+      continue;
+    }
+
+    if (!singleQuoted && !doubleQuoted && char === "$") {
+      const match = text.slice(index).match(/^\$[A-Za-z0-9_]*\$/);
+      if (match) {
+        const tag = match[0];
+        if (!dollarTag) {
+          dollarTag = tag;
+        } else if (dollarTag === tag) {
+          dollarTag = null;
+        }
+        out += tag;
+        index += tag.length - 1;
+        continue;
+      }
+    }
+
+    out += char;
+  }
+
+  return out;
+}
+
 /**
  * Ground truth: every `REFERENCES staff_users` column actually declared in
- * neon/migrations/*.sql, resolved back to its owning table by walking to the
- * nearest preceding CREATE TABLE / ALTER TABLE statement in the same file.
+ * `migrationsDir` (defaults to neon/migrations/*.sql), resolved back to its
+ * owning table by walking to the nearest preceding CREATE TABLE / ALTER
+ * TABLE statement in the same file.
  *
  * This is the same manual method used in review to catch the
  * `live_agent_sessions.assigned_agent_id` gap -- automated here so the next
- * new FK doesn't depend on a human remembering to re-run it.
+ * new FK doesn't depend on a human remembering to re-run it. The
+ * `migrationsDir` parameter exists so the parser itself is testable against
+ * fixture SQL, independent of whatever the real schema currently contains.
  */
-function staffForeignKeysInMigrations() {
-  const migrationsDir = join(import.meta.dirname, "..", "..", "..", "neon", "migrations");
+function staffForeignKeysInMigrations(migrationsDir = DEFAULT_MIGRATIONS_DIR) {
   const files = readdirSync(migrationsDir)
     .filter((name) => name.endsWith(".sql"))
     .sort();
 
   const refs = [];
   for (const file of files) {
-    const lines = readFileSync(join(migrationsDir, file), "utf8").split("\n");
+    const text = stripSqlComments(readFileSync(join(migrationsDir, file), "utf8"));
+    const lines = text.split("\n");
     let currentTable = null;
     for (const rawLine of lines) {
       const line = rawLine.trim();
+
+      // Both regexes only anchor the table-name token at the start of the
+      // line -- neither `continue`s early, so a table declared and
+      // referenced on the very same line (e.g. a one-line
+      // `ALTER TABLE t ADD COLUMN c UUID REFERENCES staff_users(id)`) still
+      // falls through to the REFERENCES check below instead of being
+      // silently dropped.
       const createMatch = line.match(/^CREATE TABLE(?:\s+IF NOT EXISTS)?\s+([a-zA-Z0-9_]+)/i);
+      if (createMatch) currentTable = createMatch[1];
+
       const alterMatch = line.match(/^ALTER TABLE\s+([a-zA-Z0-9_]+)/i);
-      if (createMatch) {
-        currentTable = createMatch[1];
-        continue;
-      }
-      if (alterMatch) {
-        currentTable = alterMatch[1];
-        continue;
-      }
+      if (alterMatch) currentTable = alterMatch[1];
+
       if (!line.includes("REFERENCES staff_users")) continue;
 
       // The column name is whatever token sits right before the UUID type.
@@ -126,6 +199,46 @@ function staffForeignKeysInMigrations() {
   }
   return refs;
 }
+
+test("staffForeignKeysInMigrations resolves a same-line ALTER TABLE ADD COLUMN and ignores comments", () => {
+  const fixtureDir = mkdtempSync(join(tmpdir(), "staff-ownership-fixture-"));
+  try {
+    writeFileSync(
+      join(fixtureDir, "0001_fixture.sql"),
+      [
+        "CREATE TABLE IF NOT EXISTS widgets (",
+        "  id UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+        ");",
+        "",
+        "-- Bug 1 regression: table name and REFERENCES staff_users on the very",
+        "-- same ALTER TABLE ... ADD COLUMN line, not on separate lines.",
+        "ALTER TABLE widgets ADD COLUMN owner_id UUID REFERENCES staff_users(id) ON DELETE SET NULL;",
+        "",
+        "CREATE TABLE IF NOT EXISTS gadgets (",
+        "  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),",
+        "  -- Bug 2 regression: a commented-out FK must not produce a phantom ref.",
+        "  -- legacy_owner_id UUID REFERENCES staff_users(id) ON DELETE SET NULL,",
+        "  owner_id UUID REFERENCES staff_users(id) ON DELETE SET NULL -- trailing comment says staff_users too",
+        ");",
+        "",
+      ].join("\n"),
+    );
+
+    const refs = staffForeignKeysInMigrations(fixtureDir);
+
+    assert.deepEqual(
+      refs.map(({ table, column }) => `${table}.${column}`),
+      ["widgets.owner_id", "gadgets.owner_id"],
+      "expected exactly the two real references, in file order, with no phantom or dropped entries",
+    );
+    assert.ok(
+      !refs.some((ref) => ref.column === "legacy_owner_id"),
+      "a commented-out REFERENCES staff_users line must never be treated as a real reference",
+    );
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
+});
 
 test("every REFERENCES staff_users column in the schema is classified as ownership or history", () => {
   const schemaRefs = staffForeignKeysInMigrations();

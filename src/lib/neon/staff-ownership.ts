@@ -34,7 +34,7 @@ export const STAFF_OWNERSHIP_COLUMNS = [
   // because an ownership-shaped column absent from the handover is a gap
   // waiting for the first person to wire it.
   { table: "live_agent_sessions", column: "assigned_agent_id" },
-] as const;
+] as const satisfies readonly StaffOwnershipColumn[];
 
 /**
  * Authorship and audit. These never move. Listed so tests can assert exclusion.
