@@ -203,6 +203,31 @@ test("an allowlisted account cannot be demoted or deactivated by anyone", () => 
     allowed: false,
     reason: "protected-account",
   });
+
+  // Compound-failure priority: when two guards could both fire, the reason
+  // returned is whichever one no follow-up action could resolve -- never one
+  // that would look fixable but isn't. Protection blocks every actor, not
+  // just this one, so it outranks the self-only guards below even when the
+  // target is also the actor.
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      targetStaffId: roleChangeBase.actorStaffId,
+      currentRoles: ["admin"],
+      nextRoles: ["manager"],
+      targetIsProtected: true,
+    }),
+    { allowed: false, reason: "protected-account" },
+  );
+
+  assert.deepEqual(
+    decideStaffDeactivation({
+      ...deactivationBase,
+      targetStaffId: deactivationBase.actorStaffId,
+      targetIsProtected: true,
+    }),
+    { allowed: false, reason: "protected-account" },
+  );
 });
 
 test("the last admin role in the system cannot be removed", () => {
@@ -226,6 +251,21 @@ test("the last admin role in the system cannot be removed", () => {
     }),
     { allowed: true },
   );
+
+  // Same priority rule: even as the last admin, removing your OWN admin role
+  // always reads as self-admin-removal, never last-admin -- another admin
+  // could never do this for you either, since self-removal is blocked
+  // unconditionally, so "last-admin" would misleadingly imply a fix exists.
+  assert.deepEqual(
+    decideStaffRoleChange({
+      ...roleChangeBase,
+      targetStaffId: roleChangeBase.actorStaffId,
+      currentRoles: ["admin"],
+      nextRoles: [],
+      otherAdminCount: 0,
+    }),
+    { allowed: false, reason: "self-admin-removal" },
+  );
 });
 
 test("deactivation requires admin, a different person, and a successor when they own work", () => {
@@ -248,6 +288,20 @@ test("deactivation requires admin, a different person, and a successor when they
       ...deactivationBase,
       targetRoles: ["admin"],
       otherAdminCount: 0,
+    }),
+    { allowed: false, reason: "last-admin" },
+  );
+
+  // Same priority rule: naming a successor would not unblock this -- the
+  // system would still lose its only admin -- so last-admin outranks
+  // successor-required even when both conditions hold at once.
+  assert.deepEqual(
+    decideStaffDeactivation({
+      ...deactivationBase,
+      targetRoles: ["admin"],
+      otherAdminCount: 0,
+      ownedTotal: 3,
+      reassignToStaffId: null,
     }),
     { allowed: false, reason: "last-admin" },
   );
