@@ -173,6 +173,31 @@ const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent
  * whole transaction when this fires, so nothing else sent in the same
  * transactionRows() call -- an earlier DELETE, a later INSERT, an ownership
  * handover -- is left half-applied.
+ *
+ * The guard is deliberately NOT `CASE WHEN <safe> THEN true ELSE (1/0=0) END`
+ * ANDed alongside the row-identifying predicate: verified empirically (throwaway
+ * Postgres 17 container, EXPLAIN + actual execution under both the normal
+ * planner and a forced sequential scan) that this obvious-looking form is
+ * broken two different ways --
+ *   1. `1/0` is a pure-literal subexpression. Postgres's constant folder
+ *      simplifies it eagerly during planning, INSIDE the CASE branch,
+ *      independent of whether that branch would ever be selected at runtime --
+ *      it errors even during a plain EXPLAIN, on rows that don't need the
+ *      guard at all, including the intended-safe path.
+ *   2. Even once the divisor is replaced with something non-constant (so it
+ *      can't be folded), if the guard predicate references only the bind
+ *      parameter and not a column of the row being scanned, Postgres treats it
+ *      as row-independent and hoists it into a one-time InitPlan/filter that
+ *      runs once, unconditionally -- before the scan even determines whether a
+ *      matching row exists. That fires the guard even when zero rows would
+ *      ever match the DELETE/UPDATE at all.
+ * The fix verified to behave correctly in every tested case (safe path, zero
+ * rows to touch, real last-admin block, real safe removal, forced seq scan):
+ * make the risky division's divisor a CASE whose WHEN condition redundantly
+ * re-tests the row's own column (e.g. `target.role = 'admin'`), so Postgres
+ * cannot fold it at plan time and cannot treat it as independent of the
+ * specific row being examined -- it is only ever evaluated, and can only ever
+ * fire, for the one row (if any) that both statements below actually target.
  */
 function isZeroAdminGuardTrip(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
@@ -189,13 +214,18 @@ function isZeroAdminGuardTrip(error: unknown): boolean {
  * Committed isolation, each transaction's guard can see the other admin as
  * still "active" (neither has committed yet), so both pass and both commit --
  * this is the classic write-skew anomaly Postgres's Serializable mode exists
- * to catch. It catches it by aborting one side with 40001, which we surface
- * as a retryable conflict rather than letting the raw driver error escape.
+ * to catch. It catches it by aborting one side with 40001. This can also fire
+ * for a conflict that has nothing to do with the admin invariant (e.g. two
+ * concurrent ownership reassignments), so the message we surface for it stays
+ * conflict-neutral rather than claiming it was specifically an admin change.
  */
 function isSerializationConflict(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   return String((error as { code?: unknown }).code ?? "") === "40001";
 }
+
+const CONCURRENT_STAFF_ACCESS_CONFLICT_MESSAGE =
+  "This change conflicted with another concurrent staff-access update. Please retry.";
 
 /**
  * Replace a staff member's role set.
@@ -220,9 +250,23 @@ function isSerializationConflict(error: unknown): boolean {
  * A live re-check alone is not enough: two admins demoting each other at the
  * same instant can each read the other as still active before either has
  * committed (classic write skew), so the transaction also runs at
- * Serializable isolation whenever this write drops admin -- see
+ * Serializable isolation whenever this write can drop admin -- see
  * isSerializationConflict -- which is what makes Postgres itself refuse the
  * anomaly rather than just narrowing the window.
+ *
+ * Whether the guarded DELETE is even included is decided by whether `admin`
+ * is absent from the REQUESTED next role set (`nextRoles`), never by what the
+ * `summary` snapshot said the target currently holds. A snapshot-based gate
+ * is unsound in one direction: if the snapshot said "not admin" but a
+ * concurrent grant lands before this write, omitting the guarded DELETE would
+ * let that grant survive silently, while writeAudit and the return value
+ * would still claim the requested (admin-less) role set -- a false audit
+ * record on a privilege change. Including it unconditionally whenever
+ * `nextRoles` excludes admin is safe and self-correcting either way: the
+ * statement's own row-identifying predicate means it only ever matches (and
+ * therefore only ever evaluates its guard) against the target's actual
+ * 'admin' row, if one exists at write time -- see isZeroAdminGuardTrip for
+ * how that is verified, not assumed.
  */
 export async function updateStaffRoles(
   input: { staffId: string; roles: StaffAccessRole[] },
@@ -261,23 +305,27 @@ export async function updateStaffRoles(
     throw new Response(decision.reason, { status });
   }
 
-  // Whether this write drops 'admin' from the role set -- the only change
-  // that can ever reduce the admin count. Mirrors losesAdmin() in
-  // staff-security-policy.ts; only this case needs the transactional guard
-  // below.
-  const losingAdmin = summary.roles.includes("admin") && !nextRoles.includes("admin");
+  // Whether the write COULD drop 'admin' -- decided from the request, not the
+  // (possibly stale) summary snapshot. See the doc comment above.
+  const dropsAdmin = !nextRoles.includes("admin");
 
   // Delete-then-insert inside one transaction: a role set is replaced whole, and
   // a half-applied change could leave someone with no roles at all.
   //
   // Non-admin roles are always safe to drop outright -- dropping 'manager' or
-  // 'agent' carries no lockout risk. The admin role is only touched when
-  // losingAdmin is true, and even then the DELETE only matches if some OTHER
-  // active admin exists at that moment (EXISTS below, re-evaluated live, not
-  // the otherAdminRows snapshot read above). CASE, not AND/OR, guards the
-  // `1 / 0`: Postgres only guarantees short-circuit evaluation for CASE
-  // branches, not for the operands of AND/OR, so the division is written as
-  // the CASE's ELSE so it is provably never evaluated on the safe path.
+  // 'agent' carries no lockout risk. The admin row is only ever touched by the
+  // second statement, and only when dropsAdmin is true; that statement's own
+  // WHERE clause is what makes it a safe no-op when the target turns out not
+  // to hold admin at all.
+  //
+  // The guard's shape is load-bearing, not stylistic -- see isZeroAdminGuardTrip
+  // for what was verified and why the obvious `AND (CASE WHEN <safe> THEN
+  // true ELSE (1/0=0) END)` form is broken. Concretely: the divisor is a CASE
+  // (not a bare literal, so it cannot be constant-folded at plan time), and
+  // that CASE's WHEN redundantly re-tests `target.role = 'admin'` -- a column
+  // of the scanned row, not just the bind parameter -- so Postgres cannot
+  // treat the guard as row-independent and hoist it ahead of the scan. Both
+  // properties were required; either alone still misfired in testing.
   try {
     await transactionRows(
       [
@@ -285,25 +333,27 @@ export async function updateStaffRoles(
           statement: `DELETE FROM staff_roles WHERE staff_user_id = $1::uuid AND role <> 'admin'::staff_role`,
           params: [input.staffId],
         },
-        ...(losingAdmin
+        ...(dropsAdmin
           ? [
               {
                 statement: `
-                DELETE FROM staff_roles
-                WHERE staff_user_id = $1::uuid
-                  AND role = 'admin'::staff_role
+                DELETE FROM staff_roles AS target
+                WHERE target.staff_user_id = $1::uuid
+                  AND target.role = 'admin'::staff_role
                   AND (
-                    CASE
-                      WHEN EXISTS (
-                        SELECT 1
-                        FROM staff_roles other
-                        JOIN staff_users os ON os.id = other.staff_user_id
-                        WHERE other.role = 'admin'::staff_role
-                          AND other.staff_user_id <> $1::uuid
-                          AND os.active = true
-                      ) THEN true
-                      ELSE (1 / 0 = 0)
-                    END
+                    1 / (
+                      CASE
+                        WHEN target.role = 'admin'::staff_role AND EXISTS (
+                          SELECT 1
+                          FROM staff_roles other
+                          JOIN staff_users os ON os.id = other.staff_user_id
+                          WHERE other.role = 'admin'::staff_role
+                            AND other.staff_user_id <> target.staff_user_id
+                            AND os.active = true
+                        ) THEN 1
+                        ELSE 0
+                      END
+                    ) = 1
                   )
               `,
                 params: [input.staffId] as unknown[],
@@ -316,28 +366,40 @@ export async function updateStaffRoles(
           params: [input.staffId, role] as unknown[],
         })),
       ],
-      // Only the admin-losing path needs Serializable: it is the only case
+      // Only the admin-dropping path needs Serializable: it is the only case
       // where this transaction's guard reads a row it does not write while
       // depending on another transaction not writing it concurrently.
-      losingAdmin ? { isolationLevel: "Serializable" } : {},
+      dropsAdmin ? { isolationLevel: "Serializable" } : {},
     );
   } catch (error) {
-    if (losingAdmin && isZeroAdminGuardTrip(error)) {
+    if (dropsAdmin && isZeroAdminGuardTrip(error)) {
       throw new Response("last-admin", { status: 400 });
     }
-    if (losingAdmin && isSerializationConflict(error)) {
-      throw new Response("Another admin change happened at the same time. Please retry.", {
-        status: 409,
-      });
+    if (dropsAdmin && isSerializationConflict(error)) {
+      throw new Response(CONCURRENT_STAFF_ACCESS_CONFLICT_MESSAGE, { status: 409 });
     }
     throw error;
   }
 
+  // Re-read rather than trust nextRoles: dropsAdmin's own no-op case above
+  // means the write we just ran may not have applied the full requested set
+  // (e.g. a concurrent grant of admin that arrived after our summary read but
+  // survived the guard). The audit trail and the caller both need what the
+  // database actually holds now, not what this call intended to write.
+  const rolesAfterRows = await queryRows(
+    `SELECT COALESCE(array_to_json(array_agg(role)), '[]'::json) AS roles
+       FROM staff_roles WHERE staff_user_id = $1::uuid`,
+    [input.staffId],
+  );
+  const rolesAfter = (Array.isArray(rolesAfterRows[0]?.roles) ? rolesAfterRows[0].roles : []).map(
+    String,
+  ) as StaffAccessRole[];
+
   await writeAudit(actor.staffId, "staff.roles.update", "staff_user", input.staffId, {
     before: summary.roles,
-    after: nextRoles,
+    after: rolesAfter,
   });
-  return { ok: true as const, roles: nextRoles };
+  return { ok: true as const, roles: rolesAfter };
 }
 
 /**
@@ -425,46 +487,52 @@ export async function setStaffActive(
     }
   }
 
-  // Same CASE-guarded, forced-error technique as updateStaffRoles' admin-role
-  // DELETE, and for the same reason: a plain `WHERE ... AND EXISTS(...)` would
-  // just match zero rows on the safe-but-blocked path, leaving the
-  // reassignment statements above -- sent in the same transactionRows() call
-  // -- to commit anyway. Forcing a real Postgres error aborts everything sent
-  // in this call together.
+  // Same guarded, forced-error technique as updateStaffRoles' admin-role
+  // DELETE -- see isZeroAdminGuardTrip for what was verified and why. This
+  // UPDATE always targets the row (`target.id = $1`, not `AND role =
+  // 'admin'`), so it is not naturally a no-op when the target turns out not
+  // to be admin the way the DELETE's `role = 'admin'` predicate is; the first
+  // WHEN branch below (`NOT EXISTS admin role for target`) is what makes the
+  // non-admin case safe instead. The risky division's divisor is a CASE that
+  // redundantly re-tests `target.id = $1::uuid` in every branch -- a column
+  // of the scanned row, not just the bind parameter -- for the same reason as
+  // updateStaffRoles: without that, Postgres can (and in testing, did) treat
+  // the guard as independent of which row is being examined and evaluate it
+  // before the scan even determines there is a matching row at all.
   //
-  // Unlike updateStaffRoles' DELETE, this UPDATE always targets the row
-  // (`WHERE id = $1`, not `AND role = 'admin'`), so it is not naturally a
-  // no-op when the target turns out not to be admin. Gating Serializable on
-  // summary.roles (read a moment earlier) would reopen exactly the staleness
-  // gap this function exists to close -- a concurrent grant of admin to this
-  // target, between that read and this write, would run the deactivation at
-  // plain Read Committed. So Serializable is unconditional here, for every
-  // deactivation, not just ones summary.roles already knew were admins.
+  // Gating Serializable on summary.roles (read a moment earlier) would reopen
+  // exactly the staleness gap this function exists to close -- a concurrent
+  // grant of admin to this target, between that read and this write, would
+  // run the deactivation at plain Read Committed. So Serializable is
+  // unconditional here, for every deactivation, not just ones summary.roles
+  // already knew were admins.
   try {
     await transactionRows(
       [
         ...(reassignToStaffId ? staffReassignStatements(input.staffId, reassignToStaffId) : []),
         {
           statement: `
-          UPDATE staff_users
+          UPDATE staff_users AS target
           SET active = false, updated_at = now()
-          WHERE id = $1::uuid
+          WHERE target.id = $1::uuid
             AND (
-              CASE
-                WHEN NOT EXISTS (
-                  SELECT 1 FROM staff_roles r
-                  WHERE r.staff_user_id = $1::uuid AND r.role = 'admin'::staff_role
-                ) THEN true
-                WHEN EXISTS (
-                  SELECT 1
-                  FROM staff_roles other
-                  JOIN staff_users os ON os.id = other.staff_user_id
-                  WHERE other.role = 'admin'::staff_role
-                    AND other.staff_user_id <> $1::uuid
-                    AND os.active = true
-                ) THEN true
-                ELSE (1 / 0 = 0)
-              END
+              1 / (
+                CASE
+                  WHEN target.id = $1::uuid AND NOT EXISTS (
+                    SELECT 1 FROM staff_roles r
+                    WHERE r.staff_user_id = target.id AND r.role = 'admin'::staff_role
+                  ) THEN 1
+                  WHEN target.id = $1::uuid AND EXISTS (
+                    SELECT 1
+                    FROM staff_roles other
+                    JOIN staff_users os ON os.id = other.staff_user_id
+                    WHERE other.role = 'admin'::staff_role
+                      AND other.staff_user_id <> target.id
+                      AND os.active = true
+                  ) THEN 1
+                  ELSE 0
+                END
+              ) = 1
             )
         `,
           params: [input.staffId],
@@ -477,9 +545,7 @@ export async function setStaffActive(
       throw new Response("last-admin", { status: 400 });
     }
     if (isSerializationConflict(error)) {
-      throw new Response("Another admin change happened at the same time. Please retry.", {
-        status: 409,
-      });
+      throw new Response(CONCURRENT_STAFF_ACCESS_CONFLICT_MESSAGE, { status: 409 });
     }
     throw error;
   }
