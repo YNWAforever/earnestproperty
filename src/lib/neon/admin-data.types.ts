@@ -472,3 +472,30 @@ export type CommandCenterData = {
   generated_at: string;
   woztell_enabled: boolean;
 };
+
+export type StaffAccessRole = "admin" | "manager" | "agent";
+
+/** One key per entry in STAFF_OWNERSHIP_COLUMNS, keyed by table name. */
+export type StaffOwnedCounts = {
+  properties: number;
+  crm_contacts: number;
+  crm_leads: number;
+  inquiries: number;
+  whatsapp_conversations: number;
+  live_agent_sessions: number;
+};
+
+export type StaffAccessSummary = {
+  staffId: string;
+  roles: StaffAccessRole[];
+  active: boolean;
+  /** True when the viewer is looking at their own record. */
+  isSelf: boolean;
+  /** True when removing this person's admin would leave the system with none. */
+  isLastAdmin: boolean;
+  /** True when this email is in ADMIN_BOOTSTRAP_EMAILS -- an owner account that
+   * cannot be demoted or deactivated through the UI by anyone. */
+  isProtected: boolean;
+  owned: StaffOwnedCounts;
+  ownedTotal: number;
+};
