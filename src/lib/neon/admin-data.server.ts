@@ -45,6 +45,9 @@ import type {
   CommandCenterData,
   CommandCenterKpis,
   CommandCenterRow,
+  StaffAccessRole,
+  StaffAccessSummary,
+  StaffOwnedCounts,
 } from "./admin-data.types";
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
@@ -97,6 +100,67 @@ export const BULK_LEAD_UPDATE_LIMIT = 200;
 export function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
+}
+
+/**
+ * Roles, active flag and per-table owned counts for one staff member.
+ *
+ * `isLastAdmin` is computed here rather than on the client: it decides whether
+ * a privilege change is allowed, so it must come from the database at decision
+ * time.
+ */
+export async function fetchStaffAccessSummary(
+  input: { staffId: string },
+  actor: StaffAccess,
+): Promise<StaffAccessSummary> {
+  const { STAFF_OWNERSHIP_COLUMNS, staffOwnershipCountSql } = await import("./staff-ownership");
+
+  const { isProtectedStaffEmail } = await import("./auth.server");
+
+  const roleRows = await queryRows(
+    `SELECT s.active,
+            s.email,
+            COALESCE(
+              array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)),
+              '[]'::json
+            ) AS roles,
+            (
+              SELECT count(*)::int
+              FROM staff_roles other
+              JOIN staff_users os ON os.id = other.staff_user_id
+              WHERE other.role = 'admin'
+                AND other.staff_user_id <> $1::uuid
+                AND os.active = true
+            ) AS other_admin_count
+       FROM staff_users s
+       LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+      WHERE s.id = $1::uuid
+      GROUP BY s.id`,
+    [input.staffId],
+  );
+  const row = roleRows[0];
+  if (!row) throw new Response("Staff member not found.", { status: 404 });
+
+  const roles = (Array.isArray(row.roles) ? row.roles : []).map(String) as StaffAccessRole[];
+  const otherAdminCount = Number(row.other_admin_count ?? 0);
+
+  const count = staffOwnershipCountSql(input.staffId);
+  const countRows = await queryRows(count.statement, count.params);
+  const countRow = countRows[0] ?? {};
+  const owned = Object.fromEntries(
+    STAFF_OWNERSHIP_COLUMNS.map(({ table }) => [table, Number(countRow[table] ?? 0)]),
+  ) as StaffOwnedCounts;
+
+  return {
+    staffId: input.staffId,
+    roles,
+    active: row.active === true,
+    isSelf: actor.staffId === input.staffId,
+    isLastAdmin: roles.includes("admin") && otherAdminCount < 1,
+    isProtected: isProtectedStaffEmail(stringOrNull(row.email)),
+    owned,
+    ownedTotal: Object.values(owned).reduce((total, value) => total + value, 0),
+  };
 }
 
 function normalizeAgentPublicSlug(value: string | null) {
