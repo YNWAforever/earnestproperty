@@ -10,6 +10,7 @@ import {
 import { SITE_URL } from "@/content/seo";
 import { fetchCorridorInventoryForAliases, type CorridorInventory } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
+import { jsonLdScript } from "@/lib/schema";
 
 type HubLoaderData = {
   inventories: Record<string, CorridorInventory>;
@@ -133,12 +134,12 @@ function CastlePeakRoadHubPage() {
     <div className="bg-background">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(breadcrumbJsonLd) }}
       />
       {faqs.length > 0 && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(faqJsonLd) }}
         />
       )}
 

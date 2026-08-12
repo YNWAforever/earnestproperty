@@ -309,6 +309,13 @@ export type AdminConversationDetail = AdminConversationRow & {
   assigned_agent_id: string | null;
   woztell_member_id: string | null;
   messages: AdminConversationMessageRow[];
+  /**
+   * Server-computed: whether the viewer may clear this contact's WhatsApp
+   * opt-out (admin/manager only). Computed here rather than from client-side
+   * roles for the same reason admin.operations.tsx reads health.capabilities --
+   * the client never sees the role list, and the server fn enforces it again.
+   */
+  can_clear_opt_out: boolean;
 };
 
 export type AdminConversationUpdateInput = {
@@ -464,4 +471,31 @@ export type CommandCenterData = {
   kpis: CommandCenterKpis;
   generated_at: string;
   woztell_enabled: boolean;
+};
+
+export type StaffAccessRole = "admin" | "manager" | "agent";
+
+/** One key per entry in STAFF_OWNERSHIP_COLUMNS, keyed by table name. */
+export type StaffOwnedCounts = {
+  properties: number;
+  crm_contacts: number;
+  crm_leads: number;
+  inquiries: number;
+  whatsapp_conversations: number;
+  live_agent_sessions: number;
+};
+
+export type StaffAccessSummary = {
+  staffId: string;
+  roles: StaffAccessRole[];
+  active: boolean;
+  /** True when the viewer is looking at their own record. */
+  isSelf: boolean;
+  /** True when removing this person's admin would leave the system with none. */
+  isLastAdmin: boolean;
+  /** True when this email is in ADMIN_BOOTSTRAP_EMAILS -- an owner account that
+   * cannot be demoted or deactivated through the UI by anyone. */
+  isProtected: boolean;
+  owned: StaffOwnedCounts;
+  ownedTotal: number;
 };

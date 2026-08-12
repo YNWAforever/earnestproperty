@@ -4,7 +4,7 @@ import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { canonicalLink, SITE_URL } from "@/content/seo";
-import { itemListSchema } from "@/lib/schema";
+import { itemListSchema, jsonLdScript } from "@/lib/schema";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
@@ -46,7 +46,7 @@ function AgentsPage() {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({ "@context": "https://schema.org", ...listSchema }),
+            __html: jsonLdScript({ "@context": "https://schema.org", ...listSchema }),
           }}
         />
       ) : null}

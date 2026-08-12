@@ -16,7 +16,7 @@ import {
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
-import { itemListSchema } from "@/lib/schema";
+import { itemListSchema, jsonLdScript } from "@/lib/schema";
 
 const PAGE_SIZE = 12;
 
@@ -119,7 +119,7 @@ function ListingsPage() {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({ "@context": "https://schema.org", ...listSchema }),
+            __html: jsonLdScript({ "@context": "https://schema.org", ...listSchema }),
           }}
         />
       ) : null}

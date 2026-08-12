@@ -41,6 +41,26 @@ export const Route = createFileRoute("/api/mls-sync")({
         // deactivate listings that disappeared from the source. Deactivation
         // compares against every discovered legacy id, not just the fetched subset.
         const result = await importer.sync({ maxDetails: 200, fullSync: true });
+
+        // A refused sweep is a failure, not a quiet zero. Discovery degrades
+        // silently (pager markup changes, page caps), and the DB layer blocks
+        // the sweep rather than deactivating inventory it simply never saw --
+        // but if this still answered ok:true, nobody would ever look. 5xx so
+        // the cron run is visibly red in Vercel.
+        if (result.deactivationBlocked) {
+          return Response.json(
+            {
+              ok: false,
+              error: result.deactivationBlocked,
+              action:
+                "Discovery covered too little of the live inventory to trust a deactivation sweep. " +
+                "Check the source pager, then re-run once discovery looks complete.",
+              ...result,
+            },
+            { status: 500 },
+          );
+        }
+
         return Response.json({ ok: true, ...result });
       },
     },

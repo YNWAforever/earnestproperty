@@ -86,6 +86,137 @@ export async function saveAdminAgentProfile(options: { data: AdminAgentProfileMu
   );
 }
 
+/**
+ * zh-HK messages for the terse `Response` bodies the staff-access server
+ * functions throw -- the `reason` union from decideStaffRoleChange /
+ * decideStaffDeactivation (staff-security-policy.ts), plus the handful of
+ * fixed strings fetchStaffAccessSummary / updateStaffRoles / setStaffActive
+ * and requireStaffAccess throw directly. Voice matches the banners already
+ * in AgentProfileForm.tsx (isProtected / isSelf / isLastAdmin) rather than
+ * inventing a second tone for the same situations.
+ *
+ * Anything NOT in this map is a body text this file's author did not
+ * anticipate -- unwrapStaffAccessResponse surfaces it verbatim rather than
+ * replacing it with a generic message, so an unrecognised code is visible
+ * and reportable instead of silently disappearing.
+ */
+const STAFF_ACCESS_ERROR_MESSAGES: Record<string, string> = {
+  "not-admin": "只有管理員可以進行此操作。",
+  "self-admin-removal": "你不能移除自己的管理員權限，請由另一位管理員代為處理。",
+  self: "你不能停用自己的帳戶，請由另一位管理員代為處理。",
+  "last-admin":
+    "此帳戶是目前系統內唯一的管理員，操作後將無人可管理系統，請先將管理員權限授予其他同事。",
+  "protected-account":
+    "此帳戶已在 ADMIN_BOOTSTRAP_EMAILS 名單內，不可移除管理員權限或停用，以免無人可登入系統。",
+  "successor-required": "此同事仍有已指派的工作，請先選擇接手人。",
+  "successor-is-target": "接手人不能是同一位同事，請選擇其他人。",
+  Unauthorized: "登入已失效，請重新登入後再試。",
+  Forbidden: "你沒有權限進行此操作。",
+};
+
+/**
+ * TanStack Start does NOT surface a thrown `Response` from a server function
+ * handler as a rejected promise on the client. Traced in
+ * @tanstack/start-server-core's server-functions-handler.js: a thrown Response
+ * lands in `res.error`, and `const unwrapped = res.result || res.error` cannot
+ * tell that apart from one the handler simply returned -- either way it sets
+ * the `x-tss-raw-response` header and returns it. @tanstack/start-client-core's
+ * serverFnFetcher.js's getResponse() then returns that response the moment it
+ * sees that header, before it ever reaches the `.ok` / status check a few
+ * lines later. So `await updateStaffRolesServer(...)` RESOLVES with the
+ * Response object whenever the handler rejected the mutation -- a last-admin
+ * guard, the 409 Serializable conflict, a protected-account block -- and a
+ * caller's `try { await x(); toast.success(...) } catch {...}` reports success
+ * on a change the database never applied. For setStaffActive specifically,
+ * that means the admin believes a departing colleague is locked out and their
+ * work reassigned, while both are still live.
+ *
+ * This is why fetchStaffAccessSummary / updateStaffRoles / setStaffActive each
+ * pipe their result through this before returning: it is the one place a
+ * resolved raw Response gets converted into a genuinely thrown Error, so the
+ * try/catch every caller already writes does the right thing with no caller
+ * changes needed. Exported so it can be unit-tested directly with a stubbed
+ * Response, rather than requiring a live server round-trip: createServerFn's
+ * client/server split (and therefore this exact resolve-not-reject behaviour)
+ * only exists once Vite's build-time macro transform has run, so calling the
+ * *Server stubs directly in a plain test process does not reproduce it.
+ */
+export async function unwrapStaffAccessResponse<T>(promise: Promise<T>): Promise<T> {
+  const result = await promise;
+  if (result instanceof Response) {
+    const text = (await result.text().catch(() => "")).trim();
+    const message =
+      STAFF_ACCESS_ERROR_MESSAGES[text] ?? (text ? text : `操作失敗（HTTP ${result.status}）`);
+    throw new Error(message);
+  }
+  return result;
+}
+
+const fetchStaffAccessSummaryServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { staffId: string }) =>
+    z.object({ staffId: z.string().trim().uuid() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchStaffAccessSummary(data, staff);
+  });
+
+export async function fetchStaffAccessSummary(options: { data: { staffId: string } }) {
+  return unwrapStaffAccessResponse(
+    callStaffServerFn(async () =>
+      fetchStaffAccessSummaryServer(await withStaffAuthHeaders(options)),
+    ),
+  );
+}
+
+const updateStaffRolesServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { staffId: string; roles: string[] }) =>
+    z
+      .object({
+        staffId: z.string().trim().uuid(),
+        roles: z.array(z.enum(["admin", "manager", "agent"])).max(3),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.updateStaffRoles(data, staff);
+  });
+
+export async function updateStaffRoles(options: {
+  data: { staffId: string; roles: ("admin" | "manager" | "agent")[] };
+}) {
+  return unwrapStaffAccessResponse(
+    callStaffServerFn(async () => updateStaffRolesServer(await withStaffAuthHeaders(options))),
+  );
+}
+
+const setStaffActiveServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { staffId: string; active: boolean; reassignToStaffId?: string | null }) =>
+    z
+      .object({
+        staffId: z.string().trim().uuid(),
+        active: z.boolean(),
+        reassignToStaffId: z.string().trim().uuid().nullable().optional(),
+      })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.setStaffActive(data, staff);
+  });
+
+export async function setStaffActive(options: {
+  data: { staffId: string; active: boolean; reassignToStaffId?: string | null };
+}) {
+  return unwrapStaffAccessResponse(
+    callStaffServerFn(async () => setStaffActiveServer(await withStaffAuthHeaders(options))),
+  );
+}
+
 const STALE_SERVER_FN_RELOAD_KEY = "earnest-admin-stale-server-fn-reloaded";
 
 function errorMessage(error: unknown) {
@@ -194,9 +325,9 @@ export async function fetchAdminEstateOptions() {
 const fetchAdminPropertyServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    await requireStaff(["admin", "manager", "agent"]);
+    const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.getAdminProperty(data.id);
+    return adminData.getAdminProperty(data.id, staff);
   });
 
 export async function fetchAdminProperty(options: { data: { id: string } }) {
@@ -415,7 +546,17 @@ export async function fetchAdminCampaigns() {
 const websiteInquirySchema = z
   .object({
     name: z.string().trim().min(1).max(120),
-    phone: z.string().trim().max(30),
+    // Mirrors the identical client-side constraint in contact.tsx and
+    // property.$listingNo.tsx. The server previously accepted any string up to
+    // 30 chars, including one with no digits at all -- weaker than the form it
+    // backs, and enough to write junk crm_contacts rows straight past both
+    // forms via a direct server-fn call.
+    phone: z
+      .string()
+      .trim()
+      .min(8)
+      .max(30)
+      .regex(/^[\d+\-\s()]+$/),
     email: z.string().trim().max(254).email().optional().or(z.literal("")),
     message: z.string().trim().max(2000).optional().or(z.literal("")),
     listingNo: z.string().regex(WEBSITE_LISTING_NO_PATTERN).optional(),
@@ -427,9 +568,43 @@ const websiteInquirySchema = z
 
 export type WebsiteInquiryInput = z.infer<typeof websiteInquirySchema>;
 
+// Public, unauthenticated write path -- the only server fn in this file with no
+// requireStaff() gate. Every submission inserts a crm_contacts row, a crm_leads
+// row and an inquiries row, so without a limit a single client can flood the
+// CRM (and the agents' lead queue) as fast as it can POST.
+const WEBSITE_INQUIRY_RATE_LIMIT_PER_IP = 5;
+const WEBSITE_INQUIRY_RATE_LIMIT_PER_IP_PHONE = 3;
+const WEBSITE_INQUIRY_RATE_WINDOW_SECONDS = 60;
+
 export const createWebsiteInquiry = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => websiteInquirySchema.parse(data))
   .handler(async ({ data }) => {
+    const { clientIpFromRequest, enforceRateLimit } = await import("@/lib/ratelimit.server");
+    const request = getRequest();
+    const clientIp = clientIpFromRequest(request);
+
+    await enforceRateLimit({
+      key: `website-inquiry:ip:${clientIp}`,
+      limit: WEBSITE_INQUIRY_RATE_LIMIT_PER_IP,
+      windowSeconds: WEBSITE_INQUIRY_RATE_WINDOW_SECONDS,
+    });
+
+    // Scoped to (ip, phone), NOT to phone alone. A global per-phone bucket is a
+    // weapon: anyone could burn a stranger's quota and lock that specific
+    // person out of the contact form, from any IP, indefinitely. Pairing it
+    // with the IP still stops one client hammering a single number while
+    // leaving a real customer on a different connection unaffected. Skipped
+    // entirely when the phone has no digits, so those submissions do not all
+    // collapse into one shared bucket and block each other.
+    const phoneDigits = data.phone.replace(/\D/g, "");
+    if (phoneDigits) {
+      await enforceRateLimit({
+        key: `website-inquiry:ip-phone:${clientIp}:${phoneDigits}`,
+        limit: WEBSITE_INQUIRY_RATE_LIMIT_PER_IP_PHONE,
+        windowSeconds: WEBSITE_INQUIRY_RATE_WINDOW_SECONDS,
+      });
+    }
+
     const adminData = await import("./admin-data.server");
     return adminData.createWebsiteInquiry(data);
   });
@@ -775,6 +950,29 @@ const updateAdminConversationServer = createServerFn({ method: "POST" })
 export async function updateAdminConversation(options: { data: AdminConversationUpdateInput }) {
   return callStaffServerFn(async () =>
     updateAdminConversationServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+// admin/manager only: clearing an opt-out re-enables marketing messages to a
+// real person, so it is a deliberately narrower grant than the rest of the
+// conversation surface (which agents can use).
+const clearContactWhatsappOptOutServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { contactId: string; reason: string }) =>
+    z
+      .object({ contactId: z.string().trim().uuid(), reason: z.string().trim().min(1).max(500) })
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.clearContactWhatsappOptOut(data, staff);
+  });
+
+export async function clearContactWhatsappOptOut(options: {
+  data: { contactId: string; reason: string };
+}) {
+  return callStaffServerFn(async () =>
+    clearContactWhatsappOptOutServer(await withStaffAuthHeaders(options)),
   );
 }
 

@@ -323,6 +323,10 @@ function AdminBlasts() {
         name: campaignDraft.name.trim(),
         scheduled_at: nullIfBlank(campaignDraft.scheduled_at ?? ""),
       };
+      // Whether this was a create or an update is decided BEFORE the request:
+      // `id` afterwards is the saved row's id, which is always truthy, so the
+      // 已新增 branch was unreachable and creating a campaign said 已儲存.
+      const isUpdate = Boolean(campaignDraft.id);
       const result = (await saveAdminCampaign({ data: payload })) as MutationResult;
       assertNoServerError(result);
       const id = result.id || campaignDraft.id;
@@ -330,7 +334,7 @@ function AdminBlasts() {
       setCampaignDraft(savedDraft);
       setSavedCampaignDraft(savedDraft);
       await refreshAdminData({ clearRowPreviews: true });
-      toast.success(id ? "Campaign 已儲存" : "Campaign 已新增");
+      toast.success(isUpdate ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
       toast.error(errorText(err));
     } finally {

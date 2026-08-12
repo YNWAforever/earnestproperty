@@ -57,6 +57,7 @@ import {
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
 import { getYouTubeVideoId, isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
+import { jsonLdScript } from "@/lib/schema";
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
 // reject a relative og:image outright, so it is absolutised here rather than in
@@ -548,7 +549,7 @@ function HomePage() {
             <script
               type="application/ld+json"
               dangerouslySetInnerHTML={{
-                __html: JSON.stringify({
+                __html: jsonLdScript({
                   "@context": "https://schema.org",
                   "@type": "FAQPage",
                   mainEntity: faqs.map((f: FaqItem) => ({
@@ -598,7 +599,7 @@ function HomePage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLdScript({
             "@context": "https://schema.org",
             "@type": "RealEstateAgent",
             name: "晉誠地產 Earnest Property",

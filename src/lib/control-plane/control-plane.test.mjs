@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { operationsCapabilitiesForRoles } from "./capabilities.ts";
@@ -359,7 +360,20 @@ test("job workers renew leases, expose checkpoints, and stop heartbeats", () => 
   const runnerSource = jobsServer.runClaimedJobs.toString();
 
   assert.match(renewSource, /lease_expires_at >= now/);
+  // The runner drains more than one job per invocation, but claims them ONE AT
+  // A TIME. claimJobs stamps a single shared lease_expires_at across a batch
+  // while the runner executes serially, so a batched claim left later jobs with
+  // an expired lease before they started: they could neither run, fail, nor
+  // complete (renewJobLease/failJob/completeJob all require
+  // lease_expires_at >= now()), were miscounted as `cancelled`, and were
+  // re-queued with the attempt burned until max_attempts failed them for good.
+  assert.match(runnerSource, /for \(let index = 0; index < maxJobs/);
   assert.match(runnerSource, /claimJobs\(\{ \.\.\.input, limit: 1 \}\)/);
+  assert.match(runnerSource, /MAX_JOBS_PER_RUN/);
+  // Stops before the serverless timeout rather than trusting a job count.
+  assert.match(runnerSource, /RUN_BUDGET_MS/);
+  // The batch form must not come back.
+  assert.doesNotMatch(runnerSource, /claimJobs\(\{ \.\.\.input, limit \}\)/);
   assert.match(jobsServer.completeJob.toString(), /lease_expires_at >= now/);
   assert.match(jobsServer.failJob.toString(), /lease_expires_at >= now/);
   assert.doesNotMatch(jobsServer.enqueueJob.toString(), /status IN \('cancelled', 'failed'\)/);
@@ -509,4 +523,142 @@ test("WozTell campaign handler maps timeout to retry and permanent rejection to 
     () => rejected.run(payload, { jobId: "job-3", attempt: 1 }),
     (error) => error?.code === "WOZTELL_CAMPAIGN_REJECTED" && !isRetryableJobError(error),
   );
+});
+
+// enqueueJob's ON CONFLICT is `DO UPDATE SET idempotency_key =
+// EXCLUDED.idempotency_key` -- a self-assignment that returns the EXISTING row
+// rather than re-arming it. That is correct for de-duplicating one queue run,
+// but with a campaign-stable key it also meant a campaign whose job had reached
+// 'succeeded' or exhausted max_attempts could never be queued again: the route
+// answered 202 with the dead job's status and the UI reported success.
+test("campaign delivery idempotency key is scoped to a queue run, not the campaign", async () => {
+  const { campaignDeliveryIdempotencyKey } = await import("./jobs.ts");
+
+  const campaign = "11111111-1111-4111-8111-111111111111";
+  const firstRun = "2026-08-11T02:00:00.000Z";
+  const secondRun = "2026-08-11T09:30:00.000Z";
+
+  // Same run enqueued twice (admin button racing the send-queue cron) collapses
+  // to one job -- this is what stops a campaign being delivered twice.
+  assert.equal(
+    campaignDeliveryIdempotencyKey(campaign, firstRun),
+    campaignDeliveryIdempotencyKey(campaign, firstRun),
+  );
+
+  // A later re-queue of the same campaign is a DIFFERENT job.
+  assert.notEqual(
+    campaignDeliveryIdempotencyKey(campaign, firstRun),
+    campaignDeliveryIdempotencyKey(campaign, secondRun),
+  );
+
+  assert.match(campaignDeliveryIdempotencyKey(campaign, firstRun), /^woztell\.campaign\.deliver:/);
+});
+
+// The two enqueue paths do NOT hand over the same string for the same row: the
+// admin route passes the driver's Date via toISOString()
+// ("2026-08-11T02:00:00.000Z"), while the send-queue cron reads
+// timestamptz::text from Postgres ("2026-08-11 02:00:00+00", with microseconds).
+// Interpolating those verbatim produced two different keys for ONE queue run,
+// so both paths enqueued and the campaign was delivered twice -- billably, to
+// real customers. The key normalises to epoch millis so representation drift on
+// either side cannot resurrect that.
+test("both enqueue paths derive the same key from the same queue run", async () => {
+  const { campaignDeliveryIdempotencyKey } = await import("./jobs.ts");
+  const campaign = "11111111-1111-4111-8111-111111111111";
+
+  const fromAdminRoute = "2026-08-11T02:00:00.000Z";
+  const fromCronSql = "2026-08-11 02:00:00+00";
+  const fromCronSqlWithMicroseconds = "2026-08-11 02:00:00.000123+00";
+
+  assert.equal(
+    campaignDeliveryIdempotencyKey(campaign, fromAdminRoute),
+    campaignDeliveryIdempotencyKey(campaign, fromCronSql),
+  );
+  assert.equal(
+    campaignDeliveryIdempotencyKey(campaign, fromAdminRoute),
+    campaignDeliveryIdempotencyKey(campaign, fromCronSqlWithMicroseconds),
+  );
+
+  // An unparseable value must not collapse every campaign onto one key, which
+  // would silently suppress real enqueues.
+  assert.notEqual(
+    campaignDeliveryIdempotencyKey(campaign, "garbage"),
+    campaignDeliveryIdempotencyKey(campaign, "other-garbage"),
+  );
+});
+
+test("the send-queue cron falls back to an immutable timestamp, not updated_at", () => {
+  const cron = readFileSync("src/routes/api.admin.jobs.send-queue.ts", "utf8");
+
+  // saveAdminCampaign writes status unconditionally, so a campaign can be
+  // 'queued' with reviewed_at still NULL. updated_at changes on every later
+  // write and would hand the cron a fresh key -- and a fresh delivery job --
+  // after any edit.
+  assert.match(
+    cron,
+    /COALESCE\(campaign\.reviewed_at, campaign\.created_at\)::text AS queue_run_at/,
+  );
+  assert.doesNotMatch(cron, /COALESCE\(campaign\.reviewed_at, campaign\.updated_at\)/);
+});
+
+test("re-materializing a campaign never re-queues a possibly-delivered recipient", () => {
+  const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+  const start = source.indexOf("INSERT INTO whatsapp_campaign_recipients (campaign_id");
+  const clause = source.slice(
+    start,
+    source.indexOf("[campaignId, uniqueEligibleContactIds]", start),
+  );
+
+  assert.notEqual(start, -1);
+  // WOZTELL_DELIVERY_UNKNOWN means the provider took the message but never
+  // confirmed the outcome, so the customer may already have it. Re-queueing
+  // sends (and bills) a second real WhatsApp message.
+  assert.match(
+    clause,
+    /error = 'WOZTELL_DELIVERY_UNKNOWN'\s+THEN whatsapp_campaign_recipients\.status/,
+  );
+  assert.match(
+    clause,
+    /error = 'WOZTELL_DELIVERY_UNKNOWN'\s+THEN whatsapp_campaign_recipients\.error/,
+  );
+});
+
+test("the queue flip re-asserts the same statuses canQueueAdminCampaign accepts", () => {
+  const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+  const start = source.indexOf("UPDATE whatsapp_campaigns c\n      SET status = 'queued'");
+  const clause = source.slice(start, source.indexOf("RETURNING c.id", start));
+
+  assert.notEqual(start, -1);
+  // Accepting 'draft' here contradicted the gate above it, so a concurrent
+  // save-back-to-draft mid-queue still sent. Check the IN list itself rather
+  // than the whole clause, which legitimately mentions 'draft' in a comment.
+  const statusIn = clause.match(/AND c\.status IN \(([^)]*)\)/);
+  assert.ok(statusIn, "queue flip must re-assert c.status");
+  assert.equal(statusIn[1].trim(), "'review', 'scheduled'");
+});
+
+// Keyset cursors are built from a to_char(... 'US') column, not from the
+// millisecond-truncated display value. Feeding a truncated timestamp back into
+// `(created_at, id) < (...)` silently skipped every row whose true timestamp
+// fell between the truncated and actual value -- audit entries and jobs
+// vanished across page boundaries with no error.
+test("keyset cursors carry microsecond precision, not truncated ISO strings", () => {
+  const audit = readFileSync("src/lib/control-plane/audit.server.ts", "utf8");
+  const jobs = readFileSync("src/lib/control-plane/jobs.server.ts", "utf8");
+
+  for (const [name, source] of [
+    ["audit.server.ts", audit],
+    ["jobs.server.ts", jobs],
+  ]) {
+    assert.match(
+      source,
+      /to_char\(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS\.US"Z"'\) AS created_at_cursor/,
+      `${name} must select a microsecond-precision cursor column`,
+    );
+    assert.match(source, /created_at_cursor/, `${name} must use that column for the cursor`);
+  }
+
+  // The cursor must not be rebuilt from the truncated display field.
+  assert.doesNotMatch(audit, /encodeAuditCursor\(\{ createdAt: last\.created_at,/);
+  assert.doesNotMatch(jobs, /encodeJobCursor\(\{ createdAt: last\.createdAt,/);
 });

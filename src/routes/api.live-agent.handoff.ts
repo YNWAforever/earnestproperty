@@ -56,6 +56,11 @@ export const Route = createFileRoute("/api/live-agent/handoff")({
             const status = err.status;
             return Response.json({ error: err.message }, { status });
           }
+          // Log before swallowing. A 500 here means a real visitor asked for a
+          // human and did not get one, and the cause was previously discarded
+          // entirely -- nothing in this repo's 19 API routes recorded it, so the
+          // only trace was a lost lead.
+          console.error("[live-agent] handoff failed", { sessionId, error: err });
           return Response.json({ error: "Unable to request handoff" }, { status: 500 });
         }
       },

@@ -19,7 +19,19 @@ const LEAVE_CONFIRM = "離開並放棄修改";
  */
 export function RouteLeaveBlocker({ isDirty }: { isDirty: boolean }) {
   const blocker = useBlocker({
-    shouldBlockFn: () => isDirty,
+    // Block only when the PATHNAME changes, not on every navigate. Admin screens
+    // keep their open record and filters in the URL, so closing a panel or
+    // typing in a search box is a same-pathname navigate that only rewrites the
+    // query string -- blocking those asked 尚未儲存 on keystroke-driven URL
+    // updates. On the CRM leads page that produced two identical confirms for
+    // one close (the panel's own dirty-close guard, then this one), and
+    // cancelling the second left ?lead=<id> pointing at an already-closed panel.
+    //
+    // Compared on pathname rather than routeId deliberately: moving between two
+    // listings (/admin/listings/a -> /admin/listings/b) keeps the SAME routeId,
+    // and a dirty 20-field PropertyForm must still be protected there.
+    shouldBlockFn: ({ current, next }) => isDirty && current.pathname !== next.pathname,
+    // Tab close / reload is always a real exit, so it stays gated on isDirty alone.
     enableBeforeUnload: () => isDirty,
     disabled: !isDirty,
     withResolver: true,

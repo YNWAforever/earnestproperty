@@ -11,7 +11,6 @@ export const controlPlanePermissions = [
   "system.jobs.cancel",
   "system.migrations.plan",
   "system.migrations.apply",
-  "staff.manage",
   "audit.read",
 ] as const;
 

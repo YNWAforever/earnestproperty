@@ -165,8 +165,14 @@ test("campaign delivery makes accepted-then-timeout recipients terminal unknown"
   assert.equal(result.claimCount, 2);
 });
 
-test("campaign delivery makes ambiguous HTTP responses terminal unknown", async () => {
-  for (const status of [200, 408, 429, 503]) {
+// WOZTELL_DELIVERY_UNKNOWN is now TERMINAL: materializeCampaignRecipients
+// refuses to re-queue a recipient carrying it, because the provider may already
+// have delivered the message. That makes the classification below load-bearing
+// -- anything filed as UNKNOWN can never be retried, so only genuinely
+// ambiguous outcomes belong there.
+test("campaign delivery makes genuinely ambiguous HTTP responses terminal unknown", async () => {
+  // The request may have been processed before the connection broke.
+  for (const status of [200, 408, 503]) {
     const result = await runSingleRecipientCampaign(async () => ({
       ok: false,
       status,
@@ -177,6 +183,21 @@ test("campaign delivery makes ambiguous HTTP responses terminal unknown", async 
     ]);
     assert.equal(result.summary.failed, 1);
   }
+});
+
+test("a rate-limited send is rejected, not ambiguous, so it stays retryable", async () => {
+  // 429 means the provider refused to accept the request at all: nothing was
+  // sent. Filing it as UNKNOWN would strand the recipient permanently now that
+  // UNKNOWN blocks re-queueing, so a whole campaign throttled by the provider
+  // could never be completed.
+  const result = await runSingleRecipientCampaign(async () => ({
+    ok: false,
+    status: 429,
+    error: "rate limited",
+  }));
+
+  assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_PROVIDER_REJECTED"]]);
+  assert.equal(result.summary.failed, 1);
 });
 
 test("campaign delivery checkpoints before claims and every recipient send", async () => {
@@ -299,4 +320,103 @@ test("admin reply server action never accepts a browser recipient id", () => {
 
   assert.match(adminData, /conversationId: string; text: string/);
   assert.doesNotMatch(adminData, /conversationId: string; recipientId: string; text: string/);
+});
+
+// The substring matcher behind isOptOutText fired on any message merely
+// CONTAINING an opt-out keyword. Written Chinese has no word delimiter, so
+// 「我想取消今日睇樓約會」 -- a customer rescheduling a viewing -- silently opted
+// them out of WhatsApp. Because the webhook writes the flag monotonically
+// (opted_out_whatsapp OR $7), that was irreversible until the admin/manager
+// reset landed: staff replies 400'd forever and the contact was dropped from
+// every campaign.
+test("real opt-out messages are detected across script, width and politeness", async () => {
+  const { isOptOutText } = await import("./woztell.server.ts");
+
+  // Unambiguous phrases anywhere in the message.
+  for (const value of [
+    "取消訂閱",
+    "取消订阅",
+    "我要退訂",
+    "退订",
+    "請停止發送",
+    "停止發送",
+    "拒收",
+    "不再接收",
+    "唔想再收",
+    "unsubscribe please",
+    "opt out",
+    "remove me",
+  ]) {
+    assert.equal(isOptOutText(value), true, `${value} must be treated as an opt-out`);
+  }
+
+  // Bare stems, with and without politeness prefixes and punctuation.
+  for (const value of [
+    "取消",
+    "停止",
+    "唔要",
+    "不要",
+    "取消！",
+    "  停止  ",
+    "唔該停止",
+    "我要取消",
+  ]) {
+    assert.equal(isOptOutText(value), true, `${value} must be treated as an opt-out`);
+  }
+
+  // Latin, including next to CJK -- \\P{L} never matched there because CJK
+  // characters ARE letters, so 「請stop」 and 「STOP啦」 used to slip past.
+  for (const value of [
+    "stop",
+    "STOP.",
+    "Please STOP",
+    "請stop",
+    "STOP啦",
+    "唔該stop",
+    "ＳＴＯＰ",
+  ]) {
+    assert.equal(isOptOutText(value), true, `${value} must be treated as an opt-out`);
+  }
+});
+
+// The original matcher used `text.includes(term)`, so any sentence merely
+// CONTAINING a stem opted the customer out. Written Chinese has no word
+// delimiter, so 「我想取消今日睇樓約會」 -- rescheduling a viewing -- silently opted
+// them out, irreversibly (the webhook writes opted_out_whatsapp OR $7).
+test("ordinary sentences containing an opt-out stem are not opt-outs", async () => {
+  const { isOptOutText } = await import("./woztell.server.ts");
+
+  for (const value of [
+    "我想取消今日睇樓約會",
+    "唔要呢個單位，想睇第二個",
+    "不要太貴嘅盤",
+    "請停止安排星期六睇樓",
+    "我不要三房嘅",
+    "想睇樓",
+    "stopover in Tsuen Wan",
+    "",
+    "   ",
+  ]) {
+    assert.equal(isOptOutText(value), false, `${value} must NOT be treated as an opt-out`);
+  }
+
+  assert.equal(isOptOutText(null), false);
+  assert.equal(isOptOutText(undefined), false);
+});
+
+test("an opt-out can be cleared by admin/manager, with a reason and an audit row", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const client = read("src/lib/neon/admin-data.ts");
+
+  // The only write that sets the flag back to false.
+  assert.match(server, /export async function clearContactWhatsappOptOut/);
+  assert.match(server, /SET opted_out_whatsapp = false/);
+  assert.match(server, /AND opted_out_whatsapp = true/);
+  assert.match(server, /writeAudit\(actor\.staffId, "contact\.optout\.clear"/);
+
+  // Narrower than the rest of the conversation surface: agents cannot clear.
+  assert.match(
+    client,
+    /clearContactWhatsappOptOutServer[\s\S]{0,400}requireStaff\(\["admin", "manager"\]\)/,
+  );
 });

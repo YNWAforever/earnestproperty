@@ -2,17 +2,37 @@ import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
-import { saveAdminAgentProfile } from "@/lib/neon/admin-data";
-import type { AdminAgentProfileInput } from "@/lib/neon/admin-data.types";
+import { saveAdminAgentProfile, setStaffActive, updateStaffRoles } from "@/lib/neon/admin-data";
+import type {
+  AdminAgentProfileInput,
+  StaffAccessRole,
+  StaffAccessSummary,
+} from "@/lib/neon/admin-data.types";
 import { agentProfileSchema, buildAgentProfilePayload } from "./agent-profile-form-utils";
 
 type AgentProfile = Partial<AdminAgentProfileInput> & { id?: string };
+
+/** Module scope: a fixed lookup table, not per-render state. */
+const ROLE_LABELS: { value: StaffAccessRole; label: string; hint: string }[] = [
+  { value: "admin", label: "管理員", hint: "完整權限，包括權限管理及資料庫遷移" },
+  { value: "manager", label: "主管", hint: "可查看所有同事的客戶及放盤" },
+  { value: "agent", label: "經紀", hint: "只可查看自己的客戶及放盤" },
+];
 
 function createInitialForm(profile?: AgentProfile) {
   return {
@@ -40,11 +60,19 @@ type FormState = ReturnType<typeof createInitialForm>;
 export function AgentProfileForm({
   profile,
   canManageIdentity,
+  access,
+  activeStaffOptions = [],
   onSaved,
+  onAccessChanged,
 }: {
   profile?: AgentProfile;
   canManageIdentity: boolean;
+  /** Null for a new record, or when the viewer is not an admin. */
+  access?: StaffAccessSummary | null;
+  /** Active staff who can inherit work, excluding the person being edited. */
+  activeStaffOptions?: { id: string; label: string }[];
   onSaved: (id: string) => void;
+  onAccessChanged?: () => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -66,6 +94,20 @@ export function AgentProfileForm({
   const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
+  const [roleDraft, setRoleDraft] = useState<StaffAccessRole[]>(access?.roles ?? []);
+  const [roleConfirmOpen, setRoleConfirmOpen] = useState(false);
+  const [deactivateOpen, setDeactivateOpen] = useState(false);
+  const [successorId, setSuccessorId] = useState("");
+  const [accessPending, setAccessPending] = useState(false);
+
+  const roleDelta = useMemo(() => {
+    const before = new Set(access?.roles ?? []);
+    const after = new Set(roleDraft);
+    const added = ROLE_LABELS.filter((r) => after.has(r.value) && !before.has(r.value));
+    const removed = ROLE_LABELS.filter((r) => before.has(r.value) && !after.has(r.value));
+    return { added, removed, changed: added.length > 0 || removed.length > 0 };
+  }, [access?.roles, roleDraft]);
+
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
     setFieldErrors((current) => {
@@ -83,6 +125,66 @@ export function AgentProfileForm({
       "aria-invalid": Boolean(error),
       "aria-describedby": error ? `${key}-error` : undefined,
     };
+  }
+
+  function toggleRole(role: StaffAccessRole, checked: boolean) {
+    setRoleDraft((current) =>
+      checked ? Array.from(new Set([...current, role])) : current.filter((r) => r !== role),
+    );
+  }
+
+  async function confirmRoleChange() {
+    if (!access) return;
+    setAccessPending(true);
+    try {
+      await updateStaffRoles({ data: { staffId: access.staffId, roles: roleDraft } });
+      setRoleConfirmOpen(false);
+      toast.success("權限已更新");
+      onAccessChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAccessPending(false);
+    }
+  }
+
+  async function confirmDeactivate() {
+    if (!access) return;
+    setAccessPending(true);
+    try {
+      await setStaffActive({
+        data: {
+          staffId: access.staffId,
+          active: false,
+          reassignToStaffId: access.ownedTotal > 0 ? successorId : null,
+        },
+      });
+      setDeactivateOpen(false);
+      toast.success("帳戶已停用，工作已轉交");
+      onAccessChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAccessPending(false);
+    }
+  }
+
+  // Not behind a confirm dialog like the two actions above -- reactivation
+  // does not move any work or change who can sign in, it just lets someone
+  // back in. Still routed through accessPending / try-catch so a failure
+  // surfaces a toast instead of an unhandled rejection and a stuck button.
+  async function reactivateAccount() {
+    if (!access) return;
+    setAccessPending(true);
+    try {
+      await setStaffActive({ data: { staffId: access.staffId, active: true } });
+      toast.success("帳戶已重新啟用");
+      onAccessChanged?.();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAccessPending(false);
+    }
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -339,6 +441,181 @@ export function AgentProfileForm({
           {submitting ? "儲存中..." : profile?.id ? "更新代理" : "建立代理"}
         </Button>
       </div>
+
+      {access ? (
+        <section
+          className="mt-8 rounded-lg border border-destructive/30 p-4"
+          aria-labelledby="access-heading"
+        >
+          <h2 id="access-heading" className="text-base font-semibold">
+            權限
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            權限變更會即時生效，並記錄在審計記錄中。
+          </p>
+
+          <div className="mt-4 grid gap-3">
+            {ROLE_LABELS.map((role) => (
+              <label key={role.value} className="flex items-start gap-3 text-sm">
+                <Checkbox
+                  checked={roleDraft.includes(role.value)}
+                  onCheckedChange={(checked) => toggleRole(role.value, checked === true)}
+                  aria-label={role.label}
+                />
+                <span>
+                  <span className="font-medium">{role.label}</span>
+                  <span className="block text-xs text-muted-foreground">{role.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {/*
+            One slot, priority-ordered: isProtected > isSelf > isLastAdmin.
+            A disabled control with no stated reason reads as broken, so every
+            case that disables 停用帳戶 (and, for isProtected/isSelf, the admin
+            checkbox on 更新權限) gets an explanation here -- not just isProtected.
+            isSelf and isLastAdmin can both be true for the same account; isSelf
+            wins because it holds regardless of how many other admins exist, so
+            it is the one constraint promoting a colleague cannot resolve.
+          */}
+          {access.isProtected ? (
+            <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
+              此帳戶已在 ADMIN_BOOTSTRAP_EMAILS
+              名單內，不可移除管理員權限或停用，以免無人可登入系統。
+            </p>
+          ) : access.isSelf ? (
+            <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
+              你不能移除自己的管理員權限，亦不能停用自己的帳戶，請由另一位管理員代為處理。
+            </p>
+          ) : access.isLastAdmin ? (
+            <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
+              此帳戶是目前系統內唯一的管理員，停用後將無人可管理系統，請先將管理員權限授予其他同事，再停用此帳戶。
+            </p>
+          ) : null}
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={
+                !roleDelta.changed ||
+                accessPending ||
+                (access.isProtected && !roleDraft.includes("admin")) ||
+                (access.isSelf && !roleDraft.includes("admin"))
+              }
+              onClick={() => setRoleConfirmOpen(true)}
+            >
+              更新權限
+            </Button>
+            {access.active ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={
+                  access.isSelf || access.isLastAdmin || access.isProtected || accessPending
+                }
+                onClick={() => setDeactivateOpen(true)}
+              >
+                停用帳戶
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={accessPending}
+                onClick={() => void reactivateAccount()}
+              >
+                重新啟用
+              </Button>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      <AdminConfirmDialog
+        open={roleConfirmOpen}
+        title="確認變更權限？"
+        description="權限變更會即時生效。"
+        confirmLabel="確認變更"
+        confirmVariant="destructive"
+        isPending={accessPending}
+        onOpenChange={(open) => {
+          if (!accessPending) setRoleConfirmOpen(open);
+        }}
+        onConfirm={() => void confirmRoleChange()}
+      >
+        <ul className="space-y-1 text-sm">
+          {roleDelta.added.map((role) => (
+            <li key={`add-${role.value}`}>＋ {role.label}</li>
+          ))}
+          {roleDelta.removed.map((role) => (
+            <li key={`remove-${role.value}`}>－ {role.label}</li>
+          ))}
+        </ul>
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
+        open={deactivateOpen}
+        title="停用帳戶並轉交工作？"
+        description="停用後此同事無法登入。已指派的工作會轉交給你選擇的接手人。"
+        confirmLabel="確認停用"
+        confirmVariant="destructive"
+        disabled={access ? access.ownedTotal > 0 && !successorId : false}
+        isPending={accessPending}
+        onOpenChange={(open) => {
+          if (!accessPending) setDeactivateOpen(open);
+        }}
+        onConfirm={() => void confirmDeactivate()}
+      >
+        {access && access.ownedTotal > 0 ? (
+          <div className="space-y-3 text-sm">
+            <dl className="grid gap-1 rounded-md border bg-muted/40 p-3">
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">放盤</dt>
+                <dd className="tabular-nums">{access.owned.properties}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">客戶</dt>
+                <dd className="tabular-nums">{access.owned.crm_contacts}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">Leads</dt>
+                <dd className="tabular-nums">{access.owned.crm_leads}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">查詢</dt>
+                <dd className="tabular-nums">{access.owned.inquiries}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">WhatsApp 對話</dt>
+                <dd className="tabular-nums">{access.owned.whatsapp_conversations}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-muted-foreground">線上對話</dt>
+                <dd className="tabular-nums">{access.owned.live_agent_sessions}</dd>
+              </div>
+            </dl>
+            <div className="space-y-1.5">
+              <Label htmlFor="successor">接手人</Label>
+              <Select value={successorId} onValueChange={setSuccessorId}>
+                <SelectTrigger id="successor" aria-label="接手人">
+                  <SelectValue placeholder="選擇接手同事" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeStaffOptions.map((option) => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">此同事沒有已指派的工作，可直接停用。</p>
+        )}
+      </AdminConfirmDialog>
     </form>
   );
 }

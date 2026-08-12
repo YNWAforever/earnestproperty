@@ -82,6 +82,8 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
           upserted: 0,
           deactivated: 0,
           deactivationSkipped: !canDeactivate,
+          deactivationBlocked: null,
+          deactivationCoverage: null,
           errors,
           dryRunRows: rows,
         };
@@ -103,6 +105,12 @@ export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
         upserted: upserted.count,
         deactivated: deactivated.count,
         deactivationSkipped: !canDeactivate,
+        // The DB layer refuses to sweep when the discovery pass covered too
+        // little of the live inventory to be trusted. Surfaced rather than
+        // swallowed: a silent "deactivated: 0" is how a degraded run used to
+        // look identical to a healthy one.
+        deactivationBlocked: deactivated.skipped ?? null,
+        deactivationCoverage: deactivated.coverage ?? null,
         errors,
         dryRunRows: [],
       };

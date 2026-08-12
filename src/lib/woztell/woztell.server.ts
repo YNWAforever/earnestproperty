@@ -43,10 +43,129 @@ export function verifyWoztellSignature(
   return false;
 }
 
+/**
+ * Opt-out detection has to be wrong as rarely as possible in BOTH directions,
+ * and the two failure modes cost different things:
+ *
+ *  - False positive: the flag is written monotonically by the webhook
+ *    (`opted_out_whatsapp = opted_out_whatsapp OR $7`), so mis-reading
+ *    「我想取消今日睇樓約會」 as an opt-out blocks every staff reply and every
+ *    campaign for that contact until an admin clears it.
+ *  - False negative: the agency keeps marketing to someone who asked it to
+ *    stop. That is the PDPO problem, and it is the more expensive one.
+ *
+ * So the terms are split by how ambiguous they are, rather than by language.
+ */
+
+/**
+ * Phrases that cannot plausibly mean anything except "stop messaging me".
+ * Matched ANYWHERE in the message, because there is no sentence in which
+ * 「取消訂閱」 or 「拒收」 is incidental. Both Traditional and Simplified are listed;
+ * the agency's customers write both.
+ */
+const UNAMBIGUOUS_OPT_OUT_PHRASES = [
+  "取消訂閱",
+  "取消订阅",
+  "退訂",
+  "退订",
+  "停止發送",
+  "停止发送",
+  "停止接收",
+  "停止接受",
+  "拒收",
+  "不再接收",
+  "不想再收",
+  "唔想再收",
+  "唔要再send",
+  "unsubscribe",
+  "opt out",
+  "optout",
+  "remove me",
+];
+
+/**
+ * Bare stems that DO appear mid-sentence for innocent reasons -- 取消 in
+ * 「我想取消今日睇樓約會」, 停止 in 「請停止安排星期六睇樓」, 不要 in 「不要太貴嘅盤」.
+ * These only count when they are the whole message, after politeness prefixes
+ * and punctuation are stripped.
+ */
+const AMBIGUOUS_OPT_OUT_STEMS = ["取消", "停止", "唔要", "不要", "不用"];
+
+/**
+ * Latin stems matched on word boundaries, so "please stop" opts out but
+ * "stopover" does not.
+ */
+const LATIN_OPT_OUT_STEMS = ["stop"];
+
+/**
+ * Leading politeness that carries no meaning for this decision, so 「唔該停止」 and
+ * 「我要取消」 reduce to the bare stem. Ordered longest-first so 唔該 is consumed
+ * before 唔.
+ */
+const POLITENESS_PREFIXES = [
+  "唔該晒",
+  "唔該",
+  "麻煩晒",
+  "麻煩你",
+  "麻煩",
+  "please",
+  "pls",
+  "我想要",
+  "我想",
+  "我要",
+  "我唔想",
+  "請你",
+  "请你",
+  "請",
+  "请",
+];
+
+/** Strip punctuation, symbols and whitespace so 「取消！」 and "STOP." still match. */
+function stripPunctuation(text: string) {
+  return text.replace(/[\p{P}\p{S}\p{Z}\s]/gu, "");
+}
+
+function stripPolitenessPrefixes(text: string) {
+  let result = text;
+  // Loop so 「唔該請取消」 reduces all the way down.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const before = result;
+    for (const prefix of POLITENESS_PREFIXES) {
+      if (result.startsWith(prefix)) {
+        result = result.slice(prefix.length);
+        break;
+      }
+    }
+    if (result === before) break;
+  }
+  return result;
+}
+
 export function isOptOutText(value: string | null | undefined) {
-  const text = (value ?? "").trim().toLowerCase();
-  return ["stop", "unsubscribe", "取消", "停止", "退訂", "唔要", "不要"].some(
-    (term) => text === term || text.includes(term),
+  // NFKC folds full-width Latin (ＳＴＯＰ) onto ASCII before casefolding, so a
+  // customer typing on a Chinese IME is not silently ignored.
+  const text = (value ?? "").normalize("NFKC").trim().toLowerCase();
+  if (!text) return false;
+
+  const bare = stripPunctuation(text);
+  if (!bare) return false;
+
+  // 1. Unambiguous phrases, anywhere in the message.
+  if (UNAMBIGUOUS_OPT_OUT_PHRASES.some((phrase) => bare.includes(stripPunctuation(phrase)))) {
+    return true;
+  }
+
+  // 2. Ambiguous stems, only once the message is nothing but the stem.
+  const stem = stripPolitenessPrefixes(bare);
+  if (AMBIGUOUS_OPT_OUT_STEMS.includes(stem)) return true;
+
+  // 3. Latin stems on word boundaries. The boundary class is "not a Latin
+  //    letter and not a digit" rather than \P{L}: CJK characters ARE letters,
+  //    so \P{L} never matched next to one and 「請stop」 / 「STOP啦」 slipped past.
+  return LATIN_OPT_OUT_STEMS.some((term) =>
+    new RegExp(`(?:^|[^\\p{Script=Latin}\\p{N}])${term}(?:[^\\p{Script=Latin}\\p{N}]|$)`, "u").test(
+      text,
+    ),
   );
 }
 

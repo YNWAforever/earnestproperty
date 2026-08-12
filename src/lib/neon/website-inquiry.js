@@ -20,6 +20,25 @@ export function isValidWebsiteListingNo(value) {
   return typeof value === "string" && WEBSITE_LISTING_NO_PATTERN.test(value);
 }
 
+/**
+ * KNOWN GAP -- needs a product decision, do not assume it is handled.
+ *
+ * Because the ON CONFLICT branch below carries name/email/opt_in_whatsapp over
+ * unchanged, an EXISTING contact cannot change any of them through the public
+ * form. For consent specifically that is a one-way door today: there is no
+ * admin screen and no server fn anywhere that sets crm_contacts.opt_in_whatsapp,
+ * so the only remaining way for it to become true is the customer sending an
+ * inbound WhatsApp message (api.woztell.webhook.ts, `opt_in_whatsapp OR $6`).
+ *
+ * Concretely: a customer who submits once WITHOUT ticking the consent box, and
+ * later returns and ticks it, has that consent silently discarded, and the form
+ * still reports success.
+ *
+ * Deliberately left as-is rather than papered over: allowing the public form to
+ * raise consent is exactly the forgery this guards against. The fix is a
+ * staff-side, audited mutation (mirror clearContactWhatsappOptOut in
+ * admin-data.server.ts) plus a control in the admin -- not a change here.
+ */
 export async function persistWebsiteInquiry(query, input) {
   const { name, phone, normalizedPhone, email, message, listingNo, propertyId, consentWhatsapp } =
     input;
@@ -29,9 +48,18 @@ export async function persistWebsiteInquiry(query, input) {
         INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
         VALUES ($1, $2, $3, $4, 'website', $6)
         ON CONFLICT (normalized_phone) DO UPDATE SET
-          name = COALESCE(EXCLUDED.name, crm_contacts.name),
-          email = COALESCE(EXCLUDED.email, crm_contacts.email),
-          opt_in_whatsapp = crm_contacts.opt_in_whatsapp OR EXCLUDED.opt_in_whatsapp,
+          -- Existing values win. This endpoint is unauthenticated: the only
+          -- thing a submitter proves is that they typed a phone number, so
+          -- letting EXCLUDED win meant anyone who knew a customer's number
+          -- could rewrite that contact's name and email in the CRM. New values
+          -- still fill blanks, which is the case the public form is for.
+          name = COALESCE(crm_contacts.name, EXCLUDED.name),
+          email = COALESCE(crm_contacts.email, EXCLUDED.email),
+          -- Deliberately NOT "OR EXCLUDED.opt_in_whatsapp". Raising consent here
+          -- let an unauthenticated caller forge WhatsApp marketing opt-in for
+          -- any number already in the CRM, and a forged opt-in feeds straight
+          -- into real blast delivery (see campaign-delivery.server.ts).
+          opt_in_whatsapp = crm_contacts.opt_in_whatsapp,
           updated_at = now()
         RETURNING id
       )`

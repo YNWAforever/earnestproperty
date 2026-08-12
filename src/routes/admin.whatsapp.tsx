@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Clock3, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
@@ -23,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
+  clearContactWhatsappOptOut,
   fetchAdminAgents,
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
@@ -115,8 +117,31 @@ function AdminWhatsapp() {
   // Drafts are held per conversation. A single shared string meant clicking
   // another conversation to check a flat number silently destroyed a half-typed
   // reply, with no warning and no undo, under a 24-hour reply clock.
+  //
+  // Persisted to sessionStorage rather than guarded with useRouteLeaveGuard:
+  // selecting a conversation is a same-route navigate, so treating a draft as
+  // "dirty" would pop 尚未儲存 on every single conversation click. Persistence
+  // gives the agent their text back after a reload or a trip to another admin
+  // page, with no prompt at all. sessionStorage (not local) so the draft dies
+  // with the tab rather than lingering on a shared office machine.
   const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
+
+  // Load this user's drafts once their identity is known, and re-load if the
+  // signed-in user changes -- never carry one agent's drafts into another's
+  // session.
+  const staffUserId = user?.id ?? null;
+  useEffect(() => {
+    setReplyDrafts(readStoredReplyDrafts(staffUserId));
+  }, [staffUserId]);
+
+  useEffect(() => {
+    writeStoredReplyDrafts(replyDrafts, staffUserId);
+  }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
+  // Clearing an opt-out re-enables marketing messages to a real person, so it
+  // is confirmed and reason-tagged rather than a bare button.
+  const [clearOptOutOpen, setClearOptOutOpen] = useState(false);
+  const [clearOptOutReason, setClearOptOutReason] = useState("");
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const inboxQuery = search.q ?? "";
@@ -184,13 +209,18 @@ function AdminWhatsapp() {
   }, [user]);
 
   const loadConversationAiAssist = useCallback(
-    async (id: string) => {
+    async (id: string, options: { background?: boolean } = {}) => {
       const requestId = aiAssistRequestRef.current + 1;
       aiAssistRequestRef.current = requestId;
-      setAiAssist(null);
-      // Without this, a pending fetch and an outright failure both rendered the
-      // same 「未有 AI assist。」, so staff could not tell "wait" from "broken".
-      setAiAssistLoading(true);
+      // A background refresh must leave the current card on screen. The 30s poll
+      // called this unconditionally, so the AI assist panel blanked to a
+      // skeleton every tick while an agent was reading it.
+      if (!options.background) {
+        setAiAssist(null);
+        // Without this, a pending fetch and an outright failure both rendered the
+        // same 「未有 AI assist。」, so staff could not tell "wait" from "broken".
+        setAiAssistLoading(true);
+      }
 
       try {
         const assist = await fetchAdminConversationAiAssist({ data: { conversationId: id } });
@@ -198,7 +228,8 @@ function AdminWhatsapp() {
         setAiAssist(assist as AdminConversationAiAssist);
       } catch {
         if (requestId !== aiAssistRequestRef.current || !canApplyConversationDetail(id)) return;
-        setAiAssist(null);
+        // Keep the last good card rather than blanking it on a transient poll error.
+        if (!options.background) setAiAssist(null);
       } finally {
         if (requestId === aiAssistRequestRef.current && canApplyConversationDetail(id)) {
           setAiAssistLoading(false);
@@ -230,7 +261,7 @@ function AdminWhatsapp() {
         const conversation = data as AdminConversationDetail;
         setDetail(conversation);
         setDetailError(null);
-        loadConversationAiAssist(id);
+        loadConversationAiAssist(id, { background: options.background });
         if (options.resetReply) {
           setReplyDrafts((current) => ({ ...current, [id]: "" }));
         }
@@ -382,9 +413,30 @@ function AdminWhatsapp() {
         },
       });
       assertNoMutationError(result);
-      const refreshedRows = (await fetchAdminConversations()) as AdminConversationRow[];
-      setRows(refreshedRows);
-      setListUpdatedAt(Date.now());
+
+      // Claim the list request slot before refetching. This fetch ran outside
+      // listRequestRef entirely, so a 30s background poll started earlier could
+      // resolve afterwards and overwrite the freshly-saved row with its stale
+      // copy -- the agent's status or assignment change silently reverted on
+      // screen while the database held the new value.
+      // Claiming the slot also means owning the loading flag: refreshConversations
+      // sets loadingRows(true) and only clears it when its own request id is
+      // still current, so bumping the ref from outside left an in-flight refresh
+      // unable to clear it -- the inbox sat in its skeleton state with 重新整理
+      // disabled until a full reload.
+      const listRequestId = listRequestRef.current + 1;
+      listRequestRef.current = listRequestId;
+      setLoadingRows(true);
+      let refreshedRows: AdminConversationRow[] = [];
+      try {
+        refreshedRows = (await fetchAdminConversations()) as AdminConversationRow[];
+        if (listRequestId === listRequestRef.current) {
+          setRows(refreshedRows);
+          setListUpdatedAt(Date.now());
+        }
+      } finally {
+        if (listRequestId === listRequestRef.current) setLoadingRows(false);
+      }
       if (!canApplyConversationDetail(targetId)) return;
 
       // Handing a conversation to another agent moves it out of this inbox, so
@@ -401,6 +453,44 @@ function AdminWhatsapp() {
       if (refreshed && canApplyConversationDetail(targetId)) toast.success("對話已更新");
     } catch (err) {
       if (canApplyConversationDetail(targetId)) toast.error(errorText(err));
+    } finally {
+      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
+    }
+  }
+
+  async function confirmClearOptOut() {
+    const contactId = detail?.contact_id;
+    const targetId = detail?.id;
+    if (!contactId || !targetId) {
+      toast.error("此對話未連結客戶記錄");
+      return;
+    }
+
+    const reason = clearOptOutReason.trim();
+    if (!reason) {
+      toast.error("請填寫解除原因");
+      return;
+    }
+
+    setMutatingAction("optout");
+    try {
+      const result = (await clearContactWhatsappOptOut({
+        data: { contactId, reason },
+      })) as { ok: boolean; error?: string };
+
+      if (!result.ok) {
+        toast.error(
+          result.error === "NOT_OPTED_OUT" ? "此客戶並未拒收 WhatsApp" : "解除失敗，請重試",
+        );
+        return;
+      }
+
+      setClearOptOutOpen(false);
+      setClearOptOutReason("");
+      const refreshed = await loadConversationDetail(targetId);
+      if (refreshed && canApplyConversationDetail(targetId)) toast.success("已解除拒收狀態");
+    } catch (err) {
+      toast.error(errorText(err));
     } finally {
       if (canApplyConversationDetail(targetId)) setMutatingAction(null);
     }
@@ -597,6 +687,7 @@ function AdminWhatsapp() {
               sendingReply={mutatingAction === "reply"}
               onReplyBodyChange={setReplyBody}
               onSendReply={sendReply}
+              onRequestClearOptOut={() => setClearOptOutOpen(true)}
               onStatusChange={(status) =>
                 detail
                   ? saveConversationUpdate({
@@ -639,6 +730,7 @@ function AdminWhatsapp() {
           sendingReply={mutatingAction === "reply"}
           onReplyBodyChange={setReplyBody}
           onSendReply={sendReply}
+          onRequestClearOptOut={() => setClearOptOutOpen(true)}
           onStatusChange={(status) =>
             detail
               ? saveConversationUpdate({
@@ -657,6 +749,50 @@ function AdminWhatsapp() {
           }
         />
       </AdminDetailPanel>
+
+      <AdminConfirmDialog
+        open={clearOptOutOpen}
+        title="解除拒收狀態？"
+        description="解除後，此客戶會重新收到 WhatsApp 回覆及群發訊息。請只在確認客戶並非有意拒收時使用。"
+        confirmLabel="確認解除"
+        confirmVariant="destructive"
+        isPending={mutatingAction === "optout"}
+        onOpenChange={(open) => {
+          if (mutatingAction === "optout") return;
+          setClearOptOutOpen(open);
+          if (!open) setClearOptOutReason("");
+        }}
+        onConfirm={() => void confirmClearOptOut()}
+      >
+        <div className="space-y-3 text-sm">
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3">
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt className="text-muted-foreground">客戶</dt>
+              <dd className="font-medium">{detail?.name ?? "WhatsApp 客戶"}</dd>
+            </div>
+            <div className="flex flex-wrap justify-between gap-2">
+              <dt className="text-muted-foreground">電話</dt>
+              <dd className="tabular-nums">{detail?.phone ?? "未有電話"}</dd>
+            </div>
+          </dl>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" htmlFor="clear-optout-reason">
+              解除原因
+            </label>
+            <Textarea
+              id="clear-optout-reason"
+              value={clearOptOutReason}
+              onChange={(event) => setClearOptOutReason(event.target.value)}
+              placeholder="例如：客戶來電確認只想取消睇樓，並非拒收訊息"
+              rows={3}
+              maxLength={500}
+            />
+            {/* Recorded in ops_audit_logs so a re-enabled contact is always
+                traceable to a person and a stated reason. */}
+            <p className="text-xs text-muted-foreground">原因會記錄在審計記錄中。</p>
+          </div>
+        </div>
+      </AdminConfirmDialog>
     </AdminShell>
   );
 }
@@ -775,6 +911,7 @@ function ConversationWorkspace({
   onSendReply,
   onStatusChange,
   onAgentChange,
+  onRequestClearOptOut,
 }: {
   detail: AdminConversationDetail | null;
   agents: AdminAgentRow[];
@@ -792,6 +929,7 @@ function ConversationWorkspace({
   onSendReply: () => void;
   onStatusChange: (status: string) => void;
   onAgentChange: (assignedAgentId: string | null) => void;
+  onRequestClearOptOut: () => void;
 }) {
   if (loading && !detail) return <Skeleton className="h-[32rem] w-full rounded-none" />;
   if (error)
@@ -824,6 +962,21 @@ function ConversationWorkspace({
               <h2 className="truncate text-base font-semibold">{detail.name ?? "WhatsApp 客戶"}</h2>
               <StatusBadge status={detail.status} />
               {detail.opted_out_whatsapp ? <Badge variant="destructive">已拒收</Badge> : null}
+              {/* An opt-out used to be a one-way door: the inbound webhook only
+                  ever OR-ed the flag true, so a customer mis-read as opting out
+                  (「我想取消今日睇樓約會」) was blocked from replies and campaigns
+                  forever. admin/manager can undo it; the server re-checks. */}
+              {detail.opted_out_whatsapp && detail.can_clear_opt_out && detail.contact_id ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={onRequestClearOptOut}
+                  disabled={disabled}
+                >
+                  解除拒收
+                </Button>
+              ) : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{detail.phone ?? "未有電話"}</p>
           </div>
@@ -1241,4 +1394,58 @@ function errorText(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return String(error);
+}
+
+const REPLY_DRAFT_STORAGE_PREFIX = "earnest:whatsapp:reply-drafts";
+
+/**
+ * Drafts are namespaced per authenticated user. sessionStorage is shared by
+ * every page in the tab, so a single unnamespaced key meant that on a shared
+ * office machine the next person to sign in was shown -- and could send -- the
+ * previous agent's half-written reply to a customer.
+ */
+function replyDraftStorageKey(userId: string | null | undefined) {
+  return userId ? `${REPLY_DRAFT_STORAGE_PREFIX}:${userId}` : null;
+}
+
+/**
+ * Reply drafts survive reload and navigation away from the inbox. Reads are
+ * defensive: sessionStorage throws in private-mode Safari and the stored JSON
+ * can be anything a previous version wrote, and a corrupt draft cache must
+ * never stop the inbox from rendering.
+ */
+function readStoredReplyDrafts(userId: string | null | undefined): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const key = replyDraftStorageKey(userId);
+  if (!key) return {};
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(
+      Object.entries(parsed as Record<string, unknown>)
+        .filter(([, value]) => typeof value === "string" && value.trim())
+        .map(([key, value]) => [key, value as string]),
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeStoredReplyDrafts(drafts: Record<string, string>, userId: string | null | undefined) {
+  if (typeof window === "undefined") return;
+  const key = replyDraftStorageKey(userId);
+  if (!key) return;
+  try {
+    // Drop sent/empty drafts so the key does not grow without bound.
+    const kept = Object.fromEntries(Object.entries(drafts).filter(([, value]) => value.trim()));
+    if (Object.keys(kept).length === 0) {
+      window.sessionStorage.removeItem(key);
+      return;
+    }
+    window.sessionStorage.setItem(key, JSON.stringify(kept));
+  } catch {
+    // Quota or private-mode failure: the draft simply is not persisted.
+  }
 }

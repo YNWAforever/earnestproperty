@@ -92,3 +92,123 @@ export function shouldBootstrapFirstAdmin(input: {
   }
   return isFirstAdminBootstrapEligible(input.staffRows);
 }
+
+export type StaffRoleChangeDecision =
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason: "not-admin" | "self-admin-removal" | "last-admin" | "protected-account";
+    };
+
+export type StaffDeactivationDecision =
+  | { allowed: true }
+  | {
+      allowed: false;
+      reason:
+        | "not-admin"
+        | "self"
+        | "last-admin"
+        | "successor-required"
+        | "successor-is-target"
+        | "protected-account";
+    };
+
+function losesAdmin(current: readonly string[], next: readonly string[]) {
+  return current.includes("admin") && !next.includes("admin");
+}
+
+/**
+ * These counts are read from the database, so an authorization boundary
+ * cannot trust that they always arrive as clean numbers -- a malformed row
+ * or an upstream `Number(...)` on non-numeric input can hand us `NaN`.
+ * `NaN < 1` and `NaN > 0` are both `false`, so an unguarded comparison would
+ * silently skip the check it guards: a false ALLOW at an authorization
+ * boundary. Normalize non-finite input to the most restrictive value instead
+ * of trusting it -- fail closed, not open.
+ */
+function normalizedAdminCount(otherAdminCount: number): number {
+  return Number.isFinite(otherAdminCount) ? otherAdminCount : 0;
+}
+
+/** Same fail-closed posture as {@link normalizedAdminCount}: an unreadable ownership total is treated as "owns work". */
+function normalizedOwnedTotal(ownedTotal: number): number {
+  return Number.isFinite(ownedTotal) ? ownedTotal : Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Role changes are privilege changes, so the guards are about lockout rather
+ * than tidiness: you may drop your own `manager`, but never your own `admin`,
+ * and the system must always retain at least one admin.
+ *
+ * `otherAdminCount` counts admins EXCLUDING the target, and must be read
+ * server-side inside the same transaction as the write -- a client-supplied
+ * count is a TOCTOU hole. Non-finite input is normalized to the most
+ * restrictive value rather than silently skipping the guard (see
+ * `normalizedAdminCount`).
+ */
+export function decideStaffRoleChange(input: {
+  actorRoles: readonly string[];
+  actorStaffId: string;
+  targetStaffId: string;
+  currentRoles: readonly string[];
+  nextRoles: readonly string[];
+  otherAdminCount: number;
+  /** True when the target's email is in ADMIN_BOOTSTRAP_EMAILS. */
+  targetIsProtected: boolean;
+}): StaffRoleChangeDecision {
+  const otherAdminCount = normalizedAdminCount(input.otherAdminCount);
+
+  if (!input.actorRoles.includes("admin")) return { allowed: false, reason: "not-admin" };
+
+  if (losesAdmin(input.currentRoles, input.nextRoles)) {
+    // Owner accounts cannot be demoted by anyone, including another admin.
+    // Gaining roles is still allowed -- only losing admin is blocked.
+    if (input.targetIsProtected) return { allowed: false, reason: "protected-account" };
+    if (input.actorStaffId === input.targetStaffId) {
+      return { allowed: false, reason: "self-admin-removal" };
+    }
+    if (otherAdminCount < 1) return { allowed: false, reason: "last-admin" };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Deactivating someone hands their work to a colleague, so the guards here
+ * are about never leaving the system without an admin and never leaving
+ * owned work orphaned -- not about tidiness.
+ *
+ * `otherAdminCount` (admins EXCLUDING the target) and `ownedTotal` must both
+ * be read server-side inside the same transaction as the write -- client-
+ * supplied values are a TOCTOU hole. Non-finite input is normalized to the
+ * most restrictive value rather than silently skipping the guard it feeds
+ * (see `normalizedAdminCount` / `normalizedOwnedTotal`).
+ */
+export function decideStaffDeactivation(input: {
+  actorRoles: readonly string[];
+  actorStaffId: string;
+  targetStaffId: string;
+  targetRoles: readonly string[];
+  otherAdminCount: number;
+  ownedTotal: number;
+  reassignToStaffId: string | null;
+  /** True when the target's email is in ADMIN_BOOTSTRAP_EMAILS. */
+  targetIsProtected: boolean;
+}): StaffDeactivationDecision {
+  const otherAdminCount = normalizedAdminCount(input.otherAdminCount);
+  const ownedTotal = normalizedOwnedTotal(input.ownedTotal);
+
+  if (!input.actorRoles.includes("admin")) return { allowed: false, reason: "not-admin" };
+  if (input.targetIsProtected) return { allowed: false, reason: "protected-account" };
+  if (input.actorStaffId === input.targetStaffId) return { allowed: false, reason: "self" };
+  if (input.targetRoles.includes("admin") && otherAdminCount < 1) {
+    return { allowed: false, reason: "last-admin" };
+  }
+  if (ownedTotal > 0) {
+    if (!input.reassignToStaffId) return { allowed: false, reason: "successor-required" };
+    if (input.reassignToStaffId === input.targetStaffId) {
+      return { allowed: false, reason: "successor-is-target" };
+    }
+  }
+  return { allowed: true };
+}

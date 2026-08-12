@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { requireStaffAccess } from "@/lib/neon/auth.server";
+import { agentScope } from "@/lib/neon/admin-data.server";
 import { queryRows, stringOrNull } from "@/lib/neon/db.server";
 import { canReplyToConversation } from "@/lib/neon/admin-workflow";
 import { sendWoztellResponse, woztellEnabled } from "@/lib/woztell/woztell.server";
@@ -37,6 +38,14 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
           );
         }
 
+        // Scope the lookup the same way every sibling conversation path does
+        // (listAdminConversations, fetchAdminConversation,
+        // fetchAdminConversationAiAssist, updateAdminConversation all filter on
+        // assigned_agent_id). Without this, an agent-role token could send a
+        // real WhatsApp message on a conversation assigned to someone else --
+        // one they are not even allowed to read -- stamped with their own
+        // sent_by. NULL scope means admin/manager, who see everything.
+        const scope = agentScope(staff);
         const conversationRows = await queryRows<SendConversationRow>(
           `
           SELECT
@@ -49,13 +58,17 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
           FROM whatsapp_conversations wc
           LEFT JOIN crm_contacts c ON c.id = wc.contact_id
           WHERE wc.id = $1
+            AND ($2::uuid IS NULL OR wc.assigned_agent_id = $2::uuid)
           LIMIT 1
           `,
-          [conversationId],
+          [conversationId, scope],
         );
         const conversation = conversationRows[0];
         if (!conversation) {
-          return Response.json({ ok: false, error: "CONVERSATION_NOT_FOUND" }, { status: 400 });
+          // Deliberately the same response for "no such conversation" and "not
+          // yours": distinguishing them would let an agent enumerate which
+          // conversation ids exist.
+          return Response.json({ ok: false, error: "CONVERSATION_NOT_FOUND" }, { status: 404 });
         }
 
         const memberId = stringOrNull(conversation.woztell_member_id)?.trim();

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -145,4 +146,58 @@ test("resolveWhatsappStatus: unlinked blocked reasons in priority order", () => 
     woztellEnabled: true,
   });
   assert.equal(noConv.blockedReason, "NO_CONVERSATION");
+});
+
+// Every lead/property mutation in admin-data.server.ts scopes agents to their
+// own rows via agentScope(actor) -- except these four, which took an id
+// straight from the client. An agent who kept a UUID after reassignment (or
+// read one off a crm_ai_tags id) could read another agent's enriched lead
+// profile, overwrite it, flip their AI tags, write activities onto their
+// timeline, and SELECT * any listing including drafts.
+test("the AI and activity surfaces scope agents to their own leads", () => {
+  const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+
+  // The shared guards exist and throw rather than returning empty.
+  assert.match(source, /async function assertLeadInScope\(leadId: string, actor: StaffAccess\)/);
+  assert.match(source, /async function assertAiTagInScope\(tagId: string, actor: StaffAccess\)/);
+  assert.match(source, /throw new Response\("Forbidden", \{ status: 403 \}\)/);
+
+  // The tag guard must join through to the owning lead, not just check the tag.
+  assert.match(source, /FROM crm_ai_tags t\s*\n\s*JOIN crm_leads l ON l\.id = t\.lead_id/);
+
+  const guarded = [
+    "fetchAdminLeadAiProfile",
+    "analyzeAdminLeadAiProfile",
+    "approveAdminAiTag",
+    "rejectAdminAiTag",
+    "createAdminLeadActivity",
+  ];
+  for (const name of guarded) {
+    const start = source.indexOf(`export async function ${name}`);
+    assert.notEqual(start, -1, `${name} must exist`);
+    const body = source.slice(start, start + 900);
+    assert.match(body, /await assert(Lead|AiTag)InScope\(/, `${name} must assert scope`);
+  }
+
+  // The old opt-out: `void actor` meant the actor was accepted and discarded.
+  for (const name of ["fetchAdminLeadAiProfile", "analyzeAdminLeadAiProfile"]) {
+    const start = source.indexOf(`export async function ${name}`);
+    assert.doesNotMatch(source.slice(start, start + 400), /void actor;/);
+  }
+});
+
+test("single-property read is agent-scoped like every property write", () => {
+  const server = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+  const client = readFileSync("src/lib/neon/admin-data.ts", "utf8");
+
+  const start = server.indexOf("export async function getAdminProperty");
+  const body = server.slice(start, start + 900);
+  assert.notEqual(start, -1);
+  assert.match(body, /actor\?: StaffAccess/);
+  assert.match(body, /const scope = actor \? agentScope\(actor\) : null/);
+  assert.match(body, /AND agent_id = \$2/);
+  assert.doesNotMatch(body, /"SELECT \* FROM properties WHERE id = \$1 LIMIT 1"/);
+
+  // The staff record must actually be threaded through from the server fn.
+  assert.match(client, /adminData\.getAdminProperty\(data\.id, staff\)/);
 });

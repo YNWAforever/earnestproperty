@@ -5,7 +5,6 @@ import {
   BookOpen,
   Building2,
   ContactRound,
-  FileQuestion,
   Gauge,
   Home,
   LogOut,
@@ -26,6 +25,15 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 
+// Grouped rather than flat, and static rather than collapsible: with ten
+// entries there is no vertical space worth reclaiming, and a collapsed group is
+// how 媒體庫 became unreachable in the first place.
+//
+// /admin/cms previously had TWO entries differing only by search param -- one
+// labelled "CMS / FAQ" that actually landed on 屋苑 SEO, and one labelled
+// "AI Agent" that landed on FAQ 編輯 -- while 文章編輯, YouTube影片 and 媒體庫 had
+// no entry at all. One honest entry now covers all five tabs.
+//
 // `activeExact: false` opts an entry into prefix matching so the section stays
 // highlighted on its own child routes -- without it, editing a listing
 // (/admin/listings/123) or creating an agent (/admin/agents/new) left the whole
@@ -33,18 +41,48 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 // were in. Only entries that actually own child routes get this; /admin must
 // stay exact or it would match every admin page, and /admin/leads must stay
 // exact so it does not bleed into the separate Command Center entry.
-const navItems = [
-  { to: "/admin", label: "總覽", icon: BarChart3 },
-  { to: "/admin/cms", label: "CMS / FAQ", icon: BookOpen, search: { tab: undefined } },
-  { to: "/admin/cms", label: "AI Agent", icon: FileQuestion, search: { tab: "faqs" } },
-  { to: "/admin/listings", label: "放盤", icon: Building2, activeExact: false },
-  { to: "/admin/agents", label: "經紀管理", icon: UserRoundCog, activeExact: false },
-  { to: "/admin/leads", label: "CRM", icon: ContactRound },
-  { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
-  { to: "/admin/operations", label: "系統營運", icon: ServerCog, includeSearch: false },
-  { to: "/admin/segments", label: "Segments", icon: Users },
-  { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
-  { to: "/admin/blasts", label: "群發", icon: Send },
+const navGroups = [
+  {
+    heading: null,
+    items: [{ to: "/admin", label: "總覽", icon: BarChart3 }],
+  },
+  {
+    heading: "物業",
+    items: [
+      { to: "/admin/listings", label: "放盤", icon: Building2, activeExact: false },
+      {
+        to: "/admin/cms",
+        label: "網站內容",
+        icon: BookOpen,
+        activeExact: false,
+        includeSearch: false,
+      },
+    ],
+  },
+  {
+    heading: "客戶",
+    items: [
+      { to: "/admin/leads", label: "CRM", icon: ContactRound },
+      { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
+      { to: "/admin/segments", label: "客戶分群", icon: Users },
+    ],
+  },
+  {
+    heading: "訊息",
+    items: [
+      { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
+      { to: "/admin/blasts", label: "群發", icon: Send },
+    ],
+  },
+  {
+    heading: "系統",
+    items: [
+      // Renamed from 經紀管理: with roles attached this screen manages staff
+      // access, not just public directory entries.
+      { to: "/admin/agents", label: "員工管理", icon: UserRoundCog, activeExact: false },
+      { to: "/admin/operations", label: "系統營運", icon: ServerCog, includeSearch: false },
+    ],
+  },
 ] as const;
 
 const navLinkClassName =
@@ -60,28 +98,36 @@ const navLinkActiveProps = {
 
 function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <nav aria-label="後台選單" className="grid gap-2">
-      {navItems.map((item) => {
-        const Icon = item.icon;
-        return (
-          <Link
-            key={`${item.to}-${item.label}`}
-            to={item.to}
-            {...("search" in item ? { search: item.search } : {})}
-            activeOptions={{
-              exact: "activeExact" in item ? item.activeExact : true,
-              includeSearch: "includeSearch" in item ? item.includeSearch : true,
-              explicitUndefined: true,
-            }}
-            className={navLinkClassName}
-            activeProps={navLinkActiveProps}
-            onClick={onNavigate}
-          >
-            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {item.label}
-          </Link>
-        );
-      })}
+    <nav aria-label="後台選單" className="grid gap-4">
+      {navGroups.map((group) => (
+        <div key={group.heading ?? "root"} className="grid gap-1">
+          {group.heading ? (
+            <p className="px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {group.heading}
+            </p>
+          ) : null}
+          {group.items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={`${item.to}-${item.label}`}
+                to={item.to}
+                activeOptions={{
+                  exact: "activeExact" in item ? item.activeExact : true,
+                  includeSearch: "includeSearch" in item ? item.includeSearch : true,
+                  explicitUndefined: true,
+                }}
+                className={navLinkClassName}
+                activeProps={navLinkActiveProps}
+                onClick={onNavigate}
+              >
+                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }

@@ -63,21 +63,17 @@ test("admin child routes are present in the generated route tree", () => {
   assert.doesNotMatch(routeTree, /AdminListingsRouteWithChildren/);
   assert.doesNotMatch(routeTree, /parentRoute: typeof AdminListingsRoute/);
 });
-test("CMS and AI Agent sidebar entries keep independent active states", () => {
-  const shell = read("src/components/admin/AdminShell.tsx");
+// Superseded by "sidebar has no duplicate destinations and is fully grouped"
+// below: this used to pin the OLD /admin/cms sidebar shape -- two separate
+// entries ("CMS / FAQ" and "AI Agent") kept independently active by a
+// `search` prop spread on the nav Link. That shape *was* the bug (see Task 12
+// in docs/superpowers/plans/2026-08-12-staff-access-management.md): one entry
+// landed on the wrong tab, one was mislabelled, and three tabs had no entry
+// at all. The single grouped /admin/cms entry now relies on plain
+// `includeSearch: false` instead, with no per-item `search` prop, so this
+// test's premise no longer holds.
+test("admin CMS route still owns its own tab search state", () => {
   const cmsRoute = read("src/routes/admin.cms.tsx");
-
-  assert.match(shell, /to: "\/admin\/cms", label: "CMS \/ FAQ"/);
-  assert.match(shell, /label: "CMS \/ FAQ",[\s\S]*?search: \{ tab: undefined \}/);
-  assert.match(shell, /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/);
-  assert.match(shell, /includeSearch: false/);
-  const navLinkOpening = shell.match(
-    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
-  )?.[0];
-  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
-  assert.match(navLinkOpening, /\.\.\.\("search" in item/);
-  assert.match(navLinkOpening, /activeOptions=\{\{/);
-  assert.match(navLinkOpening, /explicitUndefined: true/);
 
   assert.match(cmsRoute, /validateSearch/);
   assert.match(cmsRoute, /Route\.useSearch\(\)/);
@@ -525,4 +521,231 @@ test("command center route is registered, noindex, and admin-guarded", () => {
 test("Operations route is present in the generated route tree", () => {
   const routeTree = read("src/routeTree.gen.ts");
   assert.match(routeTree, /['"]\/admin\/operations['"]/);
+});
+
+// An agent-role token could previously send a real WhatsApp message on ANY
+// conversation: the lookup was `WHERE wc.id = $1` with no scope, while every
+// sibling conversation path in admin-data.server.ts filters on
+// assigned_agent_id. The blast radius is a customer receiving a message from an
+// agent who is not allowed to read their thread.
+test("WhatsApp send route scopes the conversation lookup to the acting agent", () => {
+  const route = read("src/routes/api.admin.woztell.send.ts");
+
+  assert.match(route, /import \{ agentScope \} from "@\/lib\/neon\/admin-data\.server"/);
+  assert.match(route, /const scope = agentScope\(staff\)/);
+  assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
+  assert.match(route, /\[conversationId, scope\]/);
+});
+
+test("agentScope is exported once and not redefined per call site", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  assert.match(server, /export function agentScope\(actor: StaffAccess\)/);
+
+  // Any second definition means the two can drift apart.
+  const definitions = (server.match(/function agentScope\(/g) ?? []).length;
+  assert.equal(definitions, 1);
+});
+
+// Roles and deactivation are privilege operations. Managers may edit an agent's
+// public profile, but must never be able to escalate anyone -- including
+// themselves -- so all three are admin-only at the server boundary.
+test("staff access management server functions are admin-only", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+
+  for (const name of [
+    "fetchStaffAccessSummaryServer",
+    "updateStaffRolesServer",
+    "setStaffActiveServer",
+  ]) {
+    const start = client.indexOf(`const ${name} = createServerFn`);
+    assert.notEqual(start, -1, `${name} must exist`);
+    const body = client.slice(start, start + 900);
+    assert.match(body, /requireStaff\(\["admin"\]\)/, `${name} must require admin`);
+  }
+});
+
+test("deactivation reassigns and flips active in one transaction", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const start = server.indexOf("export async function setStaffActive");
+  const body = server.slice(start);
+
+  assert.notEqual(start, -1);
+  assert.match(body, /staffReassignStatements\(input\.staffId, reassignToStaffId\)/);
+  assert.match(body, /SET active = false/);
+  assert.match(body, /writeAudit\(actor\.staffId, "staff\.deactivate"/);
+});
+
+// The zero-admin guard's shape is load-bearing, not stylistic -- see the doc
+// comment on isZeroAdminGuardTrip in admin-data.server.ts. A future
+// "simplification" of `1 / (CASE ... END) = 1` back to the obvious-looking
+// `AND (CASE WHEN <safe> THEN true ELSE (1/0=0) END)` reintroduces a real bug,
+// confirmed empirically against Postgres 17: a bare `1/0` is pure literals, so
+// the planner constant-folds it during planning and it errors even on the
+// safe path, on a bare EXPLAIN; and a guard that references only the bind
+// parameter, not a column of the scanned row, gets hoisted into a one-time
+// filter that runs before the scan finds a matching row, so it fires even
+// when zero rows would ever be touched. Both guarded statements below must
+// keep BOTH properties that defeat this: the risky division's divisor is a
+// CASE (not constant-foldable), and that CASE's WHEN redundantly re-tests a
+// column of the scanned row, not just the bind parameter.
+test("zero-admin guard SQL keeps the row-dependent CASE-divisor shape in both guarded statements", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+
+  function guardStatementSql(anchorPattern) {
+    const anchorMatch = server.match(anchorPattern);
+    assert.ok(anchorMatch, `guard anchor ${anchorPattern} must exist`);
+    const start = anchorMatch.index;
+    const end = server.indexOf("`", start);
+    assert.notEqual(end, -1, `closing backtick for ${anchorPattern} not found`);
+    return server.slice(start, end);
+  }
+
+  const guardedStatements = [
+    {
+      name: "updateStaffRoles' admin-row DELETE",
+      sql: guardStatementSql(/DELETE FROM staff_roles AS target/),
+      rowColumnWhen: /WHEN\s+target\.role\s*=\s*'admin'::staff_role\s+AND\s+EXISTS/,
+    },
+    {
+      name: "setStaffActive's deactivation UPDATE",
+      sql: guardStatementSql(/UPDATE staff_users AS target\s+SET active = false/),
+      rowColumnWhen: /WHEN\s+target\.id\s*=\s*\$1::uuid/,
+    },
+  ];
+
+  for (const { name, sql, rowColumnWhen } of guardedStatements) {
+    // Property 1: the divisor is a CASE expression, not a bare literal -- a
+    // bare `1/0` is pure literals and gets constant-folded by the planner
+    // during planning, independent of runtime row values. See
+    // isZeroAdminGuardTrip.
+    assert.match(
+      sql,
+      /1\s*\/\s*\(\s*CASE[\s\S]*?END\s*\)\s*=\s*1/,
+      `${name}: guard divisor must be "1 / (CASE ... END) = 1", a CASE that can't be constant-folded -- see the isZeroAdminGuardTrip comment in admin-data.server.ts for why a bare literal divisor errors even on the safe path`,
+    );
+
+    // Property 2: the CASE's WHEN condition redundantly re-tests a column of
+    // the row being scanned (not only the bind parameter), so Postgres
+    // cannot treat the guard as row-independent and hoist it into a one-time
+    // filter that runs before the scan finds a matching row. See
+    // isZeroAdminGuardTrip.
+    assert.match(
+      sql,
+      rowColumnWhen,
+      `${name}: guard's CASE must re-test a column of the scanned row, or Postgres can hoist it ahead of the scan and fire it even when zero rows match -- see the isZeroAdminGuardTrip comment in admin-data.server.ts`,
+    );
+
+    // Both properties above are required together; this is the exact
+    // regression they guard against: a "simplified" divisor that looks
+    // equivalent but is constant-foldable and row-independent.
+    assert.doesNotMatch(
+      sql,
+      /ELSE\s*\(\s*1\s*\/\s*0\s*=\s*0\s*\)/,
+      `${name}: guard must not use the known-broken "ELSE (1/0=0)" literal form -- see the isZeroAdminGuardTrip comment in admin-data.server.ts for why it silently defeats the last-admin protection`,
+    );
+  }
+});
+
+// Owner accounts (ADMIN_BOOTSTRAP_EMAILS) must be protected at the server
+// boundary, not merely disabled in the UI -- otherwise another admin could
+// demote or deactivate the owner with a direct call to the server function,
+// bypassing any client-side disabled state entirely.
+test("protected owner accounts are enforced server-side, not only hidden in the UI", () => {
+  const auth = read("src/lib/neon/auth.server.ts");
+  assert.match(auth, /export function isProtectedStaffEmail\(/);
+
+  const server = read("src/lib/neon/admin-data.server.ts");
+  assert.match(server, /isProtected: isProtectedStaffEmail\(stringOrNull\(row\.email\)\)/);
+
+  // Bound each function body at the next top-level export, not a fixed
+  // char count: updateStaffRoles' comment block alone runs past a thousand
+  // characters, and a fixed window sized for it would either clip
+  // setStaffActive's own (later) targetIsProtected line or, sized for that,
+  // risk reading past updateStaffRoles into unrelated code.
+  const updateStaffRolesStart = server.indexOf("export async function updateStaffRoles");
+  const setStaffActiveStart = server.indexOf("export async function setStaffActive");
+  assert.notEqual(updateStaffRolesStart, -1, "updateStaffRoles must exist");
+  assert.notEqual(setStaffActiveStart, -1, "setStaffActive must exist");
+  const nextExportAfterSetStaffActive = server.indexOf("\nexport ", setStaffActiveStart + 40);
+  assert.notEqual(nextExportAfterSetStaffActive, -1, "next exported symbol must exist");
+
+  const bodies = {
+    updateStaffRoles: server.slice(updateStaffRolesStart, setStaffActiveStart),
+    setStaffActive: server.slice(setStaffActiveStart, nextExportAfterSetStaffActive),
+  };
+
+  for (const [fnName, body] of Object.entries(bodies)) {
+    assert.match(
+      body,
+      /targetIsProtected: summary\.isProtected/,
+      `${fnName} must pass targetIsProtected into its decision function`,
+    );
+  }
+});
+
+// Two entries pointed at /admin/cms differing only by search param, with labels
+// that named the wrong tab, while three of that screen's five tabs had no entry
+// at all. A duplicate destination is the shape of that bug.
+test("sidebar has no duplicate destinations and is fully grouped", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+
+  const start = shell.indexOf("const navGroups = [");
+  assert.notEqual(start, -1, "navGroups must exist");
+  const block = shell.slice(start, shell.indexOf("] as const;", start));
+
+  const destinations = [...block.matchAll(/to:\s*"([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(
+    new Set(destinations).size,
+    destinations.length,
+    `duplicate sidebar destination: ${destinations.join(", ")}`,
+  );
+  assert.equal(destinations.length, 10);
+
+  for (const heading of ["物業", "客戶", "訊息", "系統"]) {
+    assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
+  }
+
+  // The old duplicate + its misleading labels must not come back.
+  assert.doesNotMatch(block, /search: \{ tab: "faqs" \}/);
+  assert.doesNotMatch(block, /"AI Agent"/);
+  assert.doesNotMatch(block, /"CMS \/ FAQ"/);
+  assert.match(block, /"員工管理"/);
+
+  // Pinned on the entries themselves (not the whole block) so a future
+  // reorder of navGroups cannot silently invalidate this without failing
+  // here. See the comment above navGroups for why these two are exact.
+  const adminEntry = block.match(/\{\s*to:\s*"\/admin",[^}]*\}/)?.[0];
+  assert.ok(adminEntry, "/admin entry must exist in navGroups");
+  assert.doesNotMatch(
+    adminEntry,
+    /activeExact:\s*false/,
+    "/admin must stay exact (no activeExact: false) or it matches every admin page",
+  );
+
+  const adminLeadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0];
+  assert.ok(adminLeadsEntry, "/admin/leads entry must exist in navGroups");
+  assert.doesNotMatch(
+    adminLeadsEntry,
+    /activeExact:\s*false/,
+    "/admin/leads must stay exact (no activeExact: false) or it bleeds into the separate /admin/leads/command-center entry",
+  );
+
+  // `activeOptions` is where each entry's activeExact/includeSearch above
+  // actually takes effect, and `explicitUndefined: true` is what makes an
+  // entry with no search params (like /admin) refuse to match a URL that
+  // carries extra search state it should not.
+  const navLinkOpening = shell.match(
+    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
+  )?.[0];
+  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
+  assert.match(
+    navLinkOpening,
+    /activeOptions=\{\{/,
+    "nav Link must pass activeOptions, or every entry's activeExact/includeSearch setting above is ignored and falls back to the Link's own defaults",
+  );
+  assert.match(
+    navLinkOpening,
+    /explicitUndefined:\s*true/,
+    "explicitUndefined must stay true, or an entry with no search params (like /admin) can match a URL carrying extra search state it should not",
+  );
 });

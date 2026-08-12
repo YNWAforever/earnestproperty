@@ -9,6 +9,7 @@ import {
   queryRows,
   stringOrEmpty,
   stringOrNull,
+  transactionRows,
 } from "./db.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import type { StaffAccess } from "./auth.server";
@@ -45,6 +46,9 @@ import type {
   CommandCenterData,
   CommandCenterKpis,
   CommandCenterRow,
+  StaffAccessRole,
+  StaffAccessSummary,
+  StaffOwnedCounts,
 } from "./admin-data.types";
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
@@ -87,9 +91,524 @@ import { woztellEnabled } from "../woztell/woztell.server";
  * from rewriting the entire CRM in a single statement. */
 export const BULK_LEAD_UPDATE_LIMIT = 200;
 
-function agentScope(actor: StaffAccess): string | null {
+/**
+ * The row-visibility scope for an actor: null means "all rows" (admin/manager),
+ * otherwise the agent's own staff id. Exported because API routes outside this
+ * module enforce the same scoping -- see api.admin.woztell.send.ts, which sends
+ * real WhatsApp messages and must not let an agent act on another agent's
+ * conversation. Keep one definition; a second copy is how they drift apart.
+ */
+export function agentScope(actor: StaffAccess): string | null {
   if (actor.roles.includes("admin") || actor.roles.includes("manager")) return null;
   return actor.roles.includes("agent") ? actor.staffId : null;
+}
+
+/**
+ * Roles, active flag, per-table owned counts, AND the raw other-admin count
+ * for one staff member.
+ *
+ * The raw count is internal-only: `updateStaffRoles` and `setStaffActive`
+ * both need it (as an input to their own fresh decideStaffRoleChange /
+ * decideStaffDeactivation calls, not this call's already-computed
+ * `isLastAdmin`), and previously each re-ran this exact query themselves --
+ * a third round-trip for a number this function already had in hand. Kept
+ * out of the public `StaffAccessSummary` type deliberately: nothing else
+ * needs it, and widening a public type to serve two internal callers is the
+ * wrong direction.
+ */
+async function fetchStaffAccessSummaryWithCounts(
+  input: { staffId: string },
+  actor: StaffAccess,
+): Promise<{ summary: StaffAccessSummary; otherAdminCount: number }> {
+  const { STAFF_OWNERSHIP_COLUMNS, staffOwnershipCountSql } = await import("./staff-ownership");
+
+  const { isProtectedStaffEmail } = await import("./auth.server");
+
+  const roleRows = await queryRows(
+    `SELECT s.active,
+            s.email,
+            COALESCE(
+              array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)),
+              '[]'::json
+            ) AS roles,
+            (
+              SELECT count(*)::int
+              FROM staff_roles other
+              JOIN staff_users os ON os.id = other.staff_user_id
+              WHERE other.role = 'admin'
+                AND other.staff_user_id <> $1::uuid
+                AND os.active = true
+            ) AS other_admin_count
+       FROM staff_users s
+       LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+      WHERE s.id = $1::uuid
+      GROUP BY s.id`,
+    [input.staffId],
+  );
+  const row = roleRows[0];
+  if (!row) throw new Response("Staff member not found.", { status: 404 });
+
+  const roles = (Array.isArray(row.roles) ? row.roles : []).map(String) as StaffAccessRole[];
+  const otherAdminCount = Number(row.other_admin_count ?? 0);
+
+  const count = staffOwnershipCountSql(input.staffId);
+  const countRows = await queryRows(count.statement, count.params);
+  const countRow = countRows[0] ?? {};
+  const owned = Object.fromEntries(
+    STAFF_OWNERSHIP_COLUMNS.map(({ table }) => [table, Number(countRow[table] ?? 0)]),
+  ) as StaffOwnedCounts;
+
+  return {
+    summary: {
+      staffId: input.staffId,
+      roles,
+      active: row.active === true,
+      isSelf: actor.staffId === input.staffId,
+      isLastAdmin: roles.includes("admin") && otherAdminCount < 1,
+      isProtected: isProtectedStaffEmail(stringOrNull(row.email)),
+      owned,
+      ownedTotal: Object.values(owned).reduce((total, value) => total + value, 0),
+    },
+    otherAdminCount,
+  };
+}
+
+/**
+ * Roles, active flag and per-table owned counts for one staff member.
+ *
+ * `isLastAdmin` is computed here rather than on the client: it decides whether
+ * a privilege change is allowed, so it must come from the database at decision
+ * time.
+ */
+export async function fetchStaffAccessSummary(
+  input: { staffId: string },
+  actor: StaffAccess,
+): Promise<StaffAccessSummary> {
+  const { summary } = await fetchStaffAccessSummaryWithCounts(input, actor);
+  return summary;
+}
+
+const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent"];
+
+/**
+ * True when a driver error is the division-by-zero that updateStaffRoles and
+ * setStaffActive deliberately trigger inside a guarded SQL statement
+ * (SQLSTATE 22012 -- see the comments on both functions). Postgres aborts the
+ * whole transaction when this fires, so nothing else sent in the same
+ * transactionRows() call -- an earlier DELETE, a later INSERT, an ownership
+ * handover -- is left half-applied.
+ *
+ * The guard is deliberately NOT `CASE WHEN <safe> THEN true ELSE (1/0=0) END`
+ * ANDed alongside the row-identifying predicate: verified empirically (throwaway
+ * Postgres 17 container, EXPLAIN + actual execution under both the normal
+ * planner and a forced sequential scan) that this obvious-looking form is
+ * broken two different ways --
+ *   1. `1/0` is a pure-literal subexpression. Postgres's constant folder
+ *      simplifies it eagerly during planning, INSIDE the CASE branch,
+ *      independent of whether that branch would ever be selected at runtime --
+ *      it errors even during a plain EXPLAIN, on rows that don't need the
+ *      guard at all, including the intended-safe path.
+ *   2. Even once the divisor is replaced with something non-constant (so it
+ *      can't be folded), if the guard predicate references only the bind
+ *      parameter and not a column of the row being scanned, Postgres treats it
+ *      as row-independent and hoists it into a one-time InitPlan/filter that
+ *      runs once, unconditionally -- before the scan even determines whether a
+ *      matching row exists. That fires the guard even when zero rows would
+ *      ever match the DELETE/UPDATE at all.
+ * The fix verified to behave correctly in every tested case (safe path, zero
+ * rows to touch, real last-admin block, real safe removal, forced seq scan):
+ * make the risky division's divisor a CASE whose WHEN condition redundantly
+ * re-tests the row's own column (e.g. `target.role = 'admin'`), so Postgres
+ * cannot fold it at plan time and cannot treat it as independent of the
+ * specific row being examined -- it is only ever evaluated, and can only ever
+ * fire, for the one row (if any) that both statements below actually target.
+ */
+function isZeroAdminGuardTrip(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return String((error as { code?: unknown }).code ?? "") === "22012";
+}
+
+/**
+ * True when Postgres itself detected and refused a write-skew race
+ * (SQLSTATE 40001), rather than our own guard tripping. This is why these two
+ * transactions run at Serializable isolation: the guard's `EXISTS (... some
+ * OTHER active admin ...)` reads a row this statement does not write, and the
+ * other side's transaction writes that exact row while reading this one's --
+ * two admins demoting each other at the same moment. Under the default Read
+ * Committed isolation, each transaction's guard can see the other admin as
+ * still "active" (neither has committed yet), so both pass and both commit --
+ * this is the classic write-skew anomaly Postgres's Serializable mode exists
+ * to catch. It catches it by aborting one side with 40001. This can also fire
+ * for a conflict that has nothing to do with the admin invariant (e.g. two
+ * concurrent ownership reassignments), so the message we surface for it stays
+ * conflict-neutral rather than claiming it was specifically an admin change.
+ */
+function isSerializationConflict(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  return String((error as { code?: unknown }).code ?? "") === "40001";
+}
+
+const CONCURRENT_STAFF_ACCESS_CONFLICT_MESSAGE =
+  "This change conflicted with another concurrent staff-access update. Please retry.";
+
+/**
+ * Replace a staff member's role set.
+ *
+ * Roles were previously writable only by the first-admin bootstrap, so
+ * promoting someone required SQL against production. The guards are re-run here
+ * against freshly-read state: the client's view of who is an admin can be stale
+ * or forged.
+ *
+ * decideStaffRoleChange() is a pure, fast, specific guard, but it reads
+ * otherAdminCount a moment before this function writes -- so two concurrent
+ * requests can each read "someone else is still admin" and both proceed. The
+ * DELETE below re-checks that live, inside the same transaction as the write:
+ * when this change drops 'admin' from the role set, the row is only removed
+ * if some OTHER active admin still exists at the instant the statement runs.
+ * A failed check forces a genuine Postgres error (division by zero) instead
+ * of quietly matching zero rows while the rest of the transaction commits
+ * anyway -- see isZeroAdminGuardTrip. The pure guard above stays in place
+ * unchanged: it is what gives a normal caller a fast, specific 400 without
+ * ever reaching the database.
+ *
+ * A live re-check alone is not enough: two admins demoting each other at the
+ * same instant can each read the other as still active before either has
+ * committed (classic write skew), so the transaction also runs at
+ * Serializable isolation whenever this write can drop admin -- see
+ * isSerializationConflict -- which is what makes Postgres itself refuse the
+ * anomaly rather than just narrowing the window.
+ *
+ * Whether the guarded DELETE is even included is decided by whether `admin`
+ * is absent from the REQUESTED next role set (`nextRoles`), never by what the
+ * `summary` snapshot said the target currently holds. A snapshot-based gate
+ * is unsound in one direction: if the snapshot said "not admin" but a
+ * concurrent grant lands before this write, omitting the guarded DELETE would
+ * let that grant survive silently, while writeAudit and the return value
+ * would still claim the requested (admin-less) role set -- a false audit
+ * record on a privilege change. Including it unconditionally whenever
+ * `nextRoles` excludes admin is safe and self-correcting either way: the
+ * statement's own row-identifying predicate means it only ever matches (and
+ * therefore only ever evaluates its guard) against the target's actual
+ * 'admin' row, if one exists at write time -- see isZeroAdminGuardTrip for
+ * how that is verified, not assumed.
+ */
+export async function updateStaffRoles(
+  input: { staffId: string; roles: StaffAccessRole[] },
+  actor: StaffAccess,
+) {
+  const { decideStaffRoleChange } = await import("./staff-security-policy");
+
+  // Membership is checked against the ORIGINAL array, before deduping: a
+  // Set collapses duplicates first, so checking length-after-dedupe against
+  // length-before conflated "has an unknown role" with "has a repeat of a
+  // valid one" -- `{ roles: ["admin","admin"] }` was rejected as "Unknown
+  // staff role" even though every entry was valid. Duplicates are fine and
+  // should just collapse; only an actually-unrecognised role is an error.
+  if (input.roles.some((role) => !STAFF_ROLE_NAMES.includes(role))) {
+    throw new Response("Unknown staff role.", { status: 400 });
+  }
+  const nextRoles = Array.from(new Set(input.roles));
+
+  const { summary, otherAdminCount } = await fetchStaffAccessSummaryWithCounts(
+    { staffId: input.staffId },
+    actor,
+  );
+
+  const decision = decideStaffRoleChange({
+    actorRoles: actor.roles,
+    actorStaffId: actor.staffId,
+    targetStaffId: input.staffId,
+    currentRoles: summary.roles,
+    nextRoles,
+    otherAdminCount,
+    targetIsProtected: summary.isProtected,
+  });
+  if (!decision.allowed) {
+    const status =
+      decision.reason === "not-admin" || decision.reason === "protected-account" ? 403 : 400;
+    throw new Response(decision.reason, { status });
+  }
+
+  // Whether the write COULD drop 'admin' -- decided from the request, not the
+  // (possibly stale) summary snapshot. See the doc comment above.
+  const dropsAdmin = !nextRoles.includes("admin");
+
+  // Delete-then-insert inside one transaction: a role set is replaced whole, and
+  // a half-applied change could leave someone with no roles at all.
+  //
+  // Non-admin roles are always safe to drop outright -- dropping 'manager' or
+  // 'agent' carries no lockout risk. The admin row is only ever touched by the
+  // second statement, and only when dropsAdmin is true; that statement's own
+  // WHERE clause is what makes it a safe no-op when the target turns out not
+  // to hold admin at all.
+  //
+  // The guard's shape is load-bearing, not stylistic -- see isZeroAdminGuardTrip
+  // for what was verified and why the obvious `AND (CASE WHEN <safe> THEN
+  // true ELSE (1/0=0) END)` form is broken. Concretely: the divisor is a CASE
+  // (not a bare literal, so it cannot be constant-folded at plan time), and
+  // that CASE's WHEN redundantly re-tests `target.role = 'admin'` -- a column
+  // of the scanned row, not just the bind parameter -- so Postgres cannot
+  // treat the guard as row-independent and hoist it ahead of the scan. Both
+  // properties were required; either alone still misfired in testing.
+  //
+  // The final SELECT is part of THIS transaction, not a separate call after
+  // it: appended as the last statement in the same array and read off the
+  // same transactionRows() result, it sees exactly this transaction's own
+  // writes and nothing committed after it -- there is no window between
+  // commit and read for a third party's change to land and be misattributed
+  // to this call in the audit trail / return value.
+  let results;
+  try {
+    results = await transactionRows(
+      [
+        {
+          statement: `DELETE FROM staff_roles WHERE staff_user_id = $1::uuid AND role <> 'admin'::staff_role`,
+          params: [input.staffId],
+        },
+        ...(dropsAdmin
+          ? [
+              {
+                statement: `
+                DELETE FROM staff_roles AS target
+                WHERE target.staff_user_id = $1::uuid
+                  AND target.role = 'admin'::staff_role
+                  AND (
+                    1 / (
+                      CASE
+                        WHEN target.role = 'admin'::staff_role AND EXISTS (
+                          SELECT 1
+                          FROM staff_roles other
+                          JOIN staff_users os ON os.id = other.staff_user_id
+                          WHERE other.role = 'admin'::staff_role
+                            AND other.staff_user_id <> target.staff_user_id
+                            AND os.active = true
+                        ) THEN 1
+                        ELSE 0
+                      END
+                    ) = 1
+                  )
+              `,
+                params: [input.staffId] as unknown[],
+              },
+            ]
+          : []),
+        ...nextRoles.map((role) => ({
+          statement: `INSERT INTO staff_roles (staff_user_id, role) VALUES ($1::uuid, $2::staff_role)
+          ON CONFLICT (staff_user_id, role) DO NOTHING`,
+          params: [input.staffId, role] as unknown[],
+        })),
+        {
+          statement: `SELECT COALESCE(array_to_json(array_agg(role)), '[]'::json) AS roles
+                         FROM staff_roles WHERE staff_user_id = $1::uuid`,
+          params: [input.staffId] as unknown[],
+        },
+      ],
+      // Only the admin-dropping path needs Serializable: it is the only case
+      // where this transaction's guard reads a row it does not write while
+      // depending on another transaction not writing it concurrently.
+      dropsAdmin ? { isolationLevel: "Serializable" } : {},
+    );
+  } catch (error) {
+    if (dropsAdmin && isZeroAdminGuardTrip(error)) {
+      throw new Response("last-admin", { status: 400 });
+    }
+    if (dropsAdmin && isSerializationConflict(error)) {
+      throw new Response(CONCURRENT_STAFF_ACCESS_CONFLICT_MESSAGE, { status: 409 });
+    }
+    throw error;
+  }
+
+  const rolesAfterRow = results[results.length - 1]?.[0];
+  const rolesAfter = (Array.isArray(rolesAfterRow?.roles) ? rolesAfterRow.roles : []).map(
+    String,
+  ) as StaffAccessRole[];
+
+  await writeAudit(actor.staffId, "staff.roles.update", "staff_user", input.staffId, {
+    before: summary.roles,
+    after: rolesAfter,
+  });
+  return { ok: true as const, roles: rolesAfter };
+}
+
+/**
+ * Deactivate or reactivate a staff member.
+ *
+ * Deactivating also hands over everything they own. agentScope() hides rows
+ * assigned to another agent, so leaving assignments behind makes a departing
+ * colleague's leads and live WhatsApp threads invisible to everyone who should
+ * now be working them.
+ *
+ * The reassignment and the active flag go in ONE transaction: a partial
+ * handover would leave work stranded on a disabled account with no record of
+ * what moved.
+ *
+ * decideStaffDeactivation() reads otherAdminCount a moment before this
+ * function writes -- the same TOCTOU window as updateStaffRoles above. The
+ * deactivation UPDATE re-checks live, inside the same transaction as the
+ * write and the handover: it only takes effect when the target isn't an
+ * admin, or some OTHER active admin still exists at the instant it runs. A
+ * failed check forces a genuine Postgres error (division by zero, see
+ * isZeroAdminGuardTrip) rather than quietly matching zero rows -- which would
+ * otherwise let the ownership handover commit while the account stayed
+ * active and admin, silently stranding the very work it was meant to protect.
+ *
+ * Every deactivation runs at Serializable isolation (see isSerializationConflict
+ * on updateStaffRoles for why a live re-check alone still allows write skew
+ * between two admins deactivating each other at the same instant). This is
+ * unconditional rather than gated on "is the target currently an admin",
+ * because that flag would itself come from a read taken moments earlier and
+ * so could be stale for the one case that matters most: a concurrent grant of
+ * admin to this exact target in between.
+ */
+export async function setStaffActive(
+  input: { staffId: string; active: boolean; reassignToStaffId?: string | null },
+  actor: StaffAccess,
+) {
+  const { decideStaffDeactivation } = await import("./staff-security-policy");
+  const { STAFF_OWNERSHIP_COLUMNS, staffOwnershipCountSql, staffReassignStatements } =
+    await import("./staff-ownership");
+
+  if (input.active) {
+    if (input.reassignToStaffId) {
+      throw new Response("Reactivation does not take a successor.", { status: 400 });
+    }
+    // RETURNING id, not a bare UPDATE: the reactivate branch skips
+    // fetchStaffAccessSummary (no lockout risk in gaining active status, so
+    // no need for its 404-on-missing check) -- but that meant a nonexistent
+    // staffId matched zero rows here and STILL audited "staff.reactivate" and
+    // returned { ok: true }, same as a real success. A write path auditing a
+    // change that never happened is exactly the kind of false record item 5
+    // exists to catch.
+    const reactivateRows = await queryRows(
+      `UPDATE staff_users SET active = true, updated_at = now() WHERE id = $1::uuid RETURNING id`,
+      [input.staffId],
+    );
+    if (!reactivateRows[0]) {
+      throw new Response("Staff member not found.", { status: 404 });
+    }
+    await writeAudit(actor.staffId, "staff.reactivate", "staff_user", input.staffId, {});
+    return { ok: true as const, reassigned: null };
+  }
+
+  const { summary, otherAdminCount } = await fetchStaffAccessSummaryWithCounts(
+    { staffId: input.staffId },
+    actor,
+  );
+  const reassignToStaffId = input.reassignToStaffId?.trim() || null;
+
+  const decision = decideStaffDeactivation({
+    actorRoles: actor.roles,
+    actorStaffId: actor.staffId,
+    targetStaffId: input.staffId,
+    targetRoles: summary.roles,
+    otherAdminCount,
+    ownedTotal: summary.ownedTotal,
+    reassignToStaffId,
+    targetIsProtected: summary.isProtected,
+  });
+  if (!decision.allowed) {
+    const status =
+      decision.reason === "not-admin" || decision.reason === "protected-account" ? 403 : 400;
+    throw new Response(decision.reason, { status });
+  }
+
+  if (reassignToStaffId) {
+    const successorRows = await queryRows(
+      `SELECT id FROM staff_users WHERE id = $1::uuid AND active = true`,
+      [reassignToStaffId],
+    );
+    if (!successorRows[0]) {
+      throw new Response("The successor must be an active staff member.", { status: 400 });
+    }
+  }
+
+  // Same guarded, forced-error technique as updateStaffRoles' admin-role
+  // DELETE -- see isZeroAdminGuardTrip for what was verified and why. This
+  // UPDATE always targets the row (`target.id = $1`, not `AND role =
+  // 'admin'`), so it is not naturally a no-op when the target turns out not
+  // to be admin the way the DELETE's `role = 'admin'` predicate is; the first
+  // WHEN branch below (`NOT EXISTS admin role for target`) is what makes the
+  // non-admin case safe instead. The risky division's divisor is a CASE that
+  // redundantly re-tests `target.id = $1::uuid` in every branch -- a column
+  // of the scanned row, not just the bind parameter -- for the same reason as
+  // updateStaffRoles: without that, Postgres can (and in testing, did) treat
+  // the guard as independent of which row is being examined and evaluate it
+  // before the scan even determines there is a matching row at all.
+  //
+  // Gating Serializable on summary.roles (read a moment earlier) would reopen
+  // exactly the staleness gap this function exists to close -- a concurrent
+  // grant of admin to this target, between that read and this write, would
+  // run the deactivation at plain Read Committed. So Serializable is
+  // unconditional here, for every deactivation, not just ones summary.roles
+  // already knew were admins.
+  //
+  // The ownership-count SELECT below is the first statement, not a read of
+  // `summary.owned` from before this transaction: `summary` can be stale by
+  // the time this write runs (new work could have been assigned to the
+  // target in between), and because this whole transaction is Serializable,
+  // every statement in it shares ONE fixed snapshot -- so a count taken here,
+  // before the reassignment UPDATEs run, is exactly what those UPDATEs are
+  // about to move, not an approximation of it. It has to run before the
+  // reassignment, not after: after, the rows have already been rewritten to
+  // point at the successor, so counting the target's ownership at that point
+  // would just count zero.
+  const countSql = staffOwnershipCountSql(input.staffId);
+  let results;
+  try {
+    results = await transactionRows(
+      [
+        { statement: countSql.statement, params: countSql.params },
+        ...(reassignToStaffId ? staffReassignStatements(input.staffId, reassignToStaffId) : []),
+        {
+          statement: `
+          UPDATE staff_users AS target
+          SET active = false, updated_at = now()
+          WHERE target.id = $1::uuid
+            AND (
+              1 / (
+                CASE
+                  WHEN target.id = $1::uuid AND NOT EXISTS (
+                    SELECT 1 FROM staff_roles r
+                    WHERE r.staff_user_id = target.id AND r.role = 'admin'::staff_role
+                  ) THEN 1
+                  WHEN target.id = $1::uuid AND EXISTS (
+                    SELECT 1
+                    FROM staff_roles other
+                    JOIN staff_users os ON os.id = other.staff_user_id
+                    WHERE other.role = 'admin'::staff_role
+                      AND other.staff_user_id <> target.id
+                      AND os.active = true
+                  ) THEN 1
+                  ELSE 0
+                END
+              ) = 1
+            )
+        `,
+          params: [input.staffId],
+        },
+      ],
+      { isolationLevel: "Serializable" },
+    );
+  } catch (error) {
+    if (isZeroAdminGuardTrip(error)) {
+      throw new Response("last-admin", { status: 400 });
+    }
+    if (isSerializationConflict(error)) {
+      throw new Response(CONCURRENT_STAFF_ACCESS_CONFLICT_MESSAGE, { status: 409 });
+    }
+    throw error;
+  }
+
+  const countRow = results[0]?.[0] ?? {};
+  const reassignedCounts = Object.fromEntries(
+    STAFF_OWNERSHIP_COLUMNS.map(({ table }) => [table, Number(countRow[table] ?? 0)]),
+  ) as StaffOwnedCounts;
+
+  await writeAudit(actor.staffId, "staff.deactivate", "staff_user", input.staffId, {
+    successorStaffId: reassignToStaffId,
+    counts: reassignedCounts,
+  });
+  return { ok: true as const, reassigned: reassignedCounts };
 }
 
 function normalizeAgentPublicSlug(value: string | null) {
@@ -446,10 +965,19 @@ export type AdminPropertyRecord = Partial<AdminPropertyInput> & { id: string };
 // in a server function's return type -- it cannot prove them serializable -- and
 // every call site was casting to these exact types anyway, so the cast was
 // hiding the contract instead of expressing it.
-export async function getAdminProperty(id: string): Promise<AdminPropertyRecord | null> {
+export async function getAdminProperty(
+  id: string,
+  actor?: StaffAccess,
+): Promise<AdminPropertyRecord | null> {
+  // listAdminListings, saveAdminProperty and updateAdminPropertyStatus all
+  // restrict agents to p.agent_id = actor.staffId, and saveAdminProperty throws
+  // 403 for an out-of-scope edit. This single-row read took no actor at all, so
+  // an agent could SELECT * any listing -- including drafts and internal columns
+  // the scoped list view withholds -- by supplying its UUID.
+  const scope = actor ? agentScope(actor) : null;
   const rows = await queryRows<AdminPropertyRecord>(
-    "SELECT * FROM properties WHERE id = $1 LIMIT 1",
-    [id],
+    `SELECT * FROM properties WHERE id = $1${scope !== null ? " AND agent_id = $2" : ""} LIMIT 1`,
+    scope !== null ? [id, scope] : [id],
   );
   return rows[0] ?? null;
 }
@@ -1426,11 +1954,47 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
   };
 }
 
+/**
+ * Throw 403 unless the actor may act on this lead.
+ *
+ * fetchAdminLead and updateAdminLead have always scoped agents to their own
+ * rows, but the AI surface around them did not: it took a lead id straight from
+ * the client and never joined back to assigned_agent_id. An agent who kept a
+ * UUID after reassignment (or read one off a crm_ai_tags id) could pull another
+ * agent's enriched profile, overwrite it, and burn a paid LLM call doing it.
+ *
+ * Null scope means admin/manager, who legitimately see every lead.
+ */
+async function assertLeadInScope(leadId: string, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  if (scope === null) return;
+  const rows = await queryRows(
+    `SELECT 1 FROM crm_leads WHERE id = $1::uuid AND assigned_agent_id = $2::uuid LIMIT 1`,
+    [leadId, scope],
+  );
+  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+}
+
+/** Same, reached through the tag's owning lead. */
+async function assertAiTagInScope(tagId: string, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  if (scope === null) return;
+  const rows = await queryRows(
+    `SELECT 1
+       FROM crm_ai_tags t
+       JOIN crm_leads l ON l.id = t.lead_id
+      WHERE t.id = $1::uuid AND l.assigned_agent_id = $2::uuid
+      LIMIT 1`,
+    [tagId, scope],
+  );
+  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+}
+
 export async function fetchAdminLeadAiProfile(
   input: { leadId: string },
   actor: StaffAccess,
 ): Promise<AdminLeadAiProfile> {
-  void actor;
+  await assertLeadInScope(input.leadId, actor);
   return fetchCrmAiProfile({ leadId: input.leadId });
 }
 
@@ -1438,12 +2002,14 @@ export async function analyzeAdminLeadAiProfile(
   input: { leadId: string },
   actor: StaffAccess,
 ): Promise<AdminLeadAiProfile> {
+  await assertLeadInScope(input.leadId, actor);
   const result = await analyzeCrmLead(input.leadId);
   await writeAudit(actor.staffId, "ai.lead.analyze", "lead", input.leadId);
   return result;
 }
 
 export async function approveAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
+  await assertAiTagInScope(input.tagId, actor);
   const result = await approveCrmAiTag({
     tagId: input.tagId,
     staffId: actor.staffId,
@@ -1454,6 +2020,7 @@ export async function approveAdminAiTag(input: { tagId: string }, actor: StaffAc
 }
 
 export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
+  await assertAiTagInScope(input.tagId, actor);
   const result = await approveCrmAiTag({
     tagId: input.tagId,
     staffId: actor.staffId,
@@ -1567,6 +2134,11 @@ export async function bulkUpdateAdminLeads(
 }
 
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {
+  // Every sibling lead mutation scopes agents to their own rows; this one wrote
+  // notes, calls and due-dated follow-ups against any lead_id the client sent.
+  // The rows then surfaced in the real owner's timeline and in the Command
+  // Center's overdue KPI.
+  await assertLeadInScope(input.lead_id, actor);
   const rows = await queryRows(
     `INSERT INTO crm_activities (
       lead_id, contact_id, staff_user_id, activity_type, body, due_at, completed_at
@@ -1908,6 +2480,13 @@ export async function fetchAdminConversation(id: string, actor?: StaffAccess) {
     contact_id: stringOrNull(conversation.contact_id),
     assigned_agent_id: stringOrNull(conversation.assigned_agent_id),
     woztell_member_id: stringOrNull(conversation.woztell_member_id),
+    // Mirrors the requireStaff(["admin","manager"]) gate on
+    // clearContactWhatsappOptOut -- this only decides whether the control is
+    // rendered; the server fn enforces it for real. No actor means an internal
+    // unscoped call with no UI behind it, so deny rather than assume.
+    can_clear_opt_out: actor
+      ? actor.roles.includes("admin") || actor.roles.includes("manager")
+      : false,
     messages: messages.map((message) => ({
       id: stringOrEmpty(message.id),
       direction: stringOrEmpty(message.direction) as "inbound" | "outbound",
@@ -2008,6 +2587,47 @@ export async function updateAdminConversation(
     assigned_agent_id: input.assigned_agent_id,
   });
   return { ok: true };
+}
+
+/**
+ * Clear a contact's WhatsApp opt-out.
+ *
+ * opted_out_whatsapp is written monotonically by the inbound webhook
+ * (`opted_out_whatsapp = opted_out_whatsapp OR $7`), and until this existed
+ * there was no code path anywhere that could set it back to false. A customer
+ * mis-classified as opting out -- which the old substring matcher did to anyone
+ * who wrote 「我想取消今日睇樓約會」 -- was blocked from every staff reply and every
+ * campaign permanently, with no way back short of a manual SQL statement.
+ *
+ * Restricted to admin/manager and always audited: this re-enables marketing
+ * messages to a real person, so it needs to be attributable. Agents can see the
+ * 已拒收 badge but cannot clear it.
+ */
+export async function clearContactWhatsappOptOut(
+  input: { contactId: string; reason: string },
+  actor: StaffAccess,
+) {
+  const reason = input.reason.trim();
+  if (!reason) throw new Response("A reason is required to clear an opt-out.", { status: 400 });
+
+  const rows = await queryRows<{ id: unknown; opted_out_whatsapp: unknown }>(
+    `UPDATE crm_contacts
+        SET opted_out_whatsapp = false, updated_at = now()
+      WHERE id = $1::uuid
+        AND opted_out_whatsapp = true
+      RETURNING id, opted_out_whatsapp`,
+    [input.contactId],
+  );
+
+  if (!rows[0]) {
+    // Either no such contact, or it was not opted out to begin with. Both are
+    // no-ops from the caller's point of view; nothing was changed, so nothing
+    // is audited.
+    return { ok: false as const, error: "NOT_OPTED_OUT" };
+  }
+
+  await writeAudit(actor.staffId, "contact.optout.clear", "contact", input.contactId, { reason });
+  return { ok: true as const };
 }
 
 function parseConversationAiMessages(value: unknown) {
@@ -2218,7 +2838,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
     [campaignId],
   );
   const campaign = campaigns[0];
-  if (!campaign) return { ok: false, error: "Campaign not found" };
+  if (!campaign) return { ok: false as const, error: "Campaign not found" };
 
   const filters = parseAudienceFilters(campaign.filters);
   const rows = await fetchAudienceRecipientRows(filters);
@@ -2234,13 +2854,24 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
       INSERT INTO whatsapp_campaign_recipients (campaign_id, contact_id, status)
       SELECT $1::uuid, contact_id, 'queued'
       FROM unnest($2::uuid[]) AS contact_ids(contact_id)
+      -- 'sent'/'sending' are obviously not re-queueable. WOZTELL_DELIVERY_UNKNOWN
+      -- is the subtle one: it means the provider took the message but never
+      -- confirmed the outcome (a 5xx/timeout, or a 'sending' row reconciled
+      -- after 15 minutes -- see campaign-delivery.server.ts). The customer may
+      -- well have received it, so re-queueing that recipient risks a second,
+      -- billable WhatsApp message to a real person. Treat it as terminal;
+      -- genuine provider rejections (WOZTELL_PROVIDER_REJECTED) still re-queue.
       ON CONFLICT (campaign_id, contact_id) DO UPDATE SET
         status = CASE
-          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending') THEN whatsapp_campaign_recipients.status
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending')
+            OR whatsapp_campaign_recipients.error = 'WOZTELL_DELIVERY_UNKNOWN'
+            THEN whatsapp_campaign_recipients.status
           ELSE EXCLUDED.status
         END,
         error = CASE
-          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending') THEN whatsapp_campaign_recipients.error
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending')
+            OR whatsapp_campaign_recipients.error = 'WOZTELL_DELIVERY_UNKNOWN'
+            THEN whatsapp_campaign_recipients.error
           ELSE NULL
         END
       `,
@@ -2260,7 +2891,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const summary = summarizeAudienceRows(rows);
   await writeAudit(actor.staffId, "campaign.recipients", "campaign", campaignId, summary);
-  return { ok: true, ...summary };
+  return { ok: true as const, ...summary };
 }
 
 export async function validateAdminCampaignQueueability(id: string) {
@@ -2278,14 +2909,14 @@ export async function validateAdminCampaignQueueability(id: string) {
     [id],
   );
   const row = rows[0];
-  if (!row) return { ok: false, error: "Campaign not found" };
+  if (!row) return { ok: false as const, error: "Campaign not found" };
 
   const check = canPrepareAdminCampaignQueue({
     campaignStatus: stringOrEmpty(row.status),
     templateStatus: stringOrNull(row.template_status),
   });
-  if (!check.ok) return { ok: false, error: check.reason };
-  return { ok: true };
+  if (!check.ok) return { ok: false as const, error: check.reason };
+  return { ok: true as const };
 }
 
 export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
@@ -2293,7 +2924,8 @@ export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
   if (!validation.ok) return validation;
 
   const materialization = await materializeCampaignRecipients(id, actor);
-  if (!materialization.ok) return { ok: false, error: materialization.error, materialization };
+  if (!materialization.ok)
+    return { ok: false as const, error: materialization.error, materialization };
 
   const result = await queueAdminCampaign(id, actor);
   return { ...result, materialization };
@@ -2322,14 +2954,14 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
     [id],
   );
   const row = rows[0];
-  if (!row) return { ok: false, error: "Campaign not found" };
+  if (!row) return { ok: false as const, error: "Campaign not found" };
 
   const check = canQueueAdminCampaign({
     campaignStatus: stringOrEmpty(row.status),
     templateStatus: stringOrNull(row.template_status),
     eligibleRecipients: Number(row.eligible_recipients ?? 0),
   });
-  if (!check.ok) return { ok: false, error: check.reason };
+  if (!check.ok) return { ok: false as const, error: check.reason };
 
   // TOCTOU hardening: the eligibility predicate above can go stale between the
   // SELECT and the writes (a concurrent cancel/materialize could change the
@@ -2345,8 +2977,12 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
       SET status = 'queued', reviewed_by = $1, reviewed_at = now(), updated_at = now()
       FROM whatsapp_templates t
       WHERE c.id = $2
+        -- Must match canQueueAdminCampaign's own gate. This previously also
+        -- accepted 'draft', so a concurrent save-back-to-draft mid-queue still
+        -- sent: the re-assert that exists to close the TOCTOU window was
+        -- letting through the exact state the check above rejects.
+        AND c.status IN ('review', 'scheduled')
         AND t.id = c.template_id
-        AND c.status IN ('draft', 'review', 'scheduled')
         AND t.status LIKE 'active%'
         AND EXISTS (
           SELECT 1
@@ -2358,7 +2994,7 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
             AND contact.opt_in_whatsapp = true
             AND contact.opted_out_whatsapp = false
         )
-      RETURNING c.id
+      RETURNING c.id, c.reviewed_at
       `,
       [actor.staffId, id],
     ),
@@ -2379,13 +3015,21 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
   if (!Array.isArray(flipped) || !flipped[0]) {
     // Lost the race (campaign was cancelled/changed concurrently) or no longer
     // eligible. Nothing was committed.
-    return { ok: false, error: "CAMPAIGN_NOT_ELIGIBLE" };
+    return { ok: false as const, error: "CAMPAIGN_NOT_ELIGIBLE" };
   }
 
   await writeAudit(actor.staffId, "campaign.queue", "campaign", id, {
     eligibleRecipients: Number(row.eligible_recipients ?? 0),
   });
-  return { ok: true };
+
+  // reviewed_at is re-stamped on every queue flip, so it identifies THIS queue
+  // run. Callers fold it into the job's idempotency key: two enqueues of the
+  // same run collapse to one job (what idempotency is for), while a later
+  // re-queue of the same campaign gets a fresh key and therefore a fresh job
+  // row. Without it the key was campaign-stable, so once a job reached a
+  // terminal state the ON CONFLICT no-op handed back the dead row forever and
+  // the campaign could never be sent again.
+  return { ok: true as const, queueRunAt: rowDate(flipped[0].reviewed_at) };
 }
 
 export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
@@ -2430,11 +3074,27 @@ export async function createWebsiteInquiry(input: {
   });
 }
 
+const INQUIRY_STATUSES = ["new", "contacted", "qualified", "closed", "spam"] as const;
+
 export async function updateInquiryStatus(id: string, status: string, actor: StaffAccess) {
-  await queryRows("UPDATE inquiries SET status = $1, updated_at = now() WHERE id = $2", [
-    status,
-    id,
-  ]);
+  // Status came straight from the client into the UPDATE with no allowlist.
+  if (!INQUIRY_STATUSES.includes(status as (typeof INQUIRY_STATUSES)[number])) {
+    throw new Response("Unsupported inquiry status.", { status: 400 });
+  }
+
+  // Same agent scoping every other lead/inquiry mutation applies. Without it an
+  // agent could close or mark spam any inquiry in the agency, including ones
+  // routed to a colleague.
+  const scope = agentScope(actor);
+  const rows = await queryRows(
+    `UPDATE inquiries
+        SET status = $1, updated_at = now()
+      WHERE id = $2${scope !== null ? " AND assigned_agent_id = $3" : ""}
+      RETURNING id`,
+    scope !== null ? [status, id, scope] : [status, id],
+  );
+  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+
   await writeAudit(actor.staffId, "inquiry.status", "inquiry", id, { status });
   return { ok: true };
 }

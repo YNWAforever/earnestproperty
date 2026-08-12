@@ -26,6 +26,7 @@ import {
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
 import { SITE_URL, pageSeo } from "@/content/seo";
+import { jsonLdScript } from "@/lib/schema";
 
 type LoaderData = {
   estates: EstateSummary[];
@@ -329,7 +330,7 @@ function ShamTsengPage() {
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: jsonLdScript({
               "@context": "https://schema.org",
               "@type": "FAQPage",
               mainEntity: faqs.map((f) => ({

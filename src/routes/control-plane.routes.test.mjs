@@ -127,12 +127,21 @@ test("WozTell queue routes enqueue durable campaign jobs and delegate to the wor
   assert.match(queueSource, /requireStaffPermission\(request, "campaign\.queue"\)/);
   assert.match(queueSource, /jobType:\s*"woztell\.campaign\.deliver"/);
   assert.match(queueSource, /payloadVersion:\s*1/);
-  assert.match(queueSource, /woztell\.campaign\.deliver:\$\{params\.id\}/);
+  // The idempotency key is scoped to the campaign's current queue RUN, not to
+  // the campaign. A campaign-stable key made a campaign permanently
+  // un-sendable: enqueueJob's ON CONFLICT returns the existing row, so once
+  // that job reached a terminal state every later enqueue got the dead row
+  // back and nothing was ever queued again. Both paths must derive the key the
+  // same way, or one queue run would enqueue two delivery jobs.
+  assert.match(queueSource, /campaignDeliveryIdempotencyKey\(params\.id, result\.queueRunAt\)/);
+  assert.doesNotMatch(queueSource, /idempotencyKey: `woztell\.campaign\.deliver:\$\{params\.id\}`/);
   assert.match(cronSource, /process\.env\.CRON_SECRET/);
   assert.match(cronSource, /enqueueJob\(/);
   assert.match(cronSource, /runClaimedJobs\(/);
   assert.match(cronSource, /ORDER BY campaign_id/);
-  assert.match(cronSource, /woztell\.campaign\.deliver:\$\{campaignId\}/);
+  assert.match(cronSource, /campaignDeliveryIdempotencyKey\(campaignId, queueRunAt\)/);
+  assert.match(cronSource, /reviewed_at, campaign\.created_at\)::text AS queue_run_at/);
+  assert.doesNotMatch(cronSource, /idempotencyKey: `woztell\.campaign\.deliver:\$\{campaignId\}`/);
   assert.doesNotMatch(cronSource, /sendWoztellResponse/);
   assert.doesNotMatch(cronSource, /opt_in_whatsapp/);
 });
@@ -145,4 +154,34 @@ test("job and migration overview routes compose safe read models", () => {
   assert.match(jobsSource, /summary/);
   assert.match(migrationsSource, /listMigrationStates\(\)/);
   assert.doesNotMatch(migrationsSource, /migration\.statements/);
+});
+
+// Vercel Cron issues GET. A route registering POST only does not 405 under
+// TanStack -- it falls through to the SPA render -- so a scheduled job that can
+// never run looks exactly like one that runs fine. Both drain endpoints had
+// been dead since they were scheduled.
+test("every path scheduled in vercel.ts has a GET handler", () => {
+  const vercelConfig = readFileSync("vercel.ts", "utf8");
+  const cronBlock = vercelConfig.slice(
+    vercelConfig.indexOf("crons: ["),
+    vercelConfig.indexOf("redirects: ["),
+  );
+  const paths = [...cronBlock.matchAll(/path:\s*"([^"]+)"/g)].map((m) => m[1]);
+
+  assert.ok(paths.length >= 3, "expected the scheduled cron paths to be discoverable");
+
+  // /api/admin/control-plane/worker -> src/routes/api.admin.control-plane.worker.ts
+  const routeFileFor = (path) =>
+    `src/routes/api${path.replace(/^\/api/, "").replace(/\//g, ".")}.ts`;
+
+  for (const path of paths) {
+    const file = routeFileFor(path);
+    const source = readFileSync(file, "utf8");
+    assert.match(source, /\bGET:/, `${file} must expose a GET handler for the ${path} cron`);
+    assert.match(
+      source,
+      /CRON_SECRET/,
+      `${file} must still require the CRON_SECRET bearer token on every verb`,
+    );
+  }
 });

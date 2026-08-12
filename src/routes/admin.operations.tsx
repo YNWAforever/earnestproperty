@@ -17,6 +17,7 @@ import {
   fetchOperationsMigrations,
 } from "@/lib/admin/operations/operations-client";
 import { useOperationsPulse } from "@/lib/admin/operations/operations-polling";
+import type { ControlPlanePermission } from "@/lib/control-plane/permissions";
 import {
   createOperationsHealthLoader,
   resolveOperationsRouteState,
@@ -55,10 +56,15 @@ const TAB_LABELS: Record<OperationTab, string> = {
 
 // Named so a blocked tab can say which permission unlocks it instead of just
 // disappearing, which left staff with no way to know the feature exists.
-const TAB_PERMISSIONS: Record<OperationTab, string | null> = {
+//
+// Typed as ControlPlanePermission rather than string: the audit tab used to
+// name "system.audit.read", which does not exist in the permission list at all
+// (the real name is "audit.read"), so the tooltip told staff to request a
+// permission no admin could grant. The narrower type makes that a compile error.
+const TAB_PERMISSIONS: Record<OperationTab, ControlPlanePermission | null> = {
   overview: null,
   jobs: "system.jobs.read",
-  audit: "system.audit.read",
+  audit: "audit.read",
   migrations: "system.migrations.plan",
 };
 
