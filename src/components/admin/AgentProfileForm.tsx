@@ -470,13 +470,28 @@ export function AgentProfileForm({
             ))}
           </div>
 
+          {/*
+            One slot, priority-ordered: isProtected > isSelf > isLastAdmin.
+            A disabled control with no stated reason reads as broken, so every
+            case that disables 停用帳戶 (and, for isProtected/isSelf, the admin
+            checkbox on 更新權限) gets an explanation here -- not just isProtected.
+            isSelf and isLastAdmin can both be true for the same account; isSelf
+            wins because it holds regardless of how many other admins exist, so
+            it is the one constraint promoting a colleague cannot resolve.
+          */}
           {access.isProtected ? (
             <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
               此帳戶已在 ADMIN_BOOTSTRAP_EMAILS
               名單內，不可移除管理員權限或停用，以免無人可登入系統。
             </p>
-          ) : access.isSelf && !roleDraft.includes("admin") ? (
-            <p className="mt-3 text-sm text-destructive">你不能移除自己的管理員權限。</p>
+          ) : access.isSelf ? (
+            <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
+              你不能移除自己的管理員權限，亦不能停用自己的帳戶，請由另一位管理員代為處理。
+            </p>
+          ) : access.isLastAdmin ? (
+            <p className="mt-3 rounded-md border border-muted bg-muted/40 p-3 text-sm text-muted-foreground">
+              此帳戶是目前系統內唯一的管理員，停用後將無人可管理系統，請先將管理員權限授予其他同事，再停用此帳戶。
+            </p>
           ) : null}
 
           <div className="mt-4 flex flex-wrap gap-2">

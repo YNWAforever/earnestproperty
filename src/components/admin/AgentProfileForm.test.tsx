@@ -178,6 +178,56 @@ describe("權限 section", () => {
     expect(deactivate.attr("disabled")).toBeDefined();
   });
 
+  test("a self-editing admin sees why they cannot deactivate their own account", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: true,
+        access: { ...accessSummary, roles: ["admin"], isSelf: true },
+        onSaved: () => {},
+      }),
+    );
+
+    expect(html).toContain("請由另一位管理員代為處理");
+    const $ = load(html);
+    const deactivate = $("button").filter((_, el) => $(el).text().includes("停用帳戶"));
+    expect(deactivate.attr("disabled")).toBeDefined();
+  });
+
+  test("the sole remaining admin sees why they cannot deactivate someone else", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: true,
+        access: { ...accessSummary, roles: ["admin"], isLastAdmin: true },
+        onSaved: () => {},
+      }),
+    );
+
+    expect(html).toContain("唯一的管理員");
+    const $ = load(html);
+    const deactivate = $("button").filter((_, el) => $(el).text().includes("停用帳戶"));
+    expect(deactivate.attr("disabled")).toBeDefined();
+  });
+
+  // isSelf and isLastAdmin can both be true for the same account. isSelf is
+  // shown because it holds no matter how many other admins exist -- promoting
+  // a colleague cannot resolve it -- while the last-admin constraint would
+  // dissolve the moment someone else is made admin.
+  test("when isSelf and isLastAdmin both hold, the self reason wins", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: true,
+        access: { ...accessSummary, roles: ["admin"], isSelf: true, isLastAdmin: true },
+        onSaved: () => {},
+      }),
+    );
+
+    expect(html).toContain("請由另一位管理員代為處理");
+    expect(html).not.toContain("唯一的管理員");
+  });
+
   // Managers may edit an agent's public profile but must never see a path to
   // escalate anyone. The route passes access: null for non-admins.
   test("is absent entirely when no access summary is supplied", () => {
