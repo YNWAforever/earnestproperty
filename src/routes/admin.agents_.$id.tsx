@@ -8,8 +8,17 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { fetchAdminAgentEditorContext, fetchAdminAgentProfile } from "@/lib/neon/admin-data";
-import type { AdminAgentProfileRow } from "@/lib/neon/admin-data.types";
+import {
+  fetchAdminAgentEditorContext,
+  fetchAdminAgentProfile,
+  fetchAdminAgents,
+  fetchStaffAccessSummary,
+} from "@/lib/neon/admin-data";
+import type {
+  AdminAgentProfileRow,
+  AdminAgentRow,
+  StaffAccessSummary,
+} from "@/lib/neon/admin-data.types";
 
 export const Route = createFileRoute("/admin/agents_/$id")({
   loader: () => fetchAdminAgentEditorContext(),
@@ -26,6 +35,9 @@ function EditAdminAgent() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<AdminAgentProfileRow | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [access, setAccess] = useState<StaffAccessSummary | null>(null);
+  const [staffOptions, setStaffOptions] = useState<{ id: string; label: string }[]>([]);
+  const [accessVersion, setAccessVersion] = useState(0);
 
   useEffect(() => {
     if (loading) return;
@@ -53,6 +65,35 @@ function EditAdminAgent() {
     };
   }, [id, loading, user]);
 
+  // Only admins may read the access summary, so a manager simply gets null and
+  // the 權限 section does not render. A failure here must not break profile
+  // editing, which is why it is a separate effect from the profile load.
+  // editorContext can be null (loader denied access outright), so this is
+  // read with optional chaining rather than assumed non-null.
+  useEffect(() => {
+    if (loading || !user || !editorContext?.canManageIdentity) return;
+    let cancelled = false;
+    Promise.all([fetchStaffAccessSummary({ data: { staffId: id } }), fetchAdminAgents()])
+      .then(([summary, agents]) => {
+        if (cancelled) return;
+        setAccess(summary as StaffAccessSummary);
+        setStaffOptions(
+          (agents as AdminAgentRow[])
+            .filter((agent) => agent.id !== id && agent.active)
+            .map((agent) => ({
+              id: agent.id,
+              label: agent.name || agent.email || agent.id,
+            })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAccess(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loading, user, editorContext?.canManageIdentity, accessVersion]);
+
   return (
     <AdminShell title="編輯代理" description="更新代理公開資料、帳戶連結及發布狀態。">
       <div className="max-w-3xl">
@@ -75,7 +116,10 @@ function EditAdminAgent() {
           <AgentProfileForm
             profile={profile}
             canManageIdentity={editorContext.canManageIdentity}
+            access={access}
+            activeStaffOptions={staffOptions}
             onSaved={() => navigate({ to: "/admin/agents" })}
+            onAccessChanged={() => setAccessVersion((version) => version + 1)}
           />
         ) : null}
       </div>
