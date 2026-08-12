@@ -549,3 +549,140 @@ test("agentScope is exported once and not redefined per call site", () => {
   const definitions = (server.match(/function agentScope\(/g) ?? []).length;
   assert.equal(definitions, 1);
 });
+
+// Roles and deactivation are privilege operations. Managers may edit an agent's
+// public profile, but must never be able to escalate anyone -- including
+// themselves -- so all three are admin-only at the server boundary.
+test("staff access management server functions are admin-only", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+
+  for (const name of [
+    "fetchStaffAccessSummaryServer",
+    "updateStaffRolesServer",
+    "setStaffActiveServer",
+  ]) {
+    const start = client.indexOf(`const ${name} = createServerFn`);
+    assert.notEqual(start, -1, `${name} must exist`);
+    const body = client.slice(start, start + 900);
+    assert.match(body, /requireStaff\(\["admin"\]\)/, `${name} must require admin`);
+  }
+});
+
+test("deactivation reassigns and flips active in one transaction", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const start = server.indexOf("export async function setStaffActive");
+  const body = server.slice(start);
+
+  assert.notEqual(start, -1);
+  assert.match(body, /staffReassignStatements\(input\.staffId, reassignToStaffId\)/);
+  assert.match(body, /SET active = false/);
+  assert.match(body, /writeAudit\(actor\.staffId, "staff\.deactivate"/);
+});
+
+// The zero-admin guard's shape is load-bearing, not stylistic -- see the doc
+// comment on isZeroAdminGuardTrip in admin-data.server.ts. A future
+// "simplification" of `1 / (CASE ... END) = 1` back to the obvious-looking
+// `AND (CASE WHEN <safe> THEN true ELSE (1/0=0) END)` reintroduces a real bug,
+// confirmed empirically against Postgres 17: a bare `1/0` is pure literals, so
+// the planner constant-folds it during planning and it errors even on the
+// safe path, on a bare EXPLAIN; and a guard that references only the bind
+// parameter, not a column of the scanned row, gets hoisted into a one-time
+// filter that runs before the scan finds a matching row, so it fires even
+// when zero rows would ever be touched. Both guarded statements below must
+// keep BOTH properties that defeat this: the risky division's divisor is a
+// CASE (not constant-foldable), and that CASE's WHEN redundantly re-tests a
+// column of the scanned row, not just the bind parameter.
+test("zero-admin guard SQL keeps the row-dependent CASE-divisor shape in both guarded statements", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+
+  function guardStatementSql(anchorPattern) {
+    const anchorMatch = server.match(anchorPattern);
+    assert.ok(anchorMatch, `guard anchor ${anchorPattern} must exist`);
+    const start = anchorMatch.index;
+    const end = server.indexOf("`", start);
+    assert.notEqual(end, -1, `closing backtick for ${anchorPattern} not found`);
+    return server.slice(start, end);
+  }
+
+  const guardedStatements = [
+    {
+      name: "updateStaffRoles' admin-row DELETE",
+      sql: guardStatementSql(/DELETE FROM staff_roles AS target/),
+      rowColumnWhen: /WHEN\s+target\.role\s*=\s*'admin'::staff_role\s+AND\s+EXISTS/,
+    },
+    {
+      name: "setStaffActive's deactivation UPDATE",
+      sql: guardStatementSql(/UPDATE staff_users AS target\s+SET active = false/),
+      rowColumnWhen: /WHEN\s+target\.id\s*=\s*\$1::uuid/,
+    },
+  ];
+
+  for (const { name, sql, rowColumnWhen } of guardedStatements) {
+    // Property 1: the divisor is a CASE expression, not a bare literal -- a
+    // bare `1/0` is pure literals and gets constant-folded by the planner
+    // during planning, independent of runtime row values. See
+    // isZeroAdminGuardTrip.
+    assert.match(
+      sql,
+      /1\s*\/\s*\(\s*CASE[\s\S]*?END\s*\)\s*=\s*1/,
+      `${name}: guard divisor must be "1 / (CASE ... END) = 1", a CASE that can't be constant-folded -- see the isZeroAdminGuardTrip comment in admin-data.server.ts for why a bare literal divisor errors even on the safe path`,
+    );
+
+    // Property 2: the CASE's WHEN condition redundantly re-tests a column of
+    // the row being scanned (not only the bind parameter), so Postgres
+    // cannot treat the guard as row-independent and hoist it into a one-time
+    // filter that runs before the scan finds a matching row. See
+    // isZeroAdminGuardTrip.
+    assert.match(
+      sql,
+      rowColumnWhen,
+      `${name}: guard's CASE must re-test a column of the scanned row, or Postgres can hoist it ahead of the scan and fire it even when zero rows match -- see the isZeroAdminGuardTrip comment in admin-data.server.ts`,
+    );
+
+    // Both properties above are required together; this is the exact
+    // regression they guard against: a "simplified" divisor that looks
+    // equivalent but is constant-foldable and row-independent.
+    assert.doesNotMatch(
+      sql,
+      /ELSE\s*\(\s*1\s*\/\s*0\s*=\s*0\s*\)/,
+      `${name}: guard must not use the known-broken "ELSE (1/0=0)" literal form -- see the isZeroAdminGuardTrip comment in admin-data.server.ts for why it silently defeats the last-admin protection`,
+    );
+  }
+});
+
+// Owner accounts (ADMIN_BOOTSTRAP_EMAILS) must be protected at the server
+// boundary, not merely disabled in the UI -- otherwise another admin could
+// demote or deactivate the owner with a direct call to the server function,
+// bypassing any client-side disabled state entirely.
+test("protected owner accounts are enforced server-side, not only hidden in the UI", () => {
+  const auth = read("src/lib/neon/auth.server.ts");
+  assert.match(auth, /export function isProtectedStaffEmail\(/);
+
+  const server = read("src/lib/neon/admin-data.server.ts");
+  assert.match(server, /isProtected: isProtectedStaffEmail\(stringOrNull\(row\.email\)\)/);
+
+  // Bound each function body at the next top-level export, not a fixed
+  // char count: updateStaffRoles' comment block alone runs past a thousand
+  // characters, and a fixed window sized for it would either clip
+  // setStaffActive's own (later) targetIsProtected line or, sized for that,
+  // risk reading past updateStaffRoles into unrelated code.
+  const updateStaffRolesStart = server.indexOf("export async function updateStaffRoles");
+  const setStaffActiveStart = server.indexOf("export async function setStaffActive");
+  assert.notEqual(updateStaffRolesStart, -1, "updateStaffRoles must exist");
+  assert.notEqual(setStaffActiveStart, -1, "setStaffActive must exist");
+  const nextExportAfterSetStaffActive = server.indexOf("\nexport ", setStaffActiveStart + 40);
+  assert.notEqual(nextExportAfterSetStaffActive, -1, "next exported symbol must exist");
+
+  const bodies = {
+    updateStaffRoles: server.slice(updateStaffRolesStart, setStaffActiveStart),
+    setStaffActive: server.slice(setStaffActiveStart, nextExportAfterSetStaffActive),
+  };
+
+  for (const [fnName, body] of Object.entries(bodies)) {
+    assert.match(
+      body,
+      /targetIsProtected: summary\.isProtected/,
+      `${fnName} must pass targetIsProtected into its decision function`,
+    );
+  }
+});
