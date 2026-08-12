@@ -710,4 +710,42 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
   assert.doesNotMatch(block, /"AI Agent"/);
   assert.doesNotMatch(block, /"CMS \/ FAQ"/);
   assert.match(block, /"員工管理"/);
+
+  // Pinned on the entries themselves (not the whole block) so a future
+  // reorder of navGroups cannot silently invalidate this without failing
+  // here. See the comment above navGroups for why these two are exact.
+  const adminEntry = block.match(/\{\s*to:\s*"\/admin",[^}]*\}/)?.[0];
+  assert.ok(adminEntry, "/admin entry must exist in navGroups");
+  assert.doesNotMatch(
+    adminEntry,
+    /activeExact:\s*false/,
+    "/admin must stay exact (no activeExact: false) or it matches every admin page",
+  );
+
+  const adminLeadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0];
+  assert.ok(adminLeadsEntry, "/admin/leads entry must exist in navGroups");
+  assert.doesNotMatch(
+    adminLeadsEntry,
+    /activeExact:\s*false/,
+    "/admin/leads must stay exact (no activeExact: false) or it bleeds into the separate /admin/leads/command-center entry",
+  );
+
+  // `activeOptions` is where each entry's activeExact/includeSearch above
+  // actually takes effect, and `explicitUndefined: true` is what makes an
+  // entry with no search params (like /admin) refuse to match a URL that
+  // carries extra search state it should not.
+  const navLinkOpening = shell.match(
+    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
+  )?.[0];
+  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
+  assert.match(
+    navLinkOpening,
+    /activeOptions=\{\{/,
+    "nav Link must pass activeOptions, or every entry's activeExact/includeSearch setting above is ignored and falls back to the Link's own defaults",
+  );
+  assert.match(
+    navLinkOpening,
+    /explicitUndefined:\s*true/,
+    "explicitUndefined must stay true, or an entry with no search params (like /admin) can match a URL carrying extra search state it should not",
+  );
 });
