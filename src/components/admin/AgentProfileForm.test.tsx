@@ -121,3 +121,76 @@ test("rejects a photo value that is neither a path nor an http(s) URL", () => {
     expect(avatarUrlSchema.safeParse(input).success).toBe(false);
   }
 });
+
+const accessSummary = {
+  staffId: "22222222-2222-4222-8222-222222222222",
+  roles: ["agent"] as ("admin" | "manager" | "agent")[],
+  active: true,
+  isSelf: false,
+  isLastAdmin: false,
+  isProtected: false,
+  owned: {
+    properties: 4,
+    crm_contacts: 2,
+    crm_leads: 12,
+    inquiries: 1,
+    whatsapp_conversations: 3,
+    live_agent_sessions: 0,
+  },
+  ownedTotal: 22,
+};
+
+describe("權限 section", () => {
+  test("renders role controls when an access summary is supplied", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: true,
+        access: accessSummary,
+        activeStaffOptions: [{ id: "33333333-3333-4333-8333-333333333333", label: "李小明" }],
+        onSaved: () => {},
+      }),
+    );
+    const $ = load(html);
+
+    expect($("#access-heading").text()).toContain("權限");
+    for (const label of ["管理員", "主管", "經紀"]) {
+      expect($(`[aria-label="${label}"]`).length).toBe(1);
+    }
+    expect(html).toContain("停用帳戶");
+  });
+
+  test("a protected account explains why it cannot be demoted or deactivated", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: true,
+        access: { ...accessSummary, roles: ["admin"], isProtected: true },
+        onSaved: () => {},
+      }),
+    );
+
+    expect(html).toContain("ADMIN_BOOTSTRAP_EMAILS");
+    // The deactivate control is present but disabled rather than hidden, so the
+    // reason is visible instead of the button silently vanishing.
+    const $ = load(html);
+    const deactivate = $("button").filter((_, el) => $(el).text().includes("停用帳戶"));
+    expect(deactivate.attr("disabled")).toBeDefined();
+  });
+
+  // Managers may edit an agent's public profile but must never see a path to
+  // escalate anyone. The route passes access: null for non-admins.
+  test("is absent entirely when no access summary is supplied", () => {
+    const html = renderToStaticMarkup(
+      createElement(AgentProfileForm, {
+        profile: profileData,
+        canManageIdentity: false,
+        access: null,
+        onSaved: () => {},
+      }),
+    );
+
+    expect(html).not.toContain("access-heading");
+    expect(html).not.toContain("停用帳戶");
+  });
+});
