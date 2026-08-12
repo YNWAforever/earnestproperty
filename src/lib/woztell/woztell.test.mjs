@@ -303,16 +303,60 @@ test("admin send route gates replies through a fetched conversation", () => {
   assert.match(sendRoute, /WHERE id = \$1/);
 });
 
-test("webhook validates the raw body before parsing and deduplicates messages", () => {
+test("webhook validates the raw body before parsing", () => {
   const webhookRoute = read("src/routes/api.woztell.webhook.ts");
 
+  // The signature is checked against the RAW bytes, before JSON.parse -- parsing
+  // first and re-serializing would change the bytes and break verification.
   assert.match(webhookRoute, /request\.text\(\)/);
   assert.match(webhookRoute, /x-woztell-signature/);
   assert.match(webhookRoute, /try\s*\{[\s\S]*JSON\.parse\(raw/);
   assert.match(webhookRoute, /INVALID_JSON/);
-  assert.match(webhookRoute, /external_message_id/);
-  assert.match(webhookRoute, /ON CONFLICT \(external_message_id\) DO NOTHING/);
-  assert.match(webhookRoute, /ORDER BY \(whatsapp_member_id = \$2\)/);
+  const signatureCheck = webhookRoute.indexOf("verifyWoztellSignature");
+  const parseCall = webhookRoute.indexOf("JSON.parse(raw");
+  assert.ok(
+    signatureCheck > -1 && parseCall > signatureCheck,
+    "signature verification must happen before the body is parsed",
+  );
+});
+
+// The upsert moved out of the route when the history backfill needed to write
+// the same rows. These assertions moved with it -- they guard the dedupe key and
+// the contact-matching order, which are what stop the two ingest paths from
+// producing duplicate contacts and duplicate messages for one conversation.
+test("event ingestion deduplicates messages and matches contacts member-id first", () => {
+  const ingest = read("src/lib/woztell/woztell-ingest.server.ts");
+
+  assert.match(ingest, /external_message_id/);
+  assert.match(ingest, /ON CONFLICT \(external_message_id\) DO NOTHING/);
+  assert.match(ingest, /ORDER BY \(whatsapp_member_id = \$2\)/);
+});
+
+// A backfill replays OLD messages. Plain assignment (or COALESCE, which takes
+// any non-null new value) would drag last_message_at backwards and reshuffle the
+// admin inbox, which sorts on it. GREATEST ignores NULLs in Postgres, so this is
+// also correct for the webhook when events arrive out of order.
+test("recency columns never move backwards when old history is replayed", () => {
+  const ingest = read("src/lib/woztell/woztell-ingest.server.ts");
+
+  assert.match(ingest, /last_message_at = GREATEST\(last_message_at, \$4\)/);
+  assert.match(ingest, /last_inbound_at = GREATEST\(last_inbound_at, \$5\)/);
+  assert.match(ingest, /last_inbound_at = GREATEST\(last_inbound_at, \$8\)/);
+  assert.doesNotMatch(
+    ingest,
+    /last_message_at = \$\d/,
+    "last_message_at must not be assigned unconditionally -- it would regress on backfill",
+  );
+});
+
+// Both paths must go through the shared module. A future edit that re-inlines
+// SQL into the route is exactly the drift this extraction exists to prevent.
+test("the webhook route delegates persistence rather than re-inlining SQL", () => {
+  const webhookRoute = read("src/routes/api.woztell.webhook.ts");
+
+  assert.match(webhookRoute, /ingestWoztellEvent/);
+  assert.doesNotMatch(webhookRoute, /INSERT INTO/);
+  assert.doesNotMatch(webhookRoute, /UPDATE crm_contacts/);
 });
 
 test("admin reply server action never accepts a browser recipient id", () => {
