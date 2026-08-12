@@ -17,7 +17,7 @@
     "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs",
     "test:listing-search": "node --test src/lib/neon/listing-search.contract.test.mjs",
     "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
-    "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs",
+    "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs",
     "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs src/config/neon-only.test.mjs",
     "test:command-center": "node --test src/lib/neon/command-center.test.mjs src/lib/neon/admin-data.contract.test.mjs src/routes/admin.routes.test.mjs",
