@@ -63,21 +63,17 @@ test("admin child routes are present in the generated route tree", () => {
   assert.doesNotMatch(routeTree, /AdminListingsRouteWithChildren/);
   assert.doesNotMatch(routeTree, /parentRoute: typeof AdminListingsRoute/);
 });
-test("CMS and AI Agent sidebar entries keep independent active states", () => {
-  const shell = read("src/components/admin/AdminShell.tsx");
+// Superseded by "sidebar has no duplicate destinations and is fully grouped"
+// below: this used to pin the OLD /admin/cms sidebar shape -- two separate
+// entries ("CMS / FAQ" and "AI Agent") kept independently active by a
+// `search` prop spread on the nav Link. That shape *was* the bug (see Task 12
+// in docs/superpowers/plans/2026-08-12-staff-access-management.md): one entry
+// landed on the wrong tab, one was mislabelled, and three tabs had no entry
+// at all. The single grouped /admin/cms entry now relies on plain
+// `includeSearch: false` instead, with no per-item `search` prop, so this
+// test's premise no longer holds.
+test("admin CMS route still owns its own tab search state", () => {
   const cmsRoute = read("src/routes/admin.cms.tsx");
-
-  assert.match(shell, /to: "\/admin\/cms", label: "CMS \/ FAQ"/);
-  assert.match(shell, /label: "CMS \/ FAQ",[\s\S]*?search: \{ tab: undefined \}/);
-  assert.match(shell, /to: "\/admin\/cms", label: "AI Agent",[\s\S]*?search: \{ tab: "faqs" \}/);
-  assert.match(shell, /includeSearch: false/);
-  const navLinkOpening = shell.match(
-    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
-  )?.[0];
-  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
-  assert.match(navLinkOpening, /\.\.\.\("search" in item/);
-  assert.match(navLinkOpening, /activeOptions=\{\{/);
-  assert.match(navLinkOpening, /explicitUndefined: true/);
 
   assert.match(cmsRoute, /validateSearch/);
   assert.match(cmsRoute, /Route\.useSearch\(\)/);
@@ -685,4 +681,33 @@ test("protected owner accounts are enforced server-side, not only hidden in the 
       `${fnName} must pass targetIsProtected into its decision function`,
     );
   }
+});
+
+// Two entries pointed at /admin/cms differing only by search param, with labels
+// that named the wrong tab, while three of that screen's five tabs had no entry
+// at all. A duplicate destination is the shape of that bug.
+test("sidebar has no duplicate destinations and is fully grouped", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+
+  const start = shell.indexOf("const navGroups = [");
+  assert.notEqual(start, -1, "navGroups must exist");
+  const block = shell.slice(start, shell.indexOf("] as const;", start));
+
+  const destinations = [...block.matchAll(/to:\s*"([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(
+    new Set(destinations).size,
+    destinations.length,
+    `duplicate sidebar destination: ${destinations.join(", ")}`,
+  );
+  assert.equal(destinations.length, 10);
+
+  for (const heading of ["物業", "客戶", "訊息", "系統"]) {
+    assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
+  }
+
+  // The old duplicate + its misleading labels must not come back.
+  assert.doesNotMatch(block, /search: \{ tab: "faqs" \}/);
+  assert.doesNotMatch(block, /"AI Agent"/);
+  assert.doesNotMatch(block, /"CMS \/ FAQ"/);
+  assert.match(block, /"員工管理"/);
 });
