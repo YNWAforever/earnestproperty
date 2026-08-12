@@ -57,6 +57,7 @@ import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.lead
 import { Route as AdminAgentsNewRouteImport } from './routes/admin.agents_.new'
 import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
+import { Route as ApiAdminWoztellBackfillRouteImport } from './routes/api.admin.woztell.backfill'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
 import { Route as ApiAdminControlPlaneWorkerRouteImport } from './routes/api.admin.control-plane.worker'
@@ -311,6 +312,11 @@ const ApiAdminWoztellSendRoute = ApiAdminWoztellSendRouteImport.update({
   path: '/api/admin/woztell/send',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminWoztellBackfillRoute = ApiAdminWoztellBackfillRouteImport.update({
+  id: '/api/admin/woztell/backfill',
+  path: '/api/admin/woztell/backfill',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminMediaUploadRoute = ApiAdminMediaUploadRouteImport.update({
   id: '/api/admin/media/upload',
   path: '/api/admin/media/upload',
@@ -444,6 +450,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
   '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
@@ -505,6 +512,7 @@ export interface FileRoutesByTo {
   '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
   '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
@@ -569,6 +577,7 @@ export interface FileRoutesById {
   '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
   '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
@@ -634,6 +643,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
+    | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
     | '/api/admin/campaigns/$id/queue'
     | '/api/admin/control-plane/jobs/$id/cancel'
@@ -695,6 +705,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
+    | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
     | '/api/admin/campaigns/$id/queue'
     | '/api/admin/control-plane/jobs/$id/cancel'
@@ -758,6 +769,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
+    | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
     | '/api/admin/campaigns/$id/queue'
     | '/api/admin/control-plane/jobs/$id/cancel'
@@ -806,6 +818,7 @@ export interface RootRouteChildren {
   ApiAdminControlPlaneWorkerRoute: typeof ApiAdminControlPlaneWorkerRoute
   ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
+  ApiAdminWoztellBackfillRoute: typeof ApiAdminWoztellBackfillRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
   ApiAdminCampaignsIdQueueRoute: typeof ApiAdminCampaignsIdQueueRoute
 }
@@ -1148,6 +1161,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminWoztellSendRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/woztell/backfill': {
+      id: '/api/admin/woztell/backfill'
+      path: '/api/admin/woztell/backfill'
+      fullPath: '/api/admin/woztell/backfill'
+      preLoaderRoute: typeof ApiAdminWoztellBackfillRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/media/upload': {
       id: '/api/admin/media/upload'
       path: '/api/admin/media/upload'
@@ -1368,6 +1388,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminControlPlaneWorkerRoute: ApiAdminControlPlaneWorkerRoute,
   ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
+  ApiAdminWoztellBackfillRoute: ApiAdminWoztellBackfillRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,
   ApiAdminCampaignsIdQueueRoute: ApiAdminCampaignsIdQueueRoute,
 }
