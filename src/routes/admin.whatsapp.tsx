@@ -1,6 +1,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, Clock3, MessageCircle, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, Clock3, History, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
@@ -30,6 +30,7 @@ import {
   fetchAdminConversationAiAssist,
   fetchAdminConversations,
   fetchAdminWoztellStatus,
+  runAdminWoztellBackfill,
   sendAdminConversationReply,
   updateAdminConversation,
 } from "@/lib/neon/admin-data";
@@ -114,6 +115,7 @@ function AdminWhatsapp() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   // Drafts are held per conversation. A single shared string meant clicking
   // another conversation to check a flat number silently destroyed a half-typed
   // reply, with no warning and no undo, under a 24-hour reply clock.
@@ -575,6 +577,99 @@ function AdminWhatsapp() {
     ? `${statusLabel(selectedRow.status)} · ${formatDate(selectedRow.last_message_at)}`
     : "查看訊息紀錄、更新負責代理並回覆客戶。";
 
+  /**
+   * Pull history that predates the webhook into the inbox.
+   *
+   * Loops here rather than asking the server for everything at once: one run is
+   * capped so it finishes inside the platform's function timeout and hands back
+   * a cursor, so draining a long history is the client's job. Bounded at 20
+   * calls (up to ~20,000 messages) so a runaway cursor cannot spin forever --
+   * if that bound is hit the toast says so and the button can simply be pressed
+   * again, since every run is idempotent.
+   */
+  const runBackfill = useCallback(async () => {
+    setBackfilling(true);
+    const toastId = toast.loading("正在從 Woztell 匯入歷史訊息…");
+
+    // Walk one direction to exhaustion. Returns `failed` instead of throwing so
+    // the caller can decide whether a zero-row result is worth a second attempt.
+    const drain = async (mode: "forward" | "backward") => {
+      let cursor: string | null = null;
+      let imported = 0;
+      let duplicates = 0;
+      let scanned = 0;
+
+      for (let call = 0; call < 20; call += 1) {
+        const result = await runAdminWoztellBackfill({
+          data: { maxPages: 10, after: cursor, mode },
+        });
+
+        if (!result.ok) return { failed: result, imported, duplicates, scanned, done: true };
+
+        imported += result.ingested ?? 0;
+        duplicates += result.duplicates ?? 0;
+        scanned += result.rows ?? 0;
+        cursor = result.nextCursor ?? null;
+
+        if (result.reachedEnd || !cursor) {
+          return { failed: null, imported, duplicates, scanned, done: true };
+        }
+
+        toast.loading(`已處理 ${scanned} 則訊息…`, { id: toastId });
+      }
+
+      return { failed: null, imported, duplicates, scanned, done: false };
+    };
+
+    try {
+      let outcome = await drain("forward");
+
+      // Woztell documents forward pagination (first/after) but their own shipped
+      // n8n node only ever uses the backward form (last/before), and the default
+      // sort order is undocumented with no sortBy argument to pin it. So a
+      // zero-row forward result is genuinely ambiguous: it means either "no
+      // history" or "this server ignores the direction we asked for". Retrying
+      // the other way turns that ambiguity into an answer, instead of reporting
+      // an empty inbox that may not be empty. Costs one wasted call in the
+      // genuinely-empty case, which is the cheap side of the trade.
+      if (!outcome.failed && outcome.scanned === 0) {
+        toast.loading("改用反向讀取重試…", { id: toastId });
+        outcome = await drain("backward");
+      }
+
+      if (outcome.failed) {
+        // The 503 carries a hint naming the exact env var and scope to set;
+        // dropping it would leave an admin with "匯入失敗" and nowhere to go.
+        const { error, hint } = outcome.failed;
+        toast.error(hint ? `${error} — ${hint}` : (error ?? "匯入失敗"), {
+          id: toastId,
+          duration: 12_000,
+        });
+        return;
+      }
+
+      if (!outcome.done) {
+        toast.info(
+          `已匯入 ${outcome.imported} 則訊息，仍有更多記錄 — 可再次按「匯入歷史訊息」繼續`,
+          { id: toastId, duration: 10_000 },
+        );
+      } else {
+        toast.success(
+          outcome.scanned === 0
+            ? "Woztell 沒有回傳任何訊息記錄"
+            : `匯入完成：新增 ${outcome.imported} 則，已存在 ${outcome.duplicates} 則`,
+          { id: toastId },
+        );
+      }
+
+      await refreshConversations();
+    } catch (err) {
+      toast.error(errorText(err), { id: toastId });
+    } finally {
+      setBackfilling(false);
+    }
+  }, [refreshConversations]);
+
   return (
     <AdminShell
       title="WhatsApp Inbox"
@@ -628,6 +723,21 @@ function AdminWhatsapp() {
                 最後更新 {formatClock(listUpdatedAt)}
               </span>
             ) : null}
+            {/* History import. Deliberately not automatic: it reaches out to
+                Woztell and writes to crm_contacts, so it stays an explicit,
+                admin-initiated action rather than something a page load does. */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 lg:h-9"
+              disabled={backfilling}
+              onClick={() => void runBackfill()}
+              title="匯入 Woztell 上早於本系統的歷史對話"
+            >
+              <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              {backfilling ? "匯入中…" : "匯入歷史訊息"}
+            </Button>
             <Button
               type="button"
               variant="outline"

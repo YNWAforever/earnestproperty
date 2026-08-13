@@ -998,6 +998,46 @@ export async function sendAdminConversationReply(options: {
   };
 }
 
+export type WoztellBackfillResult = {
+  ok: boolean;
+  error?: string;
+  hint?: string;
+  mode?: "forward" | "backward";
+  pages?: number;
+  rows?: number;
+  ingested?: number;
+  duplicates?: number;
+  skipped?: number;
+  reachedEnd?: boolean;
+  nextCursor?: string | null;
+};
+
+/**
+ * Import WhatsApp history that predates the webhook.
+ *
+ * A plain fetch rather than a server function for the same reason
+ * sendAdminConversationReply is: the route needs the raw Response so a 503
+ * (missing WOZTELL_OPEN_API_TOKEN) and a 502 (Woztell rejected us) can be told
+ * apart and reported with their own text, instead of collapsing into one
+ * generic failure.
+ */
+export async function runAdminWoztellBackfill(options?: {
+  data?: { maxPages?: number; after?: string | null; mode?: "forward" | "backward" };
+}): Promise<WoztellBackfillResult> {
+  const request = await withStaffAuthHeaders({
+    headers: { "Content-Type": "application/json" },
+  });
+  const response = await fetch("/api/admin/woztell/backfill", {
+    method: "POST",
+    headers: request.headers,
+    body: JSON.stringify(options?.data ?? {}),
+  });
+  const payload = (await response.json().catch(() => null)) as WoztellBackfillResult | null;
+
+  if (payload && typeof payload === "object") return payload;
+  return { ok: false, error: response.statusText || "匯入失敗" };
+}
+
 const fetchAdminBlastOptionsServer = createServerFn({ method: "GET" }).handler(async () => {
   await requireStaff(["admin", "manager"]);
   const data = await import("./admin-data.server");
