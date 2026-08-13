@@ -1,3 +1,7 @@
+// Explicit .js extension: plain-JS module with a .d.ts sibling, so the
+// node --test suite imports it without a build step.
+import { MIGRATION_VERSIONS, pendingMigrations } from "./migration-versions.js";
+
 export type HealthStatus = "healthy" | "degraded" | "failed";
 
 export type HealthCheck = {
@@ -24,6 +28,13 @@ const requiredTables = [
 ] as const;
 
 const requiredColumns = {
+  // staff_users is here because its absence is what exposed the gap: this map
+  // used to cover only the control plane's own tables, so a missing
+  // staff_users.specialties reported healthy right up until 代理管理 500'd on a
+  // real click. The columns below are the ones admin-data.server.ts selects by
+  // name, where a missing column is a hard query failure rather than a
+  // degraded read.
+  staff_users: ["specialties", "served_estate_slugs", "public_slug", "show_on_website"],
   ops_audit_logs: ["permission", "action", "outcome", "request_id", "metadata", "created_at"],
   ops_jobs: [
     "job_type",
@@ -160,6 +171,35 @@ export async function runControlPlaneHealthChecks(): Promise<ControlPlaneHealth>
       required: true,
       status: Object.values(columnDetails).every(Boolean) ? "healthy" : "failed",
       details: columnDetails,
+    });
+
+    // The column check above only catches drift someone remembered to register.
+    // This catches the general case: a migration that shipped in the repo but was
+    // never run against this database. app_migrations.version holds the full
+    // filename, which is exactly what MIGRATION_VERSIONS lists.
+    //
+    // Reported as degraded rather than failed. Pending migrations mean this
+    // database is behind the code, which is serious -- but it is also the normal,
+    // transient state during a deploy, and a hard failure would make the control
+    // plane cry wolf on every release.
+    const migrationRows = await queryRows<{ version: unknown }>(
+      "SELECT version FROM app_migrations",
+    );
+    const pending = new Set(pendingMigrations(migrationRows.map((row) => String(row.version))));
+
+    // One boolean per migration rather than counts or a list of names. The
+    // overview renders details by counting truthy values ("14 項設定中已完成 13
+    // 項"), so this shape reads correctly there for free -- whereas a
+    // `{ pending: [...] }` array would be truthy even when non-empty and make
+    // the row claim 已完成設定 while migrations were outstanding.
+    const migrationDetails = Object.fromEntries(
+      MIGRATION_VERSIONS.map((version) => [version, !pending.has(version)]),
+    );
+    checks.push({
+      key: "database.migrations",
+      required: true,
+      status: pending.size === 0 ? "healthy" : "degraded",
+      details: migrationDetails,
     });
   } catch {
     checks.push({ key: "database", required: true, status: "failed" });
