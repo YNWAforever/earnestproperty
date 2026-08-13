@@ -13,6 +13,7 @@ import type {
 const healthLabels: Record<string, string> = {
   "database.tables": "資料庫表格",
   "database.columns": "資料庫欄位",
+  "database.migrations": "資料庫遷移",
   database: "資料庫",
   // Split from a single "ai" key: the gateway backs generateAiText/embedAiTexts
   // while the copilot is CMS-only, and they are configured independently.
