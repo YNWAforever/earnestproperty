@@ -421,7 +421,17 @@ test("the inbox exposes a button that drains the backfill cursor", () => {
 
   // The 503 carries a hint naming the env var and scope to set. Dropping it
   // leaves an admin with a bare failure and nowhere to go.
-  assert.match(page, /result\.hint/);
+  assert.match(page, /hint \?/);
+
+  // A zero-row forward result is ambiguous -- "no history" or "this server
+  // ignores the direction we asked for". The button must resolve that itself
+  // rather than reporting an empty inbox that may not be empty.
+  assert.match(page, /drain\("backward"\)/, "an empty forward pass must retry backward");
+  assert.match(
+    page,
+    /scanned === 0[\s\S]{0,200}drain\("backward"\)/,
+    "the backward retry must be gated on a zero-row forward pass, not run every time",
+  );
 
   // Auth must ride the same path as every other admin call.
   assert.match(client, /runAdminWoztellBackfill[\s\S]{0,400}withStaffAuthHeaders/);

@@ -590,29 +590,21 @@ function AdminWhatsapp() {
   const runBackfill = useCallback(async () => {
     setBackfilling(true);
     const toastId = toast.loading("正在從 Woztell 匯入歷史訊息…");
-    let cursor: string | null = null;
-    let imported = 0;
-    let duplicates = 0;
-    let scanned = 0;
 
-    try {
+    // Walk one direction to exhaustion. Returns `failed` instead of throwing so
+    // the caller can decide whether a zero-row result is worth a second attempt.
+    const drain = async (mode: "forward" | "backward") => {
+      let cursor: string | null = null;
+      let imported = 0;
+      let duplicates = 0;
+      let scanned = 0;
+
       for (let call = 0; call < 20; call += 1) {
         const result = await runAdminWoztellBackfill({
-          data: { maxPages: 10, after: cursor },
+          data: { maxPages: 10, after: cursor, mode },
         });
 
-        if (!result.ok) {
-          // The 503 carries a hint naming the exact env var and scope to set;
-          // dropping it would leave an admin with "匯入失敗" and nowhere to go.
-          toast.error(
-            result.hint ? `${result.error} — ${result.hint}` : (result.error ?? "匯入失敗"),
-            {
-              id: toastId,
-              duration: 12_000,
-            },
-          );
-          return;
-        }
+        if (!result.ok) return { failed: result, imported, duplicates, scanned, done: true };
 
         imported += result.ingested ?? 0;
         duplicates += result.duplicates ?? 0;
@@ -620,23 +612,56 @@ function AdminWhatsapp() {
         cursor = result.nextCursor ?? null;
 
         if (result.reachedEnd || !cursor) {
-          toast.success(
-            scanned === 0
-              ? "Woztell 沒有回傳任何訊息記錄"
-              : `匯入完成：新增 ${imported} 則，已存在 ${duplicates} 則`,
-            { id: toastId },
-          );
-          await refreshConversations();
-          return;
+          return { failed: null, imported, duplicates, scanned, done: true };
         }
 
         toast.loading(`已處理 ${scanned} 則訊息…`, { id: toastId });
       }
 
-      toast.info(`已匯入 ${imported} 則訊息，仍有更多記錄 — 可再次按「匯入歷史訊息」繼續`, {
-        id: toastId,
-        duration: 10_000,
-      });
+      return { failed: null, imported, duplicates, scanned, done: false };
+    };
+
+    try {
+      let outcome = await drain("forward");
+
+      // Woztell documents forward pagination (first/after) but their own shipped
+      // n8n node only ever uses the backward form (last/before), and the default
+      // sort order is undocumented with no sortBy argument to pin it. So a
+      // zero-row forward result is genuinely ambiguous: it means either "no
+      // history" or "this server ignores the direction we asked for". Retrying
+      // the other way turns that ambiguity into an answer, instead of reporting
+      // an empty inbox that may not be empty. Costs one wasted call in the
+      // genuinely-empty case, which is the cheap side of the trade.
+      if (!outcome.failed && outcome.scanned === 0) {
+        toast.loading("改用反向讀取重試…", { id: toastId });
+        outcome = await drain("backward");
+      }
+
+      if (outcome.failed) {
+        // The 503 carries a hint naming the exact env var and scope to set;
+        // dropping it would leave an admin with "匯入失敗" and nowhere to go.
+        const { error, hint } = outcome.failed;
+        toast.error(hint ? `${error} — ${hint}` : (error ?? "匯入失敗"), {
+          id: toastId,
+          duration: 12_000,
+        });
+        return;
+      }
+
+      if (!outcome.done) {
+        toast.info(
+          `已匯入 ${outcome.imported} 則訊息，仍有更多記錄 — 可再次按「匯入歷史訊息」繼續`,
+          { id: toastId, duration: 10_000 },
+        );
+      } else {
+        toast.success(
+          outcome.scanned === 0
+            ? "Woztell 沒有回傳任何訊息記錄"
+            : `匯入完成：新增 ${outcome.imported} 則，已存在 ${outcome.duplicates} 則`,
+          { id: toastId },
+        );
+      }
+
       await refreshConversations();
     } catch (err) {
       toast.error(errorText(err), { id: toastId });
