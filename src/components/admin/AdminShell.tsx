@@ -53,7 +53,13 @@ const navGroups = [
   {
     heading: "Administration",
     items: [
-      { to: "/admin/team", label: "團隊成員", icon: Users, activeExact: true },
+      {
+        to: "/admin/team",
+        label: "團隊成員",
+        icon: Users,
+        activeExact: true,
+        includeSearch: false,
+      },
       { to: "/admin/agents", label: "經紀檔案", icon: UserRoundCog, activeExact: false },
       {
         to: "/admin/operations",

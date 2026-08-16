@@ -69,6 +69,13 @@ test("operations shell follows the approved navigation groups and exact Team sta
   assert.match(shell, /to: "\/admin\/team"[\s\S]{0,120}activeExact: true/);
   assert.match(shell, /to: "\/admin\/agents"[\s\S]{0,120}activeExact: false/);
   assert.doesNotMatch(shell, /to: "\/admin\/operations"[\s\S]{0,120}activeExact: false/);
+
+  // The Team directory persists filters and selected detail in its URL. Its
+  // navigation item must remain active for a route such as
+  // /admin/team?q=ann&role=agent&state=invited&cursor=next&member=staff-1.
+  const teamEntry = shell.match(/\{\s*to:\s*"\/admin\/team",[^}]*\}/)?.[0];
+  assert.ok(teamEntry, "/admin/team entry must exist in navGroups");
+  assert.match(teamEntry, /includeSearch:\s*false/);
 });
 
 test("Overview reads operational sources independently without polling", () => {
