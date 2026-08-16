@@ -291,7 +291,7 @@ function HomePage() {
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             <SectionHeader
               eyebrow="精選筍盤"
-              title="Featured Listings"
+              title="精選筍盤"
               desc="即日新放盤，隨時 WhatsApp 查詢及預約睇樓。"
               className="text-left"
             />
@@ -324,7 +324,7 @@ function HomePage() {
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             <SectionHeader
               eyebrow="精選樓盤影片"
-              title="Featured Property Videos"
+              title="精選樓盤影片"
               desc="睇樓前先睇片，了解實際景觀、間隔同屋苑環境。"
               className="text-left"
             />
@@ -348,7 +348,7 @@ function HomePage() {
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader
           eyebrow="深井核心屋苑"
-          title="Sham Tseng Signature Estates"
+          title="深井核心屋苑"
           desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉"
         />
         <CoreEstateGrid estates={estates} counts={counts} />
@@ -356,7 +356,7 @@ function HomePage() {
 
       {/* WHY US */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <SectionHeader eyebrow="為何選晉誠" title="Why Earnest Property" />
+        <SectionHeader title="為何選晉誠" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Feature
             icon={<MapPin className="h-5 w-5" />}
@@ -749,14 +749,16 @@ function SectionHeader({
   desc,
   className = "text-center",
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   desc?: string;
   className?: string;
 }) {
   return (
     <div className={`max-w-2xl ${className === "text-center" ? "mx-auto" : ""} ${className}`}>
-      <p className="text-sm font-semibold uppercase tracking-widest text-coral">{eyebrow}</p>
+      {eyebrow ? (
+        <p className="text-sm font-semibold uppercase tracking-widest text-coral">{eyebrow}</p>
+      ) : null}
       <h2 className="mt-2 text-3xl font-bold tracking-tight text-primary sm:text-4xl">{title}</h2>
       {desc && <p className="mt-3 text-base text-muted-foreground">{desc}</p>}
     </div>
