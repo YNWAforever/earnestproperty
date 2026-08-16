@@ -1,11 +1,219 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { canonicalLink, SITE_URL } from "@/content/seo";
+import { itemListSchema, jsonLdScript } from "@/lib/schema";
+import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
+import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
+import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 
 export const Route = createFileRoute("/agents")({
-  head: () => ({ meta: [{ title: "代理團隊｜晉誠地產" }] }),
-  component: () => (
-    <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-      <h1 className="text-3xl font-bold text-primary">代理團隊</h1>
-      <p className="mt-4 text-muted-foreground">代理列表即將推出。</p>
-    </div>
-  ),
+  loader: async () => (await fetchNeonPublicAgentProfiles()) as NeonPublicAgentProfile[],
+  head: () => ({
+    meta: [
+      { title: "專業代理｜晉誠地產" },
+      {
+        name: "description",
+        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
+      },
+    ],
+    links: [canonicalLink("/agents")],
+  }),
+  pendingComponent: AgentDirectoryPending,
+  errorComponent: AgentDirectoryError,
+  component: AgentsPage,
 });
+
+function AgentsPage() {
+  const agents = Route.useLoaderData();
+  const listedAgents = agents.filter((agent) => agent.public_slug);
+  const listSchema =
+    listedAgents.length > 0
+      ? itemListSchema({
+          items: listedAgents.map((agent) => ({
+            url: `${SITE_URL}/agents/${agent.public_slug}`,
+            name: agent.name_zh || agent.name_en || "晉誠地產代理",
+          })),
+        })
+      : null;
+
+  return (
+    <main className="bg-background">
+      {listSchema ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLdScript({ "@context": "https://schema.org", ...listSchema }),
+          }}
+        />
+      ) : null}
+      <AgentDirectoryHeader />
+      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        {agents.length === 0 ? <DirectoryEmptyState /> : null}
+        {agents.length > 0 ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            {agents.map((agent) => (
+              <AgentDirectoryCard key={agent.id} agent={agent} />
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </main>
+  );
+}
+
+function AgentDirectoryHeader() {
+  return (
+    <section className="border-b bg-muted/30">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
+        <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
+        <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
+        <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
+          持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function AgentDirectoryCard({ agent }: { agent: NeonPublicAgentProfile }) {
+  const name = agent.name_zh || agent.name_en || "晉誠地產代理";
+  // No fallback: this used to default to the first configured branch (麗都分行), which
+  // printed a real branch name on agents who work elsewhere. A missing branch renders
+  // nothing — 董事 legitimately has none, and a blank beats a confident wrong answer.
+  const branch = agent.branch;
+  const contact = resolveAgentContact(agent);
+  const note = agentContactNote(contact);
+  const phoneHref = toTelHref(contact.phone);
+  const whatsappHref = toWhatsAppHref(contact.whatsapp);
+
+  return (
+    <article className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-[104px_1fr]">
+      <div className="aspect-square overflow-hidden rounded-md bg-muted">
+        {agent.avatar_url ? (
+          <img
+            src={agent.avatar_url}
+            alt={`${name} 個人相片`}
+            loading="lazy"
+            width={104}
+            height={104}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            <UserRound className="h-9 w-9" aria-hidden="true" />
+          </div>
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-xl font-semibold">{name}</h2>
+            {agent.name_zh && agent.name_en ? (
+              <p className="mt-1 text-sm text-muted-foreground">{agent.name_en}</p>
+            ) : null}
+          </div>
+          {branch ? <span className="text-sm text-muted-foreground">{branch}</span> : null}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          {agent.job_title ? <span>{agent.job_title}</span> : null}
+          {agent.licence_no ? <span>牌照：{agent.licence_no}</span> : null}
+        </div>
+        {agent.bio ? (
+          <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{agent.bio}</p>
+        ) : null}
+        {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {agent.public_slug ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to="/agents/$slug" params={{ slug: agent.public_slug }}>
+                <Building2 className="mr-2 h-4 w-4" />
+                查看資料
+              </Link>
+            </Button>
+          ) : null}
+          {phoneHref ? (
+            <Button asChild variant="outline" size="sm">
+              <a href={phoneHref}>
+                <Phone className="mr-2 h-4 w-4" />
+                電話聯絡
+              </a>
+            </Button>
+          ) : null}
+          {whatsappHref ? (
+            <Button asChild variant="brand" size="sm">
+              <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+                <MessageCircle className="mr-2 h-4 w-4" />
+                WhatsApp
+              </a>
+            </Button>
+          ) : null}
+          {contact.whatsappIsFallback ? (
+            <Button asChild size="sm">
+              <Link to="/contact">一般查詢</Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function AgentDirectoryPending() {
+  return (
+    <main className="bg-background">
+      <AgentDirectoryHeader />
+      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+        <DirectorySkeleton />
+      </section>
+    </main>
+  );
+}
+
+function DirectorySkeleton() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2" aria-label="正在載入代理資料">
+      {[0, 1, 2, 3].map((index) => (
+        <Skeleton key={index} className="h-48 w-full" />
+      ))}
+    </div>
+  );
+}
+
+function DirectoryEmptyState() {
+  return (
+    <div className="border-y py-12 text-center">
+      <h2 className="text-xl font-semibold">未有可公開顯示的代理資料</h2>
+      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+        請直接聯絡晉誠地產，我們會安排合適同事跟進你的放盤、買樓或租樓需要。
+      </p>
+      <Button asChild className="mt-5">
+        <Link to="/contact">聯絡我們</Link>
+      </Button>
+    </div>
+  );
+}
+
+function AgentDirectoryError() {
+  return (
+    <main className="bg-background">
+      <AgentDirectoryHeader />
+      <section
+        className="mx-auto max-w-6xl px-4 py-10 text-center sm:px-6 lg:px-8"
+        role="alert"
+        aria-live="polite"
+      >
+        <div className="border-y border-destructive/30 py-10">
+          <h2 className="text-xl font-semibold">暫時未能載入代理資料</h2>
+          <p className="mt-3 text-sm text-muted-foreground">請稍後再試，或直接聯絡晉誠地產。</p>
+          <Button asChild className="mt-5">
+            <Link to="/contact">聯絡我們</Link>
+          </Button>
+        </div>
+      </section>
+    </main>
+  );
+}

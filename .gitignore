@@ -22,6 +22,7 @@ artifacts/old-site-migration/
 .dev.vars
 .vercel/
 supabase/.temp/
+.worktrees/
 
 # Editor directories and files
 .vscode/*
@@ -33,3 +34,12 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*
+# Documentation only -- no secrets, must stay tracked.
+!.env.example
+
+# Client hand-off material: 24 namecards carrying personal phone numbers, emails
+# and individual licence numbers, plus ~37 MB of raw photos. Only the derived,
+# resized web assets under public/ belong in history.
+docs/client-feedback/

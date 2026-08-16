@@ -20,15 +20,23 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 );
 CardHeader.displayName = "CardHeader";
 
-const CardTitle = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn("font-semibold leading-none tracking-tight", className)}
-      {...props}
-    />
-  ),
-);
+/**
+ * `as` lets a card title render as a real heading. It defaults to `div` to keep
+ * every existing call site unchanged, but panels that are page sections should
+ * pass `as="h2"` -- rendering all titles as `div` left the admin pages with no
+ * heading structure below the shell's `h1`, so screen-reader users had nothing
+ * to navigate between across e.g. the five CMS tabs.
+ */
+const CardTitle = React.forwardRef<
+  HTMLHeadingElement,
+  React.HTMLAttributes<HTMLHeadingElement> & { as?: "div" | "h2" | "h3" | "h4" }
+>(({ className, as: Comp = "div", ...props }, ref) => (
+  <Comp
+    ref={ref}
+    className={cn("font-semibold leading-none tracking-tight", className)}
+    {...props}
+  />
+));
 CardTitle.displayName = "CardTitle";
 
 const CardDescription = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(

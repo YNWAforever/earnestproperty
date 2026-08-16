@@ -1,0 +1,23 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "earnestproperty-cron",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-24",
+
+  // This Worker exists only because Vercel Hobby caps crons at one run per day.
+  // It serves no traffic — no routes, no custom domain — it just wakes up and
+  // POSTs to the job-drain endpoints on the Vercel deployment.
+  "workers_dev": false,
+
+  "triggers": {
+    "crons": ["*/5 * * * *", "*/10 * * * *"],
+  },
+
+  "vars": {
+    "SITE_ORIGIN": "https://earnestproperty.vercel.app",
+  },
+
+  // CRON_SECRET is a secret, not a var. Set it with:
+  //   wrangler secret put CRON_SECRET --config workers/cron/wrangler.jsonc
+  // It must match CRON_SECRET in the Vercel project, or every call gets a 401.
+}

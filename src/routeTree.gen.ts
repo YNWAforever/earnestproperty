@@ -9,37 +9,123 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VideosRouteImport } from './routes/videos'
+import { Route as TransactionsRouteImport } from './routes/transactions'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as MortgageRouteImport } from './routes/mortgage'
 import { Route as ListingsRouteImport } from './routes/listings'
-import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as EstateReviewsRouteImport } from './routes/estate-reviews'
+import { Route as DisclaimerRouteImport } from './routes/disclaimer'
 import { Route as ContactRouteImport } from './routes/contact'
+import { Route as CastlePeakRoadRouteImport } from './routes/castle-peak-road'
 import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AgentsRouteImport } from './routes/agents'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CastlePeakRoadIndexRouteImport } from './routes/castle-peak-road.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as PropertyListingNoRouteImport } from './routes/property.$listingNo'
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
+import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
-import { Route as DashboardInquiriesRouteImport } from './routes/dashboard.inquiries'
+import { Route as CastlePeakRoadSegmentRouteImport } from './routes/castle-peak-road.$segment'
+import { Route as BlogSlugRouteImport } from './routes/blog_.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
+import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
+import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
+import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
+import { Route as AdminTeamRouteImport } from './routes/admin.team'
+import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
+import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
+import { Route as AdminListingsRouteImport } from './routes/admin.listings'
+import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
+import { Route as AdminCmsRouteImport } from './routes/admin.cms'
+import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
+import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
 import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
-import { Route as DashboardPropertyNewRouteImport } from './routes/dashboard.property.new'
-import { Route as DashboardPropertyIdRouteImport } from './routes/dashboard.property.$id'
+import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webhook'
+import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
+import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
+import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent.handoff'
+import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
+import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
+import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
+import { Route as AdminAgentsNewRouteImport } from './routes/admin.agents_.new'
+import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
+import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
+import { Route as ApiAdminWoztellBackfillRouteImport } from './routes/api.admin.woztell.backfill'
+import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
+import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
+import { Route as ApiAdminControlPlaneWorkerRouteImport } from './routes/api.admin.control-plane.worker'
+import { Route as ApiAdminControlPlaneMigrationsRouteImport } from './routes/api.admin.control-plane.migrations'
+import { Route as ApiAdminControlPlaneJobsRouteImport } from './routes/api.admin.control-plane.jobs'
+import { Route as ApiAdminControlPlaneHealthRouteImport } from './routes/api.admin.control-plane.health'
+import { Route as ApiAdminControlPlaneAuditRouteImport } from './routes/api.admin.control-plane.audit'
+import { Route as ApiAdminAiRebuildKnowledgeRouteImport } from './routes/api.admin.ai.rebuild-knowledge'
+import { Route as ApiAdminCampaignsIdQueueRouteImport } from './routes/api.admin.campaigns.$id.queue'
+import { Route as ApiAdminControlPlaneMigrationsIdPlanRouteImport } from './routes/api.admin.control-plane.migrations.$id.plan'
+import { Route as ApiAdminControlPlaneMigrationsIdApplyRouteImport } from './routes/api.admin.control-plane.migrations.$id.apply'
+import { Route as ApiAdminControlPlaneJobsIdRetryRouteImport } from './routes/api.admin.control-plane.jobs.$id.retry'
+import { Route as ApiAdminControlPlaneJobsIdCancelRouteImport } from './routes/api.admin.control-plane.jobs.$id.cancel'
 
+const VideosRoute = VideosRouteImport.update({
+  id: '/videos',
+  path: '/videos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransactionsRoute = TransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MortgageRoute = MortgageRouteImport.update({
+  id: '/mortgage',
+  path: '/mortgage',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ListingsRoute = ListingsRouteImport.update({
   id: '/listings',
   path: '/listings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const EstateReviewsRoute = EstateReviewsRouteImport.update({
+  id: '/estate-reviews',
+  path: '/estate-reviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DisclaimerRoute = DisclaimerRouteImport.update({
+  id: '/disclaimer',
+  path: '/disclaimer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
   id: '/contact',
   path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CastlePeakRoadRoute = CastlePeakRoadRouteImport.update({
+  id: '/castle-peak-road',
+  path: '/castle-peak-road',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlogRoute = BlogRouteImport.update({
@@ -52,6 +138,11 @@ const AgentsRoute = AgentsRouteImport.update({
   path: '/agents',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -61,6 +152,16 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const CastlePeakRoadIndexRoute = CastlePeakRoadIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => CastlePeakRoadRoute,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
 } as any)
 const PropertyListingNoRoute = PropertyListingNoRouteImport.update({
   id: '/property/$listingNo',
@@ -77,15 +178,25 @@ const DistrictTsuenWanRoute = DistrictTsuenWanRouteImport.update({
   path: '/district/tsuen-wan',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DistrictTingKauRoute = DistrictTingKauRouteImport.update({
+  id: '/district/ting-kau',
+  path: '/district/ting-kau',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DistrictShamTsengRoute = DistrictShamTsengRouteImport.update({
   id: '/district/sham-tseng',
   path: '/district/sham-tseng',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardInquiriesRoute = DashboardInquiriesRouteImport.update({
-  id: '/inquiries',
-  path: '/inquiries',
-  getParentRoute: () => DashboardRoute,
+const CastlePeakRoadSegmentRoute = CastlePeakRoadSegmentRouteImport.update({
+  id: '/$segment',
+  path: '/$segment',
+  getParentRoute: () => CastlePeakRoadRoute,
+} as any)
+const BlogSlugRoute = BlogSlugRouteImport.update({
+  id: '/blog_/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
@@ -97,40 +208,262 @@ const AuthPathnameRoute = AuthPathnameRouteImport.update({
   path: '/auth/$pathname',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMlsSyncRoute = ApiMlsSyncRouteImport.update({
+  id: '/api/mls-sync',
+  path: '/api/mls-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentsSlugRoute = AgentsSlugRouteImport.update({
+  id: '/agents_/$slug',
+  path: '/agents/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
+  id: '/whatsapp',
+  path: '/whatsapp',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTeamRoute = AdminTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSegmentsRoute = AdminSegmentsRouteImport.update({
+  id: '/segments',
+  path: '/segments',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminOperationsRoute = AdminOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminListingsRoute = AdminListingsRouteImport.update({
+  id: '/listings',
+  path: '/listings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLeadsRoute = AdminLeadsRouteImport.update({
+  id: '/leads',
+  path: '/leads',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCmsRoute = AdminCmsRouteImport.update({
+  id: '/cms',
+  path: '/cms',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBlastsRoute = AdminBlastsRouteImport.update({
+  id: '/blasts',
+  path: '/blasts',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAgentsRoute = AdminAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AccountPathnameRoute = AccountPathnameRouteImport.update({
   id: '/account/$pathname',
   path: '/account/$pathname',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardPropertyNewRoute = DashboardPropertyNewRouteImport.update({
-  id: '/property/new',
-  path: '/property/new',
-  getParentRoute: () => DashboardRoute,
+const ApiWoztellWebhookRoute = ApiWoztellWebhookRouteImport.update({
+  id: '/api/woztell/webhook',
+  path: '/api/woztell/webhook',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardPropertyIdRoute = DashboardPropertyIdRouteImport.update({
-  id: '/property/$id',
-  path: '/property/$id',
-  getParentRoute: () => DashboardRoute,
+const ApiLiveAgentSessionRoute = ApiLiveAgentSessionRouteImport.update({
+  id: '/api/live-agent/session',
+  path: '/api/live-agent/session',
+  getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLiveAgentMessageRoute = ApiLiveAgentMessageRouteImport.update({
+  id: '/api/live-agent/message',
+  path: '/api/live-agent/message',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLiveAgentHandoffRoute = ApiLiveAgentHandoffRouteImport.update({
+  id: '/api/live-agent/handoff',
+  path: '/api/live-agent/handoff',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminListingsNewRoute = AdminListingsNewRouteImport.update({
+  id: '/listings_/new',
+  path: '/listings/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminListingsIdRoute = AdminListingsIdRouteImport.update({
+  id: '/listings_/$id',
+  path: '/listings/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLeadsCommandCenterRoute = AdminLeadsCommandCenterRouteImport.update({
+  id: '/leads_/command-center',
+  path: '/leads/command-center',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAgentsNewRoute = AdminAgentsNewRouteImport.update({
+  id: '/agents_/new',
+  path: '/agents/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAgentsIdRoute = AdminAgentsIdRouteImport.update({
+  id: '/agents_/$id',
+  path: '/agents/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
+const ApiAdminWoztellSendRoute = ApiAdminWoztellSendRouteImport.update({
+  id: '/api/admin/woztell/send',
+  path: '/api/admin/woztell/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminWoztellBackfillRoute = ApiAdminWoztellBackfillRouteImport.update({
+  id: '/api/admin/woztell/backfill',
+  path: '/api/admin/woztell/backfill',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminMediaUploadRoute = ApiAdminMediaUploadRouteImport.update({
+  id: '/api/admin/media/upload',
+  path: '/api/admin/media/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminJobsSendQueueRoute = ApiAdminJobsSendQueueRouteImport.update({
+  id: '/api/admin/jobs/send-queue',
+  path: '/api/admin/jobs/send-queue',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminControlPlaneWorkerRoute =
+  ApiAdminControlPlaneWorkerRouteImport.update({
+    id: '/api/admin/control-plane/worker',
+    path: '/api/admin/control-plane/worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneMigrationsRoute =
+  ApiAdminControlPlaneMigrationsRouteImport.update({
+    id: '/api/admin/control-plane/migrations',
+    path: '/api/admin/control-plane/migrations',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneJobsRoute =
+  ApiAdminControlPlaneJobsRouteImport.update({
+    id: '/api/admin/control-plane/jobs',
+    path: '/api/admin/control-plane/jobs',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneHealthRoute =
+  ApiAdminControlPlaneHealthRouteImport.update({
+    id: '/api/admin/control-plane/health',
+    path: '/api/admin/control-plane/health',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneAuditRoute =
+  ApiAdminControlPlaneAuditRouteImport.update({
+    id: '/api/admin/control-plane/audit',
+    path: '/api/admin/control-plane/audit',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminAiRebuildKnowledgeRoute =
+  ApiAdminAiRebuildKnowledgeRouteImport.update({
+    id: '/api/admin/ai/rebuild-knowledge',
+    path: '/api/admin/ai/rebuild-knowledge',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminCampaignsIdQueueRoute =
+  ApiAdminCampaignsIdQueueRouteImport.update({
+    id: '/api/admin/campaigns/$id/queue',
+    path: '/api/admin/campaigns/$id/queue',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAdminControlPlaneMigrationsIdPlanRoute =
+  ApiAdminControlPlaneMigrationsIdPlanRouteImport.update({
+    id: '/$id/plan',
+    path: '/$id/plan',
+    getParentRoute: () => ApiAdminControlPlaneMigrationsRoute,
+  } as any)
+const ApiAdminControlPlaneMigrationsIdApplyRoute =
+  ApiAdminControlPlaneMigrationsIdApplyRouteImport.update({
+    id: '/$id/apply',
+    path: '/$id/apply',
+    getParentRoute: () => ApiAdminControlPlaneMigrationsRoute,
+  } as any)
+const ApiAdminControlPlaneJobsIdRetryRoute =
+  ApiAdminControlPlaneJobsIdRetryRouteImport.update({
+    id: '/$id/retry',
+    path: '/$id/retry',
+    getParentRoute: () => ApiAdminControlPlaneJobsRoute,
+  } as any)
+const ApiAdminControlPlaneJobsIdCancelRoute =
+  ApiAdminControlPlaneJobsIdCancelRouteImport.update({
+    id: '/$id/cancel',
+    path: '/$id/cancel',
+    getParentRoute: () => ApiAdminControlPlaneJobsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRoute
+  '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/disclaimer': typeof DisclaimerRoute
+  '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/mortgage': typeof MortgageRoute
+  '/privacy': typeof PrivacyRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
+  '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/blasts': typeof AdminBlastsRoute
+  '/admin/cms': typeof AdminCmsRoute
+  '/admin/leads': typeof AdminLeadsRoute
+  '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
+  '/admin/segments': typeof AdminSegmentsRoute
+  '/admin/team': typeof AdminTeamRoute
+  '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/agents/$slug': typeof AgentsSlugRoute
+  '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
-  '/dashboard/inquiries': typeof DashboardInquiriesRoute
+  '/blog/$slug': typeof BlogSlugRoute
+  '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
-  '/dashboard/property/$id': typeof DashboardPropertyIdRoute
-  '/dashboard/property/new': typeof DashboardPropertyNewRoute
+  '/admin/': typeof AdminIndexRoute
+  '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/agents/$id': typeof AdminAgentsIdRoute
+  '/admin/agents/new': typeof AdminAgentsNewRoute
+  '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
+  '/admin/listings/$id': typeof AdminListingsIdRoute
+  '/admin/listings/new': typeof AdminListingsNewRoute
+  '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
+  '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
+  '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
+  '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
+  '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
+  '/api/admin/control-plane/jobs': typeof ApiAdminControlPlaneJobsRouteWithChildren
+  '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
+  '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
+  '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
+  '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
+  '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
+  '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
+  '/api/admin/control-plane/migrations/$id/apply': typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  '/api/admin/control-plane/migrations/$id/plan': typeof ApiAdminControlPlaneMigrationsIdPlanRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -138,59 +471,195 @@ export interface FileRoutesByTo {
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/disclaimer': typeof DisclaimerRoute
+  '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/mortgage': typeof MortgageRoute
+  '/privacy': typeof PrivacyRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
+  '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/blasts': typeof AdminBlastsRoute
+  '/admin/cms': typeof AdminCmsRoute
+  '/admin/leads': typeof AdminLeadsRoute
+  '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
+  '/admin/segments': typeof AdminSegmentsRoute
+  '/admin/team': typeof AdminTeamRoute
+  '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/agents/$slug': typeof AgentsSlugRoute
+  '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
-  '/dashboard/inquiries': typeof DashboardInquiriesRoute
+  '/blog/$slug': typeof BlogSlugRoute
+  '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
-  '/dashboard/property/$id': typeof DashboardPropertyIdRoute
-  '/dashboard/property/new': typeof DashboardPropertyNewRoute
+  '/admin': typeof AdminIndexRoute
+  '/castle-peak-road': typeof CastlePeakRoadIndexRoute
+  '/admin/agents/$id': typeof AdminAgentsIdRoute
+  '/admin/agents/new': typeof AdminAgentsNewRoute
+  '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
+  '/admin/listings/$id': typeof AdminListingsIdRoute
+  '/admin/listings/new': typeof AdminListingsNewRoute
+  '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
+  '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
+  '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
+  '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
+  '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
+  '/api/admin/control-plane/jobs': typeof ApiAdminControlPlaneJobsRouteWithChildren
+  '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
+  '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
+  '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
+  '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
+  '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
+  '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
+  '/api/admin/control-plane/migrations/$id/apply': typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  '/api/admin/control-plane/migrations/$id/plan': typeof ApiAdminControlPlaneMigrationsIdPlanRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/admin': typeof AdminRouteWithChildren
   '/agents': typeof AgentsRoute
   '/blog': typeof BlogRoute
+  '/castle-peak-road': typeof CastlePeakRoadRouteWithChildren
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/disclaimer': typeof DisclaimerRoute
+  '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/mortgage': typeof MortgageRoute
+  '/privacy': typeof PrivacyRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
+  '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
+  '/admin/agents': typeof AdminAgentsRoute
+  '/admin/blasts': typeof AdminBlastsRoute
+  '/admin/cms': typeof AdminCmsRoute
+  '/admin/leads': typeof AdminLeadsRoute
+  '/admin/listings': typeof AdminListingsRoute
+  '/admin/operations': typeof AdminOperationsRoute
+  '/admin/segments': typeof AdminSegmentsRoute
+  '/admin/team': typeof AdminTeamRoute
+  '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/agents_/$slug': typeof AgentsSlugRoute
+  '/api/mls-sync': typeof ApiMlsSyncRoute
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
-  '/dashboard/inquiries': typeof DashboardInquiriesRoute
+  '/blog_/$slug': typeof BlogSlugRoute
+  '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
+  '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
-  '/dashboard/property/$id': typeof DashboardPropertyIdRoute
-  '/dashboard/property/new': typeof DashboardPropertyNewRoute
+  '/admin/': typeof AdminIndexRoute
+  '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
+  '/admin/agents_/$id': typeof AdminAgentsIdRoute
+  '/admin/agents_/new': typeof AdminAgentsNewRoute
+  '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
+  '/admin/listings_/$id': typeof AdminListingsIdRoute
+  '/admin/listings_/new': typeof AdminListingsNewRoute
+  '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
+  '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
+  '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
+  '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
+  '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
+  '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
+  '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
+  '/api/admin/control-plane/jobs': typeof ApiAdminControlPlaneJobsRouteWithChildren
+  '/api/admin/control-plane/migrations': typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
+  '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
+  '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
+  '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
+  '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
+  '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
+  '/api/admin/control-plane/migrations/$id/apply': typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  '/api/admin/control-plane/migrations/$id/plan': typeof ApiAdminControlPlaneMigrationsIdPlanRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/about'
+    | '/admin'
     | '/agents'
     | '/blog'
+    | '/castle-peak-road'
     | '/contact'
-    | '/dashboard'
+    | '/disclaimer'
+    | '/estate-reviews'
     | '/listings'
+    | '/mortgage'
+    | '/privacy'
+    | '/sitemap.xml'
+    | '/terms'
+    | '/transactions'
+    | '/videos'
     | '/account/$pathname'
+    | '/admin/agents'
+    | '/admin/blasts'
+    | '/admin/cms'
+    | '/admin/leads'
+    | '/admin/listings'
+    | '/admin/operations'
+    | '/admin/segments'
+    | '/admin/team'
+    | '/admin/whatsapp'
+    | '/agents/$slug'
+    | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
-    | '/dashboard/inquiries'
+    | '/blog/$slug'
+    | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
+    | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
-    | '/dashboard/property/$id'
-    | '/dashboard/property/new'
+    | '/admin/'
+    | '/castle-peak-road/'
+    | '/admin/agents/$id'
+    | '/admin/agents/new'
+    | '/admin/leads/command-center'
+    | '/admin/listings/$id'
+    | '/admin/listings/new'
+    | '/api/live-agent/handoff'
+    | '/api/live-agent/message'
+    | '/api/live-agent/session'
+    | '/api/woztell/webhook'
+    | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/audit'
+    | '/api/admin/control-plane/health'
+    | '/api/admin/control-plane/jobs'
+    | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
+    | '/api/admin/jobs/send-queue'
+    | '/api/admin/media/upload'
+    | '/api/admin/woztell/backfill'
+    | '/api/admin/woztell/send'
+    | '/api/admin/campaigns/$id/queue'
+    | '/api/admin/control-plane/jobs/$id/cancel'
+    | '/api/admin/control-plane/jobs/$id/retry'
+    | '/api/admin/control-plane/migrations/$id/apply'
+    | '/api/admin/control-plane/migrations/$id/plan'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -198,58 +667,218 @@ export interface FileRouteTypes {
     | '/agents'
     | '/blog'
     | '/contact'
-    | '/dashboard'
+    | '/disclaimer'
+    | '/estate-reviews'
     | '/listings'
+    | '/mortgage'
+    | '/privacy'
+    | '/sitemap.xml'
+    | '/terms'
+    | '/transactions'
+    | '/videos'
     | '/account/$pathname'
+    | '/admin/agents'
+    | '/admin/blasts'
+    | '/admin/cms'
+    | '/admin/leads'
+    | '/admin/listings'
+    | '/admin/operations'
+    | '/admin/segments'
+    | '/admin/team'
+    | '/admin/whatsapp'
+    | '/agents/$slug'
+    | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
-    | '/dashboard/inquiries'
+    | '/blog/$slug'
+    | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
+    | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
-    | '/dashboard/property/$id'
-    | '/dashboard/property/new'
+    | '/admin'
+    | '/castle-peak-road'
+    | '/admin/agents/$id'
+    | '/admin/agents/new'
+    | '/admin/leads/command-center'
+    | '/admin/listings/$id'
+    | '/admin/listings/new'
+    | '/api/live-agent/handoff'
+    | '/api/live-agent/message'
+    | '/api/live-agent/session'
+    | '/api/woztell/webhook'
+    | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/audit'
+    | '/api/admin/control-plane/health'
+    | '/api/admin/control-plane/jobs'
+    | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
+    | '/api/admin/jobs/send-queue'
+    | '/api/admin/media/upload'
+    | '/api/admin/woztell/backfill'
+    | '/api/admin/woztell/send'
+    | '/api/admin/campaigns/$id/queue'
+    | '/api/admin/control-plane/jobs/$id/cancel'
+    | '/api/admin/control-plane/jobs/$id/retry'
+    | '/api/admin/control-plane/migrations/$id/apply'
+    | '/api/admin/control-plane/migrations/$id/plan'
   id:
     | '__root__'
     | '/'
     | '/about'
+    | '/admin'
     | '/agents'
     | '/blog'
+    | '/castle-peak-road'
     | '/contact'
-    | '/dashboard'
+    | '/disclaimer'
+    | '/estate-reviews'
     | '/listings'
+    | '/mortgage'
+    | '/privacy'
+    | '/sitemap.xml'
+    | '/terms'
+    | '/transactions'
+    | '/videos'
     | '/account/$pathname'
+    | '/admin/agents'
+    | '/admin/blasts'
+    | '/admin/cms'
+    | '/admin/leads'
+    | '/admin/listings'
+    | '/admin/operations'
+    | '/admin/segments'
+    | '/admin/team'
+    | '/admin/whatsapp'
+    | '/agents_/$slug'
+    | '/api/mls-sync'
     | '/auth/$pathname'
     | '/auth/login'
-    | '/dashboard/inquiries'
+    | '/blog_/$slug'
+    | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
+    | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
     | '/property/$listingNo'
-    | '/dashboard/property/$id'
-    | '/dashboard/property/new'
+    | '/admin/'
+    | '/castle-peak-road/'
+    | '/admin/agents_/$id'
+    | '/admin/agents_/new'
+    | '/admin/leads_/command-center'
+    | '/admin/listings_/$id'
+    | '/admin/listings_/new'
+    | '/api/live-agent/handoff'
+    | '/api/live-agent/message'
+    | '/api/live-agent/session'
+    | '/api/woztell/webhook'
+    | '/api/admin/ai/rebuild-knowledge'
+    | '/api/admin/control-plane/audit'
+    | '/api/admin/control-plane/health'
+    | '/api/admin/control-plane/jobs'
+    | '/api/admin/control-plane/migrations'
+    | '/api/admin/control-plane/worker'
+    | '/api/admin/jobs/send-queue'
+    | '/api/admin/media/upload'
+    | '/api/admin/woztell/backfill'
+    | '/api/admin/woztell/send'
+    | '/api/admin/campaigns/$id/queue'
+    | '/api/admin/control-plane/jobs/$id/cancel'
+    | '/api/admin/control-plane/jobs/$id/retry'
+    | '/api/admin/control-plane/migrations/$id/apply'
+    | '/api/admin/control-plane/migrations/$id/plan'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AgentsRoute: typeof AgentsRoute
   BlogRoute: typeof BlogRoute
+  CastlePeakRoadRoute: typeof CastlePeakRoadRouteWithChildren
   ContactRoute: typeof ContactRoute
-  DashboardRoute: typeof DashboardRouteWithChildren
+  DisclaimerRoute: typeof DisclaimerRoute
+  EstateReviewsRoute: typeof EstateReviewsRoute
   ListingsRoute: typeof ListingsRoute
+  MortgageRoute: typeof MortgageRoute
+  PrivacyRoute: typeof PrivacyRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  TermsRoute: typeof TermsRoute
+  TransactionsRoute: typeof TransactionsRoute
+  VideosRoute: typeof VideosRoute
   AccountPathnameRoute: typeof AccountPathnameRoute
+  AgentsSlugRoute: typeof AgentsSlugRoute
+  ApiMlsSyncRoute: typeof ApiMlsSyncRoute
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
+  BlogSlugRoute: typeof BlogSlugRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
+  DistrictTingKauRoute: typeof DistrictTingKauRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
   EstateSlugRoute: typeof EstateSlugRoute
   PropertyListingNoRoute: typeof PropertyListingNoRoute
+  ApiLiveAgentHandoffRoute: typeof ApiLiveAgentHandoffRoute
+  ApiLiveAgentMessageRoute: typeof ApiLiveAgentMessageRoute
+  ApiLiveAgentSessionRoute: typeof ApiLiveAgentSessionRoute
+  ApiWoztellWebhookRoute: typeof ApiWoztellWebhookRoute
+  ApiAdminAiRebuildKnowledgeRoute: typeof ApiAdminAiRebuildKnowledgeRoute
+  ApiAdminControlPlaneAuditRoute: typeof ApiAdminControlPlaneAuditRoute
+  ApiAdminControlPlaneHealthRoute: typeof ApiAdminControlPlaneHealthRoute
+  ApiAdminControlPlaneJobsRoute: typeof ApiAdminControlPlaneJobsRouteWithChildren
+  ApiAdminControlPlaneMigrationsRoute: typeof ApiAdminControlPlaneMigrationsRouteWithChildren
+  ApiAdminControlPlaneWorkerRoute: typeof ApiAdminControlPlaneWorkerRoute
+  ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
+  ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
+  ApiAdminWoztellBackfillRoute: typeof ApiAdminWoztellBackfillRoute
+  ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
+  ApiAdminCampaignsIdQueueRoute: typeof ApiAdminCampaignsIdQueueRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/videos': {
+      id: '/videos'
+      path: '/videos'
+      fullPath: '/videos'
+      preLoaderRoute: typeof VideosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transactions': {
+      id: '/transactions'
+      path: '/transactions'
+      fullPath: '/transactions'
+      preLoaderRoute: typeof TransactionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mortgage': {
+      id: '/mortgage'
+      path: '/mortgage'
+      fullPath: '/mortgage'
+      preLoaderRoute: typeof MortgageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/listings': {
       id: '/listings'
       path: '/listings'
@@ -257,11 +886,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/estate-reviews': {
+      id: '/estate-reviews'
+      path: '/estate-reviews'
+      fullPath: '/estate-reviews'
+      preLoaderRoute: typeof EstateReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/disclaimer': {
+      id: '/disclaimer'
+      path: '/disclaimer'
+      fullPath: '/disclaimer'
+      preLoaderRoute: typeof DisclaimerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -269,6 +905,13 @@ declare module '@tanstack/react-router' {
       path: '/contact'
       fullPath: '/contact'
       preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/castle-peak-road': {
+      id: '/castle-peak-road'
+      path: '/castle-peak-road'
+      fullPath: '/castle-peak-road'
+      preLoaderRoute: typeof CastlePeakRoadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blog': {
@@ -285,6 +928,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/about': {
       id: '/about'
       path: '/about'
@@ -298,6 +948,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/castle-peak-road/': {
+      id: '/castle-peak-road/'
+      path: '/'
+      fullPath: '/castle-peak-road/'
+      preLoaderRoute: typeof CastlePeakRoadIndexRouteImport
+      parentRoute: typeof CastlePeakRoadRoute
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/property/$listingNo': {
       id: '/property/$listingNo'
@@ -320,6 +984,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DistrictTsuenWanRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/district/ting-kau': {
+      id: '/district/ting-kau'
+      path: '/district/ting-kau'
+      fullPath: '/district/ting-kau'
+      preLoaderRoute: typeof DistrictTingKauRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/district/sham-tseng': {
       id: '/district/sham-tseng'
       path: '/district/sham-tseng'
@@ -327,12 +998,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DistrictShamTsengRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/inquiries': {
-      id: '/dashboard/inquiries'
-      path: '/inquiries'
-      fullPath: '/dashboard/inquiries'
-      preLoaderRoute: typeof DashboardInquiriesRouteImport
-      parentRoute: typeof DashboardRoute
+    '/castle-peak-road/$segment': {
+      id: '/castle-peak-road/$segment'
+      path: '/$segment'
+      fullPath: '/castle-peak-road/$segment'
+      preLoaderRoute: typeof CastlePeakRoadSegmentRouteImport
+      parentRoute: typeof CastlePeakRoadRoute
+    }
+    '/blog_/$slug': {
+      id: '/blog_/$slug'
+      path: '/blog/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof BlogSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/auth/login': {
       id: '/auth/login'
@@ -348,6 +1026,83 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthPathnameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/mls-sync': {
+      id: '/api/mls-sync'
+      path: '/api/mls-sync'
+      fullPath: '/api/mls-sync'
+      preLoaderRoute: typeof ApiMlsSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agents_/$slug': {
+      id: '/agents_/$slug'
+      path: '/agents/$slug'
+      fullPath: '/agents/$slug'
+      preLoaderRoute: typeof AgentsSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/whatsapp': {
+      id: '/admin/whatsapp'
+      path: '/whatsapp'
+      fullPath: '/admin/whatsapp'
+      preLoaderRoute: typeof AdminWhatsappRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/team': {
+      id: '/admin/team'
+      path: '/team'
+      fullPath: '/admin/team'
+      preLoaderRoute: typeof AdminTeamRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/segments': {
+      id: '/admin/segments'
+      path: '/segments'
+      fullPath: '/admin/segments'
+      preLoaderRoute: typeof AdminSegmentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/operations': {
+      id: '/admin/operations'
+      path: '/operations'
+      fullPath: '/admin/operations'
+      preLoaderRoute: typeof AdminOperationsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/listings': {
+      id: '/admin/listings'
+      path: '/listings'
+      fullPath: '/admin/listings'
+      preLoaderRoute: typeof AdminListingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/leads': {
+      id: '/admin/leads'
+      path: '/leads'
+      fullPath: '/admin/leads'
+      preLoaderRoute: typeof AdminLeadsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/cms': {
+      id: '/admin/cms'
+      path: '/cms'
+      fullPath: '/admin/cms'
+      preLoaderRoute: typeof AdminCmsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/blasts': {
+      id: '/admin/blasts'
+      path: '/blasts'
+      fullPath: '/admin/blasts'
+      preLoaderRoute: typeof AdminBlastsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/agents': {
+      id: '/admin/agents'
+      path: '/agents'
+      fullPath: '/admin/agents'
+      preLoaderRoute: typeof AdminAgentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/account/$pathname': {
       id: '/account/$pathname'
       path: '/account/$pathname'
@@ -355,54 +1110,308 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountPathnameRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dashboard/property/new': {
-      id: '/dashboard/property/new'
-      path: '/property/new'
-      fullPath: '/dashboard/property/new'
-      preLoaderRoute: typeof DashboardPropertyNewRouteImport
-      parentRoute: typeof DashboardRoute
+    '/api/woztell/webhook': {
+      id: '/api/woztell/webhook'
+      path: '/api/woztell/webhook'
+      fullPath: '/api/woztell/webhook'
+      preLoaderRoute: typeof ApiWoztellWebhookRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/dashboard/property/$id': {
-      id: '/dashboard/property/$id'
-      path: '/property/$id'
-      fullPath: '/dashboard/property/$id'
-      preLoaderRoute: typeof DashboardPropertyIdRouteImport
-      parentRoute: typeof DashboardRoute
+    '/api/live-agent/session': {
+      id: '/api/live-agent/session'
+      path: '/api/live-agent/session'
+      fullPath: '/api/live-agent/session'
+      preLoaderRoute: typeof ApiLiveAgentSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/live-agent/message': {
+      id: '/api/live-agent/message'
+      path: '/api/live-agent/message'
+      fullPath: '/api/live-agent/message'
+      preLoaderRoute: typeof ApiLiveAgentMessageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/live-agent/handoff': {
+      id: '/api/live-agent/handoff'
+      path: '/api/live-agent/handoff'
+      fullPath: '/api/live-agent/handoff'
+      preLoaderRoute: typeof ApiLiveAgentHandoffRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/listings_/new': {
+      id: '/admin/listings_/new'
+      path: '/listings/new'
+      fullPath: '/admin/listings/new'
+      preLoaderRoute: typeof AdminListingsNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/listings_/$id': {
+      id: '/admin/listings_/$id'
+      path: '/listings/$id'
+      fullPath: '/admin/listings/$id'
+      preLoaderRoute: typeof AdminListingsIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/leads_/command-center': {
+      id: '/admin/leads_/command-center'
+      path: '/leads/command-center'
+      fullPath: '/admin/leads/command-center'
+      preLoaderRoute: typeof AdminLeadsCommandCenterRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/agents_/new': {
+      id: '/admin/agents_/new'
+      path: '/agents/new'
+      fullPath: '/admin/agents/new'
+      preLoaderRoute: typeof AdminAgentsNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/agents_/$id': {
+      id: '/admin/agents_/$id'
+      path: '/agents/$id'
+      fullPath: '/admin/agents/$id'
+      preLoaderRoute: typeof AdminAgentsIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/api/admin/woztell/send': {
+      id: '/api/admin/woztell/send'
+      path: '/api/admin/woztell/send'
+      fullPath: '/api/admin/woztell/send'
+      preLoaderRoute: typeof ApiAdminWoztellSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/woztell/backfill': {
+      id: '/api/admin/woztell/backfill'
+      path: '/api/admin/woztell/backfill'
+      fullPath: '/api/admin/woztell/backfill'
+      preLoaderRoute: typeof ApiAdminWoztellBackfillRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/media/upload': {
+      id: '/api/admin/media/upload'
+      path: '/api/admin/media/upload'
+      fullPath: '/api/admin/media/upload'
+      preLoaderRoute: typeof ApiAdminMediaUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/jobs/send-queue': {
+      id: '/api/admin/jobs/send-queue'
+      path: '/api/admin/jobs/send-queue'
+      fullPath: '/api/admin/jobs/send-queue'
+      preLoaderRoute: typeof ApiAdminJobsSendQueueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/worker': {
+      id: '/api/admin/control-plane/worker'
+      path: '/api/admin/control-plane/worker'
+      fullPath: '/api/admin/control-plane/worker'
+      preLoaderRoute: typeof ApiAdminControlPlaneWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/migrations': {
+      id: '/api/admin/control-plane/migrations'
+      path: '/api/admin/control-plane/migrations'
+      fullPath: '/api/admin/control-plane/migrations'
+      preLoaderRoute: typeof ApiAdminControlPlaneMigrationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/jobs': {
+      id: '/api/admin/control-plane/jobs'
+      path: '/api/admin/control-plane/jobs'
+      fullPath: '/api/admin/control-plane/jobs'
+      preLoaderRoute: typeof ApiAdminControlPlaneJobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/health': {
+      id: '/api/admin/control-plane/health'
+      path: '/api/admin/control-plane/health'
+      fullPath: '/api/admin/control-plane/health'
+      preLoaderRoute: typeof ApiAdminControlPlaneHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/audit': {
+      id: '/api/admin/control-plane/audit'
+      path: '/api/admin/control-plane/audit'
+      fullPath: '/api/admin/control-plane/audit'
+      preLoaderRoute: typeof ApiAdminControlPlaneAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/ai/rebuild-knowledge': {
+      id: '/api/admin/ai/rebuild-knowledge'
+      path: '/api/admin/ai/rebuild-knowledge'
+      fullPath: '/api/admin/ai/rebuild-knowledge'
+      preLoaderRoute: typeof ApiAdminAiRebuildKnowledgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/campaigns/$id/queue': {
+      id: '/api/admin/campaigns/$id/queue'
+      path: '/api/admin/campaigns/$id/queue'
+      fullPath: '/api/admin/campaigns/$id/queue'
+      preLoaderRoute: typeof ApiAdminCampaignsIdQueueRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/control-plane/migrations/$id/plan': {
+      id: '/api/admin/control-plane/migrations/$id/plan'
+      path: '/$id/plan'
+      fullPath: '/api/admin/control-plane/migrations/$id/plan'
+      preLoaderRoute: typeof ApiAdminControlPlaneMigrationsIdPlanRouteImport
+      parentRoute: typeof ApiAdminControlPlaneMigrationsRoute
+    }
+    '/api/admin/control-plane/migrations/$id/apply': {
+      id: '/api/admin/control-plane/migrations/$id/apply'
+      path: '/$id/apply'
+      fullPath: '/api/admin/control-plane/migrations/$id/apply'
+      preLoaderRoute: typeof ApiAdminControlPlaneMigrationsIdApplyRouteImport
+      parentRoute: typeof ApiAdminControlPlaneMigrationsRoute
+    }
+    '/api/admin/control-plane/jobs/$id/retry': {
+      id: '/api/admin/control-plane/jobs/$id/retry'
+      path: '/$id/retry'
+      fullPath: '/api/admin/control-plane/jobs/$id/retry'
+      preLoaderRoute: typeof ApiAdminControlPlaneJobsIdRetryRouteImport
+      parentRoute: typeof ApiAdminControlPlaneJobsRoute
+    }
+    '/api/admin/control-plane/jobs/$id/cancel': {
+      id: '/api/admin/control-plane/jobs/$id/cancel'
+      path: '/$id/cancel'
+      fullPath: '/api/admin/control-plane/jobs/$id/cancel'
+      preLoaderRoute: typeof ApiAdminControlPlaneJobsIdCancelRouteImport
+      parentRoute: typeof ApiAdminControlPlaneJobsRoute
     }
   }
 }
 
-interface DashboardRouteChildren {
-  DashboardInquiriesRoute: typeof DashboardInquiriesRoute
-  DashboardPropertyIdRoute: typeof DashboardPropertyIdRoute
-  DashboardPropertyNewRoute: typeof DashboardPropertyNewRoute
+interface AdminRouteChildren {
+  AdminAgentsRoute: typeof AdminAgentsRoute
+  AdminBlastsRoute: typeof AdminBlastsRoute
+  AdminCmsRoute: typeof AdminCmsRoute
+  AdminLeadsRoute: typeof AdminLeadsRoute
+  AdminListingsRoute: typeof AdminListingsRoute
+  AdminOperationsRoute: typeof AdminOperationsRoute
+  AdminSegmentsRoute: typeof AdminSegmentsRoute
+  AdminTeamRoute: typeof AdminTeamRoute
+  AdminWhatsappRoute: typeof AdminWhatsappRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  AdminAgentsIdRoute: typeof AdminAgentsIdRoute
+  AdminAgentsNewRoute: typeof AdminAgentsNewRoute
+  AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
+  AdminListingsIdRoute: typeof AdminListingsIdRoute
+  AdminListingsNewRoute: typeof AdminListingsNewRoute
 }
 
-const DashboardRouteChildren: DashboardRouteChildren = {
-  DashboardInquiriesRoute: DashboardInquiriesRoute,
-  DashboardPropertyIdRoute: DashboardPropertyIdRoute,
-  DashboardPropertyNewRoute: DashboardPropertyNewRoute,
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAgentsRoute: AdminAgentsRoute,
+  AdminBlastsRoute: AdminBlastsRoute,
+  AdminCmsRoute: AdminCmsRoute,
+  AdminLeadsRoute: AdminLeadsRoute,
+  AdminListingsRoute: AdminListingsRoute,
+  AdminOperationsRoute: AdminOperationsRoute,
+  AdminSegmentsRoute: AdminSegmentsRoute,
+  AdminTeamRoute: AdminTeamRoute,
+  AdminWhatsappRoute: AdminWhatsappRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  AdminAgentsIdRoute: AdminAgentsIdRoute,
+  AdminAgentsNewRoute: AdminAgentsNewRoute,
+  AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
+  AdminListingsIdRoute: AdminListingsIdRoute,
+  AdminListingsNewRoute: AdminListingsNewRoute,
 }
 
-const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
-  DashboardRouteChildren,
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
+interface CastlePeakRoadRouteChildren {
+  CastlePeakRoadSegmentRoute: typeof CastlePeakRoadSegmentRoute
+  CastlePeakRoadIndexRoute: typeof CastlePeakRoadIndexRoute
+}
+
+const CastlePeakRoadRouteChildren: CastlePeakRoadRouteChildren = {
+  CastlePeakRoadSegmentRoute: CastlePeakRoadSegmentRoute,
+  CastlePeakRoadIndexRoute: CastlePeakRoadIndexRoute,
+}
+
+const CastlePeakRoadRouteWithChildren = CastlePeakRoadRoute._addFileChildren(
+  CastlePeakRoadRouteChildren,
 )
+
+interface ApiAdminControlPlaneJobsRouteChildren {
+  ApiAdminControlPlaneJobsIdCancelRoute: typeof ApiAdminControlPlaneJobsIdCancelRoute
+  ApiAdminControlPlaneJobsIdRetryRoute: typeof ApiAdminControlPlaneJobsIdRetryRoute
+}
+
+const ApiAdminControlPlaneJobsRouteChildren: ApiAdminControlPlaneJobsRouteChildren =
+  {
+    ApiAdminControlPlaneJobsIdCancelRoute:
+      ApiAdminControlPlaneJobsIdCancelRoute,
+    ApiAdminControlPlaneJobsIdRetryRoute: ApiAdminControlPlaneJobsIdRetryRoute,
+  }
+
+const ApiAdminControlPlaneJobsRouteWithChildren =
+  ApiAdminControlPlaneJobsRoute._addFileChildren(
+    ApiAdminControlPlaneJobsRouteChildren,
+  )
+
+interface ApiAdminControlPlaneMigrationsRouteChildren {
+  ApiAdminControlPlaneMigrationsIdApplyRoute: typeof ApiAdminControlPlaneMigrationsIdApplyRoute
+  ApiAdminControlPlaneMigrationsIdPlanRoute: typeof ApiAdminControlPlaneMigrationsIdPlanRoute
+}
+
+const ApiAdminControlPlaneMigrationsRouteChildren: ApiAdminControlPlaneMigrationsRouteChildren =
+  {
+    ApiAdminControlPlaneMigrationsIdApplyRoute:
+      ApiAdminControlPlaneMigrationsIdApplyRoute,
+    ApiAdminControlPlaneMigrationsIdPlanRoute:
+      ApiAdminControlPlaneMigrationsIdPlanRoute,
+  }
+
+const ApiAdminControlPlaneMigrationsRouteWithChildren =
+  ApiAdminControlPlaneMigrationsRoute._addFileChildren(
+    ApiAdminControlPlaneMigrationsRouteChildren,
+  )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AdminRoute: AdminRouteWithChildren,
   AgentsRoute: AgentsRoute,
   BlogRoute: BlogRoute,
+  CastlePeakRoadRoute: CastlePeakRoadRouteWithChildren,
   ContactRoute: ContactRoute,
-  DashboardRoute: DashboardRouteWithChildren,
+  DisclaimerRoute: DisclaimerRoute,
+  EstateReviewsRoute: EstateReviewsRoute,
   ListingsRoute: ListingsRoute,
+  MortgageRoute: MortgageRoute,
+  PrivacyRoute: PrivacyRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
+  TermsRoute: TermsRoute,
+  TransactionsRoute: TransactionsRoute,
+  VideosRoute: VideosRoute,
   AccountPathnameRoute: AccountPathnameRoute,
+  AgentsSlugRoute: AgentsSlugRoute,
+  ApiMlsSyncRoute: ApiMlsSyncRoute,
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
+  BlogSlugRoute: BlogSlugRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
+  DistrictTingKauRoute: DistrictTingKauRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
   EstateSlugRoute: EstateSlugRoute,
   PropertyListingNoRoute: PropertyListingNoRoute,
+  ApiLiveAgentHandoffRoute: ApiLiveAgentHandoffRoute,
+  ApiLiveAgentMessageRoute: ApiLiveAgentMessageRoute,
+  ApiLiveAgentSessionRoute: ApiLiveAgentSessionRoute,
+  ApiWoztellWebhookRoute: ApiWoztellWebhookRoute,
+  ApiAdminAiRebuildKnowledgeRoute: ApiAdminAiRebuildKnowledgeRoute,
+  ApiAdminControlPlaneAuditRoute: ApiAdminControlPlaneAuditRoute,
+  ApiAdminControlPlaneHealthRoute: ApiAdminControlPlaneHealthRoute,
+  ApiAdminControlPlaneJobsRoute: ApiAdminControlPlaneJobsRouteWithChildren,
+  ApiAdminControlPlaneMigrationsRoute:
+    ApiAdminControlPlaneMigrationsRouteWithChildren,
+  ApiAdminControlPlaneWorkerRoute: ApiAdminControlPlaneWorkerRoute,
+  ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
+  ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
+  ApiAdminWoztellBackfillRoute: ApiAdminWoztellBackfillRoute,
+  ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,
+  ApiAdminCampaignsIdQueueRoute: ApiAdminCampaignsIdQueueRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

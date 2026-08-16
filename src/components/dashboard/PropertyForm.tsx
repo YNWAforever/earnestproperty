@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,43 +13,85 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { supabase } from "@/integrations/supabase/client";
-import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
+import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ImageUploader } from "./ImageUploader";
+import {
+  applyPropertyContentCopilotPatch,
+  buildPropertyContentCopilotFields,
+  buildPropertyContentCopilotFingerprintValues,
+  normalizePropertyFeatures,
+} from "./property-form-content";
+import {
+  fetchAdminAgents,
+  fetchAdminEstateOptions,
+  saveAdminProperty,
+} from "@/lib/neon/admin-data";
+import type { AdminAgentRow, AdminPropertyInput } from "@/lib/neon/admin-data.types";
 
-type Property = Tables<"properties">;
-type Estate = Pick<Tables<"estates">, "id" | "name_zh" | "district_slug">;
+type Property = Partial<AdminPropertyInput> & { id?: string };
+type Estate = { id: string; name_zh: string; district_slug: string };
+type Agent = AdminAgentRow;
 
-const schema = z.object({
-  listing_no: z.string().trim().min(1, "請輸入編號").max(40),
-  title_zh: z.string().trim().min(1, "請輸入標題").max(200),
-  deal_type: z.enum(["sale", "rent"]),
-  estate_id: z.string().uuid().optional().or(z.literal("")),
-  district_slug: z.string().trim().min(1).max(60),
-  address: z.string().trim().max(300).optional().or(z.literal("")),
-  price: z.coerce.number().nonnegative().optional().or(z.nan()),
-  rent: z.coerce.number().nonnegative().optional().or(z.nan()),
-  saleable_area: z.coerce.number().int().nonnegative().optional().or(z.nan()),
-  bedrooms: z.coerce.number().int().min(0).max(20).optional().or(z.nan()),
-  bathrooms: z.coerce.number().int().min(0).max(20).optional().or(z.nan()),
-  floor: z.string().trim().max(40).optional().or(z.literal("")),
-  description: z.string().trim().max(4000).optional().or(z.literal("")),
-  status: z.enum(["draft", "active", "sold", "rented", "offline"]),
-  featured: z.boolean(),
-});
-
-type Props = {
-  property?: Property;
-  agentId: string;
-  onSaved: (id: string) => void;
+const blankToNull = (value: unknown) => {
+  if (typeof value === "string" && value.trim() === "") return null;
+  return value;
 };
 
-export function PropertyForm({ property, agentId, onSaved }: Props) {
-  const [estates, setEstates] = useState<Estate[]>([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({
+const optionalNumber = z.preprocess(
+  blankToNull,
+  z.coerce
+    .number({ invalid_type_error: "請輸入數字" })
+    .nonnegative("請輸入 0 或以上的數字")
+    .nullable(),
+);
+
+function optionalInteger(max?: number) {
+  const base = z.coerce
+    .number({ invalid_type_error: "請輸入數字" })
+    .int("請輸入整數，不要小數點")
+    .min(0, "請輸入 0 或以上的數字");
+  return z.preprocess(
+    blankToNull,
+    (max === undefined ? base : base.max(max, `請輸入 ${max} 或以下的數字`)).nullable(),
+  );
+}
+
+const schema = z.object({
+  listing_no: z.string().trim().min(1, "請輸入編號").max(40, "編號最多 40 個字"),
+  title_zh: z.string().trim().min(1, "請輸入標題").max(200, "標題最多 200 個字"),
+  title_en: z.string().trim().max(200, "英文標題最多 200 個字").optional().or(z.literal("")),
+  deal_type: z.enum(["sale", "rent"], { message: "請選擇售盤或租盤" }),
+  estate_id: z.string().uuid("請重新選擇屋苑").optional().or(z.literal("")),
+  district_slug: z.string().trim().min(1, "請輸入地區 slug").max(60, "地區 slug 最多 60 個字"),
+  address: z.string().trim().max(300, "地址最多 300 個字").optional().or(z.literal("")),
+  price: optionalNumber,
+  rent: optionalNumber,
+  saleable_area: optionalInteger(),
+  bedrooms: optionalInteger(20),
+  bathrooms: optionalInteger(20),
+  floor: z.string().trim().max(40, "樓層最多 40 個字").optional().or(z.literal("")),
+  description: z.string().trim().max(4000, "描述最多 4000 個字").optional().or(z.literal("")),
+  features: z.string().trim().max(3000, "設施最多 3000 個字").optional().or(z.literal("")),
+  video_url: z
+    .string()
+    .trim()
+    .url("請輸入有效影片連結")
+    .max(500, "影片連結最多 500 個字")
+    .optional()
+    .or(z.literal("")),
+  seo_title: z.string().trim().max(200, "SEO 標題最多 200 個字").optional().or(z.literal("")),
+  seo_description: z.string().trim().max(300, "SEO 描述最多 300 個字").optional().or(z.literal("")),
+  agent_id: z.string().uuid("請重新選擇負責代理").optional().or(z.literal("")),
+  status: z.enum(["draft", "active", "sold", "rented", "offline"], { message: "請選擇狀態" }),
+  featured: z.boolean({ message: "請選擇是否精選" }),
+});
+
+function createInitialForm(property?: Property) {
+  return {
     listing_no: property?.listing_no ?? "",
     title_zh: property?.title_zh ?? "",
+    title_en: property?.title_en ?? "",
     deal_type: (property?.deal_type ?? "sale") as "sale" | "rent",
     estate_id: property?.estate_id ?? "",
     district_slug: property?.district_slug ?? "sham-tseng",
@@ -61,94 +103,232 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
     bathrooms: property?.bathrooms?.toString() ?? "",
     floor: property?.floor ?? "",
     description: property?.description ?? "",
-    status: (property?.status ?? "draft") as
-      | "draft" | "active" | "sold" | "rented" | "offline",
+    features: Array.isArray(property?.features) ? property.features.join("\n") : "",
+    video_url: property?.video_url ?? "",
+    seo_title: property?.seo_title ?? "",
+    seo_description: property?.seo_description ?? "",
+    agent_id: property?.agent_id ?? "",
+    status: (property?.status ?? "draft") as "draft" | "active" | "sold" | "rented" | "offline",
     featured: property?.featured ?? false,
-  });
+  };
+}
+
+type FormState = ReturnType<typeof createInitialForm>;
+
+/** Server failures reach staff verbatim otherwise. The two that actually happen
+ * are a duplicate 放盤編號 and a scope/permission miss on edit; both are
+ * actionable once named, and neither is actionable as raw Postgres or English. */
+function mapPropertySaveError(error: string): { message: string; field?: keyof FormState } {
+  if (/properties_listing_no_key|duplicate key/i.test(error)) {
+    return { message: "此放盤編號已被使用，請改用其他編號。", field: "listing_no" };
+  }
+  if (/^not found$/i.test(error.trim())) {
+    return { message: "找不到此放盤，可能已被刪除或你沒有權限編輯。" };
+  }
+  return { message: `儲存失敗，請稍後再試。（${error}）` };
+}
+
+type Props = {
+  property?: Property;
+  onSaved: (id: string) => void;
+};
+
+export function PropertyForm({ property, onSaved }: Props) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [estates, setEstates] = useState<Estate[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState(() => createInitialForm(property));
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [images, setImages] = useState<string[]>(property?.images ?? []);
+  const [saved, setSaved] = useState(false);
+
+  // The 20-field listing form had no guard at all: a sidebar click, the browser
+  // Back button or the 返回 link directly above the form destroyed everything
+  // with no prompt. Worse than the CMS dialogs, because uploaded photos are
+  // already written to Vercel Blob and media_assets, so the blobs are orphaned
+  // and the URLs unrecoverable.
+  const isDirty = useMemo(() => {
+    if (saved) return false;
+    const pristine = createInitialForm(property);
+    const formChanged = (Object.keys(pristine) as Array<keyof FormState>).some(
+      (key) => form[key] !== pristine[key],
+    );
+    const baseImages = property?.images ?? [];
+    const imagesChanged =
+      images.length !== baseImages.length || images.some((url, index) => url !== baseImages[index]);
+    return formChanged || imagesChanged;
+  }, [form, images, property, saved]);
+
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
+
+  function focusField(field: string) {
+    if (!field) return;
+    const control = formRef.current?.elements.namedItem(field);
+    if (control instanceof HTMLElement) control.focus();
+  }
 
   useEffect(() => {
-    supabase
-      .from("estates")
-      .select("id, name_zh, district_slug")
-      .order("name_zh")
-      .then(({ data }) => setEstates(data ?? []));
+    Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
+      .then(([estateData, agentData]) => {
+        setEstates(estateData as Estate[]);
+        setAgents(agentData as Agent[]);
+      })
+      .catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
   }, []);
 
-  function set<K extends keyof typeof form>(k: K, v: (typeof form)[K]) {
+  // Editing a field (by hand or via the copilot) has to drop its stale inline
+  // error, otherwise the message from the last failed submit stays under a value
+  // the staff member has already corrected.
+  function clearErrors(keys: readonly string[]) {
+    setFieldErrors((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const key of keys) {
+        if (next[key as keyof FormState]) {
+          delete next[key as keyof FormState];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }
+
+  function set<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => ({ ...f, [k]: v }));
+    clearErrors([k]);
+  }
+
+  function fieldProps(k: keyof FormState) {
+    const error = fieldErrors[k];
+    return {
+      name: k,
+      "aria-invalid": Boolean(error),
+      "aria-describedby": error ? `${k}-error` : undefined,
+    };
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "請檢查輸入");
+      const nextErrors: Partial<Record<keyof FormState, string>> = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0];
+        if (typeof key === "string" && key in form && !nextErrors[key as keyof FormState]) {
+          nextErrors[key as keyof FormState] = issue.message;
+        }
+      }
+      setFieldErrors(nextErrors);
+      toast.error("請檢查輸入資料");
+
+      // 20-plus fields means the offending one is usually off-screen; focusing it
+      // scrolls it into view and tells a screen reader which field to fix.
+      focusField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
-    const d = parsed.data;
-    const num = (v: number | undefined) => (v === undefined || isNaN(v) ? null : v);
 
-    const payload: TablesInsert<"properties"> = {
+    setFieldErrors({});
+    const d = parsed.data;
+
+    const payload: AdminPropertyInput = {
+      id: property?.id,
       listing_no: d.listing_no,
       title_zh: d.title_zh,
+      title_en: d.title_en || null,
       deal_type: d.deal_type,
       estate_id: d.estate_id || null,
       district_slug: d.district_slug,
       address: d.address || null,
-      price: num(d.price as number),
-      rent: num(d.rent as number),
-      saleable_area: num(d.saleable_area as number),
-      bedrooms: num(d.bedrooms as number),
-      bathrooms: num(d.bathrooms as number),
+      price: d.price,
+      rent: d.rent,
+      saleable_area: d.saleable_area,
+      bedrooms: d.bedrooms,
+      bathrooms: d.bathrooms,
       floor: d.floor || null,
       description: d.description || null,
+      features: normalizePropertyFeatures(d.features),
+      video_url: d.video_url || null,
       status: d.status,
       featured: d.featured,
       images,
-      agent_id: agentId,
+      agent_id: d.agent_id || null,
+      seo_title: d.seo_title || null,
+      seo_description: d.seo_description || null,
     };
 
     setSubmitting(true);
-    const { data: row, error } = property
-      ? await supabase
-          .from("properties")
-          .update(payload)
-          .eq("id", property.id)
-          .select("id")
-          .single()
-      : await supabase.from("properties").insert(payload).select("id").single();
+    const result = await saveAdminProperty({ data: payload }).catch((err) => ({
+      error: err instanceof Error ? err.message : String(err),
+      id: null,
+    }));
     setSubmitting(false);
 
-    if (error) {
-      toast.error(error.message);
+    if ("error" in result && result.error) {
+      // Raw server text used to reach staff verbatim, including the most common
+      // failure: 'duplicate key value violates unique constraint
+      // "properties_listing_no_key"', with no inline error and no focus.
+      const mapped = mapPropertySaveError(result.error);
+      if (mapped.field) {
+        setFieldErrors((current) => ({
+          ...current,
+          [mapped.field as keyof FormState]: mapped.message,
+        }));
+        focusField(mapped.field);
+      }
+      toast.error(mapped.message);
       return;
     }
+    // Must precede onSaved(): that navigates, and the leave guard would
+    // otherwise fire on a clean save.
+    setSaved(true);
     toast.success(property ? "已更新" : "已新增");
-    if (row) onSaved(row.id);
+    if (result.id) onSaved(result.id);
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {leaveGuardDialog}
       <Section title="基本資料">
-        <Field label="放盤編號 *">
-          <Input value={form.listing_no} onChange={(e) => set("listing_no", e.target.value)} required maxLength={40} />
+        <Field label="放盤編號 *" htmlFor="listing_no" error={fieldErrors.listing_no}>
+          <Input
+            id="listing_no"
+            {...fieldProps("listing_no")}
+            value={form.listing_no}
+            onChange={(e) => set("listing_no", e.target.value)}
+            required
+            maxLength={40}
+          />
         </Field>
-        <Field label="標題 *">
-          <Input value={form.title_zh} onChange={(e) => set("title_zh", e.target.value)} required maxLength={200} />
+        <Field label="標題 *" htmlFor="title_zh" error={fieldErrors.title_zh}>
+          <Input
+            id="title_zh"
+            {...fieldProps("title_zh")}
+            value={form.title_zh}
+            onChange={(e) => set("title_zh", e.target.value)}
+            required
+            maxLength={200}
+          />
         </Field>
-        <Field label="類型 *">
-          <Select value={form.deal_type} onValueChange={(v) => set("deal_type", v as "sale" | "rent")}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+        <Field label="類型 *" htmlFor="deal_type" error={fieldErrors.deal_type}>
+          <Select
+            value={form.deal_type}
+            onValueChange={(v) => set("deal_type", v as "sale" | "rent")}
+          >
+            <SelectTrigger id="deal_type" {...fieldProps("deal_type")}>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="sale">售盤</SelectItem>
               <SelectItem value="rent">租盤</SelectItem>
             </SelectContent>
           </Select>
         </Field>
-        <Field label="狀態">
+        <Field label="狀態" htmlFor="status" error={fieldErrors.status}>
           <Select value={form.status} onValueChange={(v) => set("status", v as typeof form.status)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id="status" {...fieldProps("status")}>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="draft">草稿</SelectItem>
               <SelectItem value="active">在售/在租</SelectItem>
@@ -158,10 +338,29 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
             </SelectContent>
           </Select>
         </Field>
+        <Field label="負責代理" htmlFor="agent_id" error={fieldErrors.agent_id}>
+          <Select
+            value={form.agent_id || "none"}
+            onValueChange={(v) => set("agent_id", v === "none" ? "" : v)}
+          >
+            <SelectTrigger id="agent_id" {...fieldProps("agent_id")}>
+              <SelectValue placeholder="選擇代理" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">— 未指定 —</SelectItem>
+              {agents.map((agent) => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  {agent.name ?? agent.email ?? "未命名代理"}
+                  {agent.active ? "" : "（停用）"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
       </Section>
 
       <Section title="位置">
-        <Field label="屋苑">
+        <Field label="屋苑" htmlFor="estate_id" error={fieldErrors.estate_id}>
           <Select
             value={form.estate_id || "none"}
             onValueChange={(v) => {
@@ -171,58 +370,205 @@ export function PropertyForm({ property, agentId, onSaved }: Props) {
               if (est) set("district_slug", est.district_slug);
             }}
           >
-            <SelectTrigger><SelectValue placeholder="選擇屋苑" /></SelectTrigger>
+            <SelectTrigger id="estate_id" {...fieldProps("estate_id")}>
+              <SelectValue placeholder="選擇屋苑" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">— 無 —</SelectItem>
               {estates.map((e) => (
-                <SelectItem key={e.id} value={e.id}>{e.name_zh}</SelectItem>
+                <SelectItem key={e.id} value={e.id}>
+                  {e.name_zh}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="地區 slug *">
-          <Input value={form.district_slug} onChange={(e) => set("district_slug", e.target.value)} required maxLength={60} />
+        <Field label="地區 slug *" htmlFor="district_slug" error={fieldErrors.district_slug}>
+          <Input
+            id="district_slug"
+            {...fieldProps("district_slug")}
+            value={form.district_slug}
+            onChange={(e) => set("district_slug", e.target.value)}
+            required
+            maxLength={60}
+          />
         </Field>
-        <Field label="地址" full>
-          <Input value={form.address} onChange={(e) => set("address", e.target.value)} maxLength={300} />
+        <Field label="地址" htmlFor="address" error={fieldErrors.address} full>
+          <Input
+            id="address"
+            {...fieldProps("address")}
+            value={form.address}
+            onChange={(e) => set("address", e.target.value)}
+            maxLength={300}
+          />
         </Field>
       </Section>
 
       <Section title="價格 / 規格">
-        <Field label="售價（HKD）">
-          <Input type="number" min="0" value={form.price} onChange={(e) => set("price", e.target.value)} />
+        <Field label="售價（HKD）" htmlFor="price" error={fieldErrors.price}>
+          <Input
+            id="price"
+            {...fieldProps("price")}
+            type="number"
+            min="0"
+            value={form.price}
+            onChange={(e) => set("price", e.target.value)}
+          />
         </Field>
-        <Field label="月租（HKD）">
-          <Input type="number" min="0" value={form.rent} onChange={(e) => set("rent", e.target.value)} />
+        <Field label="月租（HKD）" htmlFor="rent" error={fieldErrors.rent}>
+          <Input
+            id="rent"
+            {...fieldProps("rent")}
+            type="number"
+            min="0"
+            value={form.rent}
+            onChange={(e) => set("rent", e.target.value)}
+          />
         </Field>
-        <Field label="實用面積（呎）">
-          <Input type="number" min="0" value={form.saleable_area} onChange={(e) => set("saleable_area", e.target.value)} />
+        <Field label="實用面積（呎）" htmlFor="saleable_area" error={fieldErrors.saleable_area}>
+          <Input
+            id="saleable_area"
+            {...fieldProps("saleable_area")}
+            type="number"
+            min="0"
+            value={form.saleable_area}
+            onChange={(e) => set("saleable_area", e.target.value)}
+          />
         </Field>
-        <Field label="樓層">
-          <Input value={form.floor} onChange={(e) => set("floor", e.target.value)} maxLength={40} />
+        <Field label="樓層" htmlFor="floor" error={fieldErrors.floor}>
+          <Input
+            id="floor"
+            {...fieldProps("floor")}
+            value={form.floor}
+            onChange={(e) => set("floor", e.target.value)}
+            maxLength={40}
+          />
         </Field>
-        <Field label="房">
-          <Input type="number" min="0" max="20" value={form.bedrooms} onChange={(e) => set("bedrooms", e.target.value)} />
+        <Field label="房" htmlFor="bedrooms" error={fieldErrors.bedrooms}>
+          <Input
+            id="bedrooms"
+            {...fieldProps("bedrooms")}
+            type="number"
+            min="0"
+            max="20"
+            value={form.bedrooms}
+            onChange={(e) => set("bedrooms", e.target.value)}
+          />
         </Field>
-        <Field label="廁">
-          <Input type="number" min="0" max="20" value={form.bathrooms} onChange={(e) => set("bathrooms", e.target.value)} />
+        <Field label="廁" htmlFor="bathrooms" error={fieldErrors.bathrooms}>
+          <Input
+            id="bathrooms"
+            {...fieldProps("bathrooms")}
+            type="number"
+            min="0"
+            max="20"
+            value={form.bathrooms}
+            onChange={(e) => set("bathrooms", e.target.value)}
+          />
         </Field>
       </Section>
 
       <Section title="內容">
-        <Field label="描述" full>
-          <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} maxLength={4000} />
+        <Field label="描述" htmlFor="description" error={fieldErrors.description} full>
+          <Textarea
+            id="description"
+            {...fieldProps("description")}
+            rows={4}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            maxLength={4000}
+          />
         </Field>
-        <Field label="相片" full>
-          <ImageUploader agentId={agentId} value={images} onChange={setImages} />
+        <Field label="YouTube影片連結" htmlFor="video_url" error={fieldErrors.video_url} full>
+          <Input
+            id="video_url"
+            {...fieldProps("video_url")}
+            type="url"
+            value={form.video_url}
+            onChange={(e) => set("video_url", e.target.value)}
+            maxLength={500}
+            placeholder="https://www.youtube.com/watch?v=..."
+          />
         </Field>
-        <Field label="精選">
+        <Field label="English title" htmlFor="title_en" error={fieldErrors.title_en} full>
+          <Input
+            id="title_en"
+            {...fieldProps("title_en")}
+            value={form.title_en}
+            onChange={(e) => set("title_en", e.target.value)}
+            maxLength={200}
+          />
+        </Field>
+        <Field label="Features (one per line)" htmlFor="features" error={fieldErrors.features} full>
+          <Textarea
+            id="features"
+            {...fieldProps("features")}
+            rows={4}
+            value={form.features}
+            onChange={(e) => set("features", e.target.value)}
+            maxLength={3000}
+          />
+        </Field>
+        <Field label="SEO 標題" htmlFor="seo_title" error={fieldErrors.seo_title} full>
+          <Input
+            id="seo_title"
+            {...fieldProps("seo_title")}
+            value={form.seo_title}
+            onChange={(e) => set("seo_title", e.target.value)}
+            maxLength={200}
+          />
+        </Field>
+        <Field label="SEO 描述" htmlFor="seo_description" error={fieldErrors.seo_description} full>
+          <Textarea
+            id="seo_description"
+            {...fieldProps("seo_description")}
+            rows={3}
+            value={form.seo_description}
+            onChange={(e) => set("seo_description", e.target.value)}
+            maxLength={300}
+          />
+        </Field>
+        {/* The uploader's own control is its hidden file input, so the 相片 label
+            points there -- clicking the label opens the file picker. */}
+        <Field label="相片" htmlFor="property_images" full>
+          <ImageUploader
+            inputId="property_images"
+            ownerType="property"
+            value={images}
+            onChange={setImages}
+          />
+        </Field>
+        <Field label="精選" htmlFor="featured" error={fieldErrors.featured}>
           <div className="flex h-10 items-center">
-            <Switch checked={form.featured} onCheckedChange={(v) => set("featured", v)} />
+            <Switch
+              id="featured"
+              {...fieldProps("featured")}
+              checked={form.featured}
+              onCheckedChange={(v) => set("featured", v)}
+            />
           </div>
         </Field>
       </Section>
 
+      <AdminContentCopilot
+        resourceType="listing"
+        resourceId={property?.id ?? null}
+        values={buildPropertyContentCopilotFields(form)}
+        fingerprintValues={buildPropertyContentCopilotFingerprintValues({
+          ...property,
+          id: property?.id,
+          title_zh: form.title_zh,
+          title_en: form.title_en,
+          description: form.description,
+          features: normalizePropertyFeatures(form.features),
+          seo_title: form.seo_title,
+          seo_description: form.seo_description,
+        })}
+        onApply={(patch) => {
+          setForm((current) => applyPropertyContentCopilotPatch(current, patch));
+          clearErrors(Object.keys(patch));
+        }}
+      />
       <div className="flex justify-end gap-2 border-t pt-4">
         <Button type="submit" disabled={submitting}>
           {submitting ? "儲存中…" : property ? "更新放盤" : "建立放盤"}
@@ -243,17 +589,28 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Field({
   label,
+  htmlFor,
   children,
+  error,
   full,
 }: {
   label: string;
+  htmlFor: string;
   children: React.ReactNode;
+  error?: string;
   full?: boolean;
 }) {
   return (
     <div className={full ? "sm:col-span-2" : ""}>
-      <Label className="mb-1.5 block">{label}</Label>
+      <Label htmlFor={htmlFor} className="mb-1.5 block">
+        {label}
+      </Label>
       {children}
+      {error ? (
+        <p id={`${htmlFor}-error`} className="mt-1.5 text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }
