@@ -271,7 +271,11 @@ const CONTENT_PROPOSAL_STATUSES = new Set<ContentProposalStatus>([
   "expired",
   "failed",
 ]);
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// PostgreSQL's UUID type (and the request schema) accepts canonical UUID text
+// without constraining the version or variant nibble. Keep the audit guard in
+// sync so UUID v7, nil UUIDs, and future UUID versions are not rejected after a
+// proposal has already been persisted.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CONTENT_COPILOT_AUDIT_ACTIONS = new Set([
   "content_copilot.generated",
   "content_copilot.failed",
@@ -279,6 +283,10 @@ const CONTENT_COPILOT_AUDIT_ACTIONS = new Set([
   "content_copilot.rejected",
   "content_copilot.stale",
 ]);
+
+export function isContentCopilotAuditUuid(value: unknown) {
+  return typeof value === "string" && UUID_PATTERN.test(value);
+}
 
 export function sanitizeContentCopilotAuditMetadata(
   metadata: Record<string, unknown> | undefined,
@@ -377,9 +385,9 @@ function assertContentCopilotAuditIdentity(input: {
 }) {
   if (
     !CONTENT_COPILOT_AUDIT_ACTIONS.has(input.action) ||
-    !UUID_PATTERN.test(input.actorId) ||
-    !UUID_PATTERN.test(input.proposalId) ||
-    !UUID_PATTERN.test(input.resourceId) ||
+    !isContentCopilotAuditUuid(input.actorId) ||
+    !isContentCopilotAuditUuid(input.proposalId) ||
+    !isContentCopilotAuditUuid(input.resourceId) ||
     !CONTENT_COPILOT_RESOURCE_TYPES.has(input.resourceType as ContentCopilotResourceType)
   )
     throw contentCopilotError("COPILOT_AUDIT_METADATA_INVALID");

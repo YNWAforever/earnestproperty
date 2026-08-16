@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "bun:test";
 import {
+  isContentCopilotAuditUuid,
   isGeneratingProposalConflict,
   sanitizeContentCopilotAuditMetadata,
   sanitizeContentCopilotUsageMetadata,
 } from "./content-copilot-repository.server.ts";
+
+test("audit identity accepts every canonical PostgreSQL UUID shape", () => {
+  assert.equal(isContentCopilotAuditUuid("018f2c1e-1234-7123-8123-123456789abc"), true);
+  assert.equal(isContentCopilotAuditUuid("00000000-0000-0000-0000-000000000000"), true);
+  assert.equal(isContentCopilotAuditUuid("not-a-uuid"), false);
+});
 
 test("repository safety helpers reject unsafe metadata and map only the named conflict", () => {
   assert.equal(
