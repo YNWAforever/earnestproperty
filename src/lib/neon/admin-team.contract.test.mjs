@@ -141,6 +141,8 @@ test("listAdminTeam projects safe filtered members, counts, and a keyset cursor"
   assert.match(statement, /staff_roles/);
   assert.match(statement, /LEFT JOIN LATERAL[\s\S]*staff_identity_actions/);
   assert.match(statement, /ILIKE/);
+  assert.match(statement, /team_role\.role::text = \$2/);
+  assert.doesNotMatch(statement, /team_role\.role = \$2/);
   assert.match(statement, /ORDER BY created_at DESC, id DESC/);
   assert.match(statement, /\(s\.created_at, s\.id\) < \(/);
   assert.match(statement, /COUNT\(\*\) FILTER \(WHERE active\) AS active_count/);
