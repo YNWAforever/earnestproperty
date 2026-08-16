@@ -52,6 +52,8 @@ export function decideTeamAccess(input: {
   actorRoles: readonly string[];
   capability: TeamCapability;
 }) {
+  if (!isStaffRoleSet(input.actorRoles))
+    return { allowed: false, reason: "not-authorized" } as const;
   if (input.actorRoles.includes("admin")) return { allowed: true } as const;
   if (
     input.actorRoles.includes("manager") &&

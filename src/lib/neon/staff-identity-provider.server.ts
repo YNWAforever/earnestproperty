@@ -50,9 +50,14 @@ function invitationFrom(value: unknown): ProviderInvitation {
   const data = providerData(value);
   const invitation = asRecord(data.invitation ?? data);
   const status = invitation.status;
-  const state: ProviderInvitationState =
-    status === "pending" || status === "expired" ? status : "sent";
-  return { state, expiresAt: stringOrNull(invitation.expiresAt) };
+  if (status !== "sent" && status !== "pending" && status !== "expired") {
+    throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 502);
+  }
+  const expiresAt = invitation.expiresAt;
+  if (expiresAt !== undefined && expiresAt !== null && typeof expiresAt !== "string") {
+    throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 502);
+  }
+  return { state: status as ProviderInvitationState, expiresAt: stringOrNull(expiresAt) };
 }
 
 export function staffPasswordResetRedirect(request: Request) {
@@ -66,7 +71,7 @@ export function createStaffIdentityProvider(input: {
 }): StaffIdentityProvider {
   const fetchImpl = input.fetchImpl ?? fetch;
   const authBaseUrl =
-    input.authBaseUrl ?? process.env.NEON_AUTH_BASE_URL ?? process.env.VITE_NEON_AUTH_URL ?? "";
+    input.authBaseUrl || process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL || "";
   const organizationId = input.organizationId ?? process.env.NEON_AUTH_ORGANIZATION_ID ?? "";
 
   async function callProvider<T>(input: {
@@ -99,9 +104,12 @@ export function createStaffIdentityProvider(input: {
     return input.parse(await response.json().catch(() => null));
   }
 
-  function requireOrganization() {
+  function requireOrganization(requestOrganizationId: string) {
     if (!organizationId)
       throw new StaffIdentityProviderError("PROVIDER_CAPABILITY_UNAVAILABLE", 503);
+    if (requestOrganizationId !== organizationId) {
+      throw new StaffIdentityProviderError("PROVIDER_INVALID_REQUEST", 400);
+    }
     return organizationId;
   }
 
@@ -126,19 +134,24 @@ export function createStaffIdentityProvider(input: {
         },
       });
     },
-    async sendInvitation({ email, request }) {
+    async sendInvitation({ email, organizationId: requestOrganizationId, request }) {
       return callProvider({
         path: "/organization/invite-member",
-        body: { email, role: "member", organizationId: requireOrganization() },
+        body: { email, role: "member", organizationId: requireOrganization(requestOrganizationId) },
         request,
         resource: "invitation",
         parse: invitationFrom,
       });
     },
-    async resendInvitation({ email, request }) {
+    async resendInvitation({ email, organizationId: requestOrganizationId, request }) {
       return callProvider({
         path: "/organization/invite-member",
-        body: { email, role: "member", organizationId: requireOrganization(), resend: true },
+        body: {
+          email,
+          role: "member",
+          organizationId: requireOrganization(requestOrganizationId),
+          resend: true,
+        },
         request,
         resource: "invitation",
         parse: invitationFrom,

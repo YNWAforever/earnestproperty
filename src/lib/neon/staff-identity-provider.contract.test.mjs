@@ -91,6 +91,31 @@ test("provider adapter uses the configured base URL, forwards only auth headers,
   assert.equal("role" in requests[0].body, false);
 });
 
+test("empty server auth URL falls back to the configured VITE auth URL", async () => {
+  const previousBaseUrl = process.env.NEON_AUTH_BASE_URL;
+  const previousViteUrl = process.env.VITE_NEON_AUTH_URL;
+  process.env.NEON_AUTH_BASE_URL = "";
+  process.env.VITE_NEON_AUTH_URL = "https://vite-auth.example.test";
+
+  try {
+    const provider = createStaffIdentityProvider({
+      fetchImpl: async (url) => {
+        assert.equal(new URL(url).origin, "https://vite-auth.example.test");
+        return response({
+          data: { user: { id: "auth-1", email: null, name: null, emailVerified: false } },
+        });
+      },
+      organizationId: "org-earnest",
+    });
+    await provider.resolveUser({ authUserId: "auth-1", request: authorizedRequest });
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
+    else process.env.NEON_AUTH_BASE_URL = previousBaseUrl;
+    if (previousViteUrl === undefined) delete process.env.VITE_NEON_AUTH_URL;
+    else process.env.VITE_NEON_AUTH_URL = previousViteUrl;
+  }
+});
+
 test("provider adapter sends member-only invitations and resends", async () => {
   const { provider, requests } = createProvider([
     response({
@@ -134,6 +159,38 @@ test("provider adapter sends member-only invitations and resends", async () => {
         },
       },
     ],
+  );
+});
+
+test("provider adapter rejects malformed successful invitation responses", async () => {
+  const { provider } = createProvider([response({ data: { invitation: { status: "unknown" } } })]);
+
+  await assert.rejects(
+    provider.sendInvitation({
+      email: "new@example.test",
+      organizationId: "org-earnest",
+      request: authorizedRequest,
+    }),
+    (error) =>
+      error instanceof StaffIdentityProviderError &&
+      error.code === "PROVIDER_UNAVAILABLE" &&
+      error.status === 502,
+  );
+});
+
+test("provider adapter rejects a per-call organization that differs from configured authority", async () => {
+  const { provider } = createProvider([]);
+
+  await assert.rejects(
+    provider.sendInvitation({
+      email: "new@example.test",
+      organizationId: "wrong-organization",
+      request: authorizedRequest,
+    }),
+    (error) =>
+      error instanceof StaffIdentityProviderError &&
+      error.code === "PROVIDER_INVALID_REQUEST" &&
+      error.status === 400,
   );
 });
 

@@ -26,6 +26,26 @@ test("team access matrix defaults deny", () => {
     allowed: false,
     reason: "not-authorized",
   });
+  assert.deepEqual(
+    policy.decideTeamAccess({ actorRoles: ["admin", "unknown"], capability: "invite" }),
+    {
+      allowed: false,
+      reason: "not-authorized",
+    },
+  );
+  assert.deepEqual(
+    policy.decideTeamAccess({ actorRoles: ["admin", "admin"], capability: "invite" }),
+    {
+      allowed: false,
+      reason: "not-authorized",
+    },
+  );
+  assert.deepEqual(
+    policy.decideTeamAccess({ actorRoles: ["admin", "manager"], capability: "invite" }),
+    {
+      allowed: true,
+    },
+  );
 });
 
 test("self reset, self suspend, and unknown targets deny", () => {
