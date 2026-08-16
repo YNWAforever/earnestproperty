@@ -145,6 +145,53 @@ test("generation reloads authoritative record and excludes CRM data from prompts
   );
 });
 
+test("generation binds server-owned proposal context around a model patch envelope", async () => {
+  const trustedEvidence = {
+    id: "internal-estate-1",
+    type: "internal",
+    title: "Sham Tseng guide",
+    url: null,
+    excerpt: "Trusted internal context",
+  };
+  let completedProposal = null;
+  let generatedPrompt = "";
+  const context = await makeArticleContext();
+  const service = createContentCopilotService({
+    ...makeServiceDeps(),
+    loadContext: async () => ({
+      ...context,
+      internalEvidence: [trustedEvidence],
+    }),
+    completeProposal: async (input) => {
+      completedProposal = input.proposal;
+      return input.proposal;
+    },
+    generate: async ({ prompt }) => {
+      generatedPrompt = prompt;
+      return {
+        ok: true,
+        value: { patches: [], warnings: [] },
+        model: "go-content",
+        latencyMs: 10,
+        usageMetadata: {},
+        error: null,
+      };
+    },
+  });
+
+  const result = await service.generateContentProposal(articleRequest, managerActor);
+
+  assert.equal(result.ok, true);
+  assert.equal(completedProposal.resourceType, articleRequest.resourceType);
+  assert.equal(
+    completedProposal.sourceFingerprint,
+    await buildContentFingerprint(context.resource),
+  );
+  assert.deepEqual(completedProposal.evidence, [trustedEvidence]);
+  assert.match(generatedPrompt, /claimType/);
+  assert.match(generatedPrompt, /unsupportedClaims/);
+});
+
 test("listing agents cannot generate against another agent listing", async () => {
   const service = createContentCopilotService({
     ...makeServiceDeps(),
