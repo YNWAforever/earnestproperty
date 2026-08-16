@@ -221,7 +221,7 @@ export function createAdminTeamReadModel(
                     OR s.email ILIKE '%' || $1 || '%')
               AND ($2::text IS NULL OR EXISTS (
                     SELECT 1 FROM staff_roles team_role
-                    WHERE team_role.staff_user_id = s.id AND team_role.role = $2
+                    WHERE team_role.staff_user_id = s.id AND team_role.role::text = $2
                   ))
               AND ($3::text IS NULL
                     OR ($3 = 'active' AND s.active = true)
