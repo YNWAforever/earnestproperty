@@ -275,3 +275,26 @@ test("server read boundary authorizes admin and manager before loading the data 
     assert.equal(queryCalls, 0, `${deniedCase.name} must not query the read model`);
   }
 });
+
+test("manager and agent mutation attempts fail before the lifecycle service is loaded", async () => {
+  const request = new Request("https://earnest.test/admin/team");
+  for (const role of ["manager", "agent"]) {
+    let lifecycleLoaded = false;
+    const boundary = createAdminTeamServerBoundary({
+      requireStaffAccess: async (_request, allowedRoles) => {
+        assert.deepEqual(allowedRoles, ["admin"]);
+        throw new Response("Forbidden", { status: 403 });
+      },
+      loadLifecycleService: async () => {
+        lifecycleLoaded = true;
+        return assert.fail("lifecycle service must not load for a non-Admin mutation");
+      },
+    });
+    await assert.rejects(
+      () => boundary.sendStaffPasswordReset({ staffId }, request),
+      (error) => error instanceof Response && error.status === 403,
+      role,
+    );
+    assert.equal(lifecycleLoaded, false, `${role} must not load lifecycle service`);
+  }
+});

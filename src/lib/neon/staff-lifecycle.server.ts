@@ -121,6 +121,15 @@ function idempotencyKey(action: IdentityActionType, value: string) {
   return `${action}:${value}`;
 }
 
+function cooldownWindowKey(
+  action: "invitation" | "password-reset",
+  value: string,
+  requestedAt: Date,
+) {
+  const duration = action === "invitation" ? 15 * 60 * 1000 : 10 * 60 * 1000;
+  return `${value}:${Math.floor(requestedAt.valueOf() / duration)}`;
+}
+
 function retryAfter(action: "invitation" | "password-reset", now: Date) {
   return cooldownRetryAfter({ action, now: new Date(now.valueOf() - 1), lastRequestedAt: now });
 }
@@ -129,7 +138,15 @@ async function safeAudit(writeAudit: StaffLifecycleDependencies["writeAudit"], i
   // All callers pass small allowlisted scalar/count metadata. This service is
   // the lifecycle audit boundary: no provider payload, token, cookie, body, or
   // error message is ever available to it.
-  await writeAudit(input);
+  // Audit writes are explicitly best-effort once a provider delivery or local
+  // transaction has completed. A transient audit outage must not recast a
+  // delivered invitation/reset as a provider failure or downgrade its action.
+  try {
+    await writeAudit(input);
+  } catch {
+    // The lifecycle result remains authoritative; the next safe operation can
+    // record audit state after the audit store recovers.
+  }
 }
 
 export function createStaffLifecycleService(dependencies: StaffLifecycleDependencies) {
@@ -243,6 +260,13 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
   }
 
   async function saveProviderInvitation(operationId: string, invitation: ProviderInvitation) {
+    if (invitation.state === "expired") {
+      await actions.markIdentityActionTerminal({
+        operationId,
+        safeErrorCode: "PROVIDER_INVITATION_EXPIRED",
+      });
+      return null;
+    }
     await actions.markIdentityActionSucceeded({
       operationId,
       providerExpiresAt: invitation.expiresAt,
@@ -298,6 +322,18 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           request,
         });
         const invitationState = await saveProviderInvitation(operation.operationId, invitation);
+        if (!invitationState) {
+          await safeAudit(dependencies.writeAudit, {
+            actor,
+            permission: "staff.manage",
+            action: "staff.invited",
+            targetStaffId: member.id,
+            requestId,
+            outcome: "failure",
+            metadata: { safeErrorCode: "PROVIDER_INVITATION_EXPIRED" },
+          });
+          return { memberId: member.id, invitationState: "failed" as const, requestId };
+        }
         await safeAudit(dependencies.writeAudit, {
           actor,
           permission: "staff.manage",
@@ -344,6 +380,23 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         action: "resend_invitation",
         now: now().toISOString(),
       });
+      const operation = await beginAction({
+        action: "resend_invitation",
+        actor,
+        member,
+        requestId,
+        keyValue: cooldownWindowKey("invitation", member.id, now()),
+      });
+      if (operation.isExisting) {
+        if (operation.state === "terminal_failure") {
+          throw new Response("Invitation is not available to resend.", { status: 400 });
+        }
+        return {
+          accepted: operation.state === "pending" || operation.state === "succeeded",
+          retryAfter: null,
+          requestId,
+        };
+      }
       const localCooldown = persisted
         ? cooldownRetryAfter({
             action: "invitation",
@@ -351,6 +404,11 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
             lastRequestedAt: persisted.createdAt,
           })
         : null;
+      if (localCooldown || previous?.retryAfter)
+        await actions.markIdentityActionTerminal({
+          operationId: operation.operationId,
+          safeErrorCode: "IDENTITY_ACTION_COOLDOWN_ACTIVE",
+        });
       if (localCooldown || previous?.retryAfter)
         return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
       if (
@@ -366,19 +424,14 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         (!persisted && !previous) ||
         (persisted?.state === "terminal_failure" && previous?.state !== "retryable_failure")
       ) {
+        await actions.markIdentityActionTerminal({
+          operationId: operation.operationId,
+          safeErrorCode: "PROVIDER_INVITATION_NOT_FOUND",
+        });
         throw new Response("Invitation is not available to resend.", { status: 400 });
       }
-      const operation = await beginAction({
-        action: "resend_invitation",
-        actor,
-        member,
-        requestId,
-        keyValue: member.id,
-      });
-      if (operation.isExisting && operation.state === "succeeded")
-        return { accepted: true, retryAfter: null, requestId };
       try {
-        await saveProviderInvitation(
+        const invitationState = await saveProviderInvitation(
           operation.operationId,
           await dependencies.provider.resendInvitation({
             email: member.email,
@@ -386,6 +439,18 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
             request,
           }),
         );
+        if (!invitationState) {
+          await safeAudit(dependencies.writeAudit, {
+            actor,
+            permission: "staff.manage",
+            action: "staff.invitation_resent",
+            targetStaffId: member.id,
+            requestId,
+            outcome: "failure",
+            metadata: { safeErrorCode: "PROVIDER_INVITATION_EXPIRED" },
+          });
+          return { accepted: false, retryAfter: null, requestId };
+        }
         await safeAudit(dependencies.writeAudit, {
           actor,
           permission: "staff.manage",
@@ -435,6 +500,20 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         action: "password_reset",
         now: now().toISOString(),
       });
+      const operation = await beginAction({
+        action: "password_reset",
+        actor,
+        member,
+        requestId,
+        keyValue: cooldownWindowKey("password-reset", member.id, now()),
+      });
+      if (operation.isExisting) {
+        return {
+          accepted: operation.state === "pending" || operation.state === "succeeded",
+          retryAfter: null,
+          requestId,
+        };
+      }
       const localCooldown = persisted
         ? cooldownRetryAfter({
             action: "password-reset",
@@ -443,16 +522,12 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           })
         : null;
       if (localCooldown || previous?.retryAfter)
+        await actions.markIdentityActionTerminal({
+          operationId: operation.operationId,
+          safeErrorCode: "IDENTITY_ACTION_COOLDOWN_ACTIVE",
+        });
+      if (localCooldown || previous?.retryAfter)
         return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
-      const operation = await beginAction({
-        action: "password_reset",
-        actor,
-        member,
-        requestId,
-        keyValue: member.id,
-      });
-      if (operation.isExisting && operation.state === "succeeded")
-        return { accepted: true, retryAfter: null, requestId };
       try {
         await dependencies.provider.requestPasswordReset({
           email: member.email,
@@ -589,7 +664,7 @@ async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
   const audit = await import("../control-plane/audit.server.ts");
   return {
     organizationId: process.env.NEON_AUTH_ORGANIZATION_ID ?? "",
-    provider: createStaffIdentityProvider(),
+    provider: createStaffIdentityProvider({}),
     updateStaffRoles: adminData.updateStaffRoles,
     setStaffActive: adminData.setStaffActive,
     writeAudit: async (input) => {
@@ -600,7 +675,7 @@ async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
         resourceType: "staff_user",
         resourceId: input.targetStaffId,
         outcome: input.outcome,
-        context: { requestId: input.requestId },
+        context: { requestId: input.requestId, startedAt: new Date().toISOString() },
         metadata: input.metadata,
       });
     },
