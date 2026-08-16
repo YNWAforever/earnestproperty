@@ -217,6 +217,28 @@ test("provider failure marks proposal failed and clears the generating lease", a
   assert.equal(failedId, "proposal-1");
 });
 
+test("provider failure remains primary when audit persistence fails", async () => {
+  const service = createContentCopilotService({
+    ...makeServiceDeps(),
+    writeAudit: async () => {
+      throw new Error("COPILOT_AUDIT_METADATA_INVALID");
+    },
+    generate: async () => ({
+      ok: false,
+      value: null,
+      model: null,
+      latencyMs: 51,
+      usageMetadata: {},
+      error: "OPENCODE_GO_HTTP_ERROR",
+    }),
+  });
+
+  const result = await service.generateContentProposal(articleRequest, managerActor);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "OPENCODE_GO_HTTP_ERROR");
+});
+
 test("generated model evidence cannot replace trusted evidence", async () => {
   const service = createContentCopilotService({
     ...makeServiceDeps(),

@@ -138,21 +138,25 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
             latencyMs: generated.latencyMs,
             usageMetadata: generated.usageMetadata,
           });
-          await writeAudit({
-            actorId: actor.staffId,
-            action: "content_copilot.failed",
-            proposalId: proposalRecord.id,
-            resourceType: normalized.resourceType,
-            resourceId: normalized.resourceId,
-            metadata: {
-              provider: "opencode_go",
-              model: generated.model ?? "",
-              latencyMs: generated.latencyMs,
-              researchMode: normalized.researchMode,
-              status: "failed",
-              errorCode: stableError(generated.error, "COPILOT_GENERATION_FAILED"),
-            },
-          });
+          try {
+            await writeAudit({
+              actorId: actor.staffId,
+              action: "content_copilot.failed",
+              proposalId: proposalRecord.id,
+              resourceType: normalized.resourceType,
+              resourceId: normalized.resourceId,
+              metadata: {
+                provider: "opencode_go",
+                model: generated.model ?? "",
+                latencyMs: generated.latencyMs,
+                researchMode: normalized.researchMode,
+                status: "failed",
+                errorCode: stableError(generated.error, "COPILOT_GENERATION_FAILED"),
+              },
+            });
+          } catch {
+            // Preserve the provider result even if audit persistence is unavailable.
+          }
           return failure(stableError(generated.error, "COPILOT_GENERATION_FAILED"));
         }
 

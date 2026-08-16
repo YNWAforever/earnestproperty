@@ -13,6 +13,31 @@ test("audit identity accepts every canonical PostgreSQL UUID shape", () => {
   assert.equal(isContentCopilotAuditUuid("not-a-uuid"), false);
 });
 
+test("failed audit metadata accepts normal text and rejects control characters", () => {
+  assert.deepEqual(
+    sanitizeContentCopilotAuditMetadata({
+      provider: "opencode_go",
+      model: "",
+      latencyMs: 51,
+      researchMode: "internal",
+      status: "failed",
+      errorCode: "OPENCODE_GO_HTTP_ERROR",
+    }),
+    {
+      provider: "opencode_go",
+      model: "",
+      latencyMs: 51,
+      researchMode: "internal",
+      status: "failed",
+      errorCode: "OPENCODE_GO_HTTP_ERROR",
+    },
+  );
+  assert.throws(
+    () => sanitizeContentCopilotAuditMetadata({ model: "unsafe\u0001model" }),
+    /COPILOT_AUDIT_METADATA_INVALID/,
+  );
+});
+
 test("repository safety helpers reject unsafe metadata and map only the named conflict", () => {
   assert.equal(
     isGeneratingProposalConflict({
