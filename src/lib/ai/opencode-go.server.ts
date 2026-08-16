@@ -160,9 +160,14 @@ function extractUsageMetadata(usage: unknown): Record<string, number> {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return {};
 
   const metadata: Record<string, number> = {};
-  for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
-    const value = (usage as Record<string, unknown>)[key];
-    if (typeof value === "number" && Number.isFinite(value)) metadata[key] = value;
+  for (const [providerKey, internalKey] of [
+    ["prompt_tokens", "inputTokens"],
+    ["completion_tokens", "outputTokens"],
+    ["total_tokens", "totalTokens"],
+  ] as const) {
+    const value = (usage as Record<string, unknown>)[providerKey];
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 10_000_000)
+      metadata[internalKey] = value;
   }
   return metadata;
 }

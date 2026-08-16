@@ -19,7 +19,7 @@ test("OpenCode client posts to normalized chat completions endpoint", async () =
       return new Response(
         JSON.stringify({
           choices: [{ message: { content: '{"patches":[{"claimType":"subjective"}]}' } }],
-          usage: { total_tokens: 9 },
+          usage: { prompt_tokens: 4, completion_tokens: 5, total_tokens: 9 },
         }),
         { status: 200 },
       );
@@ -41,7 +41,7 @@ test("OpenCode client posts to normalized chat completions endpoint", async () =
     response_format: { type: "json_object" },
   });
   assert.deepEqual(result.value, { patches: [{ claimType: "subjective" }] });
-  assert.deepEqual(result.usageMetadata, { total_tokens: 9 });
+  assert.deepEqual(result.usageMetadata, { inputTokens: 4, outputTokens: 5, totalTokens: 9 });
 });
 
 test("OpenCode client retries 429 twice", async () => {
