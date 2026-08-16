@@ -548,7 +548,9 @@ function AdminTeam() {
               <div className="flex justify-center">
                 <Button
                   disabled={loading}
-                  onClick={() => replaceSearch({ ...search, cursor: directory.nextCursor })}
+                  onClick={() =>
+                    replaceSearch({ ...search, cursor: directory.nextCursor ?? undefined })
+                  }
                   type="button"
                   variant="outline"
                 >

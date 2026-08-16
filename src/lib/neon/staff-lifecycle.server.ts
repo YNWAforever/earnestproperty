@@ -390,7 +390,11 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
             })
           : null;
       if (localCooldown || previous?.retryAfter)
-        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
+        return {
+          accepted: false,
+          retryAfter: localCooldown ?? previous?.retryAfter ?? null,
+          requestId,
+        };
       if (
         persisted?.state === "succeeded" &&
         persisted.providerExpiresAt &&
@@ -503,7 +507,11 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
             })
           : null;
       if (localCooldown || previous?.retryAfter)
-        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
+        return {
+          accepted: false,
+          retryAfter: localCooldown ?? previous?.retryAfter ?? null,
+          requestId,
+        };
       const operation = await beginAction({
         action: "password_reset",
         actor,

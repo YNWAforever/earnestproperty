@@ -15,13 +15,13 @@ import {
   teamActionPayload,
   teamMutationFailure,
 } from "./admin-team-route-utils";
-import type { AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
+import type { AdminTeamMember, AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
 
-const member = {
+const member: AdminTeamMember = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "陳大文",
   email: "tai.man@example.com",
-  roles: ["agent"] as const,
+  roles: ["agent"],
   accessState: "active" as const,
   invitationState: "sent" as const,
   invitationRetryAfter: null,
