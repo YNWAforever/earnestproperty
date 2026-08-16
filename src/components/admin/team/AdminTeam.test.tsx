@@ -11,6 +11,7 @@ import { AdminTeamTable } from "./AdminTeamTable";
 import {
   createLatestRequestGuard,
   mergeAdminTeamPages,
+  resetAdminTeamPage,
   teamActionPayload,
   teamMutationFailure,
 } from "./admin-team-route-utils";
@@ -186,6 +187,17 @@ describe("Admin Team request safety", () => {
     expect(merged.members.map((item) => item.id)).toEqual([member.id, next.id]);
     expect(merged.counts.active).toBe(2);
     expect(merged.nextCursor).toBe("new");
+  });
+
+  test("mutation refresh resets to page one while retaining the selected member link", () => {
+    expect(
+      resetAdminTeamPage({
+        q: "陳",
+        role: "agent",
+        cursor: "next-page",
+        member: member.id,
+      }),
+    ).toEqual({ q: "陳", role: "agent", member: member.id });
   });
 
   test("failed invitations and cooldowns stay in their dialog with safe recovery text", () => {

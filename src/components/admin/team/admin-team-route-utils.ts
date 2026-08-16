@@ -25,6 +25,11 @@ export function mergeAdminTeamPages(current: AdminTeamList, next: AdminTeamList)
   return { ...next, members };
 }
 
+export function resetAdminTeamPage<T extends { cursor?: string }>(search: T): Omit<T, "cursor"> {
+  const { cursor: _cursor, ...firstPage } = search;
+  return firstPage;
+}
+
 export function teamMutationFailure(value: unknown): string | null {
   if (
     value &&

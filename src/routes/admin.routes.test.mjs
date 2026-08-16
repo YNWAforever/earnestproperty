@@ -49,6 +49,8 @@ test("Team route removes member data for forbidden callers and carries edited li
   assert.match(source, /reassignToStaffId: pendingOptions\.reassignToStaffId/);
   assert.match(source, /detailRequestRef\.current\.begin\(\)/);
   assert.match(source, /mergeAdminTeamPages\(teamRef\.current, nextTeam\)/);
+  assert.match(source, /resetAdminTeamPage\(search\)/);
+  assert.match(source, /await loadTeam\(true\)/);
   assert.match(source, /teamMutationFailure\(result\)/);
 });
 

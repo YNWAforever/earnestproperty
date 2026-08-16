@@ -18,6 +18,7 @@ import { AdminTeamTable } from "@/components/admin/team/AdminTeamTable";
 import {
   createLatestRequestGuard,
   mergeAdminTeamPages,
+  resetAdminTeamPage,
   teamActionPayload,
   teamMutationFailure,
 } from "@/components/admin/team/admin-team-route-utils";
@@ -137,49 +138,51 @@ function AdminTeam() {
     [navigate],
   );
 
-  const loadTeam = useCallback(async () => {
-    if (!user) return;
-    const request = requestRef.current + 1;
-    requestRef.current = request;
-    setLoading(true);
-    try {
-      const [nextTeam, selfResult] = await Promise.all([
-        listAdminTeam({
-          data: { q: search.q, role: search.role, state: search.state, cursor: search.cursor },
-        }),
-        user.email
-          ? listAdminTeam({ data: { q: user.email, limit: 1 } })
-          : Promise.resolve(emptyTeam),
-      ]);
-      if (request !== requestRef.current) return;
-      const resolvedTeam =
-        search.cursor && teamRef.current
-          ? mergeAdminTeamPages(teamRef.current, nextTeam)
-          : nextTeam;
-      setTeam(resolvedTeam);
-      teamRef.current = resolvedTeam;
-      setCanManage(Boolean(selfResult.members[0]?.roles.includes("admin")));
-      setError(null);
-      setStale(false);
-      setForbidden(false);
-    } catch (reason) {
-      if (request !== requestRef.current) return;
-      if (reason instanceof Response && reason.status === 403) {
-        setForbidden(true);
-        setTeam(null);
-        teamRef.current = null;
-        detailRequestRef.current.invalidate();
-        detailRef.current = null;
-        setDetail(null);
-        setSelectedMemberId(null);
-      } else {
-        setError(safeError(reason));
-        setStale(Boolean(teamRef.current));
+  const loadTeam = useCallback(
+    async (resetPagination = false) => {
+      if (!user) return;
+      const cursor = resetPagination ? undefined : search.cursor;
+      const request = requestRef.current + 1;
+      requestRef.current = request;
+      setLoading(true);
+      try {
+        const [nextTeam, selfResult] = await Promise.all([
+          listAdminTeam({
+            data: { q: search.q, role: search.role, state: search.state, cursor },
+          }),
+          user.email
+            ? listAdminTeam({ data: { q: user.email, limit: 1 } })
+            : Promise.resolve(emptyTeam),
+        ]);
+        if (request !== requestRef.current) return;
+        const resolvedTeam =
+          cursor && teamRef.current ? mergeAdminTeamPages(teamRef.current, nextTeam) : nextTeam;
+        setTeam(resolvedTeam);
+        teamRef.current = resolvedTeam;
+        setCanManage(Boolean(selfResult.members[0]?.roles.includes("admin")));
+        setError(null);
+        setStale(false);
+        setForbidden(false);
+      } catch (reason) {
+        if (request !== requestRef.current) return;
+        if (reason instanceof Response && reason.status === 403) {
+          setForbidden(true);
+          setTeam(null);
+          teamRef.current = null;
+          detailRequestRef.current.invalidate();
+          detailRef.current = null;
+          setDetail(null);
+          setSelectedMemberId(null);
+        } else {
+          setError(safeError(reason));
+          setStale(Boolean(teamRef.current));
+        }
+      } finally {
+        if (request === requestRef.current) setLoading(false);
       }
-    } finally {
-      if (request === requestRef.current) setLoading(false);
-    }
-  }, [search.cursor, search.q, search.role, search.state, user]);
+    },
+    [search.cursor, search.q, search.role, search.state, user],
+  );
 
   useEffect(() => {
     void loadTeam();
@@ -280,9 +283,12 @@ function AdminTeam() {
   );
 
   const refreshAll = useCallback(async () => {
-    await loadTeam();
+    teamRef.current = null;
+    setTeam(null);
+    void replaceSearch(resetAdminTeamPage(search));
+    await loadTeam(true);
     if (selectedMemberId) await loadDetail(selectedMemberId);
-  }, [loadDetail, loadTeam, selectedMemberId]);
+  }, [loadDetail, loadTeam, replaceSearch, search, selectedMemberId]);
 
   const toggleInviteRole = (role: StaffRole) =>
     setInviteRoles((roles) =>
