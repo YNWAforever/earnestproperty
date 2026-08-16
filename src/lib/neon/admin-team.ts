@@ -66,9 +66,42 @@ type ReadModel = {
   ): Promise<AdminTeamMemberDetail>;
 };
 
+type LifecycleService = {
+  inviteStaffMember(
+    input: InviteStaffMemberInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<{
+    memberId: string;
+    invitationState: "pending" | "sent" | "expired" | "failed";
+    requestId: string;
+  }>;
+  resendStaffInvitation(
+    input: ResendStaffInvitationInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<StaffLifecycleResult>;
+  sendStaffPasswordReset(
+    input: SendStaffPasswordResetInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<StaffLifecycleResult>;
+  changeStaffRoles(
+    input: ChangeStaffRolesInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<{ ok: true; roles: StaffRole[]; requestId: string }>;
+  changeStaffActive(
+    input: ChangeStaffActiveInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<{ ok: true; reassigned: Record<string, number> | null; requestId: string }>;
+};
+
 type AdminTeamServerBoundaryDependencies = {
   requireStaffAccess?: (request: Request, roles: StaffRole[]) => Promise<StaffAccess>;
   loadReadModel?: () => Promise<ReadModel>;
+  loadLifecycleService?: () => Promise<LifecycleService>;
 };
 
 export function createAdminTeamServerBoundary(
@@ -84,6 +117,9 @@ export function createAdminTeamServerBoundary(
       const module = await import("./admin-team.server.ts");
       return { listAdminTeam: module.listAdminTeam, getAdminTeamMember: module.getAdminTeamMember };
     });
+  const loadLifecycleService =
+    dependencies.loadLifecycleService ??
+    (async () => (await import("./staff-lifecycle.server.ts")).getStaffLifecycleService());
 
   async function withReadAccess<T>(
     request: Request,
@@ -95,12 +131,47 @@ export function createAdminTeamServerBoundary(
     return operation(await loadReadModel(), actor);
   }
 
+  async function withRequest<T>(
+    request: Request,
+    operation: (service: LifecycleService, actor: StaffAccess) => Promise<T>,
+  ) {
+    // Mutations fail closed before the lifecycle/provider/store modules are
+    // loaded. This is deliberately stricter than the read-only Team boundary.
+    const actor = await requireAccess(request, ["admin"]);
+    return operation(await loadLifecycleService(), actor);
+  }
+
   return {
     listAdminTeam(input: AdminTeamListInput, request: Request) {
       return withReadAccess(request, (model, actor) => model.listAdminTeam(input, actor));
     },
     getAdminTeamMember(input: { staffId: string }, request: Request) {
       return withReadAccess(request, (model, actor) => model.getAdminTeamMember(input, actor));
+    },
+    inviteStaffMember(input: InviteStaffMemberInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.inviteStaffMember(input, actor, request),
+      );
+    },
+    resendStaffInvitation(input: ResendStaffInvitationInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.resendStaffInvitation(input, actor, request),
+      );
+    },
+    sendStaffPasswordReset(input: SendStaffPasswordResetInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.sendStaffPasswordReset(input, actor, request),
+      );
+    },
+    changeStaffRoles(input: ChangeStaffRolesInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.changeStaffRoles(input, actor, request),
+      );
+    },
+    changeStaffActive(input: ChangeStaffActiveInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.changeStaffActive(input, actor, request),
+      );
     },
   };
 }
@@ -113,6 +184,21 @@ const listAdminTeamServer = createServerFn({ method: "GET" })
 const getAdminTeamMemberServer = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => getAdminTeamMemberSchema.parse(data))
   .handler(({ data }) => boundary.getAdminTeamMember(data, getRequest()));
+const inviteStaffMemberServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => inviteStaffMemberSchema.parse(data))
+  .handler(({ data }) => boundary.inviteStaffMember(data, getRequest()));
+const resendStaffInvitationServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => resendStaffInvitationSchema.parse(data))
+  .handler(({ data }) => boundary.resendStaffInvitation(data, getRequest()));
+const sendStaffPasswordResetServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => sendStaffPasswordResetSchema.parse(data))
+  .handler(({ data }) => boundary.sendStaffPasswordReset(data, getRequest()));
+const changeStaffRolesServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => changeStaffRolesSchema.parse(data))
+  .handler(({ data }) => boundary.changeStaffRoles(data, getRequest()));
+const changeStaffActiveServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => changeStaffActiveSchema.parse(data))
+  .handler(({ data }) => boundary.changeStaffActive(data, getRequest()));
 
 async function withStaffHeaders<T extends { data: unknown }>(options: T) {
   // Keep the browser auth client out of the server boundary module's eager
@@ -125,5 +211,15 @@ export const listAdminTeam = async (options: { data: AdminTeamListInput }) =>
   listAdminTeamServer(await withStaffHeaders(options));
 export const getAdminTeamMember = async (options: { data: { staffId: string } }) =>
   getAdminTeamMemberServer(await withStaffHeaders(options));
+export const inviteStaffMember = async (options: { data: InviteStaffMemberInput }) =>
+  inviteStaffMemberServer(await withStaffHeaders(options));
+export const resendStaffInvitation = async (options: { data: ResendStaffInvitationInput }) =>
+  resendStaffInvitationServer(await withStaffHeaders(options));
+export const sendStaffPasswordReset = async (options: { data: SendStaffPasswordResetInput }) =>
+  sendStaffPasswordResetServer(await withStaffHeaders(options));
+export const changeStaffRoles = async (options: { data: ChangeStaffRolesInput }) =>
+  changeStaffRolesServer(await withStaffHeaders(options));
+export const changeStaffActive = async (options: { data: ChangeStaffActiveInput }) =>
+  changeStaffActiveServer(await withStaffHeaders(options));
 
 export type { AdminTeamFilterState };

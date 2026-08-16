@@ -1,0 +1,614 @@
+import "@tanstack/react-start/server-only";
+
+import type { StaffAccess, StaffRole } from "./auth.server.ts";
+import { staffLifecycleMemberFromRow } from "./admin-team.server.ts";
+import type {
+  ChangeStaffActiveInput,
+  ChangeStaffRolesInput,
+  InviteStaffMemberInput,
+  ResendStaffInvitationInput,
+  SendStaffPasswordResetInput,
+} from "./admin-team.types.ts";
+import { queryRows, transactionRows, type DbRow, type TransactionStatement } from "./db.server.ts";
+import {
+  createIdentityActionStore,
+  type IdentityActionState,
+  type IdentityActionType,
+} from "./staff-identity-actions.server.ts";
+import { createStaffIdentityProvider } from "./staff-identity-provider.server.ts";
+import type {
+  ProviderInvitation,
+  ProviderOutcomeCode,
+  StaffIdentityProvider,
+} from "./staff-identity-provider.types.ts";
+import {
+  cooldownRetryAfter,
+  isProviderOutcomeCode,
+  normalizeStaffEmail,
+} from "./staff-lifecycle-policy.ts";
+
+type QueryRows = <T extends DbRow = DbRow>(statement: string, params?: unknown[]) => Promise<T[]>;
+type TransactionRows = (statements: readonly TransactionStatement[]) => Promise<unknown>;
+type IdentityActions = ReturnType<typeof createIdentityActionStore>;
+type AuditInput = {
+  actor: StaffAccess;
+  permission: "staff.manage";
+  action:
+    | "staff.invited"
+    | "staff.invitation_resent"
+    | "staff.password_reset.requested"
+    | "staff.session_revocation"
+    | "staff.roles_changed"
+    | "staff.suspended"
+    | "staff.reactivated";
+  targetStaffId: string;
+  requestId: string;
+  outcome: "success" | "failure" | "denied";
+  metadata?: Record<string, unknown>;
+};
+
+type LifecycleMember = {
+  id: string;
+  email: string;
+  authUserId: string | null;
+  active: boolean;
+};
+
+export type StaffLifecycleDependencies = {
+  organizationId: string;
+  provider: StaffIdentityProvider;
+  queryRows?: QueryRows;
+  transactionRows?: TransactionRows;
+  identityActions?: IdentityActions;
+  updateStaffRoles: (
+    input: { staffId: string; roles: StaffRole[] },
+    actor: StaffAccess,
+  ) => Promise<{ ok: true; roles: StaffRole[] }>;
+  setStaffActive: (
+    input: ChangeStaffActiveInput,
+    actor: StaffAccess,
+  ) => Promise<{ ok: true; reassigned: Record<string, number> | null }>;
+  writeAudit: (input: AuditInput) => Promise<void>;
+  now?: () => Date;
+  requestId?: () => string;
+};
+
+type LifecycleResult = { accepted: boolean; retryAfter: string | null; requestId: string };
+
+const providerFailureCodes = new Set<ProviderOutcomeCode>([
+  "PROVIDER_CAPABILITY_UNAVAILABLE",
+  "PROVIDER_CONFLICT",
+  "PROVIDER_FORBIDDEN",
+  "PROVIDER_IDENTITY_NOT_FOUND",
+  "PROVIDER_INVALID_REQUEST",
+  "PROVIDER_INVITATION_NOT_FOUND",
+  "PROVIDER_RATE_LIMITED",
+  "PROVIDER_UNAUTHORIZED",
+  "PROVIDER_UNAVAILABLE",
+]);
+
+function requireAdmin(actor: StaffAccess) {
+  if (!actor.roles.includes("admin")) throw new Response("Forbidden", { status: 403 });
+}
+
+function responseStatus(code: ProviderOutcomeCode) {
+  if (code === "PROVIDER_INVALID_REQUEST") return 400;
+  if (code === "PROVIDER_FORBIDDEN" || code === "PROVIDER_UNAUTHORIZED") return 403;
+  if (code === "PROVIDER_IDENTITY_NOT_FOUND" || code === "PROVIDER_INVITATION_NOT_FOUND")
+    return 404;
+  if (code === "PROVIDER_CONFLICT") return 409;
+  if (code === "PROVIDER_RATE_LIMITED") return 429;
+  return 503;
+}
+
+function safeProviderCode(error: unknown): ProviderOutcomeCode {
+  const candidate =
+    error !== null && typeof error === "object" && "code" in error
+      ? (error as { code?: unknown }).code
+      : null;
+  return isProviderOutcomeCode(candidate) && providerFailureCodes.has(candidate)
+    ? candidate
+    : "PROVIDER_UNAVAILABLE";
+}
+
+function stateFromAction(state: IdentityActionState) {
+  if (state === "succeeded") return "sent" as const;
+  if (state === "pending") return "pending" as const;
+  return "failed" as const;
+}
+
+function idempotencyKey(action: IdentityActionType, value: string) {
+  return `${action}:${value}`;
+}
+
+function retryAfter(action: "invitation" | "password-reset", now: Date) {
+  return cooldownRetryAfter({ action, now: new Date(now.valueOf() - 1), lastRequestedAt: now });
+}
+
+async function safeAudit(writeAudit: StaffLifecycleDependencies["writeAudit"], input: AuditInput) {
+  // All callers pass small allowlisted scalar/count metadata. This service is
+  // the lifecycle audit boundary: no provider payload, token, cookie, body, or
+  // error message is ever available to it.
+  await writeAudit(input);
+}
+
+export function createStaffLifecycleService(dependencies: StaffLifecycleDependencies) {
+  const runQuery = dependencies.queryRows ?? queryRows;
+  const runTransaction = dependencies.transactionRows ?? transactionRows;
+  const actions = dependencies.identityActions ?? createIdentityActionStore();
+  const now = dependencies.now ?? (() => new Date());
+  const nextRequestId = dependencies.requestId ?? crypto.randomUUID;
+
+  async function memberById(staffId: string): Promise<LifecycleMember> {
+    const rows = await runQuery<Record<string, unknown>>(
+      `SELECT id::text AS id, email, auth_user_id, active
+         FROM staff_users
+        WHERE id = $1::uuid
+        LIMIT 1`,
+      [staffId],
+    );
+    const member = staffLifecycleMemberFromRow(rows[0]);
+    if (!member) throw new Response("Staff member not found.", { status: 404 });
+    return member;
+  }
+
+  async function upsertInvitee(input: InviteStaffMemberInput): Promise<LifecycleMember> {
+    const email = normalizeStaffEmail(input.email);
+    const roles = Array.from(new Set(input.roles));
+    const statements: TransactionStatement[] = [
+      {
+        statement: `INSERT INTO staff_users (email, name_en, active)
+                    VALUES ($1, $2, true)
+                    ON CONFLICT (email) DO UPDATE
+                      SET name_en = COALESCE(EXCLUDED.name_en, staff_users.name_en), updated_at = now()
+                    RETURNING id::text AS id, email, auth_user_id, active`,
+        params: [email, input.name?.trim() || null],
+      },
+      ...roles.map((role) => ({
+        statement: `INSERT INTO staff_roles (staff_user_id, role)
+                    SELECT id, $2::staff_role FROM staff_users WHERE email = $1
+                    ON CONFLICT (staff_user_id, role) DO NOTHING`,
+        params: [email, role] as unknown[],
+      })),
+    ];
+    const results = (await runTransaction(statements)) as Array<Array<Record<string, unknown>>>;
+    const member = staffLifecycleMemberFromRow(results[0]?.[0]);
+    if (!member) throw new Response("Unable to prepare staff invitation.", { status: 503 });
+    return member;
+  }
+
+  async function beginAction(input: {
+    action: IdentityActionType;
+    actor: StaffAccess;
+    member: LifecycleMember;
+    requestId: string;
+    keyValue: string;
+  }) {
+    return actions.beginIdentityAction({
+      idempotencyKey: idempotencyKey(input.action, input.keyValue),
+      action: input.action,
+      actorStaffId: input.actor.staffId,
+      targetStaffId: input.member.id,
+      targetEmail: input.member.email,
+      requestId: input.requestId,
+    });
+  }
+
+  async function latestActionFor(input: {
+    targetStaffId: string;
+    actions: IdentityActionType[];
+  }): Promise<{
+    action: IdentityActionType;
+    state: IdentityActionState;
+    createdAt: string;
+    retryAfter: string | null;
+    providerExpiresAt: string | null;
+  } | null> {
+    const rows = await runQuery<Record<string, unknown>>(
+      `SELECT action, state, created_at, retry_after, provider_expires_at
+         FROM staff_identity_actions
+        WHERE target_staff_id = $1::uuid
+          AND action = ANY($2::text[])
+        ORDER BY created_at DESC, id DESC
+        LIMIT 1`,
+      [input.targetStaffId, input.actions],
+    );
+    const row = rows[0];
+    if (
+      !row ||
+      typeof row.action !== "string" ||
+      !input.actions.includes(row.action as IdentityActionType) ||
+      typeof row.state !== "string" ||
+      !["pending", "succeeded", "retryable_failure", "terminal_failure"].includes(row.state) ||
+      typeof row.created_at !== "string" ||
+      Number.isNaN(new Date(row.created_at).valueOf())
+    ) {
+      return null;
+    }
+    const date = (value: unknown) => {
+      const parsed = new Date(String(value));
+      return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
+    };
+    return {
+      action: row.action as IdentityActionType,
+      state: row.state as IdentityActionState,
+      createdAt: new Date(row.created_at).toISOString(),
+      retryAfter:
+        row.retry_after === null || row.retry_after === undefined ? null : date(row.retry_after),
+      providerExpiresAt:
+        row.provider_expires_at === null || row.provider_expires_at === undefined
+          ? null
+          : date(row.provider_expires_at),
+    };
+  }
+
+  async function saveProviderInvitation(operationId: string, invitation: ProviderInvitation) {
+    await actions.markIdentityActionSucceeded({
+      operationId,
+      providerExpiresAt: invitation.expiresAt,
+    });
+    return invitation.state;
+  }
+
+  async function markProviderFailure(input: {
+    operationId: string;
+    error: unknown;
+    cooldown: "invitation" | "password-reset";
+  }) {
+    const code = safeProviderCode(input.error);
+    if (code === "PROVIDER_INVITATION_NOT_FOUND") {
+      await actions.markIdentityActionTerminal({
+        operationId: input.operationId,
+        safeErrorCode: code,
+      });
+      return { code, terminal: true as const, retryAfter: null };
+    }
+    const retry = retryAfter(input.cooldown, now());
+    await actions.markIdentityActionRetryable({
+      operationId: input.operationId,
+      safeErrorCode: code,
+      retryAfter: retry,
+    });
+    return { code, terminal: false as const, retryAfter: retry };
+  }
+
+  return {
+    async inviteStaffMember(input: InviteStaffMemberInput, actor: StaffAccess, request: Request) {
+      requireAdmin(actor);
+      const requestId = nextRequestId();
+      const member = await upsertInvitee(input);
+      const operation = await beginAction({
+        action: "invite",
+        actor,
+        member,
+        requestId,
+        keyValue: normalizeStaffEmail(input.email),
+      });
+      if (operation.isExisting) {
+        return {
+          memberId: member.id,
+          invitationState: stateFromAction(operation.state),
+          requestId,
+        };
+      }
+      try {
+        const invitation = await dependencies.provider.sendInvitation({
+          email: member.email,
+          organizationId: dependencies.organizationId,
+          request,
+        });
+        const invitationState = await saveProviderInvitation(operation.operationId, invitation);
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.invited",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "success",
+          metadata: { beforeRoles: null, afterRoles: Array.from(new Set(input.roles)) },
+        });
+        return { memberId: member.id, invitationState, requestId };
+      } catch (error) {
+        const failure = await markProviderFailure({
+          operationId: operation.operationId,
+          error,
+          cooldown: "invitation",
+        });
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.invited",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "failure",
+          metadata: { safeErrorCode: failure.code, retryAfter: failure.retryAfter },
+        });
+        return { memberId: member.id, invitationState: "failed" as const, requestId };
+      }
+    },
+
+    async resendStaffInvitation(
+      input: ResendStaffInvitationInput,
+      actor: StaffAccess,
+      request: Request,
+    ): Promise<LifecycleResult> {
+      requireAdmin(actor);
+      const requestId = nextRequestId();
+      const member = await memberById(input.staffId);
+      const persisted = await latestActionFor({
+        targetStaffId: member.id,
+        actions: ["invite", "resend_invitation"],
+      });
+      const previous = await actions.findIdentityActionCooldown({
+        targetStaffId: member.id,
+        action: "resend_invitation",
+        now: now().toISOString(),
+      });
+      const localCooldown = persisted
+        ? cooldownRetryAfter({
+            action: "invitation",
+            now: now(),
+            lastRequestedAt: persisted.createdAt,
+          })
+        : null;
+      if (localCooldown || previous?.retryAfter)
+        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
+      if (
+        persisted?.state === "succeeded" &&
+        persisted.providerExpiresAt &&
+        new Date(persisted.providerExpiresAt) <= now()
+      ) {
+        throw new Response("Invitation is expired; invite the staff member again.", {
+          status: 400,
+        });
+      }
+      if (
+        (!persisted && !previous) ||
+        (persisted?.state === "terminal_failure" && previous?.state !== "retryable_failure")
+      ) {
+        throw new Response("Invitation is not available to resend.", { status: 400 });
+      }
+      const operation = await beginAction({
+        action: "resend_invitation",
+        actor,
+        member,
+        requestId,
+        keyValue: member.id,
+      });
+      if (operation.isExisting && operation.state === "succeeded")
+        return { accepted: true, retryAfter: null, requestId };
+      try {
+        await saveProviderInvitation(
+          operation.operationId,
+          await dependencies.provider.resendInvitation({
+            email: member.email,
+            organizationId: dependencies.organizationId,
+            request,
+          }),
+        );
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.invitation_resent",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "success",
+        });
+        return { accepted: true, retryAfter: null, requestId };
+      } catch (error) {
+        const failure = await markProviderFailure({
+          operationId: operation.operationId,
+          error,
+          cooldown: "invitation",
+        });
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.invitation_resent",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "failure",
+          metadata: { safeErrorCode: failure.code },
+        });
+        return { accepted: false, retryAfter: failure.retryAfter, requestId };
+      }
+    },
+
+    async sendStaffPasswordReset(
+      input: SendStaffPasswordResetInput,
+      actor: StaffAccess,
+      request: Request,
+    ): Promise<LifecycleResult> {
+      requireAdmin(actor);
+      if (actor.staffId === input.staffId)
+        throw new Response("Self password reset is not permitted.", { status: 400 });
+      const requestId = nextRequestId();
+      const member = await memberById(input.staffId);
+      if (!member.active || !member.authUserId)
+        throw new Response("Staff identity is unavailable.", { status: 400 });
+      const persisted = await latestActionFor({
+        targetStaffId: member.id,
+        actions: ["password_reset"],
+      });
+      const previous = await actions.findIdentityActionCooldown({
+        targetStaffId: member.id,
+        action: "password_reset",
+        now: now().toISOString(),
+      });
+      const localCooldown = persisted
+        ? cooldownRetryAfter({
+            action: "password-reset",
+            now: now(),
+            lastRequestedAt: persisted.createdAt,
+          })
+        : null;
+      if (localCooldown || previous?.retryAfter)
+        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
+      const operation = await beginAction({
+        action: "password_reset",
+        actor,
+        member,
+        requestId,
+        keyValue: member.id,
+      });
+      if (operation.isExisting && operation.state === "succeeded")
+        return { accepted: true, retryAfter: null, requestId };
+      try {
+        await dependencies.provider.requestPasswordReset({
+          email: member.email,
+          redirectTo: new URL("/auth/reset-password", request.url).toString(),
+          request,
+        });
+        await actions.markIdentityActionSucceeded({ operationId: operation.operationId });
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.password_reset.requested",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "success",
+        });
+        return { accepted: true, retryAfter: null, requestId };
+      } catch (error) {
+        const failure = await markProviderFailure({
+          operationId: operation.operationId,
+          error,
+          cooldown: "password-reset",
+        });
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.password_reset.requested",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "failure",
+          metadata: { safeErrorCode: failure.code },
+        });
+        return { accepted: false, retryAfter: failure.retryAfter, requestId };
+      }
+    },
+
+    async changeStaffRoles(input: ChangeStaffRolesInput, actor: StaffAccess, _request: Request) {
+      requireAdmin(actor);
+      const requestId = nextRequestId();
+      const result = await dependencies.updateStaffRoles(input, actor);
+      await safeAudit(dependencies.writeAudit, {
+        actor,
+        permission: "staff.manage",
+        action: "staff.roles_changed",
+        targetStaffId: input.staffId,
+        requestId,
+        outcome: "success",
+        metadata: { afterRoles: result.roles },
+      });
+      return { ...result, requestId };
+    },
+
+    async changeStaffActive(input: ChangeStaffActiveInput, actor: StaffAccess, request: Request) {
+      requireAdmin(actor);
+      const requestId = nextRequestId();
+      const member = await memberById(input.staffId);
+      if (input.active) {
+        if (!member.authUserId)
+          throw new Response("Staff identity is required for reactivation.", { status: 400 });
+        try {
+          await dependencies.provider.resolveUser({ authUserId: member.authUserId, request });
+        } catch (error) {
+          throw new Response(safeProviderCode(error), {
+            status: responseStatus(safeProviderCode(error)),
+          });
+        }
+        const result = await dependencies.setStaffActive(
+          { staffId: input.staffId, active: true, reassignToStaffId: null },
+          actor,
+        );
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.reactivated",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "success",
+        });
+        return { ...result, requestId };
+      }
+      const result = await dependencies.setStaffActive({ ...input, active: false }, actor);
+      const operation = await beginAction({
+        action: "session_revocation",
+        actor,
+        member,
+        requestId,
+        keyValue: member.id,
+      });
+      try {
+        if (!member.authUserId)
+          throw Object.assign(new Error(), { code: "PROVIDER_IDENTITY_NOT_FOUND" });
+        await dependencies.provider.revokeUserSessions({ userId: member.authUserId, request });
+        await actions.markIdentityActionSucceeded({ operationId: operation.operationId });
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.session_revocation",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "success",
+          metadata: { reassignedCounts: result.reassigned },
+        });
+      } catch (error) {
+        const failure = await markProviderFailure({
+          operationId: operation.operationId,
+          error,
+          cooldown: "invitation",
+        });
+        await safeAudit(dependencies.writeAudit, {
+          actor,
+          permission: "staff.manage",
+          action: "staff.session_revocation",
+          targetStaffId: member.id,
+          requestId,
+          outcome: "failure",
+          metadata: { safeErrorCode: failure.code, reassignedCounts: result.reassigned },
+        });
+      }
+      await safeAudit(dependencies.writeAudit, {
+        actor,
+        permission: "staff.manage",
+        action: "staff.suspended",
+        targetStaffId: member.id,
+        requestId,
+        outcome: "success",
+        metadata: { reassignedCounts: result.reassigned },
+      });
+      return { ...result, requestId };
+    },
+  };
+}
+
+async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
+  const adminData = await import("./admin-data.server.ts");
+  const audit = await import("../control-plane/audit.server.ts");
+  return {
+    organizationId: process.env.NEON_AUTH_ORGANIZATION_ID ?? "",
+    provider: createStaffIdentityProvider(),
+    updateStaffRoles: adminData.updateStaffRoles,
+    setStaffActive: adminData.setStaffActive,
+    writeAudit: async (input) => {
+      await audit.writeAudit({
+        actor: input.actor,
+        permission: input.permission,
+        action: input.action,
+        resourceType: "staff_user",
+        resourceId: input.targetStaffId,
+        outcome: input.outcome,
+        context: { requestId: input.requestId },
+        metadata: input.metadata,
+      });
+    },
+  };
+}
+
+let defaultService: ReturnType<typeof createStaffLifecycleService> | null = null;
+export async function getStaffLifecycleService() {
+  defaultService ??= createStaffLifecycleService(await defaultDependencies());
+  return defaultService;
+}

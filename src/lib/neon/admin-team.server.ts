@@ -33,6 +33,21 @@ const actionTypes = new Set([
 const actionStates = new Set(["pending", "succeeded", "retryable_failure", "terminal_failure"]);
 const base64urlPattern = /^[A-Za-z0-9_-]+$/;
 
+// Internal lifecycle orchestration needs only these safe local identity fields.
+// Keep this mapper here so staff-lifecycle never grows a second, incompatible
+// Team-row interpretation or reaches credential/provider tables.
+export function staffLifecycleMemberFromRow(row: Record<string, unknown> | undefined) {
+  if (!row || typeof row.id !== "string" || !uuidPattern.test(row.id)) return null;
+  if (typeof row.email !== "string" || !row.email.trim()) return null;
+  return {
+    id: row.id,
+    email: row.email.trim().toLowerCase(),
+    authUserId:
+      typeof row.auth_user_id === "string" && row.auth_user_id.trim() ? row.auth_user_id : null,
+    active: row.active === true,
+  };
+}
+
 function invalid(message = "Invalid Team query."): never {
   throw new Response(message, { status: 400 });
 }
