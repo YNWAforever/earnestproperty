@@ -174,6 +174,11 @@ export function AdminContentCopilot({
   const [targetLanguage, setTargetLanguage] = useState<"zh-HK" | "en" | null>(null);
   const [researchMode, setResearchMode] = useState<ContentCopilotResearchMode>("internal");
   const [proposal, setProposal] = useState<ReviewProposal | null>(null);
+  // The server fingerprint protects the persisted record and is rechecked by
+  // the decision endpoint. Browser form drift is a separate concern: capture
+  // this browser's own snapshot when generation starts so Date/string and
+  // database-driver serialization cannot mark an unchanged form as stale.
+  const [proposalClientFingerprint, setProposalClientFingerprint] = useState<string | null>(null);
   const [acceptedFields, setAcceptedFields] = useState<string[]>([]);
   const [applying, setApplying] = useState(false);
   // Snapshot of the fields the last 套用 overwrote, so the banner can put the
@@ -197,6 +202,7 @@ export function AdminContentCopilot({
   useEffect(() => {
     setState(resourceId ? "ready" : "disabled-unsaved");
     setProposal(null);
+    setProposalClientFingerprint(null);
     setAcceptedFields([]);
     setUndoValues(null);
     setError(null);
@@ -234,6 +240,7 @@ export function AdminContentCopilot({
 
   function discardProposal() {
     setProposal(null);
+    setProposalClientFingerprint(null);
     setAcceptedFields([]);
     setError(null);
     setState("ready");
@@ -244,9 +251,12 @@ export function AdminContentCopilot({
     setState("generating");
     setError(null);
     setProposal(null);
+    setProposalClientFingerprint(null);
+    setProposalStale(false);
     setAcceptedFields([]);
 
     try {
+      const generationFingerprint = await buildContentFingerprint(fingerprintValues ?? values);
       const { generateAdminContentProposal } = await import("@/lib/ai/content-copilot-admin");
       const result = await generateAdminContentProposal({
         data: {
@@ -265,6 +275,7 @@ export function AdminContentCopilot({
         return;
       }
       setProposal(result.proposal);
+      setProposalClientFingerprint(generationFingerprint);
       // Opt-in, not opt-out: pre-checking every patch made "replace all my copy"
       // the default one-click gesture. 全選 is one extra click when wanted.
       setAcceptedFields([]);
@@ -276,13 +287,13 @@ export function AdminContentCopilot({
   }
 
   async function apply() {
-    if (!proposal || applying) return;
+    if (!proposal || !proposalClientFingerprint || applying) return;
     setError(null);
     setApplying(true);
     try {
       const patchResult = applySelectedContentPatches(values, proposal.patches, acceptedFields, {
         resourceType,
-        sourceFingerprint: proposal.sourceFingerprint,
+        sourceFingerprint: proposalClientFingerprint,
         currentFingerprint: await buildContentFingerprint(fingerprintValues ?? values),
       });
       if (!patchResult.ok) {
@@ -326,7 +337,7 @@ export function AdminContentCopilot({
   // at apply time, after staff had spent minutes reading diff cards and ticking
   // boxes. The panel now says so while there is still time to regenerate.
   useEffect(() => {
-    if (state !== "review" || !proposal) {
+    if (state !== "review" || !proposal || !proposalClientFingerprint) {
       setProposalStale(false);
       return;
     }
@@ -334,7 +345,7 @@ export function AdminContentCopilot({
     const timer = window.setTimeout(() => {
       void buildContentFingerprint(fingerprintValues ?? values)
         .then((current) => {
-          if (!cancelled) setProposalStale(current !== proposal.sourceFingerprint);
+          if (!cancelled) setProposalStale(current !== proposalClientFingerprint);
         })
         .catch(() => undefined);
     }, 400);
@@ -342,7 +353,7 @@ export function AdminContentCopilot({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [fingerprintValues, proposal, state, values]);
+  }, [fingerprintValues, proposal, proposalClientFingerprint, state, values]);
 
   function undoApply() {
     if (!undoValues) return;

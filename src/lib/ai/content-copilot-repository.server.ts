@@ -339,7 +339,11 @@ export function sanitizeContentCopilotAuditMetadata(
       (result as Record<string, unknown>)[key] = value;
       continue;
     }
-    if (typeof value === "string" && value.length <= 100 && !/[\\u0000-\\u001f]/.test(value)) {
+    if (
+      typeof value === "string" &&
+      value.length <= 100 &&
+      ![...value].some((character) => character.charCodeAt(0) <= 0x1f)
+    ) {
       (result as Record<string, unknown>)[key] = value;
       continue;
     }

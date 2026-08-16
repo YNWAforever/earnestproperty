@@ -3,7 +3,7 @@ import "@tanstack/react-start/server-only";
 import { extractStructuredJson } from "./content-copilot.ts";
 import type { ContentCopilotConfig } from "./content-copilot-config.server.ts";
 
-const OPENCODE_GO_TIMEOUT_MS = 20_000;
+const OPENCODE_GO_TIMEOUT_MS = 60_000;
 const OPENCODE_GO_MAX_RETRIES = 2;
 const OPENCODE_GO_RETRY_BASE_DELAY_MS = 300;
 const OPENCODE_GO_MAX_RESPONSE_CHARS = 120_000;
@@ -125,6 +125,7 @@ async function fetchWithRetry(
       return response;
     } catch (error) {
       lastError = error;
+      if (isTimeoutError(error)) throw error;
       if (attempt < OPENCODE_GO_MAX_RETRIES) {
         await sleepImpl(OPENCODE_GO_RETRY_BASE_DELAY_MS * 2 ** attempt);
         continue;
@@ -159,9 +160,14 @@ function extractUsageMetadata(usage: unknown): Record<string, number> {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return {};
 
   const metadata: Record<string, number> = {};
-  for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) {
-    const value = (usage as Record<string, unknown>)[key];
-    if (typeof value === "number" && Number.isFinite(value)) metadata[key] = value;
+  for (const [providerKey, internalKey] of [
+    ["prompt_tokens", "inputTokens"],
+    ["completion_tokens", "outputTokens"],
+    ["total_tokens", "totalTokens"],
+  ] as const) {
+    const value = (usage as Record<string, unknown>)[providerKey];
+    if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 10_000_000)
+      metadata[internalKey] = value;
   }
   return metadata;
 }
