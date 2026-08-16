@@ -1,0 +1,524 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import { createStaffLifecycleService } from "./staff-lifecycle.server.ts";
+
+const admin = {
+  staffId: "11111111-1111-4111-8111-111111111111",
+  authUserId: "auth-admin",
+  email: "admin@example.test",
+  name: "Admin",
+  roles: ["admin"],
+  bootstrap: false,
+  matchedProfileOnly: false,
+};
+const manager = { ...admin, staffId: "33333333-3333-4333-8333-333333333333", roles: ["manager"] };
+const targetId = "22222222-2222-4222-8222-222222222222";
+const request = new Request("https://earnest.test/admin/team");
+
+function fixture(overrides = {}) {
+  const calls = {
+    provider: [],
+    actions: [],
+    audit: [],
+    transactions: [],
+    roleChanges: [],
+    activeChanges: [],
+  };
+  const staff = new Map();
+  const latestActions = new Map();
+  const actionRows = new Map();
+  const actionRowsById = new Map();
+  const clock = { current: new Date("2026-08-16T00:00:00.000Z") };
+  let actionNumber = 0;
+  const identityActions = {
+    async beginIdentityAction(input) {
+      calls.actions.push({ method: "begin", input });
+      const existing = actionRows.get(input.idempotencyKey);
+      if (existing) return { operationId: existing.id, isExisting: true, state: existing.state };
+      const row = {
+        id: `00000000-0000-4000-8000-${String(++actionNumber).padStart(12, "0")}`,
+        state: "pending",
+      };
+      actionRows.set(input.idempotencyKey, row);
+      actionRowsById.set(row.id, row);
+      return { operationId: row.id, isExisting: false, state: row.state };
+    },
+    async markIdentityActionSucceeded(input) {
+      calls.actions.push({ method: "succeeded", input });
+      const row = actionRowsById.get(input.operationId);
+      if (row) row.state = "succeeded";
+    },
+    async markIdentityActionRetryable(input) {
+      calls.actions.push({ method: "retryable", input });
+      const row = actionRowsById.get(input.operationId);
+      if (row) row.state = "retryable_failure";
+    },
+    async markIdentityActionTerminal(input) {
+      calls.actions.push({ method: "terminal", input });
+      const row = actionRowsById.get(input.operationId);
+      if (row) row.state = "terminal_failure";
+    },
+    async findIdentityActionCooldown() {
+      return null;
+    },
+  };
+  const service = createStaffLifecycleService({
+    organizationId: "org-earnest",
+    provider: {
+      async sendInvitation(input) {
+        calls.provider.push({ method: "invite", input });
+        return { state: "sent", expiresAt: "2026-08-17T00:00:00.000Z" };
+      },
+      async resendInvitation(input) {
+        calls.provider.push({ method: "resend", input });
+        return { state: "sent", expiresAt: "2026-08-17T00:00:00.000Z" };
+      },
+      async requestPasswordReset(input) {
+        calls.provider.push({ method: "reset", input });
+      },
+      async revokeUserSessions(input) {
+        calls.provider.push({ method: "revoke", input });
+      },
+      async resolveUser(input) {
+        calls.provider.push({ method: "resolve", input });
+        return {
+          id: input.authUserId,
+          email: "target@example.test",
+          name: null,
+          emailVerified: true,
+        };
+      },
+    },
+    queryRows: async (statement, params = []) => {
+      if (statement.includes("FROM staff_users") && statement.includes("WHERE id")) {
+        const row = staff.get(params[0]);
+        return row ? [row] : [];
+      }
+      if (statement.includes("FROM staff_identity_actions")) {
+        return latestActions.get(params[0]) ?? [];
+      }
+      return [];
+    },
+    transactionRows: async (statements) => {
+      calls.transactions.push(statements);
+      const first = statements[0];
+      if (first.statement.includes("INSERT INTO staff_users")) {
+        const email = first.params[0];
+        const existing = [...staff.values()].find((row) => row.email === email);
+        const row = existing ?? {
+          id: targetId,
+          email,
+          auth_user_id: null,
+          active: true,
+          roles: ["agent"],
+        };
+        staff.set(row.id, row);
+        return [[row]];
+      }
+      return [];
+    },
+    identityActions,
+    updateStaffRoles: async (input, actor) => {
+      calls.roleChanges.push({ input, actor });
+      return { ok: true, roles: input.roles };
+    },
+    setStaffActive: async (input, actor) => {
+      calls.activeChanges.push({ input, actor });
+      const existing = staff.get(input.staffId) ?? {
+        id: input.staffId,
+        email: "target@example.test",
+        auth_user_id: "auth-target",
+        active: !input.active,
+      };
+      staff.set(input.staffId, { ...existing, active: input.active });
+      return { ok: true, reassigned: input.active ? null : { inquiries: 2 } };
+    },
+    writeAudit: async (input) => calls.audit.push(input),
+    now: () => new Date(clock.current),
+    requestId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    ...overrides,
+  });
+  return { service, calls, staff, latestActions, identityActions, clock };
+}
+
+test("invite normalizes email, upserts one local member/action, and forwards only provider identity fields", async () => {
+  const { service, calls } = fixture();
+  const first = await service.inviteStaffMember(
+    { email: " Ada@Example.Test ", name: "Ada", roles: ["manager", "agent"] },
+    admin,
+    request,
+  );
+  const second = await service.inviteStaffMember(
+    { email: "ada@example.test", name: "Ada", roles: ["manager", "agent"] },
+    admin,
+    request,
+  );
+  assert.deepEqual(first, {
+    memberId: targetId,
+    invitationState: "sent",
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.equal(second.memberId, targetId);
+  assert.equal(calls.transactions.length, 2);
+  assert.equal(calls.actions.filter((call) => call.method === "begin").length, 2);
+  assert.deepEqual(calls.provider[0], {
+    method: "invite",
+    input: { email: "ada@example.test", organizationId: "org-earnest", request },
+  });
+  assert.doesNotMatch(JSON.stringify({ first, calls }), /password|token|cookie|provider.*body/i);
+});
+
+test("invite retains local staff and makes its operation safely retryable when delivery fails", async () => {
+  const { service, calls } = fixture({
+    provider: {
+      sendInvitation: async () => {
+        throw Object.assign(new Error("raw provider message must not escape"), {
+          code: "PROVIDER_RATE_LIMITED",
+        });
+      },
+    },
+  });
+  const result = await service.inviteStaffMember(
+    { email: "ada@example.test", roles: ["agent"] },
+    admin,
+    request,
+  );
+  assert.equal(result.invitationState, "failed");
+  assert.equal(calls.transactions.length, 1);
+  assert.equal(calls.actions.at(-1).method, "retryable");
+  assert.equal(calls.actions.at(-1).input.safeErrorCode, "PROVIDER_RATE_LIMITED");
+  assert.doesNotMatch(JSON.stringify(result), /raw provider message/i);
+});
+
+test("resend and reset reuse in-flight action keys only inside their cooldown windows", async () => {
+  const resend = fixture();
+  resend.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  resend.identityActions.findIdentityActionCooldown = async () => ({
+    state: "retryable_failure",
+    retryAfter: null,
+    providerExpiresAt: null,
+  });
+  await resend.service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  await resend.service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  assert.equal(resend.calls.provider.filter((call) => call.method === "resend").length, 1);
+  resend.clock.current = new Date("2026-08-16T00:16:00.000Z");
+  await resend.service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  assert.equal(resend.calls.provider.filter((call) => call.method === "resend").length, 2);
+  assert.notEqual(
+    resend.calls.actions.filter((call) => call.method === "begin")[0].input.idempotencyKey,
+    resend.calls.actions.filter((call) => call.method === "begin").at(-1).input.idempotencyKey,
+  );
+
+  const reset = fixture();
+  reset.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  await reset.service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+  await reset.service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+  assert.equal(reset.calls.provider.filter((call) => call.method === "reset").length, 1);
+  reset.clock.current = new Date("2026-08-16T00:11:00.000Z");
+  await reset.service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+  assert.equal(reset.calls.provider.filter((call) => call.method === "reset").length, 2);
+});
+
+test("persisted active cooldowns return their ISO retry time before creating an action", async () => {
+  const resend = fixture();
+  resend.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  resend.latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "succeeded",
+      created_at: "2026-08-16T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: "2026-08-17T00:00:00.000Z",
+    },
+  ]);
+  resend.clock.current = new Date("2026-08-16T00:01:00.000Z");
+  const resendResult = await resend.service.resendStaffInvitation(
+    { staffId: targetId },
+    admin,
+    request,
+  );
+  assert.deepEqual(resendResult, {
+    accepted: false,
+    retryAfter: "2026-08-16T00:15:00.000Z",
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.equal(resend.calls.actions.filter((call) => call.method === "begin").length, 0);
+  assert.equal(resend.calls.provider.length, 0);
+
+  const reset = fixture();
+  reset.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  reset.latestActions.set(targetId, [
+    {
+      action: "password_reset",
+      state: "succeeded",
+      created_at: "2026-08-16T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+  reset.clock.current = new Date("2026-08-16T00:01:00.000Z");
+  const resetResult = await reset.service.sendStaffPasswordReset(
+    { staffId: targetId },
+    admin,
+    request,
+  );
+  assert.deepEqual(resetResult, {
+    accepted: false,
+    retryAfter: "2026-08-16T00:10:00.000Z",
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.equal(reset.calls.actions.filter((call) => call.method === "begin").length, 0);
+  assert.equal(reset.calls.provider.length, 0);
+});
+
+test("a post-delivery audit failure does not downgrade a succeeded invitation", async () => {
+  const { service, calls } = fixture({
+    writeAudit: async () => {
+      throw new Error("audit backend unavailable");
+    },
+  });
+  const result = await service.inviteStaffMember(
+    { email: "audit@example.test", roles: ["agent"] },
+    admin,
+    request,
+  );
+  assert.equal(result.invitationState, "sent");
+  assert.equal(
+    calls.actions.some((call) => call.method === "retryable"),
+    false,
+  );
+  assert.equal(
+    calls.actions.some((call) => call.method === "succeeded"),
+    true,
+  );
+});
+
+test("expired provider invitation outcomes become terminal safe failures", async () => {
+  const invite = fixture({
+    provider: {
+      sendInvitation: async () => ({ state: "expired", expiresAt: null }),
+    },
+  });
+  const invitation = await invite.service.inviteStaffMember(
+    { email: "expired@example.test", roles: ["agent"] },
+    admin,
+    request,
+  );
+  assert.equal(invitation.invitationState, "failed");
+  assert.equal(invite.calls.actions.at(-1).method, "terminal");
+
+  const resend = fixture({
+    provider: {
+      resendInvitation: async () => ({ state: "expired", expiresAt: null }),
+    },
+  });
+  resend.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  resend.identityActions.findIdentityActionCooldown = async () => ({
+    state: "retryable_failure",
+    retryAfter: null,
+    providerExpiresAt: null,
+  });
+  const result = await resend.service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  assert.equal(result.accepted, false);
+  assert.equal(resend.calls.actions.at(-1).method, "terminal");
+});
+
+test("resend enforces local invitation state and cooldown, and makes missing provider invitations terminal", async () => {
+  const { service, calls, staff, identityActions, clock } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  identityActions.findIdentityActionCooldown = async () => ({
+    state: "succeeded",
+    retryAfter: "2026-08-16T00:15:00.000Z",
+    providerExpiresAt: null,
+  });
+  const cooldown = await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  assert.deepEqual(cooldown, {
+    accepted: false,
+    retryAfter: "2026-08-16T00:15:00.000Z",
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  identityActions.findIdentityActionCooldown = async () => null;
+  await assert.rejects(
+    () => service.resendStaffInvitation({ staffId: targetId }, admin, request),
+    (error) => error instanceof Response && error.status === 400,
+  );
+  identityActions.findIdentityActionCooldown = async () => ({
+    state: "retryable_failure",
+    retryAfter: null,
+    providerExpiresAt: null,
+  });
+  clock.current = new Date("2026-08-16T00:16:00.000Z");
+  calls.provider.length = 0;
+  await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  assert.equal(calls.provider.at(-1).method, "resend");
+  const missing = fixture({
+    provider: {
+      resendInvitation: async () => {
+        throw Object.assign(new Error("secret response"), {
+          code: "PROVIDER_INVITATION_NOT_FOUND",
+        });
+      },
+    },
+  });
+  missing.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  missing.identityActions.findIdentityActionCooldown = async () => ({
+    state: "retryable_failure",
+    retryAfter: null,
+    providerExpiresAt: null,
+  });
+  const result = await missing.service.resendStaffInvitation({ staffId: targetId }, admin, request);
+  assert.equal(result.accepted, false);
+  assert.equal(missing.calls.actions.at(-1).method, "terminal");
+});
+
+test("password reset rejects unsafe targets and only sends a provider reset link with safe output/audit data", async () => {
+  const { service, calls, staff, identityActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+  assert.deepEqual(result, {
+    accepted: true,
+    retryAfter: null,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.deepEqual(calls.provider.at(-1), {
+    method: "reset",
+    input: {
+      email: "target@example.test",
+      redirectTo: "https://earnest.test/auth/reset-password",
+      request,
+    },
+  });
+  identityActions.findIdentityActionCooldown = async () => ({
+    state: "succeeded",
+    retryAfter: "2026-08-16T00:10:00.000Z",
+    providerExpiresAt: null,
+  });
+  const cooldown = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+  assert.equal(cooldown.accepted, false);
+  await assert.rejects(
+    () => service.sendStaffPasswordReset({ staffId: admin.staffId }, admin, request),
+    (error) => error instanceof Response && error.status === 400,
+  );
+  await assert.rejects(
+    () => service.sendStaffPasswordReset({ staffId: targetId }, manager, request),
+    (error) => error instanceof Response && error.status === 403,
+  );
+  assert.equal("password" in result, false);
+  assert.equal("token" in result, false);
+  assert.equal("password" in calls.actions[0].input, false);
+  assert.equal("token" in calls.actions[0].input, false);
+  assert.equal("password" in (calls.audit[0].metadata ?? {}), false);
+  assert.equal("token" in (calls.audit[0].metadata ?? {}), false);
+});
+
+test("role changes delegate to the protected existing transaction and emit sanitized lifecycle audit", async () => {
+  const { service, calls } = fixture();
+  const result = await service.changeStaffRoles(
+    { staffId: targetId, roles: ["manager"] },
+    admin,
+    request,
+  );
+  assert.deepEqual(result, {
+    ok: true,
+    roles: ["manager"],
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.deepEqual(calls.roleChanges[0].input, { staffId: targetId, roles: ["manager"] });
+  assert.equal(calls.audit.at(-1).action, "staff.roles_changed");
+  assert.equal(calls.audit.at(-1).permission, "staff.manage");
+});
+
+test("suspension preserves local deactivation when revocation fails, while reactivation resolves the linked identity first", async () => {
+  const suspension = fixture({
+    provider: {
+      revokeUserSessions: async () => {
+        throw Object.assign(new Error("do not leak"), { code: "PROVIDER_UNAVAILABLE" });
+      },
+    },
+  });
+  suspension.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  const suspended = await suspension.service.changeStaffActive(
+    { staffId: targetId, active: false },
+    admin,
+    request,
+  );
+  assert.equal(suspended.ok, true);
+  assert.equal(suspension.calls.activeChanges.length, 1);
+  assert.equal(suspension.calls.actions.at(-1).method, "retryable");
+  assert.equal(suspension.calls.activeChanges[0].input.active, false);
+  const activation = fixture();
+  activation.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: false,
+  });
+  await activation.service.changeStaffActive({ staffId: targetId, active: true }, admin, request);
+  assert.deepEqual(activation.calls.provider[0], {
+    method: "resolve",
+    input: { authUserId: "auth-target", request },
+  });
+  assert.deepEqual(activation.calls.activeChanges[0].input, {
+    staffId: targetId,
+    active: true,
+    reassignToStaffId: null,
+  });
+  const absent = fixture();
+  absent.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: null,
+    active: false,
+  });
+  await assert.rejects(
+    () => absent.service.changeStaffActive({ staffId: targetId, active: true }, admin, request),
+    (error) => error instanceof Response && error.status === 400,
+  );
+  assert.equal(absent.calls.activeChanges.length, 0);
+});

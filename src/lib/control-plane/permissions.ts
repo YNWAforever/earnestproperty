@@ -5,6 +5,7 @@ export const controlPlanePermissions = [
   "ai.knowledge.rebuild",
   "campaign.queue",
   "cms.publish",
+  "staff.manage",
   "system.health.read",
   "system.jobs.read",
   "system.jobs.retry",

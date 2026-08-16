@@ -5,7 +5,6 @@ import {
   BookOpen,
   Building2,
   ContactRound,
-  Gauge,
   Home,
   LogOut,
   Menu,
@@ -25,62 +24,50 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 
-// Grouped rather than flat, and static rather than collapsible: with ten
-// entries there is no vertical space worth reclaiming, and a collapsed group is
-// how 媒體庫 became unreachable in the first place.
-//
-// /admin/cms previously had TWO entries differing only by search param -- one
-// labelled "CMS / FAQ" that actually landed on 屋苑 SEO, and one labelled
-// "AI Agent" that landed on FAQ 編輯 -- while 文章編輯, YouTube影片 and 媒體庫 had
-// no entry at all. One honest entry now covers all five tabs.
-//
-// `activeExact: false` opts an entry into prefix matching so the section stays
-// highlighted on its own child routes -- without it, editing a listing
-// (/admin/listings/123) or creating an agent (/admin/agents/new) left the whole
-// sidebar unlit, so staff on a detail page could not tell which section they
-// were in. Only entries that actually own child routes get this; /admin must
-// stay exact or it would match every admin page, and /admin/leads must stay
-// exact so it does not bleed into the separate Command Center entry.
+// Prefix matching is reserved for sections that own child routes. Team and
+// Operations deliberately stay exact so neither can illuminate the other.
 const navGroups = [
   {
-    heading: null,
-    items: [{ to: "/admin", label: "總覽", icon: BarChart3 }],
+    heading: "Workspace",
+    items: [
+      { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true },
+      { to: "/admin/leads", label: "客戶查詢", icon: ContactRound, activeExact: false },
+      { to: "/admin/listings", label: "樓盤管理", icon: Building2, activeExact: false },
+    ],
   },
   {
-    heading: "物業",
+    heading: "Growth",
     items: [
-      { to: "/admin/listings", label: "放盤", icon: Building2, activeExact: false },
       {
         to: "/admin/cms",
-        label: "網站內容",
+        label: "內容中心",
         icon: BookOpen,
         activeExact: false,
         includeSearch: false,
       },
+      { to: "/admin/segments", label: "客戶分群", icon: Users, activeExact: false },
+      { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle, activeExact: false },
+      { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false },
     ],
   },
   {
-    heading: "客戶",
+    heading: "Administration",
     items: [
-      { to: "/admin/leads", label: "CRM", icon: ContactRound },
-      { to: "/admin/leads/command-center", label: "Command Center", icon: Gauge },
-      { to: "/admin/segments", label: "客戶分群", icon: Users },
-    ],
-  },
-  {
-    heading: "訊息",
-    items: [
-      { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
-      { to: "/admin/blasts", label: "群發", icon: Send },
-    ],
-  },
-  {
-    heading: "系統",
-    items: [
-      // Renamed from 經紀管理: with roles attached this screen manages staff
-      // access, not just public directory entries.
-      { to: "/admin/agents", label: "員工管理", icon: UserRoundCog, activeExact: false },
-      { to: "/admin/operations", label: "系統營運", icon: ServerCog, includeSearch: false },
+      {
+        to: "/admin/team",
+        label: "團隊成員",
+        icon: Users,
+        activeExact: true,
+        includeSearch: false,
+      },
+      { to: "/admin/agents", label: "經紀檔案", icon: UserRoundCog, activeExact: false },
+      {
+        to: "/admin/operations",
+        label: "系統營運",
+        icon: ServerCog,
+        activeExact: true,
+        includeSearch: false,
+      },
     ],
   },
 ] as const;

@@ -9,6 +9,116 @@ function read(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+test("Team route is noindexed and keeps URL-backed directory state", () => {
+  const source = read("src/routes/admin.team.tsx");
+
+  assert.match(source, /createFileRoute\("\/admin\/team"\)/);
+  assert.match(source, /name:\s*"robots",\s*content:\s*"noindex"/);
+  for (const key of ["q", "role", "state", "cursor", "member"]) {
+    assert.match(source, new RegExp(`search\\.${key}`));
+  }
+  assert.match(source, /useSearch\(/);
+  assert.match(source, /cursor:\s*directory\.nextCursor/);
+  assert.match(source, /selectedMemberId/);
+});
+
+test("Team route delegates lifecycle mutations to the Task 4 server boundary", () => {
+  const source = read("src/routes/admin.team.tsx");
+
+  for (const operation of [
+    "inviteStaffMember",
+    "resendStaffInvitation",
+    "sendStaffPasswordReset",
+    "changeStaffRoles",
+    "changeStaffActive",
+  ]) {
+    assert.match(source, new RegExp(operation));
+  }
+  assert.doesNotMatch(
+    source,
+    /localStorage|sessionStorage|window\.location|token|provider response/i,
+  );
+});
+
+test("Team route removes member data for forbidden callers and carries edited lifecycle input", () => {
+  const source = read("src/routes/admin.team.tsx");
+
+  assert.match(source, /reason\.status === 403[\s\S]*setTeam\(null\)[\s\S]*setDetail\(null\)/);
+  assert.match(source, /if \(forbidden\)[\s\S]*AdminError/);
+  assert.match(source, /teamActionPayload\(\{[\s\S]*proposedRoles: pending\.proposedRoles/);
+  assert.match(source, /reassignToStaffId: pendingOptions\.reassignToStaffId/);
+  assert.match(source, /detailRequestRef\.current\.begin\(\)/);
+  assert.match(source, /mergeAdminTeamPages\(teamRef\.current, nextTeam\)/);
+  assert.match(source, /resetAdminTeamPage\(search\)/);
+  assert.match(source, /await loadTeam\(true\)/);
+  assert.match(source, /teamMutationFailure\(result\)/);
+});
+
+test("operations shell follows the approved navigation groups and exact Team state", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+
+  for (const [heading, paths] of [
+    ["Workspace", ["/admin", "/admin/leads", "/admin/listings"]],
+    ["Growth", ["/admin/cms", "/admin/segments", "/admin/whatsapp", "/admin/blasts"]],
+    ["Administration", ["/admin/team", "/admin/agents", "/admin/operations"]],
+  ]) {
+    assert.match(shell, new RegExp(`heading: "${heading}"`));
+    for (const path of paths)
+      assert.match(shell, new RegExp(`to: "${path.replaceAll("/", "\\/")}"`));
+  }
+  assert.match(shell, /to: "\/admin\/team"[\s\S]{0,120}activeExact: true/);
+  assert.match(shell, /to: "\/admin\/agents"[\s\S]{0,120}activeExact: false/);
+  assert.doesNotMatch(shell, /to: "\/admin\/operations"[\s\S]{0,120}activeExact: false/);
+
+  // The Team directory persists filters and selected detail in its URL. Its
+  // navigation item must remain active for a route such as
+  // /admin/team?q=ann&role=agent&state=invited&cursor=next&member=staff-1.
+  const teamEntry = shell.match(/\{\s*to:\s*"\/admin\/team",[^}]*\}/)?.[0];
+  assert.ok(teamEntry, "/admin/team entry must exist in navGroups");
+  assert.match(teamEntry, /includeSearch:\s*false/);
+});
+
+test("Overview reads operational sources independently without polling", () => {
+  const overview = read("src/routes/admin.index.tsx");
+
+  for (const source of [
+    "fetchAdminOverview",
+    "listAdminTeam",
+    "fetchOperationsHealth",
+    "fetchOperationsAudit",
+  ]) {
+    assert.match(overview, new RegExp(source));
+  }
+  for (const label of [
+    "啟用團隊",
+    "待處理邀請",
+    "開放查詢",
+    "系統健康",
+    "需要跟進",
+    "最近職員活動",
+  ]) {
+    assert.match(overview, new RegExp(label));
+  }
+  assert.match(overview, /role="alert"/);
+  assert.match(overview, /重新整理/);
+  assert.match(overview, /entry\.action\.startsWith\("staff\."\)/);
+  assert.match(overview, /function staffActivityLabel\(action: string\)/);
+  assert.doesNotMatch(overview, /\{entry\.action\}/);
+  assert.doesNotMatch(overview, /setInterval|setTimeout/);
+  assert.match(overview, /useEffect\([\s\S]*refresh/);
+});
+
+test("agent profile route retains profile editing and no longer loads access lifecycle data", () => {
+  const editAgent = read("src/routes/admin.agents_.$id.tsx");
+
+  assert.match(editAgent, /fetchAdminAgentProfile/);
+  assert.doesNotMatch(
+    editAgent,
+    /fetchStaffAccessSummary|fetchAdminAgents|StaffAccessSummary|accessVersion/,
+  );
+  assert.doesNotMatch(editAgent, /\baccess=|onAccessChanged|activeStaffOptions/);
+});
+
 test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   const routeFiles = [
     "src/routes/admin.tsx",
@@ -37,9 +147,10 @@ test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   assert.doesNotMatch(adminLayout, /requireStaffAccess/);
 
   const adminOverview = read("src/routes/admin.index.tsx");
-  assert.match(adminOverview, /Neon/);
-  assert.match(adminOverview, /WhatsApp/);
-  assert.match(adminOverview, /CMS/);
+  assert.match(adminOverview, /fetchAdminOverview/);
+  assert.match(adminOverview, /listAdminTeam/);
+  assert.match(adminOverview, /fetchOperationsHealth/);
+  assert.match(adminOverview, /fetchOperationsAudit/);
   assert.doesNotMatch(adminOverview, /supabase/i);
 });
 
@@ -701,7 +812,7 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
   );
   assert.equal(destinations.length, 10);
 
-  for (const heading of ["物業", "客戶", "訊息", "系統"]) {
+  for (const heading of ["Workspace", "Growth", "Administration"]) {
     assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
   }
 
@@ -709,7 +820,7 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
   assert.doesNotMatch(block, /search: \{ tab: "faqs" \}/);
   assert.doesNotMatch(block, /"AI Agent"/);
   assert.doesNotMatch(block, /"CMS \/ FAQ"/);
-  assert.match(block, /"員工管理"/);
+  assert.match(block, /"團隊成員"/);
 
   // Pinned on the entries themselves (not the whole block) so a future
   // reorder of navGroups cannot silently invalidate this without failing
@@ -724,10 +835,10 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
 
   const adminLeadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0];
   assert.ok(adminLeadsEntry, "/admin/leads entry must exist in navGroups");
-  assert.doesNotMatch(
+  assert.match(
     adminLeadsEntry,
     /activeExact:\s*false/,
-    "/admin/leads must stay exact (no activeExact: false) or it bleeds into the separate /admin/leads/command-center entry",
+    "/admin/leads owns child routes and should use prefix matching",
   );
 
   // `activeOptions` is where each entry's activeExact/includeSearch above
