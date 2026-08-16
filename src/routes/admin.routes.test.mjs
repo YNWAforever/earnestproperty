@@ -9,6 +9,37 @@ function read(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+test("Team route is noindexed and keeps URL-backed directory state", () => {
+  const source = read("src/routes/admin.team.tsx");
+
+  assert.match(source, /createFileRoute\("\/admin\/team"\)/);
+  assert.match(source, /name:\s*"robots",\s*content:\s*"noindex"/);
+  for (const key of ["q", "role", "state", "cursor"]) {
+    assert.match(source, new RegExp(`search\\.${key}`));
+  }
+  assert.match(source, /useSearch\(/);
+  assert.match(source, /cursor:\s*directory\.nextCursor/);
+  assert.match(source, /selectedMemberId/);
+});
+
+test("Team route delegates lifecycle mutations to the Task 4 server boundary", () => {
+  const source = read("src/routes/admin.team.tsx");
+
+  for (const operation of [
+    "inviteStaffMember",
+    "resendStaffInvitation",
+    "sendStaffPasswordReset",
+    "changeStaffRoles",
+    "changeStaffActive",
+  ]) {
+    assert.match(source, new RegExp(operation));
+  }
+  assert.doesNotMatch(
+    source,
+    /localStorage|sessionStorage|window\.location|token|provider response/i,
+  );
+});
+
 test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
   const routeFiles = [
     "src/routes/admin.tsx",
