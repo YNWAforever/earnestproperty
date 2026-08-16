@@ -39,7 +39,7 @@ export const STAFF_OWNERSHIP_COLUMNS = [
 /**
  * Authorship and audit. These never move. Listed so tests can assert exclusion.
  *
- * Twelve DISTINCT column names, spanning eighteen occurrences across the
+ * Thirteen DISTINCT column names, spanning nineteen occurrences across the
  * schema -- several tables share a name such as `created_by`. Kept honest
  * against neon/migrations/*.sql by the schema-derived test in
  * staff-ownership.test.mjs (not by manual re-grepping -- that's how the
@@ -58,6 +58,10 @@ export const STAFF_HISTORICAL_COLUMNS = [
   "reviewed_by",
   "sent_by",
   "staff_user_id",
+  // Identity-action targets are historical subjects of an operation, not
+  // current ownership. Reassigning this would rewrite who received an invite
+  // or reset and corrupt the audit trail.
+  "target_staff_id",
 ] as const;
 
 /**
