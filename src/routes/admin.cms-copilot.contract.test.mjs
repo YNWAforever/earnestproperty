@@ -26,3 +26,12 @@ test("CMS Copilot panels provide current full-resource fingerprints without wide
   assert.match(panel, /fingerprintValues\?: Record<string, unknown>/);
   assert.match(panel, /buildContentFingerprint\(fingerprintValues \?\? values\)/);
 });
+
+test("CMS Copilot keeps browser form drift separate from the server-owned record fingerprint", () => {
+  const panel = readFileSync("src/components/admin/AdminContentCopilot.tsx", "utf8");
+
+  assert.match(panel, /proposalClientFingerprint/);
+  assert.match(panel, /setProposalClientFingerprint\(generationFingerprint\)/);
+  assert.match(panel, /sourceFingerprint: proposalClientFingerprint/);
+  assert.doesNotMatch(panel, /sourceFingerprint: proposal\.sourceFingerprint/);
+});
