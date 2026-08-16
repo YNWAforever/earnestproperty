@@ -290,7 +290,6 @@ function HomePage() {
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             <SectionHeader
-              eyebrow="精選筍盤"
               title="精選筍盤"
               desc="即日新放盤，隨時 WhatsApp 查詢及預約睇樓。"
               className="text-left"
@@ -323,7 +322,6 @@ function HomePage() {
         <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             <SectionHeader
-              eyebrow="精選樓盤影片"
               title="精選樓盤影片"
               desc="睇樓前先睇片，了解實際景觀、間隔同屋苑環境。"
               className="text-left"
@@ -347,7 +345,6 @@ function HomePage() {
       {/* CORE ESTATES */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader
-          eyebrow="深井核心屋苑"
           title="深井核心屋苑"
           desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉"
         />
