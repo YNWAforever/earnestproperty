@@ -36,7 +36,6 @@ type MegaMenuId = "districts" | "services" | "market";
 type MegaMenuGroup = {
   id: MegaMenuId;
   label: string;
-  purpose: string;
   featured: NavItem[];
   links: NavItem[];
   cta: NavItem;
@@ -58,7 +57,6 @@ const megaMenus: MegaMenuGroup[] = [
   {
     id: "districts",
     label: "地區與屋苑",
-    purpose: "按深井、青山公路、汀九或屋苑入口瀏覽。",
     // Client pruned the district entries to 深井 / 青山公路 / 汀九, so all three
     // sit in `featured` and `links` carries estate entry points only — an estate
     // is not a district.
@@ -89,7 +87,6 @@ const megaMenus: MegaMenuGroup[] = [
   {
     id: "services",
     label: "買租服務",
-    purpose: "由買樓、租樓、放盤估價到聯絡門市。",
     featured: [
       {
         href: "/listings?deal=sale",
@@ -118,7 +115,6 @@ const megaMenus: MegaMenuGroup[] = [
   {
     id: "market",
     label: "市場資訊",
-    purpose: "影片、成交、屋苑開箱與市場分析集中入口。",
     featured: [
       {
         to: "/videos",
@@ -271,10 +267,7 @@ function MegaMenuPanel({ menu, onLinkClick }: { menu: MegaMenuGroup; onLinkClick
     >
       <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
         <div>
-          <p className="px-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {menu.purpose}
-          </p>
-          <div className="mt-2 grid gap-1">
+          <div className="grid gap-1">
             {menu.featured.map((item) => (
               <MegaMenuLink
                 key={itemKey(item)}

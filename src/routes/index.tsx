@@ -208,7 +208,7 @@ function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
         </div>
 
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 sm:py-28 lg:px-8 lg:py-36">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8 lg:py-28">
           <div className="max-w-2xl text-primary-foreground">
             {/* Solid green pill: a translucent fill over the photo scrim tops out
                 at 3.5:1, under the 4.5:1 AA floor for this 12px label. */}
