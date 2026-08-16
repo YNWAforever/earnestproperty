@@ -111,8 +111,14 @@ export function decideReactivation(input: {
 }) {
   if (!hasKnownId(input.authUserId))
     return { allowed: false, reason: "identity-required" } as const;
-  if (input.providerOutcome !== "PROVIDER_OK")
-    return { allowed: false, reason: input.providerOutcome } as const;
+  if (input.providerOutcome !== "PROVIDER_OK") {
+    return {
+      allowed: false,
+      reason: isProviderOutcomeCode(input.providerOutcome)
+        ? input.providerOutcome
+        : "PROVIDER_UNAVAILABLE",
+    } as const;
+  }
   return { allowed: true } as const;
 }
 

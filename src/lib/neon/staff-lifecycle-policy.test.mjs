@@ -108,6 +108,10 @@ test("email normalization and lifecycle transitions are deterministic", () => {
     { allowed: false, reason: "PROVIDER_IDENTITY_NOT_FOUND" },
   );
   assert.deepEqual(
+    policy.decideReactivation({ authUserId: "auth-1", providerOutcome: "raw token=never-expose" }),
+    { allowed: false, reason: "PROVIDER_UNAVAILABLE" },
+  );
+  assert.deepEqual(
     policy.decideReactivation({ authUserId: "auth-1", providerOutcome: "PROVIDER_OK" }),
     { allowed: true },
   );
