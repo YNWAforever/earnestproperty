@@ -25,6 +25,9 @@ import * as jobsServer from "./jobs.server.ts";
 test("permission matrix defaults to deny", () => {
   assert.equal(hasPermission(["agent"], "system.health.read"), true);
   assert.equal(hasPermission(["agent"], "system.jobs.retry"), false);
+  assert.equal(hasPermission(["admin"], "staff.manage"), true);
+  assert.equal(hasPermission(["manager"], "staff.manage"), false);
+  assert.equal(hasPermission(["agent"], "staff.manage"), false);
   assert.equal(hasPermission(["unknown"], "system.health.read"), false);
 });
 
