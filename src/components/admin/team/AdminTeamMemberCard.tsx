@@ -52,7 +52,7 @@ export function AdminTeamMemberCard({
       <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
         <span>
           更新於{" "}
-          {new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium" }).format(
+          {new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
             new Date(member.updatedAt),
           )}
         </span>

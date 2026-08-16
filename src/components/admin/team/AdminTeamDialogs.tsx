@@ -5,10 +5,14 @@ import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { AdminTeamMember } from "@/lib/neon/admin-team.types";
+import type { StaffRole } from "@/lib/neon/auth.server";
 
 export type PendingTeamDialog = {
   action: "invite" | "resend" | "roles" | "suspend" | "reactivate" | "reset";
-  member: Pick<AdminTeamMember, "name" | "email" | "roles">;
+  member: Pick<AdminTeamMember, "name" | "email">;
+  memberId: string | null;
+  originalRoles?: StaffRole[];
+  proposedRoles?: StaffRole[];
 };
 
 export function maskTeamEmail(email: string | null) {
@@ -51,8 +55,14 @@ const copy = {
   },
 } as const;
 
-export function teamDialogCopy(action: PendingTeamDialog["action"]) {
-  return copy[action];
+export function teamDialogCopy(
+  action: PendingTeamDialog["action"],
+  originalRoles: StaffRole[] = [],
+  proposedRoles: StaffRole[] = [],
+) {
+  const adminMembershipChanged =
+    action === "roles" && originalRoles.includes("admin") !== proposedRoles.includes("admin");
+  return { ...copy[action], requiresConfirmation: action === "invite" || adminMembershipChanged };
 }
 
 export function AdminTeamDialogs({
@@ -72,11 +82,11 @@ export function AdminTeamDialogs({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
-  const content = pending ? teamDialogCopy(pending.action) : null;
+  const content = pending
+    ? teamDialogCopy(pending.action, pending.originalRoles, pending.proposedRoles)
+    : null;
   const name = pending?.member.name?.trim() || "未命名成員";
-  const needsExplicitConfirmation =
-    pending?.action === "invite" ||
-    (pending?.action === "roles" && pending.member.roles.includes("admin"));
+  const needsExplicitConfirmation = content?.requiresConfirmation ?? false;
   const disabled =
     needsExplicitConfirmation && typedConfirmation.trim().toUpperCase() !== "CONFIRM";
   const details = useMemo(

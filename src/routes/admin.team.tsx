@@ -15,9 +15,25 @@ import { AdminTeamDialogs, type PendingTeamDialog } from "@/components/admin/tea
 import { AdminTeamFilters, type TeamFilters } from "@/components/admin/team/AdminTeamFilters";
 import { AdminTeamMemberCard } from "@/components/admin/team/AdminTeamMemberCard";
 import { AdminTeamTable } from "@/components/admin/team/AdminTeamTable";
+import {
+  createLatestRequestGuard,
+  mergeAdminTeamPages,
+  teamActionPayload,
+  teamMutationFailure,
+} from "@/components/admin/team/admin-team-route-utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
@@ -37,8 +53,8 @@ type TeamSearch = {
   role?: StaffRole;
   state?: "active" | "suspended" | "invited" | "attention";
   cursor?: string;
+  member?: string;
 };
-type LifecycleReply = { accepted: boolean; retryAfter: string | null; requestId: string };
 const emptyTeam: AdminTeamList = {
   members: [],
   counts: { active: 0, invited: 0, suspended: 0, attention: 0 },
@@ -53,6 +69,11 @@ function parseTeamSearch(search: Record<string, unknown>): TeamSearch {
   if (["active", "suspended", "invited", "attention"].includes(String(search.state)))
     result.state = search.state as TeamSearch["state"];
   if (typeof search.cursor === "string" && search.cursor.trim()) result.cursor = search.cursor;
+  if (
+    typeof search.member === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.member)
+  )
+    result.member = search.member;
   return result;
 }
 
@@ -73,10 +94,6 @@ function safeError(error: unknown) {
     if (error.status === 429) return "操作正在冷卻中，請於可重試時間後再試。";
   }
   return "暫時無法更新團隊資料，請稍後再試。";
-}
-
-function isLifecycleReply(value: unknown): value is LifecycleReply {
-  return Boolean(value) && typeof value === "object" && "accepted" in value && "requestId" in value;
 }
 
 function AdminTeam() {
@@ -108,6 +125,10 @@ function AdminTeam() {
   const [inviteRoles, setInviteRoles] = useState<StaffRole[]>(["agent"]);
   const requestRef = useRef(0);
   const teamRef = useRef<AdminTeamList | null>(null);
+  const detailRef = useRef<AdminTeamMemberDetail | null>(null);
+  const detailRequestRef = useRef(createLatestRequestGuard());
+  const pendingDetailUrlRef = useRef(false);
+  const requestedMemberRef = useRef<string | null>(null);
 
   const replaceSearch = useCallback(
     (next: TeamSearch) => {
@@ -131,8 +152,12 @@ function AdminTeam() {
           : Promise.resolve(emptyTeam),
       ]);
       if (request !== requestRef.current) return;
-      setTeam(nextTeam);
-      teamRef.current = nextTeam;
+      const resolvedTeam =
+        search.cursor && teamRef.current
+          ? mergeAdminTeamPages(teamRef.current, nextTeam)
+          : nextTeam;
+      setTeam(resolvedTeam);
+      teamRef.current = resolvedTeam;
       setCanManage(Boolean(selfResult.members[0]?.roles.includes("admin")));
       setError(null);
       setStale(false);
@@ -143,6 +168,8 @@ function AdminTeam() {
         setForbidden(true);
         setTeam(null);
         teamRef.current = null;
+        detailRequestRef.current.invalidate();
+        detailRef.current = null;
         setDetail(null);
         setSelectedMemberId(null);
       } else {
@@ -168,26 +195,88 @@ function AdminTeam() {
     return () => window.clearTimeout(timer);
   }, [filters.q, queryDraft, replaceSearch, search]);
 
+  const closeConfirmation = useCallback((open: boolean) => {
+    if (!open) {
+      setPending(null);
+      setConfirmError(null);
+      setConfirmText("");
+      setPendingOptions({});
+    }
+  }, []);
+
   const loadDetail = useCallback(
     async (staffId: string) => {
+      const request = detailRequestRef.current.begin();
       setSelectedMemberId(staffId);
+      detailRef.current = null;
+      setDetail(null);
       setDetailLoading(true);
       try {
         const nextDetail = await getAdminTeamMember({ data: { staffId } });
+        if (!detailRequestRef.current.isCurrent(request)) return;
+        detailRef.current = nextDetail;
         setDetail(nextDetail);
         setError(null);
       } catch (reason) {
+        if (!detailRequestRef.current.isCurrent(request)) return;
         if (reason instanceof Response && reason.status === 404) {
           setSelectedMemberId(null);
+          detailRef.current = null;
           setDetail(null);
+          pendingDetailUrlRef.current = true;
+          requestedMemberRef.current = null;
+          replaceSearch({ ...search, member: undefined });
           void loadTeam();
         }
         setError(safeError(reason));
       } finally {
-        setDetailLoading(false);
+        if (detailRequestRef.current.isCurrent(request)) setDetailLoading(false);
       }
     },
-    [loadTeam],
+    [loadTeam, replaceSearch, search],
+  );
+
+  const closeDetail = useCallback(
+    (syncUrl = true) => {
+      detailRequestRef.current.invalidate();
+      detailRef.current = null;
+      setDetail(null);
+      setDetailLoading(false);
+      setSelectedMemberId(null);
+      closeConfirmation(false);
+      if (syncUrl) {
+        pendingDetailUrlRef.current = true;
+        requestedMemberRef.current = null;
+        replaceSearch({ ...search, member: undefined });
+      }
+    },
+    [closeConfirmation, replaceSearch, search],
+  );
+
+  useEffect(() => {
+    if (pendingDetailUrlRef.current) {
+      if ((search.member ?? null) !== requestedMemberRef.current) return;
+      pendingDetailUrlRef.current = false;
+    }
+    if (search.member && search.member !== selectedMemberId) {
+      void loadDetail(search.member);
+      return;
+    }
+    if (!search.member && selectedMemberId) closeDetail(false);
+  }, [closeDetail, loadDetail, search.member, selectedMemberId]);
+
+  const selectMember = useCallback(
+    (staffId: string) => {
+      detailRequestRef.current.invalidate();
+      detailRef.current = null;
+      setDetail(null);
+      setDetailLoading(true);
+      closeConfirmation(false);
+      pendingDetailUrlRef.current = true;
+      requestedMemberRef.current = staffId;
+      replaceSearch({ ...search, member: staffId });
+    },
+    [closeConfirmation, replaceSearch, search],
   );
 
   const refreshAll = useCallback(async () => {
@@ -199,10 +288,6 @@ function AdminTeam() {
     setInviteRoles((roles) =>
       roles.includes(role) ? roles.filter((item) => item !== role) : [...roles, role],
     );
-  const openInvite = () => {
-    setInviteOpen(true);
-    setConfirmError(null);
-  };
   const beginInviteConfirmation = () => {
     if (!inviteEmail.trim() || !inviteRoles.length) {
       setConfirmError("請提供有效電郵並選擇至少一個角色。");
@@ -210,7 +295,10 @@ function AdminTeam() {
     }
     setPending({
       action: "invite",
-      member: { name: inviteName, email: inviteEmail, roles: inviteRoles },
+      member: { name: inviteName, email: inviteEmail },
+      memberId: null,
+      originalRoles: [],
+      proposedRoles: inviteRoles,
     });
     setConfirmError(null);
   };
@@ -223,24 +311,26 @@ function AdminTeam() {
     }
     setPending({
       action,
-      member: { ...detail.member, roles: options.roles ?? detail.member.roles },
+      member: { name: detail.member.name, email: detail.member.email },
+      memberId: detail.member.id,
+      originalRoles: detail.member.roles,
+      proposedRoles: options.roles ?? detail.member.roles,
     });
     setPendingOptions(options);
     setConfirmError(null);
     setConfirmText("");
   };
 
-  const closeConfirmation = (open: boolean) => {
-    if (!open) {
-      setPending(null);
-      setConfirmError(null);
-      setConfirmText("");
-      setPendingOptions({});
-    }
-  };
-
   const confirm = async () => {
     if (!pending) return;
+    const activeDetail = detailRef.current;
+    if (
+      pending.action !== "invite" &&
+      (!activeDetail || activeDetail.member.id !== pending.memberId)
+    ) {
+      setConfirmError("此成員資料已更新，請重新開啟詳情後再試。");
+      return;
+    }
     setMutating(true);
     try {
       let result: unknown;
@@ -248,43 +338,54 @@ function AdminTeam() {
         result = await inviteStaffMember({
           data: { name: inviteName.trim() || null, email: inviteEmail.trim(), roles: inviteRoles },
         });
+      } else if (!activeDetail) return;
+      else if (pending.action === "resend")
+        result = await resendStaffInvitation({ data: { staffId: activeDetail.member.id } });
+      else if (pending.action === "reset")
+        result = await sendStaffPasswordReset({ data: { staffId: activeDetail.member.id } });
+      else if (pending.action === "roles")
+        result = await changeStaffRoles({
+          data: teamActionPayload({
+            action: "roles",
+            staffId: activeDetail.member.id,
+            currentRoles: activeDetail.member.roles,
+            proposedRoles: pending.proposedRoles,
+          }),
+        });
+      else if (pending.action === "suspend") {
+        const suspendPayload = teamActionPayload({
+          action: "suspend",
+          staffId: activeDetail.member.id,
+          currentRoles: activeDetail.member.roles,
+          reassignToStaffId: pendingOptions.reassignToStaffId,
+        });
+        result = await changeStaffActive({
+          data: suspendPayload,
+        });
+      } else if (pending.action === "reactivate")
+        result = await changeStaffActive({
+          data: { staffId: activeDetail.member.id, active: true },
+        });
+      const failure = teamMutationFailure(result);
+      if (failure) {
+        setConfirmError(failure);
+        return;
+      }
+      if (pending.action === "invite") {
         setInviteOpen(false);
         setInviteName("");
         setInviteEmail("");
         setInviteRoles(["agent"]);
-      } else if (!detail) return;
-      else if (pending.action === "resend")
-        result = await resendStaffInvitation({ data: { staffId: detail.member.id } });
-      else if (pending.action === "reset")
-        result = await sendStaffPasswordReset({ data: { staffId: detail.member.id } });
-      else if (pending.action === "roles")
-        result = await changeStaffRoles({
-          data: { staffId: detail.member.id, roles: pendingOptions.roles ?? detail.member.roles },
-        });
-      else if (pending.action === "suspend")
-        result = await changeStaffActive({
-          data: {
-            staffId: detail.member.id,
-            active: false,
-            reassignToStaffId: pendingOptions.reassignToStaffId ?? null,
-          },
-        });
-      else if (pending.action === "reactivate")
-        result = await changeStaffActive({ data: { staffId: detail.member.id, active: true } });
-      if (isLifecycleReply(result) && !result.accepted) {
-        const retry = result.retryAfter
-          ? `可於 ${new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(new Date(result.retryAfter))} 再試。`
-          : "請稍後再試。";
-        setConfirmError(`操作尚未完成。${retry} 參考編號：${result.requestId}`);
-        return;
       }
       toast.success("團隊資料已更新。");
       closeConfirmation(false);
       await refreshAll();
     } catch (reason) {
       if (reason instanceof Response && reason.status === 409) {
+        const conflictMessage = "資料已被其他管理員更新，已重新載入最新資料，請再次確認。";
         closeConfirmation(false);
-        if (selectedMemberId) await loadDetail(selectedMemberId);
+        if (pending.memberId) await loadDetail(pending.memberId);
+        setError(conflictMessage);
       } else {
         setConfirmError(safeError(reason));
       }
@@ -307,10 +408,72 @@ function AdminTeam() {
       description="搜尋、檢視並安全管理帳戶存取權。"
       actions={
         canManage ? (
-          <Button onClick={openInvite} type="button">
-            <Plus aria-hidden="true" />
-            邀請成員
-          </Button>
+          <Dialog
+            onOpenChange={(open) => {
+              setInviteOpen(open);
+              if (!open) setConfirmError(null);
+            }}
+            open={inviteOpen}
+          >
+            <DialogTrigger asChild>
+              <Button type="button">
+                <Plus aria-hidden="true" />
+                邀請成員
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>邀請成員</DialogTitle>
+                <DialogDescription>邀請電郵會由帳戶服務安全發送。</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="invite-name">姓名</Label>
+                  <Input
+                    id="invite-name"
+                    onChange={(event) => setInviteName(event.target.value)}
+                    value={inviteName}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label htmlFor="invite-email">電郵</Label>
+                  <Input
+                    id="invite-email"
+                    onChange={(event) => setInviteEmail(event.target.value)}
+                    type="email"
+                    value={inviteEmail}
+                  />
+                </div>
+                <fieldset>
+                  <legend className="text-sm font-medium">角色</legend>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {(["admin", "manager", "agent"] as StaffRole[]).map((role) => (
+                      <Label className="flex items-center gap-2" key={role}>
+                        <Checkbox
+                          checked={inviteRoles.includes(role)}
+                          onCheckedChange={() => toggleInviteRole(role)}
+                        />
+                        {role === "admin" ? "管理員" : role === "manager" ? "主管" : "經紀"}
+                      </Label>
+                    ))}
+                  </div>
+                </fieldset>
+                {confirmError ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {confirmError}
+                  </p>
+                ) : null}
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setInviteOpen(false)} type="button" variant="outline">
+                  取消
+                </Button>
+                <Button onClick={beginInviteConfirmation} type="button">
+                  下一步
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         ) : undefined
       }
     >
@@ -361,7 +524,7 @@ function AdminTeam() {
           <>
             <AdminTeamTable
               members={directory.members}
-              onSelect={(id) => void loadDetail(id)}
+              onSelect={selectMember}
               selectedMemberId={selectedMemberId}
             />
             <div className="grid gap-3 md:hidden">
@@ -370,7 +533,7 @@ function AdminTeam() {
                   canManage={canManage}
                   key={member.id}
                   member={member}
-                  onSelect={(id) => void loadDetail(id)}
+                  onSelect={selectMember}
                   selected={member.id === selectedMemberId}
                 />
               ))}
@@ -398,10 +561,7 @@ function AdminTeam() {
       <AdminDetailPanel
         description="帳戶身份、存取權與安全活動。"
         onOpenChange={(open) => {
-          if (!open) {
-            setSelectedMemberId(null);
-            setDetail(null);
-          }
+          if (!open) closeDetail();
         }}
         open={Boolean(selectedMemberId)}
         title={detail?.member.name ?? "成員詳情"}
@@ -422,58 +582,6 @@ function AdminTeam() {
           />
         ) : null}
       </AdminDetailPanel>
-      {canManage && inviteOpen ? (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-slate-950/50 p-4">
-          <div
-            aria-modal="true"
-            className="w-full max-w-lg rounded-lg bg-background p-5 shadow-xl"
-            role="dialog"
-          >
-            <h2 className="text-lg font-semibold">邀請成員</h2>
-            <div className="mt-4 grid gap-3">
-              <label>
-                <span className="mb-1 block text-sm font-medium">姓名</span>
-                <Input onChange={(event) => setInviteName(event.target.value)} value={inviteName} />
-              </label>
-              <label>
-                <span className="mb-1 block text-sm font-medium">電郵</span>
-                <Input
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  type="email"
-                  value={inviteEmail}
-                />
-              </label>
-              <fieldset>
-                <legend className="text-sm font-medium">角色</legend>
-                <div className="mt-2 flex flex-wrap gap-3">
-                  {(["admin", "manager", "agent"] as StaffRole[]).map((role) => (
-                    <label className="flex items-center gap-2" key={role}>
-                      <Checkbox
-                        checked={inviteRoles.includes(role)}
-                        onCheckedChange={() => toggleInviteRole(role)}
-                      />
-                      {role === "admin" ? "管理員" : role === "manager" ? "主管" : "經紀"}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              {confirmError ? (
-                <p className="text-sm text-destructive" role="alert">
-                  {confirmError}
-                </p>
-              ) : null}
-            </div>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button onClick={() => setInviteOpen(false)} type="button" variant="outline">
-                取消
-              </Button>
-              <Button onClick={beginInviteConfirmation} type="button">
-                下一步
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       <AdminTeamDialogs
         error={confirmError}
         isPending={mutating}

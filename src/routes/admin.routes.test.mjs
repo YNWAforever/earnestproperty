@@ -14,7 +14,7 @@ test("Team route is noindexed and keeps URL-backed directory state", () => {
 
   assert.match(source, /createFileRoute\("\/admin\/team"\)/);
   assert.match(source, /name:\s*"robots",\s*content:\s*"noindex"/);
-  for (const key of ["q", "role", "state", "cursor"]) {
+  for (const key of ["q", "role", "state", "cursor", "member"]) {
     assert.match(source, new RegExp(`search\\.${key}`));
   }
   assert.match(source, /useSearch\(/);
@@ -38,6 +38,18 @@ test("Team route delegates lifecycle mutations to the Task 4 server boundary", (
     source,
     /localStorage|sessionStorage|window\.location|token|provider response/i,
   );
+});
+
+test("Team route removes member data for forbidden callers and carries edited lifecycle input", () => {
+  const source = read("src/routes/admin.team.tsx");
+
+  assert.match(source, /reason\.status === 403[\s\S]*setTeam\(null\)[\s\S]*setDetail\(null\)/);
+  assert.match(source, /if \(forbidden\)[\s\S]*AdminError/);
+  assert.match(source, /teamActionPayload\(\{[\s\S]*proposedRoles: pending\.proposedRoles/);
+  assert.match(source, /reassignToStaffId: pendingOptions\.reassignToStaffId/);
+  assert.match(source, /detailRequestRef\.current\.begin\(\)/);
+  assert.match(source, /mergeAdminTeamPages\(teamRef\.current, nextTeam\)/);
+  assert.match(source, /teamMutationFailure\(result\)/);
 });
 
 test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {

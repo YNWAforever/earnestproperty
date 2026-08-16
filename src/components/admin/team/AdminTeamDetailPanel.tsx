@@ -4,6 +4,13 @@ import { Activity, KeyRound, Mail, PauseCircle, RotateCcw, ShieldCheck } from "l
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
 import type { StaffRole } from "@/lib/neon/auth.server";
 
@@ -102,22 +109,21 @@ export function AdminTeamDetailPanel({
           目前有 {detail.ownership.total} 項工作需要在停用前交接。
         </p>
         {active && canManage ? (
-          <label className="mt-3 block text-sm">
-            <span className="mb-1 block font-medium">交接給</span>
-            <select
-              className="h-11 w-full rounded-md border bg-background px-3"
-              aria-label="選擇工作交接人"
-              onChange={(event) => setSuccessorId(event.target.value)}
-              value={successorId}
-            >
-              <option value="">請在確認前選擇成員</option>
-              {successors.map((successor) => (
-                <option key={successor.id} value={successor.id}>
-                  {successor.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="mt-3 grid gap-1.5 text-sm">
+            <Label htmlFor="team-successor">交接給</Label>
+            <Select onValueChange={setSuccessorId} value={successorId}>
+              <SelectTrigger aria-label="選擇工作交接人" id="team-successor">
+                <SelectValue placeholder="請在確認前選擇成員" />
+              </SelectTrigger>
+              <SelectContent>
+                {successors.map((successor) => (
+                  <SelectItem key={successor.id} value={successor.id}>
+                    {successor.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ) : null}
       </section>
       <section aria-labelledby="team-activity-heading" className="rounded-lg border bg-card p-4">

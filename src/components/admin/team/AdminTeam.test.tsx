@@ -8,6 +8,12 @@ import { maskTeamEmail, teamDialogCopy } from "./AdminTeamDialogs";
 import { AdminTeamMemberCard } from "./AdminTeamMemberCard";
 import { AdminTeamStatusBadge } from "./AdminTeamStatusBadge";
 import { AdminTeamTable } from "./AdminTeamTable";
+import {
+  createLatestRequestGuard,
+  mergeAdminTeamPages,
+  teamActionPayload,
+  teamMutationFailure,
+} from "./admin-team-route-utils";
 import type { AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
 
 const member = {
@@ -67,6 +73,11 @@ describe("Admin Team responsive directory", () => {
     expect(table("tr[aria-current='true']")).toHaveLength(1);
     expect(card("[aria-current='true']")).toHaveLength(1);
     expect(card("button[aria-label='更多操作：陳大文']")).toHaveLength(1);
+    expect(card.text()).toContain(
+      new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
+        new Date(member.updatedAt),
+      ),
+    );
 
     for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "已發送"]) {
       expect(table.text()).toContain(value);
@@ -115,6 +126,12 @@ describe("Admin Team role-aware detail and confirmations", () => {
     expect(manager.text()).toContain("唯讀");
   });
 
+  test("Admin membership confirmation covers both promotion and demotion", () => {
+    expect(teamDialogCopy("roles", ["agent"], ["admin", "agent"]).requiresConfirmation).toBe(true);
+    expect(teamDialogCopy("roles", ["admin", "agent"], ["agent"]).requiresConfirmation).toBe(true);
+    expect(teamDialogCopy("roles", ["manager"], ["agent"]).requiresConfirmation).toBe(false);
+  });
+
   test("confirmation copy identifies the member and keeps password recovery provider-owned", () => {
     const reset = teamDialogCopy("reset");
 
@@ -136,5 +153,77 @@ describe("Admin Team role-aware detail and confirmations", () => {
 
     expect($.text()).toContain("重新啟用帳戶");
     expect($.text()).not.toContain("發送密碼重設連結");
+  });
+});
+
+describe("Admin Team request safety", () => {
+  test("latest detail selection wins and invalidation suppresses late responses", () => {
+    const guard = createLatestRequestGuard();
+    const first = guard.begin();
+    const second = guard.begin();
+
+    expect(guard.isCurrent(first)).toBe(false);
+    expect(guard.isCurrent(second)).toBe(true);
+    guard.invalidate();
+    expect(guard.isCurrent(second)).toBe(false);
+  });
+
+  test("keyset page merge appends unique members while preserving current counts", () => {
+    const next = { ...member, id: "22222222-2222-4222-8222-222222222222", name: "李小明" };
+    const merged = mergeAdminTeamPages(
+      {
+        members: [member],
+        counts: { active: 1, invited: 0, suspended: 0, attention: 0 },
+        nextCursor: "old",
+      },
+      {
+        members: [member, next],
+        counts: { active: 2, invited: 0, suspended: 0, attention: 0 },
+        nextCursor: "new",
+      },
+    );
+
+    expect(merged.members.map((item) => item.id)).toEqual([member.id, next.id]);
+    expect(merged.counts.active).toBe(2);
+    expect(merged.nextCursor).toBe("new");
+  });
+
+  test("failed invitations and cooldowns stay in their dialog with safe recovery text", () => {
+    expect(teamMutationFailure({ invitationState: "failed", requestId: "request-1" })).toContain(
+      "邀請未能發送",
+    );
+    expect(
+      teamMutationFailure({
+        accepted: false,
+        retryAfter: "2026-08-16T10:00:00.000Z",
+        requestId: "request-2",
+      }),
+    ).toContain("可於");
+    expect(
+      teamMutationFailure({ accepted: true, retryAfter: null, requestId: "request-3" }),
+    ).toBeNull();
+  });
+
+  test("role and successor confirmations retain the selected payload", () => {
+    expect(
+      teamActionPayload({
+        action: "roles",
+        staffId: member.id,
+        currentRoles: ["agent"],
+        proposedRoles: ["admin", "manager"],
+      }),
+    ).toEqual({ staffId: member.id, roles: ["admin", "manager"] });
+    expect(
+      teamActionPayload({
+        action: "suspend",
+        staffId: member.id,
+        currentRoles: ["agent"],
+        reassignToStaffId: "22222222-2222-4222-8222-222222222222",
+      }),
+    ).toEqual({
+      staffId: member.id,
+      active: false,
+      reassignToStaffId: "22222222-2222-4222-8222-222222222222",
+    });
   });
 });
