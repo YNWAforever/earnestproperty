@@ -371,6 +371,7 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       requireAdmin(actor);
       const requestId = nextRequestId();
       const member = await memberById(input.staffId);
+      const currentNow = now();
       const persisted = await latestActionFor({
         targetStaffId: member.id,
         actions: ["invite", "resend_invitation"],
@@ -378,14 +379,39 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       const previous = await actions.findIdentityActionCooldown({
         targetStaffId: member.id,
         action: "resend_invitation",
-        now: now().toISOString(),
+        now: currentNow.toISOString(),
       });
+      const localCooldown =
+        persisted && ["pending", "succeeded", "retryable_failure"].includes(persisted.state)
+          ? cooldownRetryAfter({
+              action: "invitation",
+              now: currentNow,
+              lastRequestedAt: persisted.createdAt,
+            })
+          : null;
+      if (localCooldown || previous?.retryAfter)
+        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
+      if (
+        persisted?.state === "succeeded" &&
+        persisted.providerExpiresAt &&
+        new Date(persisted.providerExpiresAt) <= currentNow
+      ) {
+        throw new Response("Invitation is expired; invite the staff member again.", {
+          status: 400,
+        });
+      }
+      if (
+        (!persisted && !previous) ||
+        (persisted?.state === "terminal_failure" && previous?.state !== "retryable_failure")
+      ) {
+        throw new Response("Invitation is not available to resend.", { status: 400 });
+      }
       const operation = await beginAction({
         action: "resend_invitation",
         actor,
         member,
         requestId,
-        keyValue: cooldownWindowKey("invitation", member.id, now()),
+        keyValue: cooldownWindowKey("invitation", member.id, currentNow),
       });
       if (operation.isExisting) {
         if (operation.state === "terminal_failure") {
@@ -396,39 +422,6 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           retryAfter: null,
           requestId,
         };
-      }
-      const localCooldown = persisted
-        ? cooldownRetryAfter({
-            action: "invitation",
-            now: now(),
-            lastRequestedAt: persisted.createdAt,
-          })
-        : null;
-      if (localCooldown || previous?.retryAfter)
-        await actions.markIdentityActionTerminal({
-          operationId: operation.operationId,
-          safeErrorCode: "IDENTITY_ACTION_COOLDOWN_ACTIVE",
-        });
-      if (localCooldown || previous?.retryAfter)
-        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
-      if (
-        persisted?.state === "succeeded" &&
-        persisted.providerExpiresAt &&
-        new Date(persisted.providerExpiresAt) <= now()
-      ) {
-        throw new Response("Invitation is expired; invite the staff member again.", {
-          status: 400,
-        });
-      }
-      if (
-        (!persisted && !previous) ||
-        (persisted?.state === "terminal_failure" && previous?.state !== "retryable_failure")
-      ) {
-        await actions.markIdentityActionTerminal({
-          operationId: operation.operationId,
-          safeErrorCode: "PROVIDER_INVITATION_NOT_FOUND",
-        });
-        throw new Response("Invitation is not available to resend.", { status: 400 });
       }
       try {
         const invitationState = await saveProviderInvitation(
@@ -491,6 +484,7 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       const member = await memberById(input.staffId);
       if (!member.active || !member.authUserId)
         throw new Response("Staff identity is unavailable.", { status: 400 });
+      const currentNow = now();
       const persisted = await latestActionFor({
         targetStaffId: member.id,
         actions: ["password_reset"],
@@ -498,14 +492,24 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       const previous = await actions.findIdentityActionCooldown({
         targetStaffId: member.id,
         action: "password_reset",
-        now: now().toISOString(),
+        now: currentNow.toISOString(),
       });
+      const localCooldown =
+        persisted && ["pending", "succeeded", "retryable_failure"].includes(persisted.state)
+          ? cooldownRetryAfter({
+              action: "password-reset",
+              now: currentNow,
+              lastRequestedAt: persisted.createdAt,
+            })
+          : null;
+      if (localCooldown || previous?.retryAfter)
+        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
       const operation = await beginAction({
         action: "password_reset",
         actor,
         member,
         requestId,
-        keyValue: cooldownWindowKey("password-reset", member.id, now()),
+        keyValue: cooldownWindowKey("password-reset", member.id, currentNow),
       });
       if (operation.isExisting) {
         return {
@@ -514,20 +518,6 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           requestId,
         };
       }
-      const localCooldown = persisted
-        ? cooldownRetryAfter({
-            action: "password-reset",
-            now: now(),
-            lastRequestedAt: persisted.createdAt,
-          })
-        : null;
-      if (localCooldown || previous?.retryAfter)
-        await actions.markIdentityActionTerminal({
-          operationId: operation.operationId,
-          safeErrorCode: "IDENTITY_ACTION_COOLDOWN_ACTIVE",
-        });
-      if (localCooldown || previous?.retryAfter)
-        return { accepted: false, retryAfter: localCooldown ?? previous.retryAfter, requestId };
       try {
         await dependencies.provider.requestPasswordReset({
           email: member.email,

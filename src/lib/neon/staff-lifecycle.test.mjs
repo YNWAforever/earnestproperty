@@ -26,6 +26,7 @@ function fixture(overrides = {}) {
     activeChanges: [],
   };
   const staff = new Map();
+  const latestActions = new Map();
   const actionRows = new Map();
   const actionRowsById = new Map();
   const clock = { current: new Date("2026-08-16T00:00:00.000Z") };
@@ -94,6 +95,9 @@ function fixture(overrides = {}) {
         const row = staff.get(params[0]);
         return row ? [row] : [];
       }
+      if (statement.includes("FROM staff_identity_actions")) {
+        return latestActions.get(params[0]) ?? [];
+      }
       return [];
     },
     transactionRows: async (statements) => {
@@ -135,7 +139,7 @@ function fixture(overrides = {}) {
     requestId: () => "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     ...overrides,
   });
-  return { service, calls, staff, identityActions, clock };
+  return { service, calls, staff, latestActions, identityActions, clock };
 }
 
 test("invite normalizes email, upserts one local member/action, and forwards only provider identity fields", async () => {
@@ -224,6 +228,68 @@ test("resend and reset reuse in-flight action keys only inside their cooldown wi
   reset.clock.current = new Date("2026-08-16T00:11:00.000Z");
   await reset.service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
   assert.equal(reset.calls.provider.filter((call) => call.method === "reset").length, 2);
+});
+
+test("persisted active cooldowns return their ISO retry time before creating an action", async () => {
+  const resend = fixture();
+  resend.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  resend.latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "succeeded",
+      created_at: "2026-08-16T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: "2026-08-17T00:00:00.000Z",
+    },
+  ]);
+  resend.clock.current = new Date("2026-08-16T00:01:00.000Z");
+  const resendResult = await resend.service.resendStaffInvitation(
+    { staffId: targetId },
+    admin,
+    request,
+  );
+  assert.deepEqual(resendResult, {
+    accepted: false,
+    retryAfter: "2026-08-16T00:15:00.000Z",
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.equal(resend.calls.actions.filter((call) => call.method === "begin").length, 0);
+  assert.equal(resend.calls.provider.length, 0);
+
+  const reset = fixture();
+  reset.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  reset.latestActions.set(targetId, [
+    {
+      action: "password_reset",
+      state: "succeeded",
+      created_at: "2026-08-16T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+  reset.clock.current = new Date("2026-08-16T00:01:00.000Z");
+  const resetResult = await reset.service.sendStaffPasswordReset(
+    { staffId: targetId },
+    admin,
+    request,
+  );
+  assert.deepEqual(resetResult, {
+    accepted: false,
+    retryAfter: "2026-08-16T00:10:00.000Z",
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.equal(reset.calls.actions.filter((call) => call.method === "begin").length, 0);
+  assert.equal(reset.calls.provider.length, 0);
 });
 
 test("a post-delivery audit failure does not downgrade a succeeded invitation", async () => {
@@ -369,7 +435,7 @@ test("password reset rejects unsafe targets and only sends a provider reset link
     providerExpiresAt: null,
   });
   const cooldown = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
-  assert.equal(cooldown.accepted, true);
+  assert.equal(cooldown.accepted, false);
   await assert.rejects(
     () => service.sendStaffPasswordReset({ staffId: admin.staffId }, admin, request),
     (error) => error instanceof Response && error.status === 400,
