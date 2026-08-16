@@ -195,6 +195,26 @@ test("invalid list and member inputs fail closed with 400", async () => {
   );
 });
 
+test("admin Team cursors require canonical base64url and real UTC microsecond timestamps", () => {
+  const valid = Buffer.from(
+    JSON.stringify({ createdAt: "2028-02-29T23:59:59.123456Z", id: staffId }),
+  ).toString("base64url");
+  assert.deepEqual(decodeAdminTeamCursor(valid), {
+    createdAt: "2028-02-29T23:59:59.123456Z",
+    id: staffId,
+  });
+
+  const impossibleDate = Buffer.from(
+    JSON.stringify({ createdAt: "2026-02-30T12:00:00.123456Z", id: staffId }),
+  ).toString("base64url");
+  for (const cursor of [valid + "=", valid + " ", impossibleDate]) {
+    assert.throws(
+      () => decodeAdminTeamCursor(cursor),
+      (error) => error instanceof Response && error.status === 400,
+    );
+  }
+});
+
 test("server read boundary authorizes admin and manager before loading the data module", async () => {
   const request = new Request("https://earnest.test/admin/team");
   const calls = [];
@@ -223,19 +243,35 @@ test("server read boundary authorizes admin and manager before loading the data 
   assert.equal(calls[0].receivedRequest, request);
   assert.deepEqual(calls[0].roles, ["admin", "manager"]);
 
-  let loaded = false;
-  const denied = createAdminTeamServerBoundary({
-    requireStaffAccess: async () => {
-      throw new Response("Forbidden", { status: 403 });
-    },
-    loadReadModel: async () => {
-      loaded = true;
-      return assert.fail("data module must not load after authorization failure");
-    },
-  });
-  await assert.rejects(
-    () => denied.getAdminTeamMember({ staffId }, request),
-    (error) => error instanceof Response && error.status === 403,
-  );
-  assert.equal(loaded, false);
+  for (const deniedCase of [
+    { name: "Agent", status: 403, body: "Forbidden" },
+    { name: "unauthenticated", status: 401, body: "Unauthorized" },
+  ]) {
+    let loaded = false;
+    let queryCalls = 0;
+    const denied = createAdminTeamServerBoundary({
+      requireStaffAccess: async () => {
+        throw new Response(deniedCase.body, { status: deniedCase.status });
+      },
+      loadReadModel: async () => {
+        loaded = true;
+        return {
+          listAdminTeam: async () => {
+            queryCalls += 1;
+            return assert.fail("read must not run after authorization failure");
+          },
+          getAdminTeamMember: async () => {
+            queryCalls += 1;
+            return assert.fail("read must not run after authorization failure");
+          },
+        };
+      },
+    });
+    await assert.rejects(
+      () => denied.getAdminTeamMember({ staffId }, request),
+      (error) => error instanceof Response && error.status === deniedCase.status,
+    );
+    assert.equal(loaded, false, `${deniedCase.name} must not load the read module`);
+    assert.equal(queryCalls, 0, `${deniedCase.name} must not query the read model`);
+  }
 });

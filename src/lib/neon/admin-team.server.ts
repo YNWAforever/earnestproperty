@@ -31,6 +31,7 @@ const actionTypes = new Set([
   "session_revocation",
 ]);
 const actionStates = new Set(["pending", "succeeded", "retryable_failure", "terminal_failure"]);
+const base64urlPattern = /^[A-Za-z0-9_-]+$/;
 
 function invalid(message = "Invalid Team query."): never {
   throw new Response(message, { status: 400 });
@@ -69,16 +70,36 @@ export function encodeAdminTeamCursor(cursor: Cursor) {
   return Buffer.from(JSON.stringify(cursor)).toString("base64url");
 }
 
+function isRealUtcMicrosecondTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})Z$/.exec(value);
+  if (!match) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  if (year < 1 || month < 1 || month > 12 || hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day >= 1 && day <= daysInMonth[month - 1];
+}
+
 export function decodeAdminTeamCursor(cursor: string | null | undefined): Cursor | null {
   if (!cursor) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as Record<
-      string,
-      unknown
-    >;
+    if (!base64urlPattern.test(cursor)) return invalid("Invalid Team cursor.");
+    const bytes = Buffer.from(cursor, "base64url");
+    if (bytes.length === 0 || bytes.toString("base64url") !== cursor) {
+      return invalid("Invalid Team cursor.");
+    }
+    const parsed = JSON.parse(bytes.toString("utf8")) as Record<string, unknown>;
     if (
-      typeof parsed.createdAt !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(parsed.createdAt) ||
+      !isRealUtcMicrosecondTimestamp(parsed.createdAt) ||
       typeof parsed.id !== "string" ||
       !uuidPattern.test(parsed.id)
     ) {
