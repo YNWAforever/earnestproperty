@@ -119,6 +119,57 @@ test("OpenCode client retries network failures twice", async () => {
   assert.equal(attempts, 3);
 });
 
+test("OpenCode client gives slow provider generations a full minute", async () => {
+  const observedTimeouts = [];
+  const originalTimeout = AbortSignal.timeout;
+  AbortSignal.timeout = (milliseconds) => {
+    observedTimeouts.push(milliseconds);
+    return new AbortController().signal;
+  };
+
+  try {
+    const client = createOpenCodeGoClient({
+      config: enabledConfig,
+      sleepImpl: async () => undefined,
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }), {
+          status: 200,
+        }),
+    });
+
+    const result = await client.generateProposal({ system: "rules", prompt: "record" });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(observedTimeouts, [60_000]);
+  } finally {
+    AbortSignal.timeout = originalTimeout;
+  }
+});
+
+test("OpenCode client does not retry a timed-out generation", async () => {
+  let attempts = 0;
+  const delays = [];
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    sleepImpl: async (milliseconds) => {
+      delays.push(milliseconds);
+    },
+    fetchImpl: async () => {
+      attempts += 1;
+      const error = new Error("provider generation exceeded the timeout");
+      error.name = "TimeoutError";
+      throw error;
+    },
+  });
+
+  const result = await client.generateProposal({ system: "rules", prompt: "record" });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "OPENCODE_GO_TIMEOUT");
+  assert.equal(attempts, 1);
+  assert.deepEqual(delays, []);
+});
+
 test("OpenCode client retries 5xx twice", async () => {
   let attempts = 0;
   const client = createOpenCodeGoClient({

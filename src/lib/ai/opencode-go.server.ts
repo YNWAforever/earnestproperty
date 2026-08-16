@@ -3,7 +3,7 @@ import "@tanstack/react-start/server-only";
 import { extractStructuredJson } from "./content-copilot.ts";
 import type { ContentCopilotConfig } from "./content-copilot-config.server.ts";
 
-const OPENCODE_GO_TIMEOUT_MS = 20_000;
+const OPENCODE_GO_TIMEOUT_MS = 60_000;
 const OPENCODE_GO_MAX_RETRIES = 2;
 const OPENCODE_GO_RETRY_BASE_DELAY_MS = 300;
 const OPENCODE_GO_MAX_RESPONSE_CHARS = 120_000;
@@ -125,6 +125,7 @@ async function fetchWithRetry(
       return response;
     } catch (error) {
       lastError = error;
+      if (isTimeoutError(error)) throw error;
       if (attempt < OPENCODE_GO_MAX_RETRIES) {
         await sleepImpl(OPENCODE_GO_RETRY_BASE_DELAY_MS * 2 ** attempt);
         continue;
