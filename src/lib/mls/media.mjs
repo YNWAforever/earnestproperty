@@ -1710,6 +1710,7 @@ export async function prepareListingMedia(rawInput) {
       continue;
     }
 
+    let orphanedUploadUrl = null;
     try {
       const downloaded = await fetchImage({
         candidateUrl: candidate.url,
@@ -1722,7 +1723,6 @@ export async function prepareListingMedia(rawInput) {
       throwIfAborted(signal);
       const contentHash = sha256(downloaded.bytes);
       let asset = localAssets.get(contentHash) ?? null;
-      let orphanedUploadUrl = null;
       if (!asset) {
         asset = await abortRace(() => repository.findMediaByHash(contentHash, { signal }), signal);
         throwIfAborted(signal);
@@ -1760,6 +1760,7 @@ export async function prepareListingMedia(rawInput) {
             contentType: downloaded.mime,
             size: downloaded.bytes.byteLength,
           });
+          orphanedUploadUrl = blob.url;
           uploadCount += 1;
         } catch {
           throwIfAborted(signal);
@@ -1775,11 +1776,17 @@ export async function prepareListingMedia(rawInput) {
           ownerId: null,
           createdBy: null,
         };
-        const registered = await abortRace(
-          () => repository.registerOwnedMedia(registration, { signal }),
-          signal,
-        );
-        throwIfAborted(signal);
+        let registered;
+        try {
+          registered = await abortRace(
+            () => repository.registerOwnedMedia(registration, { signal }),
+            signal,
+          );
+          throwIfAborted(signal);
+        } catch {
+          throwIfAborted(signal);
+          fail("owned_media_registration_failed");
+        }
         const registrationOutcome = validateRegistrationOutcome(registered, registration);
         asset = registrationOutcome.asset;
         orphanedUploadUrl = registrationOutcome.orphanedUploadUrl;
@@ -1807,6 +1814,7 @@ export async function prepareListingMedia(rawInput) {
       reasons.push(code);
       await saveResult(
         resultFor(candidate, identity, {
+          orphanedUploadUrl,
           eligibility: code === "blob_upload_failed" ? "upload_failed" : "rejected",
           rejectionReason: code,
         }),

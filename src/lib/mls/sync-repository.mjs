@@ -30,6 +30,20 @@ const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+const CREDENTIAL_VALUE_PATTERN_SOURCE = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)`;
+const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
+const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)\s+)?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  "gi",
+);
+const STANDALONE_SCHEME_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(bearer|basic)\s+${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  "gi",
+);
+const NAMED_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  "gi",
+);
 const OBSERVATION_KEYS = new Set([
   "schemaVersion",
   "source",
@@ -50,6 +64,29 @@ const OBSERVATION_KEYS = new Set([
   "quarantineReasons",
   "parseWarnings",
 ]);
+const OWNED_MEDIA_INPUT_KEYS = new Set([
+  "url",
+  "pathname",
+  "contentType",
+  "sizeBytes",
+  "contentHash",
+  "ownerType",
+  "ownerId",
+  "createdBy",
+]);
+const MEDIA_RECORD_INPUT_KEYS = new Set([
+  "observationId",
+  "propertyId",
+  "sourceUrl",
+  "contentHash",
+  "ownedMediaAssetId",
+  "detectedMime",
+  "sizeBytes",
+  "width",
+  "height",
+  "eligibility",
+  "rejectionReason",
+]);
 
 function isPlainRecord(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -63,6 +100,11 @@ function hasExactKeys(value, keys) {
   return (
     ownKeys.length === keys.size && ownKeys.every((key) => typeof key === "string" && keys.has(key))
   );
+}
+
+function exactInputSnapshot(value, keys) {
+  if (!hasExactKeys(value, keys)) return null;
+  return Object.freeze(Object.fromEntries([...keys].map((key) => [key, value[key]])));
 }
 
 function isUuid(value) {
@@ -452,6 +494,10 @@ function subtractDays(dateValue, count) {
   return date.toISOString().slice(0, 10);
 }
 
+function hongKongMidnightUtc(dateValue) {
+  return new Date(`${dateValue}T00:00:00+08:00`).toISOString();
+}
+
 function redactedText(value, label, { max = 1_000, nullable = true } = {}) {
   if (value == null) {
     if (nullable) return null;
@@ -468,16 +514,9 @@ function redactedText(value, label, { max = 1_000, nullable = true } = {}) {
   }
   text = text
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[redacted]@")
-    .replace(/\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)\s+)?[^\s,;]+/gi, "$1=[redacted]")
-    .replace(
-      /\b((?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
-      "$1=[redacted]",
-    )
-    .replace(/\b(bearer|basic)\s+(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1 [redacted]")
-    .replace(
-      /\b((?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd)\s+(?:(?:is|was)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
-      "$1 [redacted]",
-    )
+    .replace(AUTHORIZATION_CREDENTIAL_PATTERN, "$1=[redacted]")
+    .replace(NAMED_CREDENTIAL_PATTERN, "$1 [redacted]")
+    .replace(STANDALONE_SCHEME_CREDENTIAL_PATTERN, "$1 [redacted]")
     .replace(/\b(?:sk|pk)_[A-Za-z0-9_-]{8,}\b/g, "[redacted]");
   if (text.length > max) text = `${text.slice(0, Math.max(0, max - 1))}…`;
   return text;
@@ -969,7 +1008,7 @@ export function createSyncRepository(options = {}) {
       if (Date.parse(validated.baseline_approved_at) > Date.now()) {
         throw new TypeError("shadow approval timestamp cannot be in the future");
       }
-      if (validated.baseline_approved_at >= `${beforeDate}T00:00:00.000Z`) {
+      if (validated.baseline_approved_at >= hongKongMidnightUtc(beforeDate)) {
         throw new TypeError("shadow approval must predate the prospective publish date");
       }
     }
@@ -1207,21 +1246,32 @@ export function createSyncRepository(options = {}) {
     }
     const seen = new Set();
     return links.map((link) => {
+      if (!isPlainRecord(link)) throw new TypeError("proposed link is invalid");
+      const snapshot = Object.freeze({
+        propertyId: link.propertyId,
+        source: link.source,
+        externalId: link.externalId,
+        dealType: link.dealType,
+        matchKey: link.matchKey,
+        observedAt: link.observedAt,
+      });
       const valid =
-        isPlainRecord(link) &&
-        isUuid(link.propertyId) &&
-        isSource(link.source) &&
-        isExternalId(link.externalId) &&
-        isDealType(link.dealType) &&
-        typeof link.matchKey === "string" &&
-        link.matchKey ===
-          buildMatchKey(link.matchKey.slice(link.matchKey.indexOf(":") + 1), link.dealType) &&
-        isTimestamp(link.observedAt);
+        isUuid(snapshot.propertyId) &&
+        isSource(snapshot.source) &&
+        isExternalId(snapshot.externalId) &&
+        isDealType(snapshot.dealType) &&
+        typeof snapshot.matchKey === "string" &&
+        snapshot.matchKey ===
+          buildMatchKey(
+            snapshot.matchKey.slice(snapshot.matchKey.indexOf(":") + 1),
+            snapshot.dealType,
+          );
       if (!valid) throw new TypeError("proposed link is invalid");
-      const identity = `${link.source}\u0000${link.externalId}\u0000${link.dealType}`;
+      requireObservationTimestamp(snapshot.observedAt, "proposed link observedAt");
+      const identity = `${snapshot.source}\u0000${snapshot.externalId}\u0000${snapshot.dealType}`;
       if (seen.has(identity)) throw new TypeError("duplicate proposed link identity");
       seen.add(identity);
-      return link;
+      return snapshot;
     });
   }
 
@@ -1598,29 +1648,32 @@ export function createSyncRepository(options = {}) {
   }
 
   function validateOwnedMediaInput(input) {
-    if (!isPlainRecord(input)) throw new TypeError("owned media input is invalid");
-    requireUrl(input.url, "owned media URL");
-    requireSafeText(input.pathname, "owned media pathname", { max: 1_024 });
+    const snapshot = exactInputSnapshot(input, OWNED_MEDIA_INPUT_KEYS);
+    if (snapshot == null) {
+      throw new TypeError("owned media input is invalid");
+    }
+    requireUrl(snapshot.url, "owned media URL");
+    requireSafeText(snapshot.pathname, "owned media pathname", { max: 1_024 });
     if (
-      input.contentType != null &&
-      (typeof input.contentType !== "string" ||
-        !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(input.contentType))
+      snapshot.contentType !== null &&
+      (typeof snapshot.contentType !== "string" ||
+        !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(snapshot.contentType))
     ) {
       throw new TypeError("owned media contentType is invalid");
     }
     if (
-      input.sizeBytes != null &&
-      (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0)
+      snapshot.sizeBytes !== null &&
+      (!Number.isSafeInteger(snapshot.sizeBytes) || snapshot.sizeBytes < 0)
     ) {
       throw new TypeError("owned media sizeBytes is invalid");
     }
-    if (typeof input.contentHash !== "string" || !HASH_PATTERN.test(input.contentHash)) {
+    if (typeof snapshot.contentHash !== "string" || !HASH_PATTERN.test(snapshot.contentHash)) {
       throw new TypeError("owned media content hash is invalid");
     }
-    requireSafeText(input.ownerType, "owned media ownerType", { max: 160 });
-    if (input.ownerId != null) requireUuid(input.ownerId, "owned media ownerId");
-    if (input.createdBy != null) requireUuid(input.createdBy, "owned media createdBy");
-    return input;
+    requireSafeText(snapshot.ownerType, "owned media ownerType", { max: 160 });
+    if (snapshot.ownerId !== null) requireUuid(snapshot.ownerId, "owned media ownerId");
+    if (snapshot.createdBy !== null) requireUuid(snapshot.createdBy, "owned media createdBy");
+    return snapshot;
   }
 
   async function registerOwnedMedia(suppliedInput, operation) {
@@ -1636,12 +1689,12 @@ export function createSyncRepository(options = {}) {
       [
         input.url,
         input.pathname,
-        input.contentType ?? null,
-        input.sizeBytes ?? null,
+        input.contentType,
+        input.sizeBytes,
         input.contentHash,
         input.ownerType,
-        input.ownerId ?? null,
-        input.createdBy ?? null,
+        input.ownerId,
+        input.createdBy,
       ],
       "register owned media",
       operation,
@@ -1663,10 +1716,7 @@ export function createSyncRepository(options = {}) {
       throw new TypeError("registered media winner was missing or duplicated");
     }
     const asset = validateMediaRow(rows[0], { expectedHash: input.contentHash });
-    if (
-      asset.contentType !== (input.contentType ?? null) ||
-      asset.sizeBytes !== (input.sizeBytes ?? null)
-    ) {
+    if (asset.contentType !== input.contentType || asset.sizeBytes !== input.sizeBytes) {
       throw new TypeError("registered media winner metadata does not match the requested content");
     }
     const insertedId = insertedRows[0]?.id ?? null;
@@ -1676,8 +1726,8 @@ export function createSyncRepository(options = {}) {
         asset.url !== input.url ||
         asset.pathname !== input.pathname ||
         asset.ownerType !== input.ownerType ||
-        asset.ownerId !== (input.ownerId ?? null) ||
-        asset.createdBy !== (input.createdBy ?? null))
+        asset.ownerId !== input.ownerId ||
+        asset.createdBy !== input.createdBy)
     ) {
       throw new TypeError("inserted media ownership binding does not match the request");
     }
@@ -1688,7 +1738,7 @@ export function createSyncRepository(options = {}) {
   }
 
   function optionalPositiveInteger(value, label) {
-    if (value == null) return null;
+    if (value === null) return null;
     if (!Number.isInteger(value) || value <= 0 || value > MAX_INT) {
       throw new TypeError(`${label} is invalid`);
     }
@@ -1696,47 +1746,53 @@ export function createSyncRepository(options = {}) {
   }
 
   function validateMediaRecordInput(input) {
-    if (!isPlainRecord(input)) throw new TypeError("media record input is invalid");
-    requireUuid(input.observationId, "media record observationId");
-    if (input.propertyId != null) requireUuid(input.propertyId, "media record propertyId");
-    requireUrl(input.sourceUrl, "media record source URL");
-    if (input.contentHash != null && !HASH_PATTERN.test(input.contentHash)) {
+    const snapshot = exactInputSnapshot(input, MEDIA_RECORD_INPUT_KEYS);
+    if (snapshot == null) {
+      throw new TypeError("media record input is invalid");
+    }
+    requireUuid(snapshot.observationId, "media record observationId");
+    if (snapshot.propertyId !== null) requireUuid(snapshot.propertyId, "media record propertyId");
+    requireUrl(snapshot.sourceUrl, "media record source URL");
+    if (
+      snapshot.contentHash !== null &&
+      (typeof snapshot.contentHash !== "string" || !HASH_PATTERN.test(snapshot.contentHash))
+    ) {
       throw new TypeError("media record content hash is invalid");
     }
-    if (input.ownedMediaAssetId != null) {
-      requireUuid(input.ownedMediaAssetId, "media record ownedMediaAssetId");
+    if (snapshot.ownedMediaAssetId !== null) {
+      requireUuid(snapshot.ownedMediaAssetId, "media record ownedMediaAssetId");
     }
     if (
-      input.detectedMime != null &&
-      (typeof input.detectedMime !== "string" ||
-        !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(input.detectedMime))
+      snapshot.detectedMime !== null &&
+      (typeof snapshot.detectedMime !== "string" ||
+        !/^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(snapshot.detectedMime))
     ) {
       throw new TypeError("media record detectedMime is invalid");
     }
     if (
-      input.sizeBytes != null &&
-      (!Number.isSafeInteger(input.sizeBytes) || input.sizeBytes < 0)
+      snapshot.sizeBytes !== null &&
+      (!Number.isSafeInteger(snapshot.sizeBytes) || snapshot.sizeBytes < 0)
     ) {
       throw new TypeError("media record sizeBytes is invalid");
     }
-    optionalPositiveInteger(input.width, "media record width");
-    optionalPositiveInteger(input.height, "media record height");
-    if (!MEDIA_ELIGIBILITIES.has(input.eligibility)) {
+    optionalPositiveInteger(snapshot.width, "media record width");
+    optionalPositiveInteger(snapshot.height, "media record height");
+    if (!MEDIA_ELIGIBILITIES.has(snapshot.eligibility)) {
       throw new TypeError("media record eligibility is invalid");
     }
     if (
-      input.eligibility === "eligible" &&
-      (!input.contentHash ||
-        !input.ownedMediaAssetId ||
-        !input.detectedMime ||
-        input.sizeBytes == null)
+      snapshot.eligibility === "eligible" &&
+      (!snapshot.contentHash ||
+        !snapshot.ownedMediaAssetId ||
+        !snapshot.detectedMime ||
+        snapshot.sizeBytes === null)
     ) {
       throw new TypeError("eligible media requires persisted hash, asset, MIME, and size evidence");
     }
-    if (input.rejectionReason != null) {
-      requireSafeText(input.rejectionReason, "media rejectionReason", { max: 500 });
+    if (snapshot.rejectionReason !== null) {
+      requireSafeText(snapshot.rejectionReason, "media rejectionReason", { max: 500 });
     }
-    return input;
+    return snapshot;
   }
 
   function validatePersistedMediaRecord(row, expected) {
@@ -1772,16 +1828,16 @@ export function createSyncRepository(options = {}) {
     }
     const matches =
       row.observation_id === expected.observationId &&
-      row.property_id === (expected.propertyId ?? null) &&
+      row.property_id === expected.propertyId &&
       row.source_url === expected.sourceUrl &&
-      row.content_hash === (expected.contentHash ?? null) &&
-      row.owned_media_asset_id === (expected.ownedMediaAssetId ?? null) &&
-      row.detected_mime === (expected.detectedMime ?? null) &&
-      sizeBytes === (expected.sizeBytes ?? null) &&
-      row.width === (expected.width ?? null) &&
-      row.height === (expected.height ?? null) &&
+      row.content_hash === expected.contentHash &&
+      row.owned_media_asset_id === expected.ownedMediaAssetId &&
+      row.detected_mime === expected.detectedMime &&
+      sizeBytes === expected.sizeBytes &&
+      row.width === expected.width &&
+      row.height === expected.height &&
       row.eligibility === expected.eligibility &&
-      row.rejection_reason === (expected.rejectionReason ?? null);
+      row.rejection_reason === expected.rejectionReason;
     if (!matches) {
       throw new TypeError("persisted media record provenance does not match the request");
     }
@@ -1824,16 +1880,16 @@ export function createSyncRepository(options = {}) {
        RETURNING id`,
       [
         input.observationId,
-        input.propertyId ?? null,
+        input.propertyId,
         input.sourceUrl,
-        input.contentHash ?? null,
-        input.ownedMediaAssetId ?? null,
-        input.detectedMime ?? null,
-        input.sizeBytes ?? null,
-        input.width ?? null,
-        input.height ?? null,
+        input.contentHash,
+        input.ownedMediaAssetId,
+        input.detectedMime,
+        input.sizeBytes,
+        input.width,
+        input.height,
         input.eligibility,
-        input.rejectionReason ?? null,
+        input.rejectionReason,
       ],
       "save media record",
       operation,

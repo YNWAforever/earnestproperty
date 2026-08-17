@@ -1831,18 +1831,53 @@ test("registration outcomes reject bare, extra, unknown, cross-origin, and drift
   ];
 
   for (const registerOwnedMedia of cases) {
+    const repository = fakeRepository({ registerOwnedMedia });
+    const blobStore = fakeBlobStore();
     const result = await prepareListingMedia(
       mediaFixture({
         bytes,
-        repository: fakeRepository({ registerOwnedMedia }),
-        blobStore: fakeBlobStore(),
+        repository,
+        blobStore,
       }),
     );
     assert.equal(result.publishable, false);
     assert.deepEqual(result.images, []);
     assert.ok(result.reasons.includes("owned_media_binding_invalid"));
+    assert.equal(
+      result.candidateResults[0].orphanedUploadUrl,
+      `https://owned.example/${blobStore.puts[0].pathname}`,
+    );
+    assert.equal(repository.state.records.length, 1);
   }
   assert.equal(hash.length, 64);
+});
+
+test("non-abort registration failures retain bounded orphaned-upload evidence", async () => {
+  const rawError = "repository failure with sensitive and unbounded implementation detail";
+  const repository = fakeRepository({
+    registerOwnedMedia() {
+      throw new Error(rawError);
+    },
+  });
+  const blobStore = fakeBlobStore();
+
+  const result = await prepareListingMedia(
+    mediaFixture({ bytes: webpBytes(), repository, blobStore }),
+  );
+
+  assert.equal(result.publishable, false);
+  assert.equal(result.uploadCount, 1);
+  assert.deepEqual(result.images, []);
+  assert.ok(result.reasons.includes("owned_media_registration_failed"));
+  assert.ok(result.reasons.every((reason) => reason.length <= 500));
+  assert.equal(
+    result.candidateResults[0].orphanedUploadUrl,
+    `https://owned.example/${blobStore.puts[0].pathname}`,
+  );
+  assert.equal(result.candidateResults[0].rejectionReason, "owned_media_registration_failed");
+  assert.equal(repository.state.records.length, 1);
+  assert.equal(repository.state.records[0].rejectionReason, "owned_media_registration_failed");
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(rawError));
 });
 
 test("forged or quarantined observations are blocked before any media side effect", async () => {
