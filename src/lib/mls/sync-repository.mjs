@@ -62,8 +62,8 @@ const STANDALONE_BASIC_CREDENTIAL_PATTERN = new RegExp(
   "gi",
 );
 const NAMED_CREDENTIAL_PATTERN = new RegExp(
-  String.raw`\b(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
-  "gi",
+  String.raw`(?<![\p{L}\p{N}\p{Pc}$-])(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  "giu",
 );
 const OBSERVATION_KEYS = new Set([
   "schemaVersion",

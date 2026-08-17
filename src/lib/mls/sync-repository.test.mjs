@@ -1036,6 +1036,55 @@ test("operator diagnostics redact wrapped Basic credentials and punctuation term
   assert.match(stored, /ordinary Basic requirements remain useful/);
 });
 
+test("named credential labels never start inside hyphenated prose or consume the next label", async () => {
+  const labels = ["token", "secret", "password", "access-token", "refresh-token", "api-key"];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const failures = [];
+
+  for (const [index, label] of labels.entries()) {
+    const nextLabel = labels[(index + 1) % labels.length];
+    const firstSecret = `SENT_CHAIN_${index}_FIRST`;
+    const nextSecret = `SENT_CHAIN_${index}_NEXT`;
+    const adjacent = `after-${label}`;
+    const trailing = `kept-context-${index}`;
+    await repository.finishRun(RUN_ID, {
+      status: "failed",
+      ...evaluation(),
+      failureCode: "adapter_failed",
+      failureSummary: `${label}: ${firstSecret} ${adjacent} ${nextLabel}: ${nextSecret} ${trailing}`,
+    });
+    const stored = client.calls.at(-1).params[6];
+    if (
+      stored.includes(firstSecret) ||
+      stored.includes(nextSecret) ||
+      !stored.includes(adjacent) ||
+      !stored.includes(trailing)
+    ) {
+      failures.push({ label, nextLabel, stored });
+    }
+  }
+
+  assert.deepEqual(failures, []);
+});
+
+test("named credential labels never start inside Unicode identifiers", async () => {
+  const firstSecret = "SENT_UNICODE_FIRST";
+  const nextSecret = "SENT_UNICODE_NEXT";
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  await createSyncRepository({ client }).finishRun(RUN_ID, {
+    status: "failed",
+    ...evaluation(),
+    failureCode: "adapter_failed",
+    failureSummary: `token: ${firstSecret} 前token secret: ${nextSecret} 保留上下文`,
+  });
+
+  const stored = client.calls[0].params[6];
+  assert.equal(stored.includes(firstSecret), false);
+  assert.equal(stored.includes(nextSecret), false);
+  assert.match(stored, /前token|保留上下文/);
+});
+
 test("run evidence rejects malformed JSON, statuses, UUIDs, and database misses", async () => {
   const client = fakeClient(() => result());
   const repository = createSyncRepository({ client });
