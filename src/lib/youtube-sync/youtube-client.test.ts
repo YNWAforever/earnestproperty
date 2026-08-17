@@ -103,6 +103,67 @@ test("client resolves the canonical uploads playlist and exhausts pages", async 
   assert.doesNotMatch(fake.urls.join("\n"), /UUtwcj9hcQoKVpKEZY-ZgnwA/);
 });
 
+test("client accepts consistent declared totals across first middle and final pages", async () => {
+  const fake = queuedFetch([
+    channelResponse(),
+    json({
+      items: [playlistItem("AAAAAAAAAAA")],
+      nextPageToken: "page-2",
+      pageInfo: { totalResults: 3, resultsPerPage: 1 },
+    }),
+    json({
+      items: [playlistItem("BBBBBBBBBBB")],
+      nextPageToken: "page-3",
+      pageInfo: { totalResults: 3, resultsPerPage: 1 },
+    }),
+    json({
+      items: [playlistItem("CCCCCCCCCCC")],
+      pageInfo: { totalResults: 3, resultsPerPage: 1 },
+    }),
+  ]);
+  const pages: number[] = [];
+  const result = await createYouTubeClient({
+    apiKey,
+    channelId,
+    fetchImpl: fake.fetchImpl,
+  }).listUploads({
+    onPage: async ({ pageNumber }) => {
+      pages.push(pageNumber);
+    },
+  });
+
+  assert.deepEqual(
+    result.videos.map((item) => item.videoId),
+    ["AAAAAAAAAAA", "BBBBBBBBBBB", "CCCCCCCCCCC"],
+  );
+  assert.deepEqual(pages, [1, 2, 3]);
+  assert.equal(result.boundaryFound, false);
+});
+
+test("terminal declared-total contradictions fail before the page callback", async () => {
+  const fake = queuedFetch([
+    channelResponse(),
+    json({
+      items: [playlistItem("AAAAAAAAAAA")],
+      pageInfo: { totalResults: 2, resultsPerPage: 1 },
+    }),
+  ]);
+  let pageCallbacks = 0;
+
+  await assert.rejects(
+    () =>
+      createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({
+        onPage: async () => {
+          pageCallbacks += 1;
+        },
+      }),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+  );
+
+  assert.equal(pageCallbacks, 0);
+});
+
 test("incremental pagination includes the prior boundary and stops", async () => {
   const fake = queuedFetch([
     channelResponse(),
@@ -113,6 +174,7 @@ test("incremental pagination includes the prior boundary and stops", async () =>
         playlistItem("AAAAAAAAAAA"),
       ],
       nextPageToken: "older-page",
+      pageInfo: { totalResults: 4, resultsPerPage: 3 },
     }),
   ]);
   const client = createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl });

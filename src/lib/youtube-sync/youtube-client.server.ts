@@ -256,6 +256,8 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
     let pageToken: string | null = null;
     let pageNumber = 0;
     let boundaryFound = false;
+    let declaredTotal: number | null = null;
+    let cumulativeProviderItems = 0;
 
     do {
       const url = new URL(`${API_ROOT}/playlistItems`);
@@ -308,6 +310,26 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
         );
       }
       if (next) seenTokens.add(next);
+      if (Object.prototype.hasOwnProperty.call(body, "pageInfo")) {
+        const pageTotal = (body.pageInfo as Record<string, number>).totalResults;
+        if (declaredTotal !== null && pageTotal !== declaredTotal) {
+          throw new YouTubeSyncError(
+            "youtube_invalid_snapshot",
+            "The provider returned an invalid YouTube snapshot.",
+          );
+        }
+        declaredTotal = pageTotal;
+      }
+      cumulativeProviderItems += pageVideos.length;
+      if (
+        (declaredTotal !== null && cumulativeProviderItems > declaredTotal) ||
+        (next && declaredTotal !== null && cumulativeProviderItems >= declaredTotal)
+      ) {
+        throw new YouTubeSyncError(
+          "youtube_invalid_snapshot",
+          "The provider returned an invalid YouTube snapshot.",
+        );
+      }
       const boundaryIndex = listInput.boundaryVideoId
         ? pageVideos.findIndex((item) => item.videoId === listInput.boundaryVideoId)
         : -1;
@@ -315,6 +337,17 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
       videos.push(...pageVideos.slice(0, acceptedOnPage));
       if (boundaryIndex !== -1) {
         boundaryFound = true;
+      }
+      if (
+        !next &&
+        !boundaryFound &&
+        declaredTotal !== null &&
+        cumulativeProviderItems !== declaredTotal
+      ) {
+        throw new YouTubeSyncError(
+          "youtube_invalid_snapshot",
+          "The provider returned an invalid YouTube snapshot.",
+        );
       }
       await listInput.onPage?.({ pageNumber, itemCount: acceptedOnPage });
       if (boundaryFound) break;

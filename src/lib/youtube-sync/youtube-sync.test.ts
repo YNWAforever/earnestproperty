@@ -196,6 +196,25 @@ test("malformed provider envelopes never reach snapshot reconciliation", async (
       ],
     },
     { items: [], nextPageToken: 1 },
+    {
+      items: [
+        {
+          snippet: {
+            channelId,
+            videoOwnerChannelId: channelId,
+            title: "Latest title",
+            description: "YouTube description",
+            publishedAt: "2026-08-01T00:00:00.000Z",
+            resourceId: { videoId: "AAAAAAAAAAA" },
+          },
+          contentDetails: {
+            videoId: "AAAAAAAAAAA",
+            videoPublishedAt: "2026-08-01T00:00:00.000Z",
+          },
+        },
+      ],
+      pageInfo: { totalResults: 2, resultsPerPage: 1 },
+    },
   ]) {
     const responses = [
       {
