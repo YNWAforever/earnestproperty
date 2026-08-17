@@ -3,6 +3,16 @@
  * so the cron handler had no checking on the sync payload at all. */
 
 export declare const DEFAULT_SEED_URLS: string[];
+export declare const DEFAULT_OLD_SITE_SEED_URLS: Array<{
+  url: string;
+  dealType: "sale" | "rent";
+}>;
+
+export declare function discoverOldSitePages(input: {
+  fetchText: (url: string) => Promise<string>;
+  seedUrls?: Array<string | { url: string; dealType: "sale" | "rent" }>;
+  maxPages?: number;
+}): Promise<string[]>;
 
 export type MlsListingRow = Record<string, unknown>;
 
