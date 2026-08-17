@@ -785,7 +785,104 @@ test("exactly one valid observation key may establish a new target when inputs o
   assert.equal(result.validationEvidence.targetMatchKey, "sale:C003097");
 });
 
+test("a persisted UUID cannot be transplanted to publish ordinary automated fields", () => {
+  const listed = observation(SOURCE_28HSE, "listed", "C003097", "sale", {
+    title_zh: "Repository observation",
+    price: 10_000_000,
+  });
+  const other = observation(SOURCE_28HSE, "other", "C003097", "sale", {
+    title_zh: "Transplanted observation",
+    price: 99_000_000,
+  });
+  const transplanted = { ...other, id: listed.id };
+  const result = reconcileProperty({
+    current: {},
+    observations: [transplanted],
+    persistedObservationRefs: [persistedObservationRef(listed)],
+  });
+
+  assert.equal(result.canonical.canonical_property_no, "C003097");
+  assert.equal(result.fields.title_zh.value, null);
+  assert.equal(result.fields.price.value, null);
+  assert.equal(result.fields.title_zh.observationId, null);
+  assert.ok(result.validationEvidence.blockingCodes.includes("observation_provenance_unbound"));
+  assert.ok(result.quarantines.some(({ code }) => code === "observation_provenance_unbound"));
+});
+
+test("an unpersisted observation cannot replace safe current field values", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_zh: "Unpersisted title",
+    price: 12_000_000,
+  });
+  const result = reconcileProperty({
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      title_zh: "Current title",
+      price: 10_000_000,
+    },
+    fieldStates: {
+      title_zh: {
+        last_published_value: "Current title",
+        override_value: null,
+        active_override: false,
+      },
+      price: {
+        last_published_value: 10_000_000,
+        override_value: null,
+        active_override: false,
+      },
+    },
+    observations: [source],
+  });
+
+  assert.equal(result.fields.title_zh.value, "Current title");
+  assert.equal(result.fields.title_zh.source, "current");
+  assert.equal(result.fields.price.value, 10_000_000);
+  assert.equal(result.fields.price.source, "current");
+  assert.ok(result.validationEvidence.blockingCodes.includes("observation_provenance_unbound"));
+});
+
+test("exact persisted refs preserve source precedence and canonical provenance IDs", () => {
+  const old = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    title_zh: "Old-site title",
+    price: 10_500_000,
+    description: "Old-site description",
+  });
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_zh: "28Hse title",
+    price: 10_800_000,
+    description: "Forbidden 28Hse description",
+  });
+  const result = reconcileProperty({
+    current: {},
+    observations: [old, source],
+    persistedObservationRefs: [persistedObservationRef(old), persistedObservationRef(source)],
+  });
+
+  assert.equal(result.fields.title_zh.source, SOURCE_28HSE);
+  assert.equal(result.fields.title_zh.observationId, source.id);
+  assert.equal(result.fields.price.source, SOURCE_28HSE);
+  assert.equal(result.fields.price.observationId, source.id);
+  assert.equal(result.fields.description.source, SOURCE_OLD_SITE);
+  assert.equal(result.fields.description.observationId, old.id);
+  for (const decision of Object.values(result.fields)) {
+    if (decision.observationId != null) {
+      assert.ok([source.id, old.id].includes(decision.observationId));
+    }
+  }
+});
+
 test("staff override wins, then 28Hse, then old site; 28Hse never supplies description", () => {
+  const overrideOld = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    price: 10_500_000,
+    description: "Old source updated copy",
+  });
+  const overrideSource = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    price: 10_800_000,
+    description: "Forbidden platform copy",
+  });
   const result = reconcileProperty({
     current: {
       id: "p1",
@@ -806,15 +903,10 @@ test("staff override wins, then 28Hse, then old site; 28Hse never supplies descr
         active_override: true,
       },
     },
-    observations: [
-      observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
-        price: 10_500_000,
-        description: "Old source updated copy",
-      }),
-      observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
-        price: 10_800_000,
-        description: "Forbidden platform copy",
-      }),
+    observations: [overrideOld, overrideSource],
+    persistedObservationRefs: [
+      persistedObservationRef(overrideOld),
+      persistedObservationRef(overrideSource),
     ],
   });
 
@@ -823,6 +915,14 @@ test("staff override wins, then 28Hse, then old site; 28Hse never supplies descr
   assert.equal(result.fields.description.value, "Staff copy");
   assert.equal(result.fields.description.source, "staff_override");
 
+  const automatedOld = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    price: 10_500_000,
+    description: "Permitted old-site copy",
+  });
+  const automatedSource = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    price: 10_800_000,
+    description: "Forbidden platform copy",
+  });
   const automated = reconcileProperty({
     current: {
       id: "p1",
@@ -839,15 +939,10 @@ test("staff override wins, then 28Hse, then old site; 28Hse never supplies descr
         active_override: false,
       },
     },
-    observations: [
-      observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
-        price: 10_500_000,
-        description: "Permitted old-site copy",
-      }),
-      observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
-        price: 10_800_000,
-        description: "Forbidden platform copy",
-      }),
+    observations: [automatedOld, automatedSource],
+    persistedObservationRefs: [
+      persistedObservationRef(automatedOld),
+      persistedObservationRef(automatedSource),
     ],
   });
   assert.equal(automated.fields.price.value, 10_800_000);
@@ -857,6 +952,10 @@ test("staff override wins, then 28Hse, then old site; 28Hse never supplies descr
 });
 
 test("missing and quarantined higher-priority values fall back without erasing current values", () => {
+  const old = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    title_en: "Old English title",
+    address: "",
+  });
   const quarantined28 = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
     price: null,
     title_en: "Must be ignored",
@@ -869,13 +968,8 @@ test("missing and quarantined higher-priority values fall back without erasing c
       address: "Current address",
       orientation: "East",
     },
-    observations: [
-      observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
-        title_en: "Old English title",
-        address: "",
-      }),
-      quarantined28,
-    ],
+    observations: [old, quarantined28],
+    persistedObservationRefs: [persistedObservationRef(old)],
   });
 
   assert.equal(quarantined28.validationState, "quarantined");
@@ -890,8 +984,24 @@ test("same-priority source conflicts are deterministic and explicitly quarantine
   const old = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
     address: "Old-site fallback",
   });
-  const forward = reconcileProperty({ current: {}, observations: [z, old, a] });
-  const reverse = reconcileProperty({ current: {}, observations: [a, old, z] });
+  const forward = reconcileProperty({
+    current: {},
+    observations: [z, old, a],
+    persistedObservationRefs: [
+      persistedObservationRef(z),
+      persistedObservationRef(old),
+      persistedObservationRef(a),
+    ],
+  });
+  const reverse = reconcileProperty({
+    current: {},
+    observations: [a, old, z],
+    persistedObservationRefs: [
+      persistedObservationRef(a),
+      persistedObservationRef(old),
+      persistedObservationRef(z),
+    ],
+  });
 
   assert.equal(forward.fields.address.value, "Old-site fallback");
   assert.equal(forward.fields.address.source, SOURCE_OLD_SITE);
@@ -915,6 +1025,7 @@ test("source-value conflicts block proposal validation through direct and explic
   const result = reconcileProperty({
     current,
     observations: [a, z],
+    persistedObservationRefs: [persistedObservationRef(a), persistedObservationRef(z)],
     currentOwnedImages: current.images,
   });
 
@@ -954,6 +1065,7 @@ test("returned validation evidence cannot mutate attached authoritative evidence
   const result = reconcileProperty({
     current,
     observations: [a, z],
+    persistedObservationRefs: [persistedObservationRef(a), persistedObservationRef(z)],
     currentOwnedImages: current.images,
   });
 
@@ -971,6 +1083,7 @@ test("serialized reconciliation evidence cannot strip a recorded conflict", () =
   const result = reconcileProperty({
     current,
     observations: [a, z],
+    persistedObservationRefs: [persistedObservationRef(a), persistedObservationRef(z)],
     currentOwnedImages: current.images,
   });
   const proposal = JSON.parse(JSON.stringify(result.canonical));
@@ -1082,7 +1195,7 @@ test("mixed automated arrays reject the whole field or prepared record", () => {
   const result = reconcileProperty({
     current: {},
     observations: [source, old],
-    persistedObservationRefs: [persistedObservationRef(source)],
+    persistedObservationRefs: [persistedObservationRef(source), persistedObservationRef(old)],
     preparedImages: [preparedRecord(source, ["https://owned.invalid/listing.jpg", false])],
   });
   assert.deepEqual(result.fields.features.value, ["Old-site fallback"]);
@@ -1112,6 +1225,12 @@ test("normalization and reconciliation do not mutate their inputs", () => {
 });
 
 test("estate slugs resolve only through the provided map and unknown slugs cannot erase fallback", () => {
+  const old = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    estate_slug: "bal-residence",
+  });
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    estate_slug: "unknown-slug",
+  });
   const result = reconcileProperty({
     current: {
       id: "p1",
@@ -1127,19 +1246,16 @@ test("estate slugs resolve only through the provided map and unknown slugs canno
       },
     },
     estateIdsBySlug: new Map([["bal-residence", "estate-1"]]),
-    observations: [
-      observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
-        estate_slug: "bal-residence",
-      }),
-      observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
-        estate_slug: "unknown-slug",
-      }),
-    ],
+    observations: [old, source],
+    persistedObservationRefs: [persistedObservationRef(old), persistedObservationRef(source)],
   });
 
   assert.equal(result.fields.estate_id.value, "estate-1");
   assert.notEqual(result.fields.estate_id.value, "bal-residence");
 
+  const unresolvedSource = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    estate_slug: "unknown-slug",
+  });
   const unresolved = reconcileProperty({
     current: {
       id: "p1",
@@ -1147,11 +1263,8 @@ test("estate slugs resolve only through the provided map and unknown slugs canno
       deal_type: "sale",
       estate_id: "current-estate",
     },
-    observations: [
-      observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
-        estate_slug: "unknown-slug",
-      }),
-    ],
+    observations: [unresolvedSource],
+    persistedObservationRefs: [persistedObservationRef(unresolvedSource)],
     estateIdsBySlug: new Map(),
   });
   assert.equal(unresolved.fields.estate_id.value, "current-estate");
@@ -1414,6 +1527,9 @@ test("explicit null and empty staff values are sticky overrides, not missing val
 });
 
 test("initial backfill protects a differing current value and seeds the reviewed source baseline", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    price: 10_000_000,
+  });
   const result = reconcileProperty({
     current: {
       id: "p1",
@@ -1422,7 +1538,8 @@ test("initial backfill protects a differing current value and seeds the reviewed
       price: 12_000_000,
     },
     fieldStates: {},
-    observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { price: 10_000_000 })],
+    observations: [source],
+    persistedObservationRefs: [persistedObservationRef(source)],
   });
 
   assert.equal(result.fields.price.source, "staff_override");
@@ -1435,6 +1552,9 @@ test("initial backfill protects a differing current value and seeds the reviewed
 });
 
 test("an absent current property is not confused with an explicit undefined staff edit", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_en: "New",
+  });
   const absent = reconcileProperty({
     current: { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
     fieldStates: {
@@ -1444,7 +1564,8 @@ test("an absent current property is not confused with an explicit undefined staf
         active_override: false,
       },
     },
-    observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { title_en: "New" })],
+    observations: [source],
+    persistedObservationRefs: [persistedObservationRef(source)],
   });
 
   assert.equal(absent.fields.title_en.source, SOURCE_28HSE);
@@ -1452,6 +1573,9 @@ test("an absent current property is not confused with an explicit undefined staf
 });
 
 test("a field-state record without a published baseline does not invent an override", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_en: "Source",
+  });
   const result = reconcileProperty({
     current: {
       id: "p1",
@@ -1460,7 +1584,8 @@ test("a field-state record without a published baseline does not invent an overr
       title_en: "Existing",
     },
     fieldStates: { title_en: { active_override: false } },
-    observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { title_en: "Source" })],
+    observations: [source],
+    persistedObservationRefs: [persistedObservationRef(source)],
   });
 
   assert.equal(result.fields.title_en.source, SOURCE_28HSE);

@@ -367,13 +367,7 @@ function addBlockingCode(blockingCodes, code) {
   if (!blockingCodes.includes(code)) blockingCodes.push(code);
 }
 
-function preparedImageCandidates(
-  records,
-  observations,
-  persistedObservationRefs,
-  quarantines,
-  blockingCodes,
-) {
+function preparedImageCandidates(records, observationBindings, quarantines, blockingCodes) {
   const candidates = [];
   if (records == null) return candidates;
   if (!Array.isArray(records)) {
@@ -386,15 +380,10 @@ function preparedImageCandidates(
       ? normalizeCanonicalFieldValue("images", record.images)
       : undefined;
     const recordObservationId = isPlainRecord(record) ? normalizeUuid(record.observationId) : null;
-    const persistedRef =
-      recordObservationId == null ? null : persistedObservationRefs.get(recordObservationId);
-    const matchingIds =
-      persistedRef != null
-        ? observations.filter((observation) =>
-            observationMatchesPersistedRef(observation, persistedRef),
-          )
-        : [];
-    const matched = matchingIds.length === 1 ? matchingIds[0] : null;
+    const matchingBindings =
+      recordObservationId == null ? [] : (observationBindings.byId.get(recordObservationId) ?? []);
+    const matchedBinding = matchingBindings.length === 1 ? matchingBindings[0] : null;
+    const matched = matchedBinding?.observation;
     const identityMatches =
       matched &&
       record.source === matched.source &&
@@ -412,7 +401,7 @@ function preparedImageCandidates(
     candidates.push({
       source: matched.source,
       externalId: String(matched.externalId),
-      observationId: explicitObservationId(matched),
+      observationId: matchedBinding.observationId,
       value: images,
     });
   }
@@ -430,13 +419,44 @@ function sourceValue(observation, field, estateIdsBySlug) {
   return normalizeCanonicalFieldValue(field, observation.fields?.[field]);
 }
 
-function candidatesForField(field, observations, estateIdsBySlug, preparedCandidates) {
+function bindPersistedObservations(
+  observations,
+  persistedObservationRefs,
+  quarantines,
+  blockingCodes,
+) {
+  const bound = [];
+  const byId = new Map();
+  for (const observation of observations) {
+    const id = explicitObservationId(observation);
+    const persistedRef = id == null ? null : persistedObservationRefs.get(id);
+    if (!observationMatchesPersistedRef(observation, persistedRef)) {
+      quarantines.push({
+        code: "observation_provenance_unbound",
+        observationId: id ?? observationId(observation),
+        source: observation.source,
+        externalId: observation.externalId,
+        matchKey: observation.matchKey,
+      });
+      addBlockingCode(blockingCodes, "observation_provenance_unbound");
+      continue;
+    }
+    const binding = { observation, observationId: persistedRef.id };
+    bound.push(binding);
+    const matchingBindings = byId.get(persistedRef.id) ?? [];
+    matchingBindings.push(binding);
+    byId.set(persistedRef.id, matchingBindings);
+  }
+  return { observations: bound, byId };
+}
+
+function candidatesForField(field, boundObservations, estateIdsBySlug, preparedCandidates) {
   if (field === "images") return preparedCandidates;
-  return observations
-    .map((observation) => ({
+  return boundObservations
+    .map(({ observation, observationId: persistedId }) => ({
       source: observation.source,
       externalId: String(observation.externalId),
-      observationId: observationId(observation),
+      observationId: persistedId,
       value: sourceValue(observation, field, estateIdsBySlug),
     }))
     .filter((candidate) => automatedPresent(candidate.value))
@@ -595,8 +615,7 @@ function persistedObservationRefsFromInput(input, conflicts, quarantines, blocki
 
 function linkedOldSiteObservation(
   input,
-  observations,
-  persistedObservationRefs,
+  observationBindings,
   conflicts,
   quarantines,
   blockingCodes,
@@ -608,22 +627,13 @@ function linkedOldSiteObservation(
   if (Array.isArray(linkedObservationIds)) {
     for (const value of linkedObservationIds) {
       const id = normalizeUuid(value);
-      if (id == null || !persistedObservationRefs.has(id)) invalid = true;
+      if (id == null || !observationBindings.byId.has(id)) invalid = true;
       else linkedIds.add(id);
     }
   }
 
-  const byId = new Map();
-  for (const observation of observations) {
-    const id = explicitObservationId(observation);
-    const persistedRef = id == null ? null : persistedObservationRefs.get(id);
-    if (!observationMatchesPersistedRef(observation, persistedRef)) continue;
-    const rows = byId.get(id) ?? [];
-    rows.push(observation);
-    byId.set(id, rows);
-  }
   for (const id of linkedIds) {
-    if (byId.get(id)?.length !== 1) invalid = true;
+    if (observationBindings.byId.get(id)?.length !== 1) invalid = true;
   }
   if (invalid) {
     const conflict = { code: "legacy_link_invalid" };
@@ -633,20 +643,20 @@ function linkedOldSiteObservation(
     return null;
   }
   const eligible = [...linkedIds]
-    .map((id) => byId.get(id)[0])
-    .filter((observation) => observation.source === SOURCE_OLD_SITE)
-    .sort((left, right) => compareText(explicitObservationId(left), explicitObservationId(right)));
+    .map((id) => observationBindings.byId.get(id)[0])
+    .filter(({ observation }) => observation.source === SOURCE_OLD_SITE)
+    .sort((left, right) => compareText(left.observationId, right.observationId));
   if (eligible.length > 1) {
     const conflict = {
       code: "legacy_link_ambiguous",
-      observationIds: eligible.map(explicitObservationId),
+      observationIds: eligible.map(({ observationId: id }) => id),
     };
     conflicts.push(conflict);
     quarantines.push(cloneValue(conflict));
     addBlockingCode(blockingCodes, conflict.code);
     return null;
   }
-  return eligible[0] ?? null;
+  return eligible[0]?.observation ?? null;
 }
 
 function resolveTargetIdentity({
@@ -807,11 +817,16 @@ export function reconcileProperty(input) {
   if (!isUpdate && validObservations.length === 0) {
     addBlockingCode(blockingCodes, "missing_valid_observation");
   }
+  const observationBindings = bindPersistedObservations(
+    validObservations,
+    persistedObservationRefs,
+    quarantines,
+    blockingCodes,
+  );
 
   const preparedCandidates = preparedImageCandidates(
     input?.preparedImages,
-    validObservations,
-    persistedObservationRefs,
+    observationBindings,
     quarantines,
     blockingCodes,
   );
@@ -840,7 +855,12 @@ export function reconcileProperty(input) {
     const usableCurrent = currentPropertyPresent && normalizedCurrent !== undefined;
     const sourceCandidate = chooseSourceCandidate(
       field,
-      candidatesForField(field, validObservations, estateIdsBySlug, preparedCandidates),
+      candidatesForField(
+        field,
+        observationBindings.observations,
+        estateIdsBySlug,
+        preparedCandidates,
+      ),
       conflicts,
       quarantines,
     );
@@ -922,8 +942,7 @@ export function reconcileProperty(input) {
   if (!isUpdate) {
     const linkedOldSite = linkedOldSiteObservation(
       input ?? {},
-      validObservations,
-      persistedObservationRefs,
+      observationBindings,
       conflicts,
       quarantines,
       blockingCodes,
