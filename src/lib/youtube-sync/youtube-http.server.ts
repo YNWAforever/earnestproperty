@@ -107,6 +107,15 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
     ...overrides,
   };
 
+  async function writeAuditSafely(input: Parameters<Dependencies["writeAudit"]>[0]) {
+    try {
+      await dependencies.writeAudit(input);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function cron(request: Request, mode: YouTubeSyncMode) {
     const expected = dependencies.cronSecret();
     if (!expected || request.headers.get("authorization") !== `Bearer ${expected}`) {
@@ -131,7 +140,7 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
 
     const parsed = staffBodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
-      await dependencies.writeAudit({
+      const audited = await writeAuditSafely({
         actor,
         permission: "cms.publish",
         action: "youtube.sync.manual",
@@ -141,6 +150,7 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
         context,
         metadata: { code: "VALIDATION_ERROR" },
       });
+      if (!audited) return safeErrorResponse(null, false);
       return Response.json(
         {
           ok: false,
@@ -153,24 +163,11 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
       );
     }
 
+    let outcome: YouTubeSyncOutcome;
     try {
-      const outcome = await dependencies.runSync({ mode: parsed.data.mode, trigger: "staff" });
-      await dependencies.writeAudit({
-        actor,
-        permission: "cms.publish",
-        action: "youtube.sync.manual",
-        resourceType: "youtube_channel",
-        resourceId: YOUTUBE_CHANNEL_ID,
-        outcome: outcome.status === "completed" ? "success" : "failure",
-        context,
-        metadata:
-          outcome.status === "completed"
-            ? outcome.summary
-            : { mode: parsed.data.mode, reason: outcome.reason },
-      });
-      return success(outcome, true);
+      outcome = await dependencies.runSync({ mode: parsed.data.mode, trigger: "staff" });
     } catch (error) {
-      await dependencies.writeAudit({
+      await writeAuditSafely({
         actor,
         permission: "cms.publish",
         action: "youtube.sync.manual",
@@ -185,6 +182,22 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
       });
       return safeErrorResponse(error, false);
     }
+
+    const audited = await writeAuditSafely({
+      actor,
+      permission: "cms.publish",
+      action: "youtube.sync.manual",
+      resourceType: "youtube_channel",
+      resourceId: YOUTUBE_CHANNEL_ID,
+      outcome: outcome.status === "completed" ? "success" : "failure",
+      context,
+      metadata:
+        outcome.status === "completed"
+          ? outcome.summary
+          : { mode: parsed.data.mode, reason: outcome.reason },
+    });
+    if (!audited) return safeErrorResponse(null, false);
+    return success(outcome, true);
   }
 
   return { cron, staff };
