@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createStaffLifecycleService } from "./staff-lifecycle.server.ts";
+import * as lifecycleModule from "./staff-lifecycle.server.ts";
+
+const { createStaffLifecycleService } = lifecycleModule;
 
 const admin = {
   staffId: "11111111-1111-4111-8111-111111111111",
@@ -601,4 +603,27 @@ test("suspension preserves local deactivation when revocation fails, while react
     (error) => error instanceof Response && error.status === 400,
   );
   assert.equal(absent.calls.activeChanges.length, 0);
+});
+
+test("default lifecycle dependencies defer unrelated admin and audit modules", async () => {
+  assert.equal(typeof lifecycleModule.createDefaultStaffLifecycleDependencies, "function");
+
+  let adminDataLoads = 0;
+  let auditLoads = 0;
+  const dependencies = await lifecycleModule.createDefaultStaffLifecycleDependencies({
+    loadAdminData: async () => {
+      adminDataLoads += 1;
+      throw new Error("admin data should stay lazy");
+    },
+    loadAudit: async () => {
+      auditLoads += 1;
+      throw new Error("audit should stay lazy");
+    },
+  });
+
+  assert.equal(adminDataLoads, 0);
+  assert.equal(auditLoads, 0);
+  assert.equal(typeof dependencies.updateStaffRoles, "function");
+  assert.equal(typeof dependencies.setStaffActive, "function");
+  assert.equal(typeof dependencies.writeAudit, "function");
 });
