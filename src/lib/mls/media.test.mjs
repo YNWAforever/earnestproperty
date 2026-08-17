@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { deflateSync } from "node:zlib";
 
 import {
   MAX_IMAGE_BYTES,
@@ -30,6 +32,16 @@ function asciiBytes(value) {
   return [...value].map((character) => character.charCodeAt(0));
 }
 
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function pngChunk(type, payload = []) {
   const checked = [...asciiBytes(type), ...payload];
   let crc = 0xffffffff;
@@ -42,7 +54,7 @@ function pngChunk(type, payload = []) {
   return [...u32be(payload.length), ...checked, ...u32be((crc ^ 0xffffffff) >>> 0)];
 }
 
-function pngBytes(width = 3, height = 2) {
+function pngBytesWithIdat(idat, width = 3, height = 2) {
   return new Uint8Array([
     0x89,
     0x50,
@@ -53,9 +65,15 @@ function pngBytes(width = 3, height = 2) {
     0x1a,
     0x0a,
     ...pngChunk("IHDR", [...u32be(width), ...u32be(height), 0x08, 0x06, 0x00, 0x00, 0x00]),
-    ...pngChunk("IDAT", [0x78, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01]),
+    ...pngChunk("IDAT", idat),
     ...pngChunk("IEND"),
   ]);
+}
+
+function pngBytes(width = 3, height = 2) {
+  const safeFixtureSize = width * height <= 100_000;
+  const scanlines = safeFixtureSize ? new Uint8Array(height * (1 + width * 4)) : new Uint8Array();
+  return pngBytesWithIdat(deflateSync(scanlines), width, height);
 }
 
 function jpegBytes(width = 3, height = 2) {
@@ -103,12 +121,13 @@ function jpegBytes(width = 3, height = 2) {
 
 function webpBytes(width = 3, height = 2) {
   const dimensions = (width - 1) | ((height - 1) << 14);
+  const payload = [0x2f, ...u32le(dimensions), 0x01, 0x01, 0x01, 0x01];
   return new Uint8Array([
     0x52,
     0x49,
     0x46,
     0x46,
-    ...u32le(18),
+    ...u32le(12 + 8 + payload.length + (payload.length % 2) - 8),
     0x57,
     0x45,
     0x42,
@@ -117,10 +136,9 @@ function webpBytes(width = 3, height = 2) {
     0x50,
     0x38,
     0x4c,
-    ...u32le(5),
-    0x2f,
-    ...u32le(dimensions),
-    0x00,
+    ...u32le(payload.length),
+    ...payload,
+    ...(payload.length % 2 ? [0x00] : []),
   ]);
 }
 
@@ -129,14 +147,20 @@ function avifBox(type, payload = []) {
 }
 
 function avifBytes(width = null, height = null) {
+  const metaChildren = [
+    ...avifBox("pitm", [0, 0, 0, 0, 0, 1]),
+    ...avifBox("iloc", [0, 0, 0, 0, 0, 0, 0, 0]),
+    ...avifBox("iinf", [0, 0, 0, 0, 0, 0]),
+    ...avifBox("iprp", [...avifBox("ipco"), ...avifBox("ipma", [0, 0, 0, 0, 0, 0])]),
+  ];
   const boxes = [
     ...avifBox("ftyp", [...asciiBytes("avif"), 0, 0, 0, 0, ...asciiBytes("avifmif1")]),
-    ...avifBox("meta", [0, 0, 0, 0]),
+    ...avifBox("meta", [0, 0, 0, 0, ...metaChildren]),
   ];
   if (width != null && height != null) {
     boxes.push(...avifBox("ispe", [0, 0, 0, 0, ...u32be(width), ...u32be(height)]));
   }
-  boxes.push(...avifBox("mdat", [0]));
+  boxes.push(...avifBox("mdat", [0, 1, 2, 3, 4, 5, 6, 7]));
   return new Uint8Array(boxes);
 }
 
@@ -177,20 +201,22 @@ function fakeRepository(options = {}) {
   };
   const repository = {
     state,
-    async findMediaByHash(hash) {
+    async findMediaByHash(hash, operation) {
       state.hashReads.push(hash);
-      if (typeof options.findMediaByHash === "function") return options.findMediaByHash(hash);
+      if (typeof options.findMediaByHash === "function")
+        return options.findMediaByHash(hash, operation);
       return options.knownHash === hash ? options.knownAsset : null;
     },
-    async findMediaByUrls(urls) {
+    async findMediaByUrls(urls, operation) {
       state.urlReads.push([...urls]);
-      if (typeof options.findMediaByUrls === "function") return options.findMediaByUrls(urls);
+      if (typeof options.findMediaByUrls === "function")
+        return options.findMediaByUrls(urls, operation);
       return options.ownedCurrent ?? [];
     },
-    async registerOwnedMedia(input) {
+    async registerOwnedMedia(input, operation) {
       state.registered.push(structuredClone(input));
       if (typeof options.registerOwnedMedia === "function")
-        return options.registerOwnedMedia(input);
+        return options.registerOwnedMedia(input, operation);
       return {
         id: `asset-${state.registered.length}`,
         url: input.url,
@@ -203,9 +229,10 @@ function fakeRepository(options = {}) {
         createdBy: input.createdBy,
       };
     },
-    async saveMediaRecord(input) {
+    async saveMediaRecord(input, operation) {
       state.records.push(structuredClone(input));
-      if (typeof options.saveMediaRecord === "function") return options.saveMediaRecord(input);
+      if (typeof options.saveMediaRecord === "function")
+        return options.saveMediaRecord(input, operation);
     },
   };
   return repository;
@@ -231,6 +258,7 @@ function fakeBlobStore(options = {}) {
 }
 
 function mediaFixture(overrides = {}) {
+  const { fetchImpl: fixtureTransport, ...fixtureOverrides } = overrides;
   const repository = overrides.repository ?? fakeRepository();
   const blobStore = overrides.blobStore ?? fakeBlobStore();
   const candidates = overrides.candidates ?? [listingPhoto(overrides.candidateUrl)];
@@ -244,10 +272,10 @@ function mediaFixture(overrides = {}) {
     mode: "upload",
     allowedMediaHosts: [MEDIA_HOST],
     resolveHost: async () => [PUBLIC_ADDRESS],
-    fetchImpl: async () => imageResponse(overrides.bytes ?? pngBytes()),
+    transport: fixtureTransport ?? (async () => imageResponse(overrides.bytes ?? pngBytes())),
     repository,
     blobStore,
-    ...overrides,
+    ...fixtureOverrides,
     repository,
     blobStore,
   };
@@ -410,6 +438,8 @@ test("DNS validation rejects any non-public IPv4 or IPv6 answer, including mappe
     "100::1",
     "2001:db8::1",
     "2002:0a00:0001::",
+    "3fff::1",
+    "3fff:0fff:ffff:ffff:ffff:ffff:ffff:ffff",
     "fc00::1",
     "fe80::1",
     "ff02::1",
@@ -430,6 +460,11 @@ test("DNS validation rejects any non-public IPv4 or IPv6 answer, including mappe
     mediaFixture({ resolveHost: async () => [{ address: "2606:4700:4700::1111", family: 6 }] }),
   );
   assert.equal(publicV6.publishable, true);
+
+  const publicBoundaryV6 = await prepareListingMedia(
+    mediaFixture({ resolveHost: async () => [{ address: "3fff:1000::1", family: 6 }] }),
+  );
+  assert.equal(publicBoundaryV6.publishable, true);
 });
 
 test("redirects are manual, same-host, capped at two, and DNS-revalidated each hop", async () => {
@@ -494,6 +529,75 @@ test("redirects are manual, same-host, capped at two, and DNS-revalidated each h
   );
   assert.equal(crossHost.publishable, false);
   assert.ok(crossHost.reasons.includes("unsafe_media_url"));
+});
+
+test("every response body rejected before reading is cancelled exactly once", async () => {
+  const cancellationCounts = [];
+  const response = (status, headers = {}) => {
+    const index = cancellationCounts.push(0) - 1;
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      headers: new Headers(headers),
+      body: {
+        async cancel() {
+          cancellationCounts[index] += 1;
+        },
+      },
+    };
+  };
+
+  await prepareListingMedia(mediaFixture({ fetchImpl: async () => response(302) }));
+  await prepareListingMedia(
+    mediaFixture({ fetchImpl: async () => response(302, { location: "https://[" }) }),
+  );
+  await prepareListingMedia(
+    mediaFixture({
+      allowedMediaHosts: [MEDIA_HOST, "cdn.28hse.test"],
+      fetchImpl: async () => response(302, { location: "https://cdn.28hse.test/cross-host.png" }),
+    }),
+  );
+  await prepareListingMedia(
+    mediaFixture({ fetchImpl: async () => response(302, { location: "/again.png" }) }),
+  );
+  await prepareListingMedia(mediaFixture({ fetchImpl: async () => response(503) }));
+  await prepareListingMedia(
+    mediaFixture({
+      fetchImpl: async () => response(200, { "content-length": String(MAX_IMAGE_BYTES + 1) }),
+    }),
+  );
+
+  assert.deepEqual(cancellationCounts, [1, 1, 1, 1, 1, 1, 1, 1]);
+});
+
+test("an unused reader-only response body is cancelled and released", async () => {
+  let cancellationReason = null;
+  let releases = 0;
+  const result = await prepareListingMedia(
+    mediaFixture({
+      fetchImpl: async () => ({
+        ok: false,
+        status: 503,
+        headers: new Headers(),
+        body: {
+          getReader() {
+            return {
+              async cancel(reason) {
+                cancellationReason = reason;
+              },
+              releaseLock() {
+                releases += 1;
+              },
+            };
+          },
+        },
+      }),
+    }),
+  );
+
+  assert.ok(result.reasons.includes("media_fetch_failed"));
+  assert.equal(cancellationReason?.code, "media_fetch_failed");
+  assert.equal(releases, 1);
 });
 
 test("downloads are sequential and each request observes the shared cancellation signal", async () => {
@@ -575,8 +679,54 @@ test("mid-stream run cancellation cancels the reader and preserves the exact rea
   assert.equal(cancelReason, reason);
 });
 
+test("reader cleanup cannot lose an abort during listener attachment", async () => {
+  const controller = new AbortController();
+  const reason = new Error("cancel reader listener race exactly");
+  let cancelReason = null;
+  const response = {
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    body: {
+      getReader() {
+        return {
+          read() {
+            return new Promise(() => {});
+          },
+          async cancel(value) {
+            cancelReason = value;
+          },
+          releaseLock() {},
+        };
+      },
+    },
+  };
+
+  await assert.rejects(
+    prepareListingMedia(
+      mediaFixture({
+        signal: controller.signal,
+        fetchImpl: async (_url, init) => {
+          const original = init.signal.addEventListener.bind(init.signal);
+          Object.defineProperty(init.signal, "addEventListener", {
+            configurable: true,
+            value(type, listener, options) {
+              if (type === "abort" && !controller.signal.aborted) controller.abort(reason);
+              return original(type, listener, options);
+            },
+          });
+          return response;
+        },
+      }),
+    ),
+    (error) => error === reason,
+  );
+  assert.equal(cancelReason, reason);
+});
+
 test("Content-Length is rejected before body reads and streaming stops above five MiB", async () => {
   let readerRequests = 0;
+  let precheckCancelled = false;
   const prechecked = await prepareListingMedia(
     mediaFixture({
       fetchImpl: async () => ({
@@ -584,6 +734,9 @@ test("Content-Length is rejected before body reads and streaming stops above fiv
         status: 200,
         headers: new Headers({ "content-length": String(MAX_IMAGE_BYTES + 1) }),
         body: {
+          async cancel() {
+            precheckCancelled = true;
+          },
           getReader() {
             readerRequests += 1;
             throw new Error("body reader must not be requested");
@@ -595,6 +748,7 @@ test("Content-Length is rejected before body reads and streaming stops above fiv
   assert.equal(prechecked.publishable, false);
   assert.ok(prechecked.reasons.includes("media_too_large"));
   assert.equal(readerRequests, 0);
+  assert.equal(precheckCancelled, true);
 
   let cancelled = false;
   const chunk = new Uint8Array(1024 * 1024);
@@ -928,6 +1082,172 @@ test("a shared cancellation aborts a hanging resolver immediately with the exact
   assert.equal(final.error, reason);
   assert.ok(resolverSignal instanceof AbortSignal);
   assert.equal(fetches, 0);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(fetches, 0);
+});
+
+test("shared cancellation races every repository and Blob await with the exact reason", async (t) => {
+  const scenarios = [
+    {
+      name: "hash lookup",
+      arrange(started, gate, observeSignal) {
+        const blobStore = fakeBlobStore();
+        const repository = fakeRepository({
+          findMediaByHash(_hash, operation) {
+            observeSignal(operation?.signal);
+            started.resolve();
+            return gate.promise;
+          },
+        });
+        return {
+          input: mediaFixture({ repository, blobStore }),
+          verify() {
+            assert.equal(blobStore.puts.length, 0);
+            assert.equal(repository.state.registered.length, 0);
+            assert.equal(repository.state.records.length, 0);
+          },
+        };
+      },
+    },
+    {
+      name: "Blob upload",
+      arrange(started, gate, observeSignal) {
+        const repository = fakeRepository();
+        const blobStore = fakeBlobStore({
+          put(input) {
+            observeSignal(input.signal);
+            started.resolve();
+            return gate.promise;
+          },
+        });
+        return {
+          input: mediaFixture({ repository, blobStore }),
+          verify() {
+            assert.equal(repository.state.registered.length, 0);
+            assert.equal(repository.state.records.length, 0);
+          },
+        };
+      },
+    },
+    {
+      name: "asset registration",
+      arrange(started, gate, observeSignal) {
+        const repository = fakeRepository({
+          registerOwnedMedia(_input, operation) {
+            observeSignal(operation?.signal);
+            started.resolve();
+            return gate.promise;
+          },
+        });
+        return {
+          input: mediaFixture({ repository }),
+          verify() {
+            assert.equal(repository.state.records.length, 0);
+          },
+        };
+      },
+    },
+    {
+      name: "media record write",
+      arrange(started, gate, observeSignal) {
+        const repository = fakeRepository({
+          saveMediaRecord(_input, operation) {
+            observeSignal(operation?.signal);
+            started.resolve();
+            return gate.promise;
+          },
+        });
+        return { input: mediaFixture({ repository }), verify() {} };
+      },
+    },
+    {
+      name: "owned-current lookup",
+      arrange(started, gate, observeSignal) {
+        const repository = fakeRepository({
+          findMediaByUrls(_urls, operation) {
+            observeSignal(operation?.signal);
+            started.resolve();
+            return gate.promise;
+          },
+        });
+        return {
+          input: mediaFixture({
+            candidates: [],
+            currentImages: ["https://www.earnestproperty.com/current.png"],
+            isNew: false,
+            repository,
+          }),
+          verify() {},
+        };
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const controller = new AbortController();
+      const reason = new Error(`cancel ${scenario.name} exactly`);
+      const started = deferred();
+      const gate = deferred();
+      let observedSignal;
+      const arranged = scenario.arrange(started, gate, (signal) => {
+        observedSignal = signal;
+      });
+      const promise = prepareListingMedia({ ...arranged.input, signal: controller.signal });
+      const observed = promise.then(
+        () => ({ value: "resolved" }),
+        (error) => ({ error }),
+      );
+      await started.promise;
+      controller.abort(reason);
+      const prompt = await Promise.race([
+        observed,
+        new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+      ]);
+      gate.resolve(null);
+      const final = prompt === "still-pending" ? await observed : prompt;
+
+      assert.notEqual(prompt, "still-pending", scenario.name);
+      assert.equal(final.error, reason, scenario.name);
+      assert.equal(observedSignal, controller.signal, scenario.name);
+      arranged.verify();
+    });
+  }
+});
+
+test("an abort observed between storage steps prevents later mutations", async () => {
+  for (const boundary of ["blob", "registration"]) {
+    const controller = new AbortController();
+    const reason = new Error(`cancel after ${boundary} exactly`);
+    const repository = fakeRepository({
+      registerOwnedMedia(input) {
+        if (boundary === "registration") controller.abort(reason);
+        return {
+          id: "asset-boundary",
+          ...input,
+        };
+      },
+    });
+    const blobStore = fakeBlobStore({
+      put(input) {
+        if (boundary === "blob") controller.abort(reason);
+        return {
+          url: `https://owned.example/${input.pathname}`,
+          downloadUrl: `https://owned.example/${input.pathname}?download=1`,
+          pathname: input.pathname,
+          contentType: input.contentType,
+          size: input.body.byteLength,
+        };
+      },
+    });
+
+    await assert.rejects(
+      prepareListingMedia(mediaFixture({ signal: controller.signal, repository, blobStore })),
+      (error) => error === reason,
+    );
+    assert.equal(repository.state.records.length, 0, boundary);
+    if (boundary === "blob") assert.equal(repository.state.registered.length, 0);
+  }
 });
 
 test("cancellation cannot be lost while the candidate deadline listener is attached", async () => {
@@ -1056,6 +1376,47 @@ test("truncated JPEG, PNG, WebP, and AVIF structures are rejected before hashing
   }
 });
 
+test("non-decodable PNG, header-only VP8L, and empty AVIF media structures are rejected", async (t) => {
+  const corruptPayloads = [
+    ["PNG invalid IDAT zlib", pngBytesWithIdat([0x78, 0x9c, 0xff, 0xff, 0xff, 0xff])],
+    [
+      "WebP header-only VP8L",
+      new Uint8Array([
+        ...asciiBytes("RIFF"),
+        ...u32le(18),
+        ...asciiBytes("WEBPVP8L"),
+        ...u32le(5),
+        0x2f,
+        0,
+        0,
+        0,
+        0,
+        0,
+      ]),
+    ],
+    [
+      "AVIF empty meta and one-byte mdat",
+      new Uint8Array([
+        ...avifBox("ftyp", [...asciiBytes("avif"), 0, 0, 0, 0, ...asciiBytes("avifmif1")]),
+        ...avifBox("meta", [0, 0, 0, 0]),
+        ...avifBox("mdat", [0]),
+      ]),
+    ],
+  ];
+
+  for (const [name, bytes] of corruptPayloads) {
+    await t.test(name, async () => {
+      const repository = fakeRepository();
+      const blobStore = fakeBlobStore();
+      const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+      assert.equal(result.publishable, false);
+      assert.ok(result.reasons.includes("invalid_image_payload"));
+      assert.equal(repository.state.hashReads.length, 0);
+      assert.equal(blobStore.puts.length, 0);
+    });
+  }
+});
+
 test("reused and newly registered assets must be exactly bound to the requested content", async () => {
   const bytes = webpBytes();
   const hash = sha256(bytes);
@@ -1161,6 +1522,43 @@ test("malformed rejection markers and duplicate candidate URLs fail closed befor
     );
     assert.equal(sideEffects, 0);
   }
+});
+
+test("MediaCandidate declarations expose the exact optional rejection marker contract", () => {
+  const declaration = readFileSync(new URL("./source-contract.d.mts", import.meta.url), "utf8");
+  for (const expected of [
+    /rejected\?:\s*boolean/,
+    /eligible\?:\s*boolean/,
+    /contextRejected\?:\s*boolean/,
+    /rejectionReason\?:\s*string/,
+    /rejectionReasons\?:\s*readonly string\[\]/,
+    /contextRejectionMarkers\?:\s*readonly string\[\]/,
+  ]) {
+    assert.match(declaration, expected);
+  }
+});
+
+test("only the explicitly pin-aware transport seam is accepted", async () => {
+  let sideEffects = 0;
+  const input = mediaFixture({
+    transport: async () => {
+      sideEffects += 1;
+      return imageResponse();
+    },
+  });
+  input.fetchImpl = async () => {
+    sideEffects += 1;
+    return imageResponse();
+  };
+
+  await assert.rejects(prepareListingMedia(input), /fetchImpl|pin-aware transport/i);
+  assert.equal(sideEffects, 0);
+});
+
+test("the default resolver documents OS lookup cancellation while orchestration suppresses late work", () => {
+  const source = readFileSync(new URL("./media.mjs", import.meta.url), "utf8");
+  assert.match(source, /dns\.lookup does not support AbortSignal/);
+  assert.match(source, /defaultResolveMediaHost\(hostname, _options/);
 });
 
 test("validate-only results are never exposed as owned prepared media", async () => {

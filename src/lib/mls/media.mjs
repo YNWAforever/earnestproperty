@@ -3,6 +3,7 @@ import { lookup as dnsLookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { Readable } from "node:stream";
+import { createInflate } from "node:zlib";
 
 import { exactObservationQuarantineReason } from "./match.mjs";
 
@@ -210,7 +211,111 @@ function validJpegStructure(bytes) {
   return false;
 }
 
-function validPngStructure(bytes) {
+function pngScanlineLayouts(width, height, bitsPerPixel, interlace) {
+  const passes = interlace
+    ? [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]
+    : [[0, 0, 1, 1]];
+  return passes
+    .map(([startX, startY, stepX, stepY]) => {
+      const columns = width <= startX ? 0 : Math.ceil((width - startX) / stepX);
+      const rows = height <= startY ? 0 : Math.ceil((height - startY) / stepY);
+      return { rows, rowBytes: Math.ceil((columns * bitsPerPixel) / 8) };
+    })
+    .filter(({ rows, rowBytes }) => rows > 0 && rowBytes > 0);
+}
+
+function inflatePngScanlines(parts, layouts, signal) {
+  const expectedBytes = layouts.reduce(
+    (total, layout) => total + layout.rows * (layout.rowBytes + 1),
+    0,
+  );
+  const compressedBytes = parts.reduce((total, part) => total + part.byteLength, 0);
+  return new Promise((resolve) => {
+    const inflater = createInflate();
+    let settled = false;
+    let valid = true;
+    let total = 0;
+    let layoutIndex = 0;
+    let rowsRemaining = layouts[0]?.rows ?? 0;
+    let dataRemaining = 0;
+    const advancePass = () => {
+      while (rowsRemaining === 0 && layoutIndex < layouts.length) {
+        layoutIndex += 1;
+        rowsRemaining = layouts[layoutIndex]?.rows ?? 0;
+      }
+    };
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const invalidate = () => {
+      if (!valid) return;
+      valid = false;
+      inflater.destroy(new Error("invalid PNG scanlines"));
+    };
+    const onAbort = () => inflater.destroy(new Error("PNG validation aborted"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    inflater.on("data", (chunk) => {
+      total += chunk.byteLength;
+      if (total > expectedBytes) {
+        invalidate();
+        return;
+      }
+      let offset = 0;
+      while (valid && offset < chunk.byteLength) {
+        advancePass();
+        if (layoutIndex >= layouts.length) {
+          invalidate();
+          return;
+        }
+        if (dataRemaining === 0) {
+          const filter = chunk[offset];
+          offset += 1;
+          if (filter > 4) {
+            invalidate();
+            return;
+          }
+          dataRemaining = layouts[layoutIndex].rowBytes;
+        }
+        const consumed = Math.min(dataRemaining, chunk.byteLength - offset);
+        dataRemaining -= consumed;
+        offset += consumed;
+        if (dataRemaining === 0) rowsRemaining -= 1;
+      }
+    });
+    inflater.once("error", () => finish(false));
+    inflater.once("end", () => {
+      advancePass();
+      finish(
+        valid &&
+          total === expectedBytes &&
+          layoutIndex === layouts.length &&
+          dataRemaining === 0 &&
+          inflater.bytesWritten === compressedBytes,
+      );
+    });
+    inflater.once("close", () => finish(false));
+    try {
+      for (const part of parts) inflater.write(part);
+      inflater.end();
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+async function validPngStructure(bytes, signal) {
   if (
     bytes.length < 57 ||
     bytes[0] !== 0x89 ||
@@ -225,7 +330,10 @@ function validPngStructure(bytes) {
   let offset = 8;
   let chunks = 0;
   let sawHeader = false;
-  let imageDataBytes = 0;
+  let header = null;
+  const imageData = [];
+  let sawImageData = false;
+  let imageDataEnded = false;
   let sawEnd = false;
   while (offset < bytes.length) {
     const length = readU32be(bytes, offset);
@@ -259,11 +367,18 @@ function validPngStructure(bytes) {
       ) {
         return false;
       }
+      header = { width, height, bitDepth, colorType, interlace: bytes[dataStart + 12] };
       sawHeader = true;
     } else if (type === "IHDR") {
       return false;
     }
-    if (type === "IDAT") imageDataBytes += length;
+    if (type === "IDAT") {
+      if (imageDataEnded) return false;
+      sawImageData = true;
+      imageData.push(bytes.subarray(dataStart, dataEnd));
+    } else if (sawImageData && type !== "IEND") {
+      imageDataEnded = true;
+    }
     if (type === "IEND") {
       if (length !== 0 || dataEnd + 4 !== bytes.length) return false;
       sawEnd = true;
@@ -271,7 +386,22 @@ function validPngStructure(bytes) {
     chunks += 1;
     offset = dataEnd + 4;
   }
-  return sawHeader && imageDataBytes > 0 && sawEnd && offset === bytes.length;
+  if (!sawHeader || !sawImageData || !sawEnd || offset !== bytes.length) return false;
+  if (
+    header.width > MAX_IMAGE_DIMENSION ||
+    header.height > MAX_IMAGE_DIMENSION ||
+    header.width * header.height > MAX_IMAGE_PIXELS
+  ) {
+    return true;
+  }
+  const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[header.colorType];
+  const layouts = pngScanlineLayouts(
+    header.width,
+    header.height,
+    channels * header.bitDepth,
+    header.interlace === 1,
+  );
+  return inflatePngScanlines(imageData, layouts, signal);
 }
 
 function validWebpStructure(bytes) {
@@ -295,7 +425,14 @@ function validWebpStructure(bytes) {
     if (dataEnd > bytes.length || paddedEnd > bytes.length) return false;
     if (kind === "VP8X" && length !== 10) return false;
     if (kind === "VP8L") {
-      if (length < 5 || bytes[dataStart] !== 0x2f) return false;
+      if (
+        length < 9 ||
+        bytes[dataStart] !== 0x2f ||
+        (bytes[dataStart + 4] & 0xe0) !== 0 ||
+        bytes.subarray(dataStart + 5, dataEnd).every((byte) => byte === 0)
+      ) {
+        return false;
+      }
       sawVisualData = true;
     } else if (kind === "VP8 ") {
       if (
@@ -351,21 +488,66 @@ function validAvifStructure(bytes) {
     }
     if (type === "meta") {
       if (size < headerSize + 4) return false;
+      const metaEnd = offset + size;
+      let childOffset = offset + headerSize + 4;
+      const children = new Map();
+      while (childOffset < metaEnd) {
+        const childSize = readU32be(bytes, childOffset);
+        const childType = ascii(bytes, childOffset + 4, 4);
+        if (childSize == null || childSize < 8 || childSize > metaEnd - childOffset) return false;
+        children.set(childType, { offset: childOffset, size: childSize });
+        childOffset += childSize;
+      }
+      if (childOffset !== metaEnd) return false;
+      for (const required of ["pitm", "iloc", "iinf", "iprp"]) {
+        if (!children.has(required)) return false;
+      }
+      if (
+        children.get("pitm").size < 14 ||
+        children.get("iloc").size < 16 ||
+        children.get("iinf").size < 14
+      ) {
+        return false;
+      }
+      const itemProperties = children.get("iprp");
+      const propertyEnd = itemProperties.offset + itemProperties.size;
+      let propertyOffset = itemProperties.offset + 8;
+      const propertyChildren = new Set();
+      while (propertyOffset < propertyEnd) {
+        const propertySize = readU32be(bytes, propertyOffset);
+        const propertyType = ascii(bytes, propertyOffset + 4, 4);
+        if (
+          propertySize == null ||
+          propertySize < 8 ||
+          propertySize > propertyEnd - propertyOffset
+        ) {
+          return false;
+        }
+        propertyChildren.add(propertyType);
+        propertyOffset += propertySize;
+      }
+      if (
+        propertyOffset !== propertyEnd ||
+        !propertyChildren.has("ipco") ||
+        !propertyChildren.has("ipma")
+      ) {
+        return false;
+      }
       sawMeta = true;
     }
-    if (type === "mdat" && size > headerSize) sawMediaData = true;
+    if (type === "mdat" && size >= headerSize + 8) sawMediaData = true;
     boxes += 1;
     offset += size;
   }
   return sawFtyp && sawMeta && sawMediaData && offset === bytes.length;
 }
 
-function validateImageStructure(bytes, mime) {
+async function validateImageStructure(bytes, mime, signal) {
   const valid =
     mime === "image/jpeg"
       ? validJpegStructure(bytes)
       : mime === "image/png"
-        ? validPngStructure(bytes)
+        ? await validPngStructure(bytes, signal)
         : mime === "image/webp"
           ? validWebpStructure(bytes)
           : validAvifStructure(bytes);
@@ -539,6 +721,7 @@ function publicIpv6(value) {
     [ipv6BigInt("2001:db8::"), 32],
     [ipv6BigInt("2002::"), 16],
     [ipv6BigInt("3ffe::"), 16],
+    [ipv6BigInt("3fff::"), 20],
   ];
   return blocked.every(([prefix, bits]) => !hasIpv6Prefix(address, prefix, bits));
 }
@@ -753,11 +936,53 @@ async function resolvePublicConnection(url, resolveHost, signal) {
   return { ...normalized[0], hostname: url.hostname };
 }
 
+async function cancelUnusedBody(response, signal, reason) {
+  const body = response?.body;
+  if (typeof body?.cancel === "function") {
+    try {
+      await abortRace(() => body.cancel(reason), signal);
+    } catch {
+      throwIfAborted(signal);
+    }
+    return;
+  }
+  if (typeof body?.getReader === "function") {
+    let reader;
+    let cancellation = null;
+    try {
+      reader = body.getReader();
+      cancellation = Promise.resolve(reader.cancel(reason));
+      cancellation.catch(() => {});
+      await abortRace(() => cancellation, signal);
+    } catch {
+      throwIfAborted(signal);
+    } finally {
+      try {
+        reader?.releaseLock();
+      } catch {
+        void cancellation?.finally(() => {
+          try {
+            reader?.releaseLock();
+          } catch {}
+        });
+      }
+    }
+  }
+}
+
+async function rejectUnusedResponse(response, signal, code) {
+  const reason = new MediaPreparationError(code);
+  await cancelUnusedBody(response, signal, reason);
+  throw reason;
+}
+
 async function readLimitedBody(response, signal) {
   const advertised = response.headers?.get?.("content-length");
   if (typeof advertised === "string" && /^\d+$/.test(advertised)) {
     try {
-      if (BigInt(advertised) > BigInt(MAX_IMAGE_BYTES)) fail("media_too_large");
+      if (BigInt(advertised) > BigInt(MAX_IMAGE_BYTES)) {
+        await rejectUnusedResponse(response, signal, "media_too_large");
+      }
     } catch (error) {
       if (error instanceof MediaPreparationError) throw error;
     }
@@ -768,10 +993,23 @@ async function readLimitedBody(response, signal) {
     return buffer;
   }
   const reader = response.body.getReader();
+  let cancelPromise = null;
+  const cancelReader = (reason) => {
+    if (cancelPromise == null) {
+      try {
+        cancelPromise = Promise.resolve(reader.cancel(reason));
+      } catch (error) {
+        cancelPromise = Promise.reject(error);
+      }
+      cancelPromise.catch(() => {});
+    }
+    return cancelPromise;
+  };
   const cancelForAbort = () => {
-    void Promise.resolve(reader.cancel(signal?.reason)).catch(() => {});
+    void cancelReader(signal?.reason);
   };
   signal?.addEventListener("abort", cancelForAbort, { once: true });
+  if (signal?.aborted) cancelForAbort();
   const chunks = [];
   let total = 0;
   try {
@@ -781,19 +1019,41 @@ async function readLimitedBody(response, signal) {
       throwIfAborted(signal);
       if (done) break;
       const chunk = bytesView(value);
-      if (!chunk) fail("invalid_image_payload");
+      if (!chunk) {
+        const reason = new MediaPreparationError("invalid_image_payload");
+        await abortRace(() => cancelReader(reason), signal);
+        throw reason;
+      }
       total += chunk.byteLength;
       if (total > MAX_IMAGE_BYTES) {
-        await reader.cancel().catch(() => {});
-        fail("media_too_large");
+        const reason = new MediaPreparationError("media_too_large");
+        await abortRace(() => cancelReader(reason), signal);
+        throw reason;
       }
       chunks.push(chunk);
     }
+  } catch (error) {
+    if (!signal?.aborted) {
+      try {
+        await abortRace(() => cancelReader(error), signal);
+      } catch {
+        throwIfAborted(signal);
+      }
+    } else {
+      cancelForAbort();
+    }
+    throw error;
   } finally {
     signal?.removeEventListener("abort", cancelForAbort);
     try {
       reader.releaseLock();
-    } catch {}
+    } catch {
+      void cancelPromise?.finally(() => {
+        try {
+          reader.releaseLock();
+        } catch {}
+      });
+    }
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -829,6 +1089,7 @@ async function fetchImage({ candidateUrl, hosts, resolveHost, transport, sharedS
         deadline.signal,
       );
       if (REDIRECT_STATUSES.has(response?.status)) {
+        await cancelUnusedBody(response, deadline.signal, new MediaPreparationError("redirect"));
         if (redirects >= 2) fail("too_many_redirects");
         const location = response.headers?.get?.("location");
         if (!location) fail("unsafe_media_url");
@@ -840,21 +1101,16 @@ async function fetchImage({ candidateUrl, hosts, resolveHost, transport, sharedS
         }
         next = parseCandidateUrl(next.toString(), hosts);
         if (next.hostname !== originalHostname) fail("unsafe_media_url");
-        if (typeof response.body?.cancel === "function") {
-          try {
-            await abortRace(() => response.body.cancel(), deadline.signal);
-          } catch {
-            throwIfAborted(deadline.signal);
-          }
-        }
         current = next;
         continue;
       }
-      if (!response?.ok) fail("media_fetch_failed");
+      if (!response?.ok) {
+        await rejectUnusedResponse(response, deadline.signal, "media_fetch_failed");
+      }
       const bytes = await readLimitedBody(response, deadline.signal);
       const mime = detectImageMime(bytes);
       if (!mime || !ALLOWED_MIME.has(mime)) fail("unsupported_media_type");
-      validateImageStructure(bytes, mime);
+      await abortRace(() => validateImageStructure(bytes, mime, deadline.signal), deadline.signal);
       const { width, height } = imageDimensions(bytes, mime);
       return { bytes, mime, width, height };
     }
@@ -1083,8 +1339,8 @@ function validateInput(input, validatedObservation) {
   ) {
     throw new TypeError("currentImages must be an array of non-empty strings");
   }
-  if (hasOwn(input, "fetchImpl") && typeof input.fetchImpl !== "function") {
-    throw new TypeError("fetchImpl must be a function");
+  if (hasOwn(input, "fetchImpl")) {
+    throw new TypeError("fetchImpl is not accepted; use the pin-aware transport seam");
   }
   if (hasOwn(input, "transport") && typeof input.transport !== "function") {
     throw new TypeError("transport must be a function");
@@ -1115,14 +1371,18 @@ function validateInput(input, validatedObservation) {
     observationId,
     propertyId,
     resolveHost: input.resolveHost ?? defaultResolveMediaHost,
-    transport: input.transport ?? input.fetchImpl ?? createPinnedHttpsTransport(),
+    transport: input.transport ?? createPinnedHttpsTransport(),
     hosts: allowedHosts(input.allowedMediaHosts ?? process.env.MLS_MEDIA_ALLOWED_HOSTS ?? ""),
   };
 }
 
-async function ownedCurrentImages(currentImages, repository) {
+async function ownedCurrentImages(currentImages, repository, signal) {
   if (currentImages.length === 0) return { owned: [], allOwned: true };
-  const rows = await repository.findMediaByUrls([...currentImages]);
+  throwIfAborted(signal);
+  const rows = await abortRace(
+    () => repository.findMediaByUrls([...currentImages], { signal }),
+    signal,
+  );
   if (!Array.isArray(rows)) throw new TypeError("repository.findMediaByUrls returned invalid data");
   const exact = new Set();
   for (const row of rows) {
@@ -1240,8 +1500,11 @@ export async function prepareListingMedia(rawInput) {
   }
 
   const saveResult = async (result) => {
+    throwIfAborted(signal);
     results.push(result);
-    if (mode === "upload") await repository.saveMediaRecord(mediaRecord(result));
+    if (mode === "upload") {
+      await abortRace(() => repository.saveMediaRecord(mediaRecord(result), { signal }), signal);
+    }
   };
 
   const localAssets = new Map();
@@ -1276,7 +1539,7 @@ export async function prepareListingMedia(rawInput) {
       const contentHash = sha256(downloaded.bytes);
       let asset = localAssets.get(contentHash) ?? null;
       if (!asset) {
-        asset = await repository.findMediaByHash(contentHash);
+        asset = await abortRace(() => repository.findMediaByHash(contentHash, { signal }), signal);
         if (asset != null) {
           validateAsset(asset, {
             contentHash,
@@ -1295,11 +1558,16 @@ export async function prepareListingMedia(rawInput) {
         const pathname = buildOwnedMediaPathname(contentHash, downloaded.mime);
         let blob;
         try {
-          blob = await blobStore.put({
-            pathname,
-            body: downloaded.bytes,
-            contentType: downloaded.mime,
-          });
+          blob = await abortRace(
+            () =>
+              blobStore.put({
+                pathname,
+                body: downloaded.bytes,
+                contentType: downloaded.mime,
+                signal,
+              }),
+            signal,
+          );
           validateBlobResult(blob, {
             pathname,
             contentType: downloaded.mime,
@@ -1320,7 +1588,10 @@ export async function prepareListingMedia(rawInput) {
           ownerId: null,
           createdBy: null,
         };
-        asset = validateAsset(await repository.registerOwnedMedia(registration), registration);
+        asset = validateAsset(
+          await abortRace(() => repository.registerOwnedMedia(registration, { signal }), signal),
+          registration,
+        );
         localAssets.set(contentHash, asset);
       }
       const result = resultFor(candidate, identity, {
@@ -1364,7 +1635,7 @@ export async function prepareListingMedia(rawInput) {
         prepared: null,
       });
     }
-    const current = await ownedCurrentImages(input.currentImages, repository);
+    const current = await ownedCurrentImages(input.currentImages, repository, signal);
     if (!current.allOwned) reasons.push("current_media_not_owned");
     const publishable = current.allOwned;
     const images = publishable ? current.owned : [];
@@ -1409,6 +1680,8 @@ export async function prepareListingMedia(rawInput) {
   });
 }
 
-export async function defaultResolveMediaHost(hostname) {
+// Node dns.lookup does not support AbortSignal. The caller abort-races this operation and
+// suppresses any late result, so an OS lookup completion cannot reach transport or storage.
+export async function defaultResolveMediaHost(hostname, _options = {}) {
   return dnsLookup(hostname, { all: true, verbatim: true });
 }

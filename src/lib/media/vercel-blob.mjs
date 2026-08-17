@@ -50,26 +50,18 @@ function parseBlobMetadata(value, requested) {
   if (value.pathname !== requested.pathname) {
     throw new Error("Vercel Blob upload returned invalid metadata");
   }
-  const contentType = value.contentType == null ? requested.contentType : value.contentType;
-  if (
-    typeof contentType !== "string" ||
-    contentType.length === 0 ||
-    contentType.trim() !== contentType
-  ) {
+  if (value.contentType != null && value.contentType !== requested.contentType) {
     throw new Error("Vercel Blob upload returned invalid metadata");
   }
-  const size = value.size == null ? requested.size : value.size;
-  try {
-    finiteSize(size, "Vercel Blob size");
-  } catch {
+  if (value.size != null && value.size !== requested.size) {
     throw new Error("Vercel Blob upload returned invalid metadata");
   }
   return Object.freeze({
     url,
     downloadUrl,
     pathname: requested.pathname,
-    contentType,
-    size,
+    contentType: requested.contentType,
+    size: requested.size,
   });
 }
 
@@ -80,10 +72,13 @@ export function createVercelBlobStore({ token, fetchImpl = globalThis.fetch } = 
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
 
   return Object.freeze({
-    async put({ pathname, body, contentType } = {}) {
+    async put({ pathname, body, contentType, signal } = {}) {
       const requestedPathname = requiredTrimmedString(pathname, "pathname");
       if (requestedPathname.includes("\0")) throw new TypeError("pathname is invalid");
       const requestedContentType = requiredTrimmedString(contentType, "contentType");
+      if (signal != null && !(signal instanceof AbortSignal)) {
+        throw new TypeError("signal must be an AbortSignal");
+      }
       const size = finiteSize(bodySize(body), "body size");
       const params = new URLSearchParams({ pathname: requestedPathname });
       const response = await fetchImpl(`${BLOB_API_URL}?${params.toString()}`, {
@@ -97,6 +92,7 @@ export function createVercelBlobStore({ token, fetchImpl = globalThis.fetch } = 
           "x-content-type": requestedContentType,
         },
         body,
+        signal,
       });
       if (!response?.ok) {
         const status = Number.isInteger(response?.status) ? response.status : "unknown";

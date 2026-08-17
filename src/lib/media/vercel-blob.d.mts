@@ -10,6 +10,7 @@ export interface VercelBlobPutInput {
   pathname: string;
   body: Blob | ArrayBuffer | ArrayBufferView;
   contentType: string;
+  signal?: AbortSignal;
 }
 
 export interface VercelBlobStore {

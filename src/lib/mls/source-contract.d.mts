@@ -24,6 +24,12 @@ export interface MediaCandidate {
   url: string;
   category: "listing_photo" | "map" | "floorplan" | "qr" | "vr" | "branded" | "unknown";
   isPrimary: boolean;
+  rejected?: boolean;
+  eligible?: boolean;
+  contextRejected?: boolean;
+  rejectionReason?: string;
+  rejectionReasons?: readonly string[];
+  contextRejectionMarkers?: readonly string[];
 }
 
 export interface SourceObservation {

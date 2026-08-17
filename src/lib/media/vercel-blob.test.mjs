@@ -94,6 +94,20 @@ test("blob adapter derives missing optional metadata from the validated request"
   assert.equal(saved.size, 3);
 });
 
+test("blob adapter forwards the caller's exact cancellation signal", async () => {
+  const calls = [];
+  const controller = new AbortController();
+  const store = createVercelBlobStore({ token: TOKEN, fetchImpl: successfulFetch(calls) });
+  await store.put({
+    pathname: "mls/ab/abcdef.webp",
+    body: new Uint8Array([0x52, 0x49, 0x46, 0x46]),
+    contentType: "image/webp",
+    signal: controller.signal,
+  });
+
+  assert.equal(calls[0].signal, controller.signal);
+});
+
 test("blob adapter validates configuration and put input before fetch", async () => {
   let calls = 0;
   const fetchImpl = async () => {
@@ -128,6 +142,7 @@ test("blob adapter declaration exposes exactly the runtime-supported binary body
   const declaration = readFileSync(new URL("./vercel-blob.d.mts", import.meta.url), "utf8");
   assert.doesNotMatch(declaration, /\bBodyInit\b/);
   assert.match(declaration, /body:\s*Blob\s*\|\s*ArrayBuffer\s*\|\s*ArrayBufferView/);
+  assert.match(declaration, /signal\?:\s*AbortSignal/);
 });
 
 test("blob adapter rejects failed or malformed responses without exposing the token", async () => {
@@ -150,6 +165,8 @@ test("blob adapter rejects failed or malformed responses without exposing the to
     { url: "http://owned.example/x.png", pathname: "x.png" },
     { url: "https://owned.example/x.png", pathname: "other.png" },
     { url: "https://owned.example/x.png", pathname: "x.png", size: -1 },
+    { url: "https://owned.example/x.png", pathname: "x.png", size: 2 },
+    { url: "https://owned.example/x.png", pathname: "x.png", contentType: "image/jpeg" },
     { url: "https://owned.example/x.png", pathname: "x.png", contentType: 42 },
   ]) {
     const store = createVercelBlobStore({
