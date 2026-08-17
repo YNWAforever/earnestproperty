@@ -99,8 +99,42 @@ function exactNonEmptyString(value) {
   return typeof value === "string" && value.length > 0 && value.trim() === value;
 }
 
-function exactNullableString(value) {
-  return value === null || exactNonEmptyString(value);
+function calendarDateValid(yearText, monthText, dayText) {
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth[month - 1];
+}
+
+function supportedIsoTimestamp(value, { nullable = false, allowDate = false } = {}) {
+  if (value === null) return nullable;
+  if (!exactNonEmptyString(value)) return false;
+  const dateMatched = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateMatched) {
+    return allowDate && calendarDateValid(dateMatched[1], dateMatched[2], dateMatched[3]);
+  }
+  const matched =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/.exec(
+      value,
+    );
+  if (!matched) return false;
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, zone] = matched;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  if (!calendarDateValid(yearText, monthText, dayText) || hour > 23 || minute > 59 || second > 59) {
+    return false;
+  }
+  if (zone !== "Z") {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
+      return false;
+    }
+  }
+  return Number.isFinite(Date.parse(value));
 }
 
 function sourceUrlValid(value) {
@@ -153,9 +187,9 @@ function observationQuarantineReason(observation) {
     !DEAL_TYPES.includes(observation.dealType) ||
     typeof observation.propertyNoRaw !== "string" ||
     observation.propertyNoNormalized !== normalizedPropertyNo ||
-    !exactNullableString(observation.sourceUpdatedAt) ||
-    !exactNonEmptyString(observation.discoveredAt) ||
-    !exactNonEmptyString(observation.fetchedAt) ||
+    !supportedIsoTimestamp(observation.sourceUpdatedAt, { nullable: true, allowDate: true }) ||
+    !supportedIsoTimestamp(observation.discoveredAt) ||
+    !supportedIsoTimestamp(observation.fetchedAt) ||
     !isPlainRecord(observation.fields) ||
     !isPlainRecord(observation.rawFields) ||
     !mediaCandidatesValid(observation.mediaCandidates) ||
@@ -202,21 +236,31 @@ export function groupExactMatches(observations) {
 }
 
 function describeGroup(group) {
-  const observations = Array.isArray(group)
+  const suppliedObservations = Array.isArray(group)
     ? [...group]
     : Array.isArray(group?.observations)
       ? [...group.observations]
       : [];
-  const keys = new Set(observations.map((observation) => observation?.matchKey).filter(Boolean));
+  const keys = new Set(
+    suppliedObservations.map((observation) => observation?.matchKey).filter(Boolean),
+  );
   const matchKey = Array.isArray(group)
     ? keys.size === 1
       ? [...keys][0]
       : null
     : (group?.matchKey ?? (keys.size === 1 ? [...keys][0] : null));
-  return {
-    identity: parseMatchKey(matchKey),
-    observations: observations.sort(compareObservations),
-  };
+  const identity = parseMatchKey(matchKey);
+  const observations =
+    identity &&
+    suppliedObservations.length > 0 &&
+    suppliedObservations.every(
+      (observation) =>
+        observationQuarantineReason(observation) === null &&
+        observation.matchKey === identity.matchKey,
+    )
+      ? suppliedObservations.sort(compareObservations)
+      : [];
+  return { identity, observations };
 }
 
 function candidateId(candidate) {
@@ -242,9 +286,14 @@ function exactCandidate(candidate, identity) {
 
 function uniqueCandidates(candidates) {
   const groupedById = new Map();
+  const contractConflicts = [];
   for (const candidate of candidates ?? []) {
     const id = candidateId(candidate);
     if (id == null) continue;
+    if (!exactNonEmptyString(candidate?.listing_no)) {
+      contractConflicts.push(id);
+      continue;
+    }
     const rows = groupedById.get(id) ?? [];
     rows.push(candidate);
     groupedById.set(id, rows);
@@ -252,14 +301,10 @@ function uniqueCandidates(candidates) {
   const byId = new Map();
   const identityConflicts = [];
   for (const [id, rows] of groupedById) {
-    const identities = new Set(
-      rows.map(
-        (candidate) =>
-          `${normalizePropertyNo(candidate.canonical_property_no) ?? ""}\u0000${candidate.deal_type ?? ""}`,
-      ),
+    const rowFingerprints = new Set(
+      rows.map((candidate) => JSON.stringify(stableValue(candidate))),
     );
-    const listingNumbers = new Set(rows.map((candidate) => candidate.listing_no ?? null));
-    if (identities.size > 1 || listingNumbers.size > 1) identityConflicts.push(id);
+    if (rowFingerprints.size > 1) identityConflicts.push(id);
     rows.sort(
       (left, right) =>
         compareText(
@@ -272,7 +317,7 @@ function uniqueCandidates(candidates) {
     );
     byId.set(id, rows[0]);
   }
-  return { byId, identityConflicts };
+  return { byId, identityConflicts, contractConflicts };
 }
 
 function observationIdentitySet(observations) {
@@ -331,7 +376,14 @@ export function matchCanonicalProperty(group, candidates = [], sourceLinks = [])
   const { identity, observations } = describeGroup(group);
   if (!identity) return ambiguous("invalid_match_key", []);
 
-  const { byId: candidatesById, identityConflicts } = uniqueCandidates(candidates);
+  const {
+    byId: candidatesById,
+    identityConflicts,
+    contractConflicts,
+  } = uniqueCandidates(candidates);
+  if (contractConflicts.length) {
+    return ambiguous("candidate_contract_invalid", contractConflicts);
+  }
   if (identityConflicts.length) {
     return ambiguous("candidate_identity_conflict", identityConflicts);
   }
@@ -373,6 +425,7 @@ export function matchCanonicalProperty(group, candidates = [], sourceLinks = [])
   const exactIds = [...exactById.keys()].sort(compareText);
   if (exactIds.length > 1) return ambiguous("ambiguous_canonical_match", exactIds);
   if (exactIds.length === 1) return existingOutcome(exactById.get(exactIds[0]), identity);
+  if (!observations.length) return ambiguous("missing_valid_observation", []);
 
   const suffix = identity.dealType === "sale" ? "S" : "R";
   return {

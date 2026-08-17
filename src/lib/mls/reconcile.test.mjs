@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { SOURCE_28HSE, SOURCE_OLD_SITE, createObservation } from "./source-contract.mjs";
+import {
+  SOURCE_28HSE,
+  SOURCE_OLD_SITE,
+  createObservation,
+  stableObservationHash,
+} from "./source-contract.mjs";
 import { groupExactMatches, matchCanonicalProperty } from "./match.mjs";
 import {
   RECONCILED_FIELDS,
@@ -29,7 +34,9 @@ function observation(source, externalId, propertyNo, dealType, fields = {}, extr
     },
     rawFields: extras.rawFields ?? {},
     mediaCandidates: extras.mediaCandidates ?? [],
-    fetchedAt: "2026-08-17T00:00:00.000Z",
+    sourceUpdatedAt: extras.sourceUpdatedAt,
+    discoveredAt: extras.discoveredAt,
+    fetchedAt: extras.fetchedAt ?? "2026-08-17T00:00:00.000Z",
     quarantineReasons: extras.quarantineReasons,
   });
   return {
@@ -82,7 +89,7 @@ function validationEvidenceFor(proposal, overrides = {}) {
     (proposal.deal_type === "sale" || proposal.deal_type === "rent")
       ? `${proposal.deal_type}:${proposal.canonical_property_no}`
       : null;
-  return {
+  const payload = {
     schemaVersion: 1,
     targetMatchKey: inferredMatchKey,
     currentMatchKey: proposal.id == null ? null : inferredMatchKey,
@@ -94,6 +101,13 @@ function validationEvidenceFor(proposal, overrides = {}) {
       currentOwnedImages: proposal.id == null ? [] : [...(proposal.images ?? [])],
     },
     ...overrides,
+  };
+  return {
+    ...payload,
+    integrityHash: stableObservationHash({
+      domain: "earnestproperty.mls.reconciliation-evidence.v1",
+      evidence: payload,
+    }),
   };
 }
 
@@ -178,6 +192,70 @@ test("revalidates the complete immutable observation contract while allowing a d
   assert.equal(reconciled.canonical.title_zh, null);
 });
 
+test("observation timestamps require finite supported ISO forms", () => {
+  const validOffset = observation(
+    SOURCE_28HSE,
+    "offset",
+    "C003097",
+    "sale",
+    {},
+    {
+      discoveredAt: "2026-08-17T08:00:00+08:00",
+      fetchedAt: "2026-08-17T08:01:00+08:00",
+      sourceUpdatedAt: "2026-08-16T23:59:59Z",
+    },
+  );
+  assert.equal(groupExactMatches([validOffset]).matched.size, 1);
+  const validSourceDate = observation(
+    SOURCE_OLD_SITE,
+    "source-date",
+    "C003097",
+    "sale",
+    {},
+    {
+      sourceUpdatedAt: "2026-06-21",
+    },
+  );
+  assert.equal(groupExactMatches([validSourceDate]).matched.size, 1);
+
+  const invalid = [
+    observation(
+      SOURCE_28HSE,
+      "bad-discovered",
+      "C003097",
+      "sale",
+      {},
+      {
+        discoveredAt: "yesterday",
+      },
+    ),
+    observation(
+      SOURCE_28HSE,
+      "bad-fetched",
+      "C003097",
+      "sale",
+      {},
+      {
+        fetchedAt: "2026-02-30T00:00:00Z",
+      },
+    ),
+    observation(
+      SOURCE_28HSE,
+      "bad-updated",
+      "C003097",
+      "sale",
+      {},
+      {
+        sourceUpdatedAt: "not-a-timestamp",
+      },
+    ),
+  ];
+  const grouped = groupExactMatches(invalid);
+  assert.equal(grouped.matched.size, 0);
+  assert.equal(grouped.quarantined.length, invalid.length);
+  assert.ok(grouped.quarantined.every(({ reason }) => reason === "observation_contract_invalid"));
+});
+
 test("group ordering and generated listing numbers are input-order invariant", () => {
   const observations = [
     observation(SOURCE_OLD_SITE, "old-z", "C003097", "sale"),
@@ -208,11 +286,11 @@ test("the returned exact-group Map iterates in sorted match-key order", () => {
 
 test("canonical matching normalizes conservatively, requires deal equality, and deduplicates IDs", () => {
   const outcome = matchCanonicalProperty({ matchKey: "sale:C003097" }, [
-    { id: "p2", canonical_property_no: " C 003097 ", deal_type: "sale" },
-    { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
-    { id: "p2", canonical_property_no: "C003097", deal_type: "sale" },
-    { id: "rent-row", canonical_property_no: "C003097", deal_type: "rent" },
-    { id: "fuzzy-row", canonical_property_no: "C003097X", deal_type: "sale" },
+    { id: "p2", canonical_property_no: " C 003097 ", deal_type: "sale", listing_no: "P2" },
+    { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "P1" },
+    { id: "p2", canonical_property_no: " C 003097 ", deal_type: "sale", listing_no: "P2" },
+    { id: "rent-row", canonical_property_no: "C003097", deal_type: "rent", listing_no: "RENT" },
+    { id: "fuzzy-row", canonical_property_no: "C003097X", deal_type: "sale", listing_no: "FUZZY" },
   ]);
 
   assert.equal(outcome.kind, "ambiguous");
@@ -246,7 +324,7 @@ test("duplicate canonical rows with one identity but different listing numbers f
   });
 });
 
-test("identical duplicate candidate identities select a deterministic row", () => {
+test("duplicate candidate rows with differing canonical data fail closed", () => {
   const rows = [
     {
       id: "p1",
@@ -265,8 +343,61 @@ test("identical duplicate candidate identities select a deterministic row", () =
   ];
   const forward = matchCanonicalProperty({ matchKey: "sale:C003097" }, rows);
   const reverse = matchCanonicalProperty({ matchKey: "sale:C003097" }, [...rows].reverse());
-  assert.deepEqual(forward, reverse);
-  assert.equal(forward.property.marker, "Alpha");
+  assert.deepEqual(forward, {
+    kind: "ambiguous",
+    reason: "candidate_identity_conflict",
+    candidateIds: ["p1"],
+  });
+  assert.deepEqual(reverse, forward);
+});
+
+test("byte-equivalent duplicate candidate rows remain one deterministic candidate", () => {
+  const row = {
+    id: "p1",
+    canonical_property_no: "C003097",
+    deal_type: "sale",
+    listing_no: "ONE",
+    marker: "Same",
+  };
+  const outcome = matchCanonicalProperty({ matchKey: "sale:C003097" }, [
+    structuredClone(row),
+    structuredClone(row),
+  ]);
+  assert.equal(outcome.kind, "existing");
+  assert.deepEqual(outcome.property, row);
+});
+
+test("a canonical candidate without a usable listing number fails closed", () => {
+  const grouped = groupExactMatches([
+    observation(SOURCE_28HSE, "3972991", "C003097", "sale"),
+  ]).matched.get("sale:C003097");
+  const outcome = matchCanonicalProperty(grouped, [
+    { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
+  ]);
+  assert.deepEqual(outcome, {
+    kind: "ambiguous",
+    reason: "candidate_contract_invalid",
+    candidateIds: ["p1"],
+  });
+});
+
+test("a new match requires at least one contract-valid exact observation", () => {
+  assert.deepEqual(matchCanonicalProperty({ matchKey: "sale:C003097" }, []), {
+    kind: "ambiguous",
+    reason: "missing_valid_observation",
+    candidateIds: [],
+  });
+
+  const valid = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  const forged = { ...valid, contentHash: "0".repeat(64) };
+  assert.deepEqual(
+    matchCanonicalProperty({ matchKey: "sale:C003097", observations: [forged] }, []),
+    {
+      kind: "ambiguous",
+      reason: "missing_valid_observation",
+      candidateIds: [],
+    },
+  );
 });
 
 test("one exact canonical match preserves its existing listing number", () => {
@@ -315,8 +446,8 @@ test("link identity disagreement and multiple linked rows quarantine without rel
     observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale"),
   ]).matched.get("sale:C003097");
   const candidates = [
-    { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
-    { id: "p2", canonical_property_no: "C999999", deal_type: "sale" },
+    { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" },
+    { id: "p2", canonical_property_no: "C999999", deal_type: "sale", listing_no: "TWO" },
   ];
   const disagreement = matchCanonicalProperty(grouped, candidates, [
     {
@@ -332,8 +463,8 @@ test("link identity disagreement and multiple linked rows quarantine without rel
   const multiple = matchCanonicalProperty(
     grouped,
     [
-      { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
-      { id: "p2", canonical_property_no: "C003097", deal_type: "sale" },
+      { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" },
+      { id: "p2", canonical_property_no: "C003097", deal_type: "sale", listing_no: "TWO" },
     ],
     [
       {
@@ -377,8 +508,8 @@ test("a relink attempt reports every exact and conflicting linked row determinis
   const outcome = matchCanonicalProperty(
     grouped,
     [
-      { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
-      { id: "p2", canonical_property_no: "C999999", deal_type: "sale" },
+      { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" },
+      { id: "p2", canonical_property_no: "C999999", deal_type: "sale", listing_no: "TWO" },
     ],
     [
       {
@@ -416,8 +547,8 @@ test("a relevant active link with a non-exact reason fails closed", () => {
   const outcome = matchCanonicalProperty(
     grouped,
     [
-      { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
-      { id: "p2", canonical_property_no: "C003097", deal_type: "sale" },
+      { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" },
+      { id: "p2", canonical_property_no: "C003097", deal_type: "sale", listing_no: "TWO" },
     ],
     [
       {
@@ -482,7 +613,7 @@ test("an empty linked canonical ID cannot identify an existing row", () => {
   ]).matched.get("sale:C003097");
   const outcome = matchCanonicalProperty(
     grouped,
-    [{ id: "", canonical_property_no: "C003097", deal_type: "sale" }],
+    [{ id: "", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" }],
     [
       {
         property_id: "",
@@ -794,6 +925,46 @@ test("source-value conflicts block proposal validation through direct and explic
     validateCanonicalProposal(serialized, {
       kind: "update",
       currentOwnedImages: current.images,
+    }).includes("missing_reconciliation_evidence"),
+  );
+});
+
+test("returned validation evidence cannot mutate attached authoritative evidence", () => {
+  const a = observation(SOURCE_28HSE, "100", "C003097", "sale", { address: "Alpha" });
+  const z = observation(SOURCE_28HSE, "900", "C003097", "sale", { address: "Zulu" });
+  const current = validNewProposal({ id: "p1", address: "Current" });
+  const result = reconcileProperty({
+    current,
+    observations: [a, z],
+    currentOwnedImages: current.images,
+  });
+
+  assert.equal(Object.isFrozen(result.validationEvidence), true);
+  assert.equal(Object.isFrozen(result.validationEvidence.blockingCodes), true);
+  assert.equal(Object.isFrozen(result.validationEvidence.conflicts), true);
+  assert.throws(() => result.validationEvidence.blockingCodes.splice(0), TypeError);
+  assert.ok(validateCanonicalProposal(result.canonical).includes("source_value_conflict"));
+});
+
+test("serialized reconciliation evidence cannot strip a recorded conflict", () => {
+  const a = observation(SOURCE_28HSE, "100", "C003097", "sale", { address: "Alpha" });
+  const z = observation(SOURCE_28HSE, "900", "C003097", "sale", { address: "Zulu" });
+  const current = validNewProposal({ id: "p1", address: "Current" });
+  const result = reconcileProperty({
+    current,
+    observations: [a, z],
+    currentOwnedImages: current.images,
+  });
+  const proposal = JSON.parse(JSON.stringify(result.canonical));
+  const strippedEvidence = JSON.parse(JSON.stringify(result.validationEvidence));
+  strippedEvidence.blockingCodes = [];
+  strippedEvidence.conflicts = [];
+  strippedEvidence.quarantines = [];
+
+  assert.ok(
+    validateCanonicalProposal(proposal, {
+      kind: "update",
+      validationEvidence: strippedEvidence,
     }).includes("missing_reconciliation_evidence"),
   );
 });
@@ -1183,6 +1354,73 @@ test("malformed field-state metadata blocks automation and preserves current dat
   }
 });
 
+test("repository field-state arrays preserve sticky overrides", () => {
+  const result = reconcileProperty({
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      price: 11_000_000,
+    },
+    fieldStates: [
+      {
+        property_id: "p1",
+        field_name: "price",
+        last_published_value: 9_000_000,
+        override_value: 11_000_000,
+        active_override: true,
+        winning_observation_id: "obs-previous",
+      },
+    ],
+    observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { price: 11_000_000 })],
+  });
+
+  assert.equal(result.fields.price.source, "staff_override");
+  assert.equal(result.fields.price.value, 11_000_000);
+  assert.equal(result.fields.price.nextFieldState.last_published_value, 9_000_000);
+});
+
+test("duplicate repository field-state rows fail closed", () => {
+  const row = {
+    property_id: "p1",
+    field_name: "price",
+    last_published_value: 9_000_000,
+    override_value: null,
+    active_override: false,
+  };
+  const result = reconcileProperty({
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      price: 11_000_000,
+    },
+    fieldStates: [row, { ...row }],
+    observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { price: 12_000_000 })],
+  });
+
+  assert.equal(result.canonical.price, 11_000_000);
+  assert.equal(result.fields.price.source, "current");
+  assert.ok(result.validationEvidence.blockingCodes.includes("field_state_invalid"));
+});
+
+test("an arbitrary top-level field-state shape fails closed", () => {
+  const result = reconcileProperty({
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      price: 11_000_000,
+    },
+    fieldStates: "not-field-state-metadata",
+    observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { price: 12_000_000 })],
+  });
+
+  assert.equal(result.canonical.price, 11_000_000);
+  assert.equal(result.fields.price.source, "current");
+  assert.ok(result.validationEvidence.blockingCodes.includes("field_state_invalid"));
+});
+
 test("updates preserve all non-reconciled current properties", () => {
   const current = {
     id: "p1",
@@ -1256,6 +1494,34 @@ test("new rows receive only safe defaults and legacy columns require an explicit
   assert.equal(linked.canonical.legacy_detail_id, "6709182");
   assert.equal(linked.canonical.legacy_property_no, "C003097");
   assert.equal(linked.canonical.legacy_url, old.sourceUrl);
+});
+
+test("legacy linking rejects synthetic observation IDs", () => {
+  const old = observation(SOURCE_OLD_SITE, "6709182", "C003097", "sale");
+  const withoutId = { ...old };
+  Reflect.deleteProperty(withoutId, "id");
+  const result = reconcileProperty({
+    current: {},
+    observations: [withoutId],
+    listingNo: "C003097-6709182-S",
+    linkedObservationIds: [`${old.source}:${old.externalId}:${old.dealType}`],
+  });
+
+  assert.equal(Object.hasOwn(result.canonical, "legacy_detail_id"), false);
+  assert.ok(result.validationEvidence.blockingCodes.includes("legacy_link_invalid"));
+});
+
+test("a malformed linked-observation collection fails closed without throwing", () => {
+  const old = observation(SOURCE_OLD_SITE, "6709182", "C003097", "sale");
+  const result = reconcileProperty({
+    current: {},
+    observations: [old],
+    listingNo: "C003097-6709182-S",
+    linkedObservationIds: old.id,
+  });
+
+  assert.equal(Object.hasOwn(result.canonical, "legacy_detail_id"), false);
+  assert.ok(result.validationEvidence.blockingCodes.includes("legacy_link_invalid"));
 });
 
 test("every reconciled field exposes a complete provenance decision", () => {
@@ -1446,7 +1712,14 @@ test("proposal error codes are unique and deterministic", () => {
 });
 
 test("lifecycle validates counters, resets degraded absence, and inactivates on the second full absence", () => {
-  for (const consecutive of [-1, 1.5, "1", Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
+  for (const consecutive of [
+    -1,
+    1.5,
+    "1",
+    Number.NaN,
+    2_147_483_648,
+    Number.MAX_SAFE_INTEGER + 1,
+  ]) {
     assert.throws(
       () => nextLifecycleState({ consecutive, seen: false, mayAdvanceInactivity: true }),
       /nonnegative integer/,
@@ -1477,7 +1750,16 @@ test("lifecycle validates counters, resets degraded absence, and inactivates on 
       mayAdvanceInactivity: true,
       currentStatus: "inactive",
     }),
-    { consecutive: 3, statusChange: null },
+    { consecutive: 2, statusChange: null },
+  );
+  assert.deepEqual(
+    nextLifecycleState({
+      consecutive: 2_147_483_647,
+      seen: false,
+      mayAdvanceInactivity: true,
+      currentStatus: "inactive",
+    }),
+    { consecutive: 2, statusChange: null },
   );
 });
 
@@ -1502,7 +1784,7 @@ test("lifecycle requires exact boolean inputs and a valid supplied status", () =
     () =>
       nextLifecycleState({
         ...valid,
-        consecutive: Number.MAX_SAFE_INTEGER,
+        consecutive: 2_147_483_648,
       }),
     /lifecycle input/,
   );

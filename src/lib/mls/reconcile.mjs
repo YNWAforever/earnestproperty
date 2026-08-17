@@ -3,6 +3,7 @@ import {
   SOURCE_OLD_SITE,
   buildMatchKey,
   normalizePropertyNo,
+  stableObservationHash,
 } from "./source-contract.mjs";
 import { exactObservationQuarantineReason } from "./match.mjs";
 
@@ -26,7 +27,10 @@ export const RECONCILED_FIELDS = Object.freeze([
   "status",
 ]);
 
+const RECONCILED_FIELD_NAMES = new Set(RECONCILED_FIELDS);
+
 const RECONCILIATION_EVIDENCE = Symbol("earnestproperty.mls.reconciliation-evidence");
+const RECONCILIATION_EVIDENCE_DOMAIN = "earnestproperty.mls.reconciliation-evidence.v1";
 
 const NUMERIC_FIELDS = new Set(["price", "rent"]);
 const INTEGER_FIELDS = new Set(["saleable_area", "gross_area", "bedrooms", "bathrooms"]);
@@ -42,6 +46,7 @@ const TEXT_FIELDS = new Set([
   "status",
 ]);
 const CANONICAL_STATUSES = new Set(["draft", "active", "sold", "rented", "offline", "inactive"]);
+const POSTGRES_INTEGER_MAX = 2_147_483_647;
 
 function hasOwn(value, key) {
   return value != null && Object.prototype.hasOwnProperty.call(value, key);
@@ -59,6 +64,14 @@ function cloneValue(value) {
     return Object.fromEntries(
       Object.entries(value).map(([key, child]) => [key, cloneValue(child)]),
     );
+  }
+  return value;
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
   }
   return value;
 }
@@ -154,6 +167,53 @@ function validateFieldState(field, state, present) {
   if (lastPublished.present) normalized.last_published_value = lastPublished.value;
   if (override.present) normalized.override_value = override.value;
   return { valid: true, state: normalized };
+}
+
+function stateFromRepositoryRow(row) {
+  const state = {};
+  for (const key of ["last_published_value", "override_value", "active_override"]) {
+    if (hasOwn(row, key)) state[key] = cloneValue(row[key]);
+  }
+  return state;
+}
+
+function normalizeFieldStatesInput(input, current) {
+  if (!hasOwn(input, "fieldStates") || input.fieldStates === undefined) {
+    return { valid: true, states: {} };
+  }
+  const supplied = input.fieldStates;
+  if (Array.isArray(supplied)) {
+    const currentId = current?.id == null ? null : String(current.id);
+    const states = {};
+    const seen = new Set();
+    let valid = currentId != null || supplied.length === 0;
+    for (const row of supplied) {
+      if (
+        !isPlainRecord(row) ||
+        typeof row.property_id !== "string" ||
+        row.property_id.length === 0 ||
+        row.property_id.trim() !== row.property_id ||
+        !RECONCILED_FIELD_NAMES.has(row.field_name)
+      ) {
+        valid = false;
+        continue;
+      }
+      const rowKey = `${row.property_id}\u0000${row.field_name}`;
+      if (seen.has(rowKey)) valid = false;
+      seen.add(rowKey);
+      if (row.property_id === currentId) {
+        states[row.field_name] = stateFromRepositoryRow(row);
+      }
+    }
+    return { valid, states };
+  }
+  if (
+    !isPlainRecord(supplied) ||
+    Object.keys(supplied).some((field) => !RECONCILED_FIELD_NAMES.has(field))
+  ) {
+    return { valid: false, states: {} };
+  }
+  return { valid: true, states: supplied };
 }
 
 function inactiveState(state) {
@@ -375,9 +435,49 @@ function normalizeEvidenceImages(value) {
   return Array.isArray(images) ? images : [];
 }
 
+function validationEvidencePayload(candidate) {
+  return {
+    schemaVersion: candidate.schemaVersion,
+    targetMatchKey: candidate.targetMatchKey,
+    currentMatchKey: candidate.currentMatchKey,
+    blockingCodes: cloneValue(candidate.blockingCodes),
+    conflicts: cloneValue(candidate.conflicts),
+    quarantines: cloneValue(candidate.quarantines),
+    media: cloneValue(candidate.media),
+  };
+}
+
+function sealValidationEvidence(payload) {
+  const evidence = validationEvidencePayload(payload);
+  return {
+    ...evidence,
+    integrityHash: stableObservationHash({
+      domain: RECONCILIATION_EVIDENCE_DOMAIN,
+      evidence,
+    }),
+  };
+}
+
+function evidenceIntegrityValid(candidate) {
+  if (
+    typeof candidate.integrityHash !== "string" ||
+    !/^[a-f0-9]{64}$/.test(candidate.integrityHash)
+  ) {
+    return false;
+  }
+  const evidence = validationEvidencePayload(candidate);
+  return (
+    stableObservationHash({
+      domain: RECONCILIATION_EVIDENCE_DOMAIN,
+      evidence,
+    }) === candidate.integrityHash
+  );
+}
+
 function attachReconciliationEvidence(canonical, validationEvidence) {
+  const authoritativeEvidence = deepFreeze(cloneValue(validationEvidence));
   Object.defineProperty(canonical, RECONCILIATION_EVIDENCE, {
-    value: validationEvidence,
+    value: authoritativeEvidence,
     enumerable: true,
     configurable: false,
     writable: false,
@@ -401,6 +501,46 @@ function parseCanonicalMatchKey(matchKey) {
 function pushConflict(conflicts, blockingCodes, code, details = {}) {
   conflicts.push({ code, ...details });
   addBlockingCode(blockingCodes, code);
+}
+
+function linkedOldSiteObservation(input, observations, conflicts, quarantines, blockingCodes) {
+  if (!hasOwn(input, "linkedObservationIds")) return null;
+  const linkedObservationIds = input.linkedObservationIds;
+  let invalid = !Array.isArray(linkedObservationIds);
+  const linkedIds = new Set();
+  if (Array.isArray(linkedObservationIds)) {
+    for (const value of linkedObservationIds) {
+      if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+        invalid = true;
+      } else {
+        linkedIds.add(value);
+      }
+    }
+  }
+
+  const byId = new Map();
+  for (const observation of observations) {
+    const id = explicitObservationId(observation);
+    if (id == null) continue;
+    const rows = byId.get(id) ?? [];
+    rows.push(observation);
+    byId.set(id, rows);
+  }
+  for (const id of linkedIds) {
+    if (byId.get(id)?.length !== 1) invalid = true;
+  }
+  if (invalid) {
+    const conflict = { code: "legacy_link_invalid" };
+    conflicts.push(conflict);
+    quarantines.push(cloneValue(conflict));
+    addBlockingCode(blockingCodes, conflict.code);
+    return null;
+  }
+  for (const id of linkedIds) {
+    const observation = byId.get(id)[0];
+    if (observation.source === SOURCE_OLD_SITE) return observation;
+  }
+  return null;
 }
 
 function resolveTargetIdentity({
@@ -515,7 +655,8 @@ function resolveTargetIdentity({
 
 export function reconcileProperty(input) {
   const current = input?.current && typeof input.current === "object" ? input.current : {};
-  const fieldStates = input?.fieldStates ?? {};
+  const fieldStateInput = normalizeFieldStatesInput(input ?? {}, current);
+  const fieldStates = fieldStateInput.states;
   const estateIdsBySlug = input?.estateIdsBySlug ?? new Map();
   const conflicts = [];
   const quarantines = [];
@@ -587,7 +728,9 @@ export function reconcileProperty(input) {
       conflicts,
       quarantines,
     );
-    const stateResult = validateFieldState(field, fieldStates[field], hasOwn(fieldStates, field));
+    const stateResult = fieldStateInput.valid
+      ? validateFieldState(field, fieldStates[field], hasOwn(fieldStates, field))
+      : { valid: false, state: null };
     if (!stateResult.valid) {
       const conflict = { code: "field_state_invalid", field };
       conflicts.push(conflict);
@@ -661,10 +804,12 @@ export function reconcileProperty(input) {
   }
 
   if (!isUpdate) {
-    const linkedIds = new Set((input?.linkedObservationIds ?? []).map(String));
-    const linkedOldSite = validObservations.find(
-      (observation) =>
-        observation.source === SOURCE_OLD_SITE && linkedIds.has(observationId(observation)),
+    const linkedOldSite = linkedOldSiteObservation(
+      input ?? {},
+      validObservations,
+      conflicts,
+      quarantines,
+      blockingCodes,
     );
     if (linkedOldSite) {
       canonical.legacy_detail_id = String(linkedOldSite.externalId);
@@ -688,18 +833,20 @@ export function reconcileProperty(input) {
       compareText(left.source, right.source) ||
       compareText(left.observationId, right.observationId),
   );
-  const validationEvidence = {
-    schemaVersion: 1,
-    targetMatchKey: resolvedIdentity.target?.matchKey ?? null,
-    currentMatchKey: resolvedIdentity.currentMatchKey,
-    blockingCodes: [...blockingCodes],
-    conflicts: cloneValue(conflicts),
-    quarantines: cloneValue(quarantines),
-    media: {
-      preparedImages: [...preparedEvidence],
-      currentOwnedImages: [...currentOwnedImages],
-    },
-  };
+  const validationEvidence = deepFreeze(
+    sealValidationEvidence({
+      schemaVersion: 1,
+      targetMatchKey: resolvedIdentity.target?.matchKey ?? null,
+      currentMatchKey: resolvedIdentity.currentMatchKey,
+      blockingCodes: [...blockingCodes],
+      conflicts: cloneValue(conflicts),
+      quarantines: cloneValue(quarantines),
+      media: {
+        preparedImages: [...preparedEvidence],
+        currentOwnedImages: [...currentOwnedImages],
+      },
+    }),
+  );
   attachReconciliationEvidence(canonical, validationEvidence);
 
   return { fields, canonical, conflicts, quarantines, validationEvidence };
@@ -760,7 +907,8 @@ function evidenceFromProposal(proposal, options) {
     !conflictsCovered ||
     !isPlainRecord(candidate.media) ||
     !strictNonEmptyStringArray(candidate.media.preparedImages) ||
-    !strictNonEmptyStringArray(candidate.media.currentOwnedImages)
+    !strictNonEmptyStringArray(candidate.media.currentOwnedImages) ||
+    !evidenceIntegrityValid(candidate)
   ) {
     return {
       valid: false,
@@ -851,8 +999,8 @@ export function nextLifecycleState({
   currentStatus,
   hasStatusOverride = false,
 }) {
-  if (!Number.isSafeInteger(consecutive) || consecutive < 0) {
-    throw new TypeError("consecutive must be a nonnegative integer");
+  if (!Number.isSafeInteger(consecutive) || consecutive < 0 || consecutive > POSTGRES_INTEGER_MAX) {
+    throw new TypeError("lifecycle input consecutive must be a nonnegative integer within INT");
   }
   if (
     typeof seen !== "boolean" ||
@@ -869,11 +1017,8 @@ export function nextLifecycleState({
     };
   }
   if (!mayAdvanceInactivity) return { consecutive: 0, statusChange: null };
-  if (consecutive === Number.MAX_SAFE_INTEGER) {
-    throw new TypeError("lifecycle input would exceed the safe consecutive range");
-  }
 
-  const nextConsecutive = consecutive + 1;
+  const nextConsecutive = Math.min(consecutive + 1, 2);
   const shouldInactivate =
     nextConsecutive >= 2 && currentStatus !== "inactive" && !hasStatusOverride;
   return {
