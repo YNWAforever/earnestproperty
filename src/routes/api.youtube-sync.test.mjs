@@ -68,6 +68,6 @@ test("package exposes deterministic and disposable-database YouTube suites", () 
   assert.match(packageJson.scripts["test:youtube-sync"], /api\.youtube-sync\.test\.mjs/);
   assert.equal(
     packageJson.scripts["test:youtube-sync:db"],
-    "bun test src/lib/youtube-sync/youtube-sync.integration.test.mjs",
+    "bun test --no-env-file src/lib/youtube-sync/youtube-sync.integration.test.mjs",
   );
 });
