@@ -230,6 +230,25 @@ describe("Admin Team request safety", () => {
     ).toBeNull();
   });
 
+  test("structured reset failures explain the safe recovery path", () => {
+    expect(
+      teamMutationFailure({
+        accepted: false,
+        retryAfter: null,
+        requestId: "request-self",
+        failureCode: "SELF_RESET_NOT_ALLOWED",
+      }),
+    ).toContain("登入頁面");
+    expect(
+      teamMutationFailure({
+        accepted: false,
+        retryAfter: null,
+        requestId: "request-store",
+        failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+      }),
+    ).toContain("團隊資料");
+  });
+
   test("role and successor confirmations retain the selected payload", () => {
     expect(
       teamActionPayload({

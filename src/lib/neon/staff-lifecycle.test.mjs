@@ -436,10 +436,12 @@ test("password reset rejects unsafe targets and only sends a provider reset link
   });
   const cooldown = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
   assert.equal(cooldown.accepted, false);
-  await assert.rejects(
-    () => service.sendStaffPasswordReset({ staffId: admin.staffId }, admin, request),
-    (error) => error instanceof Response && error.status === 400,
+  const selfReset = await service.sendStaffPasswordReset(
+    { staffId: admin.staffId },
+    admin,
+    request,
   );
+  assert.equal(selfReset.failureCode, "SELF_RESET_NOT_ALLOWED");
   await assert.rejects(
     () => service.sendStaffPasswordReset({ staffId: targetId }, manager, request),
     (error) => error instanceof Response && error.status === 403,
@@ -450,6 +452,84 @@ test("password reset rejects unsafe targets and only sends a provider reset link
   assert.equal("token" in calls.actions[0].input, false);
   assert.equal("password" in (calls.audit[0].metadata ?? {}), false);
   assert.equal("token" in (calls.audit[0].metadata ?? {}), false);
+});
+
+test("password reset returns a serializable self-target denial before any store or provider call", async () => {
+  const { service, calls, staff } = fixture();
+  staff.set(admin.staffId, {
+    id: admin.staffId,
+    email: admin.email,
+    auth_user_id: admin.authUserId,
+    active: true,
+  });
+
+  const result = await service.sendStaffPasswordReset(
+    { staffId: admin.staffId },
+    admin,
+    request,
+  );
+
+  assert.deepEqual(result, {
+    accepted: false,
+    retryAfter: null,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    failureCode: "SELF_RESET_NOT_ALLOWED",
+  });
+  assert.equal(calls.provider.length, 0);
+  assert.equal(calls.actions.length, 0);
+});
+
+test("password reset uses the linked provider identity email instead of a stale staff directory email", async () => {
+  const { service, calls, staff } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "info@earnesrproperty.com",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(calls.provider, [
+    {
+      method: "resolve",
+      input: { authUserId: "auth-target", request },
+    },
+    {
+      method: "reset",
+      input: {
+        email: "target@example.test",
+        redirectTo: "https://earnest.test/auth/reset-password",
+        request,
+      },
+    },
+  ]);
+});
+
+test("password reset reports a safe action-store failure before requesting provider delivery", async () => {
+  const { service, calls, staff, identityActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  identityActions.findIdentityActionCooldown = async () => {
+    throw new Error("raw database details must not escape");
+  };
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.deepEqual(result, {
+    accepted: false,
+    retryAfter: null,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+  });
+  assert.equal(calls.provider.length, 0);
+  assert.equal(calls.actions.filter((call) => call.method === "begin").length, 0);
+  assert.doesNotMatch(JSON.stringify(result), /raw database details/i);
 });
 
 test("role changes delegate to the protected existing transaction and emit sanitized lifecycle audit", async () => {

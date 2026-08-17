@@ -1,7 +1,12 @@
 import type { AdminTeamList } from "@/lib/neon/admin-team.types";
 import type { StaffRole } from "@/lib/neon/auth.server";
 
-type LifecycleReply = { accepted: boolean; retryAfter: string | null; requestId: string };
+type LifecycleReply = {
+  accepted: boolean;
+  retryAfter: string | null;
+  requestId: string;
+  failureCode?: string;
+};
 
 export function createLatestRequestGuard() {
   let current = 0;
@@ -47,6 +52,12 @@ export function teamMutationFailure(value: unknown): string | null {
     !(value as LifecycleReply).accepted
   ) {
     const reply = value as LifecycleReply;
+    if (reply.failureCode === "SELF_RESET_NOT_ALLOWED")
+      return `目前登入帳戶不能從這裡重設；請在登入頁面使用「忘記密碼」。參考編號：${reply.requestId}`;
+    if (reply.failureCode === "STAFF_IDENTITY_UNAVAILABLE")
+      return `此成員沒有可用的已連結帳戶，未能發送重設連結。參考編號：${reply.requestId}`;
+    if (reply.failureCode === "STAFF_ACTION_STORE_UNAVAILABLE")
+      return `團隊資料暫時無法更新，請稍後再試。參考編號：${reply.requestId}`;
     const retry = reply.retryAfter
       ? `可於 ${new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(new Date(reply.retryAfter))} 再試。`
       : "請稍後再試。";
