@@ -47,7 +47,17 @@ const TEXT_FIELDS = new Set([
 ]);
 const CANONICAL_STATUSES = new Set(["draft", "active", "sold", "rented", "offline", "inactive"]);
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CONTENT_HASH_PATTERN = /^[0-9a-f]{64}$/;
+const PERSISTED_OBSERVATION_REF_KEYS = new Set([
+  "id",
+  "source",
+  "externalId",
+  "dealType",
+  "propertyNoNormalized",
+  "matchKey",
+  "contentHash",
+]);
 
 function hasOwn(value, key) {
   return value != null && Object.prototype.hasOwnProperty.call(value, key);
@@ -317,14 +327,25 @@ function observationId(observation) {
 }
 
 function normalizeUuid(value) {
-  return typeof value === "string" && value.trim() === value && UUID_PATTERN.test(value)
-    ? value.toLowerCase()
-    : null;
+  return typeof value === "string" && UUID_PATTERN.test(value) ? value : null;
 }
 
 function explicitObservationId(observation) {
   const value = observation?.id ?? observation?.observationId;
   return normalizeUuid(value);
+}
+
+function observationMatchesPersistedRef(observation, ref) {
+  return (
+    ref != null &&
+    explicitObservationId(observation) === ref.id &&
+    observation.source === ref.source &&
+    observation.externalId === ref.externalId &&
+    observation.dealType === ref.dealType &&
+    observation.propertyNoNormalized === ref.propertyNoNormalized &&
+    observation.matchKey === ref.matchKey &&
+    observation.contentHash === ref.contentHash
+  );
 }
 
 function compareCandidates(left, right) {
@@ -349,7 +370,7 @@ function addBlockingCode(blockingCodes, code) {
 function preparedImageCandidates(
   records,
   observations,
-  persistedObservationIds,
+  persistedObservationRefs,
   quarantines,
   blockingCodes,
 ) {
@@ -365,10 +386,12 @@ function preparedImageCandidates(
       ? normalizeCanonicalFieldValue("images", record.images)
       : undefined;
     const recordObservationId = isPlainRecord(record) ? normalizeUuid(record.observationId) : null;
+    const persistedRef =
+      recordObservationId == null ? null : persistedObservationRefs.get(recordObservationId);
     const matchingIds =
-      recordObservationId && persistedObservationIds.has(recordObservationId)
-        ? observations.filter(
-            (observation) => recordObservationId === explicitObservationId(observation),
+      persistedRef != null
+        ? observations.filter((observation) =>
+            observationMatchesPersistedRef(observation, persistedRef),
           )
         : [];
     const matched = matchingIds.length === 1 ? matchingIds[0] : null;
@@ -516,31 +539,64 @@ function pushConflict(conflicts, blockingCodes, code, details = {}) {
   addBlockingCode(blockingCodes, code);
 }
 
-function persistedObservationIdsFromInput(input, conflicts, quarantines, blockingCodes) {
-  if (!hasOwn(input, "persistedObservationIds")) return new Set();
-  const supplied = input.persistedObservationIds;
-  const ids = new Set();
+function persistedObservationRefsFromInput(input, conflicts, quarantines, blockingCodes) {
+  if (!hasOwn(input, "persistedObservationRefs") && !hasOwn(input, "persistedObservationIds")) {
+    return new Map();
+  }
+  const supplied = input.persistedObservationRefs;
+  const refs = new Map();
+  const identities = new Set();
   let invalid = !Array.isArray(supplied);
   if (Array.isArray(supplied)) {
-    for (const value of supplied) {
-      const id = normalizeUuid(value);
-      if (id == null || ids.has(id)) invalid = true;
-      else ids.add(id);
+    for (const ref of supplied) {
+      const ownKeys = isPlainRecord(ref) ? Reflect.ownKeys(ref) : [];
+      const propertyNoNormalized = isPlainRecord(ref)
+        ? normalizePropertyNo(ref.propertyNoNormalized)
+        : null;
+      const valid =
+        isPlainRecord(ref) &&
+        ownKeys.length === PERSISTED_OBSERVATION_REF_KEYS.size &&
+        ownKeys.every(
+          (key) => typeof key === "string" && PERSISTED_OBSERVATION_REF_KEYS.has(key),
+        ) &&
+        normalizeUuid(ref.id) === ref.id &&
+        (ref.source === SOURCE_28HSE || ref.source === SOURCE_OLD_SITE) &&
+        typeof ref.externalId === "string" &&
+        ref.externalId.length > 0 &&
+        ref.externalId.trim() === ref.externalId &&
+        !/\s/.test(ref.externalId) &&
+        (ref.dealType === "sale" || ref.dealType === "rent") &&
+        propertyNoNormalized != null &&
+        ref.propertyNoNormalized === propertyNoNormalized &&
+        ref.matchKey === buildMatchKey(propertyNoNormalized, ref.dealType) &&
+        typeof ref.contentHash === "string" &&
+        CONTENT_HASH_PATTERN.test(ref.contentHash);
+      if (!valid) {
+        invalid = true;
+        continue;
+      }
+      const identity = `${ref.source}\u0000${ref.externalId}\u0000${ref.dealType}`;
+      if (refs.has(ref.id) || identities.has(identity)) {
+        invalid = true;
+        continue;
+      }
+      refs.set(ref.id, deepFreeze(cloneValue(ref)));
+      identities.add(identity);
     }
   }
-  if (!invalid) return ids;
+  if (!invalid) return refs;
 
-  const conflict = { code: "persisted_observation_ids_invalid" };
+  const conflict = { code: "persisted_observation_refs_invalid" };
   conflicts.push(conflict);
   quarantines.push(cloneValue(conflict));
   addBlockingCode(blockingCodes, conflict.code);
-  return new Set();
+  return new Map();
 }
 
 function linkedOldSiteObservation(
   input,
   observations,
-  persistedObservationIds,
+  persistedObservationRefs,
   conflicts,
   quarantines,
   blockingCodes,
@@ -552,7 +608,7 @@ function linkedOldSiteObservation(
   if (Array.isArray(linkedObservationIds)) {
     for (const value of linkedObservationIds) {
       const id = normalizeUuid(value);
-      if (id == null || !persistedObservationIds.has(id)) invalid = true;
+      if (id == null || !persistedObservationRefs.has(id)) invalid = true;
       else linkedIds.add(id);
     }
   }
@@ -560,7 +616,8 @@ function linkedOldSiteObservation(
   const byId = new Map();
   for (const observation of observations) {
     const id = explicitObservationId(observation);
-    if (id == null) continue;
+    const persistedRef = id == null ? null : persistedObservationRefs.get(id);
+    if (!observationMatchesPersistedRef(observation, persistedRef)) continue;
     const rows = byId.get(id) ?? [];
     rows.push(observation);
     byId.set(id, rows);
@@ -713,7 +770,7 @@ export function reconcileProperty(input) {
   const contractObservations = [];
   const currentIsUpdate = hasOwn(current, "id") && current.id != null;
   const isUpdate = input?.kind === "update" || currentIsUpdate;
-  const persistedObservationIds = persistedObservationIdsFromInput(
+  const persistedObservationRefs = persistedObservationRefsFromInput(
     input ?? {},
     conflicts,
     quarantines,
@@ -754,7 +811,7 @@ export function reconcileProperty(input) {
   const preparedCandidates = preparedImageCandidates(
     input?.preparedImages,
     validObservations,
-    persistedObservationIds,
+    persistedObservationRefs,
     quarantines,
     blockingCodes,
   );
@@ -866,7 +923,7 @@ export function reconcileProperty(input) {
     const linkedOldSite = linkedOldSiteObservation(
       input ?? {},
       validObservations,
-      persistedObservationIds,
+      persistedObservationRefs,
       conflicts,
       quarantines,
       blockingCodes,

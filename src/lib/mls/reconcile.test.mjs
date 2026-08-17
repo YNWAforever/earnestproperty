@@ -88,6 +88,19 @@ function preparedRecord(sourceObservation, images, overrides = {}) {
   };
 }
 
+function persistedObservationRef(sourceObservation, overrides = {}) {
+  return {
+    id: sourceObservation.id,
+    source: sourceObservation.source,
+    externalId: sourceObservation.externalId,
+    dealType: sourceObservation.dealType,
+    propertyNoNormalized: sourceObservation.propertyNoNormalized,
+    matchKey: sourceObservation.matchKey,
+    contentHash: sourceObservation.contentHash,
+    ...overrides,
+  };
+}
+
 function validationEvidenceFor(proposal, overrides = {}) {
   const inferredMatchKey =
     typeof proposal.canonical_property_no === "string" &&
@@ -1069,7 +1082,7 @@ test("mixed automated arrays reject the whole field or prepared record", () => {
   const result = reconcileProperty({
     current: {},
     observations: [source, old],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     preparedImages: [preparedRecord(source, ["https://owned.invalid/listing.jpg", false])],
   });
   assert.deepEqual(result.fields.features.value, ["Old-site fallback"]);
@@ -1168,7 +1181,7 @@ test("raw observation images are ignored and only explicit prepared images can w
   const prepared = reconcileProperty({
     current: {},
     observations: [source],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     preparedImages: [preparedRecord(source, ["https://owned.invalid/listing.jpg"])],
   });
   assert.deepEqual(prepared.canonical.images, ["https://owned.invalid/listing.jpg"]);
@@ -1181,7 +1194,7 @@ test("an orphan or quarantined prepared-image record cannot become canonical", (
   const result = reconcileProperty({
     current: {},
     observations: [source],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     preparedImages: [
       preparedRecord(source, ["https://owned.invalid/orphan.jpg"], {
         externalId: "not-this-listing",
@@ -1208,7 +1221,7 @@ test("prepared media requires every exact observation identity component", () =>
     const result = reconcileProperty({
       current: {},
       observations: [source],
-      persistedObservationIds: [source.id],
+      persistedObservationRefs: [persistedObservationRef(source)],
       preparedImages: [record],
     });
     assert.deepEqual(result.canonical.images, []);
@@ -1216,7 +1229,7 @@ test("prepared media requires every exact observation identity component", () =>
   }
 });
 
-test("prepared media requires a repository-listed persisted observation UUID", () => {
+test("prepared media requires an exact repository-listed persisted observation ref", () => {
   const image = "https://owned.invalid/listing.jpg";
   const forged = observation(
     SOURCE_28HSE,
@@ -1231,19 +1244,19 @@ test("prepared media requires a repository-listed persisted observation UUID", (
   const forgedResult = reconcileProperty({
     current: {},
     observations: [forged],
-    persistedObservationIds: [forged.id],
+    persistedObservationRefs: [persistedObservationRef(forged)],
     preparedImages: [preparedRecord(forged, [image])],
   });
   assert.deepEqual(forgedResult.canonical.images, []);
   assert.ok(
-    forgedResult.validationEvidence.blockingCodes.includes("persisted_observation_ids_invalid"),
+    forgedResult.validationEvidence.blockingCodes.includes("persisted_observation_refs_invalid"),
   );
 
   const unlisted = observation(SOURCE_28HSE, "unlisted", "C003097", "sale");
   const unlistedResult = reconcileProperty({
     current: {},
     observations: [unlisted],
-    persistedObservationIds: [],
+    persistedObservationRefs: [],
     preparedImages: [preparedRecord(unlisted, [image])],
   });
   assert.deepEqual(unlistedResult.canonical.images, []);
@@ -1253,25 +1266,67 @@ test("prepared media requires a repository-listed persisted observation UUID", (
   const listedResult = reconcileProperty({
     current: {},
     observations: [listed],
-    persistedObservationIds: [listed.id],
+    persistedObservationRefs: [persistedObservationRef(listed)],
     preparedImages: [preparedRecord(listed, [image])],
   });
   assert.deepEqual(listedResult.canonical.images, [image]);
   assert.equal(listedResult.fields.images.observationId, listed.id);
 });
 
-test("malformed or duplicate persisted-observation collections fail closed", () => {
+test("a persisted UUID cannot be transplanted onto another observation for prepared media", () => {
+  const listed = observation(SOURCE_28HSE, "listed", "C003097", "sale");
+  const other = observation(SOURCE_28HSE, "other", "C003097", "sale");
+  const transplanted = { ...other, id: listed.id };
+  const result = reconcileProperty({
+    current: {},
+    observations: [transplanted],
+    persistedObservationRefs: [persistedObservationRef(listed)],
+    persistedObservationIds: [listed.id],
+    preparedImages: [preparedRecord(transplanted, ["https://owned.invalid/transplanted.jpg"])],
+  });
+
+  assert.deepEqual(result.canonical.images, []);
+  assert.ok(result.validationEvidence.blockingCodes.includes("prepared_media_invalid"));
+});
+
+test("malformed or duplicate persisted-observation refs fail closed", () => {
   const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
-  for (const persistedObservationIds of [source.id, [source.id, source.id]]) {
+  const other = observation(SOURCE_28HSE, "other", "C003097", "sale");
+  const exact = persistedObservationRef(source);
+  const malformedCollections = [
+    source.id,
+    [exact, exact],
+    [exact, persistedObservationRef(other, { id: exact.id })],
+    [exact, persistedObservationRef(source, { id: other.id })],
+    [{ ...exact, source: "third_party" }],
+    [{ ...exact, externalId: " not-exact " }],
+    [{ ...exact, dealType: "lease" }],
+    [{ ...exact, propertyNoNormalized: " c003097 " }],
+    [{ ...exact, matchKey: "sale:C999999" }],
+    [{ ...exact, contentHash: "0".repeat(63) }],
+    [{ ...exact, unexpected: true }],
+  ];
+  for (const persistedObservationRefs of malformedCollections) {
     const result = reconcileProperty({
       current: {},
       observations: [source],
-      persistedObservationIds,
+      persistedObservationRefs,
     });
     assert.ok(
-      result.validationEvidence.blockingCodes.includes("persisted_observation_ids_invalid"),
+      result.validationEvidence.blockingCodes.includes("persisted_observation_refs_invalid"),
     );
   }
+
+  const staleUuidOnlyInput = reconcileProperty({
+    current: {},
+    observations: [source],
+    persistedObservationIds: [source.id],
+  });
+  assert.ok(
+    staleUuidOnlyInput.validationEvidence.blockingCodes.includes(
+      "persisted_observation_refs_invalid",
+    ),
+  );
 });
 
 test("prepared media cannot bind through a synthetic observation ID", () => {
@@ -1281,7 +1336,7 @@ test("prepared media cannot bind through a synthetic observation ID", () => {
   const result = reconcileProperty({
     current: {},
     observations: [withoutId],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     preparedImages: [
       preparedRecord(source, ["https://owned.invalid/listing.jpg"], {
         observationId: `${source.source}:${source.externalId}:${source.dealType}`,
@@ -1297,7 +1352,7 @@ test("a non-array prepared-media collection fails closed instead of throwing", (
   const result = reconcileProperty({
     current: {},
     observations: [source],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     preparedImages: preparedRecord(source, ["https://owned.invalid/listing.jpg"]),
   });
   assert.deepEqual(result.canonical.images, []);
@@ -1309,7 +1364,7 @@ test("prepared images require an exact observation or source external identity",
   const result = reconcileProperty({
     current: {},
     observations: [source],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     preparedImages: [
       {
         source: SOURCE_28HSE,
@@ -1576,7 +1631,7 @@ test("new rows receive only safe defaults and legacy columns require an explicit
   const base = {
     current: {},
     observations: [old],
-    persistedObservationIds: [old.id],
+    persistedObservationRefs: [persistedObservationRef(old)],
     listingNo: "C003097-6709182-S",
     canonicalPropertyNo: "C003097",
     dealType: "sale",
@@ -1615,7 +1670,7 @@ test("legacy linking rejects synthetic observation IDs", () => {
   const result = reconcileProperty({
     current: {},
     observations: [withoutId],
-    persistedObservationIds: [old.id],
+    persistedObservationRefs: [persistedObservationRef(old)],
     listingNo: "C003097-6709182-S",
     linkedObservationIds: [`${old.source}:${old.externalId}:${old.dealType}`],
   });
@@ -1629,9 +1684,26 @@ test("a malformed linked-observation collection fails closed without throwing", 
   const result = reconcileProperty({
     current: {},
     observations: [old],
-    persistedObservationIds: [old.id],
+    persistedObservationRefs: [persistedObservationRef(old)],
     listingNo: "C003097-6709182-S",
     linkedObservationIds: old.id,
+  });
+
+  assert.equal(Object.hasOwn(result.canonical, "legacy_detail_id"), false);
+  assert.ok(result.validationEvidence.blockingCodes.includes("legacy_link_invalid"));
+});
+
+test("a persisted UUID cannot be transplanted onto another old-site observation", () => {
+  const listed = observation(SOURCE_OLD_SITE, "listed-old", "C003097", "sale");
+  const other = observation(SOURCE_OLD_SITE, "other-old", "C003097", "sale");
+  const transplanted = { ...other, id: listed.id };
+  const result = reconcileProperty({
+    current: {},
+    observations: [transplanted],
+    persistedObservationRefs: [persistedObservationRef(listed)],
+    persistedObservationIds: [listed.id],
+    listingNo: "C003097-OTHER-S",
+    linkedObservationIds: [listed.id],
   });
 
   assert.equal(Object.hasOwn(result.canonical, "legacy_detail_id"), false);
@@ -1641,16 +1713,24 @@ test("a malformed linked-observation collection fails closed without throwing", 
 test("multiple persisted old-site links are order-invariant and fail closed as ambiguous", () => {
   const alpha = observation(SOURCE_OLD_SITE, "old-alpha", "C003097", "sale");
   const zulu = observation(SOURCE_OLD_SITE, "old-zulu", "C003097", "sale");
-  const run = (observations, linkedObservationIds, persistedObservationIds) =>
+  const run = (observations, linkedObservationIds, persistedObservationRefs) =>
     reconcileProperty({
       current: {},
       observations,
-      persistedObservationIds,
+      persistedObservationRefs,
       listingNo: "C003097-OLD-S",
       linkedObservationIds,
     });
-  const forward = run([alpha, zulu], [alpha.id, zulu.id], [alpha.id, zulu.id]);
-  const reverse = run([zulu, alpha], [zulu.id, alpha.id], [zulu.id, alpha.id]);
+  const forward = run(
+    [alpha, zulu],
+    [alpha.id, zulu.id],
+    [persistedObservationRef(alpha), persistedObservationRef(zulu)],
+  );
+  const reverse = run(
+    [zulu, alpha],
+    [zulu.id, alpha.id],
+    [persistedObservationRef(zulu), persistedObservationRef(alpha)],
+  );
 
   for (const result of [forward, reverse]) {
     assert.equal(Object.hasOwn(result.canonical, "legacy_detail_id"), false);
@@ -1855,7 +1935,7 @@ test("reconciled prepared-media evidence survives the brief's one-argument propo
   const resolved = reconcileProperty({
     current: {},
     observations: [source],
-    persistedObservationIds: [source.id],
+    persistedObservationRefs: [persistedObservationRef(source)],
     listingNo: "C003097-3972991-S",
     canonicalPropertyNo: "C003097",
     dealType: "sale",
