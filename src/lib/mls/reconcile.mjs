@@ -335,10 +335,20 @@ function explicitObservationId(observation) {
   return normalizeUuid(value);
 }
 
+function observationCompositeKey(value) {
+  return JSON.stringify([
+    value?.source,
+    value?.externalId,
+    value?.dealType,
+    value?.propertyNoNormalized,
+    value?.matchKey,
+    value?.contentHash,
+  ]);
+}
+
 function observationMatchesPersistedRef(observation, ref) {
   return (
     ref != null &&
-    explicitObservationId(observation) === ref.id &&
     observation.source === ref.source &&
     observation.externalId === ref.externalId &&
     observation.dealType === ref.dealType &&
@@ -428,12 +438,12 @@ function bindPersistedObservations(
   const bound = [];
   const byId = new Map();
   for (const observation of observations) {
-    const id = explicitObservationId(observation);
-    const persistedRef = id == null ? null : persistedObservationRefs.get(id);
+    const enrichedId = explicitObservationId(observation);
+    const persistedRef = persistedObservationRefs.get(observationCompositeKey(observation));
     if (!observationMatchesPersistedRef(observation, persistedRef)) {
       quarantines.push({
         code: "observation_provenance_unbound",
-        observationId: id ?? observationId(observation),
+        observationId: enrichedId ?? observationId(observation),
         source: observation.source,
         externalId: observation.externalId,
         matchKey: observation.matchKey,
@@ -565,6 +575,7 @@ function persistedObservationRefsFromInput(input, conflicts, quarantines, blocki
   }
   const supplied = input.persistedObservationRefs;
   const refs = new Map();
+  const ids = new Set();
   const identities = new Set();
   let invalid = !Array.isArray(supplied);
   if (Array.isArray(supplied)) {
@@ -596,11 +607,13 @@ function persistedObservationRefsFromInput(input, conflicts, quarantines, blocki
         continue;
       }
       const identity = `${ref.source}\u0000${ref.externalId}\u0000${ref.dealType}`;
-      if (refs.has(ref.id) || identities.has(identity)) {
+      const compositeKey = observationCompositeKey(ref);
+      if (ids.has(ref.id) || identities.has(identity) || refs.has(compositeKey)) {
         invalid = true;
         continue;
       }
-      refs.set(ref.id, deepFreeze(cloneValue(ref)));
+      refs.set(compositeKey, deepFreeze(cloneValue(ref)));
+      ids.add(ref.id);
       identities.add(identity);
     }
   }

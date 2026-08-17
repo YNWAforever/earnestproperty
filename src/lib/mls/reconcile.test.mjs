@@ -22,9 +22,9 @@ function observationUuid(source, externalId, dealType) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-function observation(source, externalId, propertyNo, dealType, fields = {}, extras = {}) {
+function untouchedObservation(source, externalId, propertyNo, dealType, fields = {}, extras = {}) {
   const requiredPrice = dealType === "sale" ? { price: 10_000_000 } : { rent: 25_000 };
-  const created = createObservation({
+  return createObservation({
     source,
     externalId,
     dealType,
@@ -44,6 +44,10 @@ function observation(source, externalId, propertyNo, dealType, fields = {}, extr
     fetchedAt: extras.fetchedAt ?? "2026-08-17T00:00:00.000Z",
     quarantineReasons: extras.quarantineReasons,
   });
+}
+
+function observation(source, externalId, propertyNo, dealType, fields = {}, extras = {}) {
+  const created = untouchedObservation(source, externalId, propertyNo, dealType, fields, extras);
   return {
     ...created,
     id: extras.id ?? observationUuid(source, externalId, dealType),
@@ -783,6 +787,97 @@ test("exactly one valid observation key may establish a new target when inputs o
   assert.equal(result.canonical.canonical_property_no, "C003097");
   assert.equal(result.canonical.deal_type, "sale");
   assert.equal(result.validationEvidence.targetMatchKey, "sale:C003097");
+});
+
+test("an untouched source observation binds to its exact persisted ref for ordinary fields", () => {
+  const source = untouchedObservation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_zh: "Untouched observation",
+    price: 10_800_000,
+  });
+  const ref = persistedObservationRef(source, {
+    id: observationUuid(source.source, source.externalId, source.dealType),
+  });
+  const result = reconcileProperty({
+    current: {},
+    observations: [source],
+    persistedObservationRefs: [ref],
+  });
+
+  assert.equal(Object.hasOwn(source, "id"), false);
+  assert.equal(Object.hasOwn(source, "observationId"), false);
+  assert.equal(result.fields.title_zh.value, "Untouched observation");
+  assert.equal(result.fields.title_zh.source, SOURCE_28HSE);
+  assert.equal(result.fields.title_zh.observationId, ref.id);
+  assert.equal(result.fields.price.value, 10_800_000);
+  assert.equal(result.fields.price.observationId, ref.id);
+  assert.equal(
+    result.validationEvidence.blockingCodes.includes("observation_provenance_unbound"),
+    false,
+  );
+});
+
+test("an optional enriched UUID cannot override exact composite binding or provenance", () => {
+  const source = untouchedObservation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_zh: "Composite-bound observation",
+  });
+  const ref = persistedObservationRef(source, {
+    id: observationUuid(source.source, source.externalId, source.dealType),
+  });
+  const enriched = {
+    ...source,
+    id: observationUuid(source.source, "unrelated-id", source.dealType),
+  };
+  const result = reconcileProperty({
+    current: {},
+    observations: [enriched],
+    persistedObservationRefs: [ref],
+  });
+
+  assert.equal(result.fields.title_zh.value, "Composite-bound observation");
+  assert.equal(result.fields.title_zh.source, SOURCE_28HSE);
+  assert.equal(result.fields.title_zh.observationId, ref.id);
+  assert.equal(
+    result.validationEvidence.blockingCodes.includes("observation_provenance_unbound"),
+    false,
+  );
+});
+
+test("prepared media joins an untouched observation through its exact persisted ref", () => {
+  const source = untouchedObservation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  const ref = persistedObservationRef(source, {
+    id: observationUuid(source.source, source.externalId, source.dealType),
+  });
+  const image = "https://owned.invalid/untouched.jpg";
+  const result = reconcileProperty({
+    current: {},
+    observations: [source],
+    persistedObservationRefs: [ref],
+    preparedImages: [preparedRecord(source, [image], { observationId: ref.id })],
+  });
+
+  assert.deepEqual(result.canonical.images, [image]);
+  assert.equal(result.fields.images.source, SOURCE_28HSE);
+  assert.equal(result.fields.images.observationId, ref.id);
+  assert.equal(result.validationEvidence.blockingCodes.includes("prepared_media_invalid"), false);
+});
+
+test("legacy linking joins an untouched old-site observation through its persisted ref", () => {
+  const source = untouchedObservation(SOURCE_OLD_SITE, "6709182", "C003097", "sale");
+  const ref = persistedObservationRef(source, {
+    id: observationUuid(source.source, source.externalId, source.dealType),
+  });
+  const result = reconcileProperty({
+    current: {},
+    observations: [source],
+    persistedObservationRefs: [ref],
+    listingNo: "C003097-6709182-S",
+    linkedObservationIds: [ref.id],
+  });
+
+  assert.equal(result.canonical.legacy_detail_id, "6709182");
+  assert.equal(result.canonical.legacy_property_no, "C003097");
+  assert.equal(result.canonical.legacy_url, source.sourceUrl);
+  assert.equal(result.validationEvidence.blockingCodes.includes("legacy_link_invalid"), false);
 });
 
 test("a persisted UUID cannot be transplanted to publish ordinary automated fields", () => {
