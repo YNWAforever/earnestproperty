@@ -41,3 +41,44 @@ test("observation hash is stable and carries exact match identity", () => {
   assert.equal(first.source, SOURCE_28HSE);
   assert.equal(SOURCE_OLD_SITE, "old_site");
 });
+
+test("observation owns deeply immutable content and a matching hash", () => {
+  const input = {
+    source: SOURCE_OLD_SITE,
+    externalId: "6709182",
+    dealType: "sale",
+    sourceUrl: "https://www.earnestproperty.com/property-detail/6709182.html",
+    propertyNoRaw: "B054805",
+    fields: { price: 5_900_000, features: ["開放式廚房"] },
+    rawFields: { price: { label: "售價", value: "590萬" } },
+    mediaCandidates: [
+      {
+        url: "https://imgs.property.hk/largePhotos/first.jpg",
+        category: "listing_photo",
+        isPrimary: true,
+      },
+    ],
+    fetchedAt: "2026-08-17T02:00:00.000Z",
+  };
+  const observation = createObservation(input);
+  const originalHash = observation.contentHash;
+
+  input.fields.features.push("input mutation");
+  input.rawFields.price.value = "input mutation";
+  input.mediaCandidates[0].url = "https://example.test/input-mutation.jpg";
+
+  assert.deepEqual(observation.fields.features, ["開放式廚房"]);
+  assert.equal(observation.rawFields.price.value, "590萬");
+  assert.equal(
+    observation.mediaCandidates[0].url,
+    "https://imgs.property.hk/largePhotos/first.jpg",
+  );
+  assert.throws(() => observation.fields.features.push("output mutation"), TypeError);
+  assert.throws(() => {
+    observation.rawFields.price.value = "output mutation";
+  }, TypeError);
+  assert.throws(() => {
+    observation.mediaCandidates[0].url = "https://example.test/output-mutation.jpg";
+  }, TypeError);
+  assert.equal(observation.contentHash, originalHash);
+});

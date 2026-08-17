@@ -32,6 +32,16 @@ function stable(value) {
   return value;
 }
 
+function cloneAndFreeze(value) {
+  if (Array.isArray(value)) return Object.freeze(value.map(cloneAndFreeze));
+  if (value && typeof value === "object") {
+    return Object.freeze(
+      Object.fromEntries(Object.entries(value).map(([key, child]) => [key, cloneAndFreeze(child)])),
+    );
+  }
+  return value;
+}
+
 export function stableObservationHash(value) {
   return createHash("sha256")
     .update(JSON.stringify(stable(value)))
@@ -48,7 +58,9 @@ export function createObservation(input) {
   const propertyNoNormalized = normalizePropertyNo(input.propertyNoRaw);
   const quarantineReasons = [...new Set(input.quarantineReasons ?? [])];
   if (!propertyNoNormalized) quarantineReasons.push("missing_or_invalid_property_number");
-  const fields = input.fields ?? {};
+  const fields = cloneAndFreeze(input.fields ?? {});
+  const rawFields = cloneAndFreeze(input.rawFields ?? {});
+  const mediaCandidates = cloneAndFreeze(input.mediaCandidates ?? []);
   if (input.dealType === "sale" && !(Number(fields.price) > 0)) {
     quarantineReasons.push("missing_or_invalid_sale_price");
   }
@@ -62,8 +74,8 @@ export function createObservation(input) {
     dealType: input.dealType,
     propertyNoNormalized,
     fields,
-    rawFields: input.rawFields ?? {},
-    mediaCandidates: input.mediaCandidates ?? [],
+    rawFields,
+    mediaCandidates,
     sourceUpdatedAt: input.sourceUpdatedAt ?? null,
   };
   return Object.freeze({
@@ -75,7 +87,7 @@ export function createObservation(input) {
     fetchedAt: input.fetchedAt,
     contentHash: stableObservationHash(hashInput),
     validationState: quarantineReasons.length ? "quarantined" : "valid",
-    quarantineReasons: [...new Set(quarantineReasons)],
-    parseWarnings: [...new Set(input.parseWarnings ?? [])],
+    quarantineReasons: Object.freeze([...new Set(quarantineReasons)]),
+    parseWarnings: Object.freeze([...new Set(input.parseWarnings ?? [])]),
   });
 }

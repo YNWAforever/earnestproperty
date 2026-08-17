@@ -114,6 +114,15 @@ function responseStatusFromError(error) {
   return Number.isInteger(error?.response?.status) ? error.response.status : null;
 }
 
+function nonFatalWarnings(detail, row) {
+  return unique(
+    [detail?.parseWarnings, detail?.warnings, row?.parseWarnings, row?.warnings]
+      .flatMap((warnings) => (Array.isArray(warnings) ? warnings : [warnings]))
+      .map((warning) => String(warning ?? "").trim())
+      .filter(Boolean),
+  );
+}
+
 async function fetchResponse(fetchImpl, url, signal) {
   const response = await fetchImpl(url, { signal });
   const status = Number.isInteger(response?.status) ? response.status : null;
@@ -157,6 +166,7 @@ export function createOldSiteSourceAdapter({
   random,
   now = () => new Date(),
   signal,
+  parseDetail = parseListingDetail,
 } = {}) {
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl is required");
 
@@ -170,6 +180,7 @@ export function createOldSiteSourceAdapter({
 
       for (const seed of seedUrls) {
         const indexUrl = seedUrl(seed);
+        let activeIndexUrl = indexUrl;
         const dealType = dealTypeForSeed(seed);
         try {
           const first = await fetchResponse(fetchImpl, indexUrl, signal);
@@ -181,6 +192,7 @@ export function createOldSiteSourceAdapter({
           }
 
           for (const pageUrl of pageUrls) {
+            activeIndexUrl = pageUrl;
             const page =
               pageUrl === indexUrl ? first : await fetchResponse(fetchImpl, pageUrl, signal);
             diagnosticsByUrl.set(pageUrl, diagnostics(pageUrl, page.status));
@@ -203,11 +215,11 @@ export function createOldSiteSourceAdapter({
           paginationComplete = false;
           const message = error instanceof Error ? error.message : String(error);
           failures.push({ code: "index_fetch_failed", detail: message });
-          const prior = diagnosticsByUrl.get(indexUrl);
+          const prior = diagnosticsByUrl.get(activeIndexUrl);
           diagnosticsByUrl.set(
-            indexUrl,
+            activeIndexUrl,
             diagnostics(
-              indexUrl,
+              activeIndexUrl,
               prior?.responseStatus ?? responseStatusFromError(error),
               "index_fetch_failed",
             ),
@@ -227,7 +239,7 @@ export function createOldSiteSourceAdapter({
             payload = { html: fetched.text, fetchedAt };
             detailPayloads.set(record.sourceUrl, payload);
           }
-          const detail = parseListingDetail(payload.html, record.sourceUrl);
+          const detail = parseDetail(payload.html, record.sourceUrl);
           const rows = normalizeListingDetail(detail, { nowIso: payload.fetchedAt });
           const row = rows.find((candidate) => candidate.deal_type === record.dealType) ?? null;
           observations.push(
@@ -243,7 +255,7 @@ export function createOldSiteSourceAdapter({
               sourceUpdatedAt: detail.sourceUpdatedAt,
               discoveredAt: record.discoveredAt,
               fetchedAt: payload.fetchedAt,
-              parseWarnings: [],
+              parseWarnings: nonFatalWarnings(detail, row),
             }),
           );
         } catch (error) {
