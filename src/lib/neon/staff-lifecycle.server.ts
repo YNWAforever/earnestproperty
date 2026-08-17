@@ -8,6 +8,7 @@ import type {
   InviteStaffMemberInput,
   ResendStaffInvitationInput,
   SendStaffPasswordResetInput,
+  StaffLifecycleFailureCode,
 } from "./admin-team.types.ts";
 import { queryRows, transactionRows, type DbRow, type TransactionStatement } from "./db.server.ts";
 import {
@@ -73,7 +74,12 @@ export type StaffLifecycleDependencies = {
   requestId?: () => string;
 };
 
-type LifecycleResult = { accepted: boolean; retryAfter: string | null; requestId: string };
+type LifecycleResult = {
+  accepted: boolean;
+  retryAfter: string | null;
+  requestId: string;
+  failureCode?: StaffLifecycleFailureCode;
+};
 
 const providerFailureCodes = new Set<ProviderOutcomeCode>([
   "PROVIDER_CAPABILITY_UNAVAILABLE",
@@ -482,22 +488,60 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       request: Request,
     ): Promise<LifecycleResult> {
       requireAdmin(actor);
-      if (actor.staffId === input.staffId)
-        throw new Response("Self password reset is not permitted.", { status: 400 });
       const requestId = nextRequestId();
-      const member = await memberById(input.staffId);
+      if (actor.staffId === input.staffId)
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "SELF_RESET_NOT_ALLOWED",
+        };
+      let member: LifecycleMember;
+      try {
+        member = await memberById(input.staffId);
+      } catch (error) {
+        if (error instanceof Response && error.status === 404)
+          return {
+            accepted: false,
+            retryAfter: null,
+            requestId,
+            failureCode: "STAFF_IDENTITY_UNAVAILABLE",
+          };
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+        };
+      }
       if (!member.active || !member.authUserId)
-        throw new Response("Staff identity is unavailable.", { status: 400 });
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_IDENTITY_UNAVAILABLE",
+        };
       const currentNow = now();
-      const persisted = await latestActionFor({
-        targetStaffId: member.id,
-        actions: ["password_reset"],
-      });
-      const previous = await actions.findIdentityActionCooldown({
-        targetStaffId: member.id,
-        action: "password_reset",
-        now: currentNow.toISOString(),
-      });
+      let persisted: Awaited<ReturnType<typeof latestActionFor>>;
+      let previous: Awaited<ReturnType<typeof actions.findIdentityActionCooldown>>;
+      try {
+        persisted = await latestActionFor({
+          targetStaffId: member.id,
+          actions: ["password_reset"],
+        });
+        previous = await actions.findIdentityActionCooldown({
+          targetStaffId: member.id,
+          action: "password_reset",
+          now: currentNow.toISOString(),
+        });
+      } catch {
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+        };
+      }
       const localCooldown =
         persisted && ["pending", "succeeded", "retryable_failure"].includes(persisted.state)
           ? cooldownRetryAfter({
@@ -512,13 +556,23 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           retryAfter: localCooldown ?? previous?.retryAfter ?? null,
           requestId,
         };
-      const operation = await beginAction({
-        action: "password_reset",
-        actor,
-        member,
-        requestId,
-        keyValue: cooldownWindowKey("password-reset", member.id, currentNow),
-      });
+      let operation: Awaited<ReturnType<typeof beginAction>>;
+      try {
+        operation = await beginAction({
+          action: "password_reset",
+          actor,
+          member,
+          requestId,
+          keyValue: cooldownWindowKey("password-reset", member.id, currentNow),
+        });
+      } catch {
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+        };
+      }
       if (operation.isExisting) {
         return {
           accepted: operation.state === "pending" || operation.state === "succeeded",
@@ -527,8 +581,18 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         };
       }
       try {
+        // The local staff directory can contain a stale/typoed email. The
+        // linked identity provider is authoritative for where a reset link is
+        // delivered, so never send a reset using member.email alone.
+        const identity = await dependencies.provider.resolveUser({
+          authUserId: member.authUserId,
+          request,
+        });
+        const providerEmail = identity.email?.trim().toLowerCase();
+        if (!providerEmail)
+          throw Object.assign(new Error(), { code: "PROVIDER_IDENTITY_NOT_FOUND" });
         await dependencies.provider.requestPasswordReset({
-          email: member.email,
+          email: providerEmail,
           redirectTo: new URL("/auth/reset-password", request.url).toString(),
           request,
         });

@@ -57,8 +57,13 @@ export type ChangeStaffActiveInput = {
   active: boolean;
   reassignToStaffId?: string | null;
 };
+export type StaffLifecycleFailureCode =
+  | "SELF_RESET_NOT_ALLOWED"
+  | "STAFF_IDENTITY_UNAVAILABLE"
+  | "STAFF_ACTION_STORE_UNAVAILABLE";
 export type StaffLifecycleResult = {
   requestId: string;
   accepted: boolean;
   retryAfter: string | null;
+  failureCode?: StaffLifecycleFailureCode;
 };
