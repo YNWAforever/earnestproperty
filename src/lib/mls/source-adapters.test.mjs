@@ -2,17 +2,111 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import {
+  classifyFetchFailure,
+  classifyRobotsResponse,
+  createPolicyFetch,
+  MAX_HTML_BYTES,
+  parseRobots,
+} from "./access-policy.mjs";
+import { build28HseAgentUrl } from "./parse-28hse.mjs";
 import { parseListingDetail, parseListingIndex } from "./parse-old-site.mjs";
+import { create28HseAgentSourceAdapter } from "./sources/28hse-agent.mjs";
 import { createOldSiteSourceAdapter } from "./sources/old-site.mjs";
 
 const seedUrl = "https://www.earnestproperty.com/property/c1";
 const detailUrl = "https://www.earnestproperty.com/property-detail/6709182.html";
+const oldRobotsUrl = "https://www.earnestproperty.com/robots.txt";
+const hseRobotsUrl = "https://www.28hse.com/robots.txt";
 
 function fixture(name) {
   return readFileSync(
     new URL(`../../../scripts/old-site-migration/__fixtures__/${name}`, import.meta.url),
     "utf8",
   );
+}
+
+function sourceFixture(source, name) {
+  return readFileSync(new URL(`./__fixtures__/${source}/${name}`, import.meta.url), "utf8");
+}
+
+function withOldRobots(fetchImpl, robotsName = "robots-allow.txt") {
+  return async (url, options) =>
+    url === oldRobotsUrl
+      ? new Response(sourceFixture("old-site", robotsName), { status: 200 })
+      : fetchImpl(url, options);
+}
+
+function hseFixtureResponses() {
+  const saleDetail = sourceFixture("28hse", "detail-sale-3972991.html");
+  return new Map([
+    [hseRobotsUrl, sourceFixture("28hse", "robots-allow.txt")],
+    [build28HseAgentUrl("sale", 1), sourceFixture("28hse", "agent-sale-page-1.html")],
+    [build28HseAgentUrl("sale", 2), sourceFixture("28hse", "agent-sale-page-2.html")],
+    [build28HseAgentUrl("rent", 1), sourceFixture("28hse", "agent-rent-page-1.html")],
+    ["https://www.28hse.com/buy/apartment/property-3972991", saleDetail],
+    [
+      "https://www.28hse.com/buy/apartment/property-3973002",
+      saleDetail.replace("C003097", "C003002"),
+    ],
+    [
+      "https://www.28hse.com/buy/apartment/property-3973003",
+      saleDetail.replace("C003097", "C003003"),
+    ],
+    [
+      "https://www.28hse.com/rent/apartment/property-3976155",
+      sourceFixture("28hse", "detail-rent-3976155.html"),
+    ],
+  ]);
+}
+
+function fakeFixtureFetch(requested, overrides = new Map()) {
+  const responses = hseFixtureResponses();
+  for (const [url, value] of overrides) responses.set(url, value);
+  return async (url) => {
+    requested.push(String(url));
+    if (!responses.has(String(url))) throw new Error(`Unexpected fixture URL: ${url}`);
+    const value = responses.get(String(url));
+    if (value instanceof Response) return value;
+    if (value instanceof Error) throw value;
+    return new Response(value, { status: 200 });
+  };
+}
+
+function createHseHarness(fetchImpl, sleeps = []) {
+  return create28HseAgentSourceAdapter({
+    fetchImpl,
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    random: () => 0.5,
+    now: () => new Date("2026-08-17T02:00:00.000Z"),
+    signal: new AbortController().signal,
+  });
+}
+
+function repeatedPageAdapter() {
+  const requested = [];
+  return createHseHarness(
+    fakeFixtureFetch(
+      requested,
+      new Map([[build28HseAgentUrl("sale", 2), sourceFixture("28hse", "agent-sale-page-1.html")]]),
+    ),
+  );
+}
+
+function oldSitePolicyHarness(robotsName) {
+  const indexHtml = oneLinkIndexFromFixture();
+  return createOldSiteSourceAdapter({
+    fetchImpl: withOldRobots(async (url) => {
+      if (url === seedUrl) return new Response(indexHtml, { status: 200 });
+      if (url === detailUrl)
+        return new Response(fixture("property-detail-6709182.html"), { status: 200 });
+      throw new Error(`Unexpected fixture URL: ${url}`);
+    }, robotsName),
+    sleep: async () => {},
+    random: () => 0.5,
+    now: () => new Date("2026-08-17T02:00:00.000Z"),
+    signal: new AbortController().signal,
+  });
 }
 
 function oneLinkIndexFromFixture() {
@@ -35,10 +129,10 @@ test("old-site adapter returns an immutable observation for a discovered sale de
     [seedUrl, indexHtml],
     [detailUrl, fixture("property-detail-6709182.html")],
   ]);
-  const fakeResponseFetch = async (url) => {
+  const fakeResponseFetch = withOldRobots(async (url) => {
     const body = responses.get(url);
     return new Response(body ?? "", { status: body === undefined ? 404 : 200 });
-  };
+  });
 
   const adapter = createOldSiteSourceAdapter({
     fetchImpl: fakeResponseFetch,
@@ -59,10 +153,11 @@ test("old-site adapter returns an immutable observation for a discovered sale de
 
 test("old-site adapter retains a quarantined stub when a discovered detail fails", async () => {
   const indexHtml = oneLinkIndexFromFixture();
-  const fakeResponseFetch = async (url) =>
+  const fakeResponseFetch = withOldRobots(async (url) =>
     url === seedUrl
       ? new Response(indexHtml, { status: 200 })
-      : new Response("temporarily unavailable", { status: 503, headers: { "retry-after": "60" } });
+      : new Response("temporarily unavailable", { status: 503, headers: { "retry-after": "60" } }),
+  );
   const adapter = createOldSiteSourceAdapter({
     fetchImpl: fakeResponseFetch,
     sleep: async () => {},
@@ -90,10 +185,12 @@ test("old-site adapter retains a quarantined stub when a discovered detail fails
 test("old-site adapter preserves parser warnings without quarantining the observation", async () => {
   const indexHtml = oneLinkIndexFromFixture();
   const adapter = createOldSiteSourceAdapter({
-    fetchImpl: async (url) =>
-      new Response(url === seedUrl ? indexHtml : fixture("property-detail-6709182.html"), {
-        status: 200,
-      }),
+    fetchImpl: withOldRobots(
+      async (url) =>
+        new Response(url === seedUrl ? indexHtml : fixture("property-detail-6709182.html"), {
+          status: 200,
+        }),
+    ),
     parseDetail: (html, url) => ({
       ...parseListingDetail(html, url),
       parseWarnings: ["fixture_parser_notice"],
@@ -114,10 +211,10 @@ test("old-site adapter preserves parser warnings without quarantining the observ
 test("old-site adapter records a page-two failure against the page URL", async () => {
   const pageTwoUrl = `${seedUrl}?page=2`;
   const adapter = createOldSiteSourceAdapter({
-    fetchImpl: async (url) => {
+    fetchImpl: withOldRobots(async (url) => {
       if (url === seedUrl) return new Response(twoPageIndexFromFixture(), { status: 200 });
       return new Response("temporarily unavailable", { status: 503 });
-    },
+    }),
     sleep: async () => {},
     random: () => 0,
     now: () => new Date("2026-08-17T02:00:00.000Z"),
@@ -127,26 +224,165 @@ test("old-site adapter records a page-two failure against the page URL", async (
   const result = await adapter.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] });
 
   assert.equal(result.paginationComplete, false);
-  assert.deepEqual(
-    result.diagnostics.find((entry) => entry.sourceUrl === seedUrl),
-    {
-      sourceUrl: seedUrl,
-      responseStatus: 200,
-      attempts: 1,
-      templateFingerprint: null,
-      selectorCounts: {},
-      failureCode: null,
-    },
-  );
+  const firstPageDiagnostic = result.diagnostics.find((entry) => entry.sourceUrl === seedUrl);
+  assert.equal(firstPageDiagnostic?.responseStatus, 200);
+  assert.equal(firstPageDiagnostic?.attempts, 1);
+  assert.match(firstPageDiagnostic?.templateFingerprint ?? "", /^[a-f0-9]{64}$/);
+  assert.deepEqual(firstPageDiagnostic?.selectorCounts, { listings: 1 });
+  assert.equal(firstPageDiagnostic?.failureCode, null);
   assert.deepEqual(
     result.diagnostics.find((entry) => entry.sourceUrl === pageTwoUrl),
     {
       sourceUrl: pageTwoUrl,
       responseStatus: 503,
-      attempts: 1,
+      attempts: 3,
       templateFingerprint: null,
       selectorCounts: {},
       failureCode: "index_fetch_failed",
     },
   );
+});
+
+test("robots evaluator uses the most-specific matching rule and Allow wins ties", () => {
+  const policy = parseRobots(sourceFixture("28hse", "robots-allow.txt"), "EarnestPropertyBot");
+  assert.equal(policy.isAllowed("/agent/540"), true);
+  assert.equal(policy.isAllowed("/private/export"), false);
+  assert.equal(policy.crawlDelaySeconds, 2.5);
+});
+
+test("403 and 429 are terminal but network, 408, and 5xx are retryable", () => {
+  assert.equal(classifyFetchFailure({ status: 403 }), "terminal_access");
+  assert.equal(classifyFetchFailure({ status: 429 }), "terminal_access");
+  assert.equal(classifyFetchFailure({ status: 503 }), "retryable");
+  assert.equal(classifyFetchFailure({ status: 408 }), "retryable");
+  assert.equal(classifyFetchFailure({ networkError: true }), "retryable");
+});
+
+test("robots status handling distinguishes unavailable from unreachable", () => {
+  assert.equal(classifyRobotsResponse({ status: 404 }), "allow_unavailable");
+  assert.equal(classifyRobotsResponse({ status: 410 }), "allow_unavailable");
+  assert.equal(classifyRobotsResponse({ status: 403 }), "terminal_access");
+  assert.equal(classifyRobotsResponse({ status: 429 }), "terminal_access");
+  assert.equal(classifyRobotsResponse({ status: 503 }), "disallow_unreachable");
+  assert.equal(classifyRobotsResponse({ networkError: true }), "disallow_unreachable");
+});
+
+test("policy fetch retries retryable responses at most three total attempts", async () => {
+  let attempts = 0;
+  const sleeps = [];
+  const policyFetch = createPolicyFetch({
+    fetchImpl: async () => {
+      attempts += 1;
+      return attempts < 3
+        ? new Response("temporary", { status: 503 })
+        : new Response("ready", { status: 200 });
+    },
+    sleep: async (milliseconds) => sleeps.push(milliseconds),
+    random: () => 0.5,
+    signal: new AbortController().signal,
+  });
+
+  const result = await policyFetch("https://example.test/page", { maxBytes: 128 });
+  assert.equal(result.text, "ready");
+  assert.equal(result.attempts, 3);
+  assert.deepEqual(sleeps, [2500, 2500]);
+});
+
+test("28Hse adapter preserves the active deal filter across pagination", async () => {
+  const requested = [];
+  const sleeps = [];
+  const adapter = createHseHarness(fakeFixtureFetch(requested), sleeps);
+  const result = await adapter.collect();
+
+  assert.ok(requested.some((url) => url.includes("buyRent=buy&page=2")));
+  assert.ok(requested.some((url) => url.includes("buyRent=rent&page=1")));
+  assert.equal(
+    requested.some((url) => /page-2/.test(url)),
+    false,
+  );
+  assert.equal(result.identityValid, true);
+  assert.equal(result.paginationComplete, true);
+  assert.equal(result.observations.length, result.discovered);
+  assert.ok(sleeps.length >= 3);
+  assert.ok(sleeps.every((value) => value === 2500));
+});
+
+test("repeated pages and access challenges fail closed", async () => {
+  const loopResult = await repeatedPageAdapter().collect();
+  assert.equal(loopResult.paginationComplete, false);
+  assert.ok(loopResult.failures.some((failure) => failure.code === "pagination_loop"));
+
+  const requested = [];
+  const challenge = createHseHarness(
+    fakeFixtureFetch(
+      requested,
+      new Map([[build28HseAgentUrl("sale", 1), sourceFixture("28hse", "challenge.html")]]),
+    ),
+  );
+  const challengeResult = await challenge.collect();
+  assert.equal(challengeResult.challengeDetected, true);
+  assert.equal(challengeResult.paginationComplete, false);
+  assert.equal(challengeResult.observations.length, 0);
+});
+
+test("conflicting duplicate IDs are reported without conflating sale and rent identity", async () => {
+  const requested = [];
+  const conflictingPage = sourceFixture("28hse", "agent-sale-page-2.html").replace(
+    "/buy/apartment/property-3973002",
+    "/buy/house/property-3973002",
+  );
+  const adapter = createHseHarness(
+    fakeFixtureFetch(requested, new Map([[build28HseAgentUrl("sale", 2), conflictingPage]])),
+  );
+
+  const result = await adapter.collect();
+  assert.deepEqual(result.conflictingDuplicateIds, ["3973002"]);
+  assert.ok(result.failures.some((failure) => failure.code === "duplicate_id_conflict"));
+});
+
+test("oversized index bodies fail as an unexpected template without retrying", async () => {
+  const requested = [];
+  const pageUrl = build28HseAgentUrl("sale", 1);
+  const adapter = createHseHarness(
+    fakeFixtureFetch(
+      requested,
+      new Map([[pageUrl, new Response(new Uint8Array(MAX_HTML_BYTES + 1), { status: 200 })]]),
+    ),
+  );
+
+  const result = await adapter.collect();
+  assert.equal(requested.filter((url) => url === pageUrl).length, 1);
+  assert.ok(result.failures.some((failure) => failure.code === "unexpected_template"));
+  assert.equal(
+    result.diagnostics.find((entry) => entry.sourceUrl === pageUrl)?.failureCode,
+    "unexpected_template",
+  );
+});
+
+test("old-site adapter also checks robots, retries safely, and reports page loops", async () => {
+  const allowed = await oldSitePolicyHarness("robots-allow.txt").collect({
+    seedUrls: [{ url: seedUrl, dealType: "sale" }],
+  });
+  const denied = await oldSitePolicyHarness("robots-disallow.txt").collect({
+    seedUrls: [{ url: seedUrl, dealType: "sale" }],
+  });
+  assert.equal(allowed.robotsAllowed, true);
+  assert.equal(denied.robotsAllowed, false);
+  assert.equal(denied.observations.length, 0);
+
+  const repeated = createOldSiteSourceAdapter({
+    fetchImpl: withOldRobots(async (url) => {
+      if (url === seedUrl) return new Response(twoPageIndexFromFixture(), { status: 200 });
+      if (url === `${seedUrl}?page=2`)
+        return new Response(oneLinkIndexFromFixture(), { status: 200 });
+      throw new Error(`Unexpected fixture URL: ${url}`);
+    }),
+    sleep: async () => {},
+    random: () => 0.5,
+    now: () => new Date("2026-08-17T02:00:00.000Z"),
+    signal: new AbortController().signal,
+  });
+  const loop = await repeated.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] });
+  assert.equal(loop.paginationComplete, false);
+  assert.ok(loop.failures.some((failure) => failure.code === "pagination_loop"));
 });

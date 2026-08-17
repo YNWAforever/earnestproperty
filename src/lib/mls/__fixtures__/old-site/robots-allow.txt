@@ -1,0 +1,10 @@
+User-agent: *
+Disallow: /admin/
+Allow: /
+Crawl-delay: 0.25
+
+User-agent: EarnestPropertyBot
+Disallow: /admin/
+Allow: /property/
+Allow: /property-detail/
+Crawl-delay: 0.25
