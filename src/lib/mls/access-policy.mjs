@@ -245,13 +245,38 @@ function crawlerUserAgent() {
 }
 
 function abortError(signal) {
-  return signal?.reason instanceof Error
+  return signal?.aborted
     ? signal.reason
     : new DOMException("The operation was aborted", "AbortError");
 }
 
 export function isAbortError(error) {
   return error?.name === "AbortError";
+}
+
+export function rethrowIfRunCancelled(error, signal) {
+  if (signal?.aborted) throw abortError(signal);
+  if (isAbortError(error)) throw error;
+}
+
+export function defaultSleep(milliseconds, { signal } = {}) {
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) {
+    return Promise.reject(new TypeError("Sleep duration must be a non-negative finite number"));
+  }
+  if (signal?.aborted) return Promise.reject(abortError(signal));
+
+  return new Promise((resolve, reject) => {
+    let timer;
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError(signal));
+    };
+    timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 export async function abortableDelay(sleep, milliseconds, signal) {
@@ -336,7 +361,7 @@ function requestSignal(runSignal, timeoutMs) {
 
 export function createPolicyFetch({
   fetchImpl,
-  sleep = async () => {},
+  sleep = defaultSleep,
   random = Math.random,
   signal: runSignal,
   maxAttempts = 3,
@@ -430,7 +455,7 @@ export function createPolicyFetch({
           break;
         }
       } catch (error) {
-        if (runSignal?.aborted) throw abortError(runSignal);
+        rethrowIfRunCancelled(error, runSignal);
         if (isAbortError(error) && !timeoutSignal.aborted) throw error;
         if (
           error instanceof PolicyFetchError &&
@@ -461,7 +486,12 @@ export function createPolicyFetch({
   };
 }
 
-export async function loadRobotsPolicy({ policyFetch, robotsUrl, userAgent = CRAWLER_USER_AGENT }) {
+export async function loadRobotsPolicy({
+  policyFetch,
+  robotsUrl,
+  userAgent = CRAWLER_USER_AGENT,
+  signal,
+}) {
   try {
     const fetched = await policyFetch(robotsUrl, {
       timeoutMs: ROBOTS_TIMEOUT_MS,
@@ -487,7 +517,7 @@ export async function loadRobotsPolicy({ policyFetch, robotsUrl, userAgent = CRA
       ...fetched,
     };
   } catch (error) {
-    if (isAbortError(error)) throw error;
+    rethrowIfRunCancelled(error, signal);
     return {
       allowed: false,
       classification: error?.code ?? "disallow_unreachable",

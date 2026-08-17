@@ -5,8 +5,9 @@ import {
   PolicyFetchError,
   abortableDelay,
   createPolicyFetch,
-  isAbortError,
+  defaultSleep,
   loadRobotsPolicy,
+  rethrowIfRunCancelled,
 } from "../access-policy.mjs";
 import {
   build28HseAgentUrl,
@@ -119,7 +120,7 @@ function robotsFailureCode(classification) {
 
 export function create28HseAgentSourceAdapter({
   fetchImpl,
-  sleep = async () => {},
+  sleep = defaultSleep,
   random = Math.random,
   now = () => new Date(),
   signal,
@@ -152,6 +153,7 @@ export function create28HseAgentSourceAdapter({
         policyFetch,
         robotsUrl: ROBOTS_URL,
         userAgent: CRAWLER_USER_AGENT,
+        signal,
       });
       diagnosticsByUrl.set(
         ROBOTS_URL,
@@ -232,7 +234,7 @@ export function create28HseAgentSourceAdapter({
           try {
             fetched = await fetchPage(pageUrl);
           } catch (error) {
-            if (isAbortError(error)) throw error;
+            rethrowIfRunCancelled(error, signal);
             const code =
               error?.code === "terminal_access"
                 ? "terminal_access"
@@ -264,6 +266,7 @@ export function create28HseAgentSourceAdapter({
           try {
             parsed = parse28HseAgentIndex(fetched.text, { dealType, pageUrl });
           } catch (error) {
+            rethrowIfRunCancelled(error, signal);
             const identityFailure = /licence|company|identity|source url|deal type/i.test(
               String(error?.message ?? ""),
             );
@@ -373,6 +376,16 @@ export function create28HseAgentSourceAdapter({
             paginationComplete = false;
             abortReason = "advertised_count_mismatch";
             pushFailure(failures, "advertised_count_mismatch");
+            diagnosticsByUrl.set(
+              pageUrl,
+              diagnostic(
+                pageUrl,
+                fetched,
+                "advertised_count_mismatch",
+                parsed.pageFingerprint,
+                parsed.links.length,
+              ),
+            );
             aborted = true;
             break discovery;
           }
@@ -425,7 +438,7 @@ export function create28HseAgentSourceAdapter({
               detailRequestIndex += 1;
               fetched = await fetchPage(candidate.sourceUrl, { detailIndex: pacingIndex });
             } catch (error) {
-              if (isAbortError(error)) throw error;
+              rethrowIfRunCancelled(error, signal);
               const isAccess =
                 error?.code === "terminal_access" || error?.code === "robots_prohibited";
               const code = isAccess
@@ -477,7 +490,8 @@ export function create28HseAgentSourceAdapter({
                 }),
               );
               diagnosticsByUrl.set(candidate.sourceUrl, diagnostic(candidate.sourceUrl, fetched));
-            } catch {
+            } catch (error) {
+              rethrowIfRunCancelled(error, signal);
               lastFailureCode = "detail_fetch_or_parse_failed";
               pushFailure(failures, lastFailureCode, record.externalId);
               diagnosticsByUrl.set(
@@ -490,20 +504,16 @@ export function create28HseAgentSourceAdapter({
           const propertyNumbers = new Set(
             parsedCandidates.map((observation) => observation.propertyNoNormalized),
           );
-          if (propertyNumbers.size > 1) {
+          if (lastFailureCode) {
+            observations.push(stubObservation(record, isoNow(now), lastFailureCode));
+          } else if (propertyNumbers.size > 1) {
             conflictingDuplicateIds.add(record.externalId);
             pushFailure(failures, "duplicate_id_conflict", record.externalId);
             observations.push(stubObservation(record, isoNow(now), "duplicate_id_conflict"));
           } else if (parsedCandidates.length) {
             observations.push(parsedCandidates[0]);
           } else {
-            observations.push(
-              stubObservation(
-                record,
-                isoNow(now),
-                lastFailureCode ?? "detail_fetch_or_parse_failed",
-              ),
-            );
+            observations.push(stubObservation(record, isoNow(now)));
           }
         }
       }

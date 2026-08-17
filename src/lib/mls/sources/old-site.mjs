@@ -8,8 +8,9 @@ import {
   PolicyFetchError,
   abortableDelay,
   createPolicyFetch,
-  isAbortError,
+  defaultSleep,
   loadRobotsPolicy,
+  rethrowIfRunCancelled,
 } from "../access-policy.mjs";
 
 import {
@@ -253,7 +254,7 @@ export async function discoverOldSitePages({
 
 export function createOldSiteSourceAdapter({
   fetchImpl,
-  sleep = async () => {},
+  sleep = defaultSleep,
   random = Math.random,
   now = () => new Date(),
   signal,
@@ -283,6 +284,7 @@ export function createOldSiteSourceAdapter({
         policyFetch,
         robotsUrl: OLD_SITE_ROBOTS_URL,
         userAgent: CRAWLER_USER_AGENT,
+        signal,
       });
       diagnosticsByUrl.set(
         OLD_SITE_ROBOTS_URL,
@@ -366,7 +368,7 @@ export function createOldSiteSourceAdapter({
           try {
             fetched = await fetchPage(pageUrl);
           } catch (error) {
-            if (isAbortError(error)) throw error;
+            rethrowIfRunCancelled(error, signal);
             const code =
               error?.code === "terminal_access"
                 ? "terminal_access"
@@ -403,7 +405,8 @@ export function createOldSiteSourceAdapter({
             );
             if (pageNumber === 1)
               advertisedMaxPage = Math.max(1, parseMaxListingPage(fetched.text));
-          } catch {
+          } catch (error) {
+            rethrowIfRunCancelled(error, signal);
             paginationComplete = false;
             aborted = true;
             abortReason = "unexpected_index_template";
@@ -530,7 +533,7 @@ export function createOldSiteSourceAdapter({
             }),
           );
         } catch (error) {
-          if (isAbortError(error)) throw error;
+          rethrowIfRunCancelled(error, signal);
           const isAccess = error?.code === "terminal_access" || error?.code === "robots_prohibited";
           const isChallenge = error?.code === "challenge_detected";
           const code = isAccess

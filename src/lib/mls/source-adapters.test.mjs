@@ -6,6 +6,7 @@ import {
   classifyFetchFailure,
   classifyRobotsResponse,
   createPolicyFetch,
+  defaultSleep,
   MAX_HTML_BYTES,
   parseRobots,
 } from "./access-policy.mjs";
@@ -110,7 +111,7 @@ function oldSitePolicyHarness(robotsName) {
 }
 
 function runCancellation(controller) {
-  const error = new DOMException("run cancelled", "AbortError");
+  const error = new Error("run cancelled with a custom reason");
   controller.abort(error);
   return error;
 }
@@ -301,8 +302,40 @@ test("run cancellation during robots fetch propagates from both adapters", async
       random: () => 0.5,
       signal: controller.signal,
     });
-    await assert.rejects(() => adapter.collect(), { name: "AbortError" });
+    await assert.rejects(
+      () => adapter.collect(),
+      (error) => error === controller.signal.reason,
+    );
   }
+});
+
+test("the shared default sleeper waits until completion or exact-reason cancellation", async () => {
+  let completed = false;
+  const shortSleep = defaultSleep(10).then(() => {
+    completed = true;
+  });
+  await Promise.resolve();
+  assert.equal(completed, false);
+  await shortSleep;
+  assert.equal(completed, true);
+
+  const controller = new AbortController();
+  const reason = new Error("stop the default timer");
+  let settled = false;
+  const pending = defaultSleep(10_000, { signal: controller.signal });
+  pending.then(
+    () => {
+      settled = true;
+    },
+    () => {
+      settled = true;
+    },
+  );
+
+  await Promise.resolve();
+  assert.equal(settled, false);
+  controller.abort(reason);
+  await assert.rejects(pending, (error) => error === reason);
 });
 
 test("a pre-aborted run stops before any source request", async () => {
@@ -335,7 +368,10 @@ test("run cancellation during index and detail fetch propagates from both adapte
     random: () => 0.5,
     signal: indexController.signal,
   });
-  await assert.rejects(() => hseIndexRun.collect(), { name: "AbortError" });
+  await assert.rejects(
+    () => hseIndexRun.collect(),
+    (error) => error === indexController.signal.reason,
+  );
 
   const oldIndexController = new AbortController();
   const oldIndexRun = createOldSiteSourceAdapter({
@@ -351,7 +387,7 @@ test("run cancellation during index and detail fetch propagates from both adapte
   });
   await assert.rejects(
     () => oldIndexRun.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] }),
-    { name: "AbortError" },
+    (error) => error === oldIndexController.signal.reason,
   );
 
   const hseDetailController = new AbortController();
@@ -369,7 +405,10 @@ test("run cancellation during index and detail fetch propagates from both adapte
     now: () => new Date("2026-08-17T02:00:00.000Z"),
     signal: hseDetailController.signal,
   });
-  await assert.rejects(() => hseDetailRun.collect(), { name: "AbortError" });
+  await assert.rejects(
+    () => hseDetailRun.collect(),
+    (error) => error === hseDetailController.signal.reason,
+  );
 
   const oldDetailController = new AbortController();
   const indexHtml = oneLinkIndexFromFixture();
@@ -387,7 +426,7 @@ test("run cancellation during index and detail fetch propagates from both adapte
   });
   await assert.rejects(
     () => oldDetailRun.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] }),
-    { name: "AbortError" },
+    (error) => error === oldDetailController.signal.reason,
   );
 });
 
@@ -402,7 +441,10 @@ test("run cancellation during crawl pacing sleep propagates", async () => {
     random: () => 0.5,
     signal: controller.signal,
   });
-  await assert.rejects(() => adapter.collect(), { name: "AbortError" });
+  await assert.rejects(
+    () => adapter.collect(),
+    (error) => error === controller.signal.reason,
+  );
 });
 
 test("robots evaluator uses the most-specific matching rule and Allow wins ties", () => {
@@ -614,6 +656,24 @@ test("access denial after discovery preserves stubs and stops further requests",
   );
 });
 
+test("advertised-count overflow marks the affected page diagnostic", async () => {
+  const requested = [];
+  const pageUrl = build28HseAgentUrl("sale", 2);
+  const overflowPage = sourceFixture("28hse", "agent-sale-page-2.html").replaceAll(
+    "3973002",
+    "3973004",
+  );
+  const adapter = createHseHarness(fakeFixtureFetch(requested, new Map([[pageUrl, overflowPage]])));
+
+  const result = await adapter.collect();
+  assert.equal(result.paginationComplete, false);
+  assert.ok(result.failures.some((failure) => failure.code === "advertised_count_mismatch"));
+  assert.equal(
+    result.diagnostics.find((entry) => entry.sourceUrl === pageUrl)?.failureCode,
+    "advertised_count_mismatch",
+  );
+});
+
 test("duplicate candidates with conflicting parsed property numbers are quarantined", async () => {
   const requested = [];
   const alternateUrl = "https://www.28hse.com/buy/house/property-3973002";
@@ -681,6 +741,33 @@ test("duplicate candidate URLs with the same property number collapse without re
       .length,
     1,
   );
+});
+
+test("one failed duplicate candidate quarantines an otherwise successful identity", async () => {
+  const requested = [];
+  const primaryUrl = "https://www.28hse.com/buy/apartment/property-3973002";
+  const alternateUrl = "https://www.28hse.com/buy/house/property-3973002";
+  const duplicatePage = sourceFixture("28hse", "agent-sale-page-2.html").replace(
+    "/buy/apartment/property-3973002",
+    "/buy/house/property-3973002",
+  );
+  const adapter = createHseHarness(
+    fakeFixtureFetch(
+      requested,
+      new Map([
+        [build28HseAgentUrl("sale", 2), duplicatePage],
+        [alternateUrl, "<html><body>changed detail template</body></html>"],
+      ]),
+    ),
+  );
+
+  const result = await adapter.collect();
+  const duplicate = result.observations.find((entry) => entry.externalId === "3973002");
+  assert.equal(result.observations.length, result.discovered);
+  assert.ok(duplicate.quarantineReasons.includes("detail_fetch_or_parse_failed"));
+  assert.equal(duplicate.validationState, "quarantined");
+  assert.equal(requested.filter((url) => url === primaryUrl).length, 1);
+  assert.equal(requested.filter((url) => url === alternateUrl).length, 1);
 });
 
 test("oversized index bodies fail as an unexpected template without retrying", async () => {
