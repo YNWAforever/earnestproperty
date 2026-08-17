@@ -74,7 +74,11 @@ test("client rejects a channel override that differs from the fixed channel", ()
 test("client resolves the canonical uploads playlist and exhausts pages", async () => {
   const fake = queuedFetch([
     channelResponse(),
-    json({ items: [playlistItem("AAAAAAAAAAA")], nextPageToken: "page-2" }),
+    json({
+      items: [playlistItem("AAAAAAAAAAA")],
+      nextPageToken: "page-2",
+      pageInfo: { totalResults: 2, resultsPerPage: 50 },
+    }),
     json({ items: [playlistItem("BBBBBBBBBBB")] }),
   ]);
   const pages: number[] = [];
@@ -264,6 +268,73 @@ test("non-JSON provider snapshots are classified as invalid", async () => {
     (error) =>
       error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
   );
+});
+
+test("non-RFC3339 publication timestamps fail before the page callback", async () => {
+  const invalidDateItem = playlistItem("AAAAAAAAAAA");
+  invalidDateItem.contentDetails.videoPublishedAt = "0";
+  const fake = queuedFetch([channelResponse(), json({ items: [invalidDateItem] })]);
+  let pageCallbacks = 0;
+
+  await assert.rejects(
+    () =>
+      createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({
+        onPage: async () => {
+          pageCallbacks += 1;
+        },
+      }),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+  );
+
+  assert.equal(pageCallbacks, 0);
+});
+
+test("non-string continuation tokens fail before the page callback", async () => {
+  for (const nextPageToken of [1, true, {}, [], null, "", " \t "]) {
+    const fake = queuedFetch([
+      channelResponse(),
+      json({ items: [playlistItem("AAAAAAAAAAA")], nextPageToken }),
+    ]);
+    let pageCallbacks = 0;
+
+    await assert.rejects(
+      () =>
+        createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({
+          onPage: async () => {
+            pageCallbacks += 1;
+          },
+        }),
+      (error) =>
+        error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+    );
+
+    assert.equal(pageCallbacks, 0);
+  }
+});
+
+test("inconsistent pageInfo fails before the page callback", async () => {
+  const fake = queuedFetch([
+    channelResponse(),
+    json({
+      items: [playlistItem("AAAAAAAAAAA")],
+      pageInfo: { totalResults: 1, resultsPerPage: "50" },
+    }),
+  ]);
+  let pageCallbacks = 0;
+
+  await assert.rejects(
+    () =>
+      createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({
+        onPage: async () => {
+          pageCallbacks += 1;
+        },
+      }),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+  );
+
+  assert.equal(pageCallbacks, 0);
 });
 
 test("mismatched identity and invalid publication timestamps invalidate the snapshot", async () => {

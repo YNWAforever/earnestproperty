@@ -13,6 +13,8 @@ import {
 const API_ROOT = "https://www.googleapis.com/youtube/v3";
 const MAX_ATTEMPTS = 4;
 const BASE_BACKOFF_MS = 500;
+const RFC3339_TIMESTAMP =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 
 type FetchLike = typeof fetch;
 type Sleep = (milliseconds: number) => Promise<void>;
@@ -40,6 +42,48 @@ export function readYouTubeSyncConfig(env: Record<string, string | undefined> = 
 
 function defaultSleep(milliseconds: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isStrictRfc3339Timestamp(value: string) {
+  const match = value.match(RFC3339_TIMESTAMP);
+  if (!match) return false;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = Number(match[7]);
+  const offsetMinute = Number(match[8]);
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return (
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59 &&
+    (match[7] === undefined || (offsetHour <= 23 && offsetMinute <= 59)) &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function hasConsistentPageInfo(value: unknown, itemCount: number) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const pageInfo = value as Record<string, unknown>;
+  const totalResults = pageInfo.totalResults;
+  const resultsPerPage = pageInfo.resultsPerPage;
+  if (
+    typeof totalResults !== "number" ||
+    typeof resultsPerPage !== "number" ||
+    !Number.isSafeInteger(totalResults) ||
+    !Number.isSafeInteger(resultsPerPage)
+  ) {
+    return false;
+  }
+  return totalResults >= itemCount && resultsPerPage >= itemCount && resultsPerPage <= 50;
 }
 
 function providerReason(body: unknown) {
@@ -188,7 +232,7 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
       (videoOwnerChannelId !== null && videoOwnerChannelId !== channelId) ||
       (!snippetChannelId && !videoOwnerChannelId) ||
       !title ||
-      !Number.isFinite(Date.parse(publishedAt))
+      !isStrictRfc3339Timestamp(publishedAt)
     ) {
       throw new YouTubeSyncError(
         "youtube_invalid_snapshot",
@@ -232,6 +276,17 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
           "The provider returned an invalid YouTube snapshot.",
         );
       }
+      if (
+        (Object.prototype.hasOwnProperty.call(body, "nextPageToken") &&
+          (typeof body.nextPageToken !== "string" || !body.nextPageToken.trim())) ||
+        (Object.prototype.hasOwnProperty.call(body, "pageInfo") &&
+          !hasConsistentPageInfo(body.pageInfo, body.items.length))
+      ) {
+        throw new YouTubeSyncError(
+          "youtube_invalid_snapshot",
+          "The provider returned an invalid YouTube snapshot.",
+        );
+      }
       pageNumber += 1;
       const pageVideos: YouTubeVideo[] = [];
       for (const rawItem of body.items) {
@@ -245,8 +300,7 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
         seenVideoIds.add(item.videoId);
         pageVideos.push(item);
       }
-      const next =
-        typeof body.nextPageToken === "string" && body.nextPageToken ? body.nextPageToken : null;
+      const next = typeof body.nextPageToken === "string" ? body.nextPageToken : null;
       if (next && seenTokens.has(next)) {
         throw new YouTubeSyncError(
           "youtube_invalid_snapshot",

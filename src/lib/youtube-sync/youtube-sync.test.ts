@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "bun:test";
 
+import { createYouTubeClient } from "./youtube-client.server";
 import { runYouTubeSync } from "./youtube-sync.server";
 import { canonicalYouTubeUrl } from "./youtube-reconciliation";
 import {
@@ -173,6 +174,78 @@ test("provider failure releases the lease and never applies a snapshot", async (
     (error) => error instanceof Error && "code" in error && error.code === "youtube_unavailable",
   );
   assert.deepEqual(events, ["release"]);
+});
+
+test("malformed provider envelopes never reach snapshot reconciliation", async () => {
+  let applies = 0;
+
+  for (const playlistPage of [
+    {
+      items: [
+        {
+          snippet: {
+            channelId,
+            videoOwnerChannelId: channelId,
+            title: "Latest title",
+            description: "YouTube description",
+            publishedAt: "0",
+            resourceId: { videoId: "AAAAAAAAAAA" },
+          },
+          contentDetails: { videoId: "AAAAAAAAAAA", videoPublishedAt: "0" },
+        },
+      ],
+    },
+    { items: [], nextPageToken: 1 },
+  ]) {
+    const responses = [
+      {
+        items: [
+          {
+            id: channelId,
+            contentDetails: { relatedPlaylists: { uploads: "CANONICAL_UPLOADS_PLAYLIST" } },
+          },
+        ],
+      },
+      playlistPage,
+    ];
+    const fetchImpl = Object.assign(
+      async () => new Response(JSON.stringify(responses.shift()), { status: 200 }),
+      { preconnect: fetch.preconnect },
+    ) as typeof fetch;
+
+    await assert.rejects(
+      () =>
+        runYouTubeSync(
+          { mode: "full", trigger: "cron" },
+          {
+            channelId,
+            owner: () => "11111111-1111-4111-8111-111111111111",
+            now: () => new Date("2026-08-17T00:00:00.000Z"),
+            client: createYouTubeClient({ apiKey: "test-key-never-log", channelId, fetchImpl }),
+            repository: {
+              acquireLease: async () => ({
+                channelId,
+                owner: "11111111-1111-4111-8111-111111111111",
+                lastIncrementalVideoId: null,
+                lastFullPeriod: null,
+              }),
+              renewLease: async () => true,
+              releaseLease: async () => {},
+              listManualCandidates: async () => [],
+              applySnapshot: async () => {
+                applies += 1;
+                return { inserted: 0, adopted: 0, updated: 0, restored: 0, unavailable: 0 };
+              },
+            },
+            logger: { info: () => {}, error: () => {} },
+          },
+        ),
+      (error) =>
+        error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+    );
+  }
+
+  assert.equal(applies, 0);
 });
 
 test("full mode uses no boundary and passes the Hong Kong month period", async () => {
