@@ -1681,10 +1681,13 @@ export function createSyncRepository(options = {}) {
       row.pathname === row.pathname.trim() &&
       row.pathname.length > 0 &&
       row.pathname.length <= 1_024 &&
-      (row.content_type == null ||
+      Object.hasOwn(row, "content_type") &&
+      (row.content_type === null ||
         (typeof row.content_type === "string" &&
           /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(row.content_type))) &&
-      (row.content_hash == null || HASH_PATTERN.test(row.content_hash)) &&
+      Object.hasOwn(row, "content_hash") &&
+      (row.content_hash === null ||
+        (typeof row.content_hash === "string" && HASH_PATTERN.test(row.content_hash))) &&
       typeof row.owner_type === "string" &&
       row.owner_type === row.owner_type.trim() &&
       row.owner_type.length > 0 &&

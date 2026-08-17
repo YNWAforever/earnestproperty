@@ -16,6 +16,18 @@ const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/av
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+const REGISTRATION_ASSET_KEYS = Object.freeze([
+  "id",
+  "url",
+  "pathname",
+  "contentType",
+  "sizeBytes",
+  "contentHash",
+  "ownerType",
+  "ownerId",
+  "createdBy",
+  "createdAt",
+]);
 const FIRST_PARTY_ORIGIN = "https://www.earnestproperty.com";
 
 class MediaPreparationError extends Error {
@@ -1374,7 +1386,12 @@ function snapshotRegistration(registration) {
   try {
     outcome = registration.outcome;
     sourceAsset = registration.asset;
-    if (!plainRecord(sourceAsset)) fail("owned_media_binding_invalid");
+    if (
+      !plainRecord(sourceAsset) ||
+      REGISTRATION_ASSET_KEYS.some((key) => !hasOwn(sourceAsset, key))
+    ) {
+      fail("owned_media_binding_invalid");
+    }
     asset = Object.freeze({
       id: sourceAsset.id,
       url: sourceAsset.url,
@@ -1385,6 +1402,7 @@ function snapshotRegistration(registration) {
       ownerType: sourceAsset.ownerType,
       ownerId: sourceAsset.ownerId,
       createdBy: sourceAsset.createdBy,
+      createdAt: sourceAsset.createdAt,
     });
   } catch (error) {
     if (error instanceof MediaPreparationError) throw error;
@@ -1408,6 +1426,8 @@ function validateRegistrationOutcome(registration, expected) {
     !asset.ownerType.trim() ||
     asset.ownerType !== asset.ownerType.trim() ||
     asset.ownerType.length > 160 ||
+    typeof asset.createdAt !== "string" ||
+    !asset.createdAt.trim() ||
     (asset.ownerId !== null &&
       (typeof asset.ownerId !== "string" || !UUID_PATTERN.test(asset.ownerId))) ||
     (asset.createdBy !== null &&

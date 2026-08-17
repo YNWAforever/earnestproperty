@@ -273,6 +273,22 @@ function imageResponse(bytes = pngBytes(), init = {}) {
   });
 }
 
+function registrationAsset(input, overrides = {}) {
+  return {
+    id: "asset-registration",
+    url: input.url,
+    pathname: input.pathname,
+    contentType: input.contentType,
+    sizeBytes: input.sizeBytes,
+    contentHash: input.contentHash,
+    ownerType: input.ownerType,
+    ownerId: input.ownerId,
+    createdBy: input.createdBy,
+    createdAt: "2026-08-17T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function fakeRepository(options = {}) {
   const state = {
     hashReads: [],
@@ -300,17 +316,7 @@ function fakeRepository(options = {}) {
         return options.registerOwnedMedia(input, operation);
       return {
         outcome: "inserted",
-        asset: {
-          id: `asset-${state.registered.length}`,
-          url: input.url,
-          pathname: input.pathname,
-          contentType: input.contentType,
-          sizeBytes: input.sizeBytes,
-          contentHash: input.contentHash,
-          ownerType: input.ownerType,
-          ownerId: input.ownerId,
-          createdBy: input.createdBy,
-        },
+        asset: registrationAsset(input, { id: `asset-${state.registered.length}` }),
       };
     },
     async saveMediaRecord(input, operation) {
@@ -976,6 +982,7 @@ test("content-hash reuse returns the existing owned asset without rewriting owne
     ownerType: "cms",
     ownerId: "33333333-3333-4333-8333-333333333333",
     createdBy: "44444444-4444-4444-8444-444444444444",
+    createdAt: "2026-08-17T00:00:00.000Z",
   };
   const repository = fakeRepository({ knownHash: hash, knownAsset });
   const blobStore = fakeBlobStore();
@@ -1768,6 +1775,7 @@ test("a content-hash registration race accepts only the same-origin owned winner
     ownerType: "cms",
     ownerId: "33333333-3333-4333-8333-333333333333",
     createdBy: "44444444-4444-4444-8444-444444444444",
+    createdAt: "2026-08-17T00:00:00.000Z",
   };
   const repository = fakeRepository({
     registerOwnedMedia: () => ({ outcome: "existing", asset: winner }),
@@ -1805,6 +1813,7 @@ test("registration outcomes snapshot accessor-backed assets exactly once before 
         ownerType: input.ownerType,
         ownerId: input.ownerId,
         createdBy: input.createdBy,
+        createdAt: "2026-08-17T00:00:00.000Z",
       };
       Object.defineProperty(asset, "url", {
         enumerable: true,
@@ -1859,6 +1868,7 @@ test("throwing registration getters become bounded binding evidence with the orp
         ownerType: input.ownerType,
         ownerId: input.ownerId,
         createdBy: input.createdBy,
+        createdAt: "2026-08-17T00:00:00.000Z",
       };
       Object.defineProperty(asset, "url", {
         enumerable: true,
@@ -1883,20 +1893,96 @@ test("throwing registration getters become bounded binding evidence with the orp
   assert.doesNotMatch(JSON.stringify(result), new RegExp(rawError));
 });
 
+test("registration assets reject inherited ownership before ordinary value reads", async () => {
+  let inheritedReads = 0;
+  const repository = fakeRepository({
+    registerOwnedMedia(input) {
+      const prototype = {};
+      for (const [key, value] of Object.entries({
+        ownerType: input.ownerType,
+        ownerId: input.ownerId,
+        createdBy: input.createdBy,
+      })) {
+        Object.defineProperty(prototype, key, {
+          get() {
+            inheritedReads += 1;
+            return value;
+          },
+        });
+      }
+      return {
+        outcome: "inserted",
+        asset: Object.assign(Object.create(prototype), {
+          id: "asset-inherited-ownership",
+          url: input.url,
+          pathname: input.pathname,
+          contentType: input.contentType,
+          sizeBytes: input.sizeBytes,
+          contentHash: input.contentHash,
+          createdAt: "2026-08-17T00:00:00.000Z",
+        }),
+      };
+    },
+  });
+  const blobStore = fakeBlobStore();
+
+  const result = await prepareListingMedia(
+    mediaFixture({ bytes: webpBytes(), repository, blobStore }),
+  );
+
+  assert.equal(inheritedReads, 0);
+  assert.equal(result.publishable, false);
+  assert.ok(result.reasons.includes("owned_media_binding_invalid"));
+  assert.equal(
+    result.candidateResults[0].orphanedUploadUrl,
+    `https://owned.example/${blobStore.puts[0].pathname}`,
+  );
+});
+
+test("registration assets reject Proxy ownership fallbacks before ordinary value reads", async () => {
+  let fallbackReads = 0;
+  const repository = fakeRepository({
+    registerOwnedMedia(input) {
+      const ownership = {
+        ownerType: input.ownerType,
+        ownerId: input.ownerId,
+        createdBy: input.createdBy,
+      };
+      const target = registrationAsset(input, { id: "asset-proxy-ownership" });
+      for (const key of Object.keys(ownership)) delete target[key];
+      return {
+        outcome: "inserted",
+        asset: new Proxy(target, {
+          get(object, key, receiver) {
+            if (Object.hasOwn(ownership, key)) {
+              fallbackReads += 1;
+              return ownership[key];
+            }
+            return Reflect.get(object, key, receiver);
+          },
+        }),
+      };
+    },
+  });
+  const blobStore = fakeBlobStore();
+
+  const result = await prepareListingMedia(
+    mediaFixture({ bytes: webpBytes(), repository, blobStore }),
+  );
+
+  assert.equal(fallbackReads, 0);
+  assert.equal(result.publishable, false);
+  assert.ok(result.reasons.includes("owned_media_binding_invalid"));
+  assert.equal(
+    result.candidateResults[0].orphanedUploadUrl,
+    `https://owned.example/${blobStore.puts[0].pathname}`,
+  );
+});
+
 test("registration outcomes reject bare, extra, unknown, cross-origin, and drifted winners", async () => {
   const bytes = webpBytes();
   const hash = sha256(bytes);
-  const exactAsset = (input) => ({
-    id: "asset-registration",
-    url: input.url,
-    pathname: input.pathname,
-    contentType: input.contentType,
-    sizeBytes: input.sizeBytes,
-    contentHash: input.contentHash,
-    ownerType: input.ownerType,
-    ownerId: input.ownerId,
-    createdBy: input.createdBy,
-  });
+  const exactAsset = (input) => registrationAsset(input);
   const cases = [
     (input) => exactAsset(input),
     (input) => ({ outcome: "inserted", asset: exactAsset(input), extra: true }),

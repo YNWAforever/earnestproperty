@@ -1916,6 +1916,30 @@ test("media lookup requires explicit null or UUID ownership fields from PostgreS
   }
 });
 
+test("URL media lookup requires own nullable content columns while preserving real nulls", async () => {
+  const nullRow = mediaRow({ content_type: null, content_hash: null });
+  const validClient = fakeClient(() => result([nullRow]));
+  const [asset] = await createSyncRepository({ client: validClient }).findMediaByUrls([
+    nullRow.url,
+  ]);
+  assert.equal(asset.contentType, null);
+  assert.equal(asset.contentHash, null);
+
+  for (const field of ["content_type", "content_hash"]) {
+    for (const variant of ["missing", "undefined"]) {
+      const row = mediaRow();
+      if (variant === "missing") delete row[field];
+      else row[field] = undefined;
+      const client = fakeClient(() => result([row]));
+      await assert.rejects(
+        createSyncRepository({ client }).findMediaByUrls([row.url]),
+        /media row/i,
+        `${field} ${variant}`,
+      );
+    }
+  }
+});
+
 test("registerOwnedMedia inserts conflict-safely then returns the existing race winner", async () => {
   const winner = mediaRow({
     url: "https://owned.example/admin-winner.png",
