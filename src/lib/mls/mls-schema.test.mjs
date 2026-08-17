@@ -43,3 +43,14 @@ test("lifecycle state uses inactive rather than a new delisted enum", () => {
   assert.doesNotMatch(sql, /ALTER TYPE property_status ADD VALUE ['"]delisted/i);
   assert.match(sql, /consecutive_absent_healthy_runs/i);
 });
+
+test("canonical property numbers remove whitespace with PostgreSQL's whitespace pattern", () => {
+  assert.match(
+    sql,
+    /regexp_replace\(trim\(legacy_property_no\), '\\s\+', '', 'g'\)/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /regexp_replace\(trim\(legacy_property_no\), '\\\\s\+', '', 'g'\)/i,
+  );
+});

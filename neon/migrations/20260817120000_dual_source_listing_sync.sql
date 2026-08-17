@@ -2,7 +2,7 @@ ALTER TABLE properties
   ADD COLUMN IF NOT EXISTS canonical_property_no TEXT;
 
 UPDATE properties
-SET canonical_property_no = upper(regexp_replace(trim(legacy_property_no), '\\s+', '', 'g'))
+SET canonical_property_no = upper(regexp_replace(trim(legacy_property_no), '\s+', '', 'g'))
 WHERE canonical_property_no IS NULL
   AND legacy_property_no IS NOT NULL
   AND trim(legacy_property_no) <> '';
