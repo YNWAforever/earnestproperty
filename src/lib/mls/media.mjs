@@ -650,6 +650,88 @@ function imageDimensions(bytes, mime) {
   return { width, height };
 }
 
+function validatedDecodedDimensions(value, probed) {
+  const width = value?.width;
+  const height = value?.height;
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1) {
+    fail("invalid_image_payload");
+  }
+  if (
+    width > MAX_IMAGE_DIMENSION ||
+    height > MAX_IMAGE_DIMENSION ||
+    width * height > MAX_IMAGE_PIXELS
+  ) {
+    fail("invalid_image_dimensions");
+  }
+  if (probed.width != null && (probed.width !== width || probed.height !== height)) {
+    fail("invalid_image_payload");
+  }
+  return { width, height };
+}
+
+function decodedImageDimensions(value, mime, probed) {
+  const expectedFormat = {
+    "image/jpeg": "jpeg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/avif": "heif",
+  }[mime];
+  if (value?.format !== expectedFormat || (mime === "image/avif" && value?.compression !== "av1")) {
+    fail("invalid_image_payload");
+  }
+  return validatedDecodedDimensions(value, probed);
+}
+
+let sharpModulePromise = null;
+
+async function decodeImageWithSharp(bytes, { mime, signal, probed }) {
+  let sharp;
+  try {
+    sharpModulePromise ??= import("sharp");
+    const module = await abortRace(() => sharpModulePromise, signal);
+    throwIfAborted(signal);
+    sharp = module.default;
+    if (typeof sharp !== "function") fail("image_decoder_unavailable");
+  } catch (error) {
+    throwIfAborted(signal);
+    if (error instanceof MediaPreparationError) throw error;
+    fail("image_decoder_unavailable");
+  }
+
+  let image;
+  try {
+    image = sharp(bytes, {
+      failOn: "error",
+      limitInputPixels: MAX_IMAGE_PIXELS,
+      sequentialRead: true,
+    });
+  } catch {
+    fail("invalid_image_payload");
+  }
+  const stopDecode = () => {
+    try {
+      image.destroy();
+    } catch {}
+  };
+  signal?.addEventListener("abort", stopDecode, { once: true });
+  if (signal?.aborted) stopDecode();
+  try {
+    const metadata = await abortRace(() => image.metadata(), signal);
+    throwIfAborted(signal);
+    const dimensions = decodedImageDimensions(metadata, mime, probed);
+    await abortRace(() => image.stats(), signal);
+    throwIfAborted(signal);
+    return dimensions;
+  } catch (error) {
+    throwIfAborted(signal);
+    if (error instanceof MediaPreparationError) throw error;
+    fail("invalid_image_payload");
+  } finally {
+    signal?.removeEventListener("abort", stopDecode);
+    stopDecode();
+  }
+}
+
 function parseIpv4(value) {
   const parts = String(value).split(".");
   if (parts.length !== 4) return null;
@@ -960,11 +1042,15 @@ async function cancelUnusedBody(response, signal, reason) {
       try {
         reader?.releaseLock();
       } catch {
-        void cancellation?.finally(() => {
-          try {
-            reader?.releaseLock();
-          } catch {}
-        });
+        if (cancellation) {
+          void cancellation
+            .finally(() => {
+              try {
+                reader?.releaseLock();
+              } catch {}
+            })
+            .catch(() => {});
+        }
       }
     }
   }
@@ -1048,11 +1134,15 @@ async function readLimitedBody(response, signal) {
     try {
       reader.releaseLock();
     } catch {
-      void cancelPromise?.finally(() => {
-        try {
-          reader.releaseLock();
-        } catch {}
-      });
+      if (cancelPromise) {
+        void cancelPromise
+          .finally(() => {
+            try {
+              reader.releaseLock();
+            } catch {}
+          })
+          .catch(() => {});
+      }
     }
   }
   const bytes = new Uint8Array(total);
@@ -1064,7 +1154,14 @@ async function readLimitedBody(response, signal) {
   return bytes;
 }
 
-async function fetchImage({ candidateUrl, hosts, resolveHost, transport, sharedSignal }) {
+async function fetchImage({
+  candidateUrl,
+  hosts,
+  resolveHost,
+  transport,
+  decodeImage,
+  sharedSignal,
+}) {
   const deadline = candidateSignal(sharedSignal);
   try {
     let current = parseCandidateUrl(candidateUrl, hosts);
@@ -1111,7 +1208,14 @@ async function fetchImage({ candidateUrl, hosts, resolveHost, transport, sharedS
       const mime = detectImageMime(bytes);
       if (!mime || !ALLOWED_MIME.has(mime)) fail("unsupported_media_type");
       await abortRace(() => validateImageStructure(bytes, mime, deadline.signal), deadline.signal);
-      const { width, height } = imageDimensions(bytes, mime);
+      throwIfAborted(deadline.signal);
+      const probed = imageDimensions(bytes, mime);
+      const decoded = await abortRace(
+        () => decodeImage(bytes, { mime, signal: deadline.signal, probed }),
+        deadline.signal,
+      );
+      throwIfAborted(deadline.signal);
+      const { width, height } = validatedDecodedDimensions(decoded, probed);
       return { bytes, mime, width, height };
     }
   } catch (error) {
@@ -1348,6 +1452,9 @@ function validateInput(input, validatedObservation) {
   if (hasOwn(input, "resolveHost") && typeof input.resolveHost !== "function") {
     throw new TypeError("resolveHost must be a function");
   }
+  if (hasOwn(input, "decodeImage") && typeof input.decodeImage !== "function") {
+    throw new TypeError("decodeImage must be a function");
+  }
   const repository = input.repository;
   for (const method of [
     "findMediaByHash",
@@ -1372,17 +1479,19 @@ function validateInput(input, validatedObservation) {
     propertyId,
     resolveHost: input.resolveHost ?? defaultResolveMediaHost,
     transport: input.transport ?? createPinnedHttpsTransport(),
+    decodeImage: input.decodeImage ?? decodeImageWithSharp,
     hosts: allowedHosts(input.allowedMediaHosts ?? process.env.MLS_MEDIA_ALLOWED_HOSTS ?? ""),
   };
 }
 
 async function ownedCurrentImages(currentImages, repository, signal) {
-  if (currentImages.length === 0) return { owned: [], allOwned: true };
   throwIfAborted(signal);
+  if (currentImages.length === 0) return { owned: [], allOwned: true };
   const rows = await abortRace(
     () => repository.findMediaByUrls([...currentImages], { signal }),
     signal,
   );
+  throwIfAborted(signal);
   if (!Array.isArray(rows)) throw new TypeError("repository.findMediaByUrls returned invalid data");
   const exact = new Set();
   for (const row of rows) {
@@ -1504,6 +1613,7 @@ export async function prepareListingMedia(rawInput) {
     results.push(result);
     if (mode === "upload") {
       await abortRace(() => repository.saveMediaRecord(mediaRecord(result), { signal }), signal);
+      throwIfAborted(signal);
     }
   };
 
@@ -1534,12 +1644,15 @@ export async function prepareListingMedia(rawInput) {
         hosts: input.hosts,
         resolveHost: input.resolveHost,
         transport: input.transport,
+        decodeImage: input.decodeImage,
         sharedSignal: signal,
       });
+      throwIfAborted(signal);
       const contentHash = sha256(downloaded.bytes);
       let asset = localAssets.get(contentHash) ?? null;
       if (!asset) {
         asset = await abortRace(() => repository.findMediaByHash(contentHash, { signal }), signal);
+        throwIfAborted(signal);
         if (asset != null) {
           validateAsset(asset, {
             contentHash,
@@ -1568,6 +1681,7 @@ export async function prepareListingMedia(rawInput) {
               }),
             signal,
           );
+          throwIfAborted(signal);
           validateBlobResult(blob, {
             pathname,
             contentType: downloaded.mime,
@@ -1588,10 +1702,12 @@ export async function prepareListingMedia(rawInput) {
           ownerId: null,
           createdBy: null,
         };
-        asset = validateAsset(
-          await abortRace(() => repository.registerOwnedMedia(registration, { signal }), signal),
-          registration,
+        const registered = await abortRace(
+          () => repository.registerOwnedMedia(registration, { signal }),
+          signal,
         );
+        throwIfAborted(signal);
+        asset = validateAsset(registered, registration);
         localAssets.set(contentHash, asset);
       }
       const result = resultFor(candidate, identity, {
@@ -1625,6 +1741,7 @@ export async function prepareListingMedia(rawInput) {
   if (selected.length === 0) {
     if (input.isNew) {
       reasons.push("primary_image_required");
+      throwIfAborted(signal);
       return finalResult({
         publishable: false,
         reasons,
@@ -1639,6 +1756,7 @@ export async function prepareListingMedia(rawInput) {
     if (!current.allOwned) reasons.push("current_media_not_owned");
     const publishable = current.allOwned;
     const images = publishable ? current.owned : [];
+    throwIfAborted(signal);
     return finalResult({
       publishable,
       reasons,
@@ -1668,6 +1786,7 @@ export async function prepareListingMedia(rawInput) {
         ),
       ]
     : [];
+  throwIfAborted(signal);
   return finalResult({
     publishable,
     reasons,

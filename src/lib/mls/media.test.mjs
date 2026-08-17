@@ -19,6 +19,22 @@ const OBSERVATION_ID = "11111111-1111-4111-8111-111111111111";
 const PROPERTY_ID = "22222222-2222-4222-8222-222222222222";
 const PUBLIC_ADDRESS = "8.8.8.8";
 const MEDIA_HOST = "images.28hse.test";
+const DECODABLE_IMAGES = {
+  jpeg3x2:
+    "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAMDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AKpAB//Z",
+  jpeg4x3:
+    "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAADAAQDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AKpAB//Z",
+  webp3x2: "UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoDAAIAAUAmJaQAA3AA/vz0AAA=",
+  webp6x5: "UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoGAAUAAUAmJaQAA3AA/vz0AAA=",
+  avif3x2:
+    "AAAAHGZ0eXBhdmlmAAAAAG1pZjFhdmlmbWlhZgAAAXBtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAAA5waXRtAAAAAAABAAAANGlsb2MAAAAAREAAAgABAAAAAAGUAAEAAAAAAAAAGAACAAAAAAGsAAEAAAAAAAAAFQAAADhpaW5mAAAAAAACAAAAFWluZmUCAAAAAAEAAGF2MDEAAAAAFWluZmUCAAAAAAIAAGF2MDEAAAAAr2lwcnAAAACKaXBjbwAAAAxhdjFDgSACAAAAABRpc3BlAAAAAAAAAAMAAAACAAAAEHBpeGkAAAAAAwgICAAAAAxhdjFDgQAcAAAAAA5waXhpAAAAAAEIAAAAOGF1eEMAAAAAdXJuOm1wZWc6bXBlZ0I6Y2ljcDpzeXN0ZW1zOmF1eGlsaWFyeTphbHBoYQAAAAAdaXBtYQAAAAAAAAACAAEDgQIDAAIEhAIFhgAAABppcmVmAAAAAAAAAA5hdXhsAAIAAQABAAAANW1kYXQSAAoIOAQrCAhoNIAyChgAAABAALASmpgSAAoFGAQrCoAyChgAAAEAAiEbo2A=",
+  avif7x6:
+    "AAAAHGZ0eXBhdmlmAAAAAG1pZjFhdmlmbWlhZgAAAXBtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAAA5waXRtAAAAAAABAAAANGlsb2MAAAAAREAAAgABAAAAAAGUAAEAAAAAAAAAGAACAAAAAAGsAAEAAAAAAAAAFQAAADhpaW5mAAAAAAACAAAAFWluZmUCAAAAAAEAAGF2MDEAAAAAFWluZmUCAAAAAAIAAGF2MDEAAAAAr2lwcnAAAACKaXBjbwAAAAxhdjFDgSACAAAAABRpc3BlAAAAAAAAAAcAAAAGAAAAEHBpeGkAAAAAAwgICAAAAAxhdjFDgQAcAAAAAA5waXhpAAAAAAEIAAAAOGF1eEMAAAAAdXJuOm1wZWc6bXBlZ0I6Y2ljcDpzeXN0ZW1zOmF1eGlsaWFyeTphbHBoYQAAAAAdaXBtYQAAAAAAAAACAAEDgQIDAAIEhAIFhgAAABppcmVmAAAAAAAAAA5hdXhsAAIAAQABAAAANW1kYXQSAAoIOAi1YQENBpAyChgAAABAALASmpgSAAoFGAi1YVAyChgAAAEAAiEbo2A=",
+};
+
+function base64Bytes(value) {
+  return new Uint8Array(Buffer.from(value, "base64"));
+}
 
 function u32be(value) {
   return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff];
@@ -40,6 +56,36 @@ function deferred() {
     reject = rejectPromise;
   });
   return { promise, resolve, reject };
+}
+
+async function observeUnhandledRejections(operation) {
+  const reasons = [];
+  const onUnhandled = (reason) => reasons.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    await operation();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    return reasons;
+  } finally {
+    process.removeListener("unhandledRejection", onUnhandled);
+  }
+}
+
+function abortOnNextAbortListenerRemoval(controller, reason) {
+  let armed = false;
+  const signal = controller.signal;
+  const removeEventListener = signal.removeEventListener.bind(signal);
+  Object.defineProperty(signal, "removeEventListener", {
+    configurable: true,
+    value(type, listener, options) {
+      removeEventListener(type, listener, options);
+      if (armed && type === "abort" && !signal.aborted) controller.abort(reason);
+    },
+  });
+  return () => {
+    armed = true;
+  };
 }
 
 function pngChunk(type, payload = []) {
@@ -76,7 +122,24 @@ function pngBytes(width = 3, height = 2) {
   return pngBytesWithIdat(deflateSync(scanlines), width, height);
 }
 
-function jpegBytes(width = 3, height = 2) {
+function indexedPngWithoutPaletteBytes(width = 3, height = 2) {
+  const scanlines = new Uint8Array(height * (1 + width));
+  return new Uint8Array([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...pngChunk("IHDR", [...u32be(width), ...u32be(height), 0x08, 0x03, 0x00, 0x00, 0x00]),
+    ...pngChunk("IDAT", deflateSync(scanlines)),
+    ...pngChunk("IEND"),
+  ]);
+}
+
+function jpegWithoutQuantizationBytes(width = 3, height = 2) {
   return new Uint8Array([
     0xff,
     0xd8,
@@ -119,7 +182,13 @@ function jpegBytes(width = 3, height = 2) {
   ]);
 }
 
-function webpBytes(width = 3, height = 2) {
+function jpegBytes(width = 3, height = 2) {
+  const key = `jpeg${width}x${height}`;
+  if (!(key in DECODABLE_IMAGES)) throw new Error(`missing JPEG fixture ${key}`);
+  return base64Bytes(DECODABLE_IMAGES[key]);
+}
+
+function unreadableVp8lBytes(width = 3, height = 2) {
   const dimensions = (width - 1) | ((height - 1) << 14);
   const payload = [0x2f, ...u32le(dimensions), 0x01, 0x01, 0x01, 0x01];
   return new Uint8Array([
@@ -142,11 +211,17 @@ function webpBytes(width = 3, height = 2) {
   ]);
 }
 
+function webpBytes(width = 3, height = 2) {
+  const key = `webp${width}x${height}`;
+  if (!(key in DECODABLE_IMAGES)) throw new Error(`missing WebP fixture ${key}`);
+  return base64Bytes(DECODABLE_IMAGES[key]);
+}
+
 function avifBox(type, payload = []) {
   return [...u32be(payload.length + 8), ...asciiBytes(type), ...payload];
 }
 
-function avifBytes(width = null, height = null) {
+function invalidAvifBytes(width = null, height = null) {
   const metaChildren = [
     ...avifBox("pitm", [0, 0, 0, 0, 0, 1]),
     ...avifBox("iloc", [0, 0, 0, 0, 0, 0, 0, 0]),
@@ -162,6 +237,12 @@ function avifBytes(width = null, height = null) {
   }
   boxes.push(...avifBox("mdat", [0, 1, 2, 3, 4, 5, 6, 7]));
   return new Uint8Array(boxes);
+}
+
+function avifBytes(width = 3, height = 2) {
+  const key = `avif${width}x${height}`;
+  if (!(key in DECODABLE_IMAGES)) throw new Error(`missing AVIF fixture ${key}`);
+  return base64Bytes(DECODABLE_IMAGES[key]);
 }
 
 function listingPhoto(url = `https://${MEDIA_HOST}/photo.png`, isPrimary = true) {
@@ -724,6 +805,70 @@ test("reader cleanup cannot lose an abort during listener attachment", async () 
   assert.equal(cancelReason, reason);
 });
 
+test("deferred cancel and release failures never create unhandled rejections", async (t) => {
+  const scenarios = [
+    {
+      name: "unused reader body",
+      response(cleanupError) {
+        return {
+          ok: false,
+          status: 503,
+          headers: new Headers(),
+          body: {
+            getReader() {
+              return {
+                cancel: async () => {
+                  throw cleanupError;
+                },
+                releaseLock() {
+                  throw new Error("release is still pending");
+                },
+              };
+            },
+          },
+        };
+      },
+    },
+    {
+      name: "stream reader",
+      response(cleanupError) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          body: {
+            getReader() {
+              return {
+                read: async () => {
+                  throw new Error("stream read failed");
+                },
+                cancel: async () => {
+                  throw cleanupError;
+                },
+                releaseLock() {
+                  throw new Error("release is still pending");
+                },
+              };
+            },
+          },
+        };
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const cleanupError = new Error(`${scenario.name} cancellation failed`);
+      const unhandled = await observeUnhandledRejections(() =>
+        prepareListingMedia(
+          mediaFixture({ fetchImpl: async () => scenario.response(cleanupError) }),
+        ),
+      );
+      assert.deepEqual(unhandled, []);
+    });
+  }
+});
+
 test("Content-Length is rejected before body reads and streaming stops above five MiB", async () => {
   let readerRequests = 0;
   let precheckCancelled = false;
@@ -779,7 +924,7 @@ test("actual magic controls MIME and safe dimensions are recorded", async () => 
     [pngBytes(5, 4), "image/png", 5, 4],
     [webpBytes(6, 5), "image/webp", 6, 5],
     [avifBytes(7, 6), "image/avif", 7, 6],
-    [avifBytes(), "image/avif", null, null],
+    [avifBytes(), "image/avif", 3, 2],
   ]) {
     const result = await prepareListingMedia(
       mediaFixture({
@@ -787,7 +932,7 @@ test("actual magic controls MIME and safe dimensions are recorded", async () => 
         fetchImpl: async () => imageResponse(bytes, { contentType: "image/gif" }),
       }),
     );
-    assert.equal(result.publishable, true, expectedMime);
+    assert.equal(result.publishable, true, `${expectedMime}: ${result.reasons.join(",")}`);
     assert.equal(result.candidateResults[0].detectedMime, expectedMime);
     assert.equal(result.candidateResults[0].width, width);
     assert.equal(result.candidateResults[0].height, height);
@@ -1250,6 +1395,97 @@ test("an abort observed between storage steps prevents later mutations", async (
   }
 });
 
+test("an abort during repository or Blob listener detachment is never lost", async (t) => {
+  const scenarios = [
+    {
+      name: "hash lookup",
+      arrange(arm) {
+        return {
+          repository: fakeRepository({
+            findMediaByHash() {
+              arm();
+              return null;
+            },
+          }),
+        };
+      },
+    },
+    {
+      name: "Blob upload",
+      arrange(arm) {
+        return {
+          blobStore: fakeBlobStore({
+            put(input) {
+              arm();
+              return {
+                url: `https://owned.example/${input.pathname}`,
+                downloadUrl: `https://owned.example/${input.pathname}?download=1`,
+                pathname: input.pathname,
+                contentType: input.contentType,
+                size: input.body.byteLength,
+              };
+            },
+          }),
+        };
+      },
+    },
+    {
+      name: "asset registration",
+      arrange(arm) {
+        return {
+          repository: fakeRepository({
+            registerOwnedMedia(input) {
+              arm();
+              return { id: "asset-detach-race", ...input };
+            },
+          }),
+        };
+      },
+    },
+    {
+      name: "media record write",
+      arrange(arm) {
+        return {
+          repository: fakeRepository({
+            saveMediaRecord() {
+              arm();
+            },
+          }),
+        };
+      },
+    },
+    {
+      name: "owned-current lookup",
+      arrange(arm) {
+        const currentUrl = "https://www.earnestproperty.com/current.png";
+        return {
+          candidates: [],
+          currentImages: [currentUrl],
+          isNew: false,
+          repository: fakeRepository({
+            findMediaByUrls() {
+              arm();
+              return [{ url: currentUrl }];
+            },
+          }),
+        };
+      },
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const controller = new AbortController();
+      const reason = new Error(`abort after ${scenario.name} detach exactly`);
+      const arm = abortOnNextAbortListenerRemoval(controller, reason);
+      await assert.rejects(
+        prepareListingMedia(mediaFixture({ signal: controller.signal, ...scenario.arrange(arm) })),
+        (error) => error === reason,
+      );
+    });
+  }
+});
+
 test("cancellation cannot be lost while the candidate deadline listener is attached", async () => {
   const controller = new AbortController();
   const reason = new Error("abort during listener attachment exactly");
@@ -1415,6 +1651,68 @@ test("non-decodable PNG, header-only VP8L, and empty AVIF media structures are r
       assert.equal(blobStore.puts.length, 0);
     });
   }
+});
+
+test("the production decode gate rejects unreadable image payloads before hashing", async (t) => {
+  const payloads = [
+    ["JPEG without quantization tables", jpegWithoutQuantizationBytes()],
+    ["indexed PNG without a palette", indexedPngWithoutPaletteBytes()],
+    ["unreadable VP8L", unreadableVp8lBytes()],
+    ["invalid AVIF item data", invalidAvifBytes(3, 2)],
+  ];
+
+  for (const [name, bytes] of payloads) {
+    await t.test(name, async () => {
+      const repository = fakeRepository();
+      const result = await prepareListingMedia(
+        mediaFixture({ mode: "validate", bytes, repository }),
+      );
+      assert.equal(result.publishable, false);
+      assert.ok(result.reasons.includes("invalid_image_payload"));
+      assert.equal(repository.state.hashReads.length, 0);
+    });
+  }
+});
+
+test("decode cancellation returns the exact shared reason before hashing", async () => {
+  const controller = new AbortController();
+  const reason = new Error("cancel image decode exactly");
+  const started = deferred();
+  const release = deferred();
+  const repository = fakeRepository();
+  let decoderSignal;
+  const promise = prepareListingMedia(
+    mediaFixture({
+      mode: "validate",
+      signal: controller.signal,
+      repository,
+      decodeImage(_bytes, options) {
+        decoderSignal = options?.signal;
+        started.resolve();
+        return release.promise;
+      },
+    }),
+  );
+  const decoderStarted = await Promise.race([
+    started.promise.then(() => true),
+    new Promise((resolve) => setTimeout(() => resolve(false), 25)),
+  ]);
+  assert.equal(decoderStarted, true, "decodeImage must be invoked");
+  controller.abort(reason);
+  const observed = await Promise.race([
+    promise.then(
+      () => ({ value: "resolved" }),
+      (error) => ({ error }),
+    ),
+    new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+  ]);
+  release.resolve({ width: 3, height: 2 });
+
+  assert.notEqual(observed, "still-pending");
+  assert.equal(observed.error, reason);
+  assert.ok(decoderSignal instanceof AbortSignal);
+  assert.equal(decoderSignal.reason, reason);
+  assert.equal(repository.state.hashReads.length, 0);
 });
 
 test("reused and newly registered assets must be exactly bound to the requested content", async () => {
