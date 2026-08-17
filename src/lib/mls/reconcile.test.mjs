@@ -64,6 +64,48 @@ function validNewProposal(overrides = {}) {
   };
 }
 
+function preparedRecord(sourceObservation, images, overrides = {}) {
+  return {
+    observationId: sourceObservation.id,
+    source: sourceObservation.source,
+    externalId: sourceObservation.externalId,
+    dealType: sourceObservation.dealType,
+    matchKey: sourceObservation.matchKey,
+    images,
+    ...overrides,
+  };
+}
+
+function validationEvidenceFor(proposal, overrides = {}) {
+  const inferredMatchKey =
+    typeof proposal.canonical_property_no === "string" &&
+    (proposal.deal_type === "sale" || proposal.deal_type === "rent")
+      ? `${proposal.deal_type}:${proposal.canonical_property_no}`
+      : null;
+  return {
+    schemaVersion: 1,
+    targetMatchKey: inferredMatchKey,
+    currentMatchKey: proposal.id == null ? null : inferredMatchKey,
+    blockingCodes: [],
+    conflicts: [],
+    quarantines: [],
+    media: {
+      preparedImages: proposal.id == null ? [...(proposal.images ?? [])] : [],
+      currentOwnedImages: proposal.id == null ? [] : [...(proposal.images ?? [])],
+    },
+    ...overrides,
+  };
+}
+
+function validationOptions(proposal, overrides = {}) {
+  const kind = overrides.kind ?? (proposal.id == null ? "new" : "update");
+  return {
+    kind,
+    validationEvidence:
+      overrides.validationEvidence ?? validationEvidenceFor(proposal, overrides.evidenceOverrides),
+  };
+}
+
 test("deduplicates only exact property number plus deal type", () => {
   const groups = groupExactMatches([
     observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale"),
@@ -107,6 +149,35 @@ test("rejects a forged raw property identity even when its normalized fields loo
   assert.equal(grouped.quarantined[0].reason, "match_key_identity_mismatch");
 });
 
+test("revalidates the complete immutable observation contract while allowing a database ID", () => {
+  const valid = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  assert.equal(groupExactMatches([{ ...valid, id: "database-observation-id" }]).matched.size, 1);
+
+  const forged = [
+    { ...valid, schemaVersion: 99 },
+    { ...valid, source: "third_party" },
+    { ...valid, externalId: "" },
+    { ...valid, sourceUrl: " " },
+    { ...valid, quarantineReasons: ["forged-valid-state"] },
+    { ...valid, contentHash: "0".repeat(64) },
+    { ...valid, propertyNoRaw: 3097 },
+    { ...valid, fetchedAt: null },
+    { ...valid, discoveredAt: null },
+    { ...valid, fields: [] },
+    { ...valid, rawFields: [] },
+    { ...valid, mediaCandidates: {} },
+  ];
+  for (const forgedObservation of forged) {
+    const grouped = groupExactMatches([forgedObservation]);
+    assert.equal(grouped.matched.size, 0);
+    assert.equal(grouped.quarantined.length, 1);
+  }
+
+  const reconciled = reconcileProperty({ current: {}, observations: forged });
+  assert.equal(reconciled.fields.title_zh.source, null);
+  assert.equal(reconciled.canonical.title_zh, null);
+});
+
 test("group ordering and generated listing numbers are input-order invariant", () => {
   const observations = [
     observation(SOURCE_OLD_SITE, "old-z", "C003097", "sale"),
@@ -122,6 +193,17 @@ test("group ordering and generated listing numbers are input-order invariant", (
   );
   assert.equal(matchCanonicalProperty(forward, []).listingNo, "C003097-200-S");
   assert.equal(matchCanonicalProperty(reverse, []).listingNo, "C003097-200-S");
+});
+
+test("the returned exact-group Map iterates in sorted match-key order", () => {
+  const observations = [
+    observation(SOURCE_28HSE, "rent-z", "Z999", "rent"),
+    observation(SOURCE_28HSE, "sale-a", "A001", "sale"),
+  ];
+  const forward = [...groupExactMatches(observations).matched.keys()];
+  const reverse = [...groupExactMatches([...observations].reverse()).matched.keys()];
+  assert.deepEqual(forward, ["rent:Z999", "sale:A001"]);
+  assert.deepEqual(reverse, forward);
 });
 
 test("canonical matching normalizes conservatively, requires deal equality, and deduplicates IDs", () => {
@@ -150,6 +232,41 @@ test("duplicate canonical rows with one ID but conflicting identities fail close
       candidateIds: ["p1"],
     });
   }
+});
+
+test("duplicate canonical rows with one identity but different listing numbers fail closed", () => {
+  const outcome = matchCanonicalProperty({ matchKey: "sale:C003097" }, [
+    { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" },
+    { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "TWO" },
+  ]);
+  assert.deepEqual(outcome, {
+    kind: "ambiguous",
+    reason: "candidate_identity_conflict",
+    candidateIds: ["p1"],
+  });
+});
+
+test("identical duplicate candidate identities select a deterministic row", () => {
+  const rows = [
+    {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      listing_no: "ONE",
+      marker: "Zulu",
+    },
+    {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      listing_no: "ONE",
+      marker: "Alpha",
+    },
+  ];
+  const forward = matchCanonicalProperty({ matchKey: "sale:C003097" }, rows);
+  const reverse = matchCanonicalProperty({ matchKey: "sale:C003097" }, [...rows].reverse());
+  assert.deepEqual(forward, reverse);
+  assert.equal(forward.property.marker, "Alpha");
 });
 
 test("one exact canonical match preserves its existing listing number", () => {
@@ -292,7 +409,7 @@ test("a relink attempt reports every exact and conflicting linked row determinis
   });
 });
 
-test("inactive, inexact, and unrelated source links cannot identify a canonical row", () => {
+test("a relevant active link with a non-exact reason fails closed", () => {
   const grouped = groupExactMatches([
     observation(SOURCE_28HSE, "3972991", "C003097", "sale"),
   ]).matched.get("sale:C003097");
@@ -325,12 +442,209 @@ test("inactive, inexact, and unrelated source links cannot identify a canonical 
   );
 
   assert.equal(outcome.kind, "ambiguous");
-  assert.equal(outcome.reason, "ambiguous_canonical_match");
+  assert.equal(outcome.reason, "link_identity_conflict");
+  assert.deepEqual(outcome.candidateIds, ["p1"]);
+});
+
+test("active links are audited by source and external ID before deal filtering", () => {
+  const grouped = groupExactMatches([
+    observation(SOURCE_28HSE, "3972991", "C003097", "sale"),
+  ]).matched.get("sale:C003097");
+  const candidates = [
+    { id: "p1", canonical_property_no: "C003097", deal_type: "sale", listing_no: "ONE" },
+  ];
+  const baseLink = {
+    property_id: "p1",
+    source: SOURCE_28HSE,
+    external_listing_id: "3972991",
+    deal_type: "sale",
+    match_key: "sale:C003097",
+    link_reason: "exact_property_no_and_deal_type",
+    status: "active",
+  };
+  const conflictingLinks = [
+    { ...baseLink, deal_type: "rent" },
+    { ...baseLink, match_key: "sale:C999999" },
+    { ...baseLink, link_reason: "manual_guess" },
+    { ...baseLink, property_id: undefined },
+    { ...baseLink, property_id: "stale-property" },
+  ];
+  for (const link of conflictingLinks) {
+    const outcome = matchCanonicalProperty(grouped, candidates, [link]);
+    assert.equal(outcome.kind, "ambiguous");
+    assert.equal(outcome.reason, "link_identity_conflict");
+  }
+});
+
+test("an empty linked canonical ID cannot identify an existing row", () => {
+  const grouped = groupExactMatches([
+    observation(SOURCE_28HSE, "3972991", "C003097", "sale"),
+  ]).matched.get("sale:C003097");
+  const outcome = matchCanonicalProperty(
+    grouped,
+    [{ id: "", canonical_property_no: "C003097", deal_type: "sale" }],
+    [
+      {
+        property_id: "",
+        source: SOURCE_28HSE,
+        external_listing_id: "3972991",
+        deal_type: "sale",
+        match_key: "sale:C003097",
+        link_reason: "exact_property_no_and_deal_type",
+        status: "active",
+      },
+    ],
+  );
+  assert.deepEqual(outcome, {
+    kind: "ambiguous",
+    reason: "link_identity_conflict",
+    candidateIds: [],
+  });
+});
+
+test("inactive and unrelated links remain irrelevant", () => {
+  const grouped = groupExactMatches([
+    observation(SOURCE_28HSE, "3972991", "C003097", "sale"),
+  ]).matched.get("sale:C003097");
+  const candidate = {
+    id: "p1",
+    canonical_property_no: "C003097",
+    deal_type: "sale",
+    listing_no: "ONE",
+  };
+  const outcome = matchCanonicalProperty(
+    grouped,
+    [candidate],
+    [
+      {
+        property_id: "other",
+        source: SOURCE_28HSE,
+        external_listing_id: "unrelated",
+        deal_type: "rent",
+        match_key: "rent:C999999",
+        link_reason: "manual_guess",
+        status: "active",
+      },
+      {
+        property_id: "other",
+        source: SOURCE_28HSE,
+        external_listing_id: "3972991",
+        deal_type: "rent",
+        match_key: "rent:C999999",
+        link_reason: "manual_guess",
+        status: "rejected",
+      },
+    ],
+  );
+  assert.equal(outcome.kind, "existing");
+  assert.equal(outcome.propertyId, "p1");
+});
+
+test("an update's current exact identity is authoritative and immutable", () => {
+  const result = reconcileProperty({
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      title_zh: "Current title",
+    },
+    matchKey: "rent:C999999",
+    canonicalPropertyNo: "C999999",
+    dealType: "rent",
+    observations: [
+      observation(SOURCE_28HSE, "3972991", "C999999", "rent", {
+        title_zh: "Wrong identity title",
+      }),
+    ],
+  });
+
+  assert.equal(result.canonical.canonical_property_no, "C003097");
+  assert.equal(result.canonical.deal_type, "sale");
+  assert.equal(result.canonical.title_zh, "Current title");
+  assert.ok(result.validationEvidence.blockingCodes.includes("target_identity_conflict"));
+  assert.ok(result.quarantines.some(({ code }) => code === "observation_identity_mismatch"));
+});
+
+test("kind new cannot bypass an existing current row's authoritative identity", () => {
+  const result = reconcileProperty({
+    kind: "new",
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      title_zh: "Current title",
+    },
+    canonicalPropertyNo: "C999999",
+    dealType: "rent",
+    observations: [observation(SOURCE_28HSE, "3972991", "C999999", "rent")],
+  });
+  assert.equal(result.canonical.id, "p1");
+  assert.equal(result.canonical.canonical_property_no, "C003097");
+  assert.equal(result.canonical.deal_type, "sale");
+  assert.ok(result.validationEvidence.blockingCodes.includes("target_identity_conflict"));
+});
+
+test("a lone observation that disagrees with the current identity is quarantined", () => {
+  const result = reconcileProperty({
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      title_zh: "Current title",
+    },
+    observations: [
+      observation(SOURCE_28HSE, "3972991", "C999999", "sale", {
+        title_zh: "Wrong identity title",
+      }),
+    ],
+  });
+
+  assert.equal(result.fields.title_zh.source, "current");
+  assert.equal(result.canonical.title_zh, "Current title");
+  assert.ok(result.validationEvidence.blockingCodes.includes("observation_identity_mismatch"));
+});
+
+test("new explicit identity representations must agree with each other and observations", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C999999", "sale");
+  const mismatch = reconcileProperty({
+    current: {},
+    matchKey: "sale:C003097",
+    canonicalPropertyNo: "C003097",
+    dealType: "sale",
+    observations: [source],
+  });
+  assert.equal(mismatch.fields.title_zh.source, null);
+  assert.ok(mismatch.validationEvidence.blockingCodes.includes("target_identity_conflict"));
+
+  const explicitDisagreement = reconcileProperty({
+    current: {},
+    matchKey: "sale:C003097",
+    canonicalPropertyNo: "C999999",
+    dealType: "sale",
+    observations: [],
+  });
+  assert.ok(
+    explicitDisagreement.validationEvidence.blockingCodes.includes("target_identity_conflict"),
+  );
+});
+
+test("exactly one valid observation key may establish a new target when inputs omit identity", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  const result = reconcileProperty({ current: {}, observations: [source] });
+  assert.equal(result.canonical.canonical_property_no, "C003097");
+  assert.equal(result.canonical.deal_type, "sale");
+  assert.equal(result.validationEvidence.targetMatchKey, "sale:C003097");
 });
 
 test("staff override wins, then 28Hse, then old site; 28Hse never supplies description", () => {
   const result = reconcileProperty({
-    current: { id: "p1", price: 11_000_000, description: "Staff copy" },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      price: 11_000_000,
+      description: "Staff copy",
+    },
     fieldStates: {
       price: {
         last_published_value: 10_000_000,
@@ -361,7 +675,13 @@ test("staff override wins, then 28Hse, then old site; 28Hse never supplies descr
   assert.equal(result.fields.description.source, "staff_override");
 
   const automated = reconcileProperty({
-    current: { id: "p1", price: 10_000_000, description: "Old source copy" },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      price: 10_000_000,
+      description: "Old source copy",
+    },
     fieldStates: {
       price: { last_published_value: 10_000_000, override_value: null, active_override: false },
       description: {
@@ -393,7 +713,13 @@ test("missing and quarantined higher-priority values fall back without erasing c
     title_en: "Must be ignored",
   });
   const result = reconcileProperty({
-    current: { id: "p1", address: "Current address", orientation: "East" },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      address: "Current address",
+      orientation: "East",
+    },
     observations: [
       observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
         title_en: "Old English title",
@@ -412,10 +738,14 @@ test("missing and quarantined higher-priority values fall back without erasing c
 test("same-priority source conflicts are deterministic and explicitly quarantined", () => {
   const a = observation(SOURCE_28HSE, "100", "C003097", "sale", { address: "Alpha" });
   const z = observation(SOURCE_28HSE, "900", "C003097", "sale", { address: "Zulu" });
-  const forward = reconcileProperty({ current: {}, observations: [z, a] });
-  const reverse = reconcileProperty({ current: {}, observations: [a, z] });
+  const old = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    address: "Old-site fallback",
+  });
+  const forward = reconcileProperty({ current: {}, observations: [z, old, a] });
+  const reverse = reconcileProperty({ current: {}, observations: [a, old, z] });
 
-  assert.equal(forward.fields.address.value, "Alpha");
+  assert.equal(forward.fields.address.value, "Old-site fallback");
+  assert.equal(forward.fields.address.source, SOURCE_OLD_SITE);
   assert.deepEqual(forward.fields.address, reverse.fields.address);
   assert.deepEqual(forward.conflicts, reverse.conflicts);
   assert.deepEqual(forward.quarantines, reverse.quarantines);
@@ -427,6 +757,45 @@ test("same-priority source conflicts are deterministic and explicitly quarantine
       observationIds: [a.id, z.id],
     },
   ]);
+});
+
+test("source-value conflicts block proposal validation through direct and explicit evidence", () => {
+  const a = observation(SOURCE_28HSE, "100", "C003097", "sale", { address: "Alpha" });
+  const z = observation(SOURCE_28HSE, "900", "C003097", "sale", { address: "Zulu" });
+  const current = validNewProposal({ id: "p1", address: "Current" });
+  const result = reconcileProperty({
+    current,
+    observations: [a, z],
+    currentOwnedImages: current.images,
+  });
+
+  assert.ok(result.validationEvidence.blockingCodes.includes("source_value_conflict"));
+  assert.ok(validateCanonicalProposal({ ...result.canonical }).includes("source_value_conflict"));
+  assert.ok(
+    validateCanonicalProposal(result.canonical, {
+      kind: "update",
+      validationEvidence: result.validationEvidence,
+    }).includes("source_value_conflict"),
+  );
+
+  const inconsistentEvidence = {
+    ...result.validationEvidence,
+    blockingCodes: [],
+  };
+  assert.ok(
+    validateCanonicalProposal(result.canonical, {
+      kind: "update",
+      validationEvidence: inconsistentEvidence,
+    }).includes("missing_reconciliation_evidence"),
+  );
+
+  const serialized = JSON.parse(JSON.stringify(result.canonical));
+  assert.ok(
+    validateCanonicalProposal(serialized, {
+      kind: "update",
+      currentOwnedImages: current.images,
+    }).includes("missing_reconciliation_evidence"),
+  );
 });
 
 test("reconciliation fails closed when observations from different exact identities are mixed", () => {
@@ -466,11 +835,40 @@ test("normalizes database numbers, integers, text, feature sets, and ordered ima
     ]),
     ["https://owned.invalid/b.jpg", "https://owned.invalid/a.jpg"],
   );
+  assert.equal(normalizeCanonicalFieldValue("features", ["Balcony", 3]), undefined);
+  assert.equal(
+    normalizeCanonicalFieldValue("images", ["https://owned.invalid/a.jpg", false]),
+    undefined,
+  );
+});
+
+test("mixed automated arrays reject the whole field or prepared record", () => {
+  const old = observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale", {
+    features: ["Old-site fallback"],
+  });
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    features: ["Balcony", 3],
+  });
+  const result = reconcileProperty({
+    current: {},
+    observations: [source, old],
+    preparedImages: [preparedRecord(source, ["https://owned.invalid/listing.jpg", false])],
+  });
+  assert.deepEqual(result.fields.features.value, ["Old-site fallback"]);
+  assert.equal(result.fields.features.source, SOURCE_OLD_SITE);
+  assert.deepEqual(result.canonical.images, []);
+  assert.ok(result.validationEvidence.blockingCodes.includes("prepared_media_invalid"));
 });
 
 test("normalization and reconciliation do not mutate their inputs", () => {
   const features = ["Sea view", "Balcony", "Sea view"];
-  const current = { id: "p1", features, custom_admin_note: { keep: true } };
+  const current = {
+    id: "p1",
+    canonical_property_no: "C003097",
+    deal_type: "sale",
+    features,
+    custom_admin_note: { keep: true },
+  };
   const observations = [observation(SOURCE_OLD_SITE, "old-1", "C003097", "sale")];
   const beforeCurrent = structuredClone(current);
   const beforeObservations = structuredClone(observations);
@@ -484,7 +882,12 @@ test("normalization and reconciliation do not mutate their inputs", () => {
 
 test("estate slugs resolve only through the provided map and unknown slugs cannot erase fallback", () => {
   const result = reconcileProperty({
-    current: { id: "p1", estate_id: "current-estate" },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      estate_id: "current-estate",
+    },
     fieldStates: {
       estate_id: {
         last_published_value: "current-estate",
@@ -507,7 +910,12 @@ test("estate slugs resolve only through the provided map and unknown slugs canno
   assert.notEqual(result.fields.estate_id.value, "bal-residence");
 
   const unresolved = reconcileProperty({
-    current: { id: "p1", estate_id: "current-estate" },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      estate_id: "current-estate",
+    },
     observations: [
       observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
         estate_slug: "unknown-slug",
@@ -542,14 +950,7 @@ test("raw observation images are ignored and only explicit prepared images can w
   const prepared = reconcileProperty({
     current: {},
     observations: [source],
-    preparedImages: [
-      {
-        source: SOURCE_28HSE,
-        externalId: "3972991",
-        observationId: source.id,
-        images: ["https://owned.invalid/listing.jpg"],
-      },
-    ],
+    preparedImages: [preparedRecord(source, ["https://owned.invalid/listing.jpg"])],
   });
   assert.deepEqual(prepared.canonical.images, ["https://owned.invalid/listing.jpg"]);
   assert.equal(prepared.fields.images.source, SOURCE_28HSE);
@@ -562,17 +963,64 @@ test("an orphan or quarantined prepared-image record cannot become canonical", (
     current: {},
     observations: [source],
     preparedImages: [
-      {
-        source: SOURCE_28HSE,
+      preparedRecord(source, ["https://owned.invalid/orphan.jpg"], {
         externalId: "not-this-listing",
         observationId: "missing-observation",
-        images: ["https://owned.invalid/orphan.jpg"],
-      },
+      }),
     ],
   });
 
   assert.deepEqual(result.canonical.images, []);
   assert.equal(result.quarantines.at(-1).code, "orphan_prepared_images");
+});
+
+test("prepared media requires every exact observation identity component", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  const complete = preparedRecord(source, ["https://owned.invalid/listing.jpg"]);
+  const invalidRecords = [
+    { ...complete, observationId: undefined },
+    { ...complete, source: SOURCE_OLD_SITE },
+    { ...complete, externalId: "other" },
+    { ...complete, dealType: "rent" },
+    { ...complete, matchKey: "sale:C999999" },
+  ];
+  for (const record of invalidRecords) {
+    const result = reconcileProperty({
+      current: {},
+      observations: [source],
+      preparedImages: [record],
+    });
+    assert.deepEqual(result.canonical.images, []);
+    assert.ok(result.validationEvidence.blockingCodes.includes("prepared_media_invalid"));
+  }
+});
+
+test("prepared media cannot bind through a synthetic observation ID", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  const withoutId = { ...source };
+  Reflect.deleteProperty(withoutId, "id");
+  const result = reconcileProperty({
+    current: {},
+    observations: [withoutId],
+    preparedImages: [
+      preparedRecord(source, ["https://owned.invalid/listing.jpg"], {
+        observationId: `${source.source}:${source.externalId}:${source.dealType}`,
+      }),
+    ],
+  });
+  assert.deepEqual(result.canonical.images, []);
+  assert.ok(result.validationEvidence.blockingCodes.includes("prepared_media_invalid"));
+});
+
+test("a non-array prepared-media collection fails closed instead of throwing", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale");
+  const result = reconcileProperty({
+    current: {},
+    observations: [source],
+    preparedImages: preparedRecord(source, ["https://owned.invalid/listing.jpg"]),
+  });
+  assert.deepEqual(result.canonical.images, []);
+  assert.ok(result.validationEvidence.blockingCodes.includes("prepared_media_invalid"));
 });
 
 test("prepared images require an exact observation or source external identity", () => {
@@ -630,7 +1078,12 @@ test("explicit null and empty staff values are sticky overrides, not missing val
 
 test("initial backfill protects a differing current value and seeds the reviewed source baseline", () => {
   const result = reconcileProperty({
-    current: { id: "p1", price: 12_000_000 },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      price: 12_000_000,
+    },
     fieldStates: {},
     observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { price: 10_000_000 })],
   });
@@ -646,7 +1099,7 @@ test("initial backfill protects a differing current value and seeds the reviewed
 
 test("an absent current property is not confused with an explicit undefined staff edit", () => {
   const absent = reconcileProperty({
-    current: { id: "p1" },
+    current: { id: "p1", canonical_property_no: "C003097", deal_type: "sale" },
     fieldStates: {
       title_en: {
         last_published_value: "Old",
@@ -663,7 +1116,12 @@ test("an absent current property is not confused with an explicit undefined staf
 
 test("a field-state record without a published baseline does not invent an override", () => {
   const result = reconcileProperty({
-    current: { id: "p1", title_en: "Existing" },
+    current: {
+      id: "p1",
+      canonical_property_no: "C003097",
+      deal_type: "sale",
+      title_en: "Existing",
+    },
     fieldStates: { title_en: { active_override: false } },
     observations: [observation(SOURCE_28HSE, "3972991", "C003097", "sale", { title_en: "Source" })],
   });
@@ -672,9 +1130,64 @@ test("a field-state record without a published baseline does not invent an overr
   assert.equal(result.fields.title_en.value, "Source");
 });
 
+test("malformed field-state metadata blocks automation and preserves current data", () => {
+  const source = observation(SOURCE_28HSE, "3972991", "C003097", "sale", {
+    title_en: "Automated title",
+    price: 11_000_000,
+  });
+  const cases = [
+    {
+      field: "title_en",
+      current: { title_en: "Staff title" },
+      state: { active_override: true, last_published_value: "Source title" },
+      expected: "Staff title",
+    },
+    {
+      field: "title_en",
+      current: {},
+      state: { active_override: true, override_value: "Stored override" },
+      expected: null,
+    },
+    {
+      field: "title_en",
+      current: { title_en: "Staff title" },
+      state: {
+        active_override: "true",
+        last_published_value: "Source title",
+        override_value: "Staff title",
+      },
+      expected: "Staff title",
+    },
+    {
+      field: "price",
+      current: { price: 10_000_000 },
+      state: { active_override: false, last_published_value: "not-a-number" },
+      expected: 10_000_000,
+    },
+  ];
+
+  for (const fixture of cases) {
+    const result = reconcileProperty({
+      current: {
+        id: "p1",
+        canonical_property_no: "C003097",
+        deal_type: "sale",
+        ...fixture.current,
+      },
+      fieldStates: { [fixture.field]: fixture.state },
+      observations: [source],
+    });
+    assert.deepEqual(result.fields[fixture.field].value, fixture.expected);
+    assert.notEqual(result.fields[fixture.field].value, undefined);
+    assert.ok(result.validationEvidence.blockingCodes.includes("field_state_invalid"));
+  }
+});
+
 test("updates preserve all non-reconciled current properties", () => {
   const current = {
     id: "p1",
+    canonical_property_no: "C003097",
+    deal_type: "sale",
     listing_no: "KEEP-NO",
     price: 10_000_000,
     featured: true,
@@ -763,25 +1276,25 @@ test("every reconciled field exposes a complete provenance decision", () => {
 });
 
 test("new proposal validation requires canonical identity, active value, status, and prepared-owned media", () => {
-  assert.deepEqual(
-    validateCanonicalProposal(validNewProposal(), {
-      kind: "new",
-      preparedImages: ["https://owned.invalid/listing.jpg"],
-    }),
-    [],
-  );
+  const valid = validNewProposal();
+  assert.deepEqual(validateCanonicalProposal(valid, validationOptions(valid)), []);
+  const invalid = validNewProposal({
+    listing_no: " ",
+    title_zh: "",
+    district_slug: null,
+    deal_type: "lease",
+    price: Number.POSITIVE_INFINITY,
+    status: "published",
+    images: ["https://media.28hse.example/hotlink.jpg"],
+  });
   assert.deepEqual(
     validateCanonicalProposal(
-      validNewProposal({
-        listing_no: " ",
-        title_zh: "",
-        district_slug: null,
-        deal_type: "lease",
-        price: Number.POSITIVE_INFINITY,
-        status: "published",
-        images: ["https://media.28hse.example/hotlink.jpg"],
+      invalid,
+      validationOptions(invalid, {
+        evidenceOverrides: {
+          media: { preparedImages: [], currentOwnedImages: [] },
+        },
       }),
-      { kind: "new" },
     ),
     [
       "missing_listing_no",
@@ -792,56 +1305,35 @@ test("new proposal validation requires canonical identity, active value, status,
       "missing_owned_primary_image",
     ],
   );
-  assert.deepEqual(
-    validateCanonicalProposal(validNewProposal({ price: null }), {
-      kind: "new",
-      preparedImages: ["https://owned.invalid/listing.jpg"],
-    }),
-    ["invalid_sale_price"],
-  );
-  assert.deepEqual(
-    validateCanonicalProposal(validNewProposal({ deal_type: "rent", price: null, rent: 0 }), {
-      kind: "new",
-      preparedImages: ["https://owned.invalid/listing.jpg"],
-    }),
-    ["invalid_rent"],
-  );
+  const missingPrice = validNewProposal({ price: null });
+  assert.deepEqual(validateCanonicalProposal(missingPrice, validationOptions(missingPrice)), [
+    "invalid_sale_price",
+  ]);
+  const missingRent = validNewProposal({ deal_type: "rent", price: null, rent: 0 });
+  assert.deepEqual(validateCanonicalProposal(missingRent, validationOptions(missingRent)), [
+    "invalid_rent",
+  ]);
 });
 
 test("all real canonical statuses are valid", () => {
   for (const status of ["draft", "active", "sold", "rented", "offline", "inactive"]) {
-    assert.deepEqual(
-      validateCanonicalProposal(validNewProposal({ status }), {
-        kind: "new",
-        preparedImages: ["https://owned.invalid/listing.jpg"],
-      }),
-      [],
-    );
+    const proposal = validNewProposal({ status });
+    assert.deepEqual(validateCanonicalProposal(proposal, validationOptions(proposal)), []);
   }
 });
 
 test("updates require explicit current or prepared ownership evidence and cannot null required columns", () => {
   const update = validNewProposal({ id: "p1" });
   assert.deepEqual(validateCanonicalProposal(update, { kind: "update" }), [
+    "missing_reconciliation_evidence",
     "missing_owned_primary_image",
   ]);
-  assert.deepEqual(
-    validateCanonicalProposal(update, {
-      kind: "update",
-      currentOwnedImages: ["https://owned.invalid/listing.jpg"],
-    }),
-    [],
-  );
-  assert.deepEqual(
-    validateCanonicalProposal(
-      { ...update, listing_no: null, title_zh: null },
-      {
-        kind: "update",
-        currentOwnedImages: ["https://owned.invalid/listing.jpg"],
-      },
-    ),
-    ["missing_listing_no", "missing_title_zh"],
-  );
+  assert.deepEqual(validateCanonicalProposal(update, validationOptions(update)), []);
+  const invalidUpdate = { ...update, listing_no: null, title_zh: null };
+  assert.deepEqual(validateCanonicalProposal(invalidUpdate, validationOptions(invalidUpdate)), [
+    "missing_listing_no",
+    "missing_title_zh",
+  ]);
 });
 
 test("ownership evidence must cover the selected primary image, not only a secondary image", () => {
@@ -849,21 +1341,70 @@ test("ownership evidence must cover the selected primary image, not only a secon
     images: ["https://unowned.invalid/primary.jpg", "https://owned.invalid/secondary.jpg"],
   });
   assert.deepEqual(
-    validateCanonicalProposal(proposal, {
-      kind: "new",
-      preparedImages: ["https://owned.invalid/secondary.jpg"],
-    }),
+    validateCanonicalProposal(
+      proposal,
+      validationOptions(proposal, {
+        evidenceOverrides: {
+          media: {
+            preparedImages: ["https://owned.invalid/secondary.jpg"],
+            currentOwnedImages: [],
+          },
+        },
+      }),
+    ),
     ["missing_owned_primary_image"],
   );
 });
 
 test("proposal validation rejects an unknown explicit proposal kind", () => {
+  const proposal = validNewProposal();
   assert.deepEqual(
-    validateCanonicalProposal(validNewProposal(), {
-      kind: "replace",
-      preparedImages: ["https://owned.invalid/listing.jpg"],
-    }),
+    validateCanonicalProposal(proposal, validationOptions(proposal, { kind: "replace" })),
     ["invalid_proposal_kind"],
+  );
+});
+
+test("proposal validation requires an already-normalized canonical identity", () => {
+  const missing = validNewProposal({ canonical_property_no: null });
+  assert.ok(
+    validateCanonicalProposal(missing, validationOptions(missing)).includes(
+      "missing_canonical_property_no",
+    ),
+  );
+
+  const unnormalized = validNewProposal({ canonical_property_no: " c 003097 " });
+  assert.ok(
+    validateCanonicalProposal(unnormalized, validationOptions(unnormalized)).includes(
+      "invalid_canonical_identity",
+    ),
+  );
+
+  const targetMismatch = validNewProposal();
+  assert.ok(
+    validateCanonicalProposal(
+      targetMismatch,
+      validationOptions(targetMismatch, {
+        evidenceOverrides: { targetMatchKey: "rent:C003097" },
+      }),
+    ).includes("invalid_canonical_identity"),
+  );
+});
+
+test("update proposal identity cannot differ from supplied current identity evidence", () => {
+  const update = validNewProposal({
+    id: "p1",
+    canonical_property_no: "C999999",
+  });
+  assert.ok(
+    validateCanonicalProposal(
+      update,
+      validationOptions(update, {
+        evidenceOverrides: {
+          targetMatchKey: "sale:C003097",
+          currentMatchKey: "sale:C003097",
+        },
+      }),
+    ).includes("invalid_canonical_identity"),
   );
 });
 
@@ -875,14 +1416,7 @@ test("reconciled prepared-media evidence survives the brief's one-argument propo
     listingNo: "C003097-3972991-S",
     canonicalPropertyNo: "C003097",
     dealType: "sale",
-    preparedImages: [
-      {
-        source: SOURCE_28HSE,
-        externalId: "3972991",
-        observationId: source.id,
-        images: ["https://owned.invalid/listing.jpg"],
-      },
-    ],
+    preparedImages: [preparedRecord(source, ["https://owned.invalid/listing.jpg"])],
   });
 
   assert.deepEqual(
@@ -904,14 +1438,15 @@ test("proposal error codes are unique and deterministic", () => {
     status: "bad",
     images: [],
   };
-  const first = validateCanonicalProposal(invalid, { kind: "new" });
-  const second = validateCanonicalProposal(structuredClone(invalid), { kind: "new" });
+  const first = validateCanonicalProposal(invalid, validationOptions(invalid));
+  const clone = structuredClone(invalid);
+  const second = validateCanonicalProposal(clone, validationOptions(clone));
   assert.deepEqual(first, second);
   assert.equal(new Set(first).size, first.length);
 });
 
 test("lifecycle validates counters, resets degraded absence, and inactivates on the second full absence", () => {
-  for (const consecutive of [-1, 1.5, "1", Number.NaN]) {
+  for (const consecutive of [-1, 1.5, "1", Number.NaN, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(
       () => nextLifecycleState({ consecutive, seen: false, mayAdvanceInactivity: true }),
       /nonnegative integer/,
@@ -943,6 +1478,33 @@ test("lifecycle validates counters, resets degraded absence, and inactivates on 
       currentStatus: "inactive",
     }),
     { consecutive: 3, statusChange: null },
+  );
+});
+
+test("lifecycle requires exact boolean inputs and a valid supplied status", () => {
+  const valid = {
+    consecutive: 0,
+    seen: false,
+    mayAdvanceInactivity: true,
+    currentStatus: "active",
+    hasStatusOverride: false,
+  };
+  for (const invalid of [
+    { ...valid, seen: 0 },
+    { ...valid, mayAdvanceInactivity: "true" },
+    { ...valid, hasStatusOverride: null },
+    { ...valid, currentStatus: "published" },
+  ]) {
+    assert.throws(() => nextLifecycleState(invalid), /lifecycle input/);
+  }
+
+  assert.throws(
+    () =>
+      nextLifecycleState({
+        ...valid,
+        consecutive: Number.MAX_SAFE_INTEGER,
+      }),
+    /lifecycle input/,
   );
 });
 

@@ -4,6 +4,7 @@ import {
   buildMatchKey,
   normalizePropertyNo,
 } from "./source-contract.mjs";
+import { exactObservationQuarantineReason } from "./match.mjs";
 
 export const RECONCILED_FIELDS = Object.freeze([
   "title_zh",
@@ -25,7 +26,7 @@ export const RECONCILED_FIELDS = Object.freeze([
   "status",
 ]);
 
-export const CANONICAL_MEDIA_EVIDENCE = Symbol.for("earnestproperty.mls.canonical-media-evidence");
+const RECONCILIATION_EVIDENCE = Symbol("earnestproperty.mls.reconciliation-evidence");
 
 const NUMERIC_FIELDS = new Set(["price", "rent"]);
 const INTEGER_FIELDS = new Set(["saleable_area", "gross_area", "bedrooms", "bathrooms"]);
@@ -103,10 +104,8 @@ function safeInteger(value) {
 function normalizeStringArray(value, { sort = false } = {}) {
   if (value === null) return null;
   if (!Array.isArray(value)) return undefined;
-  const normalized = value
-    .filter((entry) => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
+  if (value.some((entry) => typeof entry !== "string")) return undefined;
+  const normalized = value.map((entry) => entry.trim()).filter(Boolean);
   if (!sort) return normalized;
   return [...new Set(normalized)].sort(compareText);
 }
@@ -122,19 +121,39 @@ export function normalizeCanonicalFieldValue(field, value) {
   return cloneValue(value);
 }
 
-function normalizedState(field, state) {
-  if (!state) return null;
+function isPlainRecord(value) {
+  return (
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+  );
+}
+
+function normalizeStateValue(field, state, key) {
+  if (!hasOwn(state, key)) return { present: false, value: undefined, valid: true };
+  const value = normalizeCanonicalFieldValue(field, state[key]);
+  return { present: true, value, valid: value !== undefined };
+}
+
+function validateFieldState(field, state, present) {
+  if (!present) return { valid: true, state: null };
+  if (!isPlainRecord(state) || typeof state.active_override !== "boolean") {
+    return { valid: false, state: null };
+  }
+  const lastPublished = normalizeStateValue(field, state, "last_published_value");
+  const override = normalizeStateValue(field, state, "override_value");
+  if (
+    !lastPublished.valid ||
+    !override.valid ||
+    (state.active_override && (!lastPublished.present || !override.present))
+  ) {
+    return { valid: false, state: null };
+  }
   const normalized = { active_override: state.active_override === true };
-  if (hasOwn(state, "last_published_value")) {
-    normalized.last_published_value = normalizeCanonicalFieldValue(
-      field,
-      state.last_published_value,
-    );
-  }
-  if (hasOwn(state, "override_value")) {
-    normalized.override_value = normalizeCanonicalFieldValue(field, state.override_value);
-  }
-  return normalized;
+  if (lastPublished.present) normalized.last_published_value = lastPublished.value;
+  if (override.present) normalized.override_value = override.value;
+  return { valid: true, state: normalized };
 }
 
 function inactiveState(state) {
@@ -236,18 +255,16 @@ function observationId(observation) {
   );
 }
 
+function explicitObservationId(observation) {
+  const value = observation?.id ?? observation?.observationId;
+  return typeof value === "string" && value.length > 0 && value.trim() === value ? value : null;
+}
+
 function compareCandidates(left, right) {
   return (
     sourceRank(left.source) - sourceRank(right.source) ||
     compareText(left.externalId, right.externalId) ||
     compareText(left.observationId, right.observationId)
-  );
-}
-
-function isValidObservation(observation) {
-  if (!observation || observation.validationState !== "valid") return false;
-  return (
-    buildMatchKey(observation.propertyNoNormalized, observation.dealType) === observation.matchKey
   );
 }
 
@@ -258,33 +275,48 @@ function automatedPresent(value) {
   return true;
 }
 
-function preparedImageCandidates(records, observations, quarantines) {
+function addBlockingCode(blockingCodes, code) {
+  if (!blockingCodes.includes(code)) blockingCodes.push(code);
+}
+
+function preparedImageCandidates(records, observations, quarantines, blockingCodes) {
   const candidates = [];
-  for (const record of records ?? []) {
-    if (!record || Array.isArray(record) || typeof record !== "object") continue;
-    const images = normalizeCanonicalFieldValue("images", record.images);
-    const hasExactIdentity = record.observationId != null || record.externalId != null;
-    const matched =
-      hasExactIdentity &&
-      observations.find((observation) => {
-        const idMatches =
-          record.observationId == null ||
-          String(record.observationId) === observationId(observation);
-        const externalMatches =
-          record.externalId == null || String(record.externalId) === String(observation.externalId);
-        return record.source === observation.source && idMatches && externalMatches;
-      });
-    if (!matched || !automatedPresent(images)) {
+  if (records == null) return candidates;
+  if (!Array.isArray(records)) {
+    quarantines.push({ code: "orphan_prepared_images", observationId: null });
+    addBlockingCode(blockingCodes, "prepared_media_invalid");
+    return candidates;
+  }
+  for (const record of records) {
+    const images = isPlainRecord(record)
+      ? normalizeCanonicalFieldValue("images", record.images)
+      : undefined;
+    const matchingIds = isPlainRecord(record)
+      ? observations.filter(
+          (observation) =>
+            typeof record.observationId === "string" &&
+            record.observationId === explicitObservationId(observation),
+        )
+      : [];
+    const matched = matchingIds.length === 1 ? matchingIds[0] : null;
+    const identityMatches =
+      matched &&
+      record.source === matched.source &&
+      record.externalId === matched.externalId &&
+      record.dealType === matched.dealType &&
+      record.matchKey === matched.matchKey;
+    if (!identityMatches || !automatedPresent(images)) {
       quarantines.push({
         code: "orphan_prepared_images",
         observationId: record.observationId == null ? null : String(record.observationId),
       });
+      addBlockingCode(blockingCodes, "prepared_media_invalid");
       continue;
     }
     candidates.push({
       source: matched.source,
       externalId: String(matched.externalId),
-      observationId: observationId(matched),
+      observationId: explicitObservationId(matched),
       value: images,
     });
   }
@@ -331,6 +363,7 @@ function chooseSourceCandidate(field, candidates, conflicts, quarantines) {
       };
       conflicts.push(conflict);
       quarantines.push(cloneValue(conflict));
+      continue;
     }
     return fromSource[0];
   }
@@ -342,22 +375,141 @@ function normalizeEvidenceImages(value) {
   return Array.isArray(images) ? images : [];
 }
 
-function attachMediaEvidence(canonical, preparedImages, currentOwnedImages) {
-  Object.defineProperty(canonical, CANONICAL_MEDIA_EVIDENCE, {
-    value: Object.freeze({
-      preparedImages: Object.freeze([...preparedImages]),
-      currentOwnedImages: Object.freeze([...currentOwnedImages]),
-    }),
+function attachReconciliationEvidence(canonical, validationEvidence) {
+  Object.defineProperty(canonical, RECONCILIATION_EVIDENCE, {
+    value: validationEvidence,
     enumerable: true,
     configurable: false,
     writable: false,
   });
 }
 
-function observationIdentity(observation) {
+function identityFromParts(propertyNo, dealType) {
+  const normalizedPropertyNo = normalizePropertyNo(propertyNo);
+  const matchKey = buildMatchKey(normalizedPropertyNo, dealType);
+  return matchKey ? { propertyNo: normalizedPropertyNo, dealType, matchKey } : null;
+}
+
+function parseCanonicalMatchKey(matchKey) {
+  if (typeof matchKey !== "string") return null;
+  const matched = /^(sale|rent):([A-Z0-9-]+)$/.exec(matchKey);
+  if (!matched) return null;
+  const identity = identityFromParts(matched[2], matched[1]);
+  return identity?.matchKey === matchKey ? identity : null;
+}
+
+function pushConflict(conflicts, blockingCodes, code, details = {}) {
+  conflicts.push({ code, ...details });
+  addBlockingCode(blockingCodes, code);
+}
+
+function resolveTargetIdentity({
+  input,
+  current,
+  isUpdate,
+  observations,
+  conflicts,
+  quarantines,
+  blockingCodes,
+}) {
+  let target = null;
+  let currentMatchKey = null;
+  let identityBlocked = false;
+
+  if (isUpdate) {
+    target = identityFromParts(current.canonical_property_no, current.deal_type);
+    currentMatchKey = target?.matchKey ?? null;
+    if (!target) {
+      pushConflict(conflicts, blockingCodes, "target_identity_conflict", {
+        reason: "current_identity_invalid",
+      });
+      identityBlocked = true;
+    }
+
+    if (hasOwn(input, "matchKey")) {
+      const explicit = parseCanonicalMatchKey(input.matchKey);
+      if (!explicit || !target || explicit.matchKey !== target.matchKey) identityBlocked = true;
+    }
+    if (hasOwn(input, "canonicalPropertyNo")) {
+      const explicitPropertyNo = normalizePropertyNo(input.canonicalPropertyNo);
+      if (!explicitPropertyNo || !target || explicitPropertyNo !== target.propertyNo) {
+        identityBlocked = true;
+      }
+    }
+    if (hasOwn(input, "dealType") && (!target || input.dealType !== target.dealType)) {
+      identityBlocked = true;
+    }
+    if (identityBlocked && !blockingCodes.includes("target_identity_conflict")) {
+      pushConflict(conflicts, blockingCodes, "target_identity_conflict", {
+        reason: "explicit_identity_disagreement",
+      });
+    }
+  } else {
+    const explicitIdentities = [];
+    if (hasOwn(input, "matchKey")) {
+      const explicit = parseCanonicalMatchKey(input.matchKey);
+      if (explicit) explicitIdentities.push(explicit);
+      else identityBlocked = true;
+    }
+    const hasExplicitPropertyNo = hasOwn(input, "canonicalPropertyNo");
+    const hasExplicitDealType = hasOwn(input, "dealType");
+    if (hasExplicitPropertyNo || hasExplicitDealType) {
+      const explicit =
+        hasExplicitPropertyNo && hasExplicitDealType
+          ? identityFromParts(input.canonicalPropertyNo, input.dealType)
+          : null;
+      if (explicit) explicitIdentities.push(explicit);
+      else identityBlocked = true;
+    }
+    const explicitKeys = [...new Set(explicitIdentities.map(({ matchKey }) => matchKey))];
+    if (explicitKeys.length > 1) identityBlocked = true;
+    if (identityBlocked) {
+      pushConflict(conflicts, blockingCodes, "target_identity_conflict", {
+        reason: "explicit_identity_disagreement",
+      });
+    } else if (explicitIdentities.length) {
+      target = explicitIdentities[0];
+    }
+  }
+
+  const observationKeys = [...new Set(observations.map(({ matchKey }) => matchKey))].sort(
+    compareText,
+  );
+  if (!isUpdate && !target && !identityBlocked) {
+    if (observationKeys.length === 1) target = parseCanonicalMatchKey(observationKeys[0]);
+    else if (observationKeys.length === 0) {
+      pushConflict(conflicts, blockingCodes, "target_identity_missing");
+      identityBlocked = true;
+    } else {
+      pushConflict(conflicts, blockingCodes, "mixed_exact_identities", {
+        matchKeys: observationKeys,
+      });
+      identityBlocked = true;
+    }
+  }
+
+  const acceptedObservations = [];
+  let observationMismatch = false;
+  for (const observation of observations) {
+    if (target && observation.matchKey === target.matchKey) acceptedObservations.push(observation);
+    else {
+      observationMismatch = true;
+      quarantines.push({
+        code: "observation_identity_mismatch",
+        observationId: observationId(observation),
+        matchKey: observation.matchKey,
+      });
+    }
+  }
+  if (observationMismatch) {
+    if (isUpdate) addBlockingCode(blockingCodes, "observation_identity_mismatch");
+    else addBlockingCode(blockingCodes, "target_identity_conflict");
+    identityBlocked = true;
+  }
   return {
-    dealType: observation?.dealType,
-    propertyNo: normalizePropertyNo(observation?.propertyNoNormalized),
+    target,
+    currentMatchKey,
+    observations: identityBlocked ? [] : acceptedObservations,
   };
 }
 
@@ -367,55 +519,46 @@ export function reconcileProperty(input) {
   const estateIdsBySlug = input?.estateIdsBySlug ?? new Map();
   const conflicts = [];
   const quarantines = [];
-  const validObservations = [];
+  const blockingCodes = [];
+  const contractObservations = [];
+  const currentIsUpdate = hasOwn(current, "id") && current.id != null;
+  const isUpdate = input?.kind === "update" || currentIsUpdate;
 
   for (const observation of input?.observations ?? []) {
-    if (isValidObservation(observation)) validObservations.push(observation);
+    const contractReason = exactObservationQuarantineReason(observation);
+    if (contractReason == null) contractObservations.push(observation);
     else {
       quarantines.push({
         code: "observation_not_valid",
         observationId: observationId(observation),
+        reason: contractReason,
       });
     }
   }
-  validObservations.sort(
+  contractObservations.sort(
     (left, right) =>
       sourceRank(left.source) - sourceRank(right.source) ||
       compareText(left.externalId, right.externalId) ||
       compareText(observationId(left), observationId(right)),
   );
-  const requestedMatchKey =
-    input?.matchKey ?? buildMatchKey(current.canonical_property_no, current.deal_type);
-  const matchKeys = [...new Set(validObservations.map(({ matchKey }) => matchKey))].sort(
-    compareText,
-  );
-  if (matchKeys.length > 1) {
-    if (requestedMatchKey && matchKeys.includes(requestedMatchKey)) {
-      for (let index = validObservations.length - 1; index >= 0; index -= 1) {
-        if (validObservations[index].matchKey !== requestedMatchKey) {
-          quarantines.push({
-            code: "observation_identity_mismatch",
-            observationId: observationId(validObservations[index]),
-          });
-          validObservations.splice(index, 1);
-        }
-      }
-    } else {
-      const conflict = { code: "mixed_exact_identities", matchKeys };
-      conflicts.push(conflict);
-      quarantines.push(cloneValue(conflict));
-      validObservations.length = 0;
-    }
-  }
+  const resolvedIdentity = resolveTargetIdentity({
+    input: input ?? {},
+    current,
+    isUpdate,
+    observations: contractObservations,
+    conflicts,
+    quarantines,
+    blockingCodes,
+  });
+  const validObservations = resolvedIdentity.observations;
 
   const preparedCandidates = preparedImageCandidates(
     input?.preparedImages,
     validObservations,
     quarantines,
+    blockingCodes,
   );
   const fields = {};
-  const currentIsUpdate = hasOwn(current, "id") && current.id != null;
-  const isUpdate = input?.kind === "update" || (input?.kind !== "new" && currentIsUpdate);
   const canonical = isUpdate
     ? cloneValue(current)
     : {
@@ -426,16 +569,10 @@ export function reconcileProperty(input) {
         source_site: "dual-source-mls",
       };
 
-  const firstIdentity = observationIdentity(validObservations[0]);
   if (!isUpdate && input?.listingNo !== undefined) canonical.listing_no = input.listingNo;
-  if (!isUpdate || input?.canonicalPropertyNo !== undefined) {
-    const canonicalPropertyNo = normalizePropertyNo(
-      input?.canonicalPropertyNo ?? firstIdentity.propertyNo,
-    );
-    if (canonicalPropertyNo) canonical.canonical_property_no = canonicalPropertyNo;
-  }
-  if (!isUpdate || input?.dealType !== undefined) {
-    canonical.deal_type = input?.dealType ?? firstIdentity.dealType;
+  if (!isUpdate && resolvedIdentity.target) {
+    canonical.canonical_property_no = resolvedIdentity.target.propertyNo;
+    canonical.deal_type = resolvedIdentity.target.dealType;
   }
 
   for (const field of RECONCILED_FIELDS) {
@@ -450,8 +587,29 @@ export function reconcileProperty(input) {
       conflicts,
       quarantines,
     );
+    const stateResult = validateFieldState(field, fieldStates[field], hasOwn(fieldStates, field));
+    if (!stateResult.valid) {
+      const conflict = { code: "field_state_invalid", field };
+      conflicts.push(conflict);
+      quarantines.push(cloneValue(conflict));
+      addBlockingCode(blockingCodes, "field_state_invalid");
+      const value = usableCurrent
+        ? cloneValue(normalizedCurrent)
+        : field === "features" || field === "images"
+          ? []
+          : null;
+      fields[field] = {
+        value,
+        source: usableCurrent ? "current" : null,
+        observationId: null,
+        changed: false,
+        nextFieldState: null,
+      };
+      canonical[field] = cloneValue(value);
+      continue;
+    }
     const sourcePresent = sourceCandidate != null;
-    const state = hasOwn(fieldStates, field) ? normalizedState(field, fieldStates[field]) : null;
+    const state = stateResult.state;
     const override = detectStaffOverride(normalizedCurrent, state, {
       currentPresent: usableCurrent,
       sourcePresent,
@@ -515,6 +673,14 @@ export function reconcileProperty(input) {
     }
   }
 
+  for (const conflict of conflicts) addBlockingCode(blockingCodes, conflict.code);
+  const preparedEvidence = preparedCandidates.flatMap(({ value }) => value);
+  const currentOwnedImagesValue = normalizeCanonicalFieldValue("images", input?.currentOwnedImages);
+  const currentOwnedImages = Array.isArray(currentOwnedImagesValue) ? currentOwnedImagesValue : [];
+  if (hasOwn(input ?? {}, "currentOwnedImages") && !Array.isArray(currentOwnedImagesValue)) {
+    addBlockingCode(blockingCodes, "prepared_media_invalid");
+    quarantines.push({ code: "current_media_evidence_invalid", observationId: null });
+  }
   quarantines.sort(
     (left, right) =>
       compareText(left.code, right.code) ||
@@ -522,23 +688,99 @@ export function reconcileProperty(input) {
       compareText(left.source, right.source) ||
       compareText(left.observationId, right.observationId),
   );
-  const preparedEvidence = preparedCandidates.flatMap(({ value }) => value);
-  const currentOwnedImages = normalizeEvidenceImages(input?.currentOwnedImages);
-  attachMediaEvidence(canonical, preparedEvidence, currentOwnedImages);
+  const validationEvidence = {
+    schemaVersion: 1,
+    targetMatchKey: resolvedIdentity.target?.matchKey ?? null,
+    currentMatchKey: resolvedIdentity.currentMatchKey,
+    blockingCodes: [...blockingCodes],
+    conflicts: cloneValue(conflicts),
+    quarantines: cloneValue(quarantines),
+    media: {
+      preparedImages: [...preparedEvidence],
+      currentOwnedImages: [...currentOwnedImages],
+    },
+  };
+  attachReconciliationEvidence(canonical, validationEvidence);
 
-  return { fields, canonical, conflicts, quarantines };
+  return { fields, canonical, conflicts, quarantines, validationEvidence };
 }
 
 function nonEmptyText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function validMatchKeyOrNull(value) {
+  return value === null || parseCanonicalMatchKey(value) != null;
+}
+
+function strictStringArray(value) {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function strictNonEmptyStringArray(value) {
+  return (
+    strictStringArray(value) && value.every((entry) => entry.length > 0 && entry.trim() === entry)
+  );
+}
+
+function codedEvidenceItems(value) {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        isPlainRecord(entry) &&
+        typeof entry.code === "string" &&
+        entry.code.length > 0 &&
+        entry.code.trim() === entry.code,
+    )
+  );
+}
+
 function evidenceFromProposal(proposal, options) {
-  const attached = proposal?.[CANONICAL_MEDIA_EVIDENCE] ?? {};
+  const attached = proposal?.[RECONCILIATION_EVIDENCE];
+  const candidate = hasOwn(options, "validationEvidence") ? options.validationEvidence : attached;
+  const explicitEvidenceDisagrees =
+    attached != null && hasOwn(options, "validationEvidence") && !stableEqual(attached, candidate);
+  const conflictsCovered =
+    isPlainRecord(candidate) &&
+    strictStringArray(candidate.blockingCodes) &&
+    Array.isArray(candidate.conflicts) &&
+    candidate.conflicts.every(
+      (conflict) => isPlainRecord(conflict) && candidate.blockingCodes.includes(conflict.code),
+    );
+  if (
+    explicitEvidenceDisagrees ||
+    !isPlainRecord(candidate) ||
+    candidate.schemaVersion !== 1 ||
+    !validMatchKeyOrNull(candidate.targetMatchKey) ||
+    !validMatchKeyOrNull(candidate.currentMatchKey) ||
+    !strictNonEmptyStringArray(candidate.blockingCodes) ||
+    !codedEvidenceItems(candidate.conflicts) ||
+    !codedEvidenceItems(candidate.quarantines) ||
+    !conflictsCovered ||
+    !isPlainRecord(candidate.media) ||
+    !strictNonEmptyStringArray(candidate.media.preparedImages) ||
+    !strictNonEmptyStringArray(candidate.media.currentOwnedImages)
+  ) {
+    return {
+      valid: false,
+      targetMatchKey: null,
+      currentMatchKey: null,
+      blockingCodes: [],
+      preparedImages: normalizeEvidenceImages(options.preparedImages),
+      currentOwnedImages: normalizeEvidenceImages(options.currentOwnedImages),
+    };
+  }
   return {
-    preparedImages: normalizeEvidenceImages(options.preparedImages ?? attached.preparedImages),
+    valid: true,
+    targetMatchKey: candidate.targetMatchKey,
+    currentMatchKey: candidate.currentMatchKey,
+    blockingCodes: [...new Set(candidate.blockingCodes)].sort(compareText),
+    preparedImages: normalizeEvidenceImages(
+      options.preparedImages ?? candidate.media.preparedImages,
+    ),
     currentOwnedImages: normalizeEvidenceImages(
-      options.currentOwnedImages ?? attached.currentOwnedImages,
+      options.currentOwnedImages ?? candidate.media.currentOwnedImages,
     ),
   };
 }
@@ -550,14 +792,31 @@ export function validateCanonicalProposal(proposal, options = {}) {
   const add = (code) => {
     if (!errors.includes(code)) errors.push(code);
   };
+  const evidence = evidenceFromProposal(value, options);
 
   if (kind !== "new" && kind !== "update") add("invalid_proposal_kind");
+  if (!evidence.valid) add("missing_reconciliation_evidence");
 
   if (!nonEmptyText(value.listing_no)) add("missing_listing_no");
   if (!nonEmptyText(value.title_zh)) add("missing_title_zh");
   if (!nonEmptyText(value.district_slug)) add("missing_district_slug");
   const dealTypeValid = value.deal_type === "sale" || value.deal_type === "rent";
   if (!dealTypeValid) add("invalid_deal_type");
+  const canonicalPropertyNo = normalizePropertyNo(value.canonical_property_no);
+  if (!nonEmptyText(value.canonical_property_no)) add("missing_canonical_property_no");
+  else if (canonicalPropertyNo !== value.canonical_property_no) add("invalid_canonical_identity");
+  const proposalMatchKey = buildMatchKey(canonicalPropertyNo, value.deal_type);
+  if (
+    dealTypeValid &&
+    canonicalPropertyNo &&
+    evidence.valid &&
+    (proposalMatchKey !== evidence.targetMatchKey ||
+      (kind === "update" &&
+        evidence.currentMatchKey != null &&
+        proposalMatchKey !== evidence.currentMatchKey))
+  ) {
+    add("invalid_canonical_identity");
+  }
   if (!CANONICAL_STATUSES.has(value.status)) add("invalid_status");
 
   const requireActiveValue = kind === "new" || value.status === "active";
@@ -572,13 +831,15 @@ export function validateCanonicalProposal(proposal, options = {}) {
   }
 
   const proposalImages = normalizeEvidenceImages(value.images);
-  const evidence = evidenceFromProposal(value, options);
   const eligibleEvidence =
     kind === "new"
       ? evidence.preparedImages
       : [...evidence.preparedImages, ...evidence.currentOwnedImages];
   if (!proposalImages.length || !eligibleEvidence.includes(proposalImages[0])) {
     add("missing_owned_primary_image");
+  }
+  if (evidence.valid) {
+    for (const code of evidence.blockingCodes) add(code);
   }
   return errors;
 }
@@ -590,8 +851,16 @@ export function nextLifecycleState({
   currentStatus,
   hasStatusOverride = false,
 }) {
-  if (!Number.isInteger(consecutive) || consecutive < 0) {
+  if (!Number.isSafeInteger(consecutive) || consecutive < 0) {
     throw new TypeError("consecutive must be a nonnegative integer");
+  }
+  if (
+    typeof seen !== "boolean" ||
+    typeof mayAdvanceInactivity !== "boolean" ||
+    typeof hasStatusOverride !== "boolean" ||
+    (currentStatus !== undefined && !CANONICAL_STATUSES.has(currentStatus))
+  ) {
+    throw new TypeError("lifecycle input must use exact booleans and a valid status");
   }
   if (seen) {
     return {
@@ -600,6 +869,9 @@ export function nextLifecycleState({
     };
   }
   if (!mayAdvanceInactivity) return { consecutive: 0, statusChange: null };
+  if (consecutive === Number.MAX_SAFE_INTEGER) {
+    throw new TypeError("lifecycle input would exceed the safe consecutive range");
+  }
 
   const nextConsecutive = consecutive + 1;
   const shouldInactivate =

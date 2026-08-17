@@ -1,16 +1,45 @@
 import {
+  DEAL_TYPES,
+  OBSERVATION_SCHEMA_VERSION,
   SOURCE_28HSE,
   SOURCE_OLD_SITE,
   buildMatchKey,
   normalizePropertyNo,
+  stableObservationHash,
 } from "./source-contract.mjs";
 
 const EXACT_LINK_REASON = "exact_property_no_and_deal_type";
+const SOURCES = new Set([SOURCE_28HSE, SOURCE_OLD_SITE]);
+const MEDIA_CATEGORIES = new Set([
+  "listing_photo",
+  "map",
+  "floorplan",
+  "qr",
+  "vr",
+  "branded",
+  "unknown",
+]);
 
 function compareText(left, right) {
   const a = String(left ?? "");
   const b = String(right ?? "");
   return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function stableValue(value) {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort(compareText)
+        .map((key) => [key, stableValue(value[key])]),
+    );
+  }
+  return value;
+}
+
+function compareStableValue(left, right) {
+  return compareText(JSON.stringify(stableValue(left)), JSON.stringify(stableValue(right)));
 }
 
 function sourceRank(source) {
@@ -24,7 +53,8 @@ function compareObservations(left, right) {
     sourceRank(left?.source) - sourceRank(right?.source) ||
     compareText(left?.externalId, right?.externalId) ||
     compareText(left?.dealType, right?.dealType) ||
-    compareText(left?.id, right?.id)
+    compareText(left?.id, right?.id) ||
+    compareStableValue(left, right)
   );
 }
 
@@ -35,6 +65,69 @@ function parseMatchKey(matchKey) {
   const propertyNo = normalizePropertyNo(matched[2]);
   if (!propertyNo || buildMatchKey(propertyNo, matched[1]) !== matchKey) return null;
   return { dealType: matched[1], propertyNo, matchKey };
+}
+
+function isPlainRecord(value) {
+  return (
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null)
+  );
+}
+
+function mediaCandidatesValid(value) {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (candidate) =>
+        isPlainRecord(candidate) &&
+        typeof candidate.url === "string" &&
+        candidate.url.trim() === candidate.url &&
+        candidate.url.length > 0 &&
+        MEDIA_CATEGORIES.has(candidate.category) &&
+        typeof candidate.isPrimary === "boolean",
+    )
+  );
+}
+
+function stringArray(value) {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function exactNonEmptyString(value) {
+  return typeof value === "string" && value.length > 0 && value.trim() === value;
+}
+
+function exactNullableString(value) {
+  return value === null || exactNonEmptyString(value);
+}
+
+function sourceUrlValid(value) {
+  if (typeof value !== "string" || !value || value.trim() !== value) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function hashMatches(observation) {
+  if (typeof observation.contentHash !== "string") return false;
+  return (
+    stableObservationHash({
+      schemaVersion: observation.schemaVersion,
+      source: observation.source,
+      externalId: observation.externalId,
+      dealType: observation.dealType,
+      propertyNoNormalized: observation.propertyNoNormalized,
+      fields: observation.fields,
+      rawFields: observation.rawFields,
+      mediaCandidates: observation.mediaCandidates,
+      sourceUpdatedAt: observation.sourceUpdatedAt ?? null,
+    }) === observation.contentHash
+  );
 }
 
 function observationQuarantineReason(observation) {
@@ -51,7 +144,33 @@ function observationQuarantineReason(observation) {
   ) {
     return "match_key_identity_mismatch";
   }
+  if (
+    observation.schemaVersion !== OBSERVATION_SCHEMA_VERSION ||
+    !SOURCES.has(observation.source) ||
+    !exactNonEmptyString(observation.externalId) ||
+    /\s/.test(observation.externalId) ||
+    !sourceUrlValid(observation.sourceUrl) ||
+    !DEAL_TYPES.includes(observation.dealType) ||
+    typeof observation.propertyNoRaw !== "string" ||
+    observation.propertyNoNormalized !== normalizedPropertyNo ||
+    !exactNullableString(observation.sourceUpdatedAt) ||
+    !exactNonEmptyString(observation.discoveredAt) ||
+    !exactNonEmptyString(observation.fetchedAt) ||
+    !isPlainRecord(observation.fields) ||
+    !isPlainRecord(observation.rawFields) ||
+    !mediaCandidatesValid(observation.mediaCandidates) ||
+    !stringArray(observation.quarantineReasons) ||
+    observation.quarantineReasons.length !== 0 ||
+    !stringArray(observation.parseWarnings) ||
+    !hashMatches(observation)
+  ) {
+    return "observation_contract_invalid";
+  }
   return null;
+}
+
+export function exactObservationQuarantineReason(observation) {
+  return observationQuarantineReason(observation);
 }
 
 export function groupExactMatches(observations) {
@@ -69,13 +188,17 @@ export function groupExactMatches(observations) {
     matched.set(observation.matchKey, group);
   }
 
-  for (const group of matched.values()) group.sort(compareObservations);
+  const sortedMatched = new Map(
+    [...matched.entries()]
+      .sort(([left], [right]) => compareText(left, right))
+      .map(([matchKey, group]) => [matchKey, group.sort(compareObservations)]),
+  );
   quarantined.sort(
     (left, right) =>
       compareObservations(left.observation, right.observation) ||
       compareText(left.reason, right.reason),
   );
-  return { matched, quarantined };
+  return { matched: sortedMatched, quarantined };
 }
 
 function describeGroup(group) {
@@ -98,12 +221,16 @@ function describeGroup(group) {
 
 function candidateId(candidate) {
   const value = candidate?.id ?? candidate?.property_id ?? candidate?.propertyId;
-  return value == null ? null : String(value);
+  if (value == null) return null;
+  const id = String(value);
+  return exactNonEmptyString(id) ? id : null;
 }
 
 function linkPropertyId(link) {
   const value = link?.property_id ?? link?.propertyId;
-  return value == null ? null : String(value);
+  if (value == null) return null;
+  const id = String(value);
+  return exactNonEmptyString(id) ? id : null;
 }
 
 function exactCandidate(candidate, identity) {
@@ -131,7 +258,8 @@ function uniqueCandidates(candidates) {
           `${normalizePropertyNo(candidate.canonical_property_no) ?? ""}\u0000${candidate.deal_type ?? ""}`,
       ),
     );
-    if (identities.size > 1) identityConflicts.push(id);
+    const listingNumbers = new Set(rows.map((candidate) => candidate.listing_no ?? null));
+    if (identities.size > 1 || listingNumbers.size > 1) identityConflicts.push(id);
     rows.sort(
       (left, right) =>
         compareText(
@@ -139,7 +267,8 @@ function uniqueCandidates(candidates) {
           normalizePropertyNo(right.canonical_property_no),
         ) ||
         compareText(left.deal_type, right.deal_type) ||
-        compareText(left.listing_no, right.listing_no),
+        compareText(left.listing_no, right.listing_no) ||
+        compareStableValue(left, right),
     );
     byId.set(id, rows[0]);
   }
@@ -160,7 +289,9 @@ function relevantActiveLinks(observations, sourceLinks) {
   return (sourceLinks ?? []).filter((link) => {
     if (link?.status !== "active") return false;
     const externalId = link.external_listing_id ?? link.externalId;
-    return identities.has(`${link.source}\u0000${externalId}\u0000${link.deal_type}`);
+    return [...identities].some((identity) =>
+      identity.startsWith(`${link.source}\u0000${externalId}\u0000`),
+    );
   });
 }
 
@@ -210,23 +341,27 @@ export function matchCanonicalProperty(group, candidates = [], sourceLinks = [])
   const links = relevantActiveLinks(observations, sourceLinks);
   const linkedIds = [];
   const conflictingIds = [];
+  let linkConflict = false;
 
   for (const link of links) {
-    if (link.link_reason !== EXACT_LINK_REASON) continue;
     const id = linkPropertyId(link);
     const candidate = id == null ? null : candidatesById.get(id);
     if (
+      link.link_reason !== EXACT_LINK_REASON ||
+      link.deal_type !== identity.dealType ||
       link.match_key !== identity.matchKey ||
+      id == null ||
       !candidate ||
       !exactCandidate(candidate, identity)
     ) {
+      linkConflict = true;
       if (id != null) conflictingIds.push(id);
       continue;
     }
     linkedIds.push(id);
   }
 
-  if (conflictingIds.length) {
+  if (linkConflict) {
     return ambiguous("link_identity_conflict", [...linkedIds, ...conflictingIds]);
   }
   const uniqueLinkedIds = [...new Set(linkedIds)].sort(compareText);
