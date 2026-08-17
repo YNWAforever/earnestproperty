@@ -121,8 +121,8 @@ async function requestJson(
 
 export function createYouTubeClient(input: YouTubeClientDependencies) {
   const apiKey = input.apiKey.trim();
-  const channelId = input.channelId ?? YOUTUBE_CHANNEL_ID;
-  if (!apiKey || !/^UC[A-Za-z0-9_-]{22}$/.test(channelId)) {
+  const channelId = YOUTUBE_CHANNEL_ID;
+  if (!apiKey || (input.channelId !== undefined && input.channelId !== YOUTUBE_CHANNEL_ID)) {
     throw new YouTubeSyncError("youtube_auth_failed", "YouTube synchronization is not configured.");
   }
   const dependencies = {
@@ -169,12 +169,9 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
     const contentVideoId = typeof content?.videoId === "string" ? content.videoId : "";
     const resourceVideoId = typeof resource?.videoId === "string" ? resource.videoId : "";
     const videoId = contentVideoId || resourceVideoId;
-    const owner =
-      typeof snippet?.videoOwnerChannelId === "string"
-        ? snippet.videoOwnerChannelId
-        : typeof snippet?.channelId === "string"
-          ? snippet.channelId
-          : "";
+    const snippetChannelId = typeof snippet?.channelId === "string" ? snippet.channelId : null;
+    const videoOwnerChannelId =
+      typeof snippet?.videoOwnerChannelId === "string" ? snippet.videoOwnerChannelId : null;
     const title = typeof snippet?.title === "string" ? snippet.title.trim() : "";
     const description = typeof snippet?.description === "string" ? snippet.description : "";
     const publishedAt =
@@ -187,7 +184,9 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
     if (
       !/^[A-Za-z0-9_-]{11}$/.test(videoId) ||
       (contentVideoId && resourceVideoId && contentVideoId !== resourceVideoId) ||
-      owner !== channelId ||
+      (snippetChannelId !== null && snippetChannelId !== channelId) ||
+      (videoOwnerChannelId !== null && videoOwnerChannelId !== channelId) ||
+      (!snippetChannelId && !videoOwnerChannelId) ||
       !title ||
       !Number.isFinite(Date.parse(publishedAt))
     ) {
@@ -234,7 +233,7 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
         );
       }
       pageNumber += 1;
-      let acceptedOnPage = 0;
+      const pageVideos: YouTubeVideo[] = [];
       for (const rawItem of body.items) {
         const item = normalizePlaylistItem(rawItem);
         if (seenVideoIds.has(item.videoId)) {
@@ -244,12 +243,15 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
           );
         }
         seenVideoIds.add(item.videoId);
-        videos.push(item);
-        acceptedOnPage += 1;
-        if (listInput.boundaryVideoId && item.videoId === listInput.boundaryVideoId) {
-          boundaryFound = true;
-          break;
-        }
+        pageVideos.push(item);
+      }
+      const boundaryIndex = listInput.boundaryVideoId
+        ? pageVideos.findIndex((item) => item.videoId === listInput.boundaryVideoId)
+        : -1;
+      const acceptedOnPage = boundaryIndex === -1 ? pageVideos.length : boundaryIndex + 1;
+      videos.push(...pageVideos.slice(0, acceptedOnPage));
+      if (boundaryIndex !== -1) {
+        boundaryFound = true;
       }
       await listInput.onPage?.({ pageNumber, itemCount: acceptedOnPage });
       if (boundaryFound) break;

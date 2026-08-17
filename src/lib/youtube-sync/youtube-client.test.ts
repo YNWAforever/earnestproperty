@@ -59,6 +59,18 @@ test("configuration fails closed when the server-only key is missing", () => {
   );
 });
 
+test("client rejects a channel override that differs from the fixed channel", () => {
+  assert.throws(
+    () =>
+      createYouTubeClient({
+        apiKey,
+        channelId: `UC${"A".repeat(22)}`,
+        fetchImpl: queuedFetch([]).fetchImpl,
+      }),
+    (error) => error instanceof Error && "code" in error && error.code === "youtube_auth_failed",
+  );
+});
+
 test("client resolves the canonical uploads playlist and exhausts pages", async () => {
   const fake = queuedFetch([
     channelResponse(),
@@ -109,6 +121,27 @@ test("incremental pagination includes the prior boundary and stops", async () =>
   assert.equal(result.boundaryFound, true);
   assert.equal(result.pages, 1);
   assert.equal(fake.urls.length, 2);
+});
+
+test("boundary pages validate later items before truncating the returned videos", async () => {
+  const fake = queuedFetch([
+    channelResponse(),
+    json({
+      items: [
+        playlistItem("CCCCCCCCCCC"),
+        playlistItem("BBBBBBBBBBB"),
+        playlistItem("AAAAAAAAAAA", "Wrong", "UCwrongwrongwrongwrongwrong"),
+      ],
+    }),
+  ]);
+  await assert.rejects(
+    () =>
+      createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({
+        boundaryVideoId: "BBBBBBBBBBB",
+      }),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+  );
 });
 
 test("a missing boundary falls back to a complete traversal", async () => {
@@ -228,6 +261,17 @@ test("mismatched identity and invalid publication timestamps invalidate the snap
   await assert.rejects(
     () =>
       createYouTubeClient({ apiKey, channelId, fetchImpl: invalidDate.fetchImpl }).listUploads({}),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+  );
+});
+
+test("conflicting supplied snippet channel identities invalidate the snapshot", async () => {
+  const conflictingItem = playlistItem("AAAAAAAAAAA");
+  conflictingItem.snippet.channelId = "UCwrongwrongwrongwrongwrong";
+  const fake = queuedFetch([channelResponse(), json({ items: [conflictingItem] })]);
+  await assert.rejects(
+    () => createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({}),
     (error) =>
       error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
   );
