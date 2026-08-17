@@ -424,7 +424,7 @@ function publicationRunRow(overrides = {}) {
   return {
     id: RUN_ID,
     scheduled_for: "2026-08-17",
-    started_at: "2026-08-17T04:00:00.000Z",
+    started_at: "2026-08-17T04:00:00.000000Z",
     mode: "publish",
     status: "running",
     source_status: healthySourceStatus(),
@@ -440,10 +440,10 @@ function approvedShadowRows(count = 7, overrides = {}) {
     return {
       id: `${String(index + 60).padStart(8, "0")}-1111-4111-8111-${String(index + 60).padStart(12, "0")}`,
       scheduled_for: scheduledFor,
-      started_at: `${scheduledFor}T01:00:00.000Z`,
+      started_at: `${scheduledFor}T01:00:00.000000Z`,
       status: "shadow_healthy",
       source_status: healthySourceStatus(),
-      baseline_approved_at: `${scheduledFor}T02:00:00.000Z`,
+      baseline_approved_at: `${scheduledFor}T02:00:00.000000Z`,
       date_rank: 1,
       ...overrides,
     };
@@ -471,10 +471,26 @@ function fakePublicationClient(options = {}) {
     if (/^SELECT 1 AS alive/.test(call.statement)) {
       return options.sessionResult ?? result([{ alive: 1 }]);
     }
+    if (
+      /^SELECT source_status FROM listing_sync_runs WHERE id = \$1/.test(call.statement) &&
+      !/FOR UPDATE/.test(call.statement)
+    ) {
+      return result([
+        {
+          source_status:
+            options.preflightSourceStatus ??
+            options.runRow?.source_status ??
+            publicationRunRow(options.runOverrides).source_status,
+        },
+      ]);
+    }
     if (/FROM listing_sync_runs WHERE id = \$1 .*FOR UPDATE/.test(call.statement)) {
       return result([options.runRow ?? publicationRunRow(options.runOverrides)]);
     }
     if (/publication_shadow_streak/.test(call.statement)) return result(rows);
+    if (/^LOCK TABLE properties IN SHARE ROW EXCLUSIVE MODE$/.test(call.statement)) {
+      return options.tableLockResult ?? commandResult("LOCK");
+    }
     if (/pg_advisory_xact_lock/.test(call.statement)) {
       return result([{ acquired: 1 }]);
     }
@@ -510,6 +526,7 @@ function fakePublicationClient(options = {}) {
         : result([{ id: call.params.at(-2) }], 1, "UPDATE");
     }
     if (/INSERT INTO properties/.test(call.statement)) {
+      if (options.insertError) throw options.insertError;
       if (options.writeError) throw options.writeError;
       return result([{ id: PROPERTY_ID }], 1, "INSERT");
     }
@@ -528,8 +545,14 @@ function fakePublicationClient(options = {}) {
     if (/INSERT INTO property_source_links/.test(call.statement)) {
       return result([{ property_id: call.params[0] }], 1, "INSERT");
     }
+    if (/FROM property_sync_fields/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
+      return result(options.lockedFieldRows ?? []);
+    }
     if (/INSERT INTO property_sync_fields/.test(call.statement)) {
       return result([{ property_id: call.params[0] }], 1, "INSERT");
+    }
+    if (/FROM property_sync_state/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
+      return result(options.lockedLifecycleRows ?? []);
     }
     if (/INSERT INTO property_sync_state/.test(call.statement)) {
       return result([{ property_id: call.params[0] }], 1, "INSERT");
@@ -3274,7 +3297,7 @@ test("degraded publication resets lifecycle and forbids inactivity events", asyn
       lifecycle: {
         consecutiveAbsentHealthyRuns: 2,
         inactiveReason: "absent_two_healthy_runs",
-        inactiveAt: "2026-08-17T04:00:00.000Z",
+        inactiveAt: "2026-08-17T04:00:00.000000Z",
       },
       events: [
         {
@@ -3320,7 +3343,7 @@ test("media attachment is limited to the current-run images winner and rejects c
 test("approval evidence is strictly before the publish run and consecutive through the prior HK date", async () => {
   const equalApproval = fakePublicationClient({
     shadowRows: approvedShadowRows(7).map((row, index) =>
-      index === 0 ? { ...row, baseline_approved_at: "2026-08-17T04:00:00.000Z" } : row,
+      index === 0 ? { ...row, baseline_approved_at: "2026-08-17T04:00:00.000000Z" } : row,
     ),
   });
   await assert.rejects(
@@ -3416,7 +3439,7 @@ test("new image-bearing proposals require a current-run images winner", async ()
   assert.equal(client.calls.length, 0);
 });
 
-test("malformed BEGIN results never claim an open transaction or issue rollback", async () => {
+test("a fulfilled malformed BEGIN result is rolled back before the session is reused", async () => {
   const malformed = { rows: "not-an-array", rowCount: null };
   const client = fakePublicationClient({ beginResult: malformed });
 
@@ -3426,7 +3449,7 @@ test("malformed BEGIN results never claim an open transaction or issue rollback"
     assert.deepEqual(error.cleanupErrors, []);
     return true;
   });
-  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE"]);
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
 });
 
 test("empty primary error messages cannot displace the primary or rollback error", async () => {
@@ -3542,7 +3565,7 @@ test("inactive and reactivated events must publish the exact canonical status", 
   batch.proposals[0].lifecycle = {
     consecutiveAbsentHealthyRuns: 2,
     inactiveReason: "absent_two_healthy_runs",
-    inactiveAt: "2026-08-17T04:00:00.000Z",
+    inactiveAt: "2026-08-17T04:00:00.000000Z",
   };
   batch.proposals[0].events = [
     {
@@ -3593,8 +3616,8 @@ test("same-HK-date shadow approval is accepted only when it predates the publish
     return {
       ...row,
       scheduled_for: scheduledFor,
-      started_at: `${scheduledFor}T01:00:00.000Z`,
-      baseline_approved_at: `${scheduledFor}T02:00:00.000Z`,
+      started_at: `${scheduledFor}T01:00:00.000000Z`,
+      baseline_approved_at: `${scheduledFor}T02:00:00.000000Z`,
     };
   });
   const client = fakePublicationClient({ shadowRows: sameDayRows });
@@ -3669,7 +3692,7 @@ test("publication session and nested health rows reject accessors without invoki
     /accessor|data propert/i,
   );
   assert.equal(healthReads, 0);
-  assert.equal(healthClient.events.at(-1), "ROLLBACK");
+  assert.equal(healthClient.events.length, 0);
 });
 
 test("publication validates command and rowCount and accepts a real pg BEGIN result", async () => {
@@ -3685,7 +3708,7 @@ test("publication validates command and rowCount and accepts a real pg BEGIN res
     createSyncRepository({ client: wrongCommand }).publishBatch(approvedBatch()),
     /BEGIN|command|database result/i,
   );
-  assert.deepEqual(wrongCommand.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE"]);
+  assert.deepEqual(wrongCommand.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
 
   const inconsistentCount = fakePublicationClient({
     sessionResult: result([{ alive: 1 }], 0),
@@ -3745,14 +3768,30 @@ test("active overrides publish the staff value while retaining an independent au
   price.overrideValue = 12_000_000;
   price.activeOverride = true;
   price.winningObservationId = null;
-  batch.proposals[0].events[0] = {
-    ...batch.proposals[0].events[0],
-    newValue: 12_000_000,
-    winningObservationId: null,
-    reason: "staff_override_preserved",
-  };
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 10_000_000,
+        override_value: 11_000_000,
+        active_override: true,
+        winning_observation_id: null,
+      },
+    ],
+  });
 
-  await createSyncRepository({ client: fakePublicationClient() }).publishBatch(batch);
+  await createSyncRepository({ client }).publishBatch(batch);
 });
 
 test("candidate row versions preserve PostgreSQL microseconds and updates prove SQL timestamp equality", async () => {
@@ -3956,7 +3995,7 @@ test("status transitions cannot hide as changed and lifecycle evidence is bound 
       lifecycle: {
         consecutiveAbsentHealthyRuns: 2,
         inactiveReason: "absent_two_healthy_runs",
-        inactiveAt: "2026-08-17T04:00:00.000Z",
+        inactiveAt: "2026-08-17T04:00:00.000000Z",
       },
       events: [
         {
@@ -4004,7 +4043,7 @@ test("inactive lifecycle effective time must equal the locked publish-run start"
   proposal.lifecycle = {
     consecutiveAbsentHealthyRuns: 2,
     inactiveReason: "absent_two_healthy_runs",
-    inactiveAt: "2026-08-18T04:00:00.000Z",
+    inactiveAt: "2026-08-18T04:00:00.000000Z",
   };
   proposal.events = [
     {
@@ -4094,7 +4133,9 @@ test("publication cancellation preserves the exact abort reason and rolls back o
   const midReason = Object.freeze({ code: "mid-transaction-abort" });
   const midClient = fakePublicationClient({
     onQuery(call) {
-      if (/FROM listing_sync_runs/.test(call.statement)) midController.abort(midReason);
+      if (/FROM listing_sync_runs/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
+        midController.abort(midReason);
+      }
     },
   });
   await assert.rejects(
@@ -4152,6 +4193,471 @@ test("publication snapshots reject every non-index, hidden, symbol, or accessor 
     assert.equal(reads.count, 0);
     assert.equal(client.calls.length, 0);
   }
+});
+
+function newPublicationProposal() {
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.kind = "new";
+  delete proposal.propertyId;
+  delete proposal.expectedUpdatedAt;
+  proposal.events = [
+    {
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: structuredClone(proposal.canonical),
+      winningObservationId: OBSERVATION_ID,
+      reason: "new_listing",
+    },
+    proposal.events.find((event) => event.changeType === "link_change"),
+  ];
+  return proposal;
+}
+
+function activeOverrideBatch({ canonicalPrice = 12_000_000, baseline = 10_000_000 } = {}) {
+  const canonical = canonicalWrite({ price: canonicalPrice });
+  const batch = approvedBatch({ canonical });
+  const price = batch.proposals[0].fields.find((field) => field.fieldName === "price");
+  price.lastPublishedValue = baseline;
+  price.overrideValue = canonicalPrice;
+  price.activeOverride = true;
+  price.winningObservationId = null;
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  return batch;
+}
+
+test("baselineRequired is an exact boolean and either current source can block publication", async () => {
+  const malformed = evaluation();
+  malformed.sourceStatus[SOURCE_28HSE].baselineRequired = "true";
+  const evaluationClient = fakeClient();
+  await assert.rejects(
+    createSyncRepository({ client: evaluationClient }).recordRunEvaluation(RUN_ID, malformed),
+    /baselineRequired|sourceStatus/i,
+  );
+  assert.equal(evaluationClient.calls.length, 0);
+
+  const oldSiteBaselinePending = healthySourceStatus({
+    [SOURCE_OLD_SITE]: {
+      source: SOURCE_OLD_SITE,
+      healthy: true,
+      reasons: [],
+      baselineRequired: true,
+    },
+  });
+  const publicationClient = fakePublicationClient({
+    runOverrides: { source_status: oldSiteBaselinePending },
+    preflightSourceStatus: oldSiteBaselinePending,
+  });
+  await assert.rejects(
+    createSyncRepository({ client: publicationClient }).publishBatch(approvedBatch()),
+    /baseline.*required|publication.*baseline/i,
+  );
+  assert.equal(publicationClient.events.includes("BEGIN ISOLATION LEVEL SERIALIZABLE"), false);
+  assert.equal(publicationClient.events.includes("COMMIT"), false);
+});
+
+test("the transaction rechecks a baseline requirement that appears after preflight", async () => {
+  const baselinePending = healthySourceStatus({
+    [SOURCE_OLD_SITE]: {
+      source: SOURCE_OLD_SITE,
+      healthy: true,
+      reasons: [],
+      baselineRequired: true,
+    },
+  });
+  const client = fakePublicationClient({
+    preflightSourceStatus: healthySourceStatus(),
+    runOverrides: { source_status: baselinePending },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /baseline.*required/i,
+  );
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+});
+
+test("new proposals reject active staff overrides before any session SQL", async () => {
+  const proposal = newPublicationProposal();
+  const price = proposal.fields.find((field) => field.fieldName === "price");
+  price.lastPublishedValue = 10_000_000;
+  price.overrideValue = proposal.canonical.price;
+  price.activeOverride = true;
+  price.winningObservationId = null;
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /new.*active override|active override.*new/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("active overrides cannot overwrite a different locked staff canonical value", async () => {
+  const batch = activeOverrideBatch();
+  batch.proposals[0].events.unshift({
+    changeType: "changed",
+    fieldName: "price",
+    oldValue: 11_000_000,
+    newValue: 12_000_000,
+    winningObservationId: null,
+    reason: "forged_override",
+  });
+  const client = fakePublicationClient({
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 11_000_000 }),
+    },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /active override|staff value|publication conflict/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("active overrides lock field history and preserve the automated baseline", async () => {
+  const batch = activeOverrideBatch();
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 12_000_000 }),
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 10_000_000,
+        override_value: 11_000_000,
+        active_override: true,
+        winning_observation_id: null,
+      },
+    ],
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  const lock = client.sql.find(
+    (statement) => /FROM property_sync_fields/.test(statement) && /FOR UPDATE/.test(statement),
+  );
+  assert.match(lock, /field_name\s*=\s*ANY/i);
+});
+
+test("active override history accepts real pg-decoded JSON string scalars", async () => {
+  const canonical = canonicalWrite({ title_zh: "Staff title" });
+  const batch = approvedBatch({ canonical });
+  const title = batch.proposals[0].fields.find((field) => field.fieldName === "title_zh");
+  title.lastPublishedValue = "Automated title";
+  title.overrideValue = "Staff title";
+  title.activeOverride = true;
+  title.winningObservationId = null;
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "title_zh",
+        last_published_value: "Automated title",
+        override_value: "Previous staff title",
+        active_override: true,
+        winning_observation_id: null,
+      },
+    ],
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+});
+
+test("caller-forged active override history is rejected before field or canonical writes", async () => {
+  const batch = activeOverrideBatch();
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 12_000_000 }),
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 9_000_000,
+        override_value: 11_000_000,
+        active_override: true,
+        winning_observation_id: null,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /override.*baseline|field history|publication conflict/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO property_sync_fields/.test(statement)),
+    false,
+  );
+});
+
+test("inactive lifecycle uses lossless run time only on the active-to-inactive transition", async () => {
+  const current = canonicalWrite({ status: "active" });
+  const canonical = canonicalWrite({ status: "inactive" });
+  const proposal = approvedBatch({ canonical }).proposals[0];
+  proposal.fields.find((field) => field.fieldName === "status").winningObservationId = null;
+  proposal.lifecycle = {
+    consecutiveAbsentHealthyRuns: 2,
+    inactiveReason: "absent_two_healthy_runs",
+    inactiveAt: "2026-08-17T04:00:00.123456Z",
+  };
+  proposal.events = [
+    {
+      changeType: "inactive",
+      fieldName: "status",
+      oldValue: "active",
+      newValue: "inactive",
+      winningObservationId: null,
+      reason: "absent_two_healthy_runs",
+    },
+    approvedBatch().proposals[0].events.find((event) => event.changeType === "link_change"),
+  ];
+  const client = fakePublicationClient({
+    runOverrides: { started_at: "2026-08-17T04:00:00.123456Z" },
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...current,
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 1,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: null,
+        inactive_at_token: null,
+      },
+    ],
+    observationCanonical: canonical,
+  });
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 0, updated: 1, events: 2 },
+  );
+  assert.match(
+    client.sql.find(
+      (statement) => /FROM listing_sync_runs/.test(statement) && /FOR UPDATE/.test(statement),
+    ),
+    /to_char\s*\(\s*started_at[\s\S]*\.US/i,
+  );
+});
+
+test("already-inactive history is locked and preserved without a repeated inactive event", async () => {
+  const historicalInactiveAt = "2026-08-10T04:00:00.654321Z";
+  const canonical = canonicalWrite({ status: "inactive" });
+  const proposal = approvedBatch({ canonical }).proposals[0];
+  proposal.fields.find((field) => field.fieldName === "status").winningObservationId = null;
+  proposal.lifecycle = {
+    consecutiveAbsentHealthyRuns: 2,
+    inactiveReason: "absent_two_healthy_runs",
+    inactiveAt: historicalInactiveAt,
+  };
+  proposal.events = proposal.events.filter((event) => event.changeType === "link_change");
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 2,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: "absent_two_healthy_runs",
+        inactive_at_token: historicalInactiveAt,
+      },
+    ],
+    observationCanonical: canonical,
+  });
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 0, updated: 0, events: 1 },
+  );
+  assert.ok(
+    client.sql.some(
+      (statement) => /FROM property_sync_state/.test(statement) && /FOR UPDATE/.test(statement),
+    ),
+  );
+  const eventCalls = client.calls.filter((call) =>
+    /INSERT INTO listing_change_events/.test(call.statement),
+  );
+  assert.equal(
+    eventCalls.some((call) => call.params[2] === "inactive"),
+    false,
+  );
+});
+
+test("reactivation locks prior inactive lifecycle history and clears it once", async () => {
+  const canonical = canonicalWrite({ status: "active" });
+  const proposal = approvedBatch({ canonical }).proposals[0];
+  proposal.fields.find((field) => field.fieldName === "status").winningObservationId = null;
+  proposal.events = [
+    {
+      changeType: "reactivated",
+      fieldName: "status",
+      oldValue: "inactive",
+      newValue: "active",
+      winningObservationId: null,
+      reason: "seen_again",
+    },
+    approvedBatch().proposals[0].events.find((event) => event.changeType === "link_change"),
+  ];
+  const client = fakePublicationClient({
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ status: "inactive" }),
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 2,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: "absent_two_healthy_runs",
+        inactive_at_token: "2026-08-10T04:00:00.654321Z",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 0, updated: 1, events: 2 },
+  );
+  assert.ok(client.sql.some((statement) => /FROM property_sync_state/.test(statement)));
+});
+
+test("new identities take a table writer lock and translate database identity races", async () => {
+  const successClient = fakePublicationClient({
+    tableLockResult: realPgResult("LOCK", [], null),
+  });
+  await createSyncRepository({ client: successClient }).publishBatch(
+    approvedBatch({ proposals: [newPublicationProposal()] }),
+  );
+  const tableLockIndex = successClient.sql.findIndex(
+    (statement) => statement === "LOCK TABLE properties IN SHARE ROW EXCLUSIVE MODE",
+  );
+  const identityReadIndex = successClient.sql.findIndex((statement) =>
+    /FROM properties WHERE \(canonical_property_no/.test(statement),
+  );
+  assert.ok(tableLockIndex >= 0 && tableLockIndex < identityReadIndex);
+
+  const malformedLock = fakePublicationClient({ tableLockResult: commandResult("SELECT") });
+  await assert.rejects(
+    createSyncRepository({ client: malformedLock }).publishBatch(
+      approvedBatch({ proposals: [newPublicationProposal()] }),
+    ),
+    /LOCK|command|database result/i,
+  );
+  assert.equal(
+    malformedLock.sql.some((statement) => /INSERT INTO properties/.test(statement)),
+    false,
+  );
+  assert.equal(malformedLock.events.at(-1), "ROLLBACK");
+
+  for (const code of ["23505", "23P01"]) {
+    const race = Object.assign(new Error("concurrent identity writer"), { code });
+    const client = fakePublicationClient({ insertError: race });
+    await assert.rejects(
+      createSyncRepository({ client }).publishBatch(
+        approvedBatch({ proposals: [newPublicationProposal()] }),
+      ),
+      (error) => {
+        assert.equal(error.name, "PublicationConflictError");
+        assert.equal(error.code, "MLS_PUBLICATION_CONFLICT");
+        assert.equal(error.cause, race);
+        return true;
+      },
+    );
+    assert.equal(client.events.at(-1), "ROLLBACK");
+  }
+});
+
+test("an older source sighting cannot touch link updated_at only because its run UUID differs", () => {
+  const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
+  const linkWriter = source.slice(
+    source.indexOf("async function writeSourceLinks"),
+    source.indexOf("async function writeFieldStates"),
+  );
+  assert.match(
+    linkWriter,
+    /OR\s*\(\s*EXCLUDED\.last_seen_at\s*>=\s*property_source_links\.last_seen_at\s+AND\s+property_source_links\.last_seen_run_id\s+IS\s+DISTINCT\s+FROM\s+EXCLUDED\.last_seen_run_id\s*\)/i,
+  );
+});
+
+test("a lossless shadow approval one microsecond before the publish run is accepted", async () => {
+  const rows = approvedShadowRows(7).map((row) => {
+    const date = new Date(`${row.scheduled_for}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + 1);
+    const scheduledFor = date.toISOString().slice(0, 10);
+    return {
+      ...row,
+      scheduled_for: scheduledFor,
+      started_at: `${scheduledFor}T01:00:00.000000Z`,
+      baseline_approved_at: `${scheduledFor}T02:00:00.000000Z`,
+    };
+  });
+  rows[0] = {
+    ...rows[0],
+    baseline_approved_at: "2026-08-17T04:00:00.000000Z",
+  };
+  const client = fakePublicationClient({
+    runOverrides: { started_at: "2026-08-17T04:00:00.000001Z" },
+    shadowRows: rows,
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(approvedBatch()), {
+    inserted: 0,
+    updated: 1,
+    events: 2,
+  });
 });
 
 test("Task 9 declarations expose cancellation and unknown publication outcomes", () => {

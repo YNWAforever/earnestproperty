@@ -39,28 +39,61 @@ function databaseTarget(value, label) {
   if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
     throw new Error(`${label} must be a PostgreSQL URL.`);
   }
-  let pathname;
+  const targetOverrideParameters = new Set([
+    "host",
+    "hostaddr",
+    "port",
+    "user",
+    "database",
+    "db",
+    "dbname",
+    "service",
+  ]);
+  for (const key of parsed.searchParams.keys()) {
+    if (targetOverrideParameters.has(key.toLowerCase())) {
+      throw new Error(
+        `${label} must not identify a database target through query override parameters.`,
+      );
+    }
+  }
+  const parserUrl = new URL(parsed);
+  parserUrl.search = "";
+  parserUrl.hash = "";
+  let connectionParameters;
   try {
-    pathname = decodeURIComponent(parsed.pathname);
+    connectionParameters = new Client(parserUrl.toString()).connectionParameters;
   } catch {
-    throw new Error(`${label} contains an invalid database pathname.`);
+    throw new Error(`${label} contains an invalid PostgreSQL target.`);
+  }
+  if (
+    typeof connectionParameters?.user !== "string" ||
+    typeof connectionParameters.host !== "string" ||
+    !Number.isInteger(connectionParameters.port) ||
+    typeof connectionParameters.database !== "string"
+  ) {
+    throw new Error(`${label} resolved to an invalid PostgreSQL target.`);
   }
   return {
-    username: decodeURIComponent(parsed.username),
-    hostname: parsed.hostname.toLowerCase(),
-    port: parsed.port || "5432",
-    pathname,
+    username: connectionParameters.user,
+    hostname: connectionParameters.host.toLowerCase().replace(/\.$/, ""),
+    port: String(connectionParameters.port),
+    pathname: connectionParameters.database,
   };
 }
 
-function assertDisposableDatabase(testUrl) {
-  if (process.env.MLS_TEST_DATABASE_CONFIRMED !== "true") {
+function assertDisposableDatabase(
+  testUrl,
+  {
+    confirmed = process.env.MLS_TEST_DATABASE_CONFIRMED,
+    liveUrl = process.env.DATABASE_URL_UNPOOLED,
+  } = {},
+) {
+  if (confirmed !== true && confirmed !== "true") {
     throw new Error(
       "MLS_TEST_DATABASE_CONFIRMED=true is required before connecting to the test database.",
     );
   }
   const testTarget = databaseTarget(testUrl, "DATABASE_URL_TEST");
-  const liveUrl = process.env.DATABASE_URL_UNPOOLED;
   if (liveUrl) {
     const liveTarget = databaseTarget(liveUrl, "DATABASE_URL_UNPOOLED");
     if (
@@ -73,6 +106,69 @@ function assertDisposableDatabase(testUrl) {
     }
   }
 }
+
+function finishIntegrationCleanup({ hasPrimaryError, primaryError, cleanupErrors }) {
+  if (cleanupErrors.length === 0) return;
+  if (hasPrimaryError) {
+    if (primaryError instanceof Error && Object.isExtensible(primaryError)) {
+      Object.defineProperty(primaryError, "integrationCleanupErrors", {
+        enumerable: false,
+        value: Object.freeze([...cleanupErrors]),
+      });
+    }
+    return;
+  }
+  throw new AggregateError(cleanupErrors, "Disposable database cleanup failed.");
+}
+
+test("disposable database guard rejects target overrides before client construction", () => {
+  const liveUrl = "postgresql://live_user:live_password@live.invalid:5432/live_database";
+  const overridingTargets = [
+    "postgresql://live_user:test_password@other.invalid:5432/live_database?host=live.invalid",
+    "postgresql://other_user:test_password@live.invalid:5432/live_database?user=live_user",
+    "postgresql://live_user:test_password@live.invalid:6543/live_database?port=5432",
+    "postgresql://live_user:test_password@live.invalid:5432/other_database?database=live_database",
+  ];
+
+  for (const testUrl of overridingTargets) {
+    assert.throws(
+      () =>
+        assertDisposableDatabase(testUrl, {
+          confirmed: true,
+          liveUrl,
+        }),
+      /must not identify.*target/i,
+    );
+  }
+  assert.doesNotThrow(() =>
+    assertDisposableDatabase(
+      "postgresql://test_user:test_password@test.invalid:5432/test_database?application_name=mls-test",
+      { confirmed: true, liveUrl },
+    ),
+  );
+});
+
+test("integration cleanup never displaces a thrown null or undefined primary", () => {
+  const cleanupError = new Error("cleanup failed");
+  for (const primaryError of [null, undefined]) {
+    assert.doesNotThrow(() =>
+      finishIntegrationCleanup({
+        hasPrimaryError: true,
+        primaryError,
+        cleanupErrors: [cleanupError],
+      }),
+    );
+  }
+  assert.throws(
+    () =>
+      finishIntegrationCleanup({
+        hasPrimaryError: false,
+        primaryError: undefined,
+        cleanupErrors: [cleanupError],
+      }),
+    AggregateError,
+  );
+});
 
 function sourceStatus() {
   return {
@@ -164,6 +260,7 @@ test(
     };
     let connected = false;
     let connectionAttempted = false;
+    let hasPrimaryError = false;
     let primaryError = null;
 
     try {
@@ -497,6 +594,7 @@ test(
         { url: ownedImageUrl, owner_type: "mls-shared", owner_id: null },
       ]);
     } catch (error) {
+      hasPrimaryError = true;
       primaryError = error;
       throw error;
     } finally {
@@ -535,16 +633,7 @@ test(
           cleanupErrors.push(error);
         }
       }
-      if (cleanupErrors.length > 0) {
-        if (primaryError instanceof Error && Object.isExtensible(primaryError)) {
-          Object.defineProperty(primaryError, "integrationCleanupErrors", {
-            enumerable: false,
-            value: Object.freeze(cleanupErrors),
-          });
-        } else if (primaryError == null) {
-          throw new AggregateError(cleanupErrors, "Disposable database cleanup failed.");
-        }
-      }
+      finishIntegrationCleanup({ hasPrimaryError, primaryError, cleanupErrors });
     }
   },
 );

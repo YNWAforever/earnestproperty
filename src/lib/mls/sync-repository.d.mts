@@ -264,6 +264,7 @@ export interface ReconciledFieldWrite {
 export interface PropertySyncStateWrite {
   consecutiveAbsentHealthyRuns: number;
   inactiveReason: string | null;
+  /** Fixed six-digit UTC PostgreSQL timestamp token when inactive. */
   inactiveAt: string | null;
 }
 
@@ -279,6 +280,7 @@ export interface ListingChangeEventWrite {
 export interface PublicationProposal {
   kind: "new" | "update";
   propertyId?: string;
+  /** Fixed six-digit UTC PostgreSQL updated_at token for updates. */
   expectedUpdatedAt?: string;
   canonical: CanonicalPropertyWrite;
   links: SourceLinkWrite[];
