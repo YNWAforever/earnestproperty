@@ -1787,6 +1787,102 @@ test("a content-hash registration race accepts only the same-origin owned winner
   assert.equal(repository.state.records[0].ownedMediaAssetId, winner.id);
 });
 
+test("registration outcomes snapshot accessor-backed assets exactly once before publication", async () => {
+  const bytes = webpBytes();
+  let outcomeReads = 0;
+  let assetReads = 0;
+  let urlReads = 0;
+  let attemptedUrl;
+  const repository = fakeRepository({
+    registerOwnedMedia(input) {
+      attemptedUrl = input.url;
+      const asset = {
+        id: "asset-accessor-snapshot",
+        pathname: input.pathname,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        contentHash: input.contentHash,
+        ownerType: input.ownerType,
+        ownerId: input.ownerId,
+        createdBy: input.createdBy,
+      };
+      Object.defineProperty(asset, "url", {
+        enumerable: true,
+        get() {
+          urlReads += 1;
+          return urlReads === 1 ? input.url : "https://images.28hse.com/substituted.webp";
+        },
+      });
+      const registration = {};
+      Object.defineProperty(registration, "outcome", {
+        enumerable: true,
+        get() {
+          outcomeReads += 1;
+          return outcomeReads === 1 ? "inserted" : "existing";
+        },
+      });
+      Object.defineProperty(registration, "asset", {
+        enumerable: true,
+        get() {
+          assetReads += 1;
+          return asset;
+        },
+      });
+      return registration;
+    },
+  });
+
+  const result = await prepareListingMedia(
+    mediaFixture({ bytes, repository, blobStore: fakeBlobStore() }),
+  );
+
+  assert.equal(result.publishable, true);
+  assert.deepEqual(result.images, [attemptedUrl]);
+  assert.equal(result.candidateResults[0].ownedUrl, attemptedUrl);
+  assert.equal(outcomeReads, 1);
+  assert.equal(assetReads, 1);
+  assert.equal(urlReads, 1);
+  assert.doesNotMatch(JSON.stringify(result), /images\.28hse\.com|substituted/);
+});
+
+test("throwing registration getters become bounded binding evidence with the orphan URL", async () => {
+  const bytes = webpBytes();
+  const rawError = "SENT_THROWING_REGISTRATION_GETTER";
+  const repository = fakeRepository({
+    registerOwnedMedia(input) {
+      const asset = {
+        id: "asset-throwing-accessor",
+        pathname: input.pathname,
+        contentType: input.contentType,
+        sizeBytes: input.sizeBytes,
+        contentHash: input.contentHash,
+        ownerType: input.ownerType,
+        ownerId: input.ownerId,
+        createdBy: input.createdBy,
+      };
+      Object.defineProperty(asset, "url", {
+        enumerable: true,
+        get() {
+          throw new Error(rawError);
+        },
+      });
+      return { outcome: "inserted", asset };
+    },
+  });
+  const blobStore = fakeBlobStore();
+
+  const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+
+  assert.equal(result.publishable, false);
+  assert.ok(result.reasons.includes("owned_media_binding_invalid"));
+  assert.equal(
+    result.candidateResults[0].orphanedUploadUrl,
+    `https://owned.example/${blobStore.puts[0].pathname}`,
+  );
+  assert.equal(repository.state.records[0].rejectionReason, "owned_media_binding_invalid");
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(rawError));
+});
+
 test("registration outcomes reject bare, extra, unknown, cross-origin, and drifted winners", async () => {
   const bytes = webpBytes();
   const hash = sha256(bytes);

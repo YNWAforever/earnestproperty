@@ -1358,17 +1358,47 @@ function validateAsset(asset, expected) {
   return asset;
 }
 
-function validateRegistrationOutcome(registration, expected) {
-  const keys = plainRecord(registration) ? Reflect.ownKeys(registration) : [];
-  if (
-    keys.length !== 2 ||
-    !keys.includes("outcome") ||
-    !keys.includes("asset") ||
-    (registration.outcome !== "inserted" && registration.outcome !== "existing")
-  ) {
+function snapshotRegistration(registration) {
+  let keys;
+  try {
+    keys = plainRecord(registration) ? Reflect.ownKeys(registration) : [];
+  } catch {
     fail("owned_media_binding_invalid");
   }
-  const asset = registration.asset;
+  if (keys.length !== 2 || !keys.includes("outcome") || !keys.includes("asset")) {
+    fail("owned_media_binding_invalid");
+  }
+  let outcome;
+  let sourceAsset;
+  let asset;
+  try {
+    outcome = registration.outcome;
+    sourceAsset = registration.asset;
+    if (!plainRecord(sourceAsset)) fail("owned_media_binding_invalid");
+    asset = Object.freeze({
+      id: sourceAsset.id,
+      url: sourceAsset.url,
+      pathname: sourceAsset.pathname,
+      contentType: sourceAsset.contentType,
+      sizeBytes: sourceAsset.sizeBytes,
+      contentHash: sourceAsset.contentHash,
+      ownerType: sourceAsset.ownerType,
+      ownerId: sourceAsset.ownerId,
+      createdBy: sourceAsset.createdBy,
+    });
+  } catch (error) {
+    if (error instanceof MediaPreparationError) throw error;
+    fail("owned_media_binding_invalid");
+  }
+  return Object.freeze({ outcome, asset });
+}
+
+function validateRegistrationOutcome(registration, expected) {
+  const snapshot = snapshotRegistration(registration);
+  const { outcome, asset } = snapshot;
+  if (outcome !== "inserted" && outcome !== "existing") {
+    fail("owned_media_binding_invalid");
+  }
   if (
     !plainRecord(asset) ||
     !hasOwn(asset, "ownerType") ||
@@ -1386,7 +1416,7 @@ function validateRegistrationOutcome(registration, expected) {
     fail("owned_media_binding_invalid");
   }
 
-  if (registration.outcome === "inserted") {
+  if (outcome === "inserted") {
     validateAsset(asset, expected);
     if (
       asset.ownerType !== expected.ownerType ||
@@ -1424,8 +1454,7 @@ function validateRegistrationOutcome(registration, expected) {
 
   return {
     asset,
-    orphanedUploadUrl:
-      registration.outcome === "existing" && asset.url !== expected.url ? expected.url : null,
+    orphanedUploadUrl: outcome === "existing" && asset.url !== expected.url ? expected.url : null,
   };
 }
 

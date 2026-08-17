@@ -43,7 +43,7 @@ const BASIC_CREDENTIAL_ATOM_PATTERN_SOURCE = String.raw`(?:${BASIC_CREDENTIAL_TO
 const BASIC_CREDENTIAL_VALUE_PATTERN_SOURCE = wrappedCredentialPattern(
   BASIC_CREDENTIAL_ATOM_PATTERN_SOURCE,
 );
-const CREDENTIAL_TERMINAL_PATTERN_SOURCE = String.raw`(?=$|\s|[,;.!?)]|\]|\})`;
+const CREDENTIAL_TERMINAL_PATTERN_SOURCE = String.raw`(?=$|\s|[,;:.!?)]|\]|\})`;
 const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
 const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)${CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE})?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
@@ -345,6 +345,19 @@ function jsonEqual(left, right) {
   return JSON.stringify(stableJsonValue(left)) === JSON.stringify(stableJsonValue(right));
 }
 
+function requireDataPropertyGraph(value, seen = new Set()) {
+  if (value == null || typeof value !== "object" || seen.has(value)) return;
+  seen.add(value);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  for (const key of Reflect.ownKeys(descriptors)) {
+    const descriptor = descriptors[key];
+    if (!Object.hasOwn(descriptor, "value")) {
+      throw new TypeError("SourceObservation graph must contain only data properties");
+    }
+    requireDataPropertyGraph(descriptor.value, seen);
+  }
+}
+
 function isDeepFrozen(value, seen = new Set()) {
   if (value == null || typeof value !== "object") return true;
   if (seen.has(value) || !Object.isFrozen(value)) return false;
@@ -447,6 +460,7 @@ function validateMediaCandidate(candidate) {
 }
 
 function validateObservation(observation) {
+  requireDataPropertyGraph(observation);
   if (!hasExactKeys(observation, OBSERVATION_KEYS) || !isDeepFrozen(observation)) {
     throw new TypeError("SourceObservation must be complete and deeply immutable");
   }
@@ -789,9 +803,14 @@ export function createSyncRepository(options = {}) {
 
   async function beginRun(input) {
     if (!isPlainRecord(input)) throw new TypeError("beginRun input is invalid");
-    requireDate(input.scheduledFor, "scheduledFor");
-    if (!RUN_MODES.has(input.mode)) throw new TypeError("mode is invalid");
-    requireSafeText(input.parserVersion, "parserVersion", { max: 160 });
+    const evidence = Object.freeze({
+      scheduledFor: input.scheduledFor,
+      mode: input.mode,
+      parserVersion: input.parserVersion,
+    });
+    requireDate(evidence.scheduledFor, "scheduledFor");
+    if (!RUN_MODES.has(evidence.mode)) throw new TypeError("mode is invalid");
+    requireSafeText(evidence.parserVersion, "parserVersion", { max: 160 });
     await query(
       `UPDATE listing_sync_runs
           SET status = 'failed',
@@ -806,7 +825,7 @@ export function createSyncRepository(options = {}) {
       `INSERT INTO listing_sync_runs (scheduled_for, mode, status, parser_version)
        VALUES ($1::date, $2, 'running', $3)
        RETURNING id`,
-      [input.scheduledFor, input.mode, input.parserVersion],
+      [evidence.scheduledFor, evidence.mode, evidence.parserVersion],
       "begin run",
     );
     if (rows.length !== 1 || !isUuid(rows[0]?.id)) {
@@ -1605,7 +1624,8 @@ export function createSyncRepository(options = {}) {
       Object.hasOwn(row, "inactive_reason") &&
       (row.inactive_reason === null ||
         (typeof row.inactive_reason === "string" && row.inactive_reason.length <= 500)) &&
-      (row.inactive_at == null || isTimestamp(row.inactive_at)) &&
+      Object.hasOwn(row, "inactive_at") &&
+      (row.inactive_at === null || isTimestamp(row.inactive_at)) &&
       isTimestamp(row.updated_at);
     if (!valid) throw new TypeError("lifecycle row is invalid");
     return {

@@ -256,6 +256,29 @@ test("beginRun reconciles orphan running rows before inserting the new ledger ro
   assert.deepEqual(client.calls[1].params, ["2026-08-17", "shadow", "dual-source-v1"]);
 });
 
+test("beginRun snapshots validated evidence before orphan reconciliation awaits", async () => {
+  const input = {
+    scheduledFor: "2026-08-17",
+    mode: "shadow",
+    parserVersion: "dual-source-v1",
+  };
+  const client = fakeClient((call) => {
+    if (call.statement.startsWith("UPDATE listing_sync_runs")) {
+      input.scheduledFor = "2026-08-18";
+      input.mode = "publish";
+      input.parserVersion = "mutated-after-validation";
+      return result();
+    }
+    if (call.statement.startsWith("INSERT INTO listing_sync_runs")) {
+      return result([{ id: RUN_ID }]);
+    }
+    throw new Error(`unexpected query: ${call.statement}`);
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).beginRun(input), { runId: RUN_ID });
+  assert.deepEqual(client.calls[1].params, ["2026-08-17", "shadow", "dual-source-v1"]);
+});
+
 test("beginRun validates canonical dates, modes, parser versions, and returned UUIDs", async () => {
   const client = fakeClient(() => result([{ id: "not-a-uuid" }]));
   const repository = createSyncRepository({ client });
@@ -477,86 +500,61 @@ test("saveObservations rejects every malformed nested MediaCandidate shape befor
   }
 });
 
-test("saveObservations snapshots exact nested media evidence before awaited SQL", async () => {
-  let changedAfterInsert = false;
-  const candidateEvidence = {
-    url: "https://fixtures.invalid/listing.png",
-    category: "listing_photo",
-    isPrimary: true,
-    rejected: false,
-    eligible: true,
-    contextRejected: false,
-    rejectionReason: "fixture_reason",
-    rejectionReasons: ["fixture_reason"],
-    contextRejectionMarkers: ["fixture_marker"],
-  };
-  const base = validObservation(1, { mediaCandidates: [candidateEvidence] });
-  const dynamicCandidate = { ...candidateEvidence };
-  Object.defineProperty(dynamicCandidate, "rejectionReason", {
+test("saveObservations rejects accessor-backed fields without invoking getters or SQL", async () => {
+  const base = validObservation(1);
+  let titleReads = 0;
+  const fields = { ...base.fields };
+  delete fields.title_zh;
+  Object.defineProperty(fields, "title_zh", {
     enumerable: true,
     get() {
-      return changedAfterInsert ? "changed_after_insert" : candidateEvidence.rejectionReason;
+      titleReads += 1;
+      return titleReads === 1 ? base.fields.title_zh : "drifted title";
     },
   });
-  deepFreeze(dynamicCandidate);
-  const observation = Object.freeze({
-    ...base,
-    mediaCandidates: Object.freeze([dynamicCandidate]),
-  });
-  const row = persistedRow(base);
-  const client = fakeClient((call) => {
-    if (call.statement.startsWith("INSERT INTO listing_source_observations")) {
-      changedAfterInsert = true;
-      return result();
-    }
-    if (call.statement.startsWith("SELECT id, source, external_listing_id")) {
-      return result([row]);
-    }
-    throw new Error(`unexpected query: ${call.statement}`);
-  });
+  Object.freeze(fields);
+  const observation = Object.freeze({ ...base, fields });
+  const client = fakeClient();
 
-  const [ref] = await createSyncRepository({ client }).saveObservations(RUN_ID, [observation]);
-
-  assert.equal(ref.id, OBSERVATION_ID);
-  assert.deepEqual(JSON.parse(client.calls[0].params[8]), [candidateEvidence]);
+  await assert.rejects(
+    createSyncRepository({ client }).saveObservations(RUN_ID, [observation]),
+    /SourceObservation|immutable|accessor|content hash/i,
+  );
+  assert.equal(titleReads, 0);
+  assert.equal(client.calls.length, 0);
 });
 
-test("saveObservations reads each optional media marker once into its canonical snapshot", async () => {
-  let reads = 0;
+test("saveObservations rejects accessor-backed nested media arrays without getter reads or SQL", async () => {
   const candidateEvidence = {
     url: "https://fixtures.invalid/listing.png",
     category: "listing_photo",
     isPrimary: true,
-    rejected: false,
+    rejectionReasons: ["fixture_reason"],
   };
   const base = validObservation(1, { mediaCandidates: [candidateEvidence] });
-  const dynamicCandidate = {
-    url: candidateEvidence.url,
-    category: candidateEvidence.category,
-    isPrimary: candidateEvidence.isPrimary,
-  };
-  Object.defineProperty(dynamicCandidate, "rejected", {
+  let reasonReads = 0;
+  const rejectionReasons = [];
+  Object.defineProperty(rejectionReasons, 0, {
     enumerable: true,
     get() {
-      reads += 1;
-      return reads <= 2 ? false : undefined;
+      reasonReads += 1;
+      return reasonReads === 1 ? "fixture_reason" : "drifted_reason";
     },
   });
-  Object.freeze(dynamicCandidate);
+  Object.freeze(rejectionReasons);
+  const candidate = Object.freeze({ ...base.mediaCandidates[0], rejectionReasons });
   const observation = Object.freeze({
     ...base,
-    mediaCandidates: Object.freeze([dynamicCandidate]),
+    mediaCandidates: Object.freeze([candidate]),
   });
-  const client = fakeClient((call) =>
-    call.statement.startsWith("SELECT id, source, external_listing_id")
-      ? result([persistedRow(base)])
-      : result(),
+  const client = fakeClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).saveObservations(RUN_ID, [observation]),
+    /SourceObservation|immutable|accessor|content hash|media candidate/i,
   );
-
-  const [ref] = await createSyncRepository({ client }).saveObservations(RUN_ID, [observation]);
-
-  assert.equal(ref.id, OBSERVATION_ID);
-  assert.deepEqual(JSON.parse(client.calls[0].params[8]), [candidateEvidence]);
+  assert.equal(reasonReads, 0);
+  assert.equal(client.calls.length, 0);
 });
 
 test("saveObservations binds validation state to raw, normalized, and match-key identity", async () => {
@@ -1009,7 +1007,7 @@ test("operator diagnostics preserve ordinary Basic prose while redacting alterna
 });
 
 test("operator diagnostics redact wrapped Basic credentials and punctuation terminals", async () => {
-  const credentials = Array.from({ length: 6 }, (_, index) =>
+  const credentials = Array.from({ length: 7 }, (_, index) =>
     Buffer.from(`SENT_BASIC_${index}:fixture-secret`, "utf8").toString("base64"),
   );
   const client = fakeClient(() => result([{ id: RUN_ID }]));
@@ -1024,6 +1022,7 @@ test("operator diagnostics redact wrapped Basic credentials and punctuation term
       `period Basic ${credentials[3]}. next context`,
       `bang Basic ${credentials[4]}! next retry`,
       `closing Basic ${credentials[5]}) next stage`,
+      `colon Basic ${credentials[6]}: next colon context`,
       "ordinary Basic requirements remain useful",
     ].join(" "),
   });
@@ -1032,7 +1031,7 @@ test("operator diagnostics redact wrapped Basic credentials and punctuation term
   for (const credential of credentials) assert.equal(stored.includes(credential), false);
   assert.match(
     stored,
-    /quoted|remained useful|continued|rotated|next context|next retry|next stage/,
+    /quoted|remained useful|continued|rotated|next context|next retry|next stage|next colon context/,
   );
   assert.match(stored, /ordinary Basic requirements remain useful/);
 });
@@ -1854,6 +1853,9 @@ test("field and lifecycle rows require exact own nullable identity columns", asy
     ["lifecycle", "inactive_reason", "missing"],
     ["lifecycle", "inactive_reason", undefined],
     ["lifecycle", "inactive_reason", 42],
+    ["lifecycle", "inactive_at", "missing"],
+    ["lifecycle", "inactive_at", undefined],
+    ["lifecycle", "inactive_at", "not-a-timestamp"],
   ];
 
   for (const [kind, field, value] of cases) {
