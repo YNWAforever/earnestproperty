@@ -1825,6 +1825,18 @@ test("registration outcomes reject bare, extra, unknown, cross-origin, and drift
       return { outcome: "existing", asset };
     },
     (input) => ({
+      outcome: "existing",
+      asset: { ...exactAsset(input), ownerId: undefined },
+    }),
+    (input) => ({
+      outcome: "existing",
+      asset: { ...exactAsset(input), createdBy: undefined },
+    }),
+    (input) => ({
+      outcome: "existing",
+      asset: { ...exactAsset(input), ownerId: "not-a-uuid" },
+    }),
+    (input) => ({
       outcome: "inserted",
       asset: { ...exactAsset(input), ownerType: "cms" },
     }),

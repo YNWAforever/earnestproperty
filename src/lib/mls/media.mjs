@@ -1378,9 +1378,9 @@ function validateRegistrationOutcome(registration, expected) {
     !asset.ownerType.trim() ||
     asset.ownerType !== asset.ownerType.trim() ||
     asset.ownerType.length > 160 ||
-    (asset.ownerId != null &&
+    (asset.ownerId !== null &&
       (typeof asset.ownerId !== "string" || !UUID_PATTERN.test(asset.ownerId))) ||
-    (asset.createdBy != null &&
+    (asset.createdBy !== null &&
       (typeof asset.createdBy !== "string" || !UUID_PATTERN.test(asset.createdBy)))
   ) {
     fail("owned_media_binding_invalid");

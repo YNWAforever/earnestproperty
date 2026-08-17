@@ -30,16 +30,23 @@ const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
-const CREDENTIAL_VALUE_PATTERN_SOURCE = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+)`;
+const CREDENTIAL_ATOM_PATTERN_SOURCE = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;()[\]{}]+)`;
+const CREDENTIAL_VALUE_PATTERN_SOURCE = String.raw`(?:${CREDENTIAL_ATOM_PATTERN_SOURCE}|\(\s*${CREDENTIAL_ATOM_PATTERN_SOURCE}\s*\)|\[\s*${CREDENTIAL_ATOM_PATTERN_SOURCE}\s*\]|\{\s*${CREDENTIAL_ATOM_PATTERN_SOURCE}\s*\})`;
+const CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE = String.raw`(?:\s*:\s*|\s+)`;
 const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
 const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
-  String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)\s+)?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)${CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE})?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "gi",
 );
-const STANDALONE_SCHEME_CREDENTIAL_PATTERN = new RegExp(
-  String.raw`\b(bearer|basic)\s+${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+const STANDALONE_COLON_SCHEME_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(bearer|basic)\s*:\s*${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "gi",
 );
+const STANDALONE_BEARER_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(bearer)\s+${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  "gi",
+);
+const STANDALONE_BASIC_CREDENTIAL_PATTERN = /\b(basic)\s+([A-Za-z0-9+/]+={0,2})(?=$|[\s,;])/gi;
 const NAMED_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "gi",
@@ -498,6 +505,15 @@ function hongKongMidnightUtc(dateValue) {
   return new Date(`${dateValue}T00:00:00+08:00`).toISOString();
 }
 
+function redactStandaloneBasic(match, label, credential) {
+  const decoded = Buffer.from(credential, "base64");
+  const canonical = decoded.toString("base64").replace(/=+$/, "");
+  if (canonical === credential.replace(/=+$/, "") && decoded.includes(0x3a)) {
+    return `${label} [redacted]`;
+  }
+  return match;
+}
+
 function redactedText(value, label, { max = 1_000, nullable = true } = {}) {
   if (value == null) {
     if (nullable) return null;
@@ -516,7 +532,9 @@ function redactedText(value, label, { max = 1_000, nullable = true } = {}) {
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[redacted]@")
     .replace(AUTHORIZATION_CREDENTIAL_PATTERN, "$1=[redacted]")
     .replace(NAMED_CREDENTIAL_PATTERN, "$1 [redacted]")
-    .replace(STANDALONE_SCHEME_CREDENTIAL_PATTERN, "$1 [redacted]")
+    .replace(STANDALONE_COLON_SCHEME_CREDENTIAL_PATTERN, "$1 [redacted]")
+    .replace(STANDALONE_BEARER_CREDENTIAL_PATTERN, "$1 [redacted]")
+    .replace(STANDALONE_BASIC_CREDENTIAL_PATTERN, redactStandaloneBasic)
     .replace(/\b(?:sk|pk)_[A-Za-z0-9_-]{8,}\b/g, "[redacted]");
   if (text.length > max) text = `${text.slice(0, Math.max(0, max - 1))}…`;
   return text;
@@ -641,6 +659,8 @@ function validatePersistedObservationRow(row, expectedByIdentity) {
     row.property_no_normalized !== expected.propertyNoNormalized ||
     row.content_hash !== expected.contentHash ||
     row.validation_state !== expected.validationState ||
+    row.discovered_at_matches_input !== true ||
+    row.fetched_at_matches_input !== true ||
     discoveredAt !== observationTimestampInstant(expected.discoveredAt) ||
     fetchedAt !== observationTimestampInstant(expected.fetchedAt) ||
     !jsonEqual(payload, {
@@ -730,9 +750,10 @@ export function createSyncRepository(options = {}) {
   async function saveObservations(runId, observations) {
     requireUuid(runId, "runId");
     if (!Array.isArray(observations)) throw new TypeError("observations must be an array");
+    const requestedObservations = Object.freeze([...observations]);
     const prepared = [];
     const expectedByIdentity = new Map();
-    for (const observation of observations) {
+    for (const observation of requestedObservations) {
       const identity = observationIdentity(observation ?? {});
       if (expectedByIdentity.has(identity)) {
         throw new TypeError("duplicate observation identity");
@@ -741,6 +762,10 @@ export function createSyncRepository(options = {}) {
       expectedByIdentity.set(identity, observation);
       prepared.push({ observation, ...serialized });
     }
+    Object.freeze(prepared);
+    const orderedIdentities = Object.freeze(
+      prepared.map(({ observation }) => observationIdentity(observation)),
+    );
     const returnedByIdentity = new Map();
     const ids = new Set();
     for (const batch of chunks(prepared)) {
@@ -781,9 +806,15 @@ export function createSyncRepository(options = {}) {
 
       const selectParams = [runId];
       const tuples = batch.map(({ observation }, index) => {
-        selectParams.push(observation.source, observation.externalId, observation.dealType);
-        const start = 2 + index * 3;
-        return `($${start}, $${start + 1}, $${start + 2}::deal_type)`;
+        selectParams.push(
+          observation.source,
+          observation.externalId,
+          observation.dealType,
+          observation.discoveredAt,
+          observation.fetchedAt,
+        );
+        const start = 2 + index * 5;
+        return `($${start}, $${start + 1}, $${start + 2}::deal_type, $${start + 3}::timestamptz, $${start + 4}::timestamptz)`;
       });
       const batchExpectedByIdentity = new Map(
         batch.map(({ observation }) => [observationIdentity(observation), observation]),
@@ -792,10 +823,18 @@ export function createSyncRepository(options = {}) {
         `SELECT id, source, external_listing_id, deal_type, source_url,
                 property_no_raw, property_no_normalized, payload, media_candidates,
                 content_hash, validation_state, quarantine_reasons, parse_warnings,
-                discovered_at, fetched_at
+                discovered_at, fetched_at,
+                discovered_at = requested.expected_discovered_at AS discovered_at_matches_input,
+                fetched_at = requested.expected_fetched_at AS fetched_at_matches_input
            FROM listing_source_observations
+           JOIN (VALUES ${tuples.join(", ")}) AS requested(
+                  expected_source, expected_external_listing_id, expected_deal_type,
+                  expected_discovered_at, expected_fetched_at
+                )
+             ON source = requested.expected_source
+            AND external_listing_id = requested.expected_external_listing_id
+            AND deal_type = requested.expected_deal_type
           WHERE run_id = $1::uuid
-            AND (source, external_listing_id, deal_type) IN (${tuples.join(", ")})
           ORDER BY source, external_listing_id, deal_type, id`,
         selectParams,
         "load persisted observations",
@@ -813,11 +852,11 @@ export function createSyncRepository(options = {}) {
         ids.add(ref.id);
       }
     }
-    if (returnedByIdentity.size !== observations.length) {
+    if (returnedByIdentity.size !== orderedIdentities.length) {
       throw new TypeError("persisted observation rows are missing immutable evidence");
     }
-    return observations.map((observation) => {
-      const ref = returnedByIdentity.get(observationIdentity(observation));
+    return orderedIdentities.map((identity) => {
+      const ref = returnedByIdentity.get(identity);
       if (!ref) throw new TypeError("persisted observation row is missing");
       return ref;
     });
@@ -1558,8 +1597,10 @@ export function createSyncRepository(options = {}) {
       row.owner_type === row.owner_type.trim() &&
       row.owner_type.length > 0 &&
       row.owner_type.length <= 160 &&
-      (row.owner_id == null || isUuid(row.owner_id)) &&
-      (row.created_by == null || isUuid(row.created_by)) &&
+      Object.hasOwn(row, "owner_id") &&
+      (row.owner_id === null || isUuid(row.owner_id)) &&
+      Object.hasOwn(row, "created_by") &&
+      (row.created_by === null || isUuid(row.created_by)) &&
       isTimestamp(row.created_at);
     if (!valid) throw new TypeError("media row is invalid");
     requireUrl(row.url, "media row URL");

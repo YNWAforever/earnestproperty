@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
+import { types as neonTypes } from "@neondatabase/serverless";
+
 import { createSyncRepository } from "./sync-repository.mjs";
 import {
   SOURCE_28HSE,
@@ -88,6 +90,8 @@ function persistedRow(observation, id = OBSERVATION_ID, overrides = {}) {
     parse_warnings: [...observation.parseWarnings],
     discovered_at: observation.discoveredAt,
     fetched_at: observation.fetchedAt,
+    discovered_at_matches_input: true,
+    fetched_at_matches_input: true,
     ...overrides,
   };
 }
@@ -285,7 +289,7 @@ test("saveObservations persists complete immutable evidence in batches of at mos
   const client = fakeClient((call) => {
     if (call.statement.startsWith("INSERT INTO listing_source_observations")) return result();
     if (call.statement.startsWith("SELECT id, source, external_listing_id")) {
-      const batchSize = (call.params.length - 1) / 3;
+      const batchSize = (call.params.length - 1) / 5;
       const rows = persisted.slice(selectOffset, selectOffset + batchSize);
       selectOffset += batchSize;
       return result(rows);
@@ -317,7 +321,7 @@ test("saveObservations persists complete immutable evidence in batches of at mos
   assert.equal(inserts.length, 2);
   assert.equal(selects.length, 2);
   assert.ok(inserts.every((call) => call.params.length <= 200 * 15));
-  assert.ok(selects.every((call) => call.params.length <= 1 + 200 * 3));
+  assert.ok(selects.every((call) => call.params.length <= 1 + 200 * 5));
   assert.ok(inserts.every((call) => /ON CONFLICT .* DO NOTHING/i.test(call.statement)));
   const firstParams = inserts[0].params;
   const payload = JSON.parse(firstParams[7]);
@@ -331,6 +335,30 @@ test("saveObservations persists complete immutable evidence in batches of at mos
   assert.deepEqual(JSON.parse(firstParams[8]), observations[0].mediaCandidates);
   assert.equal(firstParams[13], observations[0].discoveredAt);
   assert.equal(firstParams[14], observations[0].fetchedAt);
+});
+
+test("saveObservations snapshots requested order before the first awaited query", async () => {
+  const first = validObservation(1);
+  const second = validObservation(2);
+  const observations = [first, second];
+  const rows = [persistedRow(first), persistedRow(second, RUN_ID_2)];
+  const client = fakeClient((call) => {
+    if (call.statement.startsWith("INSERT INTO listing_source_observations")) {
+      observations.reverse();
+      return result();
+    }
+    if (call.statement.startsWith("SELECT id, source, external_listing_id")) {
+      return result(rows);
+    }
+    throw new Error(`unexpected query: ${call.statement}`);
+  });
+
+  const refs = await createSyncRepository({ client }).saveObservations(RUN_ID, observations);
+
+  assert.deepEqual(
+    refs.map((ref) => ref.externalId),
+    [first.externalId, second.externalId],
+  );
 });
 
 test("saveObservations persists valid and quarantined immutable observations", async () => {
@@ -493,6 +521,38 @@ test("saveObservations preserves supported ISO strings while normalizing only da
   assert.equal(ref.id, OBSERVATION_ID);
   assert.equal(client.calls[0].params[13], observation.discoveredAt);
   assert.equal(client.calls[0].params[14], observation.fetchedAt);
+});
+
+test("saveObservations compares PostgreSQL microseconds before the Neon driver loses precision", async () => {
+  const parseTimestamptz = neonTypes.getTypeParser(1184, "text");
+  const requestedDate = parseTimestamptz("2026-08-17 00:00:00.000001+00");
+  const conflictingDate = parseTimestamptz("2026-08-17 00:00:00.000999+00");
+  assert.ok(requestedDate instanceof Date);
+  assert.ok(conflictingDate instanceof Date);
+  assert.equal(requestedDate.toISOString(), conflictingDate.toISOString());
+
+  const observation = validObservation(1, {
+    discoveredAt: "2026-08-17T00:00:00.000001Z",
+    fetchedAt: "2026-08-17T00:01:00.000002Z",
+  });
+  const row = persistedRow(observation, OBSERVATION_ID, {
+    discovered_at: conflictingDate,
+    fetched_at: parseTimestamptz("2026-08-17 00:01:00.000002+00"),
+    discovered_at_matches_input: false,
+  });
+  const client = fakeClient((call) =>
+    call.statement.startsWith("SELECT id, source, external_listing_id") ? result([row]) : result(),
+  );
+
+  await assert.rejects(
+    createSyncRepository({ client }).saveObservations(RUN_ID, [observation]),
+    /persisted observation|immutable evidence/i,
+  );
+  const select = client.calls[1];
+  assert.match(select.statement, /discovered_at\s*=\s*requested\.expected_discovered_at/i);
+  assert.match(select.statement, /fetched_at\s*=\s*requested\.expected_fetched_at/i);
+  assert.ok(select.params.includes(observation.discoveredAt));
+  assert.ok(select.params.includes(observation.fetchedAt));
 });
 
 test("saveObservations fails closed on missing, duplicate, or mismatched persisted rows", async () => {
@@ -790,6 +850,43 @@ test("operator diagnostics redact quoted credentials and copula punctuation with
   assert.match(finishCall.params[6], /retry context|remained useful|ordinary finish remains/);
   assert.match(approvalCall.params[1], /lead|on-call/);
   assert.match(approvalCall.params[2], /approval|rotated|ordinary approval remains/);
+});
+
+test("operator diagnostics redact wrapped and colon-scheme credentials without losing context", async () => {
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  await createSyncRepository({ client }).finishRun(RUN_ID, {
+    status: "failed",
+    ...evaluation(),
+    failureCode: "adapter_failed",
+    failureSummary:
+      'before wrapped token is: ("SENT_F SENT_H") after wrapped; before authorization Authorization: Bearer: SENT_X after authorization; before standalone Bearer: SENT_G after standalone',
+  });
+
+  const stored = client.calls[0].params[6];
+  for (const secret of ["SENT_F", "SENT_H", "SENT_X", "SENT_G"]) {
+    assert.equal(stored.includes(secret), false, secret);
+  }
+  assert.match(
+    stored,
+    /before wrapped|after wrapped|before authorization|after authorization|before standalone|after standalone/,
+  );
+});
+
+test("operator diagnostics preserve ordinary Basic prose while redacting alternate wrappers", async () => {
+  const basicCredential = "U0VOVF9CQVNJQzpzZWNyZXQ=";
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  await createSyncRepository({ client }).finishRun(RUN_ID, {
+    status: "failed",
+    ...evaluation(),
+    failureCode: "adapter_failed",
+    failureSummary: `ordinary basic requirements remain useful; Basic ${basicCredential} rejected; token was: ['SENT_EDGE one'] rotated`,
+  });
+
+  const stored = client.calls[0].params[6];
+  assert.equal(stored.includes(basicCredential), false);
+  assert.equal(stored.includes("SENT_EDGE"), false);
+  assert.match(stored, /ordinary basic requirements remain useful/);
+  assert.match(stored, /rejected|rotated/);
 });
 
 test("run evidence rejects malformed JSON, statuses, UUIDs, and database misses", async () => {
@@ -1605,6 +1702,22 @@ test("media lookup by hash and URL is exact and returns Task 7 metadata", async 
   assert.deepEqual(await repository.findMediaByUrls([row.url]), [expected]);
   assert.match(client.calls[1].statement, /WHERE url = ANY\(\$1::text\[\]\)/);
   assert.doesNotMatch(client.calls[1].statement, /LIKE|ILIKE|origin/i);
+});
+
+test("media lookup requires explicit null or UUID ownership fields from PostgreSQL", async () => {
+  for (const field of ["owner_id", "created_by"]) {
+    for (const variant of ["missing", "undefined", "invalid"]) {
+      const row = mediaRow();
+      if (variant === "missing") delete row[field];
+      else row[field] = variant === "undefined" ? undefined : "not-a-uuid";
+      const client = fakeClient(() => result([row]));
+      await assert.rejects(
+        createSyncRepository({ client }).findMediaByHash("a".repeat(64)),
+        /media row/i,
+        `${field} ${variant}`,
+      );
+    }
+  }
 });
 
 test("registerOwnedMedia inserts conflict-safely then returns the existing race winner", async () => {
