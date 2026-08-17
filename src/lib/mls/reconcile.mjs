@@ -47,6 +47,7 @@ const TEXT_FIELDS = new Set([
 ]);
 const CANONICAL_STATUSES = new Set(["draft", "active", "sold", "rented", "offline", "inactive"]);
 const POSTGRES_INTEGER_MAX = 2_147_483_647;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function hasOwn(value, key) {
   return value != null && Object.prototype.hasOwnProperty.call(value, key);
@@ -315,9 +316,15 @@ function observationId(observation) {
   );
 }
 
+function normalizeUuid(value) {
+  return typeof value === "string" && value.trim() === value && UUID_PATTERN.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
 function explicitObservationId(observation) {
   const value = observation?.id ?? observation?.observationId;
-  return typeof value === "string" && value.length > 0 && value.trim() === value ? value : null;
+  return normalizeUuid(value);
 }
 
 function compareCandidates(left, right) {
@@ -339,7 +346,13 @@ function addBlockingCode(blockingCodes, code) {
   if (!blockingCodes.includes(code)) blockingCodes.push(code);
 }
 
-function preparedImageCandidates(records, observations, quarantines, blockingCodes) {
+function preparedImageCandidates(
+  records,
+  observations,
+  persistedObservationIds,
+  quarantines,
+  blockingCodes,
+) {
   const candidates = [];
   if (records == null) return candidates;
   if (!Array.isArray(records)) {
@@ -351,13 +364,13 @@ function preparedImageCandidates(records, observations, quarantines, blockingCod
     const images = isPlainRecord(record)
       ? normalizeCanonicalFieldValue("images", record.images)
       : undefined;
-    const matchingIds = isPlainRecord(record)
-      ? observations.filter(
-          (observation) =>
-            typeof record.observationId === "string" &&
-            record.observationId === explicitObservationId(observation),
-        )
-      : [];
+    const recordObservationId = isPlainRecord(record) ? normalizeUuid(record.observationId) : null;
+    const matchingIds =
+      recordObservationId && persistedObservationIds.has(recordObservationId)
+        ? observations.filter(
+            (observation) => recordObservationId === explicitObservationId(observation),
+          )
+        : [];
     const matched = matchingIds.length === 1 ? matchingIds[0] : null;
     const identityMatches =
       matched &&
@@ -503,18 +516,44 @@ function pushConflict(conflicts, blockingCodes, code, details = {}) {
   addBlockingCode(blockingCodes, code);
 }
 
-function linkedOldSiteObservation(input, observations, conflicts, quarantines, blockingCodes) {
+function persistedObservationIdsFromInput(input, conflicts, quarantines, blockingCodes) {
+  if (!hasOwn(input, "persistedObservationIds")) return new Set();
+  const supplied = input.persistedObservationIds;
+  const ids = new Set();
+  let invalid = !Array.isArray(supplied);
+  if (Array.isArray(supplied)) {
+    for (const value of supplied) {
+      const id = normalizeUuid(value);
+      if (id == null || ids.has(id)) invalid = true;
+      else ids.add(id);
+    }
+  }
+  if (!invalid) return ids;
+
+  const conflict = { code: "persisted_observation_ids_invalid" };
+  conflicts.push(conflict);
+  quarantines.push(cloneValue(conflict));
+  addBlockingCode(blockingCodes, conflict.code);
+  return new Set();
+}
+
+function linkedOldSiteObservation(
+  input,
+  observations,
+  persistedObservationIds,
+  conflicts,
+  quarantines,
+  blockingCodes,
+) {
   if (!hasOwn(input, "linkedObservationIds")) return null;
   const linkedObservationIds = input.linkedObservationIds;
   let invalid = !Array.isArray(linkedObservationIds);
   const linkedIds = new Set();
   if (Array.isArray(linkedObservationIds)) {
     for (const value of linkedObservationIds) {
-      if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
-        invalid = true;
-      } else {
-        linkedIds.add(value);
-      }
+      const id = normalizeUuid(value);
+      if (id == null || !persistedObservationIds.has(id)) invalid = true;
+      else linkedIds.add(id);
     }
   }
 
@@ -536,11 +575,21 @@ function linkedOldSiteObservation(input, observations, conflicts, quarantines, b
     addBlockingCode(blockingCodes, conflict.code);
     return null;
   }
-  for (const id of linkedIds) {
-    const observation = byId.get(id)[0];
-    if (observation.source === SOURCE_OLD_SITE) return observation;
+  const eligible = [...linkedIds]
+    .map((id) => byId.get(id)[0])
+    .filter((observation) => observation.source === SOURCE_OLD_SITE)
+    .sort((left, right) => compareText(explicitObservationId(left), explicitObservationId(right)));
+  if (eligible.length > 1) {
+    const conflict = {
+      code: "legacy_link_ambiguous",
+      observationIds: eligible.map(explicitObservationId),
+    };
+    conflicts.push(conflict);
+    quarantines.push(cloneValue(conflict));
+    addBlockingCode(blockingCodes, conflict.code);
+    return null;
   }
-  return null;
+  return eligible[0] ?? null;
 }
 
 function resolveTargetIdentity({
@@ -664,6 +713,12 @@ export function reconcileProperty(input) {
   const contractObservations = [];
   const currentIsUpdate = hasOwn(current, "id") && current.id != null;
   const isUpdate = input?.kind === "update" || currentIsUpdate;
+  const persistedObservationIds = persistedObservationIdsFromInput(
+    input ?? {},
+    conflicts,
+    quarantines,
+    blockingCodes,
+  );
 
   for (const observation of input?.observations ?? []) {
     const contractReason = exactObservationQuarantineReason(observation);
@@ -692,10 +747,14 @@ export function reconcileProperty(input) {
     blockingCodes,
   });
   const validObservations = resolvedIdentity.observations;
+  if (!isUpdate && validObservations.length === 0) {
+    addBlockingCode(blockingCodes, "missing_valid_observation");
+  }
 
   const preparedCandidates = preparedImageCandidates(
     input?.preparedImages,
     validObservations,
+    persistedObservationIds,
     quarantines,
     blockingCodes,
   );
@@ -807,6 +866,7 @@ export function reconcileProperty(input) {
     const linkedOldSite = linkedOldSiteObservation(
       input ?? {},
       validObservations,
+      persistedObservationIds,
       conflicts,
       quarantines,
       blockingCodes,
@@ -895,6 +955,14 @@ function evidenceFromProposal(proposal, options) {
     candidate.conflicts.every(
       (conflict) => isPlainRecord(conflict) && candidate.blockingCodes.includes(conflict.code),
     );
+  const mediaOptionsAgree =
+    isPlainRecord(candidate?.media) &&
+    (!hasOwn(options, "preparedImages") ||
+      (strictNonEmptyStringArray(options.preparedImages) &&
+        stableEqual(options.preparedImages, candidate.media.preparedImages))) &&
+    (!hasOwn(options, "currentOwnedImages") ||
+      (strictNonEmptyStringArray(options.currentOwnedImages) &&
+        stableEqual(options.currentOwnedImages, candidate.media.currentOwnedImages)));
   if (
     explicitEvidenceDisagrees ||
     !isPlainRecord(candidate) ||
@@ -908,6 +976,7 @@ function evidenceFromProposal(proposal, options) {
     !isPlainRecord(candidate.media) ||
     !strictNonEmptyStringArray(candidate.media.preparedImages) ||
     !strictNonEmptyStringArray(candidate.media.currentOwnedImages) ||
+    !mediaOptionsAgree ||
     !evidenceIntegrityValid(candidate)
   ) {
     return {
@@ -915,8 +984,8 @@ function evidenceFromProposal(proposal, options) {
       targetMatchKey: null,
       currentMatchKey: null,
       blockingCodes: [],
-      preparedImages: normalizeEvidenceImages(options.preparedImages),
-      currentOwnedImages: normalizeEvidenceImages(options.currentOwnedImages),
+      preparedImages: [],
+      currentOwnedImages: [],
     };
   }
   return {
@@ -924,12 +993,8 @@ function evidenceFromProposal(proposal, options) {
     targetMatchKey: candidate.targetMatchKey,
     currentMatchKey: candidate.currentMatchKey,
     blockingCodes: [...new Set(candidate.blockingCodes)].sort(compareText),
-    preparedImages: normalizeEvidenceImages(
-      options.preparedImages ?? candidate.media.preparedImages,
-    ),
-    currentOwnedImages: normalizeEvidenceImages(
-      options.currentOwnedImages ?? candidate.media.currentOwnedImages,
-    ),
+    preparedImages: normalizeEvidenceImages(candidate.media.preparedImages),
+    currentOwnedImages: normalizeEvidenceImages(candidate.media.currentOwnedImages),
   };
 }
 
@@ -978,13 +1043,32 @@ export function validateCanonicalProposal(proposal, options = {}) {
     }
   }
 
-  const proposalImages = normalizeEvidenceImages(value.images);
+  const proposalImages = Array.isArray(value.images) ? value.images : [];
   const eligibleEvidence =
     kind === "new"
       ? evidence.preparedImages
       : [...evidence.preparedImages, ...evidence.currentOwnedImages];
-  if (!proposalImages.length || !eligibleEvidence.includes(proposalImages[0])) {
+  if (
+    !proposalImages.length ||
+    typeof proposalImages[0] !== "string" ||
+    proposalImages[0].length === 0 ||
+    proposalImages[0].trim() !== proposalImages[0] ||
+    !eligibleEvidence.includes(proposalImages[0])
+  ) {
     add("missing_owned_primary_image");
+  }
+  if (
+    proposalImages
+      .slice(1)
+      .some(
+        (image) =>
+          typeof image !== "string" ||
+          image.length === 0 ||
+          image.trim() !== image ||
+          !eligibleEvidence.includes(image),
+      )
+  ) {
+    add("unowned_canonical_image");
   }
   if (evidence.valid) {
     for (const code of evidence.blockingCodes) add(code);
