@@ -18,6 +18,10 @@ function isSuccessfulSnapshot(value) {
   return isCountSnapshot(value) && value.sale + value.rent > 0;
 }
 
+function isSupportedSource(value) {
+  return value === SOURCE_OLD_SITE || value === SOURCE_28HSE;
+}
+
 function isExternalId(value) {
   return (
     typeof value === "string" &&
@@ -39,8 +43,11 @@ function isCoreValidObservation(observation) {
   if (!isPropertyNumber(observation.propertyNoNormalized) || !isRecord(observation.fields)) {
     return false;
   }
-  if (observation.dealType === "sale") return Number(observation.fields.price) > 0;
-  if (observation.dealType === "rent") return Number(observation.fields.rent) > 0;
+  const activePrice =
+    observation.dealType === "sale" ? observation.fields.price : observation.fields.rent;
+  if (observation.dealType === "sale" || observation.dealType === "rent") {
+    return typeof activePrice === "number" && Number.isFinite(activePrice) && activePrice > 0;
+  }
   return false;
 }
 
@@ -86,16 +93,38 @@ function analyzeIdentityEvidence(sourceResult, discovered) {
   return { invalidIdentity, uniqueCounts, validUnique };
 }
 
-function normalizeCurrentCounts(sourceResult, uniqueCounts) {
+function normalizeCurrentCounts(sourceResult, uniqueCounts, discovered) {
   if (!isCountSnapshot(sourceResult.advertisedCounts)) {
-    return { counts: { sale: 0, rent: 0 }, invalid: true };
+    return { counts: { sale: 0, rent: 0 }, invalid: true, inconsistent: false };
   }
   const advertised = sourceResult.advertisedCounts;
-  const counts =
-    advertised.sale + advertised.rent > 0
-      ? { sale: advertised.sale, rent: advertised.rent }
-      : { ...uniqueCounts };
-  return { counts, invalid: false };
+  const advertisedTotal = advertised.sale + advertised.rent;
+  const uniqueTotal = uniqueCounts.sale + uniqueCounts.rent;
+  if (advertisedTotal === 0) {
+    const oldSiteFallback = sourceResult.source === SOURCE_OLD_SITE;
+    return {
+      counts: oldSiteFallback ? { ...uniqueCounts } : { ...advertised },
+      invalid: false,
+      inconsistent: oldSiteFallback
+        ? uniqueTotal !== discovered
+        : discovered > 0 || uniqueTotal > 0,
+    };
+  }
+  return {
+    counts: { ...advertised },
+    invalid: false,
+    inconsistent:
+      advertised.sale !== uniqueCounts.sale ||
+      advertised.rent !== uniqueCounts.rent ||
+      advertisedTotal !== discovered ||
+      uniqueTotal !== discovered,
+  };
+}
+
+function hasValidPaginationEvidence(sourceResult) {
+  const pageCounts = sourceResult.pageCounts;
+  if (!isCountSnapshot(pageCounts)) return false;
+  return sourceResult.paginationComplete !== true || (pageCounts.sale > 0 && pageCounts.rent > 0);
 }
 
 function normalizeHistory(previousSuccessful, rollingCounts) {
@@ -156,14 +185,19 @@ function belowFloor(observed, floor) {
 }
 
 function isHealthDecision(value, source) {
-  return (
-    isRecord(value) &&
-    value.source === source &&
-    typeof value.healthy === "boolean" &&
-    typeof value.baselineRequired === "boolean" &&
-    Array.isArray(value.reasons) &&
-    value.reasons.every((reason) => typeof reason === "string")
-  );
+  if (!isRecord(value) || value.source !== source || typeof value.healthy !== "boolean") {
+    return false;
+  }
+  if (Object.hasOwn(value, "baselineRequired") && typeof value.baselineRequired !== "boolean") {
+    return false;
+  }
+  if (
+    Object.hasOwn(value, "reasons") &&
+    (!Array.isArray(value.reasons) || !value.reasons.every((reason) => typeof reason === "string"))
+  ) {
+    return false;
+  }
+  return !value.healthy || (value.reasons ?? []).length === 0;
 }
 
 export function median(values) {
@@ -202,7 +236,7 @@ export function evaluateSourceHealth(sourceResult, options = {}) {
   const evidence = analyzeIdentityEvidence(sourceResult, discovered);
   if (!discoveredIsValid) evidence.invalidIdentity = true;
   const parseRate = discovered > 0 ? Math.min(evidence.validUnique, discovered) / discovered : 0;
-  const current = normalizeCurrentCounts(sourceResult, evidence.uniqueCounts);
+  const current = normalizeCurrentCounts(sourceResult, evidence.uniqueCounts, discovered);
   const counts = {
     ...current.counts,
     combined: current.counts.sale + current.counts.rent,
@@ -215,13 +249,16 @@ export function evaluateSourceHealth(sourceResult, options = {}) {
   };
 
   const reasons = [];
+  if (!isSupportedSource(sourceResult.source)) reasons.push("source_invalid");
   if (sourceResult.identityValid !== true) reasons.push("identity_invalid");
   if (sourceResult.robotsAllowed !== true) reasons.push("robots_disallowed");
   if (sourceResult.paginationComplete !== true) reasons.push("pagination_incomplete");
+  if (!hasValidPaginationEvidence(sourceResult)) reasons.push("pagination_evidence_invalid");
   if (sourceResult.challengeDetected !== false) reasons.push("challenge_detected");
   if (discovered === 0) reasons.push("zero_inventory");
   if (evidence.invalidIdentity) reasons.push("identity_evidence_invalid");
   if (current.invalid) reasons.push("counts_invalid");
+  if (current.inconsistent) reasons.push("counts_inconsistent");
   if (history.invalid) reasons.push("history_invalid");
   if (belowFloor(counts.sale, floors.sale)) reasons.push("sale_count_below_floor");
   if (belowFloor(counts.rent, floors.rent)) reasons.push("rent_count_below_floor");
@@ -253,15 +290,16 @@ export function evaluateRunGate({ oldSite, hse28 } = {}) {
   const hse28Healthy = hse28Valid && hse28.healthy;
   const oldSiteHealthy = oldSiteValid && oldSite.healthy;
   const baselinePending =
-    (hse28Valid && hse28.baselineRequired) || (oldSiteValid && oldSite.baselineRequired);
+    (hse28Valid && hse28.baselineRequired === true) ||
+    (oldSiteValid && oldSite.baselineRequired === true);
   const reasons = [];
 
   if (!hse28Valid) reasons.push("28hse_decision_invalid");
   if (!oldSiteValid) reasons.push("old_site_decision_invalid");
   if (hse28Valid && !hse28.healthy) reasons.push("28hse_unhealthy");
   if (oldSiteValid && !oldSite.healthy) reasons.push("old_site_unhealthy");
-  if (hse28Valid && hse28.baselineRequired) reasons.push("28hse_baseline_required");
-  if (oldSiteValid && oldSite.baselineRequired) reasons.push("old_site_baseline_required");
+  if (hse28Valid && hse28.baselineRequired === true) reasons.push("28hse_baseline_required");
+  if (oldSiteValid && oldSite.baselineRequired === true) reasons.push("old_site_baseline_required");
 
   const mode = !hse28Healthy ? "blocked" : oldSiteHealthy ? "full" : "degraded";
   return {

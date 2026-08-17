@@ -449,7 +449,7 @@ test("any source awaiting baseline approval suppresses all publication effects",
 
 test("run gate treats malformed or mislabeled decisions conservatively", () => {
   const good28 = gateDecision(SOURCES.hse28);
-  const malformed28 = { source: SOURCES.hse28, healthy: true };
+  const malformed28 = { source: SOURCES.hse28, healthy: "yes" };
   const mislabeledOld = gateDecision(SOURCES.hse28);
 
   assert.deepEqual(
@@ -472,5 +472,191 @@ test("run gate treats malformed or mislabeled decisions conservatively", () => {
     mayPublishUpserts: false,
     mayAdvanceInactivity: false,
     reasons: ["28hse_decision_invalid", "old_site_decision_invalid"],
+  });
+});
+
+test("28Hse cannot replace zero advertised totals with observation counts", () => {
+  const decision = evaluateSourceHealth(
+    healthyResult(SOURCES.hse28, {
+      advertisedCounts: { sale: 0, rent: 0 },
+    }),
+    history,
+  );
+
+  assert.equal(decision.healthy, false);
+  assert.ok(decision.reasons.includes("counts_inconsistent"));
+});
+
+test("advertised per-deal counts must equal unique observed identities", () => {
+  const decision = evaluateSourceHealth(
+    healthyResult(SOURCES.hse28, {
+      advertisedCounts: { sale: 60, rent: 40 },
+      observations: observationsFor(SOURCES.hse28, { sale: 50, rent: 50, quarantined: 1 }),
+    }),
+    history,
+  );
+
+  assert.equal(decision.healthy, false);
+  assert.ok(decision.reasons.includes("counts_inconsistent"));
+});
+
+test("advertised combined count must equal discovered identity cardinality", () => {
+  const decision = evaluateSourceHealth(
+    healthyResult(SOURCES.hse28, {
+      advertisedCounts: { sale: 60, rent: 40 },
+      discovered: 99,
+      observations: observationsFor(SOURCES.hse28, { sale: 60, rent: 39, quarantined: 1 }),
+    }),
+    history,
+  );
+
+  assert.equal(decision.healthy, false);
+  assert.ok(decision.reasons.includes("counts_inconsistent"));
+});
+
+test("old-site zero-total fallback rejects inconsistent identity cardinality", () => {
+  const decision = evaluateSourceHealth(
+    healthyResult(SOURCES.oldSite, {
+      advertisedCounts: { sale: 0, rent: 0 },
+      discovered: 99,
+      observations: observationsFor(SOURCES.oldSite, { sale: 60, rent: 40, quarantined: 1 }),
+    }),
+    history,
+  );
+
+  assert.equal(decision.healthy, false);
+  assert.ok(decision.reasons.includes("counts_inconsistent"));
+});
+
+for (const source of [undefined, null, "third_party"]) {
+  test(`source health rejects unsupported source ${String(source)}`, () => {
+    const result = healthyResult(SOURCES.hse28, { source });
+    result.observations = result.observations.map((row) => ({ ...row, source }));
+    const decision = evaluateSourceHealth(result, history);
+
+    assert.equal(decision.healthy, false);
+    assert.ok(decision.reasons.includes("source_invalid"));
+  });
+}
+
+for (const scenario of [
+  { name: "missing object", pageCounts: undefined },
+  { name: "zero sale page", pageCounts: { sale: 0, rent: 2 } },
+  { name: "zero rent page", pageCounts: { sale: 3, rent: 0 } },
+  { name: "negative page", pageCounts: { sale: -1, rent: 2 } },
+  { name: "fractional page", pageCounts: { sale: 3, rent: 1.5 } },
+  { name: "string field", pageCounts: { sale: "3", rent: 2 } },
+  { name: "malformed value", pageCounts: "3/2" },
+]) {
+  test(`complete pagination rejects ${scenario.name} evidence`, () => {
+    const decision = evaluateSourceHealth(
+      healthyResult(SOURCES.hse28, { pageCounts: scenario.pageCounts }),
+      history,
+    );
+
+    assert.equal(decision.healthy, false);
+    assert.ok(decision.reasons.includes("pagination_evidence_invalid"));
+  });
+}
+
+for (const scenario of [
+  { name: "sale numeric string", dealType: "sale", value: "1000000" },
+  { name: "rent numeric string", dealType: "rent", value: "10000" },
+  { name: "sale boolean", dealType: "sale", value: true },
+  { name: "rent boolean", dealType: "rent", value: true },
+  { name: "sale infinity", dealType: "sale", value: Number.POSITIVE_INFINITY },
+  { name: "rent infinity", dealType: "rent", value: Number.POSITIVE_INFINITY },
+  { name: "sale NaN", dealType: "sale", value: Number.NaN },
+  { name: "rent NaN", dealType: "rent", value: Number.NaN },
+]) {
+  test(`${scenario.name} cannot count as a valid core price`, () => {
+    const rows = observationsFor(SOURCES.hse28, { sale: 60, rent: 40 });
+    const index = scenario.dealType === "sale" ? 0 : 60;
+    const fieldName = scenario.dealType === "sale" ? "price" : "rent";
+    rows[index] = { ...rows[index], fields: { [fieldName]: scenario.value } };
+    const decision = evaluateSourceHealth(
+      healthyResult(SOURCES.hse28, { observations: rows, failures: [] }),
+      history,
+    );
+
+    assert.equal(decision.validDiscovered, 99);
+    assert.equal(decision.parseRate, 0.99);
+  });
+}
+
+test("three malformed core prices fail the 98 percent parse floor", () => {
+  const rows = observationsFor(SOURCES.hse28, { sale: 60, rent: 40 });
+  for (const index of [0, 1, 60]) {
+    const fieldName = rows[index].dealType === "sale" ? "price" : "rent";
+    rows[index] = { ...rows[index], fields: { [fieldName]: "100" } };
+  }
+  const decision = evaluateSourceHealth(
+    healthyResult(SOURCES.hse28, { observations: rows, failures: [] }),
+    history,
+  );
+
+  assert.equal(decision.validDiscovered, 97);
+  assert.equal(decision.parseRate, 0.97);
+  assert.equal(decision.healthy, false);
+  assert.ok(decision.reasons.includes("parse_rate_below_minimum"));
+});
+
+test("contradictory healthy decisions with failure reasons are invalid", () => {
+  const good28 = gateDecision(SOURCES.hse28);
+  const goodOld = gateDecision(SOURCES.oldSite);
+  const contradictory28 = { ...good28, reasons: ["identity_invalid"] };
+  const contradictoryOld = { ...goodOld, reasons: ["pagination_incomplete"] };
+
+  assert.deepEqual(evaluateRunGate({ oldSite: goodOld, hse28: contradictory28 }), {
+    mode: "blocked",
+    mayPublishUpserts: false,
+    mayAdvanceInactivity: false,
+    reasons: ["28hse_decision_invalid"],
+  });
+  assert.deepEqual(evaluateRunGate({ oldSite: contradictoryOld, hse28: good28 }), {
+    mode: "degraded",
+    mayPublishUpserts: true,
+    mayAdvanceInactivity: false,
+    reasons: ["old_site_decision_invalid"],
+  });
+});
+
+test("run gate accepts the Task 5 brief's minimal source decisions", () => {
+  const ok28 = { healthy: true, source: SOURCES.hse28 };
+  const bad28 = { healthy: false, source: SOURCES.hse28 };
+  const badOld = { healthy: false, source: SOURCES.oldSite };
+
+  assert.equal(evaluateRunGate({ oldSite: badOld, hse28: bad28 }).mode, "blocked");
+  assert.deepEqual(evaluateRunGate({ oldSite: badOld, hse28: ok28 }), {
+    mode: "degraded",
+    mayPublishUpserts: true,
+    mayAdvanceInactivity: false,
+    reasons: ["old_site_unhealthy"],
+  });
+});
+
+test("optional health-decision fields are validated when present", () => {
+  const invalid28 = {
+    source: SOURCES.hse28,
+    healthy: true,
+    baselineRequired: "false",
+  };
+  const invalidOld = {
+    source: SOURCES.oldSite,
+    healthy: false,
+    reasons: "identity_invalid",
+  };
+
+  assert.deepEqual(evaluateRunGate({ oldSite: gateDecision(SOURCES.oldSite), hse28: invalid28 }), {
+    mode: "blocked",
+    mayPublishUpserts: false,
+    mayAdvanceInactivity: false,
+    reasons: ["28hse_decision_invalid"],
+  });
+  assert.deepEqual(evaluateRunGate({ oldSite: invalidOld, hse28: gateDecision(SOURCES.hse28) }), {
+    mode: "degraded",
+    mayPublishUpserts: true,
+    mayAdvanceInactivity: false,
+    reasons: ["old_site_decision_invalid"],
   });
 });
