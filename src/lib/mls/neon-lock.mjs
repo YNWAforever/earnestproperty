@@ -1,4 +1,10 @@
+import { Client } from "@neondatabase/serverless";
+
 const LOCK_NAME = "earnestproperty:mls-sync";
+
+function createNeonClient(config) {
+  return new Client(config);
+}
 
 function requireFunction(value, name) {
   if (typeof value !== "function") {
@@ -33,7 +39,12 @@ function readBooleanResult(result, key, label) {
 }
 
 export async function withMlsAdvisoryLock(options = {}) {
-  const { connectionString, WebSocketImpl, createClient, work } = options;
+  const {
+    connectionString,
+    WebSocketImpl = globalThis.WebSocket,
+    createClient = createNeonClient,
+    work,
+  } = options;
   if (typeof connectionString !== "string" || !connectionString.trim()) {
     throw new Error("DATABASE_URL_UNPOOLED is required");
   }
@@ -43,20 +54,14 @@ export async function withMlsAdvisoryLock(options = {}) {
   requireFunction(createClient, "createClient");
   requireFunction(work, "work");
 
-  const client = createClient({
-    connectionString,
-    connectionTimeoutMillis: 15_000,
-    query_timeout: 30_000,
-  });
-  if (
-    !client ||
-    typeof client.connect !== "function" ||
-    typeof client.query !== "function" ||
-    typeof client.end !== "function"
-  ) {
-    throw new TypeError("createClient must return a connect/query/end client");
-  }
-
+  const client = createClient(
+    {
+      connectionString,
+      connectionTimeoutMillis: 15_000,
+      query_timeout: 30_000,
+    },
+    Object.freeze({ WebSocketImpl }),
+  );
   let connected = false;
   let acquired = false;
   let value;
@@ -64,6 +69,18 @@ export async function withMlsAdvisoryLock(options = {}) {
   const cleanupErrors = [];
 
   try {
+    if (
+      !client ||
+      typeof client.connect !== "function" ||
+      typeof client.query !== "function" ||
+      typeof client.end !== "function"
+    ) {
+      throw new TypeError("createClient must return a connect/query/end client");
+    }
+    if (!client.neonConfig || typeof client.neonConfig !== "object") {
+      throw new TypeError("client.neonConfig is required for scoped WebSocket configuration");
+    }
+    client.neonConfig.webSocketConstructor = WebSocketImpl;
     await client.connect();
     connected = true;
     const lockResult = await client.query("SELECT pg_try_advisory_lock(hashtext($1)) AS acquired", [
@@ -91,11 +108,13 @@ export async function withMlsAdvisoryLock(options = {}) {
     }
   }
 
-  try {
-    await client.end();
-  } catch (error) {
-    if (primaryError) cleanupErrors.push(error);
-    else primaryError = error;
+  if (client && typeof client.end === "function") {
+    try {
+      await client.end();
+    } catch (error) {
+      if (primaryError) cleanupErrors.push(error);
+      else primaryError = error;
+    }
   }
 
   if (primaryError) throw attachCleanupErrors(primaryError, cleanupErrors);

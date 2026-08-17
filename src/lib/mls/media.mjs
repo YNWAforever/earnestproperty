@@ -1358,6 +1358,77 @@ function validateAsset(asset, expected) {
   return asset;
 }
 
+function validateRegistrationOutcome(registration, expected) {
+  const keys = plainRecord(registration) ? Reflect.ownKeys(registration) : [];
+  if (
+    keys.length !== 2 ||
+    !keys.includes("outcome") ||
+    !keys.includes("asset") ||
+    (registration.outcome !== "inserted" && registration.outcome !== "existing")
+  ) {
+    fail("owned_media_binding_invalid");
+  }
+  const asset = registration.asset;
+  if (
+    !plainRecord(asset) ||
+    !hasOwn(asset, "ownerType") ||
+    !hasOwn(asset, "ownerId") ||
+    !hasOwn(asset, "createdBy") ||
+    typeof asset.ownerType !== "string" ||
+    !asset.ownerType.trim() ||
+    asset.ownerType !== asset.ownerType.trim() ||
+    asset.ownerType.length > 160 ||
+    (asset.ownerId != null &&
+      (typeof asset.ownerId !== "string" || !UUID_PATTERN.test(asset.ownerId))) ||
+    (asset.createdBy != null &&
+      (typeof asset.createdBy !== "string" || !UUID_PATTERN.test(asset.createdBy)))
+  ) {
+    fail("owned_media_binding_invalid");
+  }
+
+  if (registration.outcome === "inserted") {
+    validateAsset(asset, expected);
+    if (
+      asset.ownerType !== expected.ownerType ||
+      asset.ownerId !== expected.ownerId ||
+      asset.createdBy !== expected.createdBy
+    ) {
+      fail("owned_media_binding_invalid");
+    }
+  } else {
+    validateAsset(asset, {
+      contentHash: expected.contentHash,
+      contentType: expected.contentType,
+      sizeBytes: expected.sizeBytes,
+    });
+    let expectedUrl;
+    let winnerUrl;
+    try {
+      expectedUrl = new URL(expected.url);
+      winnerUrl = new URL(asset.url);
+    } catch {
+      fail("owned_media_binding_invalid");
+    }
+    if (
+      expectedUrl.protocol !== "https:" ||
+      expectedUrl.username ||
+      expectedUrl.password ||
+      winnerUrl.protocol !== "https:" ||
+      winnerUrl.username ||
+      winnerUrl.password ||
+      winnerUrl.origin !== expectedUrl.origin
+    ) {
+      fail("owned_media_binding_invalid");
+    }
+  }
+
+  return {
+    asset,
+    orphanedUploadUrl:
+      registration.outcome === "existing" && asset.url !== expected.url ? expected.url : null,
+  };
+}
+
 function validateBlobResult(blob, expected) {
   if (!plainRecord(blob)) throw new TypeError("Blob store returned invalid owned metadata");
   let url;
@@ -1398,6 +1469,7 @@ function resultFor(candidate, identity, values = {}) {
     contentHash: null,
     ownedMediaAssetId: null,
     ownedUrl: null,
+    orphanedUploadUrl: null,
     detectedMime: null,
     sizeBytes: null,
     width: null,
@@ -1650,6 +1722,7 @@ export async function prepareListingMedia(rawInput) {
       throwIfAborted(signal);
       const contentHash = sha256(downloaded.bytes);
       let asset = localAssets.get(contentHash) ?? null;
+      let orphanedUploadUrl = null;
       if (!asset) {
         asset = await abortRace(() => repository.findMediaByHash(contentHash, { signal }), signal);
         throwIfAborted(signal);
@@ -1707,13 +1780,16 @@ export async function prepareListingMedia(rawInput) {
           signal,
         );
         throwIfAborted(signal);
-        asset = validateAsset(registered, registration);
+        const registrationOutcome = validateRegistrationOutcome(registered, registration);
+        asset = registrationOutcome.asset;
+        orphanedUploadUrl = registrationOutcome.orphanedUploadUrl;
         localAssets.set(contentHash, asset);
       }
       const result = resultFor(candidate, identity, {
         contentHash,
         ownedMediaAssetId: asset?.id ?? null,
         ownedUrl: asset?.url ?? null,
+        orphanedUploadUrl,
         detectedMime: downloaded.mime,
         sizeBytes: downloaded.bytes.byteLength,
         width: downloaded.width,

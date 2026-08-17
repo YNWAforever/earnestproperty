@@ -11,6 +11,7 @@ function fakeClient({ acquired = true, lockRows, unlockRows, ...failures } = {})
   const events = [];
   return {
     events,
+    neonConfig: {},
     async connect() {
       events.push("connect");
       if (failures.connectError) throw failures.connectError;
@@ -61,6 +62,31 @@ test("one dedicated session holds and always releases the run lock", async () =>
     connectionTimeoutMillis: 15_000,
     query_timeout: 30_000,
   });
+  assert.equal(client.neonConfig.webSocketConstructor, websocket);
+});
+
+test("Node WebSocket defaults are scoped to the dedicated client", async () => {
+  const client = fakeClient();
+  const result = await withMlsAdvisoryLock({
+    connectionString: "postgres://test",
+    createClient: () => client,
+    work: async () => "done",
+  });
+
+  assert.equal(result, "done");
+  assert.equal(client.neonConfig.webSocketConstructor, globalThis.WebSocket);
+  assert.deepEqual(client.events, ["connect", "lock", "unlock", "end"]);
+});
+
+test("the production Neon client factory is built in", async () => {
+  await assert.rejects(
+    withMlsAdvisoryLock({
+      connectionString: "postgres://test",
+      WebSocketImpl: websocket,
+      work: null,
+    }),
+    /work/i,
+  );
 });
 
 test("all dependency preflights fail before constructing a database client", async () => {
@@ -68,14 +94,8 @@ test("all dependency preflights fail before constructing a database client", asy
     { connectionString: "", WebSocketImpl: websocket, createClient() {}, work() {} },
     {
       connectionString: "postgres://test",
-      WebSocketImpl: undefined,
+      WebSocketImpl: null,
       createClient() {},
-      work() {},
-    },
-    {
-      connectionString: "postgres://test",
-      WebSocketImpl: websocket,
-      createClient: null,
       work() {},
     },
     {
@@ -229,4 +249,47 @@ test("a client-construction error propagates without attempting work", async () 
     (error) => error === constructionError,
   );
   assert.equal(worked, false);
+});
+
+test("a malformed constructed client still closes when it exposes end", async () => {
+  const events = [];
+  await assert.rejects(
+    withMlsAdvisoryLock({
+      connectionString: "postgres://test",
+      WebSocketImpl: websocket,
+      createClient: () => ({
+        neonConfig: {},
+        async connect() {
+          events.push("connect");
+        },
+        async end() {
+          events.push("end");
+        },
+      }),
+      work: async () => events.push("work"),
+    }),
+    /connect\/query\/end client/i,
+  );
+  assert.deepEqual(events, ["end"]);
+});
+
+test("scoped WebSocket configuration failure still closes the constructed client", async () => {
+  const configurationError = new Error("scoped WebSocket configuration failed exactly");
+  const client = fakeClient();
+  Object.defineProperty(client.neonConfig, "webSocketConstructor", {
+    set() {
+      throw configurationError;
+    },
+  });
+
+  await assert.rejects(
+    withMlsAdvisoryLock({
+      connectionString: "postgres://test",
+      WebSocketImpl: websocket,
+      createClient: () => client,
+      work: async () => "unreachable",
+    }),
+    (error) => error === configurationError,
+  );
+  assert.deepEqual(client.events, ["end"]);
 });

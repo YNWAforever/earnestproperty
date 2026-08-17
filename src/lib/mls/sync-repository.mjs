@@ -194,6 +194,35 @@ function serializeJson(value, label) {
   }
 }
 
+function stableJsonValue(value) {
+  if (Array.isArray(value)) return value.map(stableJsonValue);
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, stableJsonValue(value[key])]),
+    );
+  }
+  return value;
+}
+
+function databaseJson(value, label) {
+  let decoded = value;
+  if (typeof value === "string") {
+    try {
+      decoded = JSON.parse(value);
+    } catch (error) {
+      throw new TypeError(`${label} is invalid JSON`, { cause: error });
+    }
+  }
+  serializeJson(decoded, label);
+  return decoded;
+}
+
+function jsonEqual(left, right) {
+  return JSON.stringify(stableJsonValue(left)) === JSON.stringify(stableJsonValue(right));
+}
+
 function isDeepFrozen(value, seen = new Set()) {
   if (value == null || typeof value !== "object") return true;
   if (seen.has(value) || !Object.isFrozen(value)) return false;
@@ -291,10 +320,15 @@ function validateObservation(observation) {
     throw new TypeError("SourceObservation property number is invalid");
   }
   const propertyNo = normalizePropertyNo(observation.propertyNoNormalized);
+  const normalizedRawPropertyNo = normalizePropertyNo(observation.propertyNoRaw);
   const normalizedIdentityIsValid =
     observation.propertyNoNormalized == null
-      ? observation.propertyNoNormalized === null && observation.matchKey === null
+      ? observation.propertyNoNormalized === null &&
+        observation.matchKey === null &&
+        normalizedRawPropertyNo === null &&
+        observation.validationState === "quarantined"
       : propertyNo === observation.propertyNoNormalized &&
+        normalizedRawPropertyNo === propertyNo &&
         observation.matchKey === buildMatchKey(propertyNo, observation.dealType);
   if (!normalizedIdentityIsValid) {
     throw new TypeError("SourceObservation normalized identity is invalid");
@@ -396,8 +430,9 @@ function redactedText(value, label, { max = 1_000, nullable = true } = {}) {
   }
   text = text
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[redacted]@")
+    .replace(/\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)\s+)?[^\s,;]+/gi, "$1=[redacted]")
     .replace(
-      /\b(token|secret|password|passwd|api[_-]?key|authorization)\s*[:=]\s*[^\s,;]+/gi,
+      /\b((?:x[-_])?api[-_]?key|access[-_]?token|refresh[-_]?token|token|secret|password|passwd)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
       "$1=[redacted]",
     )
     .replace(/\b(?:sk|pk)_[A-Za-z0-9_-]{8,}\b/g, "[redacted]");
@@ -417,6 +452,9 @@ function validateSourceStatus(value) {
       throw new TypeError("sourceStatus JSON is invalid");
     }
     requireStringArray(status.reasons, "source status reasons", { maxItems: 200 });
+    if (status.healthy === status.reasons.length > 0) {
+      throw new TypeError("sourceStatus health and reasons are inconsistent");
+    }
   }
   return serializeJson(value, "sourceStatus");
 }
@@ -434,19 +472,80 @@ function validateEvaluation(evaluation) {
   };
 }
 
+function sourceStatusPair(sourceStatus) {
+  const hse28 = sourceStatus[SOURCE_28HSE];
+  const oldSite = sourceStatus[SOURCE_OLD_SITE];
+  return {
+    hse28,
+    oldSite,
+    hse28Healthy: isPlainRecord(hse28) && hse28.source === SOURCE_28HSE && hse28.healthy === true,
+    hse28Unhealthy:
+      isPlainRecord(hse28) && hse28.source === SOURCE_28HSE && hse28.healthy === false,
+    oldSiteHealthy:
+      isPlainRecord(oldSite) && oldSite.source === SOURCE_OLD_SITE && oldSite.healthy === true,
+    oldSiteUnhealthy:
+      isPlainRecord(oldSite) && oldSite.source === SOURCE_OLD_SITE && oldSite.healthy === false,
+  };
+}
+
+function validateCompletionSemantics(completion) {
+  if (completion.status === "failed" || completion.status === "lock_skipped") return;
+  const status = sourceStatusPair(completion.sourceStatus);
+  const consistent =
+    completion.status === "healthy" || completion.status === "shadow_healthy"
+      ? status.hse28Healthy && status.oldSiteHealthy
+      : completion.status === "degraded"
+        ? status.hse28Healthy && status.oldSiteUnhealthy
+        : completion.status === "blocked"
+          ? status.hse28Unhealthy && (status.oldSiteHealthy || status.oldSiteUnhealthy)
+          : false;
+  if (!consistent) {
+    throw new TypeError("final run status is inconsistent with source health");
+  }
+}
+
 function validatePersistedObservationRow(row, expectedByIdentity) {
   const persistedPropertyNo = row?.property_no_normalized;
+  let payload;
+  let mediaCandidates;
+  let discoveredAt;
+  let fetchedAt;
+  try {
+    payload = databaseJson(row?.payload, "persisted observation payload");
+    mediaCandidates = databaseJson(row?.media_candidates, "persisted observation media candidates");
+    discoveredAt = requireTimestamp(row?.discovered_at, "persisted observation discovered_at");
+    fetchedAt = requireTimestamp(row?.fetched_at, "persisted observation fetched_at");
+  } catch (error) {
+    throw new TypeError("persisted observation row is invalid", { cause: error });
+  }
   const valid =
     isPlainRecord(row) &&
     isUuid(row.id) &&
     isSource(row.source) &&
     isExternalId(row.external_listing_id) &&
     isDealType(row.deal_type) &&
+    typeof row.source_url === "string" &&
+    (row.property_no_raw == null || typeof row.property_no_raw === "string") &&
     (persistedPropertyNo === null ||
       (typeof persistedPropertyNo === "string" &&
         normalizePropertyNo(persistedPropertyNo) === persistedPropertyNo)) &&
-    HASH_PATTERN.test(row.content_hash);
+    HASH_PATTERN.test(row.content_hash) &&
+    hasExactKeys(
+      payload,
+      new Set(["schemaVersion", "fields", "rawFields", "sourceUpdatedAt", "parseWarnings"]),
+    ) &&
+    Array.isArray(mediaCandidates) &&
+    new Set(["valid", "quarantined"]).has(row.validation_state) &&
+    Array.isArray(row.quarantine_reasons) &&
+    Array.isArray(row.parse_warnings);
   if (!valid) throw new TypeError("persisted observation row is invalid");
+  try {
+    requireUrl(row.source_url, "persisted observation source URL");
+    requireStringArray(row.quarantine_reasons, "persisted observation quarantine reasons");
+    requireStringArray(row.parse_warnings, "persisted observation parse warnings");
+  } catch (error) {
+    throw new TypeError("persisted observation row is invalid", { cause: error });
+  }
   const identity = observationIdentity({
     source: row.source,
     externalId: row.external_listing_id,
@@ -455,8 +554,23 @@ function validatePersistedObservationRow(row, expectedByIdentity) {
   const expected = expectedByIdentity.get(identity);
   if (
     !expected ||
+    row.source_url !== expected.sourceUrl ||
+    row.property_no_raw !== expected.propertyNoRaw ||
     row.property_no_normalized !== expected.propertyNoNormalized ||
-    row.content_hash !== expected.contentHash
+    row.content_hash !== expected.contentHash ||
+    row.validation_state !== expected.validationState ||
+    discoveredAt !== expected.discoveredAt ||
+    fetchedAt !== expected.fetchedAt ||
+    !jsonEqual(payload, {
+      schemaVersion: expected.schemaVersion,
+      fields: expected.fields,
+      rawFields: expected.rawFields,
+      sourceUpdatedAt: expected.sourceUpdatedAt,
+      parseWarnings: expected.parseWarnings,
+    }) ||
+    !jsonEqual(mediaCandidates, expected.mediaCandidates) ||
+    !jsonEqual(row.quarantine_reasons, expected.quarantineReasons) ||
+    !jsonEqual(row.parse_warnings, expected.parseWarnings)
   ) {
     throw new TypeError("persisted observation row does not match immutable evidence");
   }
@@ -593,7 +707,10 @@ export function createSyncRepository(options = {}) {
         batch.map(({ observation }) => [observationIdentity(observation), observation]),
       );
       const rows = await query(
-        `SELECT id, source, external_listing_id, deal_type, property_no_normalized, content_hash
+        `SELECT id, source, external_listing_id, deal_type, source_url,
+                property_no_raw, property_no_normalized, payload, media_candidates,
+                content_hash, validation_state, quarantine_reasons, parse_warnings,
+                discovered_at, fetched_at
            FROM listing_source_observations
           WHERE run_id = $1::uuid
             AND (source, external_listing_id, deal_type) IN (${tuples.join(", ")})
@@ -648,6 +765,7 @@ export function createSyncRepository(options = {}) {
       throw new TypeError("final run status is invalid");
     }
     const serialized = validateEvaluation(completion);
+    validateCompletionSemantics(completion);
     const failureCode =
       completion.failureCode == null
         ? null
@@ -744,7 +862,8 @@ export function createSyncRepository(options = {}) {
         isPlainRecord(sourceStatus[source]) &&
         sourceStatus[source].source === source &&
         sourceStatus[source].healthy === true &&
-        Array.isArray(sourceStatus[source].reasons),
+        Array.isArray(sourceStatus[source].reasons) &&
+        sourceStatus[source].reasons.length === 0,
     );
   }
 
@@ -764,18 +883,25 @@ export function createSyncRepository(options = {}) {
         WHERE id = $1::uuid
           AND mode = 'shadow'
           AND status = 'shadow_healthy'
+          AND baseline_approved_at IS NULL
           AND source_status -> '${SOURCE_28HSE}' ->> 'healthy' = 'true'
           AND source_status -> '${SOURCE_OLD_SITE}' ->> 'healthy' = 'true'
-        RETURNING id`,
+          AND jsonb_array_length(COALESCE(source_status -> '${SOURCE_28HSE}' -> 'reasons', '[]'::jsonb)) = 0
+          AND jsonb_array_length(COALESCE(source_status -> '${SOURCE_OLD_SITE}' -> 'reasons', '[]'::jsonb)) = 0
+        RETURNING id, baseline_approved_at`,
       [runId, reviewer, note],
       "approve shadow run",
     );
     if (rows.length !== 1 || rows[0]?.id !== runId) {
       throw new Error("healthy shadow run was not found for approval");
     }
+    const approvedAt = requireTimestamp(rows[0].baseline_approved_at, "shadow approval timestamp");
+    if (Date.parse(approvedAt) > Date.now()) {
+      throw new TypeError("shadow approval timestamp cannot be in the future");
+    }
   }
 
-  function validateStreakRow(row) {
+  function validateStreakRow(row, beforeDate) {
     if (
       !isPlainRecord(row) ||
       !isUuid(row.id) ||
@@ -787,7 +913,7 @@ export function createSyncRepository(options = {}) {
     ) {
       throw new TypeError("shadow streak row is invalid");
     }
-    return {
+    const validated = {
       ...row,
       finished_at: requireTimestamp(row.finished_at, "shadow streak finished_at"),
       baseline_approved_at: requireTimestamp(
@@ -796,6 +922,15 @@ export function createSyncRepository(options = {}) {
         { nullable: true },
       ),
     };
+    if (validated.baseline_approved_at != null) {
+      if (Date.parse(validated.baseline_approved_at) > Date.now()) {
+        throw new TypeError("shadow approval timestamp cannot be in the future");
+      }
+      if (validated.baseline_approved_at >= `${beforeDate}T00:00:00.000Z`) {
+        throw new TypeError("shadow approval must predate the prospective publish date");
+      }
+    }
+    return validated;
   }
 
   async function getApprovedHealthyShadowStreak(beforeDate) {
@@ -818,7 +953,7 @@ export function createSyncRepository(options = {}) {
     );
     const latestByDate = new Map();
     for (const rawRow of rows) {
-      const row = validateStreakRow(rawRow);
+      const row = validateStreakRow(rawRow, beforeDate);
       const previous = latestByDate.get(row.scheduled_for);
       if (
         !previous ||
@@ -1062,22 +1197,29 @@ export function createSyncRepository(options = {}) {
         "canonical property lookup",
       );
       for (const row of rows) {
+        const canonicalPropertyNo =
+          row?.canonical_property_no == null
+            ? null
+            : normalizePropertyNo(row.canonical_property_no);
+        const legacyPropertyNo =
+          row?.legacy_property_no == null ? null : normalizePropertyNo(row.legacy_property_no);
+        const propertyNo = canonicalPropertyNo ?? legacyPropertyNo;
         if (
           !isPlainRecord(row) ||
           !isUuid(row.id) ||
           !targetIds.includes(row.id) ||
-          typeof row.canonical_property_no !== "string" ||
-          normalizePropertyNo(row.canonical_property_no) == null ||
+          (row.canonical_property_no != null &&
+            (typeof row.canonical_property_no !== "string" || canonicalPropertyNo == null)) ||
           (row.legacy_property_no != null &&
-            (typeof row.legacy_property_no !== "string" ||
-              normalizePropertyNo(row.legacy_property_no) == null)) ||
+            (typeof row.legacy_property_no !== "string" || legacyPropertyNo == null)) ||
+          propertyNo == null ||
           !isDealType(row.deal_type) ||
           propertiesById.has(row.id)
         ) {
           throw new TypeError("canonical property row is invalid");
         }
         propertiesById.set(row.id, {
-          propertyNo: normalizePropertyNo(row.canonical_property_no),
+          propertyNo,
           dealType: row.deal_type,
         });
       }
@@ -1112,21 +1254,50 @@ export function createSyncRepository(options = {}) {
           (property_id, source, external_listing_id, deal_type, match_key, link_reason,
            status, first_seen_at, last_seen_at, last_seen_run_id)
          VALUES ${values.join(", ")}
-         ON CONFLICT (source, external_listing_id, deal_type) DO UPDATE
-           SET property_id = EXCLUDED.property_id,
-               match_key = EXCLUDED.match_key,
-               link_reason = EXCLUDED.link_reason,
-               status = CASE
-                 WHEN property_source_links.status = 'active' THEN 'active'
-                 ELSE 'proposed'
-               END,
-               last_seen_at = EXCLUDED.last_seen_at,
-               last_seen_run_id = EXCLUDED.last_seen_run_id,
-               updated_at = now()
-         WHERE property_source_links.status <> 'rejected'`,
+         ON CONFLICT (source, external_listing_id, deal_type) DO NOTHING`,
         params,
         "save proposed links",
       );
+
+      const selectParams = [];
+      const tuples = batch.map((link, index) => {
+        selectParams.push(link.source, link.externalId, link.dealType);
+        const start = index * 3;
+        return `($${start + 1}, $${start + 2}, $${start + 3}::deal_type)`;
+      });
+      const rows = await query(
+        `SELECT property_id, source, external_listing_id, deal_type, match_key,
+                link_reason, status
+           FROM property_source_links
+          WHERE (source, external_listing_id, deal_type) IN (${tuples.join(", ")})
+          ORDER BY source, external_listing_id, deal_type, property_id`,
+        selectParams,
+        "verify proposed links",
+      );
+      if (rows.length !== batch.length) {
+        throw new Error("persisted proposed links do not match requested identities");
+      }
+      const expectedByIdentity = new Map(
+        batch.map((link) => [`${link.source}\u0000${link.externalId}\u0000${link.dealType}`, link]),
+      );
+      const seen = new Set();
+      for (const row of rows) {
+        const identity = `${row?.source}\u0000${row?.external_listing_id}\u0000${row?.deal_type}`;
+        const expected = expectedByIdentity.get(identity);
+        if (
+          !isPlainRecord(row) ||
+          !expected ||
+          seen.has(identity) ||
+          !isUuid(row.property_id) ||
+          !LINK_STATUSES.has(row.status) ||
+          row.property_id !== expected.propertyId ||
+          row.match_key !== expected.matchKey ||
+          row.link_reason !== "exact_property_no_and_deal_type"
+        ) {
+          throw new Error("existing source-link conflict does not match the exact proposal");
+        }
+        seen.add(identity);
+      }
     }
   }
 
@@ -1413,11 +1584,12 @@ export function createSyncRepository(options = {}) {
     const signal = operationSignal(operation);
     throwIfAborted(signal);
     const input = validateOwnedMediaInput(suppliedInput);
-    await query(
+    const insertedRows = await query(
       `INSERT INTO media_assets
         (url, pathname, content_type, size_bytes, content_hash, owner_type, owner_id, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7::uuid, $8::uuid)
-       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING`,
+       ON CONFLICT (content_hash) WHERE content_hash IS NOT NULL DO NOTHING
+       RETURNING id`,
       [
         input.url,
         input.pathname,
@@ -1431,6 +1603,9 @@ export function createSyncRepository(options = {}) {
       "register owned media",
       operation,
     );
+    if (insertedRows.length > 1 || (insertedRows.length === 1 && !isUuid(insertedRows[0]?.id))) {
+      throw new TypeError("registered media insert returned invalid evidence");
+    }
     const rows = await query(
       `SELECT ${MEDIA_PROJECTION}
          FROM media_assets
@@ -1444,7 +1619,29 @@ export function createSyncRepository(options = {}) {
     if (rows.length !== 1) {
       throw new TypeError("registered media winner was missing or duplicated");
     }
-    return validateMediaRow(rows[0], { expectedHash: input.contentHash });
+    const asset = validateMediaRow(rows[0], { expectedHash: input.contentHash });
+    if (
+      asset.contentType !== (input.contentType ?? null) ||
+      asset.sizeBytes !== (input.sizeBytes ?? null)
+    ) {
+      throw new TypeError("registered media winner metadata does not match the requested content");
+    }
+    const insertedId = insertedRows[0]?.id ?? null;
+    if (
+      insertedId != null &&
+      (asset.id !== insertedId ||
+        asset.url !== input.url ||
+        asset.pathname !== input.pathname ||
+        asset.ownerType !== input.ownerType ||
+        asset.ownerId !== (input.ownerId ?? null) ||
+        asset.createdBy !== (input.createdBy ?? null))
+    ) {
+      throw new TypeError("inserted media ownership binding does not match the request");
+    }
+    return Object.freeze({
+      outcome: insertedId == null ? "existing" : "inserted",
+      asset,
+    });
   }
 
   function optionalPositiveInteger(value, label) {
@@ -1499,16 +1696,89 @@ export function createSyncRepository(options = {}) {
     return input;
   }
 
+  function validatePersistedMediaRecord(row, expected) {
+    let sizeBytes;
+    try {
+      sizeBytes = normalizeDatabaseInteger(row?.size_bytes, "media record size_bytes");
+    } catch (error) {
+      throw new TypeError("persisted media record is invalid", { cause: error });
+    }
+    const valid =
+      isPlainRecord(row) &&
+      isUuid(row.id) &&
+      isUuid(row.observation_id) &&
+      (row.property_id == null || isUuid(row.property_id)) &&
+      typeof row.source_url === "string" &&
+      (row.content_hash == null || HASH_PATTERN.test(row.content_hash)) &&
+      (row.owned_media_asset_id == null || isUuid(row.owned_media_asset_id)) &&
+      (row.detected_mime == null ||
+        (typeof row.detected_mime === "string" &&
+          /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(row.detected_mime))) &&
+      (row.width == null ||
+        (Number.isInteger(row.width) && row.width > 0 && row.width <= MAX_INT)) &&
+      (row.height == null ||
+        (Number.isInteger(row.height) && row.height > 0 && row.height <= MAX_INT)) &&
+      MEDIA_ELIGIBILITIES.has(row.eligibility) &&
+      (row.rejection_reason == null ||
+        (typeof row.rejection_reason === "string" && row.rejection_reason.length <= 500));
+    if (!valid) throw new TypeError("persisted media record is invalid");
+    try {
+      requireUrl(row.source_url, "persisted media source URL");
+    } catch (error) {
+      throw new TypeError("persisted media record is invalid", { cause: error });
+    }
+    const matches =
+      row.observation_id === expected.observationId &&
+      row.property_id === (expected.propertyId ?? null) &&
+      row.source_url === expected.sourceUrl &&
+      row.content_hash === (expected.contentHash ?? null) &&
+      row.owned_media_asset_id === (expected.ownedMediaAssetId ?? null) &&
+      row.detected_mime === (expected.detectedMime ?? null) &&
+      sizeBytes === (expected.sizeBytes ?? null) &&
+      row.width === (expected.width ?? null) &&
+      row.height === (expected.height ?? null) &&
+      row.eligibility === expected.eligibility &&
+      row.rejection_reason === (expected.rejectionReason ?? null);
+    if (!matches) {
+      throw new TypeError("persisted media record provenance does not match the request");
+    }
+  }
+
   async function saveMediaRecord(suppliedInput, operation) {
     const signal = operationSignal(operation);
     throwIfAborted(signal);
     const input = validateMediaRecordInput(suppliedInput);
-    await query(
+    if (input.ownedMediaAssetId != null) {
+      const assetRows = await query(
+        `SELECT ${MEDIA_PROJECTION}
+           FROM media_assets
+          WHERE id = $1::uuid
+          ORDER BY id
+          LIMIT 2`,
+        [input.ownedMediaAssetId],
+        "media record asset lookup",
+        operation,
+      );
+      if (assetRows.length !== 1) {
+        throw new TypeError("media record owned asset was missing or duplicated");
+      }
+      const asset = validateMediaRow(assetRows[0]);
+      if (
+        asset.id !== input.ownedMediaAssetId ||
+        asset.contentHash !== input.contentHash ||
+        asset.contentType !== input.detectedMime ||
+        asset.sizeBytes !== input.sizeBytes
+      ) {
+        throw new TypeError("media record owned asset binding does not match its provenance");
+      }
+    }
+    const insertedRows = await query(
       `INSERT INTO listing_media_records
         (observation_id, property_id, source_url, content_hash, owned_media_asset_id,
          detected_mime, size_bytes, width, height, eligibility, rejection_reason)
        VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid, $6, $7, $8, $9, $10, $11)
-       ON CONFLICT (observation_id, source_url) DO NOTHING`,
+       ON CONFLICT (observation_id, source_url) DO NOTHING
+       RETURNING id`,
       [
         input.observationId,
         input.propertyId ?? null,
@@ -1525,6 +1795,28 @@ export function createSyncRepository(options = {}) {
       "save media record",
       operation,
     );
+    if (insertedRows.length > 1 || (insertedRows.length === 1 && !isUuid(insertedRows[0]?.id))) {
+      throw new TypeError("media record insert returned invalid evidence");
+    }
+    const rows = await query(
+      `SELECT id, observation_id, property_id, source_url, content_hash,
+              owned_media_asset_id, detected_mime, size_bytes, width, height,
+              eligibility, rejection_reason
+         FROM listing_media_records
+        WHERE observation_id = $1::uuid AND source_url = $2
+        ORDER BY id
+        LIMIT 2`,
+      [input.observationId, input.sourceUrl],
+      "load persisted media record",
+      operation,
+    );
+    if (rows.length !== 1) {
+      throw new TypeError("persisted media record was missing or duplicated");
+    }
+    if (insertedRows.length === 1 && rows[0]?.id !== insertedRows[0].id) {
+      throw new TypeError("media record insert did not match the authoritative persisted row");
+    }
+    validatePersistedMediaRecord(rows[0], input);
   }
 
   async function assertLockSession() {

@@ -127,6 +127,11 @@ export interface OwnedMediaInput {
   createdBy: string | null;
 }
 
+export interface OwnedMediaRegistration {
+  outcome: "inserted" | "existing";
+  asset: MediaAsset;
+}
+
 export interface ListingMediaRecordInput {
   observationId: string;
   propertyId: string | null;
@@ -196,7 +201,10 @@ export interface SyncRepository {
   loadLifecycleStates(propertyIds: string[]): Promise<PropertySyncState[]>;
   findMediaByHash(hash: string, operation?: RepositoryOperation): Promise<MediaAsset | null>;
   findMediaByUrls(urls: string[], operation?: RepositoryOperation): Promise<MediaAsset[]>;
-  registerOwnedMedia(input: OwnedMediaInput, operation?: RepositoryOperation): Promise<MediaAsset>;
+  registerOwnedMedia(
+    input: OwnedMediaInput,
+    operation?: RepositoryOperation,
+  ): Promise<OwnedMediaRegistration>;
   saveMediaRecord(input: ListingMediaRecordInput, operation?: RepositoryOperation): Promise<void>;
   getLatestRun(): Promise<ListingSyncRun | null>;
 }

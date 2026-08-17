@@ -299,15 +299,18 @@ function fakeRepository(options = {}) {
       if (typeof options.registerOwnedMedia === "function")
         return options.registerOwnedMedia(input, operation);
       return {
-        id: `asset-${state.registered.length}`,
-        url: input.url,
-        pathname: input.pathname,
-        contentType: input.contentType,
-        sizeBytes: input.sizeBytes,
-        contentHash: input.contentHash,
-        ownerType: input.ownerType,
-        ownerId: input.ownerId,
-        createdBy: input.createdBy,
+        outcome: "inserted",
+        asset: {
+          id: `asset-${state.registered.length}`,
+          url: input.url,
+          pathname: input.pathname,
+          contentType: input.contentType,
+          sizeBytes: input.sizeBytes,
+          contentHash: input.contentHash,
+          ownerType: input.ownerType,
+          ownerId: input.ownerId,
+          createdBy: input.createdBy,
+        },
       };
     },
     async saveMediaRecord(input, operation) {
@@ -1750,6 +1753,96 @@ test("reused and newly registered assets must be exactly bound to the requested 
   assert.deepEqual(registrationResult.images, []);
   assert.ok(registrationResult.reasons.includes("owned_media_binding_invalid"));
   assert.doesNotMatch(JSON.stringify(registrationResult), /unowned\.webp/);
+});
+
+test("a content-hash registration race accepts only the same-origin owned winner", async () => {
+  const bytes = webpBytes();
+  const hash = sha256(bytes);
+  const winner = {
+    id: "asset-race-winner",
+    url: "https://owned.example/cms/race-winner.webp",
+    pathname: "cms/race-winner.webp",
+    contentType: "image/webp",
+    sizeBytes: bytes.byteLength,
+    contentHash: hash,
+    ownerType: "cms",
+    ownerId: "33333333-3333-4333-8333-333333333333",
+    createdBy: "44444444-4444-4444-8444-444444444444",
+  };
+  const repository = fakeRepository({
+    registerOwnedMedia: () => ({ outcome: "existing", asset: winner }),
+  });
+  const blobStore = fakeBlobStore();
+
+  const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+
+  assert.equal(result.publishable, true);
+  assert.deepEqual(result.images, [winner.url]);
+  assert.equal(result.candidateResults[0].ownedMediaAssetId, winner.id);
+  assert.equal(
+    result.candidateResults[0].orphanedUploadUrl,
+    blobStore.puts.length === 1 ? `https://owned.example/${blobStore.puts[0].pathname}` : null,
+  );
+  assert.equal(result.uploadCount, 1);
+  assert.equal(repository.state.records[0].ownedMediaAssetId, winner.id);
+});
+
+test("registration outcomes reject bare, extra, unknown, cross-origin, and drifted winners", async () => {
+  const bytes = webpBytes();
+  const hash = sha256(bytes);
+  const exactAsset = (input) => ({
+    id: "asset-registration",
+    url: input.url,
+    pathname: input.pathname,
+    contentType: input.contentType,
+    sizeBytes: input.sizeBytes,
+    contentHash: input.contentHash,
+    ownerType: input.ownerType,
+    ownerId: input.ownerId,
+    createdBy: input.createdBy,
+  });
+  const cases = [
+    (input) => exactAsset(input),
+    (input) => ({ outcome: "inserted", asset: exactAsset(input), extra: true }),
+    (input) => ({ outcome: "won", asset: exactAsset(input) }),
+    (input) => ({
+      outcome: "existing",
+      asset: {
+        ...exactAsset(input),
+        url: "https://images.28hse.com/race-winner.webp",
+        pathname: "source/race-winner.webp",
+        ownerType: "cms",
+      },
+    }),
+    (input) => ({
+      outcome: "existing",
+      asset: { ...exactAsset(input), contentHash: "0".repeat(64) },
+    }),
+    (input) => {
+      const asset = exactAsset(input);
+      delete asset.ownerId;
+      delete asset.createdBy;
+      return { outcome: "existing", asset };
+    },
+    (input) => ({
+      outcome: "inserted",
+      asset: { ...exactAsset(input), ownerType: "cms" },
+    }),
+  ];
+
+  for (const registerOwnedMedia of cases) {
+    const result = await prepareListingMedia(
+      mediaFixture({
+        bytes,
+        repository: fakeRepository({ registerOwnedMedia }),
+        blobStore: fakeBlobStore(),
+      }),
+    );
+    assert.equal(result.publishable, false);
+    assert.deepEqual(result.images, []);
+    assert.ok(result.reasons.includes("owned_media_binding_invalid"));
+  }
+  assert.equal(hash.length, 64);
 });
 
 test("forged or quarantined observations are blocked before any media side effect", async () => {

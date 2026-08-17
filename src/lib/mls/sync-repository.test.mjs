@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { createSyncRepository } from "./sync-repository.mjs";
-import { SOURCE_28HSE, SOURCE_OLD_SITE, createObservation } from "./source-contract.mjs";
+import {
+  SOURCE_28HSE,
+  SOURCE_OLD_SITE,
+  createObservation,
+  stableObservationHash,
+} from "./source-contract.mjs";
 
 const RUN_ID = "11111111-1111-4111-8111-111111111111";
 const RUN_ID_2 = "12121212-1212-4121-8121-121212121212";
@@ -11,6 +16,7 @@ const PROPERTY_ID = "22222222-2222-4222-8222-222222222222";
 const PROPERTY_ID_2 = "23232323-2323-4232-8232-232323232323";
 const OBSERVATION_ID = "33333333-3333-4333-8333-333333333333";
 const ASSET_ID = "44444444-4444-4444-8444-444444444444";
+const MEDIA_RECORD_ID = "45454545-4545-4454-8454-454545454545";
 
 function result(rows = [], rowCount = rows.length) {
   return { rows, rowCount, command: "SELECT", fields: [], oid: 0 };
@@ -59,15 +65,55 @@ function validObservation(index = 1, overrides = {}) {
   });
 }
 
-function persistedRow(observation, id = OBSERVATION_ID) {
+function persistedRow(observation, id = OBSERVATION_ID, overrides = {}) {
   return {
     id,
     source: observation.source,
     external_listing_id: observation.externalId,
     deal_type: observation.dealType,
+    source_url: observation.sourceUrl,
+    property_no_raw: observation.propertyNoRaw,
     property_no_normalized: observation.propertyNoNormalized,
+    payload: {
+      schemaVersion: observation.schemaVersion,
+      fields: structuredClone(observation.fields),
+      rawFields: structuredClone(observation.rawFields),
+      sourceUpdatedAt: observation.sourceUpdatedAt,
+      parseWarnings: [...observation.parseWarnings],
+    },
+    media_candidates: structuredClone(observation.mediaCandidates),
     content_hash: observation.contentHash,
+    validation_state: observation.validationState,
+    quarantine_reasons: [...observation.quarantineReasons],
+    parse_warnings: [...observation.parseWarnings],
+    discovered_at: observation.discoveredAt,
+    fetched_at: observation.fetchedAt,
+    ...overrides,
   };
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function forgedObservation(observation, overrides) {
+  const forged = structuredClone({ ...observation, ...overrides });
+  forged.contentHash = stableObservationHash({
+    schemaVersion: forged.schemaVersion,
+    source: forged.source,
+    externalId: forged.externalId,
+    dealType: forged.dealType,
+    propertyNoNormalized: forged.propertyNoNormalized,
+    fields: forged.fields,
+    rawFields: forged.rawFields,
+    mediaCandidates: forged.mediaCandidates,
+    sourceUpdatedAt: forged.sourceUpdatedAt,
+  });
+  return deepFreeze(forged);
 }
 
 function mediaRow(overrides = {}) {
@@ -82,6 +128,41 @@ function mediaRow(overrides = {}) {
     owner_id: null,
     created_by: null,
     created_at: "2026-08-17T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function mediaRecordInput(overrides = {}) {
+  return {
+    observationId: OBSERVATION_ID,
+    propertyId: PROPERTY_ID,
+    sourceUrl: "https://images.28hse.test/photo.png",
+    contentHash: "a".repeat(64),
+    ownedMediaAssetId: ASSET_ID,
+    detectedMime: "image/png",
+    sizeBytes: 123,
+    width: 10,
+    height: 8,
+    eligibility: "eligible",
+    rejectionReason: null,
+    ...overrides,
+  };
+}
+
+function mediaRecordRow(input = mediaRecordInput(), overrides = {}) {
+  return {
+    id: MEDIA_RECORD_ID,
+    observation_id: input.observationId,
+    property_id: input.propertyId,
+    source_url: input.sourceUrl,
+    content_hash: input.contentHash,
+    owned_media_asset_id: input.ownedMediaAssetId,
+    detected_mime: input.detectedMime,
+    size_bytes: input.sizeBytes,
+    width: input.width,
+    height: input.height,
+    eligibility: input.eligibility,
+    rejection_reason: input.rejectionReason,
     ...overrides,
   };
 }
@@ -317,6 +398,34 @@ test("saveObservations rejects mutable, forged, duplicate, or oversized evidence
   assert.equal(client.calls.length, 0);
 });
 
+test("saveObservations binds validation state to raw, normalized, and match-key identity", async () => {
+  const client = fakeClient();
+  const repository = createSyncRepository({ client });
+  const valid = validObservation(1);
+  const cases = [
+    forgedObservation(valid, {
+      propertyNoNormalized: null,
+      matchKey: null,
+      validationState: "valid",
+      quarantineReasons: [],
+    }),
+    forgedObservation(valid, {
+      propertyNoRaw: "EP-DIFFERENT",
+    }),
+    forgedObservation(valid, {
+      propertyNoNormalized: null,
+      matchKey: null,
+      validationState: "quarantined",
+      quarantineReasons: ["fixture_quarantine"],
+    }),
+  ];
+
+  for (const observation of cases) {
+    await assert.rejects(repository.saveObservations(RUN_ID, [observation]), /identity|property/i);
+  }
+  assert.equal(client.calls.length, 0);
+});
+
 test("saveObservations fails closed on missing, duplicate, or mismatched persisted rows", async () => {
   const observation = validObservation(1);
   for (const returnedRows of [
@@ -337,6 +446,56 @@ test("saveObservations fails closed on missing, duplicate, or mismatched persist
       /persisted observation/i,
     );
   }
+});
+
+test("saveObservations conflict recovery compares every immutable evidence column", async () => {
+  const observation = validObservation(1, {
+    mediaCandidates: [
+      { url: "https://fixtures.invalid/image.png", category: "listing_photo", isPrimary: true },
+    ],
+    parseWarnings: ["fixture_warning"],
+  });
+  const base = persistedRow(observation, OBSERVATION_ID, {
+    discovered_at: new Date(observation.discoveredAt),
+    fetched_at: new Date(observation.fetchedAt),
+  });
+  const mismatches = [
+    { source_url: "https://fixtures.invalid/forged" },
+    { property_no_raw: "EP-FORGED" },
+    { payload: { ...base.payload, fields: { ...base.payload.fields, price: 1 } } },
+    { payload: { ...base.payload, rawFields: { forged: true } } },
+    { payload: { ...base.payload, sourceUpdatedAt: "2026-01-01" } },
+    { payload: { ...base.payload, parseWarnings: [] } },
+    { media_candidates: [] },
+    { validation_state: "quarantined" },
+    { quarantine_reasons: ["forged"] },
+    { parse_warnings: [] },
+    { discovered_at: new Date("2026-08-17T00:00:01.000Z") },
+    { fetched_at: new Date("2026-08-17T00:01:01.000Z") },
+  ];
+
+  for (const mismatch of mismatches) {
+    const client = fakeClient((call) =>
+      call.statement.startsWith("SELECT id, source, external_listing_id")
+        ? result([{ ...base, ...mismatch }])
+        : result(),
+    );
+    await assert.rejects(
+      createSyncRepository({ client }).saveObservations(RUN_ID, [observation]),
+      /persisted observation/i,
+    );
+  }
+
+  const exactClient = fakeClient((call) =>
+    call.statement.startsWith("SELECT id, source, external_listing_id") ? result([base]) : result(),
+  );
+  const [ref] = await createSyncRepository({ client: exactClient }).saveObservations(RUN_ID, [
+    observation,
+  ]);
+  assert.equal(ref.id, OBSERVATION_ID);
+  assert.match(exactClient.calls[1].statement, /source_url/);
+  assert.match(exactClient.calls[1].statement, /media_candidates/);
+  assert.match(exactClient.calls[1].statement, /fetched_at/);
 });
 
 test("recordRunEvaluation stores serialized evidence while the run remains running", async () => {
@@ -370,6 +529,108 @@ test("finishRun records final evidence and stores only redacted bounded diagnost
   assert.equal(call.params[5], "adapter_failed");
   assert.doesNotMatch(call.params[6], /top-secret|private-value/);
   assert.match(call.params[6], /redacted/i);
+});
+
+test("finishRun enforces healthy, degraded, and blocked source-status semantics", async () => {
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const unhealthy28 = {
+    source: SOURCE_28HSE,
+    healthy: false,
+    reasons: ["challenge_detected"],
+  };
+  const unhealthyOld = {
+    source: SOURCE_OLD_SITE,
+    healthy: false,
+    reasons: ["pagination_incomplete"],
+  };
+  const invalidCompletions = [
+    {
+      status: "healthy",
+      ...evaluation({ sourceStatus: healthySourceStatus({ [SOURCE_OLD_SITE]: unhealthyOld }) }),
+    },
+    {
+      status: "shadow_healthy",
+      ...evaluation({
+        sourceStatus: healthySourceStatus({
+          [SOURCE_28HSE]: {
+            source: SOURCE_28HSE,
+            healthy: true,
+            reasons: ["blocking_reason"],
+          },
+        }),
+      }),
+    },
+    { status: "degraded", ...evaluation() },
+    {
+      status: "degraded",
+      ...evaluation({ sourceStatus: healthySourceStatus({ [SOURCE_28HSE]: unhealthy28 }) }),
+    },
+    {
+      status: "blocked",
+      ...evaluation({ sourceStatus: healthySourceStatus({ [SOURCE_OLD_SITE]: unhealthyOld }) }),
+    },
+  ];
+  for (const completion of invalidCompletions) {
+    await assert.rejects(repository.finishRun(RUN_ID, completion), /status|source|health|reason/i);
+  }
+  assert.equal(client.calls.length, 0);
+
+  await repository.finishRun(RUN_ID, {
+    status: "degraded",
+    ...evaluation({ sourceStatus: healthySourceStatus({ [SOURCE_OLD_SITE]: unhealthyOld }) }),
+  });
+  await repository.finishRun(RUN_ID, {
+    status: "blocked",
+    ...evaluation({ sourceStatus: healthySourceStatus({ [SOURCE_28HSE]: unhealthy28 }) }),
+  });
+  assert.equal(client.calls.length, 2);
+});
+
+test("all stored operator diagnostics redact authorization and named credentials", async () => {
+  const client = fakeClient((call) =>
+    call.statement.includes("baseline_approved_at = now()")
+      ? result([{ id: RUN_ID, baseline_approved_at: "2026-08-16T12:00:00.000Z" }])
+      : result([{ id: RUN_ID }]),
+  );
+  const repository = createSyncRepository({ client });
+  await repository.finishRun(RUN_ID, {
+    status: "failed",
+    ...evaluation(),
+    failureCode: "adapter_failed",
+    failureSummary:
+      "Authorization: Bearer failure-bearer Authorization=Basic ZmFpbHVyZTpwYXNz api_key=failure-key password: failure-pass token=failure-token",
+  });
+  await repository.approveShadowRun(RUN_ID, {
+    reviewer: "Authorization: Bearer reviewer-bearer",
+    note: "Authorization=Basic cmV2aWV3ZXI6cGFzcw== x-api-key=note-key password=note-pass token: note-token",
+  });
+
+  const stored = client.calls
+    .flatMap((call) => call.params)
+    .filter((value) => typeof value === "string");
+  for (const secret of [
+    "failure-bearer",
+    "ZmFpbHVyZTpwYXNz",
+    "failure-key",
+    "failure-pass",
+    "failure-token",
+    "reviewer-bearer",
+    "cmV2aWV3ZXI6cGFzcw==",
+    "note-key",
+    "note-pass",
+    "note-token",
+  ]) {
+    assert.equal(
+      stored.some((value) => value.includes(secret)),
+      false,
+      secret,
+    );
+  }
+  assert.ok(stored.some((value) => /redacted/i.test(value)));
+  assert.ok(client.calls[0].params[6].length <= 1_000);
+  assert.ok(client.calls[1].params[1].length <= 200);
+  assert.ok(client.calls[1].params[2].length <= 1_000);
 });
 
 test("run evidence rejects malformed JSON, statuses, UUIDs, and database misses", async () => {
@@ -426,7 +687,9 @@ test("healthy count history validates source, limits, dates, and count rows", as
 });
 
 test("approveShadowRun only approves a healthy shadow and redacts its note", async () => {
-  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const client = fakeClient(() =>
+    result([{ id: RUN_ID, baseline_approved_at: "2026-08-16T12:00:00.000Z" }]),
+  );
   await createSyncRepository({ client }).approveShadowRun(RUN_ID, {
     reviewer: "  operator@example.com  ",
     note: " token=approval-secret reviewed ",
@@ -437,8 +700,59 @@ test("approveShadowRun only approves a healthy shadow and redacts its note", asy
   assert.match(call.statement, /status = 'shadow_healthy'/);
   assert.match(call.statement, /28hse_agent_540/);
   assert.match(call.statement, /old_site/);
+  assert.match(call.statement, /baseline_approved_at IS NULL/i);
+  assert.match(call.statement, /reasons/i);
   assert.equal(call.params[1], "operator@example.com");
   assert.doesNotMatch(call.params[2], /approval-secret/);
+});
+
+test("shadow approval and streak evidence reject future timestamps", async () => {
+  const futureApproval = new Date(Date.now() + 86_400_000).toISOString();
+  const approvalClient = fakeClient(() =>
+    result([{ id: RUN_ID, baseline_approved_at: futureApproval }]),
+  );
+  await assert.rejects(
+    createSyncRepository({ client: approvalClient }).approveShadowRun(RUN_ID, {
+      reviewer: "operator",
+    }),
+    /approval.*future|future.*approval/i,
+  );
+
+  const streakClient = fakeClient(() =>
+    result([
+      {
+        id: RUN_ID,
+        scheduled_for: "2026-08-16",
+        finished_at: "2026-08-16T02:00:00.000Z",
+        status: "shadow_healthy",
+        baseline_approved_at: "2026-08-17T00:00:00.000Z",
+        source_status: healthySourceStatus(),
+      },
+    ]),
+  );
+  await assert.rejects(
+    createSyncRepository({ client: streakClient }).getApprovedHealthyShadowStreak("2026-08-17"),
+    /approval.*date|date.*approval|future/i,
+  );
+
+  const farFutureDate = "2099-01-02";
+  const wallClockFuture = new Date(Date.now() + 86_400_000).toISOString();
+  const wallClockClient = fakeClient(() =>
+    result([
+      {
+        id: RUN_ID,
+        scheduled_for: "2099-01-01",
+        finished_at: "2099-01-01T01:00:00.000Z",
+        status: "shadow_healthy",
+        baseline_approved_at: wallClockFuture,
+        source_status: healthySourceStatus(),
+      },
+    ]),
+  );
+  await assert.rejects(
+    createSyncRepository({ client: wallClockClient }).getApprovedHealthyShadowStreak(farFutureDate),
+    /future/i,
+  );
 });
 
 test("approveShadowRun rejects invalid approvals and nonqualifying rows", async () => {
@@ -520,6 +834,32 @@ test("unhealthy, unapproved, or later reruns stop the shadow streak", async () =
     },
   ];
   const client = fakeClient(() => result(rows));
+  assert.deepEqual(
+    await createSyncRepository({ client }).getApprovedHealthyShadowStreak("2026-08-17"),
+    { length: 0, lastDate: null },
+  );
+});
+
+test("healthy flags carrying blocking reasons do not count toward the shadow streak", async () => {
+  const sourceStatus = healthySourceStatus({
+    [SOURCE_28HSE]: {
+      source: SOURCE_28HSE,
+      healthy: true,
+      reasons: ["blocking_reason"],
+    },
+  });
+  const client = fakeClient(() =>
+    result([
+      {
+        id: RUN_ID,
+        scheduled_for: "2026-08-16",
+        finished_at: "2026-08-16T02:00:00.000Z",
+        status: "shadow_healthy",
+        baseline_approved_at: "2026-08-16T03:00:00.000Z",
+        source_status: sourceStatus,
+      },
+    ]),
+  );
   assert.deepEqual(
     await createSyncRepository({ client }).getApprovedHealthyShadowStreak("2026-08-17"),
     { length: 0, lastDate: null },
@@ -730,6 +1070,19 @@ test("saveProposedLinks verifies exact existing properties and never revives rej
         },
       ]);
     }
+    if (call.statement.startsWith("SELECT property_id, source, external_listing_id")) {
+      return result([
+        {
+          property_id: PROPERTY_ID,
+          source: SOURCE_28HSE,
+          external_listing_id: "3972991",
+          deal_type: "sale",
+          match_key: "sale:EP-0001",
+          link_reason: "exact_property_no_and_deal_type",
+          status: "rejected",
+        },
+      ]);
+    }
     return result();
   });
   await createSyncRepository({ client }).saveProposedLinks(RUN_ID, [
@@ -749,8 +1102,100 @@ test("saveProposedLinks verifies exact existing properties and never revives rej
   assert.ok(insert);
   assert.match(insert.statement, /'exact_property_no_and_deal_type'/);
   assert.match(insert.statement, /'proposed'/);
-  assert.match(insert.statement, /WHERE property_source_links\.status <> 'rejected'/);
+  assert.match(insert.statement, /ON CONFLICT[^]*DO NOTHING/i);
+  assert.doesNotMatch(insert.statement, /DO UPDATE/i);
   assert.doesNotMatch(insert.statement, /UPDATE properties|DELETE FROM properties/i);
+  assert.ok(
+    client.calls.some((call) =>
+      call.statement.startsWith("SELECT property_id, source, external_listing_id"),
+    ),
+  );
+});
+
+test("saveProposedLinks accepts the exact normalized legacy fallback candidate", async () => {
+  const client = fakeClient((call) => {
+    if (call.statement.startsWith("SELECT id, canonical_property_no")) {
+      return result([
+        {
+          id: PROPERTY_ID,
+          canonical_property_no: null,
+          legacy_property_no: " ｅｐ- ０００１ ",
+          deal_type: "sale",
+        },
+      ]);
+    }
+    if (call.statement.startsWith("SELECT property_id, source, external_listing_id")) {
+      return result([
+        {
+          property_id: PROPERTY_ID,
+          source: SOURCE_28HSE,
+          external_listing_id: "3972991",
+          deal_type: "sale",
+          match_key: "sale:EP-0001",
+          link_reason: "exact_property_no_and_deal_type",
+          status: "proposed",
+        },
+      ]);
+    }
+    return result();
+  });
+
+  await createSyncRepository({ client }).saveProposedLinks(RUN_ID, [
+    {
+      propertyId: PROPERTY_ID,
+      source: SOURCE_28HSE,
+      externalId: "3972991",
+      dealType: "sale",
+      matchKey: "sale:EP-0001",
+      observedAt: "2026-08-17T00:00:00.000Z",
+    },
+  ]);
+  assert.ok(
+    client.calls.some((call) => call.statement.startsWith("INSERT INTO property_source_links")),
+  );
+});
+
+test("saveProposedLinks fails closed instead of relinking a conflicting active identity", async () => {
+  const client = fakeClient((call) => {
+    if (call.statement.startsWith("SELECT id, canonical_property_no")) {
+      return result([
+        {
+          id: PROPERTY_ID,
+          canonical_property_no: "EP-0001",
+          legacy_property_no: null,
+          deal_type: "sale",
+        },
+      ]);
+    }
+    if (call.statement.startsWith("SELECT property_id, source, external_listing_id")) {
+      return result([
+        {
+          property_id: PROPERTY_ID_2,
+          source: SOURCE_28HSE,
+          external_listing_id: "3972991",
+          deal_type: "sale",
+          match_key: "sale:EP-9999",
+          link_reason: "exact_property_no_and_deal_type",
+          status: "active",
+        },
+      ]);
+    }
+    return result();
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).saveProposedLinks(RUN_ID, [
+      {
+        propertyId: PROPERTY_ID,
+        source: SOURCE_28HSE,
+        externalId: "3972991",
+        dealType: "sale",
+        matchKey: "sale:EP-0001",
+        observedAt: "2026-08-17T00:00:00.000Z",
+      },
+    ]),
+    /conflict|existing.*link|link.*mismatch/i,
+  );
 });
 
 test("saveProposedLinks rejects missing, mismatched, duplicate, and nonexisting targets", async () => {
@@ -912,28 +1357,137 @@ test("registerOwnedMedia inserts conflict-safely then returns the existing race 
     /ON CONFLICT \(content_hash\) WHERE content_hash IS NOT NULL DO NOTHING/,
   );
   assert.doesNotMatch(client.calls[0].statement, /DO UPDATE/i);
-  assert.equal(returned.url, winner.url);
-  assert.equal(returned.ownerType, "cms");
+  assert.deepEqual(Object.keys(returned), ["outcome", "asset"]);
+  assert.equal(returned.outcome, "existing");
+  assert.equal(returned.asset.url, winner.url);
+  assert.equal(returned.asset.ownerType, "cms");
+});
+
+test("registerOwnedMedia proves inserted ownership and rejects winner metadata drift", async () => {
+  const input = {
+    url: "https://owned.example/mls/new.png",
+    pathname: "mls/aa/new.png",
+    contentType: "image/png",
+    sizeBytes: 123,
+    contentHash: "a".repeat(64),
+    ownerType: "mls-shared",
+    ownerId: null,
+    createdBy: null,
+  };
+  const insertedWinner = mediaRow({ url: input.url, pathname: input.pathname });
+  const insertedClient = fakeClient((call) => {
+    if (call.statement.startsWith("INSERT INTO media_assets")) return result([{ id: ASSET_ID }]);
+    return result([insertedWinner]);
+  });
+  const inserted = await createSyncRepository({ client: insertedClient }).registerOwnedMedia(input);
+  assert.equal(inserted.outcome, "inserted");
+  assert.equal(inserted.asset.id, ASSET_ID);
+  assert.match(insertedClient.calls[0].statement, /RETURNING id/i);
+
+  for (const winner of [
+    mediaRow({ content_type: "image/jpeg" }),
+    mediaRow({ size_bytes: 124 }),
+    mediaRow({ owner_type: "cms" }),
+  ]) {
+    const client = fakeClient((call) =>
+      call.statement.startsWith("INSERT INTO media_assets")
+        ? result([{ id: ASSET_ID }])
+        : result([winner]),
+    );
+    await assert.rejects(
+      createSyncRepository({ client }).registerOwnedMedia(input),
+      /registered media|winner|ownership|match/i,
+    );
+  }
 });
 
 test("saveMediaRecord is conflict-safe on the observation and source URL identity", async () => {
-  const client = fakeClient();
-  await createSyncRepository({ client }).saveMediaRecord({
-    observationId: OBSERVATION_ID,
-    propertyId: PROPERTY_ID,
-    sourceUrl: "https://images.28hse.test/photo.png",
-    contentHash: "a".repeat(64),
-    ownedMediaAssetId: ASSET_ID,
-    detectedMime: "image/png",
-    sizeBytes: 123,
-    width: 10,
-    height: 8,
-    eligibility: "eligible",
-    rejectionReason: null,
+  const input = mediaRecordInput();
+  const client = fakeClient((call) => {
+    if (call.statement.includes("FROM media_assets")) return result([mediaRow()]);
+    if (call.statement.startsWith("INSERT INTO listing_media_records")) {
+      return result([{ id: MEDIA_RECORD_ID }]);
+    }
+    if (call.statement.includes("FROM listing_media_records")) {
+      return result([mediaRecordRow(input)]);
+    }
+    throw new Error(`unexpected query: ${call.statement}`);
+  });
+  await createSyncRepository({ client }).saveMediaRecord(input);
+
+  assert.match(client.calls[0].statement, /FROM media_assets/);
+  assert.match(client.calls[1].statement, /^INSERT INTO listing_media_records/);
+  assert.match(client.calls[1].statement, /ON CONFLICT \(observation_id, source_url\) DO NOTHING/);
+  assert.match(client.calls[2].statement, /FROM listing_media_records/);
+});
+
+test("saveMediaRecord verifies owned assets and exact existing provenance", async () => {
+  const input = mediaRecordInput();
+  for (const scenario of [
+    { asset: mediaRow({ content_hash: "b".repeat(64) }), existing: null },
+    {
+      asset: mediaRow(),
+      existing: mediaRecordRow(input, {
+        eligibility: "upload_failed",
+        rejection_reason: "prior_failure",
+      }),
+    },
+    {
+      asset: mediaRow(),
+      existing: mediaRecordRow(input, { owned_media_asset_id: RUN_ID_2 }),
+    },
+  ]) {
+    const client = fakeClient((call) => {
+      if (call.statement.includes("FROM media_assets")) return result([scenario.asset]);
+      if (call.statement.startsWith("INSERT INTO listing_media_records")) return result();
+      if (call.statement.includes("FROM listing_media_records")) {
+        return result(scenario.existing ? [scenario.existing] : []);
+      }
+      throw new Error(`unexpected query: ${call.statement}`);
+    });
+    await assert.rejects(
+      createSyncRepository({ client }).saveMediaRecord(input),
+      /media asset|media record|provenance|persisted/i,
+    );
+  }
+});
+
+test("saveMediaRecord binds a successful insert to the selected authoritative row", async () => {
+  const input = mediaRecordInput();
+  const client = fakeClient((call) => {
+    if (call.statement.includes("FROM media_assets")) return result([mediaRow()]);
+    if (call.statement.startsWith("INSERT INTO listing_media_records")) {
+      return result([{ id: MEDIA_RECORD_ID }]);
+    }
+    if (call.statement.includes("FROM listing_media_records")) {
+      return result([mediaRecordRow(input, { id: RUN_ID_2 })]);
+    }
+    throw new Error(`unexpected query: ${call.statement}`);
   });
 
-  assert.match(client.calls[0].statement, /^INSERT INTO listing_media_records/);
-  assert.match(client.calls[0].statement, /ON CONFLICT \(observation_id, source_url\) DO NOTHING/);
+  await assert.rejects(
+    createSyncRepository({ client }).saveMediaRecord(input),
+    /insert|authoritative|media record/i,
+  );
+});
+
+test("saveMediaRecord observes cancellation after asset lookup before any record write", async () => {
+  const controller = new AbortController();
+  const reason = new Error("cancel media record after lookup exactly");
+  const client = fakeClient((call) => {
+    controller.abort(reason);
+    return result([mediaRow()]);
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).saveMediaRecord(mediaRecordInput(), {
+      signal: controller.signal,
+    }),
+    (error) => error === reason,
+  );
+  assert.equal(client.calls.length, 1);
+  assert.match(client.calls[0].statement, /FROM media_assets/);
+  assert.doesNotMatch(client.calls[0].statement, /^INSERT/i);
 });
 
 test("media methods reject malformed inputs and mismatched database rows", async () => {
@@ -1032,7 +1586,9 @@ test("count history ranks the latest rerun before filtering its health", async (
 });
 
 test("shadow reviewer identity is bounded and secret-redacted like its note", async () => {
-  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const client = fakeClient(() =>
+    result([{ id: RUN_ID, baseline_approved_at: "2026-08-16T12:00:00.000Z" }]),
+  );
   await createSyncRepository({ client }).approveShadowRun(RUN_ID, {
     reviewer: "postgres://operator:review-secret@db.example/app token=review-token",
     note: "approved",
@@ -1108,7 +1664,11 @@ test("declarations preserve strict Task 6, 7, 9, and 10 handoffs", () => {
     /loadFieldStates\([^)]*\):\s*Promise<PropertySyncField\[\]>/s,
     /loadLifecycleStates\([^)]*\):\s*Promise<PropertySyncState\[\]>/s,
     /findMediaByHash/,
+    /interface OwnedMediaRegistration/,
+    /outcome:\s*"inserted"\s*\|\s*"existing"/,
+    /asset:\s*MediaAsset/,
     /registerOwnedMedia/,
+    /registerOwnedMedia\([^)]*\):\s*Promise<OwnedMediaRegistration>/s,
     /saveMediaRecord/,
     /interface RepositoryOperation/,
     /signal\?:\s*AbortSignal/,
