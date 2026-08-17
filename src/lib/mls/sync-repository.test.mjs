@@ -426,6 +426,61 @@ test("saveObservations binds validation state to raw, normalized, and match-key 
   assert.equal(client.calls.length, 0);
 });
 
+test("saveObservations rejects non-contract scalar representations before any SQL", async () => {
+  const valid = validObservation(1);
+  const quarantinedNullIdentity = forgedObservation(valid, {
+    propertyNoRaw: null,
+    propertyNoNormalized: null,
+    matchKey: null,
+    validationState: "quarantined",
+    quarantineReasons: ["missing_or_invalid_property_number"],
+  });
+  const cases = [
+    forgedObservation(valid, { discoveredAt: new Date(valid.discoveredAt) }),
+    forgedObservation(valid, { fetchedAt: new Date(valid.fetchedAt) }),
+    forgedObservation(valid, { discoveredAt: "2026-02-30T00:00:00Z" }),
+    forgedObservation(valid, { fetchedAt: "not-an-iso-timestamp" }),
+    forgedObservation(valid, { sourceUpdatedAt: undefined }),
+    forgedObservation(valid, { sourceUpdatedAt: "" }),
+    forgedObservation(valid, { sourceUpdatedAt: "not-an-iso-date" }),
+    forgedObservation(quarantinedNullIdentity, { propertyNoRaw: undefined }),
+    forgedObservation(valid, { fields: { ...valid.fields, title_en: undefined } }),
+  ];
+
+  for (const observation of cases) {
+    const client = fakeClient();
+    await assert.rejects(
+      createSyncRepository({ client }).saveObservations(RUN_ID, [observation]),
+      /property number|sourceUpdatedAt|discoveredAt|fetchedAt|field/i,
+    );
+    assert.equal(client.calls.length, 0);
+  }
+});
+
+test("saveObservations preserves supported ISO strings while normalizing only database timestamps", async () => {
+  const observation = forgedObservation(validObservation(1), {
+    sourceUpdatedAt: "2026-08-16T23:59:59Z",
+    discoveredAt: "2026-08-17T08:00:00+08:00",
+    fetchedAt: "2026-08-17T00:01:00Z",
+  });
+  const client = fakeClient((call) =>
+    call.statement.startsWith("SELECT id, source, external_listing_id")
+      ? result([
+          persistedRow(observation, OBSERVATION_ID, {
+            discovered_at: new Date(observation.discoveredAt),
+            fetched_at: new Date(observation.fetchedAt),
+          }),
+        ])
+      : result(),
+  );
+
+  const [ref] = await createSyncRepository({ client }).saveObservations(RUN_ID, [observation]);
+
+  assert.equal(ref.id, OBSERVATION_ID);
+  assert.equal(client.calls[0].params[13], observation.discoveredAt);
+  assert.equal(client.calls[0].params[14], observation.fetchedAt);
+});
+
 test("saveObservations fails closed on missing, duplicate, or mismatched persisted rows", async () => {
   const observation = validObservation(1);
   for (const returnedRows of [
@@ -631,6 +686,54 @@ test("all stored operator diagnostics redact authorization and named credentials
   assert.ok(client.calls[0].params[6].length <= 1_000);
   assert.ok(client.calls[1].params[1].length <= 200);
   assert.ok(client.calls[1].params[2].length <= 1_000);
+});
+
+test("operator diagnostics redact standalone and prose credentials while preserving context", async () => {
+  const client = fakeClient((call) =>
+    call.statement.includes("baseline_approved_at = now()")
+      ? result([{ id: RUN_ID, baseline_approved_at: "2026-08-16T12:00:00.000Z" }])
+      : result([{ id: RUN_ID }]),
+  );
+  const repository = createSyncRepository({ client });
+  await repository.finishRun(RUN_ID, {
+    status: "failed",
+    ...evaluation(),
+    failureCode: "adapter_failed",
+    failureSummary:
+      "crawl stopped after Bearer finish-bearer during retry; Basic ZmluaXNoOmJhc2lj rejected; API key finish-api expired; token is finish-token rotated; password is finish-password invalid; secret is finish-secret removed; ordinary diagnostic remains",
+  });
+  await repository.approveShadowRun(RUN_ID, {
+    reviewer: "on-call Bearer reviewer-bearer operator",
+    note: "approval context keeps API key note-api hidden; token is note-token rotated; password is note-password invalid; secret is note-secret removed; ordinary note remains",
+  });
+
+  const [finishCall, approvalCall] = client.calls;
+  const stored = [finishCall.params[6], approvalCall.params[1], approvalCall.params[2]];
+  for (const secret of [
+    "finish-bearer",
+    "ZmluaXNoOmJhc2lj",
+    "finish-api",
+    "finish-token",
+    "finish-password",
+    "finish-secret",
+    "reviewer-bearer",
+    "note-api",
+    "note-token",
+    "note-password",
+    "note-secret",
+  ]) {
+    assert.equal(
+      stored.some((value) => value.includes(secret)),
+      false,
+      secret,
+    );
+  }
+  assert.match(
+    finishCall.params[6],
+    /crawl stopped after|during retry|ordinary diagnostic remains/,
+  );
+  assert.match(approvalCall.params[1], /on-call|operator/);
+  assert.match(approvalCall.params[2], /approval context keeps|ordinary note remains/);
 });
 
 test("run evidence rejects malformed JSON, statuses, UUIDs, and database misses", async () => {

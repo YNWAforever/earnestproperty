@@ -28,6 +28,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIMESTAMP_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
 const OBSERVATION_KEYS = new Set([
   "schemaVersion",
   "source",
@@ -135,6 +137,41 @@ function requireTimestamp(value, label, { nullable = false } = {}) {
   const canonical = canonicalTimestamp(value);
   if (canonical == null) throw new TypeError(`${label} must be a canonical timestamp`);
   return canonical;
+}
+
+function requireObservationTimestamp(value, label, { nullable = false, allowDate = false } = {}) {
+  if (value === null) {
+    if (nullable) return null;
+    throw new TypeError(`${label} must be an ISO timestamp string`);
+  }
+  if (typeof value !== "string" || !value || value !== value.trim()) {
+    throw new TypeError(`${label} must be an ISO timestamp string`);
+  }
+  if (allowDate && isCanonicalDate(value)) return value;
+  const matched = ISO_TIMESTAMP_PATTERN.exec(value);
+  if (!matched) throw new TypeError(`${label} must be an ISO timestamp string`);
+  const [, year, month, day, hourText, minuteText, secondText, zone] = matched;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  if (!isCanonicalDate(`${year}-${month}-${day}`) || hour > 23 || minute > 59 || second > 59) {
+    throw new TypeError(`${label} must be an ISO timestamp string`);
+  }
+  if (zone !== "Z") {
+    const offsetHour = Number(zone.slice(1, 3));
+    const offsetMinute = Number(zone.slice(4, 6));
+    if (offsetHour > 14 || offsetMinute > 59 || (offsetHour === 14 && offsetMinute !== 0)) {
+      throw new TypeError(`${label} must be an ISO timestamp string`);
+    }
+  }
+  if (!Number.isFinite(Date.parse(value))) {
+    throw new TypeError(`${label} must be an ISO timestamp string`);
+  }
+  return value;
+}
+
+function observationTimestampInstant(value) {
+  return new Date(value).toISOString();
 }
 
 function requireUrl(value, label = "URL") {
@@ -262,15 +299,15 @@ function validateListingFields(fields) {
   ]);
   for (const [key, value] of Object.entries(fields)) {
     if (stringFields.has(key)) {
-      if (value != null && (typeof value !== "string" || value.length > 20_000)) {
+      if (value !== null && (typeof value !== "string" || value.length > 20_000)) {
         throw new TypeError(`observation field ${key} is invalid`);
       }
     } else if (numberFields.has(key)) {
-      if (value != null && (typeof value !== "number" || !Number.isFinite(value))) {
+      if (value !== null && (typeof value !== "number" || !Number.isFinite(value))) {
         throw new TypeError(`observation field ${key} is invalid`);
       }
     } else if (key === "features") {
-      if (value != null) requireStringArray(value, "observation features", { maxItems: 200 });
+      if (value !== null) requireStringArray(value, "observation features", { maxItems: 200 });
     } else {
       throw new TypeError(`observation field ${key} is unsupported`);
     }
@@ -316,7 +353,7 @@ function validateObservation(observation) {
     throw new TypeError("SourceObservation identity is invalid");
   }
   requireUrl(observation.sourceUrl, "observation source URL");
-  if (observation.propertyNoRaw != null && typeof observation.propertyNoRaw !== "string") {
+  if (observation.propertyNoRaw !== null && typeof observation.propertyNoRaw !== "string") {
     throw new TypeError("SourceObservation property number is invalid");
   }
   const propertyNo = normalizePropertyNo(observation.propertyNoNormalized);
@@ -341,11 +378,12 @@ function validateObservation(observation) {
     throw new TypeError("SourceObservation mediaCandidates are invalid");
   }
   observation.mediaCandidates.forEach(validateMediaCandidate);
-  if (observation.sourceUpdatedAt != null && typeof observation.sourceUpdatedAt !== "string") {
-    throw new TypeError("SourceObservation sourceUpdatedAt is invalid");
-  }
-  requireTimestamp(observation.discoveredAt, "SourceObservation discoveredAt");
-  requireTimestamp(observation.fetchedAt, "SourceObservation fetchedAt");
+  requireObservationTimestamp(observation.sourceUpdatedAt, "SourceObservation sourceUpdatedAt", {
+    nullable: true,
+    allowDate: true,
+  });
+  requireObservationTimestamp(observation.discoveredAt, "SourceObservation discoveredAt");
+  requireObservationTimestamp(observation.fetchedAt, "SourceObservation fetchedAt");
   if (!HASH_PATTERN.test(observation.contentHash)) {
     throw new TypeError("SourceObservation content hash is invalid");
   }
@@ -432,8 +470,13 @@ function redactedText(value, label, { max = 1_000, nullable = true } = {}) {
     .replace(/([a-z][a-z0-9+.-]*:\/\/)[^\s/@:]+:[^\s/@]+@/gi, "$1[redacted]@")
     .replace(/\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)\s+)?[^\s,;]+/gi, "$1=[redacted]")
     .replace(
-      /\b((?:x[-_])?api[-_]?key|access[-_]?token|refresh[-_]?token|token|secret|password|passwd)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      /\b((?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
       "$1=[redacted]",
+    )
+    .replace(/\b(bearer|basic)\s+(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1 [redacted]")
+    .replace(
+      /\b((?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd)\s+(?:(?:is|was)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi,
+      "$1 [redacted]",
     )
     .replace(/\b(?:sk|pk)_[A-Za-z0-9_-]{8,}\b/g, "[redacted]");
   if (text.length > max) text = `${text.slice(0, Math.max(0, max - 1))}…`;
@@ -559,8 +602,8 @@ function validatePersistedObservationRow(row, expectedByIdentity) {
     row.property_no_normalized !== expected.propertyNoNormalized ||
     row.content_hash !== expected.contentHash ||
     row.validation_state !== expected.validationState ||
-    discoveredAt !== expected.discoveredAt ||
-    fetchedAt !== expected.fetchedAt ||
+    discoveredAt !== observationTimestampInstant(expected.discoveredAt) ||
+    fetchedAt !== observationTimestampInstant(expected.fetchedAt) ||
     !jsonEqual(payload, {
       schemaVersion: expected.schemaVersion,
       fields: expected.fields,
