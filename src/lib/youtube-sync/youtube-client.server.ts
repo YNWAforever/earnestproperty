@@ -245,6 +245,15 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
         seenVideoIds.add(item.videoId);
         pageVideos.push(item);
       }
+      const next =
+        typeof body.nextPageToken === "string" && body.nextPageToken ? body.nextPageToken : null;
+      if (next && seenTokens.has(next)) {
+        throw new YouTubeSyncError(
+          "youtube_invalid_snapshot",
+          "The provider returned an invalid YouTube snapshot.",
+        );
+      }
+      if (next) seenTokens.add(next);
       const boundaryIndex = listInput.boundaryVideoId
         ? pageVideos.findIndex((item) => item.videoId === listInput.boundaryVideoId)
         : -1;
@@ -256,15 +265,6 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
       await listInput.onPage?.({ pageNumber, itemCount: acceptedOnPage });
       if (boundaryFound) break;
 
-      const next =
-        typeof body.nextPageToken === "string" && body.nextPageToken ? body.nextPageToken : null;
-      if (next && seenTokens.has(next)) {
-        throw new YouTubeSyncError(
-          "youtube_invalid_snapshot",
-          "The provider returned an invalid YouTube snapshot.",
-        );
-      }
-      if (next) seenTokens.add(next);
       pageToken = next;
     } while (pageToken);
 

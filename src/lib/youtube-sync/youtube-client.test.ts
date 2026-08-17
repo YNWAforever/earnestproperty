@@ -144,6 +144,27 @@ test("boundary pages validate later items before truncating the returned videos"
   );
 });
 
+test("a boundary page with a repeated token fails before its renewal callback", async () => {
+  const fake = queuedFetch([
+    channelResponse(),
+    json({ items: [playlistItem("CCCCCCCCCCC")], nextPageToken: "repeat" }),
+    json({ items: [playlistItem("BBBBBBBBBBB")], nextPageToken: "repeat" }),
+  ]);
+  const renewedPages: number[] = [];
+  await assert.rejects(
+    () =>
+      createYouTubeClient({ apiKey, channelId, fetchImpl: fake.fetchImpl }).listUploads({
+        boundaryVideoId: "BBBBBBBBBBB",
+        onPage: async ({ pageNumber }) => {
+          renewedPages.push(pageNumber);
+        },
+      }),
+    (error) =>
+      error instanceof Error && "code" in error && error.code === "youtube_invalid_snapshot",
+  );
+  assert.deepEqual(renewedPages, [1]);
+});
+
 test("a missing boundary falls back to a complete traversal", async () => {
   const fake = queuedFetch([
     channelResponse(),
