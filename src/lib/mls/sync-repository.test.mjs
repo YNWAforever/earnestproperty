@@ -459,6 +459,7 @@ function fakePublicationClient(options = {}) {
     options.onQuery?.(call);
     if (call.statement === "BEGIN ISOLATION LEVEL SERIALIZABLE") {
       events.push(call.statement);
+      if (Object.hasOwn(options, "beginError")) throw options.beginError;
       return options.beginResult ?? commandResult("BEGIN");
     }
     if (call.statement === "COMMIT" || call.statement === "ROLLBACK") {
@@ -3160,8 +3161,7 @@ test("unchanged canonical proposals neither touch updated_at nor emit caller-cla
     false,
   );
   const update = client.sql.find((statement) => /UPDATE properties SET/.test(statement));
-  assert.match(update, /IS DISTINCT FROM/);
-  assert.match(update, /updated_at = now\(\)/);
+  assert.equal(update, undefined);
 });
 
 test("publication sorts update locks by UUID and new inserts by listing number", async () => {
@@ -3176,6 +3176,7 @@ test("publication sorts update locks by UUID and new inserts by listing number",
   second.fields = second.fields.map((field) => ({ ...field, winningObservationId: null }));
   second.canonical.images = [];
   second.fields.find((field) => field.fieldName === "images").lastPublishedValue = [];
+  second.lifecycle.consecutiveAbsentHealthyRuns = 1;
   second.events = [];
   const batch = approvedBatch({ proposals: [second, first] });
 
@@ -3232,7 +3233,7 @@ test("locked canonical array evidence is snapshotted before later transaction aw
       ...current,
     },
     onQuery(call) {
-      if (/WHERE run_id = \$1::uuid AND source = \$2/.test(call.statement)) {
+      if (/FROM property_source_links/.test(call.statement)) {
         oldImages[0] = "https://mutated.invalid/after-lock.png";
       }
     },
@@ -4015,7 +4016,12 @@ test("status transitions cannot hide as changed and lifecycle evidence is bound 
   await assert.rejects(
     createSyncRepository({
       client: fakePublicationClient({
-        lockedRow: { id: PROPERTY_ID, updated_at: EXPECTED_UPDATED_AT, ...current },
+        lockedRow: {
+          id: PROPERTY_ID,
+          updated_at_token: EXPECTED_UPDATED_AT,
+          updated_at_matches_expected: true,
+          ...current,
+        },
       }),
     }).publishBatch(generic),
     /inactive event|status transition/i,
@@ -4027,7 +4033,12 @@ test("status transitions cannot hide as changed and lifecycle evidence is bound 
   await assert.rejects(
     createSyncRepository({
       client: fakePublicationClient({
-        lockedRow: { id: PROPERTY_ID, updated_at: EXPECTED_UPDATED_AT, ...current },
+        lockedRow: {
+          id: PROPERTY_ID,
+          updated_at_token: EXPECTED_UPDATED_AT,
+          updated_at_matches_expected: true,
+          ...current,
+        },
       }),
     }).publishBatch(wrongCounter),
     /two healthy|counter|lifecycle/i,
@@ -4062,6 +4073,15 @@ test("inactive lifecycle effective time must equal the locked publish-run start"
       updated_at_matches_expected: true,
       ...current,
     },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 1,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: null,
+        inactive_at_token: null,
+      },
+    ],
   });
 
   await assert.rejects(
@@ -4227,6 +4247,474 @@ function activeOverrideBatch({ canonicalPrice = 12_000_000, baseline = 10_000_00
   );
   return batch;
 }
+
+function withoutCurrentRunSighting(proposal) {
+  const snapshot = structuredClone(proposal);
+  snapshot.links = [];
+  snapshot.fields = snapshot.fields.map((field) => ({
+    ...field,
+    winningObservationId: null,
+  }));
+  snapshot.events = snapshot.events.filter((event) => event.changeType !== "link_change");
+  return snapshot;
+}
+
+test("current-run sightings derive an exact zero absence counter from locked history", async () => {
+  const canonical = canonicalWrite();
+  const batch = approvedBatch({ canonical });
+  batch.proposals[0].lifecycle.consecutiveAbsentHealthyRuns = 1;
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 0,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: null,
+        inactive_at_token: null,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /lifecycle|absence counter|current-run sighting/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("new observed proposals require active status and a zero clean lifecycle before SQL", async () => {
+  const proposal = newPublicationProposal();
+  proposal.lifecycle.consecutiveAbsentHealthyRuns = 1;
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /new.*lifecycle|lifecycle.*new|zero.*counter/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("new observed proposals cannot carry historical inactive lifecycle evidence", async () => {
+  const proposal = newPublicationProposal();
+  proposal.canonical.status = "inactive";
+  const status = proposal.fields.find((field) => field.fieldName === "status");
+  status.lastPublishedValue = "inactive";
+  proposal.lifecycle = {
+    consecutiveAbsentHealthyRuns: 2,
+    inactiveReason: "absent_two_healthy_runs",
+    inactiveAt: "2026-08-10T04:00:00.654321Z",
+  };
+  proposal.events[0].newValue = structuredClone(proposal.canonical);
+  const client = fakePublicationClient({ observationCanonical: proposal.canonical });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /new.*lifecycle|lifecycle.*new|new.*active/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("an absent property cannot be reactivated without exact current-run sighting evidence", async () => {
+  const canonical = canonicalWrite({ status: "active" });
+  const proposal = withoutCurrentRunSighting(approvedBatch({ canonical }).proposals[0]);
+  proposal.events = [
+    {
+      changeType: "reactivated",
+      fieldName: "status",
+      oldValue: "inactive",
+      newValue: "active",
+      winningObservationId: null,
+      reason: "seen_again",
+    },
+  ];
+  const client = fakePublicationClient({
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ status: "inactive" }),
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 2,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: "absent_two_healthy_runs",
+        inactive_at_token: "2026-08-10T04:00:00.654321Z",
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /reactivat|lifecycle|sighting/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("a full healthy absence advances exactly from the locked counter", async () => {
+  const canonical = canonicalWrite();
+  const proposal = withoutCurrentRunSighting(approvedBatch({ canonical }).proposals[0]);
+  proposal.events = [];
+  const client = fakePublicationClient({
+    unchanged: true,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 0,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: null,
+        inactive_at_token: null,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /lifecycle|healthy absence|counter/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("initial-backfill overrides preserve locked staff value and prove the source baseline", async () => {
+  const batch = activeOverrideBatch({ canonicalPrice: 12_000_000, baseline: 10_000_000 });
+  const client = fakePublicationClient({
+    unchanged: true,
+    observationCanonical: canonicalWrite({ price: 10_000_000 }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 12_000_000 }),
+    },
+    lockedFieldRows: [],
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  const priceState = client.calls.find(
+    (call) => /INSERT INTO property_sync_fields/.test(call.statement) && call.params[1] === "price",
+  );
+  assert.deepEqual(priceState.params.slice(2, 6), ["10000000", "12000000", true, null]);
+});
+
+test("initial image overrides prove ordered owned media from the exact linked observation", async () => {
+  const sourceImages = ["https://owned.example/mls/hash.png"];
+  const staffImages = ["https://staff.example/listing/photo.png"];
+  const canonical = canonicalWrite({ images: staffImages });
+  const batch = approvedBatch({ canonical });
+  const images = batch.proposals[0].fields.find((field) => field.fieldName === "images");
+  images.lastPublishedValue = sourceImages;
+  images.overrideValue = staffImages;
+  images.activeOverride = true;
+  images.winningObservationId = null;
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    observationCanonical: canonicalWrite({ images: sourceImages }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedFieldRows: [],
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+});
+
+test("initial-backfill override baselines must match exact current-run normalized evidence", async () => {
+  const batch = activeOverrideBatch({ canonicalPrice: 12_000_000, baseline: 9_000_000 });
+  const client = fakePublicationClient({
+    unchanged: true,
+    observationCanonical: canonicalWrite({ price: 10_000_000 }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 12_000_000 }),
+    },
+    lockedFieldRows: [],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /override.*baseline|normalized.*evidence|publication conflict/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO property_sync_fields/.test(statement)),
+    false,
+  );
+});
+
+test("feature sets use Task 6 normalization for locked no-op comparison", async () => {
+  const canonical = canonicalWrite({ features: ["Balcony", "Sea view"] });
+  const batch = approvedBatch({ canonical });
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    observationCanonical: canonical,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+      features: ["Sea view", "Balcony"],
+    },
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+});
+
+test("duplicate locked feature values normalize to the same semantic no-op", async () => {
+  const canonical = canonicalWrite({ features: ["Balcony", "Sea view"] });
+  const batch = approvedBatch({ canonical });
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    observationCanonical: canonical,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+      features: ["Sea view", "Balcony", "Sea view"],
+    },
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+});
+
+test("publication rejects non-normalized feature proposals before session SQL", async () => {
+  const canonical = canonicalWrite({ features: ["Sea view", "Balcony"] });
+  const client = fakePublicationClient({ observationCanonical: canonical });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ canonical })),
+    /features|normalized/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("an initial staff status override prevents seen reactivation without invented lifecycle history", async () => {
+  const canonical = canonicalWrite({ status: "inactive" });
+  const batch = approvedBatch({ canonical });
+  const status = batch.proposals[0].fields.find((field) => field.fieldName === "status");
+  status.lastPublishedValue = "active";
+  status.overrideValue = "inactive";
+  status.activeOverride = true;
+  status.winningObservationId = null;
+  batch.proposals[0].lifecycle = {
+    consecutiveAbsentHealthyRuns: 0,
+    inactiveReason: null,
+    inactiveAt: null,
+  };
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    observationCanonical: canonicalWrite({ status: "active" }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedFieldRows: [],
+    lockedLifecycleRows: [],
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+});
+
+test("same-run healthy absence publication is lifecycle-idempotent", async () => {
+  const canonical = canonicalWrite();
+  const proposal = withoutCurrentRunSighting(approvedBatch({ canonical }).proposals[0]);
+  proposal.lifecycle.consecutiveAbsentHealthyRuns = 1;
+  proposal.events = [];
+  const client = fakePublicationClient({
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 1,
+        last_evaluated_run_id: RUN_ID,
+        inactive_reason: null,
+        inactive_at_token: null,
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 0, updated: 0, events: 0 },
+  );
+});
+
+test("degraded unseen inactive rows reset the counter while preserving historical inactivity", async () => {
+  const historicalInactiveAt = "2026-08-10T04:00:00.654321Z";
+  const sourceStatus = healthySourceStatus({
+    [SOURCE_OLD_SITE]: {
+      source: SOURCE_OLD_SITE,
+      healthy: false,
+      reasons: ["fetch_failed"],
+    },
+  });
+  const canonical = canonicalWrite({ status: "inactive" });
+  const proposal = withoutCurrentRunSighting(approvedBatch({ canonical }).proposals[0]);
+  proposal.lifecycle = {
+    consecutiveAbsentHealthyRuns: 0,
+    inactiveReason: "absent_two_healthy_runs",
+    inactiveAt: historicalInactiveAt,
+  };
+  proposal.events = [];
+  const client = fakePublicationClient({
+    runOverrides: { source_status: sourceStatus },
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 2,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: "absent_two_healthy_runs",
+        inactive_at_token: historicalInactiveAt,
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 0, updated: 0, events: 0 },
+  );
+});
+
+test("feature change events use normalized locked and proposed semantic values", async () => {
+  const canonical = canonicalWrite({ features: ["Balcony", "Sea view"] });
+  const batch = approvedBatch({ canonical });
+  batch.proposals[0].events = [
+    {
+      changeType: "changed",
+      fieldName: "features",
+      oldValue: ["Sea view"],
+      newValue: ["Balcony", "Sea view"],
+      winningObservationId: OBSERVATION_ID,
+      reason: "source_value_changed",
+    },
+    batch.proposals[0].events.find((event) => event.changeType === "link_change"),
+  ];
+  const client = fakePublicationClient({
+    observationCanonical: canonical,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+      features: [" Sea view ", "Sea view"],
+    },
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 1,
+    events: 2,
+  });
+});
+
+test("rejected BEGIN keeps a falsy primary reason ahead of rollback failure", async () => {
+  const rollbackError = new Error("ROLLBACK was rejected");
+  const client = fakePublicationClient({ beginError: undefined, rollbackError });
+
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.cause, undefined);
+    assert.equal(error.cleanupErrors[0], rollbackError);
+    return true;
+  });
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+});
+
+test("a rejected BEGIN is outcome-ambiguous enough to require rollback cleanup", async () => {
+  const primary = new Error("BEGIN response was lost");
+  const client = fakePublicationClient({ beginError: primary });
+
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.cause, primary);
+    return true;
+  });
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+});
 
 test("baselineRequired is an exact boolean and either current source can block publication", async () => {
   const malformed = evaluation();
@@ -4435,8 +4923,7 @@ test("caller-forged active override history is rejected before field or canonica
 test("inactive lifecycle uses lossless run time only on the active-to-inactive transition", async () => {
   const current = canonicalWrite({ status: "active" });
   const canonical = canonicalWrite({ status: "inactive" });
-  const proposal = approvedBatch({ canonical }).proposals[0];
-  proposal.fields.find((field) => field.fieldName === "status").winningObservationId = null;
+  const proposal = withoutCurrentRunSighting(approvedBatch({ canonical }).proposals[0]);
   proposal.lifecycle = {
     consecutiveAbsentHealthyRuns: 2,
     inactiveReason: "absent_two_healthy_runs",
@@ -4451,7 +4938,6 @@ test("inactive lifecycle uses lossless run time only on the active-to-inactive t
       winningObservationId: null,
       reason: "absent_two_healthy_runs",
     },
-    approvedBatch().proposals[0].events.find((event) => event.changeType === "link_change"),
   ];
   const client = fakePublicationClient({
     runOverrides: { started_at: "2026-08-17T04:00:00.123456Z" },
@@ -4475,7 +4961,7 @@ test("inactive lifecycle uses lossless run time only on the active-to-inactive t
 
   assert.deepEqual(
     await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
-    { inserted: 0, updated: 1, events: 2 },
+    { inserted: 0, updated: 1, events: 1 },
   );
   assert.match(
     client.sql.find(
@@ -4488,14 +4974,13 @@ test("inactive lifecycle uses lossless run time only on the active-to-inactive t
 test("already-inactive history is locked and preserved without a repeated inactive event", async () => {
   const historicalInactiveAt = "2026-08-10T04:00:00.654321Z";
   const canonical = canonicalWrite({ status: "inactive" });
-  const proposal = approvedBatch({ canonical }).proposals[0];
-  proposal.fields.find((field) => field.fieldName === "status").winningObservationId = null;
+  const proposal = withoutCurrentRunSighting(approvedBatch({ canonical }).proposals[0]);
   proposal.lifecycle = {
     consecutiveAbsentHealthyRuns: 2,
     inactiveReason: "absent_two_healthy_runs",
     inactiveAt: historicalInactiveAt,
   };
-  proposal.events = proposal.events.filter((event) => event.changeType === "link_change");
+  proposal.events = [];
   const client = fakePublicationClient({
     unchanged: true,
     lockedRow: {
@@ -4518,7 +5003,7 @@ test("already-inactive history is locked and preserved without a repeated inacti
 
   assert.deepEqual(
     await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
-    { inserted: 0, updated: 0, events: 1 },
+    { inserted: 0, updated: 0, events: 0 },
   );
   assert.ok(
     client.sql.some(
