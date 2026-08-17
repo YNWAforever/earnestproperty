@@ -350,15 +350,16 @@ test(
       );
       await client.query(
         `INSERT INTO media_assets (
-           id, url, pathname, content_type, size_bytes, owner_type, content_hash
-         ) VALUES ($1, $2, $3, 'image/png', 123, 'mls-shared', $4)`,
+           id, url, pathname, content_type, size_bytes, owner_type, owner_id,
+           content_hash, archived_at
+         ) VALUES ($1, $2, $3, 'image/png', 123, 'mls-shared', NULL, $4, NULL)`,
         [mediaAssetId, ownedImageUrl, `mls/integration/${tag}.png`, mediaHash],
       );
       await client.query(
         `INSERT INTO listing_media_records (
            id, observation_id, source_url, content_hash, owned_media_asset_id,
-           detected_mime, size_bytes, width, height, eligibility
-         ) VALUES ($1, $2, $3, $4, $5, 'image/png', 123, 10, 8, 'eligible')`,
+           detected_mime, size_bytes, width, height, eligibility, rejection_reason
+         ) VALUES ($1, $2, $3, $4, $5, 'image/png', 123, 10, 8, 'eligible', NULL)`,
         [mediaRecordId, observationId, sourceImageUrl, mediaHash, mediaAssetId],
       );
       const fields = RECONCILED_FIELD_NAMES.map((fieldName) => ({
@@ -477,7 +478,8 @@ test(
             [propertyId],
           ),
           client.query(
-            `SELECT id, observation_id, property_id, source_url, owned_media_asset_id, eligibility
+            `SELECT id, observation_id, property_id, source_url, owned_media_asset_id,
+                    eligibility, rejection_reason
                FROM listing_media_records WHERE id = $1`,
             [mediaRecordId],
           ),
@@ -488,9 +490,10 @@ test(
               ORDER BY change_type, field_name NULLS FIRST`,
             [propertyId, runId],
           ),
-          client.query("SELECT url, owner_type, owner_id FROM media_assets WHERE id = $1", [
-            mediaAssetId,
-          ]),
+          client.query(
+            "SELECT url, owner_type, owner_id, archived_at FROM media_assets WHERE id = $1",
+            [mediaAssetId],
+          ),
         ]);
       assert.deepEqual(linkRows.rows, [
         {
@@ -529,6 +532,7 @@ test(
           source_url: sourceImageUrl,
           owned_media_asset_id: mediaAssetId,
           eligibility: "eligible",
+          rejection_reason: null,
         },
       ]);
       assert.deepEqual(eventRows.rows, [
@@ -560,7 +564,12 @@ test(
         },
       ]);
       assert.deepEqual(assetRows.rows, [
-        { url: ownedImageUrl, owner_type: "mls-shared", owner_id: null },
+        {
+          url: ownedImageUrl,
+          owner_type: "mls-shared",
+          owner_id: null,
+          archived_at: null,
+        },
       ]);
       const captured = structuredClone(published);
 
@@ -587,11 +596,16 @@ test(
       );
       assert.deepEqual(afterConflictRows.rows[0], captured);
       const assetAfterConflict = await client.query(
-        "SELECT url, owner_type, owner_id FROM media_assets WHERE id = $1",
+        "SELECT url, owner_type, owner_id, archived_at FROM media_assets WHERE id = $1",
         [mediaAssetId],
       );
       assert.deepEqual(assetAfterConflict.rows, [
-        { url: ownedImageUrl, owner_type: "mls-shared", owner_id: null },
+        {
+          url: ownedImageUrl,
+          owner_type: "mls-shared",
+          owner_id: null,
+          archived_at: null,
+        },
       ]);
     } catch (error) {
       hasPrimaryError = true;

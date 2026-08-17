@@ -222,10 +222,21 @@ export interface CanonicalPropertyWrite {
   bathrooms: number | null;
   floor: string | null;
   orientation: string | null;
-  features: string[];
+  features: string[] | null;
   description: string | null;
   images: string[];
   status: "draft" | "active" | "sold" | "rented" | "offline" | "inactive";
+}
+
+export interface NewCanonicalPropertyWrite extends CanonicalPropertyWrite {
+  featured: false;
+  management_fee: null;
+  video_url: null;
+  floorplan_url: null;
+  source_site: "dual-source-mls";
+  legacy_detail_id?: string;
+  legacy_property_no?: string;
+  legacy_url?: string;
 }
 
 export interface SourceLinkWrite {
@@ -277,17 +288,29 @@ export interface ListingChangeEventWrite {
   reason: string;
 }
 
-export interface PublicationProposal {
-  kind: "new" | "update";
-  propertyId?: string;
-  /** Fixed six-digit UTC PostgreSQL updated_at token for updates. */
-  expectedUpdatedAt?: string;
-  canonical: CanonicalPropertyWrite;
+export interface PublicationProposalBase {
   links: SourceLinkWrite[];
   fields: ReconciledFieldWrite[];
   lifecycle: PropertySyncStateWrite;
   events: ListingChangeEventWrite[];
 }
+
+export interface NewPublicationProposal extends PublicationProposalBase {
+  kind: "new";
+  propertyId?: never;
+  expectedUpdatedAt?: never;
+  canonical: NewCanonicalPropertyWrite;
+}
+
+export interface UpdatePublicationProposal extends PublicationProposalBase {
+  kind: "update";
+  propertyId: string;
+  /** Fixed six-digit UTC PostgreSQL updated_at token for updates. */
+  expectedUpdatedAt: string;
+  canonical: CanonicalPropertyWrite;
+}
+
+export type PublicationProposal = NewPublicationProposal | UpdatePublicationProposal;
 
 export interface PublicationBatchInput {
   runId: string;
