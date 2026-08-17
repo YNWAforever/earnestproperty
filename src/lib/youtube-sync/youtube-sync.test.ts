@@ -426,3 +426,161 @@ test("a background renewal loss aborts at the next page checkpoint", async () =>
   assert.equal(releases, 1);
   assert.equal(cleared, true);
 });
+
+test("the default owner creates a valid UUID for lease acquisition", async () => {
+  let acquiredOwner = "";
+
+  await runYouTubeSync(
+    { mode: "incremental", trigger: "cron" },
+    {
+      channelId,
+      now: () => new Date("2026-08-17T00:00:00.000Z"),
+      timers: {
+        setInterval: () => Symbol("heartbeat"),
+        clearInterval: () => {},
+      },
+      logger: {
+        info: () => {},
+        error: () => {},
+      },
+      client: {
+        listUploads: async () => ({ videos: [], pages: 0, boundaryFound: false }),
+      },
+      repository: {
+        acquireLease: async (input) => {
+          acquiredOwner = input.owner;
+          return {
+            channelId,
+            owner: input.owner,
+            lastIncrementalVideoId: null,
+            lastFullPeriod: null,
+          };
+        },
+        renewLease: async () => true,
+        releaseLease: async () => {},
+        listManualCandidates: async () => [],
+        applySnapshot: async () => ({
+          inserted: 0,
+          adopted: 0,
+          updated: 0,
+          restored: 0,
+          unavailable: 0,
+        }),
+      },
+    },
+  );
+
+  assert.match(
+    acquiredOwner,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  );
+});
+
+test("timer startup failure releases the acquired matching lease", async () => {
+  const owner = "11111111-1111-4111-8111-111111111111";
+  const startupError = new Error("timer startup failed");
+  let releases = 0;
+
+  await assert.rejects(
+    () =>
+      runYouTubeSync(
+        { mode: "incremental", trigger: "cron" },
+        {
+          channelId,
+          owner: () => owner,
+          now: () => new Date("2026-08-17T00:00:00.000Z"),
+          timers: {
+            setInterval: () => {
+              throw startupError;
+            },
+            clearInterval: () => {},
+          },
+          logger: {
+            info: () => {},
+            error: () => {},
+          },
+          client: {
+            listUploads: async () => ({ videos: [], pages: 0, boundaryFound: false }),
+          },
+          repository: {
+            acquireLease: async () => ({
+              channelId,
+              owner,
+              lastIncrementalVideoId: null,
+              lastFullPeriod: null,
+            }),
+            renewLease: async () => true,
+            releaseLease: async (input) => {
+              assert.equal(input.channelId, channelId);
+              assert.equal(input.owner, owner);
+              releases += 1;
+            },
+            listManualCandidates: async () => [],
+            applySnapshot: async () => ({
+              inserted: 0,
+              adopted: 0,
+              updated: 0,
+              restored: 0,
+              unavailable: 0,
+            }),
+          },
+        },
+      ),
+    (error) => error === startupError,
+  );
+
+  assert.equal(releases, 1);
+});
+
+test("completion whitelists mutation counts from the repository boundary", async () => {
+  const owner = "11111111-1111-4111-8111-111111111111";
+  const logs: Array<Record<string, unknown>> = [];
+  const result = await runYouTubeSync(
+    { mode: "incremental", trigger: "staff" },
+    {
+      channelId,
+      owner: () => owner,
+      now: () => new Date("2026-08-17T00:00:00.000Z"),
+      timers: {
+        setInterval: () => Symbol("heartbeat"),
+        clearInterval: () => {},
+      },
+      logger: {
+        info: (entry) => logs.push(entry),
+        error: (entry) => logs.push(entry),
+      },
+      client: {
+        listUploads: async () => ({ videos: [video], pages: 1, boundaryFound: false }),
+      },
+      repository: {
+        acquireLease: async () => ({
+          channelId,
+          owner,
+          lastIncrementalVideoId: null,
+          lastFullPeriod: null,
+        }),
+        renewLease: async () => true,
+        releaseLease: async () => {},
+        listManualCandidates: async () => [],
+        applySnapshot: async () => ({
+          inserted: 1,
+          adopted: 0,
+          updated: 0,
+          restored: 0,
+          unavailable: 0,
+          description: "must not cross the orchestration boundary",
+        }),
+      },
+    },
+  );
+
+  assert.equal(result.status, "completed");
+  if (result.status === "completed") {
+    assert.equal(result.summary.inserted, 1);
+    assert.equal("description" in result.summary, false);
+  }
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].event, "youtube_sync_completed");
+  assert.equal("description" in logs[0], false);
+  assert.doesNotMatch(JSON.stringify(logs), /must not cross/i);
+});

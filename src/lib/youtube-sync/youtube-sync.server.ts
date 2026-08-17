@@ -113,7 +113,7 @@ export async function runYouTubeSync(
 ): Promise<YouTubeSyncOutcome> {
   const now = overrides.now ?? (() => new Date());
   const startedAt = now();
-  const owner = (overrides.owner ?? crypto.randomUUID)();
+  const owner = (overrides.owner ?? (() => crypto.randomUUID()))();
   const channelId = overrides.channelId ?? YOUTUBE_CHANNEL_ID;
   const logger = overrides.logger ?? defaultLogger;
   const repository = overrides.repository ?? createYouTubeSyncRepository();
@@ -146,12 +146,14 @@ export async function runYouTubeSync(
     }
   }
 
-  const heartbeat = startLeaseHeartbeat(renew, overrides.timers ?? defaultTimers);
+  let startedHeartbeat: ReturnType<typeof startLeaseHeartbeat> | null = null;
   let primaryFailure: unknown = null;
   let primaryFailed = false;
   let outcome: Extract<YouTubeSyncOutcome, { status: "completed" }> | null = null;
 
   try {
+    const heartbeat = startLeaseHeartbeat(renew, overrides.timers ?? defaultTimers);
+    startedHeartbeat = heartbeat;
     const fetched = await client.listUploads({
       boundaryVideoId: input.mode === "incremental" ? lease.lastIncrementalVideoId : null,
       onPage: async () => {
@@ -187,7 +189,11 @@ export async function runYouTubeSync(
         trigger: input.trigger,
         pages: fetched.pages,
         fetched: fetched.videos.length,
-        ...mutations,
+        inserted: mutations.inserted,
+        adopted: mutations.adopted,
+        updated: mutations.updated,
+        restored: mutations.restored,
+        unavailable: mutations.unavailable,
         elapsedMs: Math.max(0, finishedAt.getTime() - startedAt.getTime()),
         period,
       },
@@ -199,11 +205,14 @@ export async function runYouTubeSync(
 
   let cleanupFailure: unknown = null;
   let cleanupFailed = false;
-  try {
-    await heartbeat.stop();
-  } catch (error) {
-    cleanupFailed = true;
-    cleanupFailure = error;
+  if (startedHeartbeat) {
+    const heartbeat = startedHeartbeat;
+    try {
+      await heartbeat.stop();
+    } catch (error) {
+      cleanupFailed = true;
+      cleanupFailure = error;
+    }
   }
   try {
     await repository.releaseLease({ channelId, owner, now: now() });
