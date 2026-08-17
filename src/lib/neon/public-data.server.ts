@@ -718,7 +718,8 @@ export async function fetchCmsVideos() {
       SELECT id, title, video_url, description, sort_order, created_at
       FROM cms_videos
       WHERE published = true
-      ORDER BY sort_order ASC, created_at DESC
+        AND (youtube_managed = false OR youtube_available = true)
+      ORDER BY sort_order ASC, COALESCE(youtube_published_at, created_at) DESC
       `,
     );
   } catch (error) {

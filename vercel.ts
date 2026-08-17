@@ -24,7 +24,7 @@ const detailRedirects = importedRedirects.map((redirect) =>
 export const config: VercelConfig = {
   buildCommand: "npm run build",
   // Vercel Hobby allows one run per day per cron, so anything more frequent fails
-  // the deploy outright. These three are the once-a-day floor; the every-5-and-10
+  // the deploy outright. These five are the once-a-day floor; the every-5-and-10
   // minute cadence the job queue actually needs comes from a Cloudflare Worker
   // (workers/cron/ — Cron Triggers are on Cloudflare's free plan).
   //
@@ -33,6 +33,7 @@ export const config: VercelConfig = {
   // sitting forever. Both endpoints claim jobs under a lease, so two schedulers
   // calling them is safe.
   crons: [
+    { path: "/api/youtube-sync", schedule: "0 19 * * *" },
     { path: "/api/mls-sync", schedule: "0 20 * * *" },
     // runClaimedJobs is only reachable from these two routes, so without them
     // nothing drains ops_jobs: queued WhatsApp campaigns and AI knowledge
@@ -40,6 +41,7 @@ export const config: VercelConfig = {
     // Bearer ${CRON_SECRET}.
     { path: "/api/admin/control-plane/worker", schedule: "10 20 * * *" },
     { path: "/api/admin/jobs/send-queue", schedule: "20 20 * * *" },
+    { path: "/api/youtube-sync/full", schedule: "0 21 1 * *" },
   ],
   redirects: [
     ...detailRedirects,
