@@ -9,9 +9,9 @@ function requiredTrimmedString(value, name) {
 
 function bodySize(body) {
   if (body == null) throw new TypeError("body is required");
-  if (typeof body.size === "number") return body.size;
-  if (typeof body.byteLength === "number") return body.byteLength;
-  throw new TypeError("body must expose a finite byte size");
+  if (typeof Blob !== "undefined" && body instanceof Blob) return body.size;
+  if (body instanceof ArrayBuffer || ArrayBuffer.isView(body)) return body.byteLength;
+  throw new TypeError("body must be a Blob, ArrayBuffer, or ArrayBufferView");
 }
 
 function finiteSize(value, name) {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { createVercelBlobStore } from "./vercel-blob.mjs";
@@ -117,7 +118,16 @@ test("blob adapter validates configuration and put input before fetch", async ()
     store.put({ pathname: "x.png", body: new Uint8Array([1]), contentType: "" }),
     /content.?type/i,
   );
+  for (const body of ["not binary", { byteLength: 1 }, { size: 1 }]) {
+    await assert.rejects(store.put({ pathname: "x.png", body, contentType: "image/png" }), /body/i);
+  }
   assert.equal(calls, 0);
+});
+
+test("blob adapter declaration exposes exactly the runtime-supported binary body types", () => {
+  const declaration = readFileSync(new URL("./vercel-blob.d.mts", import.meta.url), "utf8");
+  assert.doesNotMatch(declaration, /\bBodyInit\b/);
+  assert.match(declaration, /body:\s*Blob\s*\|\s*ArrayBuffer\s*\|\s*ArrayBufferView/);
 });
 
 test("blob adapter rejects failed or malformed responses without exposing the token", async () => {

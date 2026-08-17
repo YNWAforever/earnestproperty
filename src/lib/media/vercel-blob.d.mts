@@ -8,7 +8,7 @@ export interface VercelBlobMetadata {
 
 export interface VercelBlobPutInput {
   pathname: string;
-  body: BodyInit;
+  body: Blob | ArrayBuffer | ArrayBufferView;
   contentType: string;
 }
 

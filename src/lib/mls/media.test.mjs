@@ -11,6 +11,7 @@ import {
   prepareListingMedia,
   sha256,
 } from "./media.mjs";
+import { createObservation } from "./source-contract.mjs";
 
 const OBSERVATION_ID = "11111111-1111-4111-8111-111111111111";
 const PROPERTY_ID = "22222222-2222-4222-8222-222222222222";
@@ -19,6 +20,26 @@ const MEDIA_HOST = "images.28hse.test";
 
 function u32be(value) {
   return [(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff];
+}
+
+function u32le(value) {
+  return [value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff];
+}
+
+function asciiBytes(value) {
+  return [...value].map((character) => character.charCodeAt(0));
+}
+
+function pngChunk(type, payload = []) {
+  const checked = [...asciiBytes(type), ...payload];
+  let crc = 0xffffffff;
+  for (const byte of checked) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return [...u32be(payload.length), ...checked, ...u32be((crc ^ 0xffffffff) >>> 0)];
 }
 
 function pngBytes(width = 3, height = 2) {
@@ -31,21 +52,9 @@ function pngBytes(width = 3, height = 2) {
     0x0a,
     0x1a,
     0x0a,
-    0x00,
-    0x00,
-    0x00,
-    0x0d,
-    0x49,
-    0x48,
-    0x44,
-    0x52,
-    ...u32be(width),
-    ...u32be(height),
-    0x08,
-    0x06,
-    0x00,
-    0x00,
-    0x00,
+    ...pngChunk("IHDR", [...u32be(width), ...u32be(height), 0x08, 0x06, 0x00, 0x00, 0x00]),
+    ...pngChunk("IDAT", [0x78, 0x01, 0x01, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x01]),
+    ...pngChunk("IEND"),
   ]);
 }
 
@@ -73,22 +82,33 @@ function jpegBytes(width = 3, height = 2) {
     0x11,
     0x00,
     0xff,
+    0xda,
+    0x00,
+    0x0c,
+    0x03,
+    0x01,
+    0x00,
+    0x02,
+    0x11,
+    0x03,
+    0x11,
+    0x00,
+    0x3f,
+    0x00,
+    0x00,
+    0xff,
     0xd9,
   ]);
 }
 
 function webpBytes(width = 3, height = 2) {
-  const widthMinusOne = width - 1;
-  const heightMinusOne = height - 1;
+  const dimensions = (width - 1) | ((height - 1) << 14);
   return new Uint8Array([
     0x52,
     0x49,
     0x46,
     0x46,
-    0x16,
-    0x00,
-    0x00,
-    0x00,
+    ...u32le(18),
     0x57,
     0x45,
     0x42,
@@ -96,62 +116,49 @@ function webpBytes(width = 3, height = 2) {
     0x56,
     0x50,
     0x38,
-    0x58,
-    0x0a,
+    0x4c,
+    ...u32le(5),
+    0x2f,
+    ...u32le(dimensions),
     0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    widthMinusOne & 0xff,
-    (widthMinusOne >>> 8) & 0xff,
-    (widthMinusOne >>> 16) & 0xff,
-    heightMinusOne & 0xff,
-    (heightMinusOne >>> 8) & 0xff,
-    (heightMinusOne >>> 16) & 0xff,
   ]);
 }
 
+function avifBox(type, payload = []) {
+  return [...u32be(payload.length + 8), ...asciiBytes(type), ...payload];
+}
+
 function avifBytes(width = null, height = null) {
-  const base = [
-    0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66, 0x00, 0x00, 0x00, 0x00,
-    0x61, 0x76, 0x69, 0x66, 0x6d, 0x69, 0x66, 0x31,
+  const boxes = [
+    ...avifBox("ftyp", [...asciiBytes("avif"), 0, 0, 0, 0, ...asciiBytes("avifmif1")]),
+    ...avifBox("meta", [0, 0, 0, 0]),
   ];
-  if (width == null || height == null) return new Uint8Array(base);
-  return new Uint8Array([
-    ...base,
-    0x00,
-    0x00,
-    0x00,
-    0x14,
-    0x69,
-    0x73,
-    0x70,
-    0x65,
-    0x00,
-    0x00,
-    0x00,
-    0x00,
-    ...u32be(width),
-    ...u32be(height),
-  ]);
+  if (width != null && height != null) {
+    boxes.push(...avifBox("ispe", [0, 0, 0, 0, ...u32be(width), ...u32be(height)]));
+  }
+  boxes.push(...avifBox("mdat", [0]));
+  return new Uint8Array(boxes);
 }
 
 function listingPhoto(url = `https://${MEDIA_HOST}/photo.png`, isPrimary = true) {
   return { url, category: "listing_photo", isPrimary };
 }
 
-function observation(candidates = [listingPhoto()]) {
-  return {
-    schemaVersion: 1,
+function observation(candidates = [listingPhoto()], overrides = {}) {
+  return createObservation({
     source: "28hse_agent_540",
     externalId: "3972991",
     dealType: "sale",
-    matchKey: "sale:EP-001",
+    sourceUrl: "https://www.28hse.com/buy/apartment/property-3972991",
+    propertyNoRaw: "EP-001",
+    fields: { price: 8_000_000 },
+    rawFields: { price: "$8,000,000" },
+    sourceUpdatedAt: "2026-08-16",
+    discoveredAt: "2026-08-17T00:00:00.000Z",
+    fetchedAt: "2026-08-17T00:00:00.000Z",
+    ...overrides,
     mediaCandidates: candidates,
-  };
+  });
 }
 
 function imageResponse(bytes = pngBytes(), init = {}) {
@@ -406,6 +413,9 @@ test("DNS validation rejects any non-public IPv4 or IPv6 answer, including mappe
     "fc00::1",
     "fe80::1",
     "ff02::1",
+    "4000::1",
+    "8000::1",
+    "f000::1",
   ];
 
   for (const address of unsafeAddresses) {
@@ -424,15 +434,22 @@ test("DNS validation rejects any non-public IPv4 or IPv6 answer, including mappe
 
 test("redirects are manual, same-host, capped at two, and DNS-revalidated each hop", async () => {
   const requests = [];
+  const resolutionSignals = [];
   let resolutions = 0;
   const result = await prepareListingMedia(
     mediaFixture({
-      resolveHost: async () => {
+      resolveHost: async (_hostname, options) => {
         resolutions += 1;
+        resolutionSignals.push(options?.signal);
         return [PUBLIC_ADDRESS];
       },
-      fetchImpl: async (url, init) => {
-        requests.push({ url: String(url), redirect: init.redirect });
+      fetchImpl: async (url, init, connection) => {
+        requests.push({
+          url: String(url),
+          redirect: init.redirect,
+          signal: init.signal,
+          connection,
+        });
         const path = new URL(url).pathname;
         if (path === "/photo.png")
           return new Response(null, { status: 302, headers: { location: "/step-2.png" } });
@@ -449,6 +466,12 @@ test("redirects are manual, same-host, capped at two, and DNS-revalidated each h
     ["manual", "manual", "manual"],
   );
   assert.equal(resolutions, 3);
+  assert.ok(requests.every((request) => request.signal === requests[0].signal));
+  assert.ok(resolutionSignals.every((signal) => signal === requests[0].signal));
+  assert.deepEqual(
+    requests.map((request) => request.connection),
+    Array(3).fill({ address: PUBLIC_ADDRESS, family: 4, hostname: MEDIA_HOST }),
+  );
 
   const tooMany = await prepareListingMedia(
     mediaFixture({
@@ -645,6 +668,9 @@ test("content-hash reuse returns the existing owned asset without rewriting owne
     id: "asset-admin",
     url: "https://owned.example/admin-existing.webp",
     pathname: "cms/staff/existing.webp",
+    contentType: "image/webp",
+    sizeBytes: bytes.byteLength,
+    contentHash: hash,
     ownerType: "cms",
     ownerId: "33333333-3333-4333-8333-333333333333",
     createdBy: "44444444-4444-4444-8444-444444444444",
@@ -841,6 +867,324 @@ test("upload failure records upload_failed and never returns the current or atte
   assert.equal(result.candidateResults[0].eligibility, "upload_failed");
   assert.equal(result.candidateResults[0].rejectionReason, "blob_upload_failed");
   assert.doesNotMatch(JSON.stringify(result), /provider secret detail/);
+});
+
+test("unbound Blob metadata is quarantined and still records the candidate safely", async () => {
+  const repository = fakeRepository();
+  const blobStore = fakeBlobStore({
+    put: (input) => ({
+      url: "https://owned.example/unbound.png",
+      pathname: `wrong/${input.pathname}`,
+      contentType: input.contentType,
+      size: input.body.byteLength,
+    }),
+  });
+
+  const result = await prepareListingMedia(mediaFixture({ repository, blobStore }));
+
+  assert.equal(result.publishable, false);
+  assert.deepEqual(result.images, []);
+  assert.ok(result.reasons.includes("blob_upload_failed"));
+  assert.equal(result.candidateResults[0].eligibility, "upload_failed");
+  assert.equal(repository.state.records.length, 1);
+  assert.doesNotMatch(JSON.stringify(result), /unbound\.png/);
+});
+
+test("a shared cancellation aborts a hanging resolver immediately with the exact reason", async () => {
+  const controller = new AbortController();
+  const reason = new Error("cancel unresolved DNS exactly");
+  let releaseResolver;
+  let resolverSignal;
+  let fetches = 0;
+  const promise = prepareListingMedia(
+    mediaFixture({
+      signal: controller.signal,
+      resolveHost: (_hostname, options) => {
+        resolverSignal = options?.signal;
+        return new Promise((resolve) => {
+          releaseResolver = resolve;
+        });
+      },
+      fetchImpl: async () => {
+        fetches += 1;
+        return imageResponse();
+      },
+    }),
+  );
+  const observed = promise.then(
+    () => ({ value: "resolved" }),
+    (error) => ({ error }),
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort(reason);
+  const prompt = await Promise.race([
+    observed,
+    new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+  ]);
+  releaseResolver?.([PUBLIC_ADDRESS]);
+  const final = prompt === "still-pending" ? await observed : prompt;
+
+  assert.notEqual(prompt, "still-pending");
+  assert.equal(final.error, reason);
+  assert.ok(resolverSignal instanceof AbortSignal);
+  assert.equal(fetches, 0);
+});
+
+test("cancellation cannot be lost while the candidate deadline listener is attached", async () => {
+  const controller = new AbortController();
+  const reason = new Error("abort during listener attachment exactly");
+  const originalAddEventListener = controller.signal.addEventListener.bind(controller.signal);
+  Object.defineProperty(controller.signal, "addEventListener", {
+    configurable: true,
+    value(type, listener, options) {
+      if (type === "abort" && !controller.signal.aborted) controller.abort(reason);
+      return originalAddEventListener(type, listener, options);
+    },
+  });
+  let fetches = 0;
+
+  await assert.rejects(
+    prepareListingMedia(
+      mediaFixture({
+        signal: controller.signal,
+        fetchImpl: async () => {
+          fetches += 1;
+          return imageResponse();
+        },
+      }),
+    ),
+    (error) => error === reason,
+  );
+  assert.equal(fetches, 0);
+});
+
+test("redirect-body cleanup cannot outlive the candidate deadline or shared cancellation", async () => {
+  const controller = new AbortController();
+  const reason = new Error("cancel redirect cleanup exactly");
+  let releaseCancel;
+  const promise = prepareListingMedia(
+    mediaFixture({
+      signal: controller.signal,
+      fetchImpl: async () => ({
+        ok: false,
+        status: 302,
+        headers: new Headers({ location: "/next.png" }),
+        body: {
+          cancel() {
+            return new Promise((resolve) => {
+              releaseCancel = resolve;
+            });
+          },
+        },
+      }),
+    }),
+  );
+  const observed = promise.then(
+    () => ({ value: "resolved" }),
+    (error) => ({ error }),
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort(reason);
+  const prompt = await Promise.race([
+    observed,
+    new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+  ]);
+  releaseCancel?.();
+  const final = prompt === "still-pending" ? await observed : prompt;
+
+  assert.notEqual(prompt, "still-pending");
+  assert.equal(final.error, reason);
+});
+
+test("the production HTTPS transport pins the reviewed address while preserving TLS hostname", async () => {
+  const { createPinnedHttpsTransport } = await import("./media.mjs");
+  assert.equal(typeof createPinnedHttpsTransport, "function");
+  const sentinel = new Error("stop after inspecting request options");
+  let captured;
+  const transport = createPinnedHttpsTransport({
+    requestImpl(url, options) {
+      captured = { url: String(url), options };
+      throw sentinel;
+    },
+  });
+  const signal = new AbortController().signal;
+  await assert.rejects(
+    transport(
+      `https://${MEDIA_HOST}/photo.png`,
+      { method: "GET", headers: { accept: "image/png" }, signal },
+      { address: PUBLIC_ADDRESS, family: 4, hostname: MEDIA_HOST },
+    ),
+    sentinel,
+  );
+
+  assert.equal(captured.url, `https://${MEDIA_HOST}/photo.png`);
+  assert.equal(captured.options.servername, MEDIA_HOST);
+  assert.equal(captured.options.headers.host, MEDIA_HOST);
+  assert.equal(captured.options.signal, signal);
+  let lookupResult;
+  captured.options.lookup(MEDIA_HOST, {}, (error, address, family) => {
+    lookupResult = { error, address, family };
+  });
+  assert.deepEqual(lookupResult, { error: null, address: PUBLIC_ADDRESS, family: 4 });
+});
+
+test("truncated JPEG, PNG, WebP, and AVIF structures are rejected before hashing or storage", async () => {
+  const corruptPayloads = [
+    new Uint8Array([0xff, 0xd8, 0xff]),
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    new Uint8Array([...asciiBytes("RIFF"), ...u32le(4), ...asciiBytes("WEBP")]),
+    new Uint8Array([...u32be(40), ...asciiBytes("ftypavif"), 0, 0, 0, 0]),
+    new Uint8Array([
+      ...avifBox("ftyp", [...asciiBytes("avif"), 0, 0, 0, 0, ...asciiBytes("avifmif1")]),
+      ...u32be(100),
+      ...asciiBytes("meta"),
+      0,
+      0,
+      0,
+      0,
+    ]),
+  ];
+
+  for (const bytes of corruptPayloads) {
+    const repository = fakeRepository();
+    const blobStore = fakeBlobStore();
+    const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+    assert.equal(result.publishable, false);
+    assert.ok(result.reasons.includes("invalid_image_payload"));
+    assert.equal(repository.state.hashReads.length, 0);
+    assert.equal(blobStore.puts.length, 0);
+  }
+});
+
+test("reused and newly registered assets must be exactly bound to the requested content", async () => {
+  const bytes = webpBytes();
+  const hash = sha256(bytes);
+  const mismatchedReuse = fakeRepository({
+    knownHash: hash,
+    knownAsset: {
+      id: "asset-forged-hash",
+      url: "https://owned.example/wrong.webp",
+      pathname: "cms/wrong.webp",
+      contentType: "image/webp",
+      sizeBytes: bytes.byteLength,
+      contentHash: "0".repeat(64),
+    },
+  });
+  const reuseResult = await prepareListingMedia(
+    mediaFixture({ bytes, repository: mismatchedReuse, blobStore: fakeBlobStore() }),
+  );
+  assert.equal(reuseResult.publishable, false);
+  assert.deepEqual(reuseResult.images, []);
+  assert.ok(reuseResult.reasons.includes("owned_media_binding_invalid"));
+
+  const mismatchedRegistration = fakeRepository({
+    registerOwnedMedia: (input) => ({
+      id: "asset-forged-url",
+      ...input,
+      url: `https://${MEDIA_HOST}/unowned.webp`,
+    }),
+  });
+  const registrationResult = await prepareListingMedia(
+    mediaFixture({ bytes, repository: mismatchedRegistration, blobStore: fakeBlobStore() }),
+  );
+  assert.equal(registrationResult.publishable, false);
+  assert.deepEqual(registrationResult.images, []);
+  assert.ok(registrationResult.reasons.includes("owned_media_binding_invalid"));
+  assert.doesNotMatch(JSON.stringify(registrationResult), /unowned\.webp/);
+});
+
+test("forged or quarantined observations are blocked before any media side effect", async () => {
+  const valid = observation();
+  const invalidObservations = [
+    observation(undefined, { quarantineReasons: ["parser_quarantine"] }),
+    { ...valid, contentHash: "0".repeat(64) },
+    { ...valid, propertyNoRaw: "EP-999" },
+    { ...valid, sourceUrl: " " },
+    { ...valid, discoveredAt: "not-a-timestamp" },
+  ];
+
+  for (const [index, invalidObservation] of invalidObservations.entries()) {
+    let sideEffects = 0;
+    const repository = fakeRepository({
+      findMediaByHash: () => {
+        sideEffects += 1;
+        return null;
+      },
+    });
+    await assert.rejects(
+      prepareListingMedia(
+        mediaFixture({
+          rightsConfirmed: index === 0 ? false : true,
+          observation: invalidObservation,
+          repository,
+          resolveHost: async () => {
+            sideEffects += 1;
+            return [PUBLIC_ADDRESS];
+          },
+          fetchImpl: async () => {
+            sideEffects += 1;
+            return imageResponse();
+          },
+        }),
+      ),
+      /observation/i,
+    );
+    assert.equal(sideEffects, 0);
+    assert.deepEqual(repository.state.records, []);
+  }
+});
+
+test("malformed rejection markers and duplicate candidate URLs fail closed before side effects", async () => {
+  const duplicateUrl = `https://${MEDIA_HOST}/duplicate.png`;
+  const observations = [
+    observation([{ ...listingPhoto(), rejectionReasons: "platform_branding" }]),
+    observation([listingPhoto(duplicateUrl, true), listingPhoto(duplicateUrl, false)]),
+  ];
+
+  for (const invalidObservation of observations) {
+    let sideEffects = 0;
+    await assert.rejects(
+      prepareListingMedia(
+        mediaFixture({
+          observation: invalidObservation,
+          resolveHost: async () => {
+            sideEffects += 1;
+            return [PUBLIC_ADDRESS];
+          },
+          fetchImpl: async () => {
+            sideEffects += 1;
+            return imageResponse();
+          },
+        }),
+      ),
+      /observation|duplicate|marker/i,
+    );
+    assert.equal(sideEffects, 0);
+  }
+});
+
+test("validate-only results are never exposed as owned prepared media", async () => {
+  const bytes = webpBytes();
+  const hash = sha256(bytes);
+  const knownAsset = {
+    id: "asset-existing",
+    url: "https://owned.example/existing.webp",
+    pathname: "cms/existing.webp",
+    contentType: "image/webp",
+    sizeBytes: bytes.byteLength,
+    contentHash: hash,
+  };
+  const result = await prepareListingMedia(
+    mediaFixture({
+      mode: "validate",
+      bytes,
+      repository: fakeRepository({ knownHash: hash, knownAsset }),
+    }),
+  );
+
+  assert.equal(result.publishable, true);
+  assert.deepEqual(result.images, [knownAsset.url]);
+  assert.equal(result.preparedMedia, null);
 });
 
 test("malformed identity and dependency inputs fail before side effects", async () => {

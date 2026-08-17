@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
+import { Readable } from "node:stream";
+
+import { exactObservationQuarantineReason } from "./match.mjs";
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 export const MAX_IMAGE_DIMENSION = 12_000;
@@ -8,8 +12,6 @@ export const MAX_IMAGE_PIXELS = 40_000_000;
 export const MEDIA_FETCH_TIMEOUT_MS = 30_000;
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
-const SOURCE_VALUES = new Set(["old_site", "28hse_agent_540"]);
-const DEAL_TYPES = new Set(["sale", "rent"]);
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -115,6 +117,259 @@ function readU32be(bytes, offset) {
     bytes[offset + 2] * 0x100 +
     bytes[offset + 3]
   );
+}
+
+function readU32le(bytes, offset) {
+  if (offset < 0 || offset + 4 > bytes.length) return null;
+  return (
+    bytes[offset] +
+    bytes[offset + 1] * 0x100 +
+    bytes[offset + 2] * 0x10000 +
+    bytes[offset + 3] * 0x1000000
+  );
+}
+
+function readU64be(bytes, offset) {
+  if (offset < 0 || offset + 8 > bytes.length) return null;
+  let result = 0n;
+  for (let index = 0; index < 8; index += 1) {
+    result = (result << 8n) | BigInt(bytes[offset + index]);
+  }
+  return result;
+}
+
+function pngCrc32(bytes, start, end) {
+  let crc = 0xffffffff;
+  for (let offset = start; offset < end; offset += 1) {
+    crc ^= bytes[offset];
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function validJpegStructure(bytes) {
+  if (bytes.length < 8 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return false;
+  const frameMarkers = new Set([
+    0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
+  ]);
+  let offset = 2;
+  let inScan = false;
+  let sawFrame = false;
+  let sawScan = false;
+  while (offset < bytes.length) {
+    if (inScan) {
+      if (bytes[offset] !== 0xff) {
+        offset += 1;
+        continue;
+      }
+      while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+      if (offset >= bytes.length) return false;
+      const marker = bytes[offset];
+      if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7)) {
+        offset += 1;
+        continue;
+      }
+      inScan = false;
+      offset -= 1;
+      continue;
+    }
+    if (bytes[offset] !== 0xff) return false;
+    while (offset < bytes.length && bytes[offset] === 0xff) offset += 1;
+    if (offset >= bytes.length) return false;
+    const marker = bytes[offset];
+    offset += 1;
+    if (marker === 0xd9) return sawFrame && sawScan && offset === bytes.length;
+    if (marker === 0xd8 || marker === 0x00) return false;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    const segmentLength = readU16be(bytes, offset);
+    if (segmentLength == null || segmentLength < 2 || offset + segmentLength > bytes.length) {
+      return false;
+    }
+    if (frameMarkers.has(marker)) {
+      const components = bytes[offset + 7];
+      if (
+        segmentLength !== 8 + components * 3 ||
+        components < 1 ||
+        readU16be(bytes, offset + 3) < 1 ||
+        readU16be(bytes, offset + 5) < 1
+      ) {
+        return false;
+      }
+      sawFrame = true;
+    }
+    if (marker === 0xda) {
+      const components = bytes[offset + 2];
+      if (components < 1 || segmentLength !== 6 + components * 2 || !sawFrame) return false;
+      sawScan = true;
+      inScan = true;
+    }
+    offset += segmentLength;
+  }
+  return false;
+}
+
+function validPngStructure(bytes) {
+  if (
+    bytes.length < 57 ||
+    bytes[0] !== 0x89 ||
+    ascii(bytes, 1, 3) !== "PNG" ||
+    bytes[4] !== 0x0d ||
+    bytes[5] !== 0x0a ||
+    bytes[6] !== 0x1a ||
+    bytes[7] !== 0x0a
+  ) {
+    return false;
+  }
+  let offset = 8;
+  let chunks = 0;
+  let sawHeader = false;
+  let imageDataBytes = 0;
+  let sawEnd = false;
+  while (offset < bytes.length) {
+    const length = readU32be(bytes, offset);
+    if (length == null || length > bytes.length - offset - 12) return false;
+    const type = ascii(bytes, offset + 4, 4);
+    if (!/^[A-Za-z]{4}$/.test(type)) return false;
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    const storedCrc = readU32be(bytes, dataEnd);
+    if (storedCrc !== pngCrc32(bytes, offset + 4, dataEnd)) return false;
+    if (chunks === 0) {
+      if (type !== "IHDR" || length !== 13) return false;
+      const width = readU32be(bytes, dataStart);
+      const height = readU32be(bytes, dataStart + 4);
+      const bitDepth = bytes[dataStart + 8];
+      const colorType = bytes[dataStart + 9];
+      const allowedDepths = {
+        0: [1, 2, 4, 8, 16],
+        2: [8, 16],
+        3: [1, 2, 4, 8],
+        4: [8, 16],
+        6: [8, 16],
+      }[colorType];
+      if (
+        !width ||
+        !height ||
+        !allowedDepths?.includes(bitDepth) ||
+        bytes[dataStart + 10] !== 0 ||
+        bytes[dataStart + 11] !== 0 ||
+        ![0, 1].includes(bytes[dataStart + 12])
+      ) {
+        return false;
+      }
+      sawHeader = true;
+    } else if (type === "IHDR") {
+      return false;
+    }
+    if (type === "IDAT") imageDataBytes += length;
+    if (type === "IEND") {
+      if (length !== 0 || dataEnd + 4 !== bytes.length) return false;
+      sawEnd = true;
+    }
+    chunks += 1;
+    offset = dataEnd + 4;
+  }
+  return sawHeader && imageDataBytes > 0 && sawEnd && offset === bytes.length;
+}
+
+function validWebpStructure(bytes) {
+  if (
+    bytes.length < 26 ||
+    ascii(bytes, 0, 4) !== "RIFF" ||
+    ascii(bytes, 8, 4) !== "WEBP" ||
+    readU32le(bytes, 4) !== bytes.length - 8
+  ) {
+    return false;
+  }
+  let offset = 12;
+  let sawVisualData = false;
+  while (offset < bytes.length) {
+    const kind = ascii(bytes, offset, 4);
+    const length = readU32le(bytes, offset + 4);
+    if (!kind || length == null) return false;
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + length;
+    const paddedEnd = dataEnd + (length % 2);
+    if (dataEnd > bytes.length || paddedEnd > bytes.length) return false;
+    if (kind === "VP8X" && length !== 10) return false;
+    if (kind === "VP8L") {
+      if (length < 5 || bytes[dataStart] !== 0x2f) return false;
+      sawVisualData = true;
+    } else if (kind === "VP8 ") {
+      if (
+        length < 10 ||
+        bytes[dataStart + 3] !== 0x9d ||
+        bytes[dataStart + 4] !== 0x01 ||
+        bytes[dataStart + 5] !== 0x2a
+      ) {
+        return false;
+      }
+      sawVisualData = true;
+    } else if (kind === "ANMF") {
+      if (length < 16) return false;
+      sawVisualData = true;
+    }
+    offset = paddedEnd;
+  }
+  return sawVisualData && offset === bytes.length;
+}
+
+function validAvifStructure(bytes) {
+  let offset = 0;
+  let boxes = 0;
+  let sawFtyp = false;
+  let sawMeta = false;
+  let sawMediaData = false;
+  while (offset < bytes.length) {
+    const size32 = readU32be(bytes, offset);
+    const type = ascii(bytes, offset + 4, 4);
+    if (size32 == null || !type || size32 === 0) return false;
+    let headerSize = 8;
+    let size = size32;
+    if (size32 === 1) {
+      const largeSize = readU64be(bytes, offset + 8);
+      if (largeSize == null || largeSize > BigInt(Number.MAX_SAFE_INTEGER)) return false;
+      headerSize = 16;
+      size = Number(largeSize);
+    }
+    if (size < headerSize || size > bytes.length - offset) return false;
+    if (boxes === 0) {
+      if (type !== "ftyp" || size < headerSize + 8 || (size - headerSize) % 4 !== 0) return false;
+      const brands = [];
+      for (
+        let brandOffset = offset + headerSize;
+        brandOffset + 4 <= offset + size;
+        brandOffset += 4
+      ) {
+        if (brandOffset === offset + headerSize + 4) continue;
+        brands.push(ascii(bytes, brandOffset, 4));
+      }
+      if (!brands.includes("avif") && !brands.includes("avis")) return false;
+      sawFtyp = true;
+    }
+    if (type === "meta") {
+      if (size < headerSize + 4) return false;
+      sawMeta = true;
+    }
+    if (type === "mdat" && size > headerSize) sawMediaData = true;
+    boxes += 1;
+    offset += size;
+  }
+  return sawFtyp && sawMeta && sawMediaData && offset === bytes.length;
+}
+
+function validateImageStructure(bytes, mime) {
+  const valid =
+    mime === "image/jpeg"
+      ? validJpegStructure(bytes)
+      : mime === "image/png"
+        ? validPngStructure(bytes)
+        : mime === "image/webp"
+          ? validWebpStructure(bytes)
+          : validAvifStructure(bytes);
+  if (!valid) fail("invalid_image_payload");
 }
 
 function jpegDimensions(bytes) {
@@ -272,26 +527,39 @@ function hasIpv6Prefix(address, prefix, bits) {
 function publicIpv6(value) {
   const address = ipv6BigInt(value);
   if (address == null) return false;
+  if (address >> 32n === 0xffffn) {
+    const mapped = Number(address & 0xffffffffn);
+    return publicIpv4(
+      `${(mapped >>> 24) & 0xff}.${(mapped >>> 16) & 0xff}.${(mapped >>> 8) & 0xff}.${mapped & 0xff}`,
+    );
+  }
+  if (!hasIpv6Prefix(address, ipv6BigInt("2000::"), 3)) return false;
   const blocked = [
-    [0n, 8],
-    [ipv6BigInt("100::"), 64],
     [ipv6BigInt("2001::"), 23],
     [ipv6BigInt("2001:db8::"), 32],
     [ipv6BigInt("2002::"), 16],
     [ipv6BigInt("3ffe::"), 16],
-    [ipv6BigInt("fc00::"), 7],
-    [ipv6BigInt("fe80::"), 10],
-    [ipv6BigInt("ff00::"), 8],
   ];
   return blocked.every(([prefix, bits]) => !hasIpv6Prefix(address, prefix, bits));
 }
 
-function publicAddress(value) {
+function normalizedPublicAddress(value) {
   const text = typeof value === "string" ? value : value?.address;
-  if (typeof text !== "string") return false;
+  if (typeof text !== "string") return null;
   const normalized = text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1) : text;
   const family = isIP(normalized);
-  return family === 4 ? publicIpv4(normalized) : family === 6 ? publicIpv6(normalized) : false;
+  if (value?.family != null && Number(value.family) !== family) return null;
+  if (family === 4) return publicIpv4(normalized) ? { address: normalized, family: 4 } : null;
+  if (family !== 6 || !publicIpv6(normalized)) return null;
+  const parsed = ipv6BigInt(normalized);
+  if (parsed >> 32n === 0xffffn) {
+    const mapped = Number(parsed & 0xffffffffn);
+    return {
+      address: `${(mapped >>> 24) & 0xff}.${(mapped >>> 16) & 0xff}.${(mapped >>> 8) & 0xff}.${mapped & 0xff}`,
+      family: 4,
+    };
+  }
+  return { address: normalized.toLowerCase(), family: 6 };
 }
 
 function allowedHosts(value) {
@@ -349,44 +617,140 @@ function parseCandidateUrl(value, hosts) {
   return url;
 }
 
-async function assertPublicResolution(url, resolveHost) {
-  let addresses;
-  try {
-    addresses = await resolveHost(url.hostname);
-  } catch {
-    fail("unsafe_media_url");
-  }
-  const values = Array.isArray(addresses) ? addresses : addresses == null ? [] : [addresses];
-  if (values.length === 0 || values.some((address) => !publicAddress(address))) {
-    fail("unsafe_media_url");
-  }
-}
-
 function throwIfAborted(signal) {
   if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
 }
 
-function requestSignal(sharedSignal) {
+function abortRace(operation, signal) {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      callback(value);
+    };
+    const onAbort = () =>
+      finish(reject, signal.reason ?? new DOMException("Aborted", "AbortError"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) onAbort();
+    Promise.resolve()
+      .then(() => {
+        throwIfAborted(signal);
+        return operation();
+      })
+      .then(
+        (value) => finish(resolve, value),
+        (error) => finish(reject, error),
+      );
+  });
+}
+
+function candidateSignal(sharedSignal) {
   throwIfAborted(sharedSignal);
   const controller = new AbortController();
   const timeoutReason = new MediaPreparationError("media_fetch_timeout");
   const timer = setTimeout(() => controller.abort(timeoutReason), MEDIA_FETCH_TIMEOUT_MS);
-  timer.unref?.();
-  const onAbort = () => controller.abort(sharedSignal.reason);
+  const onAbort = () =>
+    controller.abort(sharedSignal.reason ?? new DOMException("Aborted", "AbortError"));
   sharedSignal?.addEventListener("abort", onAbort, { once: true });
+  if (sharedSignal?.aborted) onAbort();
   return {
     signal: controller.signal,
     cleanup() {
       clearTimeout(timer);
       sharedSignal?.removeEventListener("abort", onAbort);
     },
-    rethrow(error) {
-      if (sharedSignal?.aborted) throw sharedSignal.reason ?? error;
-      if (controller.signal.aborted && controller.signal.reason === timeoutReason)
-        throw timeoutReason;
-      throw error;
-    },
   };
+}
+
+function nodeResponseHeaders(values) {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(values ?? {})) {
+    if (Array.isArray(value)) {
+      for (const entry of value) headers.append(name, String(entry));
+    } else if (value != null) {
+      headers.set(name, String(value));
+    }
+  }
+  return headers;
+}
+
+export function createPinnedHttpsTransport({ requestImpl = httpsRequest } = {}) {
+  if (typeof requestImpl !== "function") throw new TypeError("requestImpl must be a function");
+  return async function pinnedHttpsTransport(urlValue, init = {}, connection) {
+    const url = new URL(urlValue);
+    const reviewed = normalizedPublicAddress(connection);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      !reviewed ||
+      connection?.hostname !== url.hostname
+    ) {
+      throw new TypeError("Pinned HTTPS connection metadata is invalid");
+    }
+    const headers = new Headers(init.headers);
+    headers.set("host", url.host);
+    const options = {
+      method: init.method ?? "GET",
+      headers: Object.fromEntries(headers.entries()),
+      signal: init.signal,
+      servername: url.hostname,
+      agent: false,
+      lookup(hostname, lookupOptions, callback) {
+        if (hostname !== url.hostname) {
+          callback(new Error("Pinned HTTPS hostname mismatch"));
+          return;
+        }
+        if (lookupOptions?.all) {
+          callback(null, [{ address: reviewed.address, family: reviewed.family }]);
+          return;
+        }
+        callback(null, reviewed.address, reviewed.family);
+      },
+    };
+    return new Promise((resolve, reject) => {
+      let request;
+      try {
+        request = requestImpl(url, options, (response) => {
+          const status = Number(response.statusCode);
+          resolve({
+            ok: status >= 200 && status < 300,
+            status,
+            headers: nodeResponseHeaders(response.headers),
+            body: Readable.toWeb(response),
+          });
+        });
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      request.once("error", reject);
+      request.end();
+    });
+  };
+}
+
+async function resolvePublicConnection(url, resolveHost, signal) {
+  let addresses;
+  try {
+    addresses = await abortRace(() => resolveHost(url.hostname, { signal }), signal);
+  } catch (error) {
+    throwIfAborted(signal);
+    if (error instanceof MediaPreparationError) throw error;
+    fail("unsafe_media_url");
+  }
+  const values = Array.isArray(addresses) ? addresses : addresses == null ? [] : [addresses];
+  const normalized = values.map(normalizedPublicAddress);
+  if (normalized.length === 0 || normalized.some((address) => address == null)) {
+    fail("unsafe_media_url");
+  }
+  normalized.sort(
+    (left, right) => left.family - right.family || left.address.localeCompare(right.address, "en"),
+  );
+  return { ...normalized[0], hostname: url.hostname };
 }
 
 async function readLimitedBody(response, signal) {
@@ -399,7 +763,7 @@ async function readLimitedBody(response, signal) {
     }
   }
   if (!response.body?.getReader) {
-    const buffer = new Uint8Array(await response.arrayBuffer());
+    const buffer = new Uint8Array(await abortRace(() => response.arrayBuffer(), signal));
     if (buffer.byteLength > MAX_IMAGE_BYTES) fail("media_too_large");
     return buffer;
   }
@@ -413,7 +777,7 @@ async function readLimitedBody(response, signal) {
   try {
     while (true) {
       throwIfAborted(signal);
-      const { value, done } = await reader.read();
+      const { value, done } = await abortRace(() => reader.read(), signal);
       throwIfAborted(signal);
       if (done) break;
       const chunk = bytesView(value);
@@ -427,7 +791,9 @@ async function readLimitedBody(response, signal) {
     }
   } finally {
     signal?.removeEventListener("abort", cancelForAbort);
-    reader.releaseLock();
+    try {
+      reader.releaseLock();
+    } catch {}
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -438,23 +804,30 @@ async function readLimitedBody(response, signal) {
   return bytes;
 }
 
-async function fetchImage({ candidateUrl, hosts, resolveHost, fetchImpl, sharedSignal }) {
-  let current = parseCandidateUrl(candidateUrl, hosts);
-  const originalHostname = current.hostname;
-  for (let redirects = 0; ; redirects += 1) {
-    throwIfAborted(sharedSignal);
-    await assertPublicResolution(current, resolveHost);
-    const request = requestSignal(sharedSignal);
-    let response;
-    try {
-      response = await fetchImpl(current.toString(), {
-        method: "GET",
-        redirect: "manual",
-        credentials: "omit",
-        referrerPolicy: "no-referrer",
-        headers: { accept: "image/avif,image/webp,image/png,image/jpeg" },
-        signal: request.signal,
-      });
+async function fetchImage({ candidateUrl, hosts, resolveHost, transport, sharedSignal }) {
+  const deadline = candidateSignal(sharedSignal);
+  try {
+    let current = parseCandidateUrl(candidateUrl, hosts);
+    const originalHostname = current.hostname;
+    for (let redirects = 0; ; redirects += 1) {
+      throwIfAborted(deadline.signal);
+      const connection = await resolvePublicConnection(current, resolveHost, deadline.signal);
+      const response = await abortRace(
+        () =>
+          transport(
+            current.toString(),
+            {
+              method: "GET",
+              redirect: "manual",
+              credentials: "omit",
+              referrerPolicy: "no-referrer",
+              headers: { accept: "image/avif,image/webp,image/png,image/jpeg" },
+              signal: deadline.signal,
+            },
+            connection,
+          ),
+        deadline.signal,
+      );
       if (REDIRECT_STATUSES.has(response?.status)) {
         if (redirects >= 2) fail("too_many_redirects");
         const location = response.headers?.get?.("location");
@@ -467,32 +840,103 @@ async function fetchImage({ candidateUrl, hosts, resolveHost, fetchImpl, sharedS
         }
         next = parseCandidateUrl(next.toString(), hosts);
         if (next.hostname !== originalHostname) fail("unsafe_media_url");
+        if (typeof response.body?.cancel === "function") {
+          try {
+            await abortRace(() => response.body.cancel(), deadline.signal);
+          } catch {
+            throwIfAborted(deadline.signal);
+          }
+        }
         current = next;
         continue;
       }
       if (!response?.ok) fail("media_fetch_failed");
-      const bytes = await readLimitedBody(response, request.signal);
+      const bytes = await readLimitedBody(response, deadline.signal);
       const mime = detectImageMime(bytes);
       if (!mime || !ALLOWED_MIME.has(mime)) fail("unsupported_media_type");
+      validateImageStructure(bytes, mime);
       const { width, height } = imageDimensions(bytes, mime);
       return { bytes, mime, width, height };
-    } catch (error) {
-      if (error instanceof MediaPreparationError) throw error;
-      try {
-        request.rethrow(error);
-      } catch (abortOrError) {
-        if (sharedSignal?.aborted) throw abortOrError;
-        if (abortOrError instanceof MediaPreparationError) throw abortOrError;
-      }
-      fail("media_fetch_failed");
-    } finally {
-      request.cleanup();
     }
+  } catch (error) {
+    if (sharedSignal?.aborted) {
+      throw sharedSignal.reason ?? new DOMException("Aborted", "AbortError");
+    }
+    if (deadline.signal.aborted) throw deadline.signal.reason;
+    if (error instanceof MediaPreparationError) throw error;
+    fail("media_fetch_failed");
+  } finally {
+    deadline.cleanup();
   }
 }
 
 function plainRecord(value) {
   return value != null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+const CANDIDATE_KEYS = new Set([
+  "url",
+  "category",
+  "isPrimary",
+  "rejected",
+  "eligible",
+  "contextRejected",
+  "rejectionReason",
+  "rejectionReasons",
+  "contextRejectionMarkers",
+]);
+
+function validateMarkerArray(candidate, key) {
+  if (!hasOwn(candidate, key)) return;
+  const value = candidate[key];
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (entry) => typeof entry !== "string" || entry.length === 0 || entry.trim() !== entry,
+    ) ||
+    new Set(value).size !== value.length
+  ) {
+    throw new TypeError("observation media candidate rejection marker is invalid");
+  }
+}
+
+function validateCandidateMarkers(candidate) {
+  if (Object.keys(candidate).some((key) => !CANDIDATE_KEYS.has(key))) {
+    throw new TypeError("observation media candidate rejection marker is invalid");
+  }
+  for (const key of ["rejected", "eligible", "contextRejected"]) {
+    if (hasOwn(candidate, key) && typeof candidate[key] !== "boolean") {
+      throw new TypeError("observation media candidate rejection marker is invalid");
+    }
+  }
+  if (
+    hasOwn(candidate, "rejectionReason") &&
+    (typeof candidate.rejectionReason !== "string" ||
+      candidate.rejectionReason.length === 0 ||
+      candidate.rejectionReason.trim() !== candidate.rejectionReason)
+  ) {
+    throw new TypeError("observation media candidate rejection marker is invalid");
+  }
+  validateMarkerArray(candidate, "rejectionReasons");
+  validateMarkerArray(candidate, "contextRejectionMarkers");
+}
+
+function validateObservation(observation) {
+  const reason = exactObservationQuarantineReason(observation);
+  if (reason) throw new TypeError(`observation is invalid: ${reason}`);
+  const urls = new Set();
+  for (const candidate of observation.mediaCandidates) {
+    validateCandidateMarkers(candidate);
+    if (urls.has(candidate.url)) {
+      throw new TypeError("observation has duplicate media candidate URLs");
+    }
+    urls.add(candidate.url);
+  }
+  return observation;
 }
 
 function candidateHasRejectionMarker(candidate) {
@@ -515,26 +959,41 @@ function validateUuid(value, name, { nullable = false } = {}) {
   return value.toLowerCase();
 }
 
-function validateAsset(asset, { requirePath = false } = {}) {
+function validateAsset(asset, expected) {
   if (
     !plainRecord(asset) ||
     typeof asset.id !== "string" ||
     asset.id.length === 0 ||
-    typeof asset.url !== "string"
+    asset.id.trim() !== asset.id ||
+    typeof asset.url !== "string" ||
+    typeof asset.pathname !== "string" ||
+    asset.pathname.length === 0 ||
+    asset.pathname.trim() !== asset.pathname ||
+    !ALLOWED_MIME.has(asset.contentType) ||
+    !Number.isSafeInteger(asset.sizeBytes) ||
+    asset.sizeBytes < 0 ||
+    typeof asset.contentHash !== "string" ||
+    !SHA256_PATTERN.test(asset.contentHash)
   ) {
-    throw new TypeError("Media repository returned an invalid owned asset");
+    fail("owned_media_binding_invalid");
   }
   let url;
   try {
     url = new URL(asset.url);
   } catch {
-    throw new TypeError("Media repository returned an invalid owned asset");
+    fail("owned_media_binding_invalid");
   }
   if (url.protocol !== "https:" || url.username || url.password) {
-    throw new TypeError("Media repository returned an invalid owned asset");
+    fail("owned_media_binding_invalid");
   }
-  if (requirePath && (typeof asset.pathname !== "string" || asset.pathname.length === 0)) {
-    throw new TypeError("Media repository returned an invalid owned asset");
+  if (
+    asset.contentHash !== expected.contentHash ||
+    asset.contentType !== expected.contentType ||
+    asset.sizeBytes !== expected.sizeBytes ||
+    (expected.pathname != null && asset.pathname !== expected.pathname) ||
+    (expected.url != null && asset.url !== expected.url)
+  ) {
+    fail("owned_media_binding_invalid");
   }
   return asset;
 }
@@ -605,7 +1064,7 @@ function mediaRecord(result) {
   };
 }
 
-function validateInput(input) {
+function validateInput(input, validatedObservation) {
   if (!plainRecord(input)) throw new TypeError("prepareListingMedia input is required");
   if (input.mode !== "validate" && input.mode !== "upload") {
     throw new TypeError("mode must be validate or upload");
@@ -615,32 +1074,7 @@ function validateInput(input) {
   const propertyId = input.isNew
     ? null
     : validateUuid(input.propertyId, "propertyId", { nullable: false });
-  const observation = input.observation;
-  if (
-    !plainRecord(observation) ||
-    observation.schemaVersion !== 1 ||
-    !SOURCE_VALUES.has(observation.source) ||
-    typeof observation.externalId !== "string" ||
-    observation.externalId.length === 0 ||
-    !DEAL_TYPES.has(observation.dealType) ||
-    typeof observation.matchKey !== "string" ||
-    !observation.matchKey.startsWith(`${observation.dealType}:`) ||
-    observation.matchKey.length <= observation.dealType.length + 1 ||
-    !Array.isArray(observation.mediaCandidates)
-  ) {
-    throw new TypeError("observation identity is invalid");
-  }
-  for (const candidate of observation.mediaCandidates) {
-    if (
-      !plainRecord(candidate) ||
-      typeof candidate.url !== "string" ||
-      candidate.url.length === 0 ||
-      typeof candidate.category !== "string" ||
-      typeof candidate.isPrimary !== "boolean"
-    ) {
-      throw new TypeError("observation media candidate is invalid");
-    }
-  }
+  const observation = validatedObservation ?? validateObservation(input.observation);
   if (
     !Array.isArray(input.currentImages) ||
     input.currentImages.some(
@@ -649,8 +1083,15 @@ function validateInput(input) {
   ) {
     throw new TypeError("currentImages must be an array of non-empty strings");
   }
-  if (typeof input.fetchImpl !== "function") throw new TypeError("fetchImpl is required");
-  if (typeof input.resolveHost !== "function") throw new TypeError("resolveHost is required");
+  if (hasOwn(input, "fetchImpl") && typeof input.fetchImpl !== "function") {
+    throw new TypeError("fetchImpl must be a function");
+  }
+  if (hasOwn(input, "transport") && typeof input.transport !== "function") {
+    throw new TypeError("transport must be a function");
+  }
+  if (hasOwn(input, "resolveHost") && typeof input.resolveHost !== "function") {
+    throw new TypeError("resolveHost must be a function");
+  }
   const repository = input.repository;
   for (const method of [
     "findMediaByHash",
@@ -673,6 +1114,8 @@ function validateInput(input) {
     observation,
     observationId,
     propertyId,
+    resolveHost: input.resolveHost ?? defaultResolveMediaHost,
+    transport: input.transport ?? input.fetchImpl ?? createPinnedHttpsTransport(),
     hosts: allowedHosts(input.allowedMediaHosts ?? process.env.MLS_MEDIA_ALLOWED_HOSTS ?? ""),
   };
 }
@@ -728,7 +1171,6 @@ function finalResult({
 function rightsDisabledPreflight(input) {
   if (!plainRecord(input) || input.rightsConfirmed === true) return null;
   const observation = input.observation;
-  if (!plainRecord(observation) || !Array.isArray(observation.mediaCandidates)) return null;
   if (!observation.mediaCandidates.some((candidate) => candidate?.category === "listing_photo")) {
     return null;
   }
@@ -759,9 +1201,15 @@ function rightsDisabledPreflight(input) {
 }
 
 export async function prepareListingMedia(rawInput) {
-  const rightsBlocked = rightsDisabledPreflight(rawInput);
+  if (!plainRecord(rawInput)) throw new TypeError("prepareListingMedia input is required");
+  if (rawInput.signal != null && !(rawInput.signal instanceof AbortSignal)) {
+    throw new TypeError("signal must be an AbortSignal");
+  }
+  const validatedObservation = validateObservation(rawInput.observation);
+  const preflightInput = { ...rawInput, observation: validatedObservation };
+  const rightsBlocked = rightsDisabledPreflight(preflightInput);
   if (rightsBlocked) return rightsBlocked;
-  const input = validateInput(rawInput);
+  const input = validateInput(preflightInput, validatedObservation);
   const { observation, observationId, propertyId, mode, repository, blobStore, signal } = input;
   throwIfAborted(signal);
   const identity = { observationId, propertyId };
@@ -822,14 +1270,20 @@ export async function prepareListingMedia(rawInput) {
         candidateUrl: candidate.url,
         hosts: input.hosts,
         resolveHost: input.resolveHost,
-        fetchImpl: input.fetchImpl,
+        transport: input.transport,
         sharedSignal: signal,
       });
       const contentHash = sha256(downloaded.bytes);
       let asset = localAssets.get(contentHash) ?? null;
       if (!asset) {
         asset = await repository.findMediaByHash(contentHash);
-        if (asset != null) validateAsset(asset);
+        if (asset != null) {
+          validateAsset(asset, {
+            contentHash,
+            contentType: downloaded.mime,
+            sizeBytes: downloaded.bytes.byteLength,
+          });
+        }
       }
       if (!asset && mode === "validate") {
         if (!plannedHashes.has(contentHash)) {
@@ -846,31 +1300,27 @@ export async function prepareListingMedia(rawInput) {
             body: downloaded.bytes,
             contentType: downloaded.mime,
           });
-          uploadCount += 1;
           validateBlobResult(blob, {
             pathname,
             contentType: downloaded.mime,
             size: downloaded.bytes.byteLength,
           });
-        } catch (error) {
-          if (error instanceof TypeError && /invalid owned metadata/.test(error.message)) {
-            throw error;
-          }
+          uploadCount += 1;
+        } catch {
+          throwIfAborted(signal);
           fail("blob_upload_failed");
         }
-        asset = validateAsset(
-          await repository.registerOwnedMedia({
-            url: blob.url,
-            pathname: blob.pathname,
-            contentType: downloaded.mime,
-            sizeBytes: downloaded.bytes.byteLength,
-            contentHash,
-            ownerType: "mls-shared",
-            ownerId: null,
-            createdBy: null,
-          }),
-          { requirePath: true },
-        );
+        const registration = {
+          url: blob.url,
+          pathname: blob.pathname,
+          contentType: downloaded.mime,
+          sizeBytes: downloaded.bytes.byteLength,
+          contentHash,
+          ownerType: "mls-shared",
+          ownerId: null,
+          createdBy: null,
+        };
+        asset = validateAsset(await repository.registerOwnedMedia(registration), registration);
         localAssets.set(contentHash, asset);
       }
       const result = resultFor(candidate, identity, {
@@ -925,7 +1375,8 @@ export async function prepareListingMedia(rawInput) {
       uploadCount,
       wouldUploadCount,
       results,
-      prepared: publishable ? preparedMedia(identity, observation, images) : null,
+      prepared:
+        publishable && mode === "upload" ? preparedMedia(identity, observation, images) : null,
     });
   }
 
@@ -953,7 +1404,8 @@ export async function prepareListingMedia(rawInput) {
     uploadCount,
     wouldUploadCount,
     results,
-    prepared: publishable ? preparedMedia(identity, observation, images) : null,
+    prepared:
+      publishable && mode === "upload" ? preparedMedia(identity, observation, images) : null,
   });
 }
 
