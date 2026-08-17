@@ -228,16 +228,28 @@ export interface CanonicalPropertyWrite {
   status: "draft" | "active" | "sold" | "rented" | "offline" | "inactive";
 }
 
-export interface NewCanonicalPropertyWrite extends CanonicalPropertyWrite {
+export interface NewCanonicalPropertyMetadata {
   featured: false;
   management_fee: null;
   video_url: null;
   floorplan_url: null;
   source_site: "dual-source-mls";
-  legacy_detail_id?: string;
-  legacy_property_no?: string;
-  legacy_url?: string;
 }
+
+export type NewCanonicalPropertyWrite = CanonicalPropertyWrite &
+  NewCanonicalPropertyMetadata &
+  (
+    | {
+        legacy_detail_id?: never;
+        legacy_property_no?: never;
+        legacy_url?: never;
+      }
+    | {
+        legacy_detail_id: string;
+        legacy_property_no: string;
+        legacy_url: string;
+      }
+  );
 
 export interface SourceLinkWrite {
   source: MlsSource;

@@ -25,6 +25,9 @@ const MEDIA_ELIGIBILITIES = new Set(["eligible", "rejected", "upload_failed"]);
 const BATCH_SIZE = 200;
 const MAX_JSON_BYTES = 1_000_000;
 const MAX_INT = 2_147_483_647;
+const MAX_ACTIVE_PUBLICATION_SOURCE_LINKS = 20;
+const MAX_PUBLICATION_MEDIA_EVIDENCE_ROWS = 200;
+const MAX_LEGACY_IDENTITY_SCAN_ROWS = 10_000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
@@ -228,6 +231,7 @@ const RECONCILED_FIELD_NAMES = Object.freeze([
   "status",
 ]);
 const RECONCILED_FIELD_SET = new Set(RECONCILED_FIELD_NAMES);
+const MAX_PUBLICATION_FIELD_HISTORY_ROWS = RECONCILED_FIELD_NAMES.length;
 const PROPERTY_STATUSES = new Set(["draft", "active", "sold", "rented", "offline", "inactive"]);
 const CHANGE_TYPES = new Set(["new", "changed", "inactive", "reactivated", "link_change"]);
 const PUBLICATION_RUN_ROW_KEYS = new Set([
@@ -962,6 +966,37 @@ function validateLifecycleWrite(value, canonical, label) {
   return value;
 }
 
+function validateNewEventCanonical(value, canonical, label) {
+  try {
+    validateCanonicalWrite(value, `${label}.newValue`, "new");
+  } catch (error) {
+    throw new TypeError(`${label} new event must contain the exact effective canonical row`, {
+      cause: error,
+    });
+  }
+  for (const key of [
+    ...CANONICAL_WRITE_KEYS,
+    "featured",
+    "management_fee",
+    "video_url",
+    "floorplan_url",
+    "source_site",
+  ]) {
+    if (!jsonEqual(value[key], canonical[key])) {
+      throw new TypeError(`${label} new event must contain the exact effective canonical row`);
+    }
+  }
+  if (
+    Object.hasOwn(canonical, "legacy_detail_id") &&
+    (!Object.hasOwn(value, "legacy_detail_id") ||
+      value.legacy_detail_id !== canonical.legacy_detail_id ||
+      value.legacy_property_no !== canonical.legacy_property_no ||
+      value.legacy_url !== canonical.legacy_url)
+  ) {
+    throw new TypeError(`${label} new event must contain the exact effective canonical row`);
+  }
+}
+
 function validateListingChangeEvent(value, canonical, label) {
   requireExactRecord(value, LISTING_CHANGE_EVENT_KEYS, label);
   if (!CHANGE_TYPES.has(value.changeType)) throw new TypeError(`${label}.changeType is invalid`);
@@ -1017,11 +1052,11 @@ function validateListingChangeEvent(value, canonical, label) {
   if (value.changeType === "reactivated" && value.oldValue !== "inactive") {
     throw new TypeError(`${label} reactivated event must start from inactive`);
   }
-  if (
-    value.changeType === "new" &&
-    (value.fieldName !== null || value.oldValue !== null || !jsonEqual(value.newValue, canonical))
-  ) {
-    throw new TypeError(`${label} new event must contain the exact canonical row`);
+  if (value.changeType === "new") {
+    if (value.fieldName !== null || value.oldValue !== null) {
+      throw new TypeError(`${label} new event must contain the exact effective canonical row`);
+    }
+    validateNewEventCanonical(value.newValue, canonical, label);
   }
   if (value.changeType === "link_change" && value.fieldName !== null) {
     throw new TypeError(`${label} link change fieldName must be null`);
@@ -3299,13 +3334,14 @@ export function createSyncRepository(options = {}) {
         WHERE property_id = $1::uuid
           AND status = 'active'
         ORDER BY source, external_listing_id, deal_type
+        LIMIT $2
         FOR UPDATE`,
-      [propertyId],
+      [propertyId, MAX_ACTIVE_PUBLICATION_SOURCE_LINKS + 1],
       "lock active publication source links",
       "SELECT",
       operation,
     );
-    if (rows.length > 1_000) {
+    if (rows.length > MAX_ACTIVE_PUBLICATION_SOURCE_LINKS) {
       throw new TypeError("active publication source-link history is unbounded");
     }
     const seen = new Set();
@@ -3461,8 +3497,12 @@ export function createSyncRepository(options = {}) {
       }
     }
 
-    let validSighting = proposalLinkObservations.size > 0;
-    let unknownSighting = activeIdentities.size === 0 && proposalLinkObservations.size === 0;
+    // Existing rows may only be seen through identities that were already active
+    // when this transaction locked them. Proposed links remain valid write evidence,
+    // but cannot manufacture a reactivation or reset an update's absence history.
+    let validSighting = propertyId == null && proposalLinkObservations.size > 0;
+    let unknownSighting =
+      propertyId == null ? proposalLinkObservations.size === 0 : activeIdentities.size === 0;
     for (const identity of activeIdentities) {
       const link = requestedByIdentity.get(identity);
       const observation = observationByIdentity.get(identity);
@@ -3514,12 +3554,16 @@ export function createSyncRepository(options = {}) {
             AND lmr.owned_media_asset_id IS NOT NULL
             AND ma.archived_at IS NULL
           ORDER BY lmr.source_url, lmr.id
+          LIMIT $2
           FOR UPDATE OF lmr, ma`,
-        [observation.id],
+        [observation.id, MAX_PUBLICATION_MEDIA_EVIDENCE_ROWS + 1],
         "lock initial override image baseline",
         "SELECT",
         operation,
       );
+      if (rows.length > MAX_PUBLICATION_MEDIA_EVIDENCE_ROWS) {
+        throw new TypeError("publication media evidence is unbounded");
+      }
       const candidatesByUrl = new Map(
         observation.media_candidates.map((candidate) => [candidate.url, candidate]),
       );
@@ -3667,10 +3711,92 @@ export function createSyncRepository(options = {}) {
     return Object.freeze({ derivedFields, mediaEvidence });
   }
 
-  function validateDerivedFieldEvidence(proposal, derived, fieldHistory, propertyId) {
+  function validateDerivedFieldEvidence(
+    proposal,
+    derived,
+    fieldHistory,
+    propertyId,
+    currentCanonical = null,
+  ) {
     for (const field of proposal.fields) {
       const candidate = derived.derivedFields.get(field.fieldName);
       const stored = fieldHistory.get(field.fieldName);
+
+      if (currentCanonical != null) {
+        const currentValue = currentCanonical[field.fieldName];
+        const lifecycleManagedStatus =
+          field.fieldName === "status" &&
+          field.activeOverride === false &&
+          (currentCanonical.status === "inactive" || proposal.canonical.status === "inactive");
+        let stickyBaseline;
+        let stickyRequired = false;
+        if (stored?.active_override === true) {
+          stickyRequired = true;
+          stickyBaseline = stored.lastPublishedValue;
+        } else if (
+          !lifecycleManagedStatus &&
+          stored != null &&
+          !jsonEqual(currentValue, stored.lastPublishedValue)
+        ) {
+          stickyRequired = true;
+          stickyBaseline = stored.lastPublishedValue;
+        } else if (
+          !lifecycleManagedStatus &&
+          stored == null &&
+          candidate != null &&
+          !jsonEqual(currentValue, candidate.value)
+        ) {
+          stickyRequired = true;
+          stickyBaseline = candidate.value;
+        }
+        if (stickyRequired) {
+          if (
+            field.activeOverride !== true ||
+            !jsonEqual(field.lastPublishedValue, stickyBaseline) ||
+            !jsonEqual(field.overrideValue, currentValue) ||
+            !jsonEqual(proposal.canonical[field.fieldName], currentValue) ||
+            field.winningObservationId !== null
+          ) {
+            throw new PublicationConflictError(
+              `publication conflict: ${field.fieldName} must preserve a derived sticky staff override`,
+              { propertyId },
+            );
+          }
+          continue;
+        }
+        if (field.activeOverride) {
+          throw new PublicationConflictError(
+            `publication conflict: ${field.fieldName} active override lacks a locked staff divergence`,
+            { propertyId },
+          );
+        }
+        if (field.fieldName === "status" && lifecycleManagedStatus) {
+          continue;
+        }
+        if (candidate == null && field.winningObservationId !== null) {
+          if (field.fieldName === "images") {
+            throw new TypeError("published images lack eligible owned current-run media records");
+          }
+          throw new TypeError(
+            `publication ${field.fieldName} winner lacks current-run source evidence`,
+          );
+        }
+        if (candidate == null && stored != null) {
+          if (
+            !jsonEqual(field.lastPublishedValue, stored.lastPublishedValue) ||
+            !jsonEqual(field.overrideValue, stored.overrideValue) ||
+            field.winningObservationId !== null ||
+            !jsonEqual(proposal.canonical[field.fieldName], currentValue)
+          ) {
+            throw new PublicationConflictError(
+              `publication conflict: ${field.fieldName} must preserve inactive field history`,
+              { propertyId },
+            );
+          }
+          continue;
+        }
+      }
+
       if (field.activeOverride) {
         if (stored == null) {
           if (candidate == null || !jsonEqual(candidate.value, field.lastPublishedValue)) {
@@ -3697,8 +3823,10 @@ export function createSyncRepository(options = {}) {
         continue;
       }
       if (
+        field.activeOverride !== false ||
         field.winningObservationId !== candidate.observation.id ||
-        !jsonEqual(field.lastPublishedValue, candidate.value)
+        !jsonEqual(field.lastPublishedValue, candidate.value) ||
+        field.overrideValue !== null
       ) {
         throw new PublicationConflictError(
           `publication conflict: ${field.fieldName} does not match derived source precedence`,
@@ -3822,6 +3950,74 @@ export function createSyncRepository(options = {}) {
     return Object.freeze(current);
   }
 
+  async function assertNoAuthoritativeLegacyIdentityConflict(
+    canonical,
+    operation,
+    { excludePropertyId = null } = {},
+  ) {
+    const rows = await publicationQuery(
+      `SELECT id, listing_no, canonical_property_no, legacy_property_no, deal_type
+         FROM properties
+        WHERE deal_type = $1::deal_type
+          AND (canonical_property_no IS NOT NULL OR legacy_property_no IS NOT NULL)
+        ORDER BY id
+        LIMIT $2
+        FOR UPDATE`,
+      [canonical.deal_type, MAX_LEGACY_IDENTITY_SCAN_ROWS + 1],
+      "publication authoritative legacy identity scan",
+      "SELECT",
+      operation,
+    );
+    if (rows.length > MAX_LEGACY_IDENTITY_SCAN_ROWS) {
+      throw new TypeError("publication legacy identity scan is unbounded");
+    }
+    let priorId = null;
+    for (const rawRow of rows) {
+      const row = exactPublicationRow(
+        rawRow,
+        new Set(["id", "listing_no", "canonical_property_no", "legacy_property_no", "deal_type"]),
+        "publication authoritative legacy identity row",
+      );
+      const canonicalPropertyNo =
+        row.canonical_property_no === null
+          ? null
+          : typeof row.canonical_property_no === "string"
+            ? normalizePropertyNo(row.canonical_property_no)
+            : undefined;
+      const legacyPropertyNo =
+        row.legacy_property_no === null
+          ? null
+          : typeof row.legacy_property_no === "string"
+            ? normalizePropertyNo(row.legacy_property_no)
+            : undefined;
+      if (
+        !isUuid(row.id) ||
+        (priorId !== null && row.id <= priorId) ||
+        typeof row.listing_no !== "string" ||
+        row.listing_no.trim().length === 0 ||
+        row.listing_no !== row.listing_no.trim() ||
+        row.listing_no.length > 160 ||
+        /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(row.listing_no) ||
+        row.deal_type !== canonical.deal_type ||
+        (row.canonical_property_no !== null && canonicalPropertyNo == null) ||
+        (row.legacy_property_no !== null && legacyPropertyNo == null)
+      ) {
+        throw new TypeError("publication authoritative legacy identity row is invalid");
+      }
+      priorId = row.id;
+      if (
+        row.id !== excludePropertyId &&
+        (canonicalPropertyNo === canonical.canonical_property_no ||
+          legacyPropertyNo === canonical.canonical_property_no)
+      ) {
+        throw new PublicationConflictError(
+          "publication conflict: authoritative normalized canonical identity already exists",
+          { propertyId: excludePropertyId },
+        );
+      }
+    }
+  }
+
   async function assertNewIdentityAvailable(proposal, operation) {
     const canonical = proposal.canonical;
     const lockKeys = [
@@ -3849,6 +4045,7 @@ export function createSyncRepository(options = {}) {
         throw new TypeError("publication canonical identity advisory lock was not acquired");
       }
     }
+    await assertNoAuthoritativeLegacyIdentityConflict(canonical, operation);
     const conflictRows = await publicationQuery(
       `SELECT id, listing_no, canonical_property_no, legacy_property_no, deal_type
          FROM properties
@@ -3907,6 +4104,9 @@ export function createSyncRepository(options = {}) {
         { propertyId },
       );
     }
+    await assertNoAuthoritativeLegacyIdentityConflict(proposal.canonical, operation, {
+      excludePropertyId: propertyId,
+    });
     const rows = await publicationQuery(
       `SELECT id, canonical_property_no, legacy_property_no, deal_type
          FROM properties
@@ -4010,16 +4210,17 @@ export function createSyncRepository(options = {}) {
     const rows = await publicationQuery(
       `SELECT property_id, field_name, last_published_value, override_value,
               active_override, winning_observation_id
-         FROM property_sync_fields
-        WHERE property_id = $1::uuid
-        ORDER BY field_name
-        FOR UPDATE`,
-      [propertyId],
+        FROM property_sync_fields
+       WHERE property_id = $1::uuid
+       ORDER BY field_name
+       LIMIT $2
+       FOR UPDATE`,
+      [propertyId, MAX_PUBLICATION_FIELD_HISTORY_ROWS + 1],
       "lock all publication field history",
       "SELECT",
       operation,
     );
-    if (rows.length > RECONCILED_FIELD_NAMES.length) {
+    if (rows.length > MAX_PUBLICATION_FIELD_HISTORY_ROWS) {
       throw new TypeError("locked publication field history is unbounded");
     }
     const rowsByField = new Map();
@@ -4085,7 +4286,7 @@ export function createSyncRepository(options = {}) {
       if (!field.activeOverride) continue;
       if (
         !jsonEqual(row.lastPublishedValue, field.lastPublishedValue) ||
-        row.winning_observation_id !== null
+        (row.active_override && row.winning_observation_id !== null)
       ) {
         throw new PublicationConflictError(
           "publication conflict: active override automated baseline changed",
@@ -4337,6 +4538,16 @@ export function createSyncRepository(options = {}) {
       const derived = await deriveAutomatedFieldEvidence(proposal, evidence, null, operation);
       validateDerivedFieldEvidence(proposal, derived, fieldHistory, null);
       const legacy = await deriveNewLegacyMetadata(proposal, evidence, runId, operation);
+      const effectiveCanonical = Object.freeze(
+        legacy.legacyDetailId === null
+          ? { ...proposal.canonical }
+          : {
+              ...proposal.canonical,
+              legacy_detail_id: legacy.legacyDetailId,
+              legacy_property_no: legacy.legacyPropertyNo,
+              legacy_url: legacy.legacyUrl,
+            },
+      );
       let rows;
       try {
         rows = await publicationQuery(
@@ -4354,15 +4565,15 @@ export function createSyncRepository(options = {}) {
          )
          RETURNING id`,
           [
-            ...values,
-            false,
-            null,
-            null,
-            null,
-            "dual-source-mls",
-            legacy.legacyDetailId,
-            legacy.legacyPropertyNo,
-            legacy.legacyUrl,
+            ...canonicalParams(effectiveCanonical),
+            effectiveCanonical.featured,
+            effectiveCanonical.management_fee,
+            effectiveCanonical.video_url,
+            effectiveCanonical.floorplan_url,
+            effectiveCanonical.source_site,
+            effectiveCanonical.legacy_detail_id ?? null,
+            effectiveCanonical.legacy_property_no ?? null,
+            effectiveCanonical.legacy_url ?? null,
           ],
           "insert canonical property",
           "INSERT",
@@ -4382,6 +4593,7 @@ export function createSyncRepository(options = {}) {
         changed: true,
         changedFields: new Set(RECONCILED_FIELD_NAMES),
         currentCanonical: null,
+        effectiveCanonical,
         evidence,
         derived,
       };
@@ -4473,7 +4685,13 @@ export function createSyncRepository(options = {}) {
       proposal.propertyId,
       operation,
     );
-    validateDerivedFieldEvidence(proposal, derived, fieldHistory, proposal.propertyId);
+    validateDerivedFieldEvidence(
+      proposal,
+      derived,
+      fieldHistory,
+      proposal.propertyId,
+      currentCanonical,
+    );
     await lockAndValidateLifecycleHistory(
       proposal,
       proposal.propertyId,
@@ -4927,7 +5145,7 @@ export function createSyncRepository(options = {}) {
           changeType: "new",
           fieldName: null,
           oldValue: null,
-          newValue: proposal.canonical,
+          newValue: canonicalResult.effectiveCanonical,
           anyCurrentWinner: true,
           reason: null,
         }),

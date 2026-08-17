@@ -195,6 +195,7 @@ test(
     const runId = randomUUID();
     const propertyId = randomUUID();
     const observationId = randomUUID();
+    const newObservationId = randomUUID();
     const mediaAssetId = randomUUID();
     const mediaRecordId = randomUUID();
     const shadowRunIds = Array.from({ length: 7 }, () => randomUUID());
@@ -203,6 +204,9 @@ test(
     const publishStartedAt = `${publishDate}T04:00:00.000Z`;
     const listingNo = `MLS-IT-${tag}`;
     const externalId = `MLS-IT-${tag}`;
+    const newListingNo = `MLS-IT-NEW-${tag}`;
+    const newExternalId = `MLS-IT-OLD-${tag}`;
+    const newLegacyUrl = `https://legacy.integration.invalid/${tag}`;
     const sourceImageUrl = `https://upstream.integration.invalid/${tag}.png`;
     const ownedImageUrl = `https://owned.integration.invalid/${tag}.png`;
     const observationMediaCandidates = [
@@ -257,6 +261,66 @@ test(
       description: null,
       images: [ownedImageUrl],
       status: "active",
+    };
+    const newObservationFields = {
+      title_zh: "New dual-source publication",
+      district_slug: "sham-tseng",
+      price: 6_000_001,
+      saleable_area: 420,
+      bedrooms: 2,
+      bathrooms: 1,
+      status: "active",
+    };
+    const newObservationPayload = {
+      schemaVersion: 1,
+      fields: newObservationFields,
+      rawFields: {},
+      sourceUpdatedAt: null,
+      parseWarnings: [],
+    };
+    const newObservationHash = stableObservationHash({
+      schemaVersion: 1,
+      source: SOURCE_OLD_SITE,
+      externalId: newExternalId,
+      dealType: "sale",
+      propertyNoNormalized: newListingNo,
+      fields: newObservationFields,
+      rawFields: {},
+      mediaCandidates: [],
+      sourceUpdatedAt: null,
+    });
+    const newCanonical = {
+      listing_no: newListingNo,
+      canonical_property_no: newListingNo,
+      title_zh: newObservationFields.title_zh,
+      title_en: null,
+      deal_type: "sale",
+      estate_id: null,
+      district_slug: newObservationFields.district_slug,
+      address: null,
+      price: newObservationFields.price,
+      rent: null,
+      saleable_area: newObservationFields.saleable_area,
+      gross_area: null,
+      bedrooms: newObservationFields.bedrooms,
+      bathrooms: newObservationFields.bathrooms,
+      floor: null,
+      orientation: null,
+      features: [],
+      description: null,
+      images: [],
+      status: "active",
+      featured: false,
+      management_fee: null,
+      video_url: null,
+      floorplan_url: null,
+      source_site: "dual-source-mls",
+    };
+    const effectiveNewCanonical = {
+      ...newCanonical,
+      legacy_detail_id: newExternalId,
+      legacy_property_no: newListingNo,
+      legacy_url: newLegacyUrl,
     };
     let connected = false;
     let connectionAttempted = false;
@@ -329,6 +393,13 @@ test(
       const expectedUpdatedAt = propertyRows.rows[0].updated_at;
       assert.match(expectedUpdatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
       await client.query(
+        `INSERT INTO property_sync_fields (
+           property_id, field_name, last_published_value, override_value,
+           active_override, winning_observation_id
+         ) VALUES ($1, 'price', $2::jsonb, NULL, false, NULL)`,
+        [propertyId, JSON.stringify(7_900_000)],
+      );
+      await client.query(
         `INSERT INTO listing_source_observations (
            id, run_id, source, external_listing_id, deal_type, source_url,
            property_no_raw, property_no_normalized, payload, media_candidates,
@@ -346,6 +417,25 @@ test(
           JSON.stringify(observationMediaCandidates),
           observationHash,
           `${publishDate}T00:01:00.000Z`,
+        ],
+      );
+      await client.query(
+        `INSERT INTO listing_source_observations (
+           id, run_id, source, external_listing_id, deal_type, source_url,
+           property_no_raw, property_no_normalized, payload, media_candidates,
+           content_hash, validation_state, discovered_at, fetched_at
+         ) VALUES ($1, $2, $3, $4, 'sale', $5, $6, $6, $7::jsonb,
+           '[]'::jsonb, $8, 'valid', $9::timestamptz, $9::timestamptz)`,
+        [
+          newObservationId,
+          runId,
+          SOURCE_OLD_SITE,
+          newExternalId,
+          newLegacyUrl,
+          newListingNo,
+          JSON.stringify(newObservationPayload),
+          newObservationHash,
+          `${publishDate}T00:02:00.000Z`,
         ],
       );
       await client.query(
@@ -370,6 +460,17 @@ test(
         winningObservationId:
           fieldName === "images" || Object.hasOwn(observationFields, fieldName)
             ? observationId
+            : null,
+      }));
+      const newFields = RECONCILED_FIELD_NAMES.map((fieldName) => ({
+        fieldName,
+        lastPublishedValue: newCanonical[fieldName],
+        overrideValue: null,
+        activeOverride: false,
+        winningObservationId:
+          newCanonical[fieldName] != null &&
+          (!Array.isArray(newCanonical[fieldName]) || newCanonical[fieldName].length > 0)
+            ? newObservationId
             : null,
       }));
       const batch = {
@@ -422,13 +523,56 @@ test(
               },
             ],
           },
+          {
+            kind: "new",
+            canonical: newCanonical,
+            links: [
+              {
+                source: SOURCE_OLD_SITE,
+                externalId: newExternalId,
+                dealType: "sale",
+                matchKey: `sale:${newListingNo}`,
+                observedAt: `${publishDate}T00:02:00.000Z`,
+              },
+            ],
+            fields: newFields,
+            lifecycle: {
+              consecutiveAbsentHealthyRuns: 0,
+              inactiveReason: null,
+              inactiveAt: null,
+            },
+            events: [
+              {
+                changeType: "new",
+                fieldName: null,
+                oldValue: null,
+                newValue: effectiveNewCanonical,
+                winningObservationId: newObservationId,
+                reason: "new_listing",
+              },
+              {
+                changeType: "link_change",
+                fieldName: null,
+                oldValue: null,
+                newValue: {
+                  source: SOURCE_OLD_SITE,
+                  externalId: newExternalId,
+                  dealType: "sale",
+                  matchKey: `sale:${newListingNo}`,
+                  status: "active",
+                },
+                winningObservationId: newObservationId,
+                reason: "source_link_activated",
+              },
+            ],
+          },
         ],
       };
 
       assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
-        inserted: 0,
+        inserted: 1,
         updated: 1,
-        events: 2,
+        events: 4,
       });
       const stateRows = await client.query(
         `SELECT
@@ -571,9 +715,51 @@ test(
           archived_at: null,
         },
       ]);
+      const newPropertyRows = await client.query(
+        `SELECT id, listing_no, canonical_property_no, source_site,
+                legacy_detail_id, legacy_property_no, legacy_url
+           FROM properties
+          WHERE listing_no = $1`,
+        [newListingNo],
+      );
+      assert.equal(newPropertyRows.rows.length, 1);
+      const newProperty = newPropertyRows.rows[0];
+      assert.deepEqual(
+        {
+          listing_no: newProperty.listing_no,
+          canonical_property_no: newProperty.canonical_property_no,
+          source_site: newProperty.source_site,
+          legacy_detail_id: newProperty.legacy_detail_id,
+          legacy_property_no: newProperty.legacy_property_no,
+          legacy_url: newProperty.legacy_url,
+        },
+        {
+          listing_no: newListingNo,
+          canonical_property_no: newListingNo,
+          source_site: "dual-source-mls",
+          legacy_detail_id: newExternalId,
+          legacy_property_no: newListingNo,
+          legacy_url: newLegacyUrl,
+        },
+      );
+      const newEventRows = await client.query(
+        `SELECT change_type, old_value, new_value, winning_observation_id
+           FROM listing_change_events
+          WHERE property_id = $1 AND run_id = $2 AND change_type = 'new'`,
+        [newProperty.id, runId],
+      );
+      assert.deepEqual(newEventRows.rows, [
+        {
+          change_type: "new",
+          old_value: null,
+          new_value: effectiveNewCanonical,
+          winning_observation_id: newObservationId,
+        },
+      ]);
       const captured = structuredClone(published);
 
       const conflicting = structuredClone(batch);
+      conflicting.proposals = [conflicting.proposals[0]];
       conflicting.proposals[0].canonical.price += 1;
       conflicting.proposals[0].fields.find(
         (field) => field.fieldName === "price",
@@ -620,11 +806,31 @@ test(
           () =>
             client.query("DELETE FROM property_sync_fields WHERE property_id = $1", [propertyId]),
           () =>
+            client.query(
+              "DELETE FROM property_sync_fields WHERE property_id IN (SELECT id FROM properties WHERE listing_no = $1)",
+              [newListingNo],
+            ),
+          () =>
             client.query("DELETE FROM property_sync_state WHERE property_id = $1", [propertyId]),
+          () =>
+            client.query(
+              "DELETE FROM property_sync_state WHERE property_id IN (SELECT id FROM properties WHERE listing_no = $1)",
+              [newListingNo],
+            ),
           () =>
             client.query("DELETE FROM property_source_links WHERE property_id = $1", [propertyId]),
           () =>
+            client.query(
+              "DELETE FROM property_source_links WHERE property_id IN (SELECT id FROM properties WHERE listing_no = $1)",
+              [newListingNo],
+            ),
+          () =>
             client.query("DELETE FROM listing_source_observations WHERE id = $1", [observationId]),
+          () =>
+            client.query("DELETE FROM listing_source_observations WHERE id = $1", [
+              newObservationId,
+            ]),
+          () => client.query("DELETE FROM properties WHERE listing_no = $1", [newListingNo]),
           () => client.query("DELETE FROM properties WHERE id = $1", [propertyId]),
           () => client.query("DELETE FROM media_assets WHERE id = $1", [mediaAssetId]),
           () =>

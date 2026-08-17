@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { types as neonTypes } from "@neondatabase/serverless";
@@ -501,6 +504,7 @@ function previousHealthyLifecycleRun(overrides = {}) {
 function fakePublicationClient(options = {}) {
   const events = [];
   const sql = [];
+  const lockedCanonicalSnapshots = new Map();
   const rows = options.shadowRows ?? approvedShadowRows(options.approvedShadowStreak ?? 7);
   const client = fakeClient((call) => {
     sql.push(call.statement);
@@ -551,6 +555,15 @@ function fakePublicationClient(options = {}) {
       return result([{ acquired: 1 }]);
     }
     if (
+      /canonical_property_no IS NOT NULL/.test(call.statement) &&
+      /legacy_property_no IS NOT NULL/.test(call.statement) &&
+      /LIMIT \$2/.test(call.statement) &&
+      /FOR UPDATE/.test(call.statement)
+    ) {
+      const configured = options.legacyIdentityScanRows ?? [];
+      return result(typeof configured === "function" ? configured(call) : configured);
+    }
+    if (
       /FROM properties WHERE \(\(canonical_property_no/.test(call.statement) ||
       (/FROM properties/.test(call.statement) &&
         /OR upper\(regexp_replace/.test(call.statement) &&
@@ -575,20 +588,35 @@ function fakePublicationClient(options = {}) {
               images: [],
             })
           : canonicalWrite();
-      return result([
-        {
-          legacy_property_no: null,
-          ...(options.lockedRow ?? {
-            id: propertyId,
-            updated_at_token: options.updatedAtConflict
-              ? "2026-08-17T00:03:00.000000Z"
-              : EXPECTED_UPDATED_AT,
-            updated_at_matches_expected: !options.updatedAtConflict,
-            ...canonical,
-            price: options.unchanged ? canonical.price : 7_900_000,
-          }),
-        },
-      ]);
+      const lockedRow = {
+        legacy_property_no: null,
+        ...(options.lockedRow ?? {
+          id: propertyId,
+          updated_at_token: options.updatedAtConflict
+            ? "2026-08-17T00:03:00.000000Z"
+            : EXPECTED_UPDATED_AT,
+          updated_at_matches_expected: !options.updatedAtConflict,
+          ...canonical,
+          price: options.unchanged ? canonical.price : 7_900_000,
+        }),
+      };
+      const descriptors = Object.getOwnPropertyDescriptors(lockedRow);
+      if (
+        [...RECONCILED_FIELD_NAMES].every(
+          (fieldName) => descriptors[fieldName] && Object.hasOwn(descriptors[fieldName], "value"),
+        )
+      ) {
+        lockedCanonicalSnapshots.set(
+          propertyId,
+          Object.fromEntries(
+            RECONCILED_FIELD_NAMES.map((fieldName) => [
+              fieldName,
+              structuredClone(descriptors[fieldName].value),
+            ]),
+          ),
+        );
+      }
+      return result([lockedRow]);
     }
     if (/UPDATE properties SET/.test(call.statement)) {
       if (options.writeError) throw options.writeError;
@@ -657,7 +685,33 @@ function fakePublicationClient(options = {}) {
       return result([{ property_id: call.params[0] }], 1, "INSERT");
     }
     if (/FROM property_sync_fields/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
-      return result(options.lockedFieldRows ?? []);
+      if (Object.hasOwn(options, "lockedFieldRows")) return result(options.lockedFieldRows);
+      const baseCanonical =
+        call.params[0] === PROPERTY_ID_2
+          ? canonicalWrite({
+              listing_no: "EP-0002",
+              canonical_property_no: "EP-0002",
+              images: [],
+            })
+          : canonicalWrite();
+      const lockedCanonical = lockedCanonicalSnapshots.get(call.params[0]) ?? {
+        ...baseCanonical,
+        price: options.unchanged ? baseCanonical.price : 7_900_000,
+      };
+      return result(
+        [...RECONCILED_FIELD_NAMES].sort().map((fieldName) => ({
+          property_id: call.params[0],
+          field_name: fieldName,
+          last_published_value: structuredClone(lockedCanonical[fieldName]),
+          override_value: null,
+          active_override: false,
+          winning_observation_id:
+            lockedCanonical[fieldName] != null &&
+            (!Array.isArray(lockedCanonical[fieldName]) || lockedCanonical[fieldName].length > 0)
+              ? OBSERVATION_ID_2
+              : null,
+        })),
+      );
     }
     if (/INSERT INTO property_sync_fields/.test(call.statement)) {
       return result([{ property_id: call.params[0] }], 1, "INSERT");
@@ -5172,6 +5226,8 @@ test("reactivation locks prior inactive lifecycle history and clears it once", a
     approvedBatch().proposals[0].events.find((event) => event.changeType === "link_change"),
   ];
   const client = fakePublicationClient({
+    activeSourceLinkRows: [activeSourceLinkRow()],
+    lifecycleObservationRows: [lifecycleObservationRow(canonical)],
     lockedRow: {
       id: PROPERTY_ID,
       updated_at_token: EXPECTED_UPDATED_AT,
@@ -5702,9 +5758,7 @@ test("new identity conflicts include equivalent normalized legacy identities und
   }
   assert.ok(caught instanceof PublicationConflictError);
   const identityRead = client.calls.find(
-    (call) =>
-      /publication|FROM properties/.test(call.statement) &&
-      /canonical_property_no/.test(call.statement),
+    (call) => /FROM properties/.test(call.statement) && /regexp_replace/i.test(call.statement),
   );
   assert.match(identityRead.statement, /legacy_property_no/);
   assert.match(identityRead.statement, /regexp_replace/i);
@@ -5802,7 +5856,16 @@ test("an initial active null feature override preserves its independently proven
       ...canonical,
       price: 7_900_000,
     },
-    lockedFieldRows: [],
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 7_900_000,
+        override_value: null,
+        active_override: false,
+        winning_observation_id: OBSERVATION_ID_2,
+      },
+    ],
   });
 
   assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
@@ -6002,4 +6065,571 @@ test("self-review: locked canonical images remain a non-null ordered URL list", 
     false,
   );
   assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("updates independently derive a sticky override when field history is missing", async () => {
+  const canonical = canonicalWrite({ price: 8_000_001 });
+  const batch = approvedBatch({ canonical });
+  const client = fakePublicationClient({
+    observationCanonical: canonical,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+      price: 7_900_000,
+    },
+    lockedFieldRows: [],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /sticky|override|staff.*value|publication conflict/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("inactive field history cannot hide a locked staff divergence from its frozen baseline", async () => {
+  const canonical = canonicalWrite({ price: 8_000_001 });
+  const batch = approvedBatch({ canonical });
+  batch.proposals[0].events.find(
+    (event) => event.changeType === "changed" && event.fieldName === "price",
+  ).oldValue = 7_950_000;
+  const client = fakePublicationClient({
+    observationCanonical: canonical,
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+      price: 7_950_000,
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 7_900_000,
+        override_value: null,
+        active_override: false,
+        winning_observation_id: OBSERVATION_ID_2,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /sticky|override|staff.*diverg|publication conflict/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("proposal-only links cannot reactivate an update without a locked-active DB identity", async () => {
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.events = [
+    proposal.events.find((event) => event.changeType === "changed"),
+    {
+      changeType: "reactivated",
+      fieldName: "status",
+      oldValue: "inactive",
+      newValue: "active",
+      winningObservationId: null,
+      reason: "seen_again",
+    },
+    proposal.events.find((event) => event.changeType === "link_change"),
+  ];
+  const client = fakePublicationClient({
+    activeSourceLinkRows: [],
+    lifecycleObservationRows: [lifecycleObservationRow()],
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 7_900_000, status: "inactive" }),
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 7_900_000,
+        override_value: null,
+        active_override: false,
+        winning_observation_id: OBSERVATION_ID_2,
+      },
+      {
+        property_id: PROPERTY_ID,
+        field_name: "status",
+        last_published_value: "active",
+        override_value: null,
+        active_override: false,
+        winning_observation_id: OBSERVATION_ID_2,
+      },
+    ],
+    lockedLifecycleRows: [
+      {
+        property_id: PROPERTY_ID,
+        consecutive_absent_healthy_runs: 2,
+        last_evaluated_run_id: RUN_ID_2,
+        inactive_reason: "absent_two_healthy_runs",
+        inactive_at_token: "2026-08-10T04:00:00.654321Z",
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /locked.active|reactivat|lifecycle|sighting/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("new proposals may establish their initial sighting from exact proposed-link evidence", async () => {
+  const proposal = newPublicationProposal();
+  const client = fakePublicationClient();
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 1, updated: 0, events: 2 },
+  );
+  assert.equal(
+    client.sql.some(
+      (statement) =>
+        /FROM property_source_links/.test(statement) && /status = 'active'/.test(statement),
+    ),
+    false,
+  );
+});
+
+test("new change events exactly audit DB-derived legacy metadata in the effective inserted row", async () => {
+  const legacyUrl = "https://fixtures.invalid/old-site/old-3972001";
+  const proposal = newPublicationProposal();
+  proposal.links = [
+    {
+      source: SOURCE_OLD_SITE,
+      externalId: "old-3972001",
+      dealType: "sale",
+      matchKey: "sale:EP-0001",
+      observedAt: "2026-08-17T00:01:00.000Z",
+    },
+  ];
+  const effectiveCanonical = {
+    ...proposal.canonical,
+    legacy_detail_id: "old-3972001",
+    legacy_property_no: "EP-0001",
+    legacy_url: legacyUrl,
+  };
+  proposal.events = [
+    {
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: effectiveCanonical,
+      winningObservationId: OBSERVATION_ID,
+      reason: "new_listing",
+    },
+    {
+      changeType: "link_change",
+      fieldName: null,
+      oldValue: null,
+      newValue: {
+        source: SOURCE_OLD_SITE,
+        externalId: "old-3972001",
+        dealType: "sale",
+        matchKey: "sale:EP-0001",
+        status: "active",
+      },
+      winningObservationId: OBSERVATION_ID,
+      reason: "source_link_activated",
+    },
+  ];
+  const client = fakePublicationClient({
+    observationRow: publicationObservationRow(canonicalWrite(), {
+      source: SOURCE_OLD_SITE,
+      external_listing_id: "old-3972001",
+    }),
+    legacySourceUrl: legacyUrl,
+  });
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 1, updated: 0, events: 2 },
+  );
+  const newEvent = client.calls.find(
+    (call) => /INSERT INTO listing_change_events/.test(call.statement) && call.params[2] === "new",
+  );
+  assert.deepEqual(JSON.parse(newEvent.params[5]), effectiveCanonical);
+});
+
+test("new identities reject authoritative FEFF, NFKC, and ECMAScript-whitespace legacy collisions", async () => {
+  const client = fakePublicationClient({
+    identityConflictRows: [],
+    legacyIdentityScanRows: [
+      {
+        id: PROPERTY_ID_2,
+        listing_no: "LEGACY-ROW",
+        canonical_property_no: null,
+        legacy_property_no: "\uFEFFｅｐ-\u3000０００１",
+        deal_type: "sale",
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(
+      approvedBatch({ proposals: [newPublicationProposal()] }),
+    ),
+    (error) => error instanceof PublicationConflictError,
+  );
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO properties/.test(statement)),
+    false,
+  );
+});
+
+test("authoritative legacy collision scans fail closed at their max-plus-one sentinel", async () => {
+  let observedLimit = null;
+  const client = fakePublicationClient({
+    identityConflictRows: [],
+    legacyIdentityScanRows(call) {
+      observedLimit = call.params[1];
+      return Array.from({ length: observedLimit }, () => ({}));
+    },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(
+      approvedBatch({ proposals: [newPublicationProposal()] }),
+    ),
+    /legacy.*unbounded|identity.*unbounded|scan.*limit/i,
+  );
+  assert.equal(Number.isInteger(observedLimit), true);
+  assert.ok(observedLimit > 1 && observedLimit <= 10_001);
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO properties/.test(statement)),
+    false,
+  );
+});
+
+test("publication evidence locks use explicit conservative max-plus-one SQL sentinels", async () => {
+  const client = fakePublicationClient();
+  await createSyncRepository({ client }).publishBatch(approvedBatch());
+
+  const activeLinks = client.calls.find(
+    (call) =>
+      /FROM property_source_links/.test(call.statement) && /status = 'active'/.test(call.statement),
+  );
+  const media = client.calls.find((call) =>
+    /FROM listing_media_records AS lmr/.test(call.statement),
+  );
+  const fields = client.calls.find(
+    (call) => /FROM property_sync_fields/.test(call.statement) && /FOR UPDATE/.test(call.statement),
+  );
+  for (const call of [activeLinks, media, fields]) {
+    assert.match(call.statement, /LIMIT \$2\s+FOR UPDATE/i);
+  }
+  assert.deepEqual(activeLinks.params, [PROPERTY_ID, 21]);
+  assert.deepEqual(media.params, [OBSERVATION_ID, 201]);
+  assert.deepEqual(fields.params, [PROPERTY_ID, RECONCILED_FIELD_NAMES.length + 1]);
+});
+
+test("active-link and media evidence overflow are rejected by sentinel before row parsing", async () => {
+  const activeLinks = Array.from({ length: 21 }, (_, index) =>
+    activeSourceLinkRow({ external_listing_id: String(3_972_001 + index) }),
+  );
+  const lifecycleRows = activeLinks.map((link, index) =>
+    lifecycleObservationRow(canonicalWrite(), {
+      id:
+        index === 0
+          ? OBSERVATION_ID
+          : `${String(400 + index).padStart(8, "0")}-1111-4111-8111-${String(400 + index).padStart(12, "0")}`,
+      external_listing_id: link.external_listing_id,
+    }),
+  );
+  const activeOverflow = fakePublicationClient({
+    activeSourceLinkRows: activeLinks,
+    lifecycleObservationRows: lifecycleRows,
+  });
+  await assert.rejects(
+    createSyncRepository({ client: activeOverflow }).publishBatch(approvedBatch()),
+    /active.*link.*unbounded|source-link.*limit/i,
+  );
+
+  const mediaOverflow = fakePublicationClient({
+    mediaRows: Array.from({ length: 201 }, () => ({
+      id: MEDIA_RECORD_ID,
+      observation_id: OBSERVATION_ID,
+      property_id: null,
+      source_url: "https://images.28hse.test/photo.png",
+      eligibility: "eligible",
+      rejection_reason: null,
+      owned_media_asset_id: ASSET_ID,
+      record_content_hash: "a".repeat(64),
+      owned_url: "https://owned.example/mls/hash.png",
+      asset_content_hash: "a".repeat(64),
+      asset_owner_type: "mls-shared",
+      asset_owner_id: null,
+    })),
+  });
+  await assert.rejects(
+    createSyncRepository({ client: mediaOverflow }).publishBatch(approvedBatch()),
+    /media.*unbounded|media.*limit/i,
+  );
+});
+
+test("NewCanonicalPropertyWrite exposes an exact all-or-none legacy metadata union", () => {
+  const fixtureDir = mkdtempSync(join(tmpdir(), "mls-task9-types-"));
+  try {
+    writeFileSync(
+      join(fixtureDir, "sync-repository.d.mts"),
+      readFileSync(new URL("./sync-repository.d.mts", import.meta.url), "utf8"),
+    );
+    writeFileSync(
+      join(fixtureDir, "source-contract.d.mts"),
+      [
+        'export type DealType = "sale" | "rent";',
+        'export type MlsSource = "28hse_agent_540" | "old_site";',
+        "export interface SourceObservation {}",
+      ].join("\n"),
+    );
+    writeFileSync(
+      join(fixtureDir, "probe.mts"),
+      `import type { CanonicalPropertyWrite, NewCanonicalPropertyWrite } from "./sync-repository.mjs";
+declare const canonical: CanonicalPropertyWrite;
+const metadata = { featured: false, management_fee: null, video_url: null, floorplan_url: null, source_site: "dual-source-mls" } as const;
+const none: NewCanonicalPropertyWrite = { ...canonical, ...metadata };
+const full: NewCanonicalPropertyWrite = { ...canonical, ...metadata, legacy_detail_id: "old-1", legacy_property_no: "EP-0001", legacy_url: "https://legacy.test/old-1" };
+// @ts-expect-error legacy metadata is all-or-none
+const onlyId: NewCanonicalPropertyWrite = { ...canonical, ...metadata, legacy_detail_id: "old-1" };
+// @ts-expect-error legacy metadata is all-or-none
+const missingUrl: NewCanonicalPropertyWrite = { ...canonical, ...metadata, legacy_detail_id: "old-1", legacy_property_no: "EP-0001" };
+// @ts-expect-error explicit undefined is not an omitted legacy trio
+const undefinedTrio: NewCanonicalPropertyWrite = { ...canonical, ...metadata, legacy_detail_id: undefined, legacy_property_no: undefined, legacy_url: undefined };
+void [none, full, onlyId, missingUrl, undefinedTrio];
+`,
+    );
+    writeFileSync(
+      join(fixtureDir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          exactOptionalPropertyTypes: true,
+          lib: ["ES2022", "DOM"],
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          noEmit: true,
+          skipLibCheck: true,
+          strict: true,
+        },
+        files: ["probe.mts"],
+      }),
+    );
+    const compile = spawnSync(
+      process.execPath,
+      [join(process.cwd(), "node_modules", "typescript", "bin", "tsc"), "-p", fixtureDir],
+      { encoding: "utf8" },
+    );
+    assert.equal(compile.status, 0, `${compile.stdout}\n${compile.stderr}`);
+  } finally {
+    rmSync(fixtureDir, { force: true, recursive: true });
+  }
+});
+
+test("self-review: legitimate missing and inactive histories derive sticky states without canonical writes", async () => {
+  const missing = activeOverrideBatch({ canonicalPrice: 7_900_000, baseline: 8_000_001 });
+  const missingClient = fakePublicationClient({
+    unchanged: true,
+    observationCanonical: canonicalWrite({ price: 8_000_001 }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 7_900_000 }),
+    },
+    lockedFieldRows: [],
+  });
+  assert.deepEqual(await createSyncRepository({ client: missingClient }).publishBatch(missing), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+
+  const inactive = activeOverrideBatch({ canonicalPrice: 7_950_000, baseline: 7_900_000 });
+  const inactiveClient = fakePublicationClient({
+    unchanged: true,
+    observationCanonical: canonicalWrite({ price: 8_000_001 }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonicalWrite({ price: 7_950_000 }),
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "price",
+        last_published_value: 7_900_000,
+        override_value: null,
+        active_override: false,
+        winning_observation_id: OBSERVATION_ID_2,
+      },
+    ],
+  });
+  assert.deepEqual(await createSyncRepository({ client: inactiveClient }).publishBatch(inactive), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  for (const client of [missingClient, inactiveClient]) {
+    assert.equal(
+      client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+      false,
+    );
+    const state = client.calls.find(
+      (call) =>
+        /INSERT INTO property_sync_fields/.test(call.statement) && call.params[1] === "price",
+    );
+    assert.equal(state.params[4], true);
+    assert.equal(state.params[5], null);
+  }
+});
+
+test("self-review: an inactive nullable feature baseline becomes a sticky null staff override", async () => {
+  const canonical = canonicalWrite({ features: null });
+  const batch = approvedBatch({ canonical });
+  const features = batch.proposals[0].fields.find((field) => field.fieldName === "features");
+  features.lastPublishedValue = ["Balcony"];
+  features.overrideValue = null;
+  features.activeOverride = true;
+  features.winningObservationId = null;
+  batch.proposals[0].events = batch.proposals[0].events.filter(
+    (event) => event.changeType === "link_change",
+  );
+  const client = fakePublicationClient({
+    unchanged: true,
+    observationCanonical: canonicalWrite({ features: ["Balcony"] }),
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...canonical,
+    },
+    lockedFieldRows: [
+      {
+        property_id: PROPERTY_ID,
+        field_name: "features",
+        last_published_value: ["Balcony"],
+        override_value: ["Sea view"],
+        active_override: false,
+        winning_observation_id: OBSERVATION_ID_2,
+      },
+    ],
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 0,
+    events: 1,
+  });
+  const state = client.calls.find(
+    (call) =>
+      /INSERT INTO property_sync_fields/.test(call.statement) && call.params[1] === "features",
+  );
+  assert.deepEqual(state.params.slice(2, 6), ['["Balcony"]', null, true, null]);
+});
+
+test("self-review: forged effective legacy metadata cannot enter a new audit event", async () => {
+  const proposal = newPublicationProposal();
+  proposal.links[0] = {
+    source: SOURCE_OLD_SITE,
+    externalId: "old-3972001",
+    dealType: "sale",
+    matchKey: "sale:EP-0001",
+    observedAt: "2026-08-17T00:01:00.000Z",
+  };
+  proposal.events[0].newValue = {
+    ...proposal.canonical,
+    legacy_detail_id: "old-3972001",
+    legacy_property_no: "EP-0001",
+    legacy_url: "https://forged.invalid/old-3972001",
+  };
+  proposal.events[1].newValue = {
+    source: SOURCE_OLD_SITE,
+    externalId: "old-3972001",
+    dealType: "sale",
+    matchKey: "sale:EP-0001",
+    status: "active",
+  };
+  const client = fakePublicationClient({
+    observationRow: publicationObservationRow(canonicalWrite(), {
+      source: SOURCE_OLD_SITE,
+      external_listing_id: "old-3972001",
+    }),
+    legacySourceUrl: "https://fixtures.invalid/old-site/old-3972001",
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /event coverage|effective canonical|legacy/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO listing_change_events/.test(statement)),
+    false,
+  );
+});
+
+test("self-review: authoritative legacy scan validates exact scalar row shapes", async () => {
+  for (const malformed of [
+    {
+      id: PROPERTY_ID_2,
+      listing_no: "LEGACY-ROW",
+      canonical_property_no: 123,
+      legacy_property_no: "EP-9999",
+      deal_type: "sale",
+    },
+    {
+      id: PROPERTY_ID_2,
+      listing_no: "LEGACY\u0000ROW",
+      canonical_property_no: "EP-9999",
+      legacy_property_no: null,
+      deal_type: "sale",
+    },
+  ]) {
+    const client = fakePublicationClient({ legacyIdentityScanRows: [malformed] });
+    await assert.rejects(
+      createSyncRepository({ client }).publishBatch(
+        approvedBatch({ proposals: [newPublicationProposal()] }),
+      ),
+      /authoritative legacy identity row.*invalid/i,
+    );
+    assert.equal(
+      client.sql.some((statement) => /INSERT INTO properties/.test(statement)),
+      false,
+    );
+  }
+});
+
+test("self-review: field-history overflow is rejected at the SQL max-plus-one sentinel", async () => {
+  const client = fakePublicationClient({
+    lockedFieldRows: Array.from({ length: RECONCILED_FIELD_NAMES.length + 1 }, () => ({})),
+  });
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /field history.*unbounded/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO property_sync_fields/.test(statement)),
+    false,
+  );
 });
