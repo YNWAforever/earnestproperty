@@ -8,6 +8,7 @@ import {
   PolicyFetchError,
   abortableDelay,
   createPolicyFetch,
+  isAbortError,
   loadRobotsPolicy,
 } from "../access-policy.mjs";
 
@@ -149,11 +150,19 @@ function pageFingerprint(urls) {
 }
 
 function detectOldSiteChallenge(html) {
-  const markup = String(html ?? "").toLowerCase();
-  const text = normalizeText(load(markup).text()).toLowerCase();
+  const rawMarkup = String(html ?? "");
+  if (!rawMarkup.trim()) return true;
+  const markup = rawMarkup.toLowerCase();
+  const document = load(rawMarkup);
+  const text = normalizeText(document.text()).toLowerCase();
+  const loginLanguage = /\bsign[ -]?in\b|\blog[ -]?in\b|登入/i.test(text);
+  const loginControl =
+    document("input[type='password'], form[action*='login' i], form[action*='signin' i]").length >
+    0;
   return (
     /captcha|cloudflare|verify you are human|access denied|just a moment/.test(text) ||
-    /cf-chl-|challenge-platform|data-cf-challenge-platform/.test(markup)
+    /cf-chl-|challenge-platform|data-cf-challenge-platform/.test(markup) ||
+    (loginLanguage && (loginControl || text.length < 200))
   );
 }
 
@@ -244,8 +253,8 @@ export async function discoverOldSitePages({
 
 export function createOldSiteSourceAdapter({
   fetchImpl,
-  sleep,
-  random,
+  sleep = async () => {},
+  random = Math.random,
   now = () => new Date(),
   signal,
   parseDetail = parseListingDetail,
@@ -267,6 +276,7 @@ export function createOldSiteSourceAdapter({
       let paginationComplete = true;
       let challengeDetected = false;
       let aborted = false;
+      let abortReason = null;
 
       const policyFetch = createPolicyFetch({ fetchImpl, sleep, random, signal, maxAttempts: 3 });
       const robots = await loadRobotsPolicy({
@@ -356,6 +366,7 @@ export function createOldSiteSourceAdapter({
           try {
             fetched = await fetchPage(pageUrl);
           } catch (error) {
+            if (isAbortError(error)) throw error;
             const code =
               error?.code === "terminal_access"
                 ? "terminal_access"
@@ -366,6 +377,7 @@ export function createOldSiteSourceAdapter({
                     : "index_fetch_failed";
             paginationComplete = false;
             aborted = true;
+            abortReason = code;
             if (code === "terminal_access" || code === "robots_prohibited") {
               robotsAllowed = false;
             }
@@ -378,6 +390,7 @@ export function createOldSiteSourceAdapter({
             challengeDetected = true;
             paginationComplete = false;
             aborted = true;
+            abortReason = "challenge_detected";
             pushFailure(failures, "challenge_detected");
             diagnosticsByUrl.set(pageUrl, diagnostics(pageUrl, fetched, "challenge_detected"));
             break seeds;
@@ -393,6 +406,7 @@ export function createOldSiteSourceAdapter({
           } catch {
             paginationComplete = false;
             aborted = true;
+            abortReason = "unexpected_index_template";
             identityValid = false;
             pushFailure(failures, "unexpected_index_template");
             diagnosticsByUrl.set(
@@ -411,6 +425,7 @@ export function createOldSiteSourceAdapter({
           if (seenFingerprints.has(fingerprint)) {
             paginationComplete = false;
             aborted = true;
+            abortReason = "pagination_loop";
             pushFailure(failures, "pagination_loop");
             diagnosticsByUrl.set(
               pageUrl,
@@ -431,6 +446,7 @@ export function createOldSiteSourceAdapter({
                 conflictingDuplicateIds.add(externalId ?? sourceUrl);
                 paginationComplete = false;
                 aborted = true;
+                abortReason = "duplicate_id_conflict";
                 pushFailure(failures, "duplicate_id_conflict", externalId);
                 break;
               }
@@ -448,6 +464,7 @@ export function createOldSiteSourceAdapter({
           if (newIds === 0 && pageNumber < advertisedMaxPage) {
             paginationComplete = false;
             aborted = true;
+            abortReason = "pagination_stalled";
             pushFailure(failures, "pagination_stalled");
             diagnosticsByUrl.set(
               pageUrl,
@@ -458,6 +475,7 @@ export function createOldSiteSourceAdapter({
           if (pageNumber === maxPages && advertisedMaxPage > maxPages) {
             paginationComplete = false;
             aborted = true;
+            abortReason = "pagination_ceiling";
             pushFailure(failures, "pagination_ceiling");
             break seeds;
           }
@@ -467,6 +485,11 @@ export function createOldSiteSourceAdapter({
       const observations = [];
       const detailPayloads = new Map();
       const records = [...discoveredByIdentity.values()];
+      if (aborted && records.length) {
+        for (const record of records) {
+          observations.push(stubObservation(record, isoNow(now), abortReason ?? "source_aborted"));
+        }
+      }
       for (let detailIndex = 0; !aborted && detailIndex < records.length; detailIndex += 1) {
         const record = records[detailIndex];
         const fetchedAt = isoNow(now);
@@ -507,6 +530,7 @@ export function createOldSiteSourceAdapter({
             }),
           );
         } catch (error) {
+          if (isAbortError(error)) throw error;
           const isAccess = error?.code === "terminal_access" || error?.code === "robots_prohibited";
           const isChallenge = error?.code === "challenge_detected";
           const code = isAccess
@@ -520,10 +544,10 @@ export function createOldSiteSourceAdapter({
           if (isChallenge) challengeDetected = true;
           pushFailure(failures, code, record.externalId ?? undefined);
           diagnosticsByUrl.set(record.sourceUrl, diagnostics(record.sourceUrl, error, code));
-          observations.push(stubObservation(record, fetchedAt));
+          observations.push(stubObservation(record, fetchedAt, code));
           if (isAccess || isChallenge) {
             for (const remaining of records.slice(detailIndex + 1)) {
-              observations.push(stubObservation(remaining, isoNow(now), "source_aborted"));
+              observations.push(stubObservation(remaining, isoNow(now), code));
             }
             break;
           }

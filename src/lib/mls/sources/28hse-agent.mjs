@@ -5,6 +5,7 @@ import {
   PolicyFetchError,
   abortableDelay,
   createPolicyFetch,
+  isAbortError,
   loadRobotsPolicy,
 } from "../access-policy.mjs";
 import {
@@ -144,6 +145,7 @@ export function create28HseAgentSourceAdapter({
       let paginationComplete = true;
       let challengeDetected = false;
       let aborted = false;
+      let abortReason = null;
 
       const policyFetch = createPolicyFetch({ fetchImpl, sleep, random, signal, maxAttempts: 3 });
       const robots = await loadRobotsPolicy({
@@ -230,6 +232,7 @@ export function create28HseAgentSourceAdapter({
           try {
             fetched = await fetchPage(pageUrl);
           } catch (error) {
+            if (isAbortError(error)) throw error;
             const code =
               error?.code === "terminal_access"
                 ? "terminal_access"
@@ -241,6 +244,7 @@ export function create28HseAgentSourceAdapter({
             diagnosticsByUrl.set(pageUrl, diagnostic(pageUrl, error, code));
             pushFailure(failures, code);
             paginationComplete = false;
+            abortReason = code;
             if (code === "terminal_access" || code === "robots_prohibited") robotsAllowed = false;
             aborted = true;
             break discovery;
@@ -249,6 +253,7 @@ export function create28HseAgentSourceAdapter({
           if (detect28HseChallenge(fetched.text)) {
             challengeDetected = true;
             paginationComplete = false;
+            abortReason = "challenge_detected";
             pushFailure(failures, "challenge_detected");
             diagnosticsByUrl.set(pageUrl, diagnostic(pageUrl, fetched, "challenge_detected"));
             aborted = true;
@@ -265,6 +270,7 @@ export function create28HseAgentSourceAdapter({
             const code = identityFailure ? "identity_mismatch" : "unexpected_index_template";
             if (identityFailure) identityValid = false;
             paginationComplete = false;
+            abortReason = code;
             pushFailure(failures, code);
             diagnosticsByUrl.set(pageUrl, diagnostic(pageUrl, fetched, code));
             aborted = true;
@@ -282,6 +288,7 @@ export function create28HseAgentSourceAdapter({
           ) {
             identityValid = false;
             paginationComplete = false;
+            abortReason = "identity_mismatch";
             pushFailure(failures, "identity_mismatch");
             diagnosticsByUrl.set(
               pageUrl,
@@ -301,6 +308,7 @@ export function create28HseAgentSourceAdapter({
             advertisedCounts[dealType] = expectedCount;
           } else if (parsed.advertisedCount !== expectedCount) {
             paginationComplete = false;
+            abortReason = "advertised_count_mismatch";
             pushFailure(failures, "advertised_count_mismatch");
             diagnosticsByUrl.set(
               pageUrl,
@@ -317,6 +325,7 @@ export function create28HseAgentSourceAdapter({
           }
           if (seenFingerprints.has(parsed.pageFingerprint)) {
             paginationComplete = false;
+            abortReason = "pagination_loop";
             pushFailure(failures, "pagination_loop");
             diagnosticsByUrl.set(
               pageUrl,
@@ -339,12 +348,11 @@ export function create28HseAgentSourceAdapter({
             const identity = `${dealType}:${link.externalId}`;
             const existing = discoveredByIdentity.get(identity);
             if (existing) {
-              if (existing.sourceUrl !== sourceUrl || existing.summaryTitle !== link.summaryTitle) {
-                conflictingDuplicateIds.add(link.externalId);
-                paginationComplete = false;
-                pushFailure(failures, "duplicate_id_conflict", link.externalId);
-                aborted = true;
-                break;
+              if (!existing.candidates.has(sourceUrl)) {
+                existing.candidates.set(sourceUrl, {
+                  sourceUrl,
+                  summaryTitle: link.summaryTitle,
+                });
               }
               continue;
             }
@@ -354,6 +362,7 @@ export function create28HseAgentSourceAdapter({
               sourceUrl,
               summaryTitle: link.summaryTitle,
               discoveredAt: isoNow(now),
+              candidates: new Map([[sourceUrl, { sourceUrl, summaryTitle: link.summaryTitle }]]),
             };
             discoveredByIdentity.set(identity, record);
             idsForDeal.add(link.externalId);
@@ -362,6 +371,7 @@ export function create28HseAgentSourceAdapter({
           if (aborted) break discovery;
           if (idsForDeal.size > expectedCount) {
             paginationComplete = false;
+            abortReason = "advertised_count_mismatch";
             pushFailure(failures, "advertised_count_mismatch");
             aborted = true;
             break discovery;
@@ -369,6 +379,7 @@ export function create28HseAgentSourceAdapter({
           if (idsForDeal.size === expectedCount) break;
           if (newIds === 0) {
             paginationComplete = false;
+            abortReason = "pagination_stalled";
             pushFailure(failures, "pagination_stalled");
             diagnosticsByUrl.set(
               pageUrl,
@@ -385,6 +396,7 @@ export function create28HseAgentSourceAdapter({
           }
           if (pageNumber === maxPages) {
             paginationComplete = false;
+            abortReason = "pagination_ceiling";
             pushFailure(failures, "pagination_ceiling");
             aborted = true;
             break discovery;
@@ -393,77 +405,105 @@ export function create28HseAgentSourceAdapter({
       }
 
       const observations = [];
-      const propertyNumbersByIdentity = new Map();
       const records = [...discoveredByIdentity.values()];
+      if (aborted && records.length) {
+        for (const record of records) {
+          observations.push(stubObservation(record, isoNow(now), abortReason ?? "source_aborted"));
+        }
+      }
       if (!aborted && paginationComplete && identityValid && robotsAllowed) {
-        for (let detailIndex = 0; detailIndex < records.length; detailIndex += 1) {
+        let detailRequestIndex = 0;
+        details: for (let detailIndex = 0; detailIndex < records.length; detailIndex += 1) {
           const record = records[detailIndex];
-          const fetchedAt = isoNow(now);
-          let fetched;
-          try {
-            fetched = await fetchPage(record.sourceUrl, { detailIndex });
-          } catch (error) {
-            const isAccess =
-              error?.code === "terminal_access" || error?.code === "robots_prohibited";
-            const code = isAccess
-              ? error.code
-              : error?.code === "unexpected_template"
-                ? "unexpected_template"
-                : "detail_fetch_or_parse_failed";
-            pushFailure(failures, code, record.externalId);
-            diagnosticsByUrl.set(record.sourceUrl, diagnostic(record.sourceUrl, error, code));
-            observations.push(stubObservation(record, fetchedAt));
-            if (isAccess) {
-              robotsAllowed = false;
+          const parsedCandidates = [];
+          let lastFailureCode = null;
+          for (const candidate of record.candidates.values()) {
+            const fetchedAt = isoNow(now);
+            let fetched;
+            try {
+              const pacingIndex = detailRequestIndex;
+              detailRequestIndex += 1;
+              fetched = await fetchPage(candidate.sourceUrl, { detailIndex: pacingIndex });
+            } catch (error) {
+              if (isAbortError(error)) throw error;
+              const isAccess =
+                error?.code === "terminal_access" || error?.code === "robots_prohibited";
+              const code = isAccess
+                ? error.code
+                : error?.code === "unexpected_template"
+                  ? "unexpected_template"
+                  : "detail_fetch_or_parse_failed";
+              lastFailureCode = code;
+              pushFailure(failures, code, record.externalId);
+              diagnosticsByUrl.set(
+                candidate.sourceUrl,
+                diagnostic(candidate.sourceUrl, error, code),
+              );
+              if (isAccess) {
+                robotsAllowed = false;
+                aborted = true;
+                observations.push(stubObservation(record, fetchedAt, code));
+                for (const remaining of records.slice(detailIndex + 1)) {
+                  observations.push(stubObservation(remaining, isoNow(now), code));
+                }
+                break details;
+              }
+              continue;
+            }
+
+            if (detect28HseChallenge(fetched.text)) {
+              challengeDetected = true;
+              pushFailure(failures, "challenge_detected", record.externalId);
+              diagnosticsByUrl.set(
+                candidate.sourceUrl,
+                diagnostic(candidate.sourceUrl, fetched, "challenge_detected"),
+              );
+              observations.push(stubObservation(record, fetchedAt, "challenge_detected"));
               aborted = true;
               for (const remaining of records.slice(detailIndex + 1)) {
-                observations.push(stubObservation(remaining, isoNow(now), "source_aborted"));
+                observations.push(stubObservation(remaining, isoNow(now), "challenge_detected"));
               }
-              break;
+              break details;
             }
-            continue;
+
+            try {
+              parsedCandidates.push(
+                parse28HseDetail(fetched.text, {
+                  dealType: record.dealType,
+                  sourceUrl: candidate.sourceUrl,
+                  summaryTitle: candidate.summaryTitle,
+                  discoveredAt: record.discoveredAt,
+                  fetchedAt,
+                }),
+              );
+              diagnosticsByUrl.set(candidate.sourceUrl, diagnostic(candidate.sourceUrl, fetched));
+            } catch {
+              lastFailureCode = "detail_fetch_or_parse_failed";
+              pushFailure(failures, lastFailureCode, record.externalId);
+              diagnosticsByUrl.set(
+                candidate.sourceUrl,
+                diagnostic(candidate.sourceUrl, fetched, lastFailureCode),
+              );
+            }
           }
 
-          if (detect28HseChallenge(fetched.text)) {
-            challengeDetected = true;
-            pushFailure(failures, "challenge_detected", record.externalId);
-            diagnosticsByUrl.set(
-              record.sourceUrl,
-              diagnostic(record.sourceUrl, fetched, "challenge_detected"),
+          const propertyNumbers = new Set(
+            parsedCandidates.map((observation) => observation.propertyNoNormalized),
+          );
+          if (propertyNumbers.size > 1) {
+            conflictingDuplicateIds.add(record.externalId);
+            pushFailure(failures, "duplicate_id_conflict", record.externalId);
+            observations.push(stubObservation(record, isoNow(now), "duplicate_id_conflict"));
+          } else if (parsedCandidates.length) {
+            observations.push(parsedCandidates[0]);
+          } else {
+            observations.push(
+              stubObservation(
+                record,
+                isoNow(now),
+                lastFailureCode ?? "detail_fetch_or_parse_failed",
+              ),
             );
-            observations.push(stubObservation(record, fetchedAt));
-            aborted = true;
-            for (const remaining of records.slice(detailIndex + 1)) {
-              observations.push(stubObservation(remaining, isoNow(now), "source_aborted"));
-            }
-            break;
-          }
-
-          try {
-            const observation = parse28HseDetail(fetched.text, {
-              dealType: record.dealType,
-              sourceUrl: record.sourceUrl,
-              summaryTitle: record.summaryTitle,
-              discoveredAt: record.discoveredAt,
-              fetchedAt,
-            });
-            const identity = `${record.dealType}:${record.externalId}`;
-            const priorPropertyNo = propertyNumbersByIdentity.get(identity);
-            if (priorPropertyNo && priorPropertyNo !== observation.propertyNoNormalized) {
-              conflictingDuplicateIds.add(record.externalId);
-              pushFailure(failures, "duplicate_id_conflict", record.externalId);
-            } else {
-              propertyNumbersByIdentity.set(identity, observation.propertyNoNormalized);
-            }
-            observations.push(observation);
-            diagnosticsByUrl.set(record.sourceUrl, diagnostic(record.sourceUrl, fetched));
-          } catch {
-            pushFailure(failures, "detail_fetch_or_parse_failed", record.externalId);
-            diagnosticsByUrl.set(
-              record.sourceUrl,
-              diagnostic(record.sourceUrl, fetched, "detail_fetch_or_parse_failed"),
-            );
-            observations.push(stubObservation(record, fetchedAt));
           }
         }
       }

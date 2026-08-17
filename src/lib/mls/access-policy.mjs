@@ -48,6 +48,71 @@ function escapeRegex(value) {
   return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
 }
 
+const PRODUCT_TOKEN_PATTERN = /^[A-Za-z_-]+$/;
+const UNRESERVED_ASCII_PATTERN = /^[A-Za-z0-9._~-]$/;
+const HEX_PAIR_PATTERN = /^[0-9A-Fa-f]{2}$/;
+
+function encodedOctets(value) {
+  return [...new TextEncoder().encode(value)].map(
+    (octet) => `%${octet.toString(16).toUpperCase().padStart(2, "0")}`,
+  );
+}
+
+function normalizeRobotsPath(value, { pattern = false } = {}) {
+  const input = String(value ?? "");
+  let normalized = "";
+  let specificity = 0;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (character === "%") {
+      const pair = input.slice(index + 1, index + 3);
+      if (!HEX_PAIR_PATTERN.test(pair)) throw new TypeError("Malformed percent encoding");
+      const octet = Number.parseInt(pair, 16);
+      const decoded = String.fromCharCode(octet);
+      normalized += UNRESERVED_ASCII_PATTERN.test(decoded) ? decoded : `%${pair.toUpperCase()}`;
+      specificity += 1;
+      index += 2;
+      continue;
+    }
+
+    if (pattern && character === "*") {
+      normalized += "*";
+      continue;
+    }
+    if (pattern && character === "$" && index === input.length - 1) {
+      normalized += "$";
+      continue;
+    }
+    if (character === "*" || character === "$") {
+      const octets = encodedOctets(character);
+      normalized += octets.join("");
+      specificity += octets.length;
+      continue;
+    }
+
+    const codePoint = input.codePointAt(index);
+    const scalar = String.fromCodePoint(codePoint);
+    if (codePoint >= 0xd800 && codePoint <= 0xdfff) {
+      throw new TypeError("Malformed Unicode scalar value");
+    }
+    if (codePoint < 0x20 || codePoint === 0x7f) {
+      throw new TypeError("Control octet in robots path");
+    }
+    if (codePoint > 0x7f) {
+      const octets = encodedOctets(scalar);
+      normalized += octets.join("");
+      specificity += octets.length;
+      if (scalar.length === 2) index += 1;
+      continue;
+    }
+    normalized += character;
+    specificity += 1;
+  }
+
+  return { normalized, specificity };
+}
+
 function compileRobotsPattern(pattern) {
   const anchored = pattern.endsWith("$");
   const raw = anchored ? pattern.slice(0, -1) : pattern;
@@ -55,29 +120,16 @@ function compileRobotsPattern(pattern) {
   return new RegExp(`^${expression}${anchored ? "$" : ""}`);
 }
 
-function ruleSpecificity(pattern) {
-  return pattern.replace(/\*/g, "").replace(/\$$/, "").length;
-}
-
 function applicableGroups(groups, userAgent) {
   const product = String(userAgent ?? "")
     .trim()
     .toLowerCase();
-  const matches = groups
-    .map((group) => ({
-      group,
-      specificity: Math.max(
-        ...group.agents.map((agent) => {
-          const token = agent.toLowerCase();
-          if (token === "*") return 0;
-          return product.includes(token) ? token.length : -1;
-        }),
-      ),
-    }))
-    .filter(({ specificity }) => specificity >= 0);
-  if (!matches.length) return [];
-  const longest = Math.max(...matches.map(({ specificity }) => specificity));
-  return matches.filter(({ specificity }) => specificity === longest).map(({ group }) => group);
+  if (!PRODUCT_TOKEN_PATTERN.test(product)) return [];
+  const exact = groups.filter((group) =>
+    group.agents.some((agent) => agent.toLowerCase() === product),
+  );
+  if (exact.length) return exact;
+  return groups.filter((group) => group.agents.some((agent) => agent === "*"));
 }
 
 export function parseRobots(text, userAgent) {
@@ -89,10 +141,7 @@ export function parseRobots(text, userAgent) {
     .replace(/^\uFEFF/, "")
     .split(/\r?\n/)) {
     const line = rawLine.replace(/#.*$/, "").trim();
-    if (!line) {
-      current = null;
-      continue;
-    }
+    if (!line) continue;
     const directive = line.match(/^([a-z][a-z0-9_-]*)\s*:\s*(.*)$/i);
     if (!directive) {
       if (current) current.malformed = true;
@@ -103,7 +152,7 @@ export function parseRobots(text, userAgent) {
     const value = directive[2].trim();
 
     if (name === "user-agent") {
-      if (!value) {
+      if (!value || (value !== "*" && !PRODUCT_TOKEN_PATTERN.test(value))) {
         malformedOutsideGroup = true;
         current = null;
         continue;
@@ -133,12 +182,17 @@ export function parseRobots(text, userAgent) {
         current.malformed = true;
         continue;
       }
-      current.rules.push({
-        allow: name === "allow",
-        pattern: value,
-        matcher: compileRobotsPattern(value),
-        specificity: ruleSpecificity(value),
-      });
+      try {
+        const normalized = normalizeRobotsPath(value, { pattern: true });
+        current.rules.push({
+          allow: name === "allow",
+          pattern: normalized.normalized,
+          matcher: compileRobotsPattern(normalized.normalized),
+          specificity: normalized.specificity,
+        });
+      } catch {
+        current.malformed = true;
+      }
       continue;
     }
     if (name === "crawl-delay") {
@@ -164,7 +218,7 @@ export function parseRobots(text, userAgent) {
       let path;
       try {
         const url = new URL(String(target), "https://robots.invalid");
-        path = `${url.pathname}${url.search}`;
+        path = normalizeRobotsPath(`${url.pathname}${url.search}`).normalized;
       } catch {
         return false;
       }
@@ -196,9 +250,13 @@ function abortError(signal) {
     : new DOMException("The operation was aborted", "AbortError");
 }
 
+export function isAbortError(error) {
+  return error?.name === "AbortError";
+}
+
 export async function abortableDelay(sleep, milliseconds, signal) {
-  if (!(milliseconds > 0)) return;
   if (signal?.aborted) throw abortError(signal);
+  if (!(milliseconds > 0)) return;
   let removeAbortListener = () => {};
   const aborted = new Promise((_, reject) => {
     if (!signal) return;
@@ -300,6 +358,7 @@ export function createPolicyFetch({
       responseKind = "page",
     } = {},
   ) {
+    if (runSignal?.aborted) throw abortError(runSignal);
     let lastError = null;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       let activeUrl = checkedUrl(sourceUrl, allowedOrigin);
@@ -372,6 +431,7 @@ export function createPolicyFetch({
         }
       } catch (error) {
         if (runSignal?.aborted) throw abortError(runSignal);
+        if (isAbortError(error) && !timeoutSignal.aborted) throw error;
         if (
           error instanceof PolicyFetchError &&
           error.code !== "retryable" &&
@@ -427,6 +487,7 @@ export async function loadRobotsPolicy({ policyFetch, robotsUrl, userAgent = CRA
       ...fetched,
     };
   } catch (error) {
+    if (isAbortError(error)) throw error;
     return {
       allowed: false,
       classification: error?.code ?? "disallow_unreachable",

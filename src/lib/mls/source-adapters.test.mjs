@@ -109,6 +109,12 @@ function oldSitePolicyHarness(robotsName) {
   });
 }
 
+function runCancellation(controller) {
+  const error = new DOMException("run cancelled", "AbortError");
+  controller.abort(error);
+  return error;
+}
+
 function oneLinkIndexFromFixture() {
   const original = fixture("property-index-c1.html");
   const selectedLink = original.match(
@@ -241,6 +247,162 @@ test("old-site adapter records a page-two failure against the page URL", async (
       failureCode: "index_fetch_failed",
     },
   );
+  assert.equal(result.discovered, 1);
+  assert.equal(result.observations.length, 1);
+  assert.ok(result.observations[0].quarantineReasons.includes("index_fetch_failed"));
+});
+
+test("old-site empty and login shells fail closed as challenges", async () => {
+  for (const body of [
+    "   \n\t",
+    "<html><body><form action='/login'><h1>Sign in</h1></form></body></html>",
+    "<html><body><h1>登入</h1></body></html>",
+  ]) {
+    const adapter = createOldSiteSourceAdapter({
+      fetchImpl: withOldRobots(async (url) => {
+        if (url === seedUrl) return new Response(body, { status: 200 });
+        throw new Error(`Unexpected fixture URL: ${url}`);
+      }),
+      now: () => new Date("2026-08-17T02:00:00.000Z"),
+      signal: new AbortController().signal,
+    });
+    const result = await adapter.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] });
+    assert.equal(result.challengeDetected, true);
+    assert.equal(result.paginationComplete, false);
+    assert.ok(result.failures.some((failure) => failure.code === "challenge_detected"));
+  }
+});
+
+test("old-site constructor remains valid when sleep and random are omitted", async () => {
+  const indexHtml = oneLinkIndexFromFixture();
+  const adapter = createOldSiteSourceAdapter({
+    fetchImpl: withOldRobots(async (url) => {
+      if (url === seedUrl) return new Response(indexHtml, { status: 200 });
+      if (url === detailUrl) {
+        return new Response(fixture("property-detail-6709182.html"), { status: 200 });
+      }
+      throw new Error(`Unexpected fixture URL: ${url}`);
+    }),
+    now: () => new Date("2026-08-17T02:00:00.000Z"),
+    signal: new AbortController().signal,
+  });
+  const result = await adapter.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] });
+  assert.equal(result.observations.length, 1);
+});
+
+test("run cancellation during robots fetch propagates from both adapters", async () => {
+  for (const createAdapter of [create28HseAgentSourceAdapter, createOldSiteSourceAdapter]) {
+    const controller = new AbortController();
+    const adapter = createAdapter({
+      fetchImpl: async () => {
+        throw runCancellation(controller);
+      },
+      sleep: async () => {},
+      random: () => 0.5,
+      signal: controller.signal,
+    });
+    await assert.rejects(() => adapter.collect(), { name: "AbortError" });
+  }
+});
+
+test("a pre-aborted run stops before any source request", async () => {
+  for (const createAdapter of [create28HseAgentSourceAdapter, createOldSiteSourceAdapter]) {
+    const controller = new AbortController();
+    controller.abort(new DOMException("cancelled before collection", "AbortError"));
+    let requests = 0;
+    const adapter = createAdapter({
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response("", { status: 200 });
+      },
+      signal: controller.signal,
+    });
+    await assert.rejects(() => adapter.collect(), { name: "AbortError" });
+    assert.equal(requests, 0);
+  }
+});
+
+test("run cancellation during index and detail fetch propagates from both adapters", async () => {
+  const indexController = new AbortController();
+  const hseIndexRun = create28HseAgentSourceAdapter({
+    fetchImpl: async (url) => {
+      if (url === hseRobotsUrl) {
+        return new Response(sourceFixture("28hse", "robots-allow.txt"), { status: 200 });
+      }
+      throw runCancellation(indexController);
+    },
+    sleep: async () => {},
+    random: () => 0.5,
+    signal: indexController.signal,
+  });
+  await assert.rejects(() => hseIndexRun.collect(), { name: "AbortError" });
+
+  const oldIndexController = new AbortController();
+  const oldIndexRun = createOldSiteSourceAdapter({
+    fetchImpl: async (url) => {
+      if (url === oldRobotsUrl) {
+        return new Response(sourceFixture("old-site", "robots-allow.txt"), { status: 200 });
+      }
+      throw runCancellation(oldIndexController);
+    },
+    sleep: async () => {},
+    random: () => 0.5,
+    signal: oldIndexController.signal,
+  });
+  await assert.rejects(
+    () => oldIndexRun.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] }),
+    { name: "AbortError" },
+  );
+
+  const hseDetailController = new AbortController();
+  const hseRequested = [];
+  const hseBaseFetch = fakeFixtureFetch(hseRequested);
+  const hseDetailRun = create28HseAgentSourceAdapter({
+    fetchImpl: async (url, options) => {
+      if (url === "https://www.28hse.com/buy/apartment/property-3972991") {
+        throw runCancellation(hseDetailController);
+      }
+      return hseBaseFetch(url, options);
+    },
+    sleep: async () => {},
+    random: () => 0.5,
+    now: () => new Date("2026-08-17T02:00:00.000Z"),
+    signal: hseDetailController.signal,
+  });
+  await assert.rejects(() => hseDetailRun.collect(), { name: "AbortError" });
+
+  const oldDetailController = new AbortController();
+  const indexHtml = oneLinkIndexFromFixture();
+  const oldDetailRun = createOldSiteSourceAdapter({
+    fetchImpl: async (url) => {
+      if (url === oldRobotsUrl) {
+        return new Response(sourceFixture("old-site", "robots-allow.txt"), { status: 200 });
+      }
+      if (url === seedUrl) return new Response(indexHtml, { status: 200 });
+      throw runCancellation(oldDetailController);
+    },
+    sleep: async () => {},
+    random: () => 0.5,
+    signal: oldDetailController.signal,
+  });
+  await assert.rejects(
+    () => oldDetailRun.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] }),
+    { name: "AbortError" },
+  );
+});
+
+test("run cancellation during crawl pacing sleep propagates", async () => {
+  const controller = new AbortController();
+  const requested = [];
+  const adapter = create28HseAgentSourceAdapter({
+    fetchImpl: fakeFixtureFetch(requested),
+    sleep: async () => {
+      throw runCancellation(controller);
+    },
+    random: () => 0.5,
+    signal: controller.signal,
+  });
+  await assert.rejects(() => adapter.collect(), { name: "AbortError" });
 });
 
 test("robots evaluator uses the most-specific matching rule and Allow wins ties", () => {
@@ -248,6 +410,94 @@ test("robots evaluator uses the most-specific matching rule and Allow wins ties"
   assert.equal(policy.isAllowed("/agent/540"), true);
   assert.equal(policy.isAllowed("/private/export"), false);
   assert.equal(policy.crawlDelaySeconds, 2.5);
+});
+
+test("robots merges repeated exact product-token groups case-insensitively", () => {
+  const policy = parseRobots(
+    `User-agent: EarnestPropertyBot
+Disallow: /first
+
+User-agent: EARNESTPROPERTYBOT
+Disallow: /second`,
+    "earnestpropertybot",
+  );
+  assert.equal(policy.isAllowed("/first"), false);
+  assert.equal(policy.isAllowed("/second"), false);
+});
+
+test("robots ignores shorter product tokens and merges wildcard fallback groups", () => {
+  const policy = parseRobots(
+    `User-agent: EarnestProperty
+Disallow: /short-token
+
+User-agent: *
+Disallow: /wild-one
+
+User-agent: *
+Disallow: /wild-two`,
+    "EarnestPropertyBot",
+  );
+  assert.equal(policy.isAllowed("/short-token"), true);
+  assert.equal(policy.isAllowed("/wild-one"), false);
+  assert.equal(policy.isAllowed("/wild-two"), false);
+});
+
+test("robots normalizes percent-encoded unreserved and Unicode octets", () => {
+  const policy = parseRobots(
+    `User-agent: EarnestPropertyBot
+Disallow: /foo/%62ar
+Disallow: /café`,
+    "EarnestPropertyBot",
+  );
+  assert.equal(policy.isAllowed("/foo/bar"), false);
+  assert.equal(policy.isAllowed("/foo/%62ar"), false);
+  assert.equal(policy.isAllowed("/café"), false);
+  assert.equal(policy.isAllowed("/caf%C3%A9"), false);
+});
+
+test("robots preserves encoded reserved octets and encoded special characters", () => {
+  const policy = parseRobots(
+    `User-agent: EarnestPropertyBot
+Disallow: /a%2Fb
+Disallow: /literal/%2A
+Disallow: /literal/%24`,
+    "EarnestPropertyBot",
+  );
+  assert.equal(policy.isAllowed("/a%2fb"), false);
+  assert.equal(policy.isAllowed("/a/b"), true);
+  assert.equal(policy.isAllowed("/literal/*"), false);
+  assert.equal(policy.isAllowed("/literal/$"), false);
+});
+
+test("robots ranks matching rules by normalized octets and Allow wins equivalent ties", () => {
+  const octetPolicy = parseRobots(
+    `User-agent: EarnestPropertyBot
+Disallow: /*éé
+Allow: /abc*`,
+    "EarnestPropertyBot",
+  );
+  assert.equal(octetPolicy.isAllowed("/abcéé"), false);
+
+  const tiePolicy = parseRobots(
+    `User-agent: EarnestPropertyBot
+Disallow: /%62ar
+Allow: /bar`,
+    "EarnestPropertyBot",
+  );
+  assert.equal(tiePolicy.isAllowed("/bar"), true);
+});
+
+test("robots fails closed on malformed percent encodings", () => {
+  const malformedRule = parseRobots(
+    `User-agent: EarnestPropertyBot
+Disallow: /private/%GG`,
+    "EarnestPropertyBot",
+  );
+  assert.equal(malformedRule.safelyInterpretable, false);
+  assert.equal(malformedRule.isAllowed("/public"), false);
+
+  const validPolicy = parseRobots("User-agent: *\nAllow: /", "EarnestPropertyBot");
+  assert.equal(validPolicy.isAllowed("/public/%GG"), false);
 });
 
 test("403 and 429 are terminal but network, 408, and 5xx are retryable", () => {
@@ -311,33 +561,126 @@ test("repeated pages and access challenges fail closed", async () => {
   const loopResult = await repeatedPageAdapter().collect();
   assert.equal(loopResult.paginationComplete, false);
   assert.ok(loopResult.failures.some((failure) => failure.code === "pagination_loop"));
+  assert.equal(loopResult.discovered, 2);
+  assert.equal(loopResult.observations.length, 2);
+  assert.ok(
+    loopResult.observations.every((observation) =>
+      observation.quarantineReasons.includes("pagination_loop"),
+    ),
+  );
 
   const requested = [];
   const challenge = createHseHarness(
     fakeFixtureFetch(
       requested,
-      new Map([[build28HseAgentUrl("sale", 1), sourceFixture("28hse", "challenge.html")]]),
+      new Map([[build28HseAgentUrl("sale", 2), sourceFixture("28hse", "challenge.html")]]),
     ),
   );
   const challengeResult = await challenge.collect();
   assert.equal(challengeResult.challengeDetected, true);
   assert.equal(challengeResult.paginationComplete, false);
-  assert.equal(challengeResult.observations.length, 0);
+  assert.equal(challengeResult.discovered, 2);
+  assert.equal(challengeResult.observations.length, 2);
+  assert.ok(
+    challengeResult.observations.every((observation) =>
+      observation.quarantineReasons.includes("challenge_detected"),
+    ),
+  );
 });
 
-test("conflicting duplicate IDs are reported without conflating sale and rent identity", async () => {
+test("access denial after discovery preserves stubs and stops further requests", async () => {
   const requested = [];
+  const deniedPage = build28HseAgentUrl("sale", 2);
+  const adapter = createHseHarness(
+    fakeFixtureFetch(requested, new Map([[deniedPage, new Response("denied", { status: 403 })]])),
+  );
+
+  const result = await adapter.collect();
+  assert.equal(result.robotsAllowed, false);
+  assert.equal(result.discovered, 2);
+  assert.equal(result.observations.length, 2);
+  assert.ok(
+    result.observations.every((observation) =>
+      observation.quarantineReasons.includes("terminal_access"),
+    ),
+  );
+  assert.equal(
+    requested.some((url) => url.includes("buyRent=rent")),
+    false,
+  );
+  assert.equal(
+    requested.some((url) => url.includes("/property-")),
+    false,
+  );
+});
+
+test("duplicate candidates with conflicting parsed property numbers are quarantined", async () => {
+  const requested = [];
+  const alternateUrl = "https://www.28hse.com/buy/house/property-3973002";
   const conflictingPage = sourceFixture("28hse", "agent-sale-page-2.html").replace(
     "/buy/apartment/property-3973002",
     "/buy/house/property-3973002",
   );
+  const conflictingDetail = sourceFixture("28hse", "detail-sale-3972991.html").replace(
+    "C003097",
+    "CONFLICT-3002",
+  );
   const adapter = createHseHarness(
-    fakeFixtureFetch(requested, new Map([[build28HseAgentUrl("sale", 2), conflictingPage]])),
+    fakeFixtureFetch(
+      requested,
+      new Map([
+        [build28HseAgentUrl("sale", 2), conflictingPage],
+        [alternateUrl, conflictingDetail],
+      ]),
+    ),
   );
 
   const result = await adapter.collect();
   assert.deepEqual(result.conflictingDuplicateIds, ["3973002"]);
   assert.ok(result.failures.some((failure) => failure.code === "duplicate_id_conflict"));
+  assert.equal(result.discovered, 4);
+  assert.equal(result.observations.length, 4);
+  const conflicted = result.observations.find((entry) => entry.externalId === "3973002");
+  assert.ok(conflicted.quarantineReasons.includes("duplicate_id_conflict"));
+  assert.equal(requested.filter((url) => url === alternateUrl).length, 1);
+  assert.equal(
+    requested.filter((url) => url === "https://www.28hse.com/buy/apartment/property-3973002")
+      .length,
+    1,
+  );
+});
+
+test("duplicate candidate URLs with the same property number collapse without repeated fetches", async () => {
+  const requested = [];
+  const alternateUrl = "https://www.28hse.com/buy/house/property-3973002";
+  const duplicatePage = sourceFixture("28hse", "agent-sale-page-2.html").replace(
+    "/buy/apartment/property-3973002",
+    "/buy/house/property-3973002",
+  );
+  const samePropertyDetail = sourceFixture("28hse", "detail-sale-3972991.html").replace(
+    "C003097",
+    "C003002",
+  );
+  const adapter = createHseHarness(
+    fakeFixtureFetch(
+      requested,
+      new Map([
+        [build28HseAgentUrl("sale", 2), duplicatePage],
+        [alternateUrl, samePropertyDetail],
+      ]),
+    ),
+  );
+
+  const result = await adapter.collect();
+  assert.deepEqual(result.conflictingDuplicateIds, []);
+  assert.equal(result.observations.length, 4);
+  assert.equal(result.observations.filter((entry) => entry.externalId === "3973002").length, 1);
+  assert.equal(requested.filter((url) => url === alternateUrl).length, 1);
+  assert.equal(
+    requested.filter((url) => url === "https://www.28hse.com/buy/apartment/property-3973002")
+      .length,
+    1,
+  );
 });
 
 test("oversized index bodies fail as an unexpected template without retrying", async () => {
@@ -385,4 +728,7 @@ test("old-site adapter also checks robots, retries safely, and reports page loop
   const loop = await repeated.collect({ seedUrls: [{ url: seedUrl, dealType: "sale" }] });
   assert.equal(loop.paginationComplete, false);
   assert.ok(loop.failures.some((failure) => failure.code === "pagination_loop"));
+  assert.equal(loop.discovered, 1);
+  assert.equal(loop.observations.length, 1);
+  assert.ok(loop.observations[0].quarantineReasons.includes("pagination_loop"));
 });
