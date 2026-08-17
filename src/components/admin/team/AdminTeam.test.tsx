@@ -155,6 +155,20 @@ describe("Admin Team role-aware detail and confirmations", () => {
     expect($.text()).toContain("重新啟用帳戶");
     expect($.text()).not.toContain("發送密碼重設連結");
   });
+
+  test("does not offer self password reset and explains the recovery path", () => {
+    const $ = render(
+      createElement(AdminTeamDetailPanel, {
+        currentUserEmail: member.email,
+        detail,
+        canManage: true,
+        onAction: () => undefined,
+      }),
+    );
+
+    expect($.text()).not.toContain("發送密碼重設連結");
+    expect($.text()).toContain("登入頁面");
+  });
 });
 
 describe("Admin Team request safety", () => {

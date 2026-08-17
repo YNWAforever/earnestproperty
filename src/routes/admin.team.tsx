@@ -86,10 +86,14 @@ export const Route = createFileRoute("/admin/team")({
   component: AdminTeam,
 });
 
-function safeError(error: unknown) {
+function safeError(error: unknown, action?: TeamMemberAction) {
   if (error instanceof Response) {
     if (error.status === 401) return "登入狀態已過期，請重新登入。";
     if (error.status === 403) return "你沒有管理團隊成員的權限。";
+    if (error.status === 400)
+      return action === "reset"
+        ? "這項密碼重設不能套用於目前成員。請確認選取的是其他已連結帳戶的成員；如要重設自己的密碼，請在登入頁面使用「忘記密碼」。"
+        : "這項團隊操作未能執行，請重新載入資料後再試。";
     if (error.status === 404) return "此成員已不存在，目錄已重新整理。";
     if (error.status === 409) return "資料已被其他管理員更新，請重新確認。";
     if (error.status === 429) return "操作正在冷卻中，請於可重試時間後再試。";
@@ -393,7 +397,7 @@ function AdminTeam() {
         if (pending.memberId) await loadDetail(pending.memberId);
         setError(conflictMessage);
       } else {
-        setConfirmError(safeError(reason));
+        setConfirmError(safeError(reason, pending.action));
       }
     } finally {
       setMutating(false);
@@ -579,6 +583,7 @@ function AdminTeam() {
         ) : detail ? (
           <AdminTeamDetailPanel
             canManage={canManage}
+            currentUserEmail={user?.email ?? null}
             detail={detail}
             onAction={beginAction}
             successors={directory.members

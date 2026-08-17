@@ -22,11 +22,13 @@ export type TeamMemberActionOptions = { roles?: StaffRole[]; reassignToStaffId?:
 export function AdminTeamDetailPanel({
   detail,
   canManage,
+  currentUserEmail = null,
   successors = [],
   onAction,
 }: {
   detail: AdminTeamMemberDetail;
   canManage: boolean;
+  currentUserEmail?: string | null;
   successors?: Array<{ id: string; label: string }>;
   onAction: (action: TeamMemberAction, options?: TeamMemberActionOptions) => void;
 }) {
@@ -34,7 +36,12 @@ export function AdminTeamDetailPanel({
   const name = member.name?.trim() || "未命名成員";
   const active = member.accessState === "active";
   const canResend = active && member.invitationState !== "none";
-  const canReset = active && detail.identity.authUserLinked;
+  const isSelfResetTarget = Boolean(
+    member.email?.trim() &&
+    currentUserEmail?.trim() &&
+    member.email.trim().toLocaleLowerCase() === currentUserEmail.trim().toLocaleLowerCase(),
+  );
+  const canReset = active && detail.identity.authUserLinked && !isSelfResetTarget;
   const canSuspend = active;
   const canReactivate = !active && detail.identity.authUserLinked;
   const [roles, setRoles] = useState<StaffRole[]>(member.roles);
@@ -164,6 +171,11 @@ export function AdminTeamDetailPanel({
             ) : null}
             {active ? (
               <>
+                {isSelfResetTarget ? (
+                  <p className="text-sm text-muted-foreground">
+                    目前登入帳戶不能從這裡重設；如需重設自己的密碼，請在登入頁面使用「忘記密碼」。
+                  </p>
+                ) : null}
                 {canReset ? (
                   <Button onClick={() => onAction("reset")} type="button" variant="outline">
                     <KeyRound aria-hidden="true" />

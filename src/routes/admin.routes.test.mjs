@@ -54,6 +54,13 @@ test("Team route removes member data for forbidden callers and carries edited li
   assert.match(source, /teamMutationFailure\(result\)/);
 });
 
+test("Team route prevents self-reset confusion and gives a safe 400 recovery message", () => {
+  const source = read("src/routes/admin.team.tsx");
+  assert.match(source, /error\.status === 400/);
+  assert.match(source, /safeError\(reason, pending\.action\)/);
+  assert.match(source, /currentUserEmail=\{user\?\.email \?\? null\}/);
+});
+
 test("operations shell follows the approved navigation groups and exact Team state", () => {
   const shell = read("src/components/admin/AdminShell.tsx");
 
