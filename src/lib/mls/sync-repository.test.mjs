@@ -1085,6 +1085,141 @@ test("named credential labels never start inside Unicode identifiers", async () 
   assert.match(stored, /前token|保留上下文/);
 });
 
+test("named credential labels reject combining, Unicode-dash, and join-control continuations", async () => {
+  const predecessors = [
+    ["combining acute", "\u0301"],
+    ["hyphen", "\u2010"],
+    ["nonbreaking hyphen", "\u2011"],
+    ["en dash", "\u2013"],
+    ["zero-width non-joiner", "\u200c"],
+    ["zero-width joiner", "\u200d"],
+  ];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const failures = [];
+
+  for (const [index, [name, predecessor]] of predecessors.entries()) {
+    const firstSecret = `SENT_BOUNDARY_${index}_FIRST`;
+    const nextSecret = `SENT_BOUNDARY_${index}_NEXT`;
+    const embedded = `adjacent${predecessor}token`;
+    const trailing = `boundary-context-${index}`;
+    await repository.finishRun(RUN_ID, {
+      status: "failed",
+      ...evaluation(),
+      failureCode: "adapter_failed",
+      failureSummary: `secret: ${firstSecret} ${embedded} api-key: ${nextSecret} ${trailing}`,
+    });
+    const stored = client.calls.at(-1).params[6];
+    if (
+      stored.includes(firstSecret) ||
+      stored.includes(nextSecret) ||
+      !stored.includes(embedded) ||
+      !stored.includes(trailing)
+    ) {
+      failures.push({ name, stored });
+    }
+  }
+
+  assert.deepEqual(failures, []);
+});
+
+test("named credential grammar preserves all 18-by-18 legitimate label transitions", async () => {
+  const labels = [
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "access token",
+    "access-token",
+    "access_token",
+    "accesstoken",
+    "refresh token",
+    "refresh-token",
+    "refresh_token",
+    "refreshtoken",
+    "api key",
+    "api-key",
+    "api_key",
+    "apikey",
+    "x-api-key",
+    "x_api_key",
+  ];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const failures = [];
+
+  assert.equal(labels.length, 18);
+  for (const [leftIndex, left] of labels.entries()) {
+    for (const [rightIndex, right] of labels.entries()) {
+      const leftSecret = `SENT_MATRIX_${leftIndex}_${rightIndex}_LEFT`;
+      const rightSecret = `SENT_MATRIX_${leftIndex}_${rightIndex}_RIGHT`;
+      const trailing = `matrix-context-${leftIndex}-${rightIndex}`;
+      await repository.finishRun(RUN_ID, {
+        status: "failed",
+        ...evaluation(),
+        failureCode: "adapter_failed",
+        failureSummary: `${left}: ${leftSecret};${right}: ${rightSecret} ${trailing}`,
+      });
+      const stored = client.calls.at(-1).params[6];
+      if (
+        stored.includes(leftSecret) ||
+        stored.includes(rightSecret) ||
+        !stored.includes(trailing)
+      ) {
+        failures.push({ left, right, stored });
+      }
+    }
+  }
+
+  assert.deepEqual(failures, []);
+});
+
+test("credential redaction preserves 13 positive start, wrapper, and scheme forms", async () => {
+  const basicAuthorization = Buffer.from("SENT_POSITIVE_AUTH_BASIC:secret").toString("base64");
+  const standaloneBasic = Buffer.from("SENT_POSITIVE_BASIC:secret").toString("base64");
+  const cases = [
+    { summary: "token: SENT_POSITIVE_0 kept-0", secrets: ["SENT_POSITIVE_0"] },
+    { summary: "prefix token: SENT_POSITIVE_1 kept-1", secrets: ["SENT_POSITIVE_1"] },
+    { summary: "(token: (SENT_POSITIVE_2)) kept-2", secrets: ["SENT_POSITIVE_2"] },
+    { summary: "[secret: ['SENT_POSITIVE_3']] kept-3", secrets: ["SENT_POSITIVE_3"] },
+    { summary: "{password: {SENT_POSITIVE_4}} kept-4", secrets: ["SENT_POSITIVE_4"] },
+    { summary: "prefix,api-key: SENT_POSITIVE_5 kept-5", secrets: ["SENT_POSITIVE_5"] },
+    { summary: "prefix;access-token: SENT_POSITIVE_6 kept-6", secrets: ["SENT_POSITIVE_6"] },
+    { summary: "prefix:refresh-token: SENT_POSITIVE_7 kept-7", secrets: ["SENT_POSITIVE_7"] },
+    {
+      summary: 'Authorization: Bearer "SENT_POSITIVE_8 SENT_POSITIVE_8B" kept-8',
+      secrets: ["SENT_POSITIVE_8", "SENT_POSITIVE_8B"],
+    },
+    {
+      summary: `Authorization=Basic ${basicAuthorization} kept-9`,
+      secrets: [basicAuthorization],
+    },
+    { summary: "Bearer: (SENT_POSITIVE_10) kept-10", secrets: ["SENT_POSITIVE_10"] },
+    { summary: `Basic ("${standaloneBasic}") kept-11`, secrets: [standaloneBasic] },
+    {
+      summary: "ordinary Basic requirements remain useful; token: SENT_POSITIVE_12 kept-12",
+      secrets: ["SENT_POSITIVE_12"],
+      ordinaryBasic: true,
+    },
+  ];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+
+  assert.equal(cases.length, 13);
+  for (const [index, value] of cases.entries()) {
+    await repository.finishRun(RUN_ID, {
+      status: "failed",
+      ...evaluation(),
+      failureCode: "adapter_failed",
+      failureSummary: value.summary,
+    });
+    const stored = client.calls.at(-1).params[6];
+    for (const secret of value.secrets) assert.equal(stored.includes(secret), false, secret);
+    assert.match(stored, new RegExp(`kept-${index}`));
+    if (value.ordinaryBasic) assert.match(stored, /ordinary Basic requirements remain useful/);
+  }
+});
+
 test("run evidence rejects malformed JSON, statuses, UUIDs, and database misses", async () => {
   const client = fakeClient(() => result());
   const repository = createSyncRepository({ client });

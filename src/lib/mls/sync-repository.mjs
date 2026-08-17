@@ -45,6 +45,7 @@ const BASIC_CREDENTIAL_VALUE_PATTERN_SOURCE = wrappedCredentialPattern(
 );
 const CREDENTIAL_TERMINAL_PATTERN_SOURCE = String.raw`(?=$|\s|[,;:.!?)]|\]|\})`;
 const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
+const CREDENTIAL_LABEL_START_PATTERN_SOURCE = String.raw`(?:^|(?<=[\s(\[{:;,]))`;
 const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)${CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE})?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "gi",
@@ -62,7 +63,7 @@ const STANDALONE_BASIC_CREDENTIAL_PATTERN = new RegExp(
   "gi",
 );
 const NAMED_CREDENTIAL_PATTERN = new RegExp(
-  String.raw`(?<![\p{L}\p{N}\p{Pc}$-])(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  String.raw`${CREDENTIAL_LABEL_START_PATTERN_SOURCE}(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "giu",
 );
 const OBSERVATION_KEYS = new Set([
