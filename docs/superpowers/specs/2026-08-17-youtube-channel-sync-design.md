@@ -208,8 +208,9 @@ last_full_period              date null
 updated_at                    timestamptz not null
 ```
 
-`last_full_period` stores the Hong Kong monthly reconciliation period. It is the
-guard that prevents two retries in the same month from counting as two misses.
+`last_full_period` stores the first calendar date of the current Hong Kong month
+(for example, `2026-08-01`). It is the guard that prevents two retries in the
+same month from counting as two misses.
 
 ## 7. Ownership and Upsert Rules
 
@@ -286,8 +287,9 @@ the same editorial sort value.
 5. If no boundary exists, or the stored boundary is no longer present, exhaust
    the playlist as a safe first-run or recovery backfill.
 6. Validate and preflight the fetched items.
-7. Upsert all fetched items and update
-   `last_incremental_video_id` plus completion time.
+7. Upsert all fetched items. Set `last_incremental_video_id` to the first,
+   newest validated item returned by the playlist and record the completion
+   time. If the playlist is empty, leave the previous boundary unchanged.
 8. Release the lease and return the run summary.
 
 Incremental runs never increment absence counters and never mark a video
@@ -315,7 +317,7 @@ for evidence that older videos disappeared.
    - update full-run state and the current period.
 6. Commit, release the lease, and return the summary.
 
-A repeated successful full run within the same Hong Kong month may refresh seen
+A repeated successful full run within the same Hong Kong month refreshes seen
 metadata but cannot increment an unseen row again. A failed or partial provider
 run performs no absence mutation. Returning videos reset their miss count and
 become available again; their staff-controlled `published` value is unchanged.
@@ -334,15 +336,17 @@ If another run holds the lease:
   `sync_in_progress`; and
 - staff POST returns HTTP 409 with the same safe reason.
 
-Lease expiry provides crash recovery. The exact timeout and renewal interval are
-implementation constants chosen in the implementation plan, with the invariant
-that renewal occurs well before expiry and during multi-page fetches.
+Lease expiry provides crash recovery. The lease lasts 15 minutes. Renew it after
+every successfully fetched provider page, immediately before database mutation,
+and whenever three minutes have elapsed during other active work. This keeps a
+healthy run well inside its lease while allowing an abandoned lease to recover.
 
 ### 11.2 Provider retry policy
 
-Retry YouTube HTTP 429 and 5xx responses at most three times with exponential
-backoff, jitter, and `Retry-After` when supplied. Classify non-transient 403
-responses rather than repeatedly retrying them.
+After the initial request fails, retry YouTube HTTP 429 and 5xx responses at most
+three additional times with exponential backoff, jitter, and `Retry-After` when
+supplied. Classify non-transient 403 responses rather than repeatedly retrying
+them.
 
 Safe operational codes are:
 
@@ -389,8 +393,8 @@ reformatting unrelated schedules:
 
 | Path | UTC schedule | Hong Kong window | Purpose |
 | --- | --- | --- | --- |
-| `/api/youtube-sync` | `0 19 * * *` | around 03:00 daily | Incremental sync |
-| `/api/youtube-sync/full` | `0 21 1 * *` | around 05:00 on local day 2 | Monthly reconciliation |
+| `/api/youtube-sync` | `0 19 * * *` | 03:00-03:59 daily | Incremental sync |
+| `/api/youtube-sync/full` | `0 21 1 * *` | 05:00-05:59 on local day 2 | Monthly reconciliation |
 
 The two-hour separation accommodates Hobby-plan hourly scheduling precision.
 The database lease remains the correctness mechanism if deliveries overlap or
