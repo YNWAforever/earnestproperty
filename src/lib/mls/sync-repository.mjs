@@ -35,7 +35,12 @@ function wrappedCredentialPattern(atomPattern) {
   return String.raw`(?:${atomPattern}|\(\s*${atomPattern}\s*\)|\[\s*${atomPattern}\s*\]|\{\s*${atomPattern}\s*\})`;
 }
 
-const CREDENTIAL_ATOM_PATTERN_SOURCE = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;()[\]{}]+)`;
+const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
+const CREDENTIAL_LABEL_VALUE_SEPARATOR_PATTERN_SOURCE = String.raw`(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)`;
+const CREDENTIAL_CHAIN_LABEL_VALUE_SEPARATOR_PATTERN_SOURCE = String.raw`(?:\s*[:=]\s*|\s+(?:is|was)(?:\s*[:=]\s*|\s+))`;
+const CREDENTIAL_CHAIN_BOUNDARY_PATTERN_SOURCE = String.raw`:\s*(?:${CREDENTIAL_LABEL_PATTERN_SOURCE})${CREDENTIAL_CHAIN_LABEL_VALUE_SEPARATOR_PATTERN_SOURCE}`;
+const CREDENTIAL_UNQUOTED_ATOM_PATTERN_SOURCE = String.raw`(?:(?!${CREDENTIAL_CHAIN_BOUNDARY_PATTERN_SOURCE})[^\s,;()[\]{}])+`;
+const CREDENTIAL_ATOM_PATTERN_SOURCE = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|${CREDENTIAL_UNQUOTED_ATOM_PATTERN_SOURCE})`;
 const CREDENTIAL_VALUE_PATTERN_SOURCE = wrappedCredentialPattern(CREDENTIAL_ATOM_PATTERN_SOURCE);
 const CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE = String.raw`(?:\s*:\s*|\s+)`;
 const BASIC_CREDENTIAL_TOKEN_PATTERN_SOURCE = String.raw`[A-Za-z0-9+/]+={0,2}`;
@@ -44,7 +49,6 @@ const BASIC_CREDENTIAL_VALUE_PATTERN_SOURCE = wrappedCredentialPattern(
   BASIC_CREDENTIAL_ATOM_PATTERN_SOURCE,
 );
 const CREDENTIAL_TERMINAL_PATTERN_SOURCE = String.raw`(?=$|\s|[,;:.!?)]|\]|\})`;
-const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
 const CREDENTIAL_LABEL_START_PATTERN_SOURCE = String.raw`(?:^|(?<=[\s(\[{:;,]))`;
 const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)${CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE})?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
@@ -63,7 +67,7 @@ const STANDALONE_BASIC_CREDENTIAL_PATTERN = new RegExp(
   "gi",
 );
 const NAMED_CREDENTIAL_PATTERN = new RegExp(
-  String.raw`${CREDENTIAL_LABEL_START_PATTERN_SOURCE}(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
+  String.raw`${CREDENTIAL_LABEL_START_PATTERN_SOURCE}(${CREDENTIAL_LABEL_PATTERN_SOURCE})${CREDENTIAL_LABEL_VALUE_SEPARATOR_PATTERN_SOURCE}${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "giu",
 );
 const OBSERVATION_KEYS = new Set([

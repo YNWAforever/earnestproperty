@@ -1174,6 +1174,129 @@ test("named credential grammar preserves all 18-by-18 legitimate label transitio
   assert.deepEqual(failures, []);
 });
 
+test("named credential grammar redacts every 18-by-18 colon-delimited label transition", async () => {
+  const labels = [
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "access token",
+    "access-token",
+    "access_token",
+    "accesstoken",
+    "refresh token",
+    "refresh-token",
+    "refresh_token",
+    "refreshtoken",
+    "api key",
+    "api-key",
+    "api_key",
+    "apikey",
+    "x-api-key",
+    "x_api_key",
+  ];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const failures = [];
+
+  assert.equal(labels.length, 18);
+  for (const [leftIndex, left] of labels.entries()) {
+    for (const [rightIndex, right] of labels.entries()) {
+      const leftSecret = `SENT_COLON_${leftIndex}_${rightIndex}_LEFT`;
+      const rightSecret = `SENT_COLON_${leftIndex}_${rightIndex}_RIGHT`;
+      const trailing = `colon-context-${leftIndex}-${rightIndex}`;
+      await repository.finishRun(RUN_ID, {
+        status: "failed",
+        ...evaluation(),
+        failureCode: "adapter_failed",
+        failureSummary: `${left}: ${leftSecret}:${right}: ${rightSecret} ${trailing}`,
+      });
+      const stored = client.calls.at(-1).params[6];
+      if (
+        stored.includes(leftSecret) ||
+        stored.includes(rightSecret) ||
+        !stored.includes(trailing)
+      ) {
+        failures.push({ left, right, stored });
+      }
+    }
+  }
+
+  assert.equal(
+    failures.length,
+    0,
+    JSON.stringify({
+      transitions: labels.length ** 2,
+      failures: failures.length,
+      samples: failures.slice(0, 6),
+    }),
+  );
+});
+
+test("Authorization and Bearer colon chains redact both credentials without losing context", async () => {
+  const cases = [
+    "Authorization: Bearer SENT_AUTH_BEARER_FIRST:api-key: SENT_AUTH_BEARER_SECOND auth-bearer-tail",
+    "Authorization=SENT_AUTH_FIRST:api-key: SENT_AUTH_SECOND auth-tail",
+    "Bearer SENT_BEARER_FIRST:api-key: SENT_BEARER_SECOND bearer-tail",
+  ];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const failures = [];
+
+  for (const summary of cases) {
+    await repository.finishRun(RUN_ID, {
+      status: "failed",
+      ...evaluation(),
+      failureCode: "adapter_failed",
+      failureSummary: summary,
+    });
+    const stored = client.calls.at(-1).params[6];
+    const secrets = summary.match(/SENT_[A-Z_]+/g) ?? [];
+    const trailing = summary.split(" ").at(-1);
+    if (secrets.some((secret) => stored.includes(secret)) || !stored.includes(trailing)) {
+      failures.push({ summary, stored });
+    }
+  }
+
+  assert.deepEqual(failures, []);
+});
+
+test("colon-bearing credentials redact fully without consuming adjacent non-label prose", async () => {
+  const cases = [
+    {
+      summary: "token: SENT_COLON_USER:user:password retained-password-context",
+      secrets: ["SENT_COLON_USER", "user:password"],
+      trailing: "retained-password-context",
+    },
+    {
+      summary: "secret: SENT_COLON_NONLABEL:audit:value retained-nonlabel-context",
+      secrets: ["SENT_COLON_NONLABEL", "audit:value"],
+      trailing: "retained-nonlabel-context",
+    },
+  ];
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  const repository = createSyncRepository({ client });
+  const failures = [];
+
+  for (const value of cases) {
+    await repository.finishRun(RUN_ID, {
+      status: "failed",
+      ...evaluation(),
+      failureCode: "adapter_failed",
+      failureSummary: value.summary,
+    });
+    const stored = client.calls.at(-1).params[6];
+    if (
+      value.secrets.some((secret) => stored.includes(secret)) ||
+      !stored.includes(value.trailing)
+    ) {
+      failures.push({ summary: value.summary, stored });
+    }
+  }
+
+  assert.deepEqual(failures, []);
+});
+
 test("credential redaction preserves 13 positive start, wrapper, and scheme forms", async () => {
   const basicAuthorization = Buffer.from("SENT_POSITIVE_AUTH_BASIC:secret").toString("base64");
   const standaloneBasic = Buffer.from("SENT_POSITIVE_BASIC:secret").toString("base64");
