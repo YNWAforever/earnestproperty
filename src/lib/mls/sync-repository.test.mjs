@@ -440,6 +440,125 @@ test("saveObservations rejects mutable, forged, duplicate, or oversized evidence
   assert.equal(client.calls.length, 0);
 });
 
+test("saveObservations rejects every malformed nested MediaCandidate shape before SQL", async () => {
+  const valid = validObservation(1);
+  const baseCandidate = {
+    url: "https://fixtures.invalid/listing.png",
+    category: "listing_photo",
+    isPrimary: true,
+  };
+  const cases = [];
+  for (const key of ["url", "category", "isPrimary"]) {
+    const candidate = { ...baseCandidate };
+    delete candidate[key];
+    cases.push(candidate);
+  }
+  const markerCases = new Map([
+    ["rejected", [null, undefined, "false"]],
+    ["eligible", [null, undefined, 1]],
+    ["contextRejected", [null, undefined, "true"]],
+    ["rejectionReason", [null, undefined, 1]],
+    ["rejectionReasons", [null, undefined, "fixture_reason", ["fixture_reason", 1]]],
+    ["contextRejectionMarkers", [null, undefined, "fixture_marker", ["fixture_marker", false]]],
+  ]);
+  for (const [key, values] of markerCases) {
+    for (const value of values) cases.push({ ...baseCandidate, [key]: value });
+  }
+  cases.push({ ...baseCandidate, undeclaredMarker: true });
+
+  for (const candidate of cases) {
+    const observation = forgedObservation(valid, { mediaCandidates: [candidate] });
+    const client = fakeClient();
+    await assert.rejects(
+      createSyncRepository({ client }).saveObservations(RUN_ID, [observation]),
+      /media candidate|media URL|rejectionReasons|contextRejectionMarkers/i,
+    );
+    assert.equal(client.calls.length, 0);
+  }
+});
+
+test("saveObservations snapshots exact nested media evidence before awaited SQL", async () => {
+  let changedAfterInsert = false;
+  const candidateEvidence = {
+    url: "https://fixtures.invalid/listing.png",
+    category: "listing_photo",
+    isPrimary: true,
+    rejected: false,
+    eligible: true,
+    contextRejected: false,
+    rejectionReason: "fixture_reason",
+    rejectionReasons: ["fixture_reason"],
+    contextRejectionMarkers: ["fixture_marker"],
+  };
+  const base = validObservation(1, { mediaCandidates: [candidateEvidence] });
+  const dynamicCandidate = { ...candidateEvidence };
+  Object.defineProperty(dynamicCandidate, "rejectionReason", {
+    enumerable: true,
+    get() {
+      return changedAfterInsert ? "changed_after_insert" : candidateEvidence.rejectionReason;
+    },
+  });
+  deepFreeze(dynamicCandidate);
+  const observation = Object.freeze({
+    ...base,
+    mediaCandidates: Object.freeze([dynamicCandidate]),
+  });
+  const row = persistedRow(base);
+  const client = fakeClient((call) => {
+    if (call.statement.startsWith("INSERT INTO listing_source_observations")) {
+      changedAfterInsert = true;
+      return result();
+    }
+    if (call.statement.startsWith("SELECT id, source, external_listing_id")) {
+      return result([row]);
+    }
+    throw new Error(`unexpected query: ${call.statement}`);
+  });
+
+  const [ref] = await createSyncRepository({ client }).saveObservations(RUN_ID, [observation]);
+
+  assert.equal(ref.id, OBSERVATION_ID);
+  assert.deepEqual(JSON.parse(client.calls[0].params[8]), [candidateEvidence]);
+});
+
+test("saveObservations reads each optional media marker once into its canonical snapshot", async () => {
+  let reads = 0;
+  const candidateEvidence = {
+    url: "https://fixtures.invalid/listing.png",
+    category: "listing_photo",
+    isPrimary: true,
+    rejected: false,
+  };
+  const base = validObservation(1, { mediaCandidates: [candidateEvidence] });
+  const dynamicCandidate = {
+    url: candidateEvidence.url,
+    category: candidateEvidence.category,
+    isPrimary: candidateEvidence.isPrimary,
+  };
+  Object.defineProperty(dynamicCandidate, "rejected", {
+    enumerable: true,
+    get() {
+      reads += 1;
+      return reads <= 2 ? false : undefined;
+    },
+  });
+  Object.freeze(dynamicCandidate);
+  const observation = Object.freeze({
+    ...base,
+    mediaCandidates: Object.freeze([dynamicCandidate]),
+  });
+  const client = fakeClient((call) =>
+    call.statement.startsWith("SELECT id, source, external_listing_id")
+      ? result([persistedRow(base)])
+      : result(),
+  );
+
+  const [ref] = await createSyncRepository({ client }).saveObservations(RUN_ID, [observation]);
+
+  assert.equal(ref.id, OBSERVATION_ID);
+  assert.deepEqual(JSON.parse(client.calls[0].params[8]), [candidateEvidence]);
+});
+
 test("saveObservations binds validation state to raw, normalized, and match-key identity", async () => {
   const client = fakeClient();
   const repository = createSyncRepository({ client });
@@ -887,6 +1006,35 @@ test("operator diagnostics preserve ordinary Basic prose while redacting alterna
   assert.equal(stored.includes("SENT_EDGE"), false);
   assert.match(stored, /ordinary basic requirements remain useful/);
   assert.match(stored, /rejected|rotated/);
+});
+
+test("operator diagnostics redact wrapped Basic credentials and punctuation terminals", async () => {
+  const credentials = Array.from({ length: 6 }, (_, index) =>
+    Buffer.from(`SENT_BASIC_${index}:fixture-secret`, "utf8").toString("base64"),
+  );
+  const client = fakeClient(() => result([{ id: RUN_ID }]));
+  await createSyncRepository({ client }).finishRun(RUN_ID, {
+    status: "failed",
+    ...evaluation(),
+    failureCode: "adapter_failed",
+    failureSummary: [
+      `quoted Basic "${credentials[0]}" remained useful.`,
+      `wrapped Basic (${credentials[1]}) continued!`,
+      `nested Basic ('${credentials[2]}') rotated.`,
+      `period Basic ${credentials[3]}. next context`,
+      `bang Basic ${credentials[4]}! next retry`,
+      `closing Basic ${credentials[5]}) next stage`,
+      "ordinary Basic requirements remain useful",
+    ].join(" "),
+  });
+
+  const stored = client.calls[0].params[6];
+  for (const credential of credentials) assert.equal(stored.includes(credential), false);
+  assert.match(
+    stored,
+    /quoted|remained useful|continued|rotated|next context|next retry|next stage/,
+  );
+  assert.match(stored, /ordinary Basic requirements remain useful/);
 });
 
 test("run evidence rejects malformed JSON, statuses, UUIDs, and database misses", async () => {
@@ -1676,6 +1824,52 @@ test("field and lifecycle row validation fails closed without silently deduplica
     createSyncRepository({ client: invalidField }).loadFieldStates([PROPERTY_ID]),
     /field-state row/i,
   );
+});
+
+test("field and lifecycle rows require exact own nullable identity columns", async () => {
+  const fieldRow = () => ({
+    property_id: PROPERTY_ID,
+    field_name: "price",
+    last_published_value: 8_000_000,
+    override_value: null,
+    active_override: false,
+    winning_observation_id: OBSERVATION_ID,
+    updated_at: "2026-08-17T00:00:00.000Z",
+  });
+  const lifecycleRow = () => ({
+    property_id: PROPERTY_ID,
+    consecutive_absent_healthy_runs: 1,
+    last_evaluated_run_id: RUN_ID,
+    inactive_reason: "missing_from_both_sources",
+    inactive_at: null,
+    updated_at: "2026-08-17T00:00:00.000Z",
+  });
+  const cases = [
+    ["field", "winning_observation_id", "missing"],
+    ["field", "winning_observation_id", undefined],
+    ["field", "winning_observation_id", "not-a-uuid"],
+    ["lifecycle", "last_evaluated_run_id", "missing"],
+    ["lifecycle", "last_evaluated_run_id", undefined],
+    ["lifecycle", "last_evaluated_run_id", "not-a-uuid"],
+    ["lifecycle", "inactive_reason", "missing"],
+    ["lifecycle", "inactive_reason", undefined],
+    ["lifecycle", "inactive_reason", 42],
+  ];
+
+  for (const [kind, field, value] of cases) {
+    const row = kind === "field" ? fieldRow() : lifecycleRow();
+    if (value === "missing") delete row[field];
+    else row[field] = value;
+    const client = fakeClient(() => result([row]));
+    const repository = createSyncRepository({ client });
+    await assert.rejects(
+      kind === "field"
+        ? repository.loadFieldStates([PROPERTY_ID])
+        : repository.loadLifecycleStates([PROPERTY_ID]),
+      kind === "field" ? /field-state row/i : /lifecycle row/i,
+      `${kind}.${field}=${String(value)}`,
+    );
+  }
 });
 
 test("media lookup by hash and URL is exact and returns Task 7 metadata", async () => {

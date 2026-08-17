@@ -14,6 +14,9 @@ function requireFunction(value, name) {
 
 function attachCleanupErrors(primary, cleanupErrors) {
   if (cleanupErrors.length === 0) return primary;
+  if (primary === null || (typeof primary !== "object" && typeof primary !== "function")) {
+    return primary;
+  }
   try {
     Object.defineProperty(primary, "cleanupErrors", {
       configurable: true,
@@ -65,6 +68,7 @@ export async function withMlsAdvisoryLock(options = {}) {
   let connected = false;
   let acquired = false;
   let value;
+  let hasPrimaryError = false;
   let primaryError;
   const cleanupErrors = [];
 
@@ -90,6 +94,7 @@ export async function withMlsAdvisoryLock(options = {}) {
     if (!acquired) value = { kind: "lock_unavailable" };
     else value = await work(client);
   } catch (error) {
+    hasPrimaryError = true;
     primaryError = error;
   }
 
@@ -103,8 +108,11 @@ export async function withMlsAdvisoryLock(options = {}) {
         throw new Error("Advisory unlock result reported that the lock was not held");
       }
     } catch (error) {
-      if (primaryError) cleanupErrors.push(error);
-      else primaryError = error;
+      if (hasPrimaryError) cleanupErrors.push(error);
+      else {
+        hasPrimaryError = true;
+        primaryError = error;
+      }
     }
   }
 
@@ -112,11 +120,14 @@ export async function withMlsAdvisoryLock(options = {}) {
     try {
       await client.end();
     } catch (error) {
-      if (primaryError) cleanupErrors.push(error);
-      else primaryError = error;
+      if (hasPrimaryError) cleanupErrors.push(error);
+      else {
+        hasPrimaryError = true;
+        primaryError = error;
+      }
     }
   }
 
-  if (primaryError) throw attachCleanupErrors(primaryError, cleanupErrors);
+  if (hasPrimaryError) throw attachCleanupErrors(primaryError, cleanupErrors);
   return value;
 }

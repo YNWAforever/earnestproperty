@@ -30,9 +30,20 @@ const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+
+function wrappedCredentialPattern(atomPattern) {
+  return String.raw`(?:${atomPattern}|\(\s*${atomPattern}\s*\)|\[\s*${atomPattern}\s*\]|\{\s*${atomPattern}\s*\})`;
+}
+
 const CREDENTIAL_ATOM_PATTERN_SOURCE = String.raw`(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;()[\]{}]+)`;
-const CREDENTIAL_VALUE_PATTERN_SOURCE = String.raw`(?:${CREDENTIAL_ATOM_PATTERN_SOURCE}|\(\s*${CREDENTIAL_ATOM_PATTERN_SOURCE}\s*\)|\[\s*${CREDENTIAL_ATOM_PATTERN_SOURCE}\s*\]|\{\s*${CREDENTIAL_ATOM_PATTERN_SOURCE}\s*\})`;
+const CREDENTIAL_VALUE_PATTERN_SOURCE = wrappedCredentialPattern(CREDENTIAL_ATOM_PATTERN_SOURCE);
 const CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE = String.raw`(?:\s*:\s*|\s+)`;
+const BASIC_CREDENTIAL_TOKEN_PATTERN_SOURCE = String.raw`[A-Za-z0-9+/]+={0,2}`;
+const BASIC_CREDENTIAL_ATOM_PATTERN_SOURCE = String.raw`(?:${BASIC_CREDENTIAL_TOKEN_PATTERN_SOURCE}|"${BASIC_CREDENTIAL_TOKEN_PATTERN_SOURCE}"|'${BASIC_CREDENTIAL_TOKEN_PATTERN_SOURCE}')`;
+const BASIC_CREDENTIAL_VALUE_PATTERN_SOURCE = wrappedCredentialPattern(
+  BASIC_CREDENTIAL_ATOM_PATTERN_SOURCE,
+);
+const CREDENTIAL_TERMINAL_PATTERN_SOURCE = String.raw`(?=$|\s|[,;.!?)]|\]|\})`;
 const CREDENTIAL_LABEL_PATTERN_SOURCE = String.raw`(?:x[-_ ]?)?api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password|passwd`;
 const AUTHORIZATION_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(authorization)\s*[:=]\s*(?:(?:bearer|basic)${CREDENTIAL_SCHEME_SEPARATOR_PATTERN_SOURCE})?${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
@@ -46,7 +57,10 @@ const STANDALONE_BEARER_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(bearer)\s+${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "gi",
 );
-const STANDALONE_BASIC_CREDENTIAL_PATTERN = /\b(basic)\s+([A-Za-z0-9+/]+={0,2})(?=$|[\s,;])/gi;
+const STANDALONE_BASIC_CREDENTIAL_PATTERN = new RegExp(
+  String.raw`\b(basic)\s+(${BASIC_CREDENTIAL_VALUE_PATTERN_SOURCE})${CREDENTIAL_TERMINAL_PATTERN_SOURCE}`,
+  "gi",
+);
 const NAMED_CREDENTIAL_PATTERN = new RegExp(
   String.raw`\b(${CREDENTIAL_LABEL_PATTERN_SOURCE})(?:\s*[:=]\s*|\s+(?:(?:is|was)(?:\s*[:=]\s*|\s+))?)${CREDENTIAL_VALUE_PATTERN_SOURCE}`,
   "gi",
@@ -70,6 +84,28 @@ const OBSERVATION_KEYS = new Set([
   "validationState",
   "quarantineReasons",
   "parseWarnings",
+]);
+const MEDIA_CANDIDATE_REQUIRED_KEYS = Object.freeze(["url", "category", "isPrimary"]);
+const MEDIA_CANDIDATE_OPTIONAL_KEYS = Object.freeze([
+  "rejected",
+  "eligible",
+  "contextRejected",
+  "rejectionReason",
+  "rejectionReasons",
+  "contextRejectionMarkers",
+]);
+const MEDIA_CANDIDATE_KEYS = new Set([
+  ...MEDIA_CANDIDATE_REQUIRED_KEYS,
+  ...MEDIA_CANDIDATE_OPTIONAL_KEYS,
+]);
+const MEDIA_CANDIDATE_CATEGORIES = new Set([
+  "listing_photo",
+  "map",
+  "floorplan",
+  "qr",
+  "vr",
+  "branded",
+  "unknown",
 ]);
 const OWNED_MEDIA_INPUT_KEYS = new Set([
   "url",
@@ -364,31 +400,50 @@ function validateListingFields(fields) {
 }
 
 function validateMediaCandidate(candidate) {
-  if (!isPlainRecord(candidate)) throw new TypeError("observation media candidate is invalid");
-  requireUrl(candidate.url, "observation media URL");
-  const categories = new Set([
-    "listing_photo",
-    "map",
-    "floorplan",
-    "qr",
-    "vr",
-    "branded",
-    "unknown",
-  ]);
-  if (!categories.has(candidate.category) || typeof candidate.isPrimary !== "boolean") {
+  if (
+    !isPlainRecord(candidate) ||
+    MEDIA_CANDIDATE_REQUIRED_KEYS.some((key) => !Object.hasOwn(candidate, key)) ||
+    Reflect.ownKeys(candidate).some((key) => !MEDIA_CANDIDATE_KEYS.has(key))
+  ) {
+    throw new TypeError("observation media candidate is invalid");
+  }
+  const snapshot = {
+    url: candidate.url,
+    category: candidate.category,
+    isPrimary: candidate.isPrimary,
+  };
+  requireUrl(snapshot.url, "observation media URL");
+  if (
+    !MEDIA_CANDIDATE_CATEGORIES.has(snapshot.category) ||
+    typeof snapshot.isPrimary !== "boolean"
+  ) {
     throw new TypeError("observation media candidate is invalid");
   }
   for (const key of ["rejected", "eligible", "contextRejected"]) {
-    if (candidate[key] != null && typeof candidate[key] !== "boolean") {
-      throw new TypeError("observation media candidate is invalid");
+    if (Object.hasOwn(candidate, key)) {
+      const value = candidate[key];
+      if (typeof value !== "boolean") {
+        throw new TypeError("observation media candidate is invalid");
+      }
+      snapshot[key] = value;
     }
   }
-  if (candidate.rejectionReason != null) {
-    requireSafeText(candidate.rejectionReason, "media rejection reason", { max: 500 });
+  if (Object.hasOwn(candidate, "rejectionReason")) {
+    const rejectionReason = candidate.rejectionReason;
+    if (typeof rejectionReason !== "string") {
+      throw new TypeError("observation media candidate is invalid");
+    }
+    requireSafeText(rejectionReason, "media rejection reason", { max: 500 });
+    snapshot.rejectionReason = rejectionReason;
   }
   for (const key of ["rejectionReasons", "contextRejectionMarkers"]) {
-    if (candidate[key] != null) requireStringArray(candidate[key], key, { maxItems: 100 });
+    if (Object.hasOwn(candidate, key)) {
+      const values = candidate[key];
+      requireStringArray(values, key, { maxItems: 100 });
+      snapshot[key] = Object.freeze([...values]);
+    }
   }
+  return Object.freeze(snapshot);
 }
 
 function validateObservation(observation) {
@@ -426,7 +481,9 @@ function validateObservation(observation) {
   if (!Array.isArray(observation.mediaCandidates) || observation.mediaCandidates.length > 500) {
     throw new TypeError("SourceObservation mediaCandidates are invalid");
   }
-  observation.mediaCandidates.forEach(validateMediaCandidate);
+  const mediaCandidates = Object.freeze(
+    observation.mediaCandidates.map((candidate) => validateMediaCandidate(candidate)),
+  );
   requireObservationTimestamp(observation.sourceUpdatedAt, "SourceObservation sourceUpdatedAt", {
     nullable: true,
     allowDate: true,
@@ -452,7 +509,7 @@ function validateObservation(observation) {
     propertyNoNormalized: observation.propertyNoNormalized,
     fields: observation.fields,
     rawFields: observation.rawFields,
-    mediaCandidates: observation.mediaCandidates,
+    mediaCandidates,
     sourceUpdatedAt: observation.sourceUpdatedAt,
   });
   if (expectedHash !== observation.contentHash) {
@@ -468,8 +525,8 @@ function validateObservation(observation) {
     },
     "observation payload",
   );
-  const media = serializeJson(observation.mediaCandidates, "observation mediaCandidates");
-  return { payload, media };
+  const media = serializeJson(mediaCandidates, "observation mediaCandidates");
+  return { payload, media, mediaCandidates };
 }
 
 function observationIdentity(value) {
@@ -506,9 +563,20 @@ function hongKongMidnightUtc(dateValue) {
 }
 
 function redactStandaloneBasic(match, label, credential) {
-  const decoded = Buffer.from(credential, "base64");
+  let unwrapped = credential.trim();
+  const wrappers = new Map([
+    ['"', '"'],
+    ["'", "'"],
+    ["(", ")"],
+    ["[", "]"],
+    ["{", "}"],
+  ]);
+  while (wrappers.get(unwrapped[0]) === unwrapped.at(-1)) {
+    unwrapped = unwrapped.slice(1, -1).trim();
+  }
+  const decoded = Buffer.from(unwrapped, "base64");
   const canonical = decoded.toString("base64").replace(/=+$/, "");
-  if (canonical === credential.replace(/=+$/, "") && decoded.includes(0x3a)) {
+  if (canonical === unwrapped.replace(/=+$/, "") && decoded.includes(0x3a)) {
     return `${label} [redacted]`;
   }
   return match;
@@ -754,13 +822,14 @@ export function createSyncRepository(options = {}) {
     const prepared = [];
     const expectedByIdentity = new Map();
     for (const observation of requestedObservations) {
-      const identity = observationIdentity(observation ?? {});
+      const { mediaCandidates, ...serialized } = validateObservation(observation);
+      const evidence = Object.freeze({ ...observation, mediaCandidates });
+      const identity = observationIdentity(evidence);
       if (expectedByIdentity.has(identity)) {
         throw new TypeError("duplicate observation identity");
       }
-      const serialized = validateObservation(observation);
-      expectedByIdentity.set(identity, observation);
-      prepared.push({ observation, ...serialized });
+      expectedByIdentity.set(identity, evidence);
+      prepared.push({ observation: evidence, ...serialized });
     }
     Object.freeze(prepared);
     const orderedIdentities = Object.freeze(
@@ -1491,7 +1560,8 @@ export function createSyncRepository(options = {}) {
       row.field_name.length > 0 &&
       row.field_name.length <= 160 &&
       typeof row.active_override === "boolean" &&
-      (row.winning_observation_id == null || isUuid(row.winning_observation_id)) &&
+      Object.hasOwn(row, "winning_observation_id") &&
+      (row.winning_observation_id === null || isUuid(row.winning_observation_id)) &&
       isTimestamp(row.updated_at);
     if (!valid) throw new TypeError("field-state row is invalid");
     serializeJson(row.last_published_value, "field-state last published value");
@@ -1530,8 +1600,10 @@ export function createSyncRepository(options = {}) {
       Number.isInteger(row.consecutive_absent_healthy_runs) &&
       row.consecutive_absent_healthy_runs >= 0 &&
       row.consecutive_absent_healthy_runs <= MAX_INT &&
-      (row.last_evaluated_run_id == null || isUuid(row.last_evaluated_run_id)) &&
-      (row.inactive_reason == null ||
+      Object.hasOwn(row, "last_evaluated_run_id") &&
+      (row.last_evaluated_run_id === null || isUuid(row.last_evaluated_run_id)) &&
+      Object.hasOwn(row, "inactive_reason") &&
+      (row.inactive_reason === null ||
         (typeof row.inactive_reason === "string" && row.inactive_reason.length <= 500)) &&
       (row.inactive_at == null || isTimestamp(row.inactive_at)) &&
       isTimestamp(row.updated_at);

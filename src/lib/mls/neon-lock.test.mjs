@@ -195,6 +195,37 @@ test("a work exception remains primary while unlock and end are still attempted"
   assert.deepEqual(client.events, ["connect", "lock", "unlock", "end"]);
 });
 
+test("every falsy work rejection remains primary over unlock and end failures", async () => {
+  for (const reason of [undefined, null, false, 0, ""]) {
+    const client = fakeClient({
+      unlockError: new Error("unlock must remain secondary"),
+      endError: new Error("end must remain secondary"),
+    });
+    let rejected = false;
+    let caught = Symbol("not rejected");
+    try {
+      await withMlsAdvisoryLock({
+        connectionString: "postgres://test",
+        WebSocketImpl: websocket,
+        createClient: () => client,
+        work: async () => {
+          throw reason;
+        },
+      });
+    } catch (error) {
+      rejected = true;
+      caught = error;
+    }
+    assert.equal(rejected, true, `work must reject for ${String(reason)}`);
+    assert.equal(
+      Object.is(caught, reason),
+      true,
+      `work reason ${String(reason)} must remain primary`,
+    );
+    assert.deepEqual(client.events, ["connect", "lock", "unlock", "end"]);
+  }
+});
+
 test("successful work surfaces unlock failure before end failure", async () => {
   const unlockError = new Error("unlock failed exactly");
   const endError = new Error("end failed exactly");
