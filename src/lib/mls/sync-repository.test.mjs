@@ -19,6 +19,8 @@ const PROPERTY_ID_2 = "23232323-2323-4232-8232-232323232323";
 const OBSERVATION_ID = "33333333-3333-4333-8333-333333333333";
 const ASSET_ID = "44444444-4444-4444-8444-444444444444";
 const MEDIA_RECORD_ID = "45454545-4545-4454-8454-454545454545";
+const EVENT_ID = "56565656-5656-4565-8565-565656565656";
+const EXPECTED_UPDATED_AT = "2026-08-17T00:02:00.000Z";
 
 function result(rows = [], rowCount = rows.length) {
   return { rows, rowCount, command: "SELECT", fields: [], oid: 0 };
@@ -205,7 +207,242 @@ function evaluation(overrides = {}) {
   };
 }
 
-test("repository requires one dedicated query client and exposes the Task 8 surface", () => {
+function canonicalWrite(overrides = {}) {
+  return {
+    listing_no: "EP-0001",
+    canonical_property_no: "EP-0001",
+    title_zh: "海景兩房",
+    title_en: null,
+    deal_type: "sale",
+    estate_id: null,
+    district_slug: "sham-tseng",
+    address: null,
+    price: 8_000_001,
+    rent: null,
+    saleable_area: 500,
+    gross_area: null,
+    bedrooms: 2,
+    bathrooms: 1,
+    floor: null,
+    orientation: null,
+    features: [],
+    description: null,
+    images: ["https://owned.example/mls/hash.png"],
+    status: "active",
+    ...overrides,
+  };
+}
+
+const RECONCILED_FIELD_NAMES = [
+  "title_zh",
+  "title_en",
+  "estate_id",
+  "district_slug",
+  "address",
+  "price",
+  "rent",
+  "saleable_area",
+  "gross_area",
+  "bedrooms",
+  "bathrooms",
+  "floor",
+  "orientation",
+  "features",
+  "description",
+  "images",
+  "status",
+];
+
+function reconciledFieldWrites(canonical = canonicalWrite()) {
+  return RECONCILED_FIELD_NAMES.map((fieldName) => ({
+    fieldName,
+    lastPublishedValue: structuredClone(canonical[fieldName]),
+    overrideValue: null,
+    activeOverride: false,
+    winningObservationId: OBSERVATION_ID,
+  }));
+}
+
+function approvedBatch(overrides = {}) {
+  const {
+    canonical: canonicalOverride,
+    proposal: proposalOverrides = {},
+    ...batchOverrides
+  } = overrides;
+  const canonical = canonicalOverride ?? canonicalWrite();
+  const proposal = {
+    kind: "update",
+    propertyId: PROPERTY_ID,
+    expectedUpdatedAt: EXPECTED_UPDATED_AT,
+    canonical,
+    links: [
+      {
+        source: SOURCE_28HSE,
+        externalId: "3972001",
+        dealType: "sale",
+        matchKey: "sale:EP-0001",
+        observedAt: "2026-08-17T00:01:00.000Z",
+      },
+    ],
+    fields: reconciledFieldWrites(canonical),
+    lifecycle: {
+      consecutiveAbsentHealthyRuns: 0,
+      inactiveReason: null,
+      inactiveAt: null,
+    },
+    events: [
+      {
+        changeType: "changed",
+        fieldName: "price",
+        oldValue: 7_900_000,
+        newValue: canonical.price,
+        winningObservationId: OBSERVATION_ID,
+        reason: "source_value_changed",
+      },
+    ],
+    ...proposalOverrides,
+  };
+  return {
+    runId: RUN_ID,
+    mode: "publish",
+    publishEnabled: true,
+    proposals: [proposal],
+    ...batchOverrides,
+  };
+}
+
+function publicationRunRow(overrides = {}) {
+  return {
+    id: RUN_ID,
+    scheduled_for: "2026-08-17",
+    started_at: "2026-08-17T04:00:00.000Z",
+    mode: "publish",
+    status: "running",
+    source_status: healthySourceStatus(),
+    hong_kong_date: "2026-08-17",
+    ...overrides,
+  };
+}
+
+function approvedShadowRows(count = 7, overrides = {}) {
+  return Array.from({ length: count }, (_, index) => {
+    const date = new Date(Date.UTC(2026, 7, 16 - index));
+    const scheduledFor = date.toISOString().slice(0, 10);
+    return {
+      id: `${String(index + 60).padStart(8, "0")}-1111-4111-8111-${String(index + 60).padStart(12, "0")}`,
+      scheduled_for: scheduledFor,
+      started_at: `${scheduledFor}T01:00:00.000Z`,
+      status: "shadow_healthy",
+      source_status: healthySourceStatus(),
+      baseline_approved_at: `${scheduledFor}T02:00:00.000Z`,
+      date_rank: 1,
+      ...overrides,
+    };
+  });
+}
+
+function fakePublicationClient(options = {}) {
+  const events = [];
+  const sql = [];
+  const rows = options.shadowRows ?? approvedShadowRows(options.approvedShadowStreak ?? 7);
+  const client = fakeClient((call) => {
+    sql.push(call.statement);
+    if (call.statement === "BEGIN ISOLATION LEVEL SERIALIZABLE") {
+      events.push(call.statement);
+      return options.beginResult ?? result();
+    }
+    if (call.statement === "COMMIT" || call.statement === "ROLLBACK") {
+      events.push(call.statement);
+      if (call.statement === "ROLLBACK" && options.rollbackError) throw options.rollbackError;
+      return result();
+    }
+    if (/^SELECT 1 AS alive/.test(call.statement)) return result([{ alive: 1 }]);
+    if (/FROM listing_sync_runs WHERE id = \$1 .*FOR UPDATE/.test(call.statement)) {
+      return result([options.runRow ?? publicationRunRow(options.runOverrides)]);
+    }
+    if (/publication_shadow_streak/.test(call.statement)) return result(rows);
+    if (/SELECT id, updated_at/.test(call.statement) && /FROM properties/.test(call.statement)) {
+      const propertyId = call.params[0];
+      const canonical =
+        propertyId === PROPERTY_ID_2
+          ? canonicalWrite({
+              listing_no: "EP-0002",
+              canonical_property_no: "EP-0002",
+              images: [],
+            })
+          : canonicalWrite();
+      return result([
+        options.lockedRow ?? {
+          id: propertyId,
+          updated_at: options.updatedAtConflict ? "2026-08-17T00:03:00.000Z" : EXPECTED_UPDATED_AT,
+          ...canonical,
+          price: options.unchanged ? canonical.price : 7_900_000,
+        },
+      ]);
+    }
+    if (/UPDATE properties SET/.test(call.statement)) {
+      if (options.writeError) throw options.writeError;
+      return options.unchanged ? result() : result([{ id: call.params.at(-1) }]);
+    }
+    if (/INSERT INTO properties/.test(call.statement)) {
+      if (options.writeError) throw options.writeError;
+      return result([{ id: PROPERTY_ID }]);
+    }
+    if (
+      /FROM listing_source_observations/.test(call.statement) &&
+      /FOR UPDATE/.test(call.statement)
+    ) {
+      return result([
+        {
+          id: OBSERVATION_ID,
+          run_id: RUN_ID,
+          source: SOURCE_28HSE,
+          external_listing_id: "3972001",
+          deal_type: "sale",
+          property_no_normalized: "EP-0001",
+          validation_state: "valid",
+          fetched_at: "2026-08-17T00:01:00.000Z",
+        },
+      ]);
+    }
+    if (/FROM property_source_links/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
+      return result(options.existingLink ? [options.existingLink] : []);
+    }
+    if (/INSERT INTO property_source_links/.test(call.statement)) {
+      return result([{ property_id: call.params[0] }]);
+    }
+    if (/INSERT INTO property_sync_fields/.test(call.statement)) {
+      return result([{ property_id: call.params[0] }]);
+    }
+    if (/INSERT INTO property_sync_state/.test(call.statement)) {
+      return result([{ property_id: call.params[0] }]);
+    }
+    if (/FROM listing_media_records/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
+      return result(
+        options.mediaRows ?? [
+          {
+            id: MEDIA_RECORD_ID,
+            observation_id: OBSERVATION_ID,
+            property_id: options.mediaPropertyId ?? null,
+            source_url: "https://owned.example/mls/hash.png",
+            eligibility: "eligible",
+            owned_media_asset_id: ASSET_ID,
+          },
+        ],
+      );
+    }
+    if (/UPDATE listing_media_records/.test(call.statement)) {
+      return result([{ id: MEDIA_RECORD_ID, property_id: call.params[1] }]);
+    }
+    if (/INSERT INTO listing_change_events/.test(call.statement)) {
+      return result([{ id: EVENT_ID }]);
+    }
+    throw new Error(`unexpected publication query: ${call.statement}`);
+  });
+  return Object.assign(client, { events, sql });
+}
+
+test("repository requires one dedicated query client and exposes the Task 9 surface", () => {
   assert.throws(() => createSyncRepository(), /client/i);
   assert.throws(() => createSyncRepository({ client: {} }), /client\.query/i);
   const repository = createSyncRepository({ client: fakeClient() });
@@ -224,6 +461,7 @@ test("repository requires one dedicated query client and exposes the Task 8 surf
     "loadFieldStates",
     "loadLifecycleStates",
     "loadSourceLinks",
+    "publishBatch",
     "recordRunEvaluation",
     "registerOwnedMedia",
     "saveMediaRecord",
@@ -2660,9 +2898,545 @@ test("pre-aborted media operations preserve the exact reason and issue no SQL", 
   assert.equal(client.calls.length, 0);
 });
 
-test("Task 8 SQL never mutates canonical properties", async () => {
+test("publish requires exact mode, enabled gate, a running healthy run, and seven approved dates", async () => {
+  const disabled = fakePublicationClient();
+  await assert.rejects(
+    createSyncRepository({ client: disabled }).publishBatch({
+      ...approvedBatch(),
+      publishEnabled: false,
+    }),
+    /publication is not enabled/i,
+  );
+  assert.equal(disabled.calls.length, 0);
+
+  const shadow = fakePublicationClient();
+  await assert.rejects(
+    createSyncRepository({ client: shadow }).publishBatch({ ...approvedBatch(), mode: "shadow" }),
+    /publish mode/i,
+  );
+  assert.equal(shadow.calls.length, 0);
+
+  const shortStreak = fakePublicationClient({ approvedShadowStreak: 6 });
+  await assert.rejects(
+    createSyncRepository({ client: shortStreak }).publishBatch(approvedBatch()),
+    /seven approved healthy shadow runs/i,
+  );
+  assert.deepEqual(shortStreak.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+
+  const unhealthy = fakePublicationClient({
+    runOverrides: {
+      source_status: healthySourceStatus({
+        [SOURCE_28HSE]: { source: SOURCE_28HSE, healthy: false, reasons: ["parse_rate"] },
+      }),
+    },
+  });
+  await assert.rejects(
+    createSyncRepository({ client: unhealthy }).publishBatch(approvedBatch()),
+    /28Hse evaluation is not healthy/i,
+  );
+  assert.deepEqual(unhealthy.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+});
+
+test("canonical, link, field, lifecycle, media, and event writes share one transaction", async () => {
+  const client = fakePublicationClient();
+  const resultValue = await createSyncRepository({ client }).publishBatch(approvedBatch());
+
+  assert.deepEqual(resultValue, { inserted: 0, updated: 1, events: 1 });
+  assert.equal(client.events[0], "BEGIN ISOLATION LEVEL SERIALIZABLE");
+  assert.equal(client.events.at(-1), "COMMIT");
+  for (const table of [
+    "properties",
+    "property_source_links",
+    "property_sync_fields",
+    "property_sync_state",
+    "listing_media_records",
+    "listing_change_events",
+  ]) {
+    assert.ok(
+      client.sql.some((statement) => statement.includes(table)),
+      table,
+    );
+  }
+  assert.equal(
+    client.sql.some((statement) => /(?:INSERT|UPDATE|DELETE).*media_assets/i.test(statement)),
+    false,
+  );
+});
+
+test("row-version conflicts roll back and expose a stable typed PublicationConflictError", async () => {
+  const client = fakePublicationClient({ updatedAtConflict: true });
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.name, "PublicationConflictError");
+    assert.equal(error.code, "MLS_PUBLICATION_CONFLICT");
+    assert.equal(error.propertyId, PROPERTY_ID);
+    return true;
+  });
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(client.events.includes("COMMIT"), false);
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+});
+
+test("publication preserves the primary write error when rollback also fails", async () => {
+  const primary = new Error("primary persistence failure");
+  const rollback = new Error("rollback transport failure");
+  const client = fakePublicationClient({ writeError: primary, rollbackError: rollback });
+
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.name, "PublicationError");
+    assert.equal(error.code, "MLS_PUBLICATION_FAILED");
+    assert.equal(error.cause, primary);
+    assert.deepEqual(error.cleanupErrors, [rollback]);
+    return true;
+  });
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(client.events.includes("COMMIT"), false);
+});
+
+test("unchanged canonical proposals neither touch updated_at nor emit caller-claimed changes", async () => {
+  const client = fakePublicationClient({ unchanged: true });
+  const outcome = await createSyncRepository({ client }).publishBatch(approvedBatch());
+
+  assert.deepEqual(outcome, { inserted: 0, updated: 0, events: 0 });
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO listing_change_events/.test(statement)),
+    false,
+  );
+  const update = client.sql.find((statement) => /UPDATE properties SET/.test(statement));
+  assert.match(update, /IS DISTINCT FROM/);
+  assert.match(update, /updated_at = now\(\)/);
+});
+
+test("publication sorts update locks by UUID and new inserts by listing number", async () => {
+  const client = fakePublicationClient({ unchanged: true });
+  const first = approvedBatch().proposals[0];
+  const second = structuredClone(first);
+  second.propertyId = PROPERTY_ID_2;
+  second.canonical.listing_no = "EP-0002";
+  second.canonical.canonical_property_no = "EP-0002";
+  second.links = [];
+  second.fields = second.fields.map((field) => ({ ...field, winningObservationId: null }));
+  second.canonical.images = [];
+  second.fields.find((field) => field.fieldName === "images").lastPublishedValue = [];
+  second.events = [];
+  const batch = approvedBatch({ proposals: [second, first] });
+
+  await createSyncRepository({ client }).publishBatch(batch);
+  const lockIds = client.calls
+    .filter(
+      (call) =>
+        /SELECT id, updated_at/.test(call.statement) && /FROM properties/.test(call.statement),
+    )
+    .map((call) => call.params[0]);
+  assert.deepEqual(lockIds, [PROPERTY_ID, PROPERTY_ID_2]);
+});
+
+test("the whole batch is snapshotted before the first awaited session check", async () => {
+  let releaseSession;
+  const sessionBarrier = new Promise((resolve) => {
+    releaseSession = resolve;
+  });
+  const client = fakePublicationClient();
+  const originalQuery = client.query.bind(client);
+  client.query = async (statement, params = []) => {
+    if (/^SELECT 1 AS alive/.test(compactSql(statement))) await sessionBarrier;
+    return originalQuery(statement, params);
+  };
+  const batch = approvedBatch();
+  const publishing = createSyncRepository({ client }).publishBatch(batch);
+  batch.proposals[0].canonical.title_zh = "MUTATED AFTER CALL";
+  batch.proposals[0].canonical.images.push("https://mutated.invalid/image.png");
+  batch.proposals[0].fields[0].fieldName = "MUTATED_FIELD";
+  releaseSession();
+
+  await publishing;
+  const serializedParams = JSON.stringify(client.calls.map((call) => call.params));
+  assert.doesNotMatch(serializedParams, /MUTATED/);
+  assert.doesNotMatch(serializedParams, /mutated\.invalid/);
+});
+
+test("publication rejects accessor, duplicate, and extraneous nested evidence before SQL", async () => {
+  let getterReads = 0;
+  const accessorBatch = approvedBatch();
+  Object.defineProperty(accessorBatch.proposals[0].canonical, "title_zh", {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return "forged";
+    },
+  });
+  const accessorClient = fakePublicationClient();
+  await assert.rejects(
+    createSyncRepository({ client: accessorClient }).publishBatch(accessorBatch),
+    /accessor/i,
+  );
+  assert.equal(getterReads, 0);
+  assert.equal(accessorClient.calls.length, 0);
+
+  const duplicateFields = approvedBatch();
+  duplicateFields.proposals[0].fields[1].fieldName = "title_zh";
+  const duplicateClient = fakePublicationClient();
+  await assert.rejects(
+    createSyncRepository({ client: duplicateClient }).publishBatch(duplicateFields),
+    /field.*exactly once|duplicate.*field/i,
+  );
+  assert.equal(duplicateClient.calls.length, 0);
+
+  const extra = approvedBatch();
+  extra.proposals[0].links[0].untrusted = true;
+  const extraClient = fakePublicationClient();
+  await assert.rejects(
+    createSyncRepository({ client: extraClient }).publishBatch(extra),
+    /unexpected key/i,
+  );
+  assert.equal(extraClient.calls.length, 0);
+});
+
+test("degraded publication resets lifecycle and forbids inactivity events", async () => {
+  const sourceStatus = healthySourceStatus({
+    [SOURCE_OLD_SITE]: { source: SOURCE_OLD_SITE, healthy: false, reasons: ["fetch_failed"] },
+  });
+  const client = fakePublicationClient({ runOverrides: { source_status: sourceStatus } });
+  const batch = approvedBatch({
+    canonical: canonicalWrite({ status: "inactive" }),
+    proposal: {
+      lifecycle: {
+        consecutiveAbsentHealthyRuns: 1,
+        inactiveReason: "absent_three_healthy_runs",
+        inactiveAt: "2026-08-17T04:00:00.000Z",
+      },
+      events: [
+        {
+          changeType: "inactive",
+          fieldName: "status",
+          oldValue: "active",
+          newValue: "inactive",
+          winningObservationId: null,
+          reason: "absent_three_healthy_runs",
+        },
+      ],
+    },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /degraded.*counter zero.*no inactivity event/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("media attachment is limited to the current-run images winner and rejects cross-property rows", async () => {
+  const client = fakePublicationClient({ mediaPropertyId: PROPERTY_ID_2 });
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.name, "PublicationConflictError");
+    assert.equal(error.code, "MLS_PUBLICATION_CONFLICT");
+    return true;
+  });
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(
+    client.sql.some((statement) => /UPDATE listing_media_records/.test(statement)),
+    false,
+  );
+
   const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+properties\b/i);
+  const attachmentSource = source.slice(
+    source.indexOf("async function attachImageMedia"),
+    source.indexOf("function eventIsReal"),
+  );
+  assert.doesNotMatch(attachmentSource, /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+media_assets\b/i);
+});
+
+test("approval evidence is strictly before the publish run and consecutive through the prior HK date", async () => {
+  const equalApproval = fakePublicationClient({
+    shadowRows: approvedShadowRows(7).map((row, index) =>
+      index === 0 ? { ...row, baseline_approved_at: "2026-08-17T04:00:00.000Z" } : row,
+    ),
+  });
+  await assert.rejects(
+    createSyncRepository({ client: equalApproval }).publishBatch(approvedBatch()),
+    /approval.*strictly before/i,
+  );
+
+  const gapRows = approvedShadowRows(7);
+  gapRows[3] = { ...gapRows[3], scheduled_for: "2026-08-12" };
+  const gap = fakePublicationClient({ shadowRows: gapRows });
+  await assert.rejects(
+    createSyncRepository({ client: gap }).publishBatch(approvedBatch()),
+    /seven approved healthy shadow runs/i,
+  );
+});
+
+test("publication database rows require exact own result shapes", async () => {
+  const client = fakePublicationClient({ runOverrides: { unexpected: "row drift" } });
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /unexpected key|publication run row/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("publication rejects explicit undefined nullable values before SQL", async () => {
+  for (const mutate of [
+    (batch) => {
+      batch.proposals[0].canonical.title_en = undefined;
+    },
+    (batch) => {
+      batch.proposals[0].canonical.estate_id = undefined;
+    },
+    (batch) => {
+      batch.proposals[0].lifecycle.inactiveAt = undefined;
+    },
+    (batch) => {
+      batch.proposals[0].events[0].winningObservationId = undefined;
+    },
+  ]) {
+    const batch = approvedBatch();
+    mutate(batch);
+    const client = fakePublicationClient();
+    await assert.rejects(
+      createSyncRepository({ client }).publishBatch(batch),
+      /null|nullable|timestamp|UUID|unsupported/i,
+    );
+    assert.equal(client.calls.length, 0);
+  }
+});
+
+test("one current-run winning observation cannot publish two canonical properties", async () => {
+  const client = fakePublicationClient({ unchanged: true });
+  const first = approvedBatch().proposals[0];
+  const second = structuredClone(first);
+  second.propertyId = PROPERTY_ID_2;
+  second.canonical.listing_no = "EP-0002";
+  second.canonical.canonical_property_no = "EP-0002";
+  second.links = [];
+  second.canonical.images = [];
+  second.fields.find((field) => field.fieldName === "images").lastPublishedValue = [];
+  second.events = [];
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [first, second] })),
+    /winning observation.*multiple|observation.*property/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("new image-bearing proposals require a current-run images winner", async () => {
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.kind = "new";
+  delete proposal.propertyId;
+  delete proposal.expectedUpdatedAt;
+  proposal.fields.find((field) => field.fieldName === "images").winningObservationId = null;
+  proposal.events = [
+    {
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: { listing_no: proposal.canonical.listing_no },
+      winningObservationId: OBSERVATION_ID,
+      reason: "new_listing",
+    },
+  ];
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /images.*winning observation|current-run.*images/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("malformed BEGIN results still trigger rollback with primary-error precedence", async () => {
+  const malformed = { rows: "not-an-array", rowCount: null };
+  const rollback = new Error("rollback after malformed begin failed");
+  const client = fakePublicationClient({ beginResult: malformed, rollbackError: rollback });
+
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.name, "PublicationError");
+    assert.match(error.message, /malformed database result/i);
+    assert.deepEqual(error.cleanupErrors, [rollback]);
+    return true;
+  });
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+});
+
+test("empty primary error messages cannot displace the primary or rollback error", async () => {
+  const primary = new Error("");
+  const rollback = new Error("rollback failed after empty primary");
+  const client = fakePublicationClient({ writeError: primary, rollbackError: rollback });
+
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.name, "PublicationError");
+    assert.equal(error.cause, primary);
+    assert.deepEqual(error.cleanupErrors, [rollback]);
+    return true;
+  });
+});
+
+test("malformed or accessor-backed publication rows fail closed without reading getters", async () => {
+  const malformedLink = {
+    property_id: PROPERTY_ID,
+    match_key: "sale:EP-0001",
+    status: "mystery",
+    first_seen_at: "2026-08-16T00:01:00.000Z",
+    last_seen_at: "2026-08-17T00:01:00.000Z",
+    last_seen_run_id: RUN_ID,
+  };
+  const linkClient = fakePublicationClient({ existingLink: malformedLink });
+  await assert.rejects(
+    createSyncRepository({ client: linkClient }).publishBatch(approvedBatch()),
+    /source-link row.*invalid|source link.*invalid/i,
+  );
+  assert.equal(linkClient.events.at(-1), "ROLLBACK");
+
+  let getterReads = 0;
+  const runRow = publicationRunRow();
+  Object.defineProperty(runRow, "status", {
+    enumerable: true,
+    get() {
+      getterReads += 1;
+      return "running";
+    },
+  });
+  const accessorClient = fakePublicationClient({ runRow });
+  await assert.rejects(
+    createSyncRepository({ client: accessorClient }).publishBatch(approvedBatch()),
+    /accessor|data propert/i,
+  );
+  assert.equal(getterReads, 0);
+  assert.equal(accessorClient.events.at(-1), "ROLLBACK");
+});
+
+test("change events must describe a field that actually changed from the locked canonical row", async () => {
+  const current = canonicalWrite({ title_zh: "Old title", price: 8_000_001 });
+  const client = fakePublicationClient({
+    lockedRow: { id: PROPERTY_ID, updated_at: EXPECTED_UPDATED_AT, ...current },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /change event.*current|event.*real change|locked canonical/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(client.events.includes("COMMIT"), false);
+});
+
+test("a baseline-required source decision cannot count toward the approved publication streak", async () => {
+  const shadowRows = approvedShadowRows(7);
+  shadowRows[3] = {
+    ...shadowRows[3],
+    source_status: healthySourceStatus({
+      [SOURCE_28HSE]: {
+        source: SOURCE_28HSE,
+        healthy: true,
+        reasons: [],
+        baselineRequired: true,
+      },
+    }),
+  };
+  const client = fakePublicationClient({ shadowRows });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /seven approved healthy shadow runs|baseline/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("semantic duplicate events are rejected independent of object key insertion order", async () => {
+  const batch = approvedBatch();
+  const event = batch.proposals[0].events[0];
+  batch.proposals[0].events.push({
+    reason: event.reason,
+    winningObservationId: event.winningObservationId,
+    newValue: event.newValue,
+    oldValue: event.oldValue,
+    fieldName: event.fieldName,
+    changeType: event.changeType,
+  });
+  const client = fakePublicationClient();
+
+  await assert.rejects(createSyncRepository({ client }).publishBatch(batch), /duplicate event/i);
+  assert.equal(client.calls.length, 0);
+});
+
+test("inactive and reactivated events must publish the exact canonical status", async () => {
+  const batch = approvedBatch();
+  batch.proposals[0].canonical.status = "inactive";
+  batch.proposals[0].fields.find((field) => field.fieldName === "status").lastPublishedValue =
+    "inactive";
+  batch.proposals[0].lifecycle = {
+    consecutiveAbsentHealthyRuns: 3,
+    inactiveReason: "absent_three_healthy_runs",
+    inactiveAt: "2026-08-17T04:00:00.000Z",
+  };
+  batch.proposals[0].events = [
+    {
+      changeType: "inactive",
+      fieldName: "status",
+      oldValue: "active",
+      newValue: "sold",
+      winningObservationId: null,
+      reason: "absent_three_healthy_runs",
+    },
+  ];
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /canonical status|inactive.*newValue/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("publication SQL selects and verifies current-run identity on every winning observation", async () => {
+  const client = fakePublicationClient();
+  await createSyncRepository({ client }).publishBatch(approvedBatch());
+
+  const winnerSelect = client.sql.find(
+    (statement) =>
+      /FROM listing_source_observations/.test(statement) && /WHERE id = \$1::uuid/.test(statement),
+  );
+  assert.match(winnerSelect, /SELECT id, run_id, source/);
+  assert.match(winnerSelect, /run_id = \$2::uuid/);
+});
+
+test("image-bearing publication fails closed when eligible owned media evidence is absent", async () => {
+  const client = fakePublicationClient({ mediaRows: [] });
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /eligible owned current-run media records/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(client.events.includes("COMMIT"), false);
+});
+
+test("same-HK-date shadow approval is accepted only when it predates the publish run", async () => {
+  const sameDayRows = approvedShadowRows(7).map((row) => {
+    const date = new Date(`${row.scheduled_for}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + 1);
+    const scheduledFor = date.toISOString().slice(0, 10);
+    return {
+      ...row,
+      scheduled_for: scheduledFor,
+      started_at: `${scheduledFor}T01:00:00.000Z`,
+      baseline_approved_at: `${scheduledFor}T02:00:00.000Z`,
+    };
+  });
+  const client = fakePublicationClient({ shadowRows: sameDayRows });
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(approvedBatch()), {
+    inserted: 0,
+    updated: 1,
+    events: 1,
+  });
+});
+
+test("pre-publication repository methods still never mutate canonical properties", async () => {
+  const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
+  const beforePublication = source.split(/function exactPublicationRow\b/)[0];
+  assert.doesNotMatch(beforePublication, /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+properties\b/i);
+  assert.doesNotMatch(source, /legacy_detail_id\s*=\s*EXCLUDED\.legacy_detail_id/i);
 });
 
 test("declarations preserve strict Task 6, 7, 9, and 10 handoffs", () => {
@@ -2689,6 +3463,12 @@ test("declarations preserve strict Task 6, 7, 9, and 10 handoffs", () => {
     /interface RepositoryOperation/,
     /signal\?:\s*AbortSignal/,
     /getApprovedHealthyShadowStreak/,
+    /class PublicationConflictError/,
+    /publishBatch\([^)]*PublicationBatchInput[^)]*\):\s*Promise<PublicationBatchResult>/s,
+    /interface CanonicalPropertyWrite/,
+    /interface ReconciledFieldWrite/,
+    /interface PropertySyncStateWrite/,
+    /interface ListingChangeEventWrite/,
   ]) {
     assert.match(declaration, marker);
   }

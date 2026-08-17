@@ -16,6 +16,28 @@ export interface RepositoryOperation {
   signal?: AbortSignal;
 }
 
+export declare class PublicationError extends Error {
+  readonly code: "MLS_PUBLICATION_FAILED" | "MLS_PUBLICATION_GATE" | "MLS_PUBLICATION_CONFLICT";
+  readonly cleanupErrors: readonly unknown[];
+  constructor(
+    message: string,
+    options?: { cause?: unknown; code?: string; cleanupErrors?: readonly unknown[] },
+  );
+}
+
+export declare class PublicationGateError extends PublicationError {
+  readonly code: "MLS_PUBLICATION_GATE";
+}
+
+export declare class PublicationConflictError extends PublicationError {
+  readonly code: "MLS_PUBLICATION_CONFLICT";
+  readonly propertyId: string | null;
+  constructor(
+    message: string,
+    options?: { propertyId?: string | null; cause?: unknown; cleanupErrors?: readonly unknown[] },
+  );
+}
+
 export interface PersistedObservationRef {
   id: string;
   source: MlsSource;
@@ -172,6 +194,101 @@ export interface ListingSyncRun {
   created_at: string;
 }
 
+export interface CanonicalPropertyWrite {
+  listing_no: string;
+  canonical_property_no: string;
+  title_zh: string;
+  title_en: string | null;
+  deal_type: DealType;
+  estate_id: string | null;
+  district_slug: string;
+  address: string | null;
+  price: number | null;
+  rent: number | null;
+  saleable_area: number | null;
+  gross_area: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  floor: string | null;
+  orientation: string | null;
+  features: string[];
+  description: string | null;
+  images: string[];
+  status: "draft" | "active" | "sold" | "rented" | "offline" | "inactive";
+}
+
+export interface SourceLinkWrite {
+  source: MlsSource;
+  externalId: string;
+  dealType: DealType;
+  matchKey: string;
+  observedAt: string;
+}
+
+export interface ReconciledFieldWrite {
+  fieldName:
+    | "title_zh"
+    | "title_en"
+    | "estate_id"
+    | "district_slug"
+    | "address"
+    | "price"
+    | "rent"
+    | "saleable_area"
+    | "gross_area"
+    | "bedrooms"
+    | "bathrooms"
+    | "floor"
+    | "orientation"
+    | "features"
+    | "description"
+    | "images"
+    | "status";
+  lastPublishedValue: unknown;
+  overrideValue: unknown;
+  activeOverride: boolean;
+  winningObservationId: string | null;
+}
+
+export interface PropertySyncStateWrite {
+  consecutiveAbsentHealthyRuns: number;
+  inactiveReason: string | null;
+  inactiveAt: string | null;
+}
+
+export interface ListingChangeEventWrite {
+  changeType: "new" | "changed" | "inactive" | "reactivated" | "link_change";
+  fieldName: string | null;
+  oldValue: unknown;
+  newValue: unknown;
+  winningObservationId: string | null;
+  reason: string;
+}
+
+export interface PublicationProposal {
+  kind: "new" | "update";
+  propertyId?: string;
+  expectedUpdatedAt?: string;
+  canonical: CanonicalPropertyWrite;
+  links: SourceLinkWrite[];
+  fields: ReconciledFieldWrite[];
+  lifecycle: PropertySyncStateWrite;
+  events: ListingChangeEventWrite[];
+}
+
+export interface PublicationBatchInput {
+  runId: string;
+  mode: "shadow" | "publish";
+  publishEnabled: boolean;
+  proposals: PublicationProposal[];
+}
+
+export interface PublicationBatchResult {
+  inserted: number;
+  updated: number;
+  events: number;
+}
+
 export interface SyncRepository {
   beginRun(input: {
     scheduledFor: string;
@@ -206,6 +323,7 @@ export interface SyncRepository {
     operation?: RepositoryOperation,
   ): Promise<OwnedMediaRegistration>;
   saveMediaRecord(input: ListingMediaRecordInput, operation?: RepositoryOperation): Promise<void>;
+  publishBatch(input: PublicationBatchInput): Promise<PublicationBatchResult>;
   getLatestRun(): Promise<ListingSyncRun | null>;
 }
 
