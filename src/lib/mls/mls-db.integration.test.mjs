@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { Client } from "@neondatabase/serverless";
 
 import { PublicationConflictError, createSyncRepository } from "./sync-repository.mjs";
+import { stableObservationHash } from "./source-contract.mjs";
 
 const SOURCE_28HSE = "28hse_agent_540";
 const SOURCE_OLD_SITE = "old_site";
@@ -106,8 +107,61 @@ test(
     const publishStartedAt = `${publishDate}T04:00:00.000Z`;
     const listingNo = `MLS-IT-${tag}`;
     const externalId = `MLS-IT-${tag}`;
-    const imageUrl = `https://integration.invalid/${tag}.png`;
-    const hash = tag.replaceAll("-", "").padEnd(64, "0").slice(0, 64);
+    const sourceImageUrl = `https://upstream.integration.invalid/${tag}.png`;
+    const ownedImageUrl = `https://owned.integration.invalid/${tag}.png`;
+    const observationMediaCandidates = [
+      { url: sourceImageUrl, category: "listing_photo", isPrimary: true },
+    ];
+    const observationFields = {
+      title_zh: "After publication",
+      district_slug: "sham-tseng",
+      price: 8_000_001,
+      saleable_area: 500,
+      bedrooms: 2,
+      bathrooms: 1,
+      status: "active",
+    };
+    const observationPayload = {
+      schemaVersion: 1,
+      fields: observationFields,
+      rawFields: {},
+      sourceUpdatedAt: null,
+      parseWarnings: [],
+    };
+    const observationHash = stableObservationHash({
+      schemaVersion: 1,
+      source: SOURCE_28HSE,
+      externalId,
+      dealType: "sale",
+      propertyNoNormalized: listingNo,
+      fields: observationFields,
+      rawFields: {},
+      mediaCandidates: observationMediaCandidates,
+      sourceUpdatedAt: null,
+    });
+    const mediaHash = "a".repeat(64);
+    const canonical = {
+      listing_no: listingNo,
+      canonical_property_no: listingNo,
+      title_zh: "After publication",
+      title_en: null,
+      deal_type: "sale",
+      estate_id: null,
+      district_slug: "sham-tseng",
+      address: null,
+      price: 8_000_001,
+      rent: null,
+      saleable_area: 500,
+      gross_area: null,
+      bedrooms: 2,
+      bathrooms: 1,
+      floor: null,
+      orientation: null,
+      features: [],
+      description: null,
+      images: [ownedImageUrl],
+      status: "active",
+    };
     let connected = false;
     let connectionAttempted = false;
     let primaryError = null;
@@ -144,21 +198,46 @@ test(
       );
       const propertyRows = await client.query(
         `INSERT INTO properties (
-           id, listing_no, canonical_property_no, title_zh, deal_type, district_slug,
-           price, images, status, featured, legacy_detail_id
-         ) VALUES ($1, $2, $2, 'Before publication', 'sale', 'sham-tseng',
-           7900000, ARRAY[$3]::text[], 'active', false, $4)
-         RETURNING updated_at`,
-        [propertyId, listingNo, imageUrl, `legacy-${tag}`],
+           id, listing_no, canonical_property_no, title_zh, title_en, deal_type,
+           estate_id, district_slug, address, price, rent, saleable_area, gross_area,
+           bedrooms, bathrooms, floor, orientation, features, description, images,
+           status, featured, legacy_detail_id
+         ) VALUES ($1, $2, $2, $3, $4, 'sale', $5::uuid, $6, $7, 7900000, $8,
+           $9, $10, $11, $12, $13, $14, $15::text[], $16, $17::text[], $18,
+           false, $19)
+         RETURNING to_char(updated_at AT TIME ZONE 'UTC',
+           'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at`,
+        [
+          propertyId,
+          listingNo,
+          canonical.title_zh,
+          canonical.title_en,
+          canonical.estate_id,
+          canonical.district_slug,
+          canonical.address,
+          canonical.rent,
+          canonical.saleable_area,
+          canonical.gross_area,
+          canonical.bedrooms,
+          canonical.bathrooms,
+          canonical.floor,
+          canonical.orientation,
+          canonical.features,
+          canonical.description,
+          canonical.images,
+          canonical.status,
+          `legacy-${tag}`,
+        ],
       );
-      const expectedUpdatedAt = new Date(propertyRows.rows[0].updated_at).toISOString();
+      const expectedUpdatedAt = propertyRows.rows[0].updated_at;
+      assert.match(expectedUpdatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/);
       await client.query(
         `INSERT INTO listing_source_observations (
            id, run_id, source, external_listing_id, deal_type, source_url,
            property_no_raw, property_no_normalized, payload, media_candidates,
            content_hash, validation_state, discovered_at, fetched_at
-         ) VALUES ($1, $2, $3, $4, 'sale', $5, $6, $6, '{}'::jsonb,
-           '[]'::jsonb, $7, 'valid', $8::timestamptz, $8::timestamptz)`,
+         ) VALUES ($1, $2, $3, $4, 'sale', $5, $6, $6, $7::jsonb,
+           $8::jsonb, $9, 'valid', $10::timestamptz, $10::timestamptz)`,
         [
           observationId,
           runId,
@@ -166,7 +245,9 @@ test(
           externalId,
           `https://integration.invalid/listing/${tag}`,
           listingNo,
-          hash,
+          JSON.stringify(observationPayload),
+          JSON.stringify(observationMediaCandidates),
+          observationHash,
           `${publishDate}T00:01:00.000Z`,
         ],
       );
@@ -174,44 +255,24 @@ test(
         `INSERT INTO media_assets (
            id, url, pathname, content_type, size_bytes, owner_type, content_hash
          ) VALUES ($1, $2, $3, 'image/png', 123, 'mls-shared', $4)`,
-        [mediaAssetId, imageUrl, `mls/integration/${tag}.png`, hash],
+        [mediaAssetId, ownedImageUrl, `mls/integration/${tag}.png`, mediaHash],
       );
       await client.query(
         `INSERT INTO listing_media_records (
            id, observation_id, source_url, content_hash, owned_media_asset_id,
            detected_mime, size_bytes, width, height, eligibility
          ) VALUES ($1, $2, $3, $4, $5, 'image/png', 123, 10, 8, 'eligible')`,
-        [mediaRecordId, observationId, imageUrl, hash, mediaAssetId],
+        [mediaRecordId, observationId, sourceImageUrl, mediaHash, mediaAssetId],
       );
-
-      const canonical = {
-        listing_no: listingNo,
-        canonical_property_no: listingNo,
-        title_zh: "After publication",
-        title_en: null,
-        deal_type: "sale",
-        estate_id: null,
-        district_slug: "sham-tseng",
-        address: null,
-        price: 8_000_001,
-        rent: null,
-        saleable_area: 500,
-        gross_area: null,
-        bedrooms: 2,
-        bathrooms: 1,
-        floor: null,
-        orientation: null,
-        features: [],
-        description: null,
-        images: [imageUrl],
-        status: "active",
-      };
       const fields = RECONCILED_FIELD_NAMES.map((fieldName) => ({
         fieldName,
         lastPublishedValue: canonical[fieldName],
         overrideValue: null,
         activeOverride: false,
-        winningObservationId: observationId,
+        winningObservationId:
+          fieldName === "images" || Object.hasOwn(observationFields, fieldName)
+            ? observationId
+            : null,
       }));
       const batch = {
         runId,
@@ -247,6 +308,20 @@ test(
                 winningObservationId: observationId,
                 reason: "source_value_changed",
               },
+              {
+                changeType: "link_change",
+                fieldName: null,
+                oldValue: null,
+                newValue: {
+                  source: SOURCE_28HSE,
+                  externalId,
+                  dealType: "sale",
+                  matchKey: `sale:${listingNo}`,
+                  status: "active",
+                },
+                winningObservationId: observationId,
+                reason: "source_link_activated",
+              },
             ],
           },
         ],
@@ -255,7 +330,7 @@ test(
       assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
         inserted: 0,
         updated: 1,
-        events: 1,
+        events: 2,
       });
       const stateRows = await client.query(
         `SELECT
@@ -281,7 +356,7 @@ test(
           media: Number(published.media),
           events: Number(published.events),
         },
-        { links: 1, fields: RECONCILED_FIELD_NAMES.length, states: 1, media: 1, events: 1 },
+        { links: 1, fields: RECONCILED_FIELD_NAMES.length, states: 1, media: 1, events: 2 },
       );
       const [linkRows, fieldRows, lifecycleRows, mediaRows, eventRows, assetRows] =
         await Promise.all([
@@ -312,10 +387,11 @@ test(
           client.query(
             `SELECT property_id, run_id, change_type, field_name, old_value, new_value,
                     winning_observation_id, reason
-               FROM listing_change_events WHERE property_id = $1 AND run_id = $2`,
+               FROM listing_change_events WHERE property_id = $1 AND run_id = $2
+              ORDER BY change_type, field_name NULLS FIRST`,
             [propertyId, runId],
           ),
-          client.query("SELECT owner_type, owner_id FROM media_assets WHERE id = $1", [
+          client.query("SELECT url, owner_type, owner_id FROM media_assets WHERE id = $1", [
             mediaAssetId,
           ]),
         ]);
@@ -353,7 +429,7 @@ test(
           id: mediaRecordId,
           observation_id: observationId,
           property_id: propertyId,
-          source_url: imageUrl,
+          source_url: sourceImageUrl,
           owned_media_asset_id: mediaAssetId,
           eligibility: "eligible",
         },
@@ -369,8 +445,26 @@ test(
           winning_observation_id: observationId,
           reason: "source_value_changed",
         },
+        {
+          property_id: propertyId,
+          run_id: runId,
+          change_type: "link_change",
+          field_name: null,
+          old_value: null,
+          new_value: {
+            source: SOURCE_28HSE,
+            externalId,
+            dealType: "sale",
+            matchKey: `sale:${listingNo}`,
+            status: "active",
+          },
+          winning_observation_id: observationId,
+          reason: "source_link_activated",
+        },
       ]);
-      assert.deepEqual(assetRows.rows, [{ owner_type: "mls-shared", owner_id: null }]);
+      assert.deepEqual(assetRows.rows, [
+        { url: ownedImageUrl, owner_type: "mls-shared", owner_id: null },
+      ]);
       const captured = structuredClone(published);
 
       const conflicting = structuredClone(batch);
@@ -396,10 +490,12 @@ test(
       );
       assert.deepEqual(afterConflictRows.rows[0], captured);
       const assetAfterConflict = await client.query(
-        "SELECT owner_type, owner_id FROM media_assets WHERE id = $1",
+        "SELECT url, owner_type, owner_id FROM media_assets WHERE id = $1",
         [mediaAssetId],
       );
-      assert.deepEqual(assetAfterConflict.rows, [{ owner_type: "mls-shared", owner_id: null }]);
+      assert.deepEqual(assetAfterConflict.rows, [
+        { url: ownedImageUrl, owner_type: "mls-shared", owner_id: null },
+      ]);
     } catch (error) {
       primaryError = error;
       throw error;

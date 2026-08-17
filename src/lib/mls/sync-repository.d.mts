@@ -3,6 +3,9 @@ import type { DealType, MlsSource, SourceObservation } from "./source-contract.m
 export interface QueryResult<Row = Record<string, unknown>> {
   rows: Row[];
   rowCount: number | null;
+  command?: string;
+  fields?: unknown[];
+  oid?: number | null;
 }
 
 export interface DedicatedQueryClient {
@@ -17,7 +20,11 @@ export interface RepositoryOperation {
 }
 
 export declare class PublicationError extends Error {
-  readonly code: "MLS_PUBLICATION_FAILED" | "MLS_PUBLICATION_GATE" | "MLS_PUBLICATION_CONFLICT";
+  readonly code:
+    | "MLS_PUBLICATION_FAILED"
+    | "MLS_PUBLICATION_GATE"
+    | "MLS_PUBLICATION_CONFLICT"
+    | "MLS_PUBLICATION_OUTCOME_UNKNOWN";
   readonly cleanupErrors: readonly unknown[];
   constructor(
     message: string,
@@ -36,6 +43,10 @@ export declare class PublicationConflictError extends PublicationError {
     message: string,
     options?: { propertyId?: string | null; cause?: unknown; cleanupErrors?: readonly unknown[] },
   );
+}
+
+export declare class PublicationOutcomeUnknownError extends PublicationError {
+  readonly code: "MLS_PUBLICATION_OUTCOME_UNKNOWN";
 }
 
 export interface PersistedObservationRef {
@@ -281,6 +292,7 @@ export interface PublicationBatchInput {
   mode: "shadow" | "publish";
   publishEnabled: boolean;
   proposals: PublicationProposal[];
+  signal?: AbortSignal;
 }
 
 export interface PublicationBatchResult {
@@ -301,7 +313,7 @@ export interface SyncRepository {
   ): Promise<PersistedObservationRef[]>;
   getHealthyCountHistory(source: MlsSource, limit?: number): Promise<CountSnapshot[]>;
   recordRunEvaluation(runId: string, evaluation: RunEvaluation): Promise<void>;
-  assertLockSession(): Promise<void>;
+  assertLockSession(operation?: RepositoryOperation): Promise<void>;
   finishRun(runId: string, result: RunCompletion): Promise<void>;
   approveShadowRun(
     runId: string,

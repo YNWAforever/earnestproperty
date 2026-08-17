@@ -5,6 +5,7 @@ import {
   normalizePropertyNo,
   stableObservationHash,
 } from "./source-contract.mjs";
+import { normalizeCanonicalFieldValue } from "./reconcile.mjs";
 
 const SOURCES = new Set([SOURCE_28HSE, SOURCE_OLD_SITE]);
 const DEAL_TYPES = new Set(["sale", "rent"]);
@@ -30,6 +31,7 @@ const EXTERNAL_ID_PATTERN = /^[A-Za-z0-9_-]{1,160}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/;
+const ROW_VERSION_PATTERN = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})Z$/;
 
 function wrappedCredentialPattern(atomPattern) {
   return String.raw`(?:${atomPattern}|\(\s*${atomPattern}\s*\)|\[\s*${atomPattern}\s*\]|\{\s*${atomPattern}\s*\})`;
@@ -135,7 +137,8 @@ const MEDIA_RECORD_INPUT_KEYS = new Set([
   "eligibility",
   "rejectionReason",
 ]);
-const PUBLICATION_BATCH_KEYS = new Set(["runId", "mode", "publishEnabled", "proposals"]);
+const PUBLICATION_BATCH_REQUIRED_KEYS = new Set(["runId", "mode", "publishEnabled", "proposals"]);
+const PUBLICATION_BATCH_KEYS = new Set([...PUBLICATION_BATCH_REQUIRED_KEYS, "signal"]);
 const PUBLICATION_PROPOSAL_KEYS = new Set([
   "kind",
   "propertyId",
@@ -244,6 +247,9 @@ const PUBLICATION_OBSERVATION_ROW_KEYS = new Set([
   "property_no_normalized",
   "validation_state",
   "fetched_at",
+  "payload",
+  "media_candidates",
+  "content_hash",
 ]);
 const PUBLICATION_MEDIA_ROW_KEYS = new Set([
   "id",
@@ -252,8 +258,30 @@ const PUBLICATION_MEDIA_ROW_KEYS = new Set([
   "source_url",
   "eligibility",
   "owned_media_asset_id",
+  "record_content_hash",
+  "owned_url",
+  "asset_content_hash",
 ]);
-const LOCKED_PROPERTY_ROW_KEYS = new Set(["id", "updated_at", ...CANONICAL_WRITE_KEYS]);
+const LOCKED_PROPERTY_ROW_KEYS = new Set([
+  "id",
+  "updated_at_token",
+  "updated_at_matches_expected",
+  ...CANONICAL_WRITE_KEYS,
+]);
+const QUERY_RESULT_REQUIRED_KEYS = new Set(["rows", "rowCount"]);
+const QUERY_RESULT_ALLOWED_KEYS = new Set([
+  "rows",
+  "rowCount",
+  "command",
+  "fields",
+  "oid",
+  "_parsers",
+  "_types",
+  "RowCtor",
+  "rowAsArray",
+  "parseRow",
+  "_prebuiltEmptyResultObject",
+]);
 
 export class PublicationError extends Error {
   constructor(message, options = {}) {
@@ -280,6 +308,13 @@ export class PublicationConflictError extends PublicationError {
     });
     this.name = "PublicationConflictError";
     this.propertyId = propertyId;
+  }
+}
+
+export class PublicationOutcomeUnknownError extends PublicationError {
+  constructor(message, options = {}) {
+    super(message, { ...options, code: "MLS_PUBLICATION_OUTCOME_UNKNOWN" });
+    this.name = "PublicationOutcomeUnknownError";
   }
 }
 
@@ -374,6 +409,24 @@ function requireTimestamp(value, label, { nullable = false } = {}) {
   const canonical = canonicalTimestamp(value);
   if (canonical == null) throw new TypeError(`${label} must be a canonical timestamp`);
   return canonical;
+}
+
+function requireRowVersion(value, label) {
+  if (typeof value !== "string") {
+    throw new TypeError(`${label} must be a lossless PostgreSQL timestamp token`);
+  }
+  const matched = ROW_VERSION_PATTERN.exec(value);
+  if (!matched) {
+    throw new TypeError(`${label} must be a lossless PostgreSQL timestamp token`);
+  }
+  const [, year, month, day, hourText, minuteText, secondText] = matched;
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  if (!isCanonicalDate(`${year}-${month}-${day}`) || hour > 23 || minute > 59 || second > 59) {
+    throw new TypeError(`${label} must be a lossless PostgreSQL timestamp token`);
+  }
+  return value;
 }
 
 function requireObservationTimestamp(value, label, { nullable = false, allowDate = false } = {}) {
@@ -493,6 +546,20 @@ function databaseJson(value, label) {
   return decoded;
 }
 
+function databaseJsonSnapshot(value, label) {
+  let decoded = value;
+  if (typeof value === "string") {
+    try {
+      decoded = JSON.parse(value);
+    } catch (error) {
+      throw new TypeError(`${label} is invalid JSON`, { cause: error });
+    }
+  }
+  const snapshot = snapshotDataGraph(decoded, label);
+  serializeJson(snapshot, label);
+  return snapshot;
+}
+
 function jsonEqual(left, right) {
   return JSON.stringify(stableJsonValue(left)) === JSON.stringify(stableJsonValue(right));
 }
@@ -526,6 +593,30 @@ function requireStringArray(value, label, { maxItems = 200, maxLength = 500 } = 
   return value;
 }
 
+function requireExactArrayDataProperties(value, label) {
+  if (!Array.isArray(value)) throw new TypeError(`${label} must be an array`);
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const expected = new Set(["length"]);
+  for (let index = 0; index < value.length; index += 1) expected.add(String(index));
+  const ownKeys = Reflect.ownKeys(descriptors);
+  if (
+    ownKeys.length !== expected.size ||
+    ownKeys.some((key) => typeof key !== "string" || !expected.has(key))
+  ) {
+    throw new TypeError(`${label} arrays must contain only dense index data properties`);
+  }
+  for (const key of expected) {
+    const descriptor = descriptors[key];
+    if (!descriptor || !Object.hasOwn(descriptor, "value")) {
+      throw new TypeError(`${label} arrays must contain only data properties`);
+    }
+    if (key !== "length" && !descriptor.enumerable) {
+      throw new TypeError(`${label} array indexes must be enumerable data properties`);
+    }
+  }
+  return descriptors;
+}
+
 function snapshotDataGraph(value, label, seen = new Map(), depth = 0) {
   if (depth > 50) throw new TypeError(`${label} nesting is too deep`);
   if (value == null || ["string", "number", "boolean"].includes(typeof value)) return value;
@@ -546,9 +637,7 @@ function snapshotDataGraph(value, label, seen = new Map(), depth = 0) {
   const output = Array.isArray(value) ? [] : {};
   seen.set(value, output);
   if (Array.isArray(value)) {
-    if (Object.keys(value).length !== value.length) {
-      throw new TypeError(`${label} arrays must be dense data properties`);
-    }
+    requireExactArrayDataProperties(value, label);
     for (let index = 0; index < value.length; index += 1) {
       output.push(snapshotDataGraph(descriptors[index].value, label, seen, depth + 1));
     }
@@ -561,6 +650,36 @@ function snapshotDataGraph(value, label, seen = new Map(), depth = 0) {
   }
   seen.delete(value);
   return Object.freeze(output);
+}
+
+function snapshotPublicationBatch(suppliedInput) {
+  if (!isPlainRecord(suppliedInput)) {
+    throw new TypeError("publication batch must be a plain record");
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(suppliedInput);
+  const keys = Reflect.ownKeys(descriptors);
+  if (keys.some((key) => typeof key !== "string" || !PUBLICATION_BATCH_KEYS.has(key))) {
+    throw new TypeError("publication batch contains an unexpected key");
+  }
+  for (const key of PUBLICATION_BATCH_REQUIRED_KEYS) {
+    if (!Object.hasOwn(descriptors, key))
+      throw new TypeError(`publication batch is missing ${key}`);
+  }
+  for (const key of keys) {
+    const descriptor = descriptors[key];
+    if (!Object.hasOwn(descriptor, "value") || !descriptor.enumerable) {
+      throw new TypeError("publication batch must contain only enumerable data properties");
+    }
+  }
+  const signal = descriptors.signal?.value ?? null;
+  if (signal != null && !(signal instanceof AbortSignal)) {
+    throw new TypeError("publication batch signal must be an AbortSignal");
+  }
+  const graph = Object.fromEntries(
+    [...PUBLICATION_BATCH_REQUIRED_KEYS].map((key) => [key, descriptors[key].value]),
+  );
+  const snapshot = snapshotDataGraph(graph, "publication batch");
+  return Object.freeze(signal == null ? snapshot : { ...snapshot, signal });
 }
 
 function requireExactRecord(value, keys, label) {
@@ -679,9 +798,6 @@ function validateReconciledFieldWrite(value, canonical, label) {
   }
   serializeJson(value.lastPublishedValue, `${label}.lastPublishedValue`);
   serializeJson(value.overrideValue, `${label}.overrideValue`);
-  if (!jsonEqual(value.lastPublishedValue, canonical[value.fieldName])) {
-    throw new TypeError(`${label} does not match the canonical field`);
-  }
   if (typeof value.activeOverride !== "boolean") {
     throw new TypeError(`${label}.activeOverride must be boolean`);
   }
@@ -694,13 +810,14 @@ function validateReconciledFieldWrite(value, canonical, label) {
   if (value.activeOverride && value.winningObservationId != null) {
     throw new TypeError(`${label} staff override cannot claim a winning observation`);
   }
-  if (value.activeOverride && !jsonEqual(value.overrideValue, value.lastPublishedValue)) {
-    throw new TypeError(`${label} active override must equal the published value`);
+  const publishedValue = value.activeOverride ? value.overrideValue : value.lastPublishedValue;
+  if (!jsonEqual(publishedValue, canonical[value.fieldName])) {
+    throw new TypeError(`${label} does not match the canonical field`);
   }
   return value;
 }
 
-function validateLifecycleWrite(value, label) {
+function validateLifecycleWrite(value, canonical, label) {
   requireExactRecord(value, LIFECYCLE_WRITE_KEYS, label);
   if (
     !Number.isInteger(value.consecutiveAbsentHealthyRuns) ||
@@ -716,6 +833,24 @@ function validateLifecycleWrite(value, label) {
   requireTimestamp(value.inactiveAt, `${label}.inactiveAt`, { nullable: true });
   if ((value.inactiveReason == null) !== (value.inactiveAt == null)) {
     throw new TypeError(`${label} inactivity reason and timestamp must be paired`);
+  }
+  if (canonical.status === "inactive") {
+    if (
+      value.consecutiveAbsentHealthyRuns !== 2 ||
+      value.inactiveReason == null ||
+      value.inactiveAt == null
+    ) {
+      throw new TypeError(`${label} inactive status requires the two-healthy-run lifecycle state`);
+    }
+  } else if (value.inactiveReason != null || value.inactiveAt != null) {
+    throw new TypeError(`${label} active lifecycle cannot retain inactive reason or time`);
+  } else if (
+    ["draft", "sold", "rented", "offline"].includes(canonical.status) &&
+    value.consecutiveAbsentHealthyRuns !== 0
+  ) {
+    throw new TypeError(`${label} terminal status requires a zero lifecycle counter`);
+  } else if (canonical.status === "active" && value.consecutiveAbsentHealthyRuns > 1) {
+    throw new TypeError(`${label} active status cannot exceed one healthy absence`);
   }
   return value;
 }
@@ -741,6 +876,12 @@ function validateListingChangeEvent(value, canonical, label) {
     if (!jsonEqual(value.newValue, canonical[value.fieldName])) {
       throw new TypeError(`${label}.newValue does not match the canonical field`);
     }
+    if (
+      value.fieldName === "status" &&
+      (value.oldValue === "inactive" || value.newValue === "inactive")
+    ) {
+      throw new TypeError(`${label} status transition must use inactive or reactivated`);
+    }
   }
   if (["inactive", "reactivated"].includes(value.changeType) && value.fieldName !== "status") {
     throw new TypeError(`${label}.fieldName must be status`);
@@ -757,6 +898,15 @@ function validateListingChangeEvent(value, canonical, label) {
   if (value.changeType === "reactivated" && value.oldValue !== "inactive") {
     throw new TypeError(`${label} reactivated event must start from inactive`);
   }
+  if (
+    value.changeType === "new" &&
+    (value.fieldName !== null || value.oldValue !== null || !jsonEqual(value.newValue, canonical))
+  ) {
+    throw new TypeError(`${label} new event must contain the exact canonical row`);
+  }
+  if (value.changeType === "link_change" && value.fieldName !== null) {
+    throw new TypeError(`${label} link change fieldName must be null`);
+  }
   if (value.winningObservationId === undefined) {
     throw new TypeError(`${label}.winningObservationId must be a UUID or null`);
   }
@@ -768,8 +918,7 @@ function validateListingChangeEvent(value, canonical, label) {
 }
 
 function validatePublicationBatch(suppliedInput) {
-  const input = snapshotDataGraph(suppliedInput, "publication batch");
-  requireExactRecord(input, PUBLICATION_BATCH_KEYS, "publication batch");
+  const input = snapshotPublicationBatch(suppliedInput);
   requireUuid(input.runId, "publication batch runId");
   if (!RUN_MODES.has(input.mode)) throw new TypeError("publication batch mode is invalid");
   if (typeof input.publishEnabled !== "boolean") {
@@ -780,6 +929,7 @@ function validatePublicationBatch(suppliedInput) {
   }
   const propertyIds = new Set();
   const listingNumbers = new Set();
+  const canonicalIdentities = new Set();
   const linkIdentities = new Set();
   const winningObservationOwners = new Map();
   for (let index = 0; index < input.proposals.length; index += 1) {
@@ -792,9 +942,14 @@ function validatePublicationBatch(suppliedInput) {
       throw new TypeError("publication batch contains a duplicate listing number");
     }
     listingNumbers.add(canonical.listing_no);
+    const canonicalIdentity = `${canonical.deal_type}\u0000${canonical.canonical_property_no}`;
+    if (canonicalIdentities.has(canonicalIdentity)) {
+      throw new TypeError("publication batch contains a duplicate canonical identity");
+    }
+    canonicalIdentities.add(canonicalIdentity);
     if (proposal.kind === "update") {
       requireUuid(proposal.propertyId, `publication proposal ${index}.propertyId`);
-      requireTimestamp(
+      requireRowVersion(
         proposal.expectedUpdatedAt,
         `publication proposal ${index}.expectedUpdatedAt`,
       );
@@ -850,12 +1005,30 @@ function validatePublicationBatch(suppliedInput) {
       throw new TypeError(`publication proposal ${index} must contain each field exactly once`);
     }
     const imageField = proposal.fields.find((field) => field.fieldName === "images");
+    if (proposal.kind === "new" && proposal.links.length === 0) {
+      throw new TypeError("new publication requires a current-run source link");
+    }
+    if (proposal.kind === "new" && canonical.images.length === 0) {
+      throw new TypeError("new publication requires an owned primary image");
+    }
+    if (proposal.kind === "new" && imageField.winningObservationId == null) {
+      throw new TypeError("new publication images require a current-run winning observation");
+    }
     if (
       proposal.kind === "new" &&
-      canonical.images.length > 0 &&
-      imageField.winningObservationId == null
+      proposal.fields.some(
+        (field) =>
+          field.fieldName !== "images" &&
+          field.activeOverride !== true &&
+          field.winningObservationId == null &&
+          field.lastPublishedValue != null &&
+          (!Array.isArray(field.lastPublishedValue) || field.lastPublishedValue.length > 0),
+      )
     ) {
-      throw new TypeError("new images require a current-run winning observation");
+      throw new TypeError("new automated values require current-run winning observations");
+    }
+    if (proposal.fields.some((field) => field.activeOverride) && proposal.links.length === 0) {
+      throw new TypeError("staff override publication requires a current-run source link");
     }
     for (const winnerId of new Set(
       proposal.fields
@@ -868,7 +1041,11 @@ function validatePublicationBatch(suppliedInput) {
       }
       winningObservationOwners.set(winnerId, index);
     }
-    validateLifecycleWrite(proposal.lifecycle, `publication proposal ${index}.lifecycle`);
+    validateLifecycleWrite(
+      proposal.lifecycle,
+      canonical,
+      `publication proposal ${index}.lifecycle`,
+    );
     if (!Array.isArray(proposal.events) || proposal.events.length > 500) {
       throw new TypeError(`publication proposal ${index}.events must be a bounded array`);
     }
@@ -1076,15 +1253,70 @@ function chunks(values, size = BATCH_SIZE) {
   return output;
 }
 
-function validateQueryResult(result, label) {
+function validateQueryResult(result, label, options = {}) {
+  if (result == null || typeof result !== "object" || Array.isArray(result)) {
+    throw new TypeError(`${label} returned a malformed database result`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(result);
+  const ownKeys = Reflect.ownKeys(descriptors);
   if (
-    !isPlainRecord(result) ||
-    !Array.isArray(result.rows) ||
-    (result.rowCount != null && (!Number.isInteger(result.rowCount) || result.rowCount < 0))
+    ownKeys.some(
+      (key) =>
+        typeof key !== "string" ||
+        !QUERY_RESULT_ALLOWED_KEYS.has(key) ||
+        !Object.hasOwn(descriptors[key], "value"),
+    ) ||
+    [...QUERY_RESULT_REQUIRED_KEYS].some((key) => !Object.hasOwn(descriptors, key))
   ) {
     throw new TypeError(`${label} returned a malformed database result`);
   }
-  return result.rows;
+  const rows = descriptors.rows.value;
+  const rowCount = descriptors.rowCount.value;
+  try {
+    requireExactArrayDataProperties(rows, `${label} rows`);
+  } catch (error) {
+    throw new TypeError(`${label} returned a malformed database result`, { cause: error });
+  }
+  if (rowCount != null && (!Number.isInteger(rowCount) || rowCount < 0)) {
+    throw new TypeError(`${label} returned a malformed database result`);
+  }
+  const command = descriptors.command?.value;
+  const fields = descriptors.fields?.value;
+  const oid = descriptors.oid?.value;
+  if (command !== undefined && command !== null && typeof command !== "string") {
+    throw new TypeError(`${label} returned a malformed database result`);
+  }
+  if (fields !== undefined) {
+    try {
+      requireExactArrayDataProperties(fields, `${label} fields`);
+    } catch (error) {
+      throw new TypeError(`${label} returned a malformed database result`, { cause: error });
+    }
+  }
+  if (oid !== undefined && oid !== null && (!Number.isInteger(oid) || oid < 0)) {
+    throw new TypeError(`${label} returned a malformed database result`);
+  }
+
+  if (options.expectedCommand != null) {
+    if (
+      !Object.hasOwn(descriptors, "command") ||
+      !Object.hasOwn(descriptors, "fields") ||
+      !Object.hasOwn(descriptors, "oid") ||
+      command !== options.expectedCommand
+    ) {
+      throw new TypeError(
+        `${label} returned command ${String(command)} instead of ${options.expectedCommand}`,
+      );
+    }
+    if (["BEGIN", "COMMIT", "ROLLBACK"].includes(options.expectedCommand)) {
+      if (rows.length !== 0 || rowCount !== null || fields.length !== 0) {
+        throw new TypeError(`${label} returned a malformed transaction command result`);
+      }
+    } else if (rowCount !== rows.length) {
+      throw new TypeError(`${label} returned an inconsistent rowCount`);
+    }
+  }
+  return Object.freeze({ rows, rowCount, command, fields, oid });
 }
 
 function subtractDays(dateValue, count) {
@@ -1310,7 +1542,9 @@ export function createSyncRepository(options = {}) {
 
   function throwIfAborted(signal) {
     if (signal?.aborted) {
-      throw signal.reason ?? new DOMException("The operation was aborted", "AbortError");
+      throw signal.reason === undefined
+        ? new DOMException("The operation was aborted", "AbortError")
+        : signal.reason;
     }
   }
 
@@ -1319,7 +1553,23 @@ export function createSyncRepository(options = {}) {
     throwIfAborted(signal);
     const result = await client.query(statement, params);
     throwIfAborted(signal);
-    return validateQueryResult(result, label);
+    return validateQueryResult(result, label).rows;
+  }
+
+  async function publicationQuery(
+    statement,
+    params,
+    label,
+    expectedCommand,
+    operation,
+    { checkAfter = true } = {},
+  ) {
+    const signal = operationSignal(operation);
+    throwIfAborted(signal);
+    const result = await client.query(statement, params);
+    if (checkAfter) throwIfAborted(signal);
+    const validated = validateQueryResult(result, label, { expectedCommand });
+    return validated.rows;
   }
 
   async function beginRun(input) {
@@ -1752,7 +2002,7 @@ export function createSyncRepository(options = {}) {
       (row.canonical_property_no == null || typeof row.canonical_property_no === "string") &&
       (row.legacy_property_no == null || typeof row.legacy_property_no === "string") &&
       isDealType(row.deal_type) &&
-      isTimestamp(row.updated_at);
+      typeof row.updated_at === "string";
     if (!valid) throw new TypeError("candidate row is invalid");
     const canonical =
       row.canonical_property_no == null
@@ -1769,7 +2019,7 @@ export function createSyncRepository(options = {}) {
       canonical_property_no: canonical,
       legacy_property_no: legacy,
       deal_type: row.deal_type,
-      updated_at: requireTimestamp(row.updated_at, "candidate updated_at"),
+      updated_at: requireRowVersion(row.updated_at, "candidate updated_at"),
     };
   }
 
@@ -1783,7 +2033,9 @@ export function createSyncRepository(options = {}) {
     let cursor = null;
     while (true) {
       const rows = await query(
-        `SELECT id, listing_no, canonical_property_no, legacy_property_no, deal_type, updated_at
+        `SELECT id, listing_no, canonical_property_no, legacy_property_no, deal_type,
+                to_char(updated_at AT TIME ZONE 'UTC',
+                  'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
            FROM properties
           WHERE deal_type = ANY($1::deal_type[])
             AND ($2::uuid IS NULL OR id > $2::uuid)
@@ -2603,25 +2855,27 @@ export function createSyncRepository(options = {}) {
 
   function validatePublicationRunRow(row, runId) {
     exactPublicationRow(row, PUBLICATION_RUN_ROW_KEYS, "publication run row");
+    const sourceStatus = databaseJsonSnapshot(row.source_status, "publication run source_status");
     const valid =
       row.id === runId &&
       isCanonicalDate(row.scheduled_for) &&
       isTimestamp(row.started_at) &&
       row.mode === "publish" &&
       row.status === "running" &&
-      isPlainRecord(row.source_status) &&
+      isPlainRecord(sourceStatus) &&
       isCanonicalDate(row.hong_kong_date);
     if (!valid)
       throw new PublicationGateError("publish run is missing, not running, or not publish mode");
-    validateSourceStatus(row.source_status);
-    if (!healthyPublicationSource(row.source_status, SOURCE_28HSE)) {
+    validateSourceStatus(sourceStatus);
+    if (!healthyPublicationSource(sourceStatus, SOURCE_28HSE)) {
       throw new PublicationGateError("persisted 28Hse evaluation is not healthy");
     }
-    if (!isPlainRecord(row.source_status[SOURCE_OLD_SITE])) {
+    if (!isPlainRecord(sourceStatus[SOURCE_OLD_SITE])) {
       throw new PublicationGateError("persisted old-site evaluation is missing");
     }
     return Object.freeze({
       ...row,
+      source_status: sourceStatus,
       started_at: requireTimestamp(row.started_at, "publication run started_at"),
     });
   }
@@ -2636,12 +2890,16 @@ export function createSyncRepository(options = {}) {
         PUBLICATION_STREAK_ROW_KEYS,
         "publication shadow streak row",
       );
+      const sourceStatus = databaseJsonSnapshot(
+        row.source_status,
+        "publication shadow source_status",
+      );
       if (
         !isUuid(row.id) ||
         !isCanonicalDate(row.scheduled_for) ||
         !isTimestamp(row.started_at) ||
         row.status !== "shadow_healthy" ||
-        !isPlainRecord(row.source_status) ||
+        !isPlainRecord(sourceStatus) ||
         !isTimestamp(row.baseline_approved_at) ||
         row.date_rank !== 1
       ) {
@@ -2651,14 +2909,14 @@ export function createSyncRepository(options = {}) {
         throw new TypeError("publication shadow streak rows contain a duplicate date");
       }
       seenDates.add(row.scheduled_for);
-      validateSourceStatus(row.source_status);
+      validateSourceStatus(sourceStatus);
       const approvedAt = requireTimestamp(row.baseline_approved_at, "publication shadow approval");
       if (approvedAt >= run.started_at) {
         throw new PublicationGateError("shadow approval must be strictly before the publish run");
       }
       if (
-        !healthyPublicationSource(row.source_status, SOURCE_28HSE) ||
-        !healthyPublicationSource(row.source_status, SOURCE_OLD_SITE)
+        !healthyPublicationSource(sourceStatus, SOURCE_28HSE) ||
+        !healthyPublicationSource(sourceStatus, SOURCE_OLD_SITE)
       ) {
         throw new PublicationGateError("seven approved healthy shadow runs are required");
       }
@@ -2679,8 +2937,8 @@ export function createSyncRepository(options = {}) {
     throw new PublicationGateError("seven approved healthy shadow runs are required");
   }
 
-  async function recheckPublicationGate(runId) {
-    const runRows = await query(
+  async function recheckPublicationGate(runId, operation) {
+    const runRows = await publicationQuery(
       `SELECT id, scheduled_for::text AS scheduled_for, started_at, mode, status,
               source_status,
               (started_at AT TIME ZONE 'Asia/Hong_Kong')::date::text AS hong_kong_date
@@ -2689,12 +2947,14 @@ export function createSyncRepository(options = {}) {
         FOR UPDATE`,
       [runId],
       "publication run gate",
+      "SELECT",
+      operation,
     );
     if (runRows.length !== 1) {
       throw new PublicationGateError("publish run is missing, not running, or not publish mode");
     }
     const run = validatePublicationRunRow(runRows[0], runId);
-    const streakRows = await query(
+    const streakRows = await publicationQuery(
       `WITH publication_shadow_streak AS (
          SELECT id, scheduled_for::text AS scheduled_for, started_at, status,
                 source_status, baseline_approved_at,
@@ -2715,6 +2975,8 @@ export function createSyncRepository(options = {}) {
         LIMIT 8`,
       [run.hong_kong_date, run.started_at],
       "publication shadow streak",
+      "SELECT",
+      operation,
     );
     validatePublicationStreak(streakRows, run);
     return Object.freeze({
@@ -2729,6 +2991,32 @@ export function createSyncRepository(options = {}) {
   function validatePublicationObservationRow(row, expected, label) {
     exactPublicationRow(row, PUBLICATION_OBSERVATION_ROW_KEYS, label);
     const fetchedAt = requireTimestamp(row.fetched_at, `${label}.fetched_at`);
+    const payload = databaseJsonSnapshot(row.payload, `${label}.payload`);
+    requireExactRecord(
+      payload,
+      new Set(["schemaVersion", "fields", "rawFields", "sourceUpdatedAt", "parseWarnings"]),
+      `${label}.payload`,
+    );
+    if (payload.schemaVersion !== 1) throw new TypeError(`${label}.payload schema is invalid`);
+    validateListingFields(payload.fields);
+    if (!isPlainRecord(payload.rawFields)) {
+      throw new TypeError(`${label}.payload rawFields is invalid`);
+    }
+    serializeJson(payload.rawFields, `${label}.payload rawFields`);
+    if (payload.sourceUpdatedAt !== null) {
+      requireObservationTimestamp(payload.sourceUpdatedAt, `${label}.payload sourceUpdatedAt`, {
+        allowDate: true,
+      });
+    }
+    requireStringArray(payload.parseWarnings, `${label}.payload parseWarnings`, {
+      maxItems: 200,
+      maxLength: 500,
+    });
+    const mediaCandidates = databaseJsonSnapshot(row.media_candidates, `${label}.media_candidates`);
+    if (!Array.isArray(mediaCandidates) || mediaCandidates.length > 200) {
+      throw new TypeError(`${label}.media_candidates is invalid`);
+    }
+    for (const candidate of mediaCandidates) validateMediaCandidate(candidate);
     if (
       !isUuid(row.id) ||
       !isUuid(row.run_id) ||
@@ -2737,7 +3025,9 @@ export function createSyncRepository(options = {}) {
       !isDealType(row.deal_type) ||
       (row.property_no_normalized != null &&
         normalizePropertyNo(row.property_no_normalized) !== row.property_no_normalized) ||
-      row.validation_state !== "valid"
+      row.validation_state !== "valid" ||
+      typeof row.content_hash !== "string" ||
+      !HASH_PATTERN.test(row.content_hash)
     ) {
       throw new TypeError(`${label} is invalid`);
     }
@@ -2755,10 +3045,29 @@ export function createSyncRepository(options = {}) {
     ) {
       throw new TypeError(`${label} does not match its requested source identity`);
     }
-    return Object.freeze({ ...row, fetched_at: fetchedAt });
+    const computedHash = stableObservationHash({
+      schemaVersion: payload.schemaVersion,
+      source: row.source,
+      externalId: row.external_listing_id,
+      dealType: row.deal_type,
+      propertyNoNormalized: row.property_no_normalized,
+      fields: payload.fields,
+      rawFields: payload.rawFields,
+      mediaCandidates,
+      sourceUpdatedAt: payload.sourceUpdatedAt,
+    });
+    if (computedHash !== row.content_hash) {
+      throw new TypeError(`${label} content hash does not match normalized payload evidence`);
+    }
+    return Object.freeze({
+      ...row,
+      fetched_at: fetchedAt,
+      payload,
+      media_candidates: mediaCandidates,
+    });
   }
 
-  async function loadWinningObservations(proposal, runId, sourceApproved) {
+  async function loadWinningObservations(proposal, runId, sourceApproved, operation) {
     const ids = new Set();
     for (const field of proposal.fields) {
       if (field.winningObservationId != null) ids.add(field.winningObservationId);
@@ -2768,15 +3077,17 @@ export function createSyncRepository(options = {}) {
     }
     const byId = new Map();
     for (const id of [...ids].sort()) {
-      const rows = await query(
+      const rows = await publicationQuery(
         `SELECT id, run_id, source, external_listing_id, deal_type, property_no_normalized,
-                validation_state, fetched_at
+                validation_state, fetched_at, payload, media_candidates, content_hash
            FROM listing_source_observations
           WHERE id = $1::uuid AND run_id = $2::uuid
           LIMIT 2
           FOR UPDATE`,
         [id, runId],
         "publication winning observation",
+        "SELECT",
+        operation,
       );
       if (rows.length !== 1) {
         throw new TypeError("publication winning observation is missing or duplicated");
@@ -2812,6 +3123,69 @@ export function createSyncRepository(options = {}) {
       byId.set(id, observation);
     }
     return byId;
+  }
+
+  function automatedValuePresent(value) {
+    if (value === undefined || value === null) return false;
+    if (typeof value === "string") return value.length > 0;
+    if (Array.isArray(value)) return value.length > 0;
+    return true;
+  }
+
+  async function validateFieldProvenance(proposal, winningObservations, operation) {
+    for (const field of proposal.fields) {
+      if (field.activeOverride) continue;
+      if (field.winningObservationId == null) continue;
+      const observation = winningObservations.get(field.winningObservationId);
+      if (!observation) {
+        throw new TypeError("publication field winner is not exact current-run evidence");
+      }
+      if (field.fieldName === "images") continue;
+      let sourceValue;
+      if (field.fieldName === "description" && observation.source === SOURCE_28HSE) {
+        sourceValue = undefined;
+      } else if (field.fieldName === "estate_id") {
+        const estateSlug = normalizeCanonicalFieldValue(
+          "district_slug",
+          observation.payload.fields.estate_slug,
+        );
+        if (estateSlug != null && field.lastPublishedValue != null) {
+          const rows = await publicationQuery(
+            `SELECT id
+               FROM estates
+              WHERE slug = $1 AND id = $2::uuid
+              ORDER BY id
+              LIMIT 2
+              FOR SHARE`,
+            [estateSlug, field.lastPublishedValue],
+            "publication estate provenance",
+            "SELECT",
+            operation,
+          );
+          if (rows.length !== 1) {
+            throw new TypeError("publication estate value lacks exact source-slug evidence");
+          }
+          exactPublicationRow(rows[0], new Set(["id"]), "publication estate provenance row");
+          if (rows[0].id !== field.lastPublishedValue) {
+            throw new TypeError("publication estate value lacks exact source-slug evidence");
+          }
+          sourceValue = field.lastPublishedValue;
+        }
+      } else {
+        sourceValue = normalizeCanonicalFieldValue(
+          field.fieldName,
+          observation.payload.fields[field.fieldName],
+        );
+      }
+      if (
+        !automatedValuePresent(sourceValue) ||
+        !jsonEqual(sourceValue, field.lastPublishedValue)
+      ) {
+        throw new TypeError(
+          `publication ${field.fieldName} value does not match its winning observation payload`,
+        );
+      }
+    }
   }
 
   const CANONICAL_PARAMS = Object.freeze([
@@ -2880,6 +3254,7 @@ export function createSyncRepository(options = {}) {
     requireNullableText(current.orientation, "locked canonical orientation", 200);
     for (const key of ["features", "images"]) {
       if (current[key] !== null) {
+        current[key] = snapshotDataGraph(current[key], `locked canonical ${key}`);
         requireStringArray(current[key], `locked canonical ${key}`, {
           maxItems: 200,
           maxLength: key === "images" ? 2_048 : 500,
@@ -2893,10 +3268,63 @@ export function createSyncRepository(options = {}) {
     return Object.freeze(current);
   }
 
-  async function writeCanonicalProperty(proposal) {
+  async function assertNewIdentityAvailable(proposal, operation) {
+    const canonical = proposal.canonical;
+    const lockKeys = [
+      `canonical:${canonical.deal_type}:${canonical.canonical_property_no}`,
+      `listing:${canonical.listing_no}`,
+    ].sort();
+    for (const lockKey of lockKeys) {
+      const lockRows = await publicationQuery(
+        `SELECT count(*)::int AS acquired
+           FROM (SELECT pg_advisory_xact_lock(hashtextextended($1, 0))) AS identity_lock`,
+        [lockKey],
+        "publication canonical identity advisory lock",
+        "SELECT",
+        operation,
+      );
+      if (lockRows.length !== 1) {
+        throw new TypeError("publication canonical identity advisory lock returned no evidence");
+      }
+      exactPublicationRow(
+        lockRows[0],
+        new Set(["acquired"]),
+        "publication canonical identity advisory-lock row",
+      );
+      if (lockRows[0].acquired !== 1) {
+        throw new TypeError("publication canonical identity advisory lock was not acquired");
+      }
+    }
+    const conflictRows = await publicationQuery(
+      `SELECT id, listing_no, canonical_property_no, deal_type
+         FROM properties
+        WHERE (canonical_property_no = $1 AND deal_type = $2::deal_type)
+           OR listing_no = $3
+        ORDER BY id
+        LIMIT 2
+        FOR UPDATE`,
+      [canonical.canonical_property_no, canonical.deal_type, canonical.listing_no],
+      "publication new canonical identity conflict check",
+      "SELECT",
+      operation,
+    );
+    if (conflictRows.length > 0) {
+      for (const row of conflictRows) {
+        exactPublicationRow(
+          row,
+          new Set(["id", "listing_no", "canonical_property_no", "deal_type"]),
+          "publication canonical identity conflict row",
+        );
+      }
+      throw new PublicationConflictError("publication conflict: canonical identity already exists");
+    }
+  }
+
+  async function writeCanonicalProperty(proposal, operation) {
     const values = canonicalParams(proposal.canonical);
     if (proposal.kind === "new") {
-      const rows = await query(
+      await assertNewIdentityAvailable(proposal, operation);
+      const rows = await publicationQuery(
         `INSERT INTO properties (
            listing_no, canonical_property_no, title_zh, title_en, deal_type,
            estate_id, district_slug, address, price, rent, saleable_area,
@@ -2910,6 +3338,8 @@ export function createSyncRepository(options = {}) {
          RETURNING id`,
         values,
         "insert canonical property",
+        "INSERT",
+        operation,
       );
       return {
         propertyId: validateReturnedPropertyId(rows, null, "canonical insert"),
@@ -2919,8 +3349,12 @@ export function createSyncRepository(options = {}) {
       };
     }
 
-    const lockedRows = await query(
-      `SELECT id, updated_at, listing_no, canonical_property_no, title_zh, title_en,
+    const lockedRows = await publicationQuery(
+      `SELECT id,
+              to_char(updated_at AT TIME ZONE 'UTC',
+                'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
+              updated_at = $2::timestamptz AS updated_at_matches_expected,
+              listing_no, canonical_property_no, title_zh, title_en,
               deal_type, estate_id, district_slug, address,
               price::float8 AS price, rent::float8 AS rent,
               saleable_area, gross_area, bedrooms, bathrooms, floor, orientation,
@@ -2928,8 +3362,10 @@ export function createSyncRepository(options = {}) {
          FROM properties
         WHERE id = $1
         FOR UPDATE`,
-      [proposal.propertyId],
+      [proposal.propertyId, proposal.expectedUpdatedAt],
       "lock canonical property",
+      "SELECT",
+      operation,
     );
     if (lockedRows.length !== 1) {
       throw new PublicationConflictError("publication conflict: canonical property is missing", {
@@ -2937,13 +3373,14 @@ export function createSyncRepository(options = {}) {
       });
     }
     exactPublicationRow(lockedRows[0], LOCKED_PROPERTY_ROW_KEYS, "locked property row");
-    const actualUpdatedAt = requireTimestamp(
-      lockedRows[0].updated_at,
+    const actualUpdatedAt = requireRowVersion(
+      lockedRows[0].updated_at_token,
       "locked property updated_at",
     );
     if (
       lockedRows[0].id !== proposal.propertyId ||
-      actualUpdatedAt !== proposal.expectedUpdatedAt
+      actualUpdatedAt !== proposal.expectedUpdatedAt ||
+      lockedRows[0].updated_at_matches_expected !== true
     ) {
       throw new PublicationConflictError("publication conflict: expectedUpdatedAt does not match", {
         propertyId: proposal.propertyId,
@@ -2952,6 +3389,7 @@ export function createSyncRepository(options = {}) {
     const currentCanonical = lockedCanonicalValues(lockedRows[0]);
     if (
       currentCanonical.listing_no !== proposal.canonical.listing_no ||
+      currentCanonical.canonical_property_no !== proposal.canonical.canonical_property_no ||
       currentCanonical.deal_type !== proposal.canonical.deal_type
     ) {
       throw new PublicationConflictError("publication conflict: canonical identity changed", {
@@ -2966,7 +3404,7 @@ export function createSyncRepository(options = {}) {
     const canonicalChanged = CANONICAL_PARAMS.some(
       (fieldName) => !jsonEqual(currentCanonical[fieldName], proposal.canonical[fieldName]),
     );
-    const rows = await query(
+    const rows = await publicationQuery(
       `UPDATE properties SET
          listing_no = $1,
          canonical_property_no = $2,
@@ -2990,6 +3428,7 @@ export function createSyncRepository(options = {}) {
          status = $20::property_status,
          updated_at = now()
        WHERE id = $21::uuid
+         AND updated_at = $22::timestamptz
          AND ROW(
            listing_no, canonical_property_no, title_zh, title_en, deal_type,
            estate_id, district_slug, address, price, rent, saleable_area,
@@ -3001,13 +3440,21 @@ export function createSyncRepository(options = {}) {
            $20::property_status
          )
        RETURNING id`,
-      [...values, proposal.propertyId],
+      [...values, proposal.propertyId, proposal.expectedUpdatedAt],
       "update canonical property",
+      "UPDATE",
+      operation,
     );
     const propertyId = validateReturnedPropertyId(rows, proposal.propertyId, "canonical update", {
       optional: true,
     });
-    if ((propertyId != null) !== canonicalChanged) {
+    if (canonicalChanged && propertyId == null) {
+      throw new PublicationConflictError(
+        "publication conflict: expectedUpdatedAt changed during canonical update",
+        { propertyId: proposal.propertyId },
+      );
+    }
+    if (!canonicalChanged && propertyId != null) {
       throw new TypeError("locked canonical comparison disagrees with the changed-only update");
     }
     return {
@@ -3018,8 +3465,8 @@ export function createSyncRepository(options = {}) {
     };
   }
 
-  async function writeSourceLinks(proposal, propertyId, runId, sourceApproved) {
-    let changed = false;
+  async function writeSourceLinks(proposal, propertyId, runId, sourceApproved, operation) {
+    const changes = [];
     for (const link of [...proposal.links].sort((left, right) =>
       observationIdentity(left).localeCompare(observationIdentity(right)),
     )) {
@@ -3028,9 +3475,9 @@ export function createSyncRepository(options = {}) {
           "source link observation did not pass this run's health gate",
         );
       }
-      const observationRows = await query(
+      const observationRows = await publicationQuery(
         `SELECT id, run_id, source, external_listing_id, deal_type, property_no_normalized,
-                validation_state, fetched_at
+                validation_state, fetched_at, payload, media_candidates, content_hash
            FROM listing_source_observations
           WHERE run_id = $1::uuid AND source = $2 AND external_listing_id = $3
             AND deal_type = $4::deal_type
@@ -3039,6 +3486,8 @@ export function createSyncRepository(options = {}) {
           FOR UPDATE`,
         [runId, link.source, link.externalId, link.dealType],
         "publication source-link observation",
+        "SELECT",
+        operation,
       );
       if (observationRows.length !== 1) {
         throw new TypeError("publication source-link observation is missing or duplicated");
@@ -3054,7 +3503,7 @@ export function createSyncRepository(options = {}) {
       ) {
         throw new TypeError("publication source-link observation evidence does not match");
       }
-      const existingRows = await query(
+      const existingRows = await publicationQuery(
         `SELECT property_id, match_key, status, first_seen_at, last_seen_at, last_seen_run_id
            FROM property_source_links
           WHERE source = $1 AND external_listing_id = $2 AND deal_type = $3::deal_type
@@ -3062,6 +3511,8 @@ export function createSyncRepository(options = {}) {
           FOR UPDATE`,
         [link.source, link.externalId, link.dealType],
         "publication source-link lock",
+        "SELECT",
+        operation,
       );
       if (existingRows.length > 1) throw new TypeError("publication source link is duplicated");
       if (existingRows.length === 1) {
@@ -3108,15 +3559,43 @@ export function createSyncRepository(options = {}) {
             propertyId,
           });
         }
-        changed =
-          changed ||
-          existing.status !== "active" ||
-          observation.fetched_at > lastSeenAt ||
-          existing.last_seen_run_id !== runId;
+        if (existing.status !== "active") {
+          changes.push(
+            Object.freeze({
+              oldValue: Object.freeze({
+                source: link.source,
+                externalId: link.externalId,
+                dealType: link.dealType,
+                matchKey: existing.match_key,
+                status: existing.status,
+              }),
+              newValue: Object.freeze({
+                source: link.source,
+                externalId: link.externalId,
+                dealType: link.dealType,
+                matchKey: link.matchKey,
+                status: "active",
+              }),
+              winningObservationId: observation.id,
+            }),
+          );
+        }
       } else {
-        changed = true;
+        changes.push(
+          Object.freeze({
+            oldValue: null,
+            newValue: Object.freeze({
+              source: link.source,
+              externalId: link.externalId,
+              dealType: link.dealType,
+              matchKey: link.matchKey,
+              status: "active",
+            }),
+            winningObservationId: observation.id,
+          }),
+        );
       }
-      const rows = await query(
+      const rows = await publicationQuery(
         `INSERT INTO property_source_links (
            property_id, source, external_listing_id, deal_type, match_key,
            link_reason, status, first_seen_at, last_seen_at, last_seen_run_id
@@ -3156,6 +3635,8 @@ export function createSyncRepository(options = {}) {
           runId,
         ],
         "publish source link",
+        "INSERT",
+        operation,
       );
       if (rows.length !== 1) {
         throw new PublicationConflictError("publication conflict: source link write was rejected", {
@@ -3167,10 +3648,10 @@ export function createSyncRepository(options = {}) {
         throw new TypeError("published source-link row does not match its property");
       }
     }
-    return changed;
+    return Object.freeze(changes);
   }
 
-  async function writeFieldStates(proposal, propertyId) {
+  async function writeFieldStates(proposal, propertyId, operation) {
     for (const field of [...proposal.fields].sort((left, right) =>
       left.fieldName.localeCompare(right.fieldName),
     )) {
@@ -3182,7 +3663,7 @@ export function createSyncRepository(options = {}) {
         field.overrideValue == null
           ? null
           : serializeJson(field.overrideValue, "published field override");
-      const rows = await query(
+      const rows = await publicationQuery(
         `INSERT INTO property_sync_fields (
            property_id, field_name, last_published_value, override_value,
            active_override, winning_observation_id
@@ -3210,6 +3691,8 @@ export function createSyncRepository(options = {}) {
           field.winningObservationId,
         ],
         "publish field state",
+        "INSERT",
+        operation,
       );
       if (rows.length !== 1)
         throw new TypeError("published field state returned an invalid row count");
@@ -3220,9 +3703,9 @@ export function createSyncRepository(options = {}) {
     }
   }
 
-  async function writeLifecycleState(proposal, propertyId, runId) {
+  async function writeLifecycleState(proposal, propertyId, runId, operation) {
     const lifecycle = proposal.lifecycle;
-    const rows = await query(
+    const rows = await publicationQuery(
       `INSERT INTO property_sync_state (
          property_id, consecutive_absent_healthy_runs, last_evaluated_run_id,
          inactive_reason, inactive_at
@@ -3249,6 +3732,8 @@ export function createSyncRepository(options = {}) {
         lifecycle.inactiveAt,
       ],
       "publish lifecycle state",
+      "INSERT",
+      operation,
     );
     if (rows.length !== 1)
       throw new TypeError("published lifecycle state returned an invalid row count");
@@ -3258,25 +3743,35 @@ export function createSyncRepository(options = {}) {
     }
   }
 
-  async function attachImageMedia(proposal, propertyId, winningObservations) {
+  async function attachImageMedia(proposal, propertyId, winningObservations, operation) {
     const imageField = proposal.fields.find((field) => field.fieldName === "images");
     if (proposal.canonical.images.length === 0 || imageField.winningObservationId == null) {
       return;
     }
-    if (!winningObservations.has(imageField.winningObservationId)) {
+    const winningObservation = winningObservations.get(imageField.winningObservationId);
+    if (!winningObservation) {
       throw new TypeError("published images winner is not current-run evidence");
     }
-    const rows = await query(
-      `SELECT id, observation_id, property_id, source_url, eligibility, owned_media_asset_id
-         FROM listing_media_records
-        WHERE observation_id = $1::uuid
-          AND source_url = ANY($2::text[])
-          AND eligibility = 'eligible'
-          AND owned_media_asset_id IS NOT NULL
-        ORDER BY id
-        FOR UPDATE`,
+    const upstreamCandidates = new Set(
+      winningObservation.media_candidates.map((candidate) => candidate.url),
+    );
+    const rows = await publicationQuery(
+      `SELECT lmr.id, lmr.observation_id, lmr.property_id, lmr.source_url,
+              lmr.eligibility, lmr.owned_media_asset_id,
+              lmr.content_hash AS record_content_hash,
+              ma.url AS owned_url, ma.content_hash AS asset_content_hash
+         FROM listing_media_records AS lmr
+         JOIN media_assets AS ma ON ma.id = lmr.owned_media_asset_id
+        WHERE lmr.observation_id = $1::uuid
+          AND ma.url = ANY($2::text[])
+          AND lmr.eligibility = 'eligible'
+          AND lmr.owned_media_asset_id IS NOT NULL
+        ORDER BY lmr.id
+        FOR UPDATE OF lmr`,
       [imageField.winningObservationId, proposal.canonical.images],
       "lock publishable image media",
+      "SELECT",
+      operation,
     );
     const byUrl = new Map();
     const ids = [];
@@ -3286,11 +3781,23 @@ export function createSyncRepository(options = {}) {
         !isUuid(row.id) ||
         row.observation_id !== imageField.winningObservationId ||
         (row.property_id != null && !isUuid(row.property_id)) ||
-        !proposal.canonical.images.includes(row.source_url) ||
+        !proposal.canonical.images.includes(row.owned_url) ||
+        requireUrl(row.source_url, "publication upstream media URL") !== row.source_url ||
+        requireUrl(row.owned_url, "publication owned media URL") !== row.owned_url ||
         row.eligibility !== "eligible" ||
-        !isUuid(row.owned_media_asset_id)
+        !isUuid(row.owned_media_asset_id) ||
+        typeof row.record_content_hash !== "string" ||
+        !HASH_PATTERN.test(row.record_content_hash) ||
+        typeof row.asset_content_hash !== "string" ||
+        !HASH_PATTERN.test(row.asset_content_hash) ||
+        row.record_content_hash !== row.asset_content_hash
       ) {
         throw new TypeError("publication media row is invalid");
+      }
+      if (!upstreamCandidates.has(row.source_url)) {
+        throw new TypeError(
+          "publication upstream media URL is not a candidate in the winning observation",
+        );
       }
       if (row.property_id != null && row.property_id !== propertyId) {
         throw new PublicationConflictError(
@@ -3300,14 +3807,14 @@ export function createSyncRepository(options = {}) {
           },
         );
       }
-      if (byUrl.has(row.source_url)) throw new TypeError("publication media URL is duplicated");
-      byUrl.set(row.source_url, row);
+      if (byUrl.has(row.owned_url)) throw new TypeError("publication media URL is duplicated");
+      byUrl.set(row.owned_url, row);
       ids.push(row.id);
     }
     if (proposal.canonical.images.some((url) => !byUrl.has(url))) {
       throw new TypeError("published images lack eligible owned current-run media records");
     }
-    const updatedRows = await query(
+    const updatedRows = await publicationQuery(
       `UPDATE listing_media_records
           SET property_id = $2::uuid
         WHERE id = ANY($1::uuid[])
@@ -3315,6 +3822,8 @@ export function createSyncRepository(options = {}) {
         RETURNING id, property_id`,
       [ids, propertyId],
       "attach publishable image media",
+      "UPDATE",
+      operation,
     );
     if (updatedRows.length !== ids.length) {
       throw new PublicationConflictError(
@@ -3334,40 +3843,133 @@ export function createSyncRepository(options = {}) {
     }
   }
 
-  function eventIsReal(event, proposal, canonicalResult, linkChanged) {
-    if (event.changeType === "new") return proposal.kind === "new" && canonicalResult.changed;
-    if (event.changeType === "link_change") return linkChanged;
-    return (
-      proposal.kind === "update" &&
-      canonicalResult.changedFields.has(event.fieldName) &&
-      jsonEqual(event.oldValue, canonicalResult.currentCanonical[event.fieldName])
-    );
+  function eventIsReal(event, expected, winningObservations) {
+    if (
+      event.changeType !== expected.changeType ||
+      event.fieldName !== expected.fieldName ||
+      !jsonEqual(event.oldValue, expected.oldValue) ||
+      !jsonEqual(event.newValue, expected.newValue)
+    ) {
+      return false;
+    }
+    if (expected.anyCurrentWinner) {
+      if (
+        event.winningObservationId !== null &&
+        !winningObservations.has(event.winningObservationId)
+      ) {
+        return false;
+      }
+    } else if (event.winningObservationId !== expected.winningObservationId) {
+      return false;
+    }
+    return expected.reason == null || event.reason === expected.reason;
   }
 
-  async function writeChangeEvents(proposal, propertyId, runId, canonicalResult, linkChanged) {
-    const actualEvents = proposal.events.filter((event) =>
-      eventIsReal(event, proposal, canonicalResult, linkChanged),
-    );
-    if (canonicalResult.changed && actualEvents.length === 0) {
-      throw new TypeError("change event does not describe a real current canonical change");
+  function expectedChangeEvents(proposal, canonicalResult, linkChanges) {
+    const expected = [];
+    if (proposal.kind === "new") {
+      expected.push(
+        Object.freeze({
+          changeType: "new",
+          fieldName: null,
+          oldValue: null,
+          newValue: proposal.canonical,
+          anyCurrentWinner: true,
+          reason: null,
+        }),
+      );
+    } else {
+      for (const fieldName of [...canonicalResult.changedFields].sort()) {
+        const field = proposal.fields.find((candidate) => candidate.fieldName === fieldName);
+        const oldValue = canonicalResult.currentCanonical[fieldName];
+        const newValue = proposal.canonical[fieldName];
+        let changeType = "changed";
+        let reason = null;
+        if (fieldName === "status" && newValue === "inactive") {
+          changeType = "inactive";
+          reason = proposal.lifecycle.inactiveReason;
+        } else if (fieldName === "status" && oldValue === "inactive") {
+          changeType = "reactivated";
+          if (
+            proposal.lifecycle.consecutiveAbsentHealthyRuns !== 0 ||
+            proposal.lifecycle.inactiveReason != null ||
+            proposal.lifecycle.inactiveAt != null
+          ) {
+            throw new TypeError("reactivated lifecycle must clear counter, reason, and time");
+          }
+        }
+        const lifecycleStatusChange = ["inactive", "reactivated"].includes(changeType);
+        if (!field.activeOverride && !lifecycleStatusChange && field.winningObservationId == null) {
+          throw new TypeError(`changed ${fieldName} field lacks current-run winning provenance`);
+        }
+        expected.push(
+          Object.freeze({
+            changeType,
+            fieldName,
+            oldValue,
+            newValue,
+            winningObservationId: lifecycleStatusChange ? null : field.winningObservationId,
+            reason,
+          }),
+        );
+      }
     }
-    if (
-      proposal.kind === "update" &&
-      canonicalResult.changedFields.size > 0 &&
-      !actualEvents.some(
-        (event) =>
-          event.changeType !== "link_change" && canonicalResult.changedFields.has(event.fieldName),
-      )
-    ) {
-      throw new TypeError("changed canonical field requires a matching real change event");
+    for (const linkChange of linkChanges) {
+      expected.push(
+        Object.freeze({
+          changeType: "link_change",
+          fieldName: null,
+          oldValue: linkChange.oldValue,
+          newValue: linkChange.newValue,
+          winningObservationId: linkChange.winningObservationId,
+          reason: null,
+        }),
+      );
+    }
+    return expected;
+  }
+
+  async function writeChangeEvents(
+    proposal,
+    propertyId,
+    runId,
+    canonicalResult,
+    linkChanges,
+    winningObservations,
+    operation,
+  ) {
+    const unmatched = [...proposal.events];
+    for (const expected of expectedChangeEvents(proposal, canonicalResult, linkChanges)) {
+      const index = unmatched.findIndex((event) =>
+        eventIsReal(event, expected, winningObservations),
+      );
+      if (index < 0) {
+        const semanticCandidate = unmatched.find(
+          (event) =>
+            event.changeType === expected.changeType &&
+            event.fieldName === expected.fieldName &&
+            jsonEqual(event.oldValue, expected.oldValue) &&
+            jsonEqual(event.newValue, expected.newValue),
+        );
+        if (semanticCandidate) {
+          throw new TypeError(
+            "publication event winning observation does not match field provenance",
+          );
+        }
+        throw new TypeError("publication event coverage is missing an exact semantic event");
+      }
+      unmatched.splice(index, 1);
+    }
+    if (unmatched.length > 0) {
+      throw new TypeError("publication event coverage contains an extra or no-op event");
     }
     let inserted = 0;
-    for (const event of actualEvents) {
+    for (const event of proposal.events) {
       const oldValue =
         event.oldValue == null ? null : serializeJson(event.oldValue, "change event old value");
       const newValue =
         event.newValue == null ? null : serializeJson(event.newValue, "change event new value");
-      const rows = await query(
+      const rows = await publicationQuery(
         `INSERT INTO listing_change_events (
            property_id, run_id, change_type, field_name, old_value, new_value,
            winning_observation_id, reason
@@ -3396,6 +3998,8 @@ export function createSyncRepository(options = {}) {
           event.reason,
         ],
         "publish change event",
+        "INSERT",
+        operation,
       );
       if (rows.length > 1) throw new TypeError("published change event returned too many rows");
       if (rows.length === 1) {
@@ -3448,6 +4052,9 @@ export function createSyncRepository(options = {}) {
     if (input.publishEnabled !== true) {
       throw new PublicationGateError("publication is not enabled");
     }
+    const operation = input.signal == null ? undefined : Object.freeze({ signal: input.signal });
+    const signal = operationSignal(operation);
+    throwIfAborted(signal);
     const ordered = Object.freeze(
       [...input.proposals].sort((left, right) => {
         const leftKey = left.kind === "update" ? left.propertyId : left.canonical.listing_no;
@@ -3455,21 +4062,34 @@ export function createSyncRepository(options = {}) {
         return leftKey.localeCompare(rightKey) || left.kind.localeCompare(right.kind);
       }),
     );
-    let transactionStarted = false;
+    let transactionState = "not_started";
     try {
-      await assertLockSession();
-      transactionStarted = true;
-      await query(
+      await assertLockSession(operation, true);
+      await publicationQuery(
         "BEGIN ISOLATION LEVEL SERIALIZABLE",
         [],
         "begin serializable publication transaction",
+        "BEGIN",
+        operation,
+        { checkAfter: false },
       );
-      const gate = await recheckPublicationGate(input.runId);
+      transactionState = "open";
+      throwIfAborted(signal);
+      const gate = await recheckPublicationGate(input.runId, operation);
       const degraded = gate.sourceApproved[SOURCE_OLD_SITE] !== true;
       let inserted = 0;
       let updated = 0;
       let events = 0;
       for (const proposal of ordered) {
+        throwIfAborted(signal);
+        if (
+          proposal.canonical.status === "inactive" &&
+          proposal.lifecycle.inactiveAt !== gate.run.started_at
+        ) {
+          throw new TypeError(
+            "inactive lifecycle effective time must equal the locked publish-run start",
+          );
+        }
         if (
           degraded &&
           (proposal.lifecycle.consecutiveAbsentHealthyRuns !== 0 ||
@@ -3483,46 +4103,100 @@ export function createSyncRepository(options = {}) {
           proposal,
           input.runId,
           gate.sourceApproved,
+          operation,
         );
-        const canonicalResult = await writeCanonicalProperty(proposal);
+        await validateFieldProvenance(proposal, winningObservations, operation);
+        const canonicalResult = await writeCanonicalProperty(proposal, operation);
         if (proposal.kind === "new") inserted += 1;
         else if (canonicalResult.changed) updated += 1;
-        const linkChanged = await writeSourceLinks(
+        const linkChanges = await writeSourceLinks(
           proposal,
           canonicalResult.propertyId,
           input.runId,
           gate.sourceApproved,
+          operation,
         );
-        await writeFieldStates(proposal, canonicalResult.propertyId);
-        await writeLifecycleState(proposal, canonicalResult.propertyId, input.runId);
-        await attachImageMedia(proposal, canonicalResult.propertyId, winningObservations);
+        await writeFieldStates(proposal, canonicalResult.propertyId, operation);
+        await writeLifecycleState(proposal, canonicalResult.propertyId, input.runId, operation);
+        await attachImageMedia(
+          proposal,
+          canonicalResult.propertyId,
+          winningObservations,
+          operation,
+        );
         events += await writeChangeEvents(
           proposal,
           canonicalResult.propertyId,
           input.runId,
           canonicalResult,
-          linkChanged,
+          linkChanges,
+          winningObservations,
+          operation,
         );
       }
-      await query("COMMIT", [], "commit publication transaction");
-      transactionStarted = false;
+      throwIfAborted(signal);
+      transactionState = "commit_attempted";
+      try {
+        await publicationQuery(
+          "COMMIT",
+          [],
+          "commit publication transaction",
+          "COMMIT",
+          operation,
+          { checkAfter: false },
+        );
+      } catch (error) {
+        throw new PublicationOutcomeUnknownError("MLS publication COMMIT outcome is unknown", {
+          cause: error,
+        });
+      }
+      transactionState = "committed";
       return Object.freeze({ inserted, updated, events });
     } catch (error) {
       const cleanupErrors = [];
-      if (transactionStarted) {
+      if (transactionState === "open") {
         try {
-          await query("ROLLBACK", [], "rollback publication transaction");
+          await publicationQuery(
+            "ROLLBACK",
+            [],
+            "rollback publication transaction",
+            "ROLLBACK",
+            undefined,
+          );
+          transactionState = "rolled_back";
         } catch (rollbackError) {
           cleanupErrors.push(rollbackError);
         }
+      }
+      if (signal?.aborted && Object.is(error, signal.reason)) throw error;
+      if (transactionState === "commit_attempted") {
+        throw error instanceof PublicationOutcomeUnknownError
+          ? error
+          : new PublicationOutcomeUnknownError("MLS publication COMMIT outcome is unknown", {
+              cause: error,
+            });
       }
       throw stablePublicationFailure(error, cleanupErrors);
     }
   }
 
-  async function assertLockSession() {
-    const rows = await query("SELECT 1 AS alive", [], "lock session assertion");
-    if (rows.length !== 1 || rows[0]?.alive !== 1) {
+  async function assertLockSession(operation, publication = false) {
+    const rows = publication
+      ? await publicationQuery(
+          "SELECT 1 AS alive",
+          [],
+          "lock session assertion",
+          "SELECT",
+          operation,
+        )
+      : await query("SELECT 1 AS alive", [], "lock session assertion", operation);
+    if (rows.length !== 1) {
+      throw new Error("lock session assertion failed");
+    }
+    if (publication) {
+      const row = exactPublicationRow(rows[0], new Set(["alive"]), "lock session row");
+      if (row.alive !== 1) throw new Error("lock session assertion failed");
+    } else if (rows[0]?.alive !== 1) {
       throw new Error("lock session assertion failed");
     }
   }

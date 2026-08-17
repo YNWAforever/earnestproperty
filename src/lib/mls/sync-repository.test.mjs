@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import { types as neonTypes } from "@neondatabase/serverless";
+import { Result as PgResult } from "pg";
 
 import { createSyncRepository } from "./sync-repository.mjs";
 import {
@@ -20,10 +21,31 @@ const OBSERVATION_ID = "33333333-3333-4333-8333-333333333333";
 const ASSET_ID = "44444444-4444-4444-8444-444444444444";
 const MEDIA_RECORD_ID = "45454545-4545-4454-8454-454545454545";
 const EVENT_ID = "56565656-5656-4565-8565-565656565656";
-const EXPECTED_UPDATED_AT = "2026-08-17T00:02:00.000Z";
+const EXPECTED_UPDATED_AT = "2026-08-17T00:02:00.000000Z";
 
-function result(rows = [], rowCount = rows.length) {
-  return { rows, rowCount, command: "SELECT", fields: [], oid: 0 };
+function result(rows = [], rowCount = rows.length, command = "SELECT") {
+  return { rows, rowCount, command, fields: [], oid: command === "SELECT" ? 0 : null };
+}
+
+function commandResult(command, overrides = {}) {
+  return {
+    rows: [],
+    rowCount: null,
+    command,
+    fields: [],
+    oid: null,
+    ...overrides,
+  };
+}
+
+function realPgResult(command, rows = [], rowCount = rows.length) {
+  const output = new PgResult();
+  output.command = command;
+  output.rows = rows;
+  output.rowCount = rowCount;
+  output.fields = [];
+  output.oid = null;
+  return output;
 }
 
 function compactSql(statement) {
@@ -259,8 +281,81 @@ function reconciledFieldWrites(canonical = canonicalWrite()) {
     lastPublishedValue: structuredClone(canonical[fieldName]),
     overrideValue: null,
     activeOverride: false,
-    winningObservationId: OBSERVATION_ID,
+    winningObservationId:
+      canonical[fieldName] != null &&
+      (!Array.isArray(canonical[fieldName]) || canonical[fieldName].length > 0)
+        ? OBSERVATION_ID
+        : null,
   }));
+}
+
+function publicationObservationRow(canonical = canonicalWrite(), overrides = {}) {
+  const fields = {};
+  for (const fieldName of [
+    "title_zh",
+    "title_en",
+    "district_slug",
+    "address",
+    "price",
+    "rent",
+    "saleable_area",
+    "gross_area",
+    "bedrooms",
+    "bathrooms",
+    "floor",
+    "orientation",
+    "features",
+    "description",
+    "status",
+  ]) {
+    const value = canonical[fieldName];
+    if (value != null && (!Array.isArray(value) || value.length > 0)) {
+      fields[fieldName] = structuredClone(value);
+    }
+  }
+  const mediaCandidates = canonical.images.length
+    ? [
+        {
+          url: "https://images.28hse.test/photo.png",
+          category: "listing_photo",
+          isPrimary: true,
+        },
+      ]
+    : [];
+  const payload = {
+    schemaVersion: 1,
+    fields,
+    rawFields: {},
+    sourceUpdatedAt: null,
+    parseWarnings: [],
+  };
+  const identity = {
+    id: OBSERVATION_ID,
+    run_id: RUN_ID,
+    source: SOURCE_28HSE,
+    external_listing_id: "3972001",
+    deal_type: canonical.deal_type,
+    property_no_normalized: canonical.canonical_property_no,
+    validation_state: "valid",
+    fetched_at: "2026-08-17T00:01:00.000Z",
+    payload,
+    media_candidates: mediaCandidates,
+  };
+  const row = { ...identity, ...overrides };
+  row.content_hash =
+    overrides.content_hash ??
+    stableObservationHash({
+      schemaVersion: row.payload.schemaVersion,
+      source: row.source,
+      externalId: row.external_listing_id,
+      dealType: row.deal_type,
+      propertyNoNormalized: row.property_no_normalized,
+      fields: row.payload.fields,
+      rawFields: row.payload.rawFields,
+      mediaCandidates: row.media_candidates,
+      sourceUpdatedAt: row.payload.sourceUpdatedAt,
+    });
+  return row;
 }
 
 function approvedBatch(overrides = {}) {
@@ -298,6 +393,20 @@ function approvedBatch(overrides = {}) {
         newValue: canonical.price,
         winningObservationId: OBSERVATION_ID,
         reason: "source_value_changed",
+      },
+      {
+        changeType: "link_change",
+        fieldName: null,
+        oldValue: null,
+        newValue: {
+          source: SOURCE_28HSE,
+          externalId: "3972001",
+          dealType: "sale",
+          matchKey: "sale:EP-0001",
+          status: "active",
+        },
+        winningObservationId: OBSERVATION_ID,
+        reason: "source_link_activated",
       },
     ],
     ...proposalOverrides,
@@ -347,21 +456,32 @@ function fakePublicationClient(options = {}) {
   const rows = options.shadowRows ?? approvedShadowRows(options.approvedShadowStreak ?? 7);
   const client = fakeClient((call) => {
     sql.push(call.statement);
+    options.onQuery?.(call);
     if (call.statement === "BEGIN ISOLATION LEVEL SERIALIZABLE") {
       events.push(call.statement);
-      return options.beginResult ?? result();
+      return options.beginResult ?? commandResult("BEGIN");
     }
     if (call.statement === "COMMIT" || call.statement === "ROLLBACK") {
       events.push(call.statement);
       if (call.statement === "ROLLBACK" && options.rollbackError) throw options.rollbackError;
-      return result();
+      if (call.statement === "COMMIT" && options.commitError) throw options.commitError;
+      if (call.statement === "COMMIT" && options.commitResult) return options.commitResult;
+      return commandResult(call.statement);
     }
-    if (/^SELECT 1 AS alive/.test(call.statement)) return result([{ alive: 1 }]);
+    if (/^SELECT 1 AS alive/.test(call.statement)) {
+      return options.sessionResult ?? result([{ alive: 1 }]);
+    }
     if (/FROM listing_sync_runs WHERE id = \$1 .*FOR UPDATE/.test(call.statement)) {
       return result([options.runRow ?? publicationRunRow(options.runOverrides)]);
     }
     if (/publication_shadow_streak/.test(call.statement)) return result(rows);
-    if (/SELECT id, updated_at/.test(call.statement) && /FROM properties/.test(call.statement)) {
+    if (/pg_advisory_xact_lock/.test(call.statement)) {
+      return result([{ acquired: 1 }]);
+    }
+    if (/FROM properties WHERE \(canonical_property_no/.test(call.statement)) {
+      return result(options.identityConflictRows ?? []);
+    }
+    if (/updated_at_token/.test(call.statement) && /FROM properties/.test(call.statement)) {
       const propertyId = call.params[0];
       const canonical =
         propertyId === PROPERTY_ID_2
@@ -374,7 +494,10 @@ function fakePublicationClient(options = {}) {
       return result([
         options.lockedRow ?? {
           id: propertyId,
-          updated_at: options.updatedAtConflict ? "2026-08-17T00:03:00.000Z" : EXPECTED_UPDATED_AT,
+          updated_at_token: options.updatedAtConflict
+            ? "2026-08-17T00:03:00.000000Z"
+            : EXPECTED_UPDATED_AT,
+          updated_at_matches_expected: !options.updatedAtConflict,
           ...canonical,
           price: options.unchanged ? canonical.price : 7_900_000,
         },
@@ -382,40 +505,34 @@ function fakePublicationClient(options = {}) {
     }
     if (/UPDATE properties SET/.test(call.statement)) {
       if (options.writeError) throw options.writeError;
-      return options.unchanged ? result() : result([{ id: call.params.at(-1) }]);
+      return options.unchanged
+        ? result([], 0, "UPDATE")
+        : result([{ id: call.params.at(-2) }], 1, "UPDATE");
     }
     if (/INSERT INTO properties/.test(call.statement)) {
       if (options.writeError) throw options.writeError;
-      return result([{ id: PROPERTY_ID }]);
+      return result([{ id: PROPERTY_ID }], 1, "INSERT");
     }
     if (
       /FROM listing_source_observations/.test(call.statement) &&
       /FOR UPDATE/.test(call.statement)
     ) {
       return result([
-        {
-          id: OBSERVATION_ID,
-          run_id: RUN_ID,
-          source: SOURCE_28HSE,
-          external_listing_id: "3972001",
-          deal_type: "sale",
-          property_no_normalized: "EP-0001",
-          validation_state: "valid",
-          fetched_at: "2026-08-17T00:01:00.000Z",
-        },
+        options.observationRow ??
+          publicationObservationRow(options.observationCanonical ?? canonicalWrite()),
       ]);
     }
     if (/FROM property_source_links/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
       return result(options.existingLink ? [options.existingLink] : []);
     }
     if (/INSERT INTO property_source_links/.test(call.statement)) {
-      return result([{ property_id: call.params[0] }]);
+      return result([{ property_id: call.params[0] }], 1, "INSERT");
     }
     if (/INSERT INTO property_sync_fields/.test(call.statement)) {
-      return result([{ property_id: call.params[0] }]);
+      return result([{ property_id: call.params[0] }], 1, "INSERT");
     }
     if (/INSERT INTO property_sync_state/.test(call.statement)) {
-      return result([{ property_id: call.params[0] }]);
+      return result([{ property_id: call.params[0] }], 1, "INSERT");
     }
     if (/FROM listing_media_records/.test(call.statement) && /FOR UPDATE/.test(call.statement)) {
       return result(
@@ -424,18 +541,21 @@ function fakePublicationClient(options = {}) {
             id: MEDIA_RECORD_ID,
             observation_id: OBSERVATION_ID,
             property_id: options.mediaPropertyId ?? null,
-            source_url: "https://owned.example/mls/hash.png",
+            source_url: "https://images.28hse.test/photo.png",
             eligibility: "eligible",
             owned_media_asset_id: ASSET_ID,
+            record_content_hash: "a".repeat(64),
+            owned_url: "https://owned.example/mls/hash.png",
+            asset_content_hash: "a".repeat(64),
           },
         ],
       );
     }
     if (/UPDATE listing_media_records/.test(call.statement)) {
-      return result([{ id: MEDIA_RECORD_ID, property_id: call.params[1] }]);
+      return result([{ id: MEDIA_RECORD_ID, property_id: call.params[1] }], 1, "UPDATE");
     }
     if (/INSERT INTO listing_change_events/.test(call.statement)) {
-      return result([{ id: EVENT_ID }]);
+      return result([{ id: EVENT_ID }], 1, "INSERT");
     }
     throw new Error(`unexpected publication query: ${call.statement}`);
   });
@@ -1847,7 +1967,7 @@ test("candidate discovery returns only the narrow exact normalized identity proj
         canonical_property_no: " ＥＰ- ０００１ ",
         legacy_property_no: "EP-LEGACY",
         deal_type: "sale",
-        updated_at: "2026-08-17T00:00:00.000Z",
+        updated_at: "2026-08-17T00:00:00.000000Z",
       },
       {
         id: PROPERTY_ID_2,
@@ -1855,7 +1975,7 @@ test("candidate discovery returns only the narrow exact normalized identity proj
         canonical_property_no: null,
         legacy_property_no: " ep-0002 ",
         deal_type: "rent",
-        updated_at: "2026-08-17T00:00:01.000Z",
+        updated_at: "2026-08-17T00:00:01.000000Z",
       },
       {
         id: "24242424-2424-4242-8242-242424242424",
@@ -1863,7 +1983,7 @@ test("candidate discovery returns only the narrow exact normalized identity proj
         canonical_property_no: "EP-9999",
         legacy_property_no: null,
         deal_type: "sale",
-        updated_at: "2026-08-17T00:00:02.000Z",
+        updated_at: "2026-08-17T00:00:02.000000Z",
       },
     ]),
   );
@@ -1879,7 +1999,7 @@ test("candidate discovery returns only the narrow exact normalized identity proj
       canonical_property_no: "EP-0002",
       legacy_property_no: "EP-0002",
       deal_type: "rent",
-      updated_at: "2026-08-17T00:00:01.000Z",
+      updated_at: "2026-08-17T00:00:01.000000Z",
     },
     {
       id: PROPERTY_ID,
@@ -1887,13 +2007,13 @@ test("candidate discovery returns only the narrow exact normalized identity proj
       canonical_property_no: "EP-0001",
       legacy_property_no: "EP-LEGACY",
       deal_type: "sale",
-      updated_at: "2026-08-17T00:00:00.000Z",
+      updated_at: "2026-08-17T00:00:00.000000Z",
     },
   ]);
   const statement = client.calls[0].statement;
   assert.match(
     statement,
-    /^SELECT id, listing_no, canonical_property_no, legacy_property_no, deal_type, updated_at FROM properties/,
+    /^SELECT id, listing_no, canonical_property_no, legacy_property_no, deal_type, to_char\(updated_at/,
   );
   assert.doesNotMatch(statement, /title|description|images|price|address/i);
   assert.match(statement, /ORDER BY id ASC LIMIT \$3/);
@@ -1907,7 +2027,7 @@ test("candidate discovery pages deterministically and rejects malformed rows", a
     canonical_property_no: `EP-${index + 1}`,
     legacy_property_no: null,
     deal_type: "sale",
-    updated_at: "2026-08-17T00:00:00.000Z",
+    updated_at: "2026-08-17T00:00:00.000000Z",
   }));
   const client = fakeClient((_call, index) => result(index === 0 ? page : []));
   await createSyncRepository({ client }).findCanonicalCandidates(["sale:EP-1"]);
@@ -1921,7 +2041,7 @@ test("candidate discovery pages deterministically and rejects malformed rows", a
   );
 });
 
-test("Neon driver timestamp objects become canonical repository strings", async () => {
+test("non-version timestamps normalize driver Dates while row versions require lossless SQL text", async () => {
   const timestamp = new Date("2026-08-17T00:00:00.000Z");
   const candidateClient = fakeClient(() =>
     result([
@@ -1931,14 +2051,14 @@ test("Neon driver timestamp objects become canonical repository strings", async 
         canonical_property_no: "EP-0001",
         legacy_property_no: null,
         deal_type: "sale",
-        updated_at: timestamp,
+        updated_at: "2026-08-17T00:00:00.000000Z",
       },
     ]),
   );
   const [candidate] = await createSyncRepository({
     client: candidateClient,
   }).findCanonicalCandidates(["sale:EP-0001"]);
-  assert.equal(candidate.updated_at, timestamp.toISOString());
+  assert.equal(candidate.updated_at, "2026-08-17T00:00:00.000000Z");
 
   const fieldClient = fakeClient(() =>
     result([
@@ -2941,7 +3061,7 @@ test("canonical, link, field, lifecycle, media, and event writes share one trans
   const client = fakePublicationClient();
   const resultValue = await createSyncRepository({ client }).publishBatch(approvedBatch());
 
-  assert.deepEqual(resultValue, { inserted: 0, updated: 1, events: 1 });
+  assert.deepEqual(resultValue, { inserted: 0, updated: 1, events: 2 });
   assert.equal(client.events[0], "BEGIN ISOLATION LEVEL SERIALIZABLE");
   assert.equal(client.events.at(-1), "COMMIT");
   for (const table of [
@@ -2996,8 +3116,20 @@ test("publication preserves the primary write error when rollback also fails", a
 });
 
 test("unchanged canonical proposals neither touch updated_at nor emit caller-claimed changes", async () => {
-  const client = fakePublicationClient({ unchanged: true });
-  const outcome = await createSyncRepository({ client }).publishBatch(approvedBatch());
+  const client = fakePublicationClient({
+    unchanged: true,
+    existingLink: {
+      property_id: PROPERTY_ID,
+      match_key: "sale:EP-0001",
+      status: "active",
+      first_seen_at: "2026-08-16T00:01:00.000Z",
+      last_seen_at: "2026-08-17T00:01:00.000Z",
+      last_seen_run_id: RUN_ID,
+    },
+  });
+  const batch = approvedBatch();
+  batch.proposals[0].events = [];
+  const outcome = await createSyncRepository({ client }).publishBatch(batch);
 
   assert.deepEqual(outcome, { inserted: 0, updated: 0, events: 0 });
   assert.equal(
@@ -3012,6 +3144,7 @@ test("unchanged canonical proposals neither touch updated_at nor emit caller-cla
 test("publication sorts update locks by UUID and new inserts by listing number", async () => {
   const client = fakePublicationClient({ unchanged: true });
   const first = approvedBatch().proposals[0];
+  first.events = first.events.filter((event) => event.changeType === "link_change");
   const second = structuredClone(first);
   second.propertyId = PROPERTY_ID_2;
   second.canonical.listing_no = "EP-0002";
@@ -3026,8 +3159,7 @@ test("publication sorts update locks by UUID and new inserts by listing number",
   await createSyncRepository({ client }).publishBatch(batch);
   const lockIds = client.calls
     .filter(
-      (call) =>
-        /SELECT id, updated_at/.test(call.statement) && /FROM properties/.test(call.statement),
+      (call) => /updated_at_token/.test(call.statement) && /FROM properties/.test(call.statement),
     )
     .map((call) => call.params[0]);
   assert.deepEqual(lockIds, [PROPERTY_ID, PROPERTY_ID_2]);
@@ -3055,6 +3187,43 @@ test("the whole batch is snapshotted before the first awaited session check", as
   const serializedParams = JSON.stringify(client.calls.map((call) => call.params));
   assert.doesNotMatch(serializedParams, /MUTATED/);
   assert.doesNotMatch(serializedParams, /mutated\.invalid/);
+});
+
+test("locked canonical array evidence is snapshotted before later transaction awaits", async () => {
+  const oldImages = ["https://owned.example/mls/old.png"];
+  const current = canonicalWrite({ price: 7_900_000, images: oldImages });
+  const batch = approvedBatch();
+  batch.proposals[0].events.splice(1, 0, {
+    changeType: "changed",
+    fieldName: "images",
+    oldValue: [...oldImages],
+    newValue: structuredClone(batch.proposals[0].canonical.images),
+    winningObservationId: OBSERVATION_ID,
+    reason: "source_media_changed",
+  });
+  const client = fakePublicationClient({
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...current,
+    },
+    onQuery(call) {
+      if (/WHERE run_id = \$1::uuid AND source = \$2/.test(call.statement)) {
+        oldImages[0] = "https://mutated.invalid/after-lock.png";
+      }
+    },
+  });
+
+  assert.deepEqual(await createSyncRepository({ client }).publishBatch(batch), {
+    inserted: 0,
+    updated: 1,
+    events: 3,
+  });
+  const eventParams = client.calls
+    .filter((call) => /INSERT INTO listing_change_events/.test(call.statement))
+    .map((call) => call.params);
+  assert.doesNotMatch(JSON.stringify(eventParams), /mutated\.invalid/);
 });
 
 test("publication rejects accessor, duplicate, and extraneous nested evidence before SQL", async () => {
@@ -3103,8 +3272,8 @@ test("degraded publication resets lifecycle and forbids inactivity events", asyn
     canonical: canonicalWrite({ status: "inactive" }),
     proposal: {
       lifecycle: {
-        consecutiveAbsentHealthyRuns: 1,
-        inactiveReason: "absent_three_healthy_runs",
+        consecutiveAbsentHealthyRuns: 2,
+        inactiveReason: "absent_two_healthy_runs",
         inactiveAt: "2026-08-17T04:00:00.000Z",
       },
       events: [
@@ -3114,7 +3283,7 @@ test("degraded publication resets lifecycle and forbids inactivity events", asyn
           oldValue: "active",
           newValue: "inactive",
           winningObservationId: null,
-          reason: "absent_three_healthy_runs",
+          reason: "absent_two_healthy_runs",
         },
       ],
     },
@@ -3247,18 +3416,17 @@ test("new image-bearing proposals require a current-run images winner", async ()
   assert.equal(client.calls.length, 0);
 });
 
-test("malformed BEGIN results still trigger rollback with primary-error precedence", async () => {
+test("malformed BEGIN results never claim an open transaction or issue rollback", async () => {
   const malformed = { rows: "not-an-array", rowCount: null };
-  const rollback = new Error("rollback after malformed begin failed");
-  const client = fakePublicationClient({ beginResult: malformed, rollbackError: rollback });
+  const client = fakePublicationClient({ beginResult: malformed });
 
   await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
     assert.equal(error.name, "PublicationError");
     assert.match(error.message, /malformed database result/i);
-    assert.deepEqual(error.cleanupErrors, [rollback]);
+    assert.deepEqual(error.cleanupErrors, []);
     return true;
   });
-  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE"]);
 });
 
 test("empty primary error messages cannot displace the primary or rollback error", async () => {
@@ -3311,12 +3479,17 @@ test("malformed or accessor-backed publication rows fail closed without reading 
 test("change events must describe a field that actually changed from the locked canonical row", async () => {
   const current = canonicalWrite({ title_zh: "Old title", price: 8_000_001 });
   const client = fakePublicationClient({
-    lockedRow: { id: PROPERTY_ID, updated_at: EXPECTED_UPDATED_AT, ...current },
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...current,
+    },
   });
 
   await assert.rejects(
     createSyncRepository({ client }).publishBatch(approvedBatch()),
-    /change event.*current|event.*real change|locked canonical/i,
+    /change event.*current|event.*real change|locked canonical|changed canonical field|event coverage/i,
   );
   assert.equal(client.events.at(-1), "ROLLBACK");
   assert.equal(client.events.includes("COMMIT"), false);
@@ -3367,8 +3540,8 @@ test("inactive and reactivated events must publish the exact canonical status", 
   batch.proposals[0].fields.find((field) => field.fieldName === "status").lastPublishedValue =
     "inactive";
   batch.proposals[0].lifecycle = {
-    consecutiveAbsentHealthyRuns: 3,
-    inactiveReason: "absent_three_healthy_runs",
+    consecutiveAbsentHealthyRuns: 2,
+    inactiveReason: "absent_two_healthy_runs",
     inactiveAt: "2026-08-17T04:00:00.000Z",
   };
   batch.proposals[0].events = [
@@ -3378,7 +3551,7 @@ test("inactive and reactivated events must publish the exact canonical status", 
       oldValue: "active",
       newValue: "sold",
       winningObservationId: null,
-      reason: "absent_three_healthy_runs",
+      reason: "absent_two_healthy_runs",
     },
   ];
   const client = fakePublicationClient();
@@ -3428,7 +3601,7 @@ test("same-HK-date shadow approval is accepted only when it predates the publish
   assert.deepEqual(await createSyncRepository({ client }).publishBatch(approvedBatch()), {
     inserted: 0,
     updated: 1,
-    events: 1,
+    events: 2,
   });
 });
 
@@ -3437,6 +3610,555 @@ test("pre-publication repository methods still never mutate canonical properties
   const beforePublication = source.split(/function exactPublicationRow\b/)[0];
   assert.doesNotMatch(beforePublication, /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+properties\b/i);
   assert.doesNotMatch(source, /legacy_detail_id\s*=\s*EXCLUDED\.legacy_detail_id/i);
+});
+
+test("real pg and class-shaped QueryResult instances are accepted without relaxing row access", async () => {
+  class DriverResult {
+    constructor(rows) {
+      this.rows = rows;
+      this.rowCount = rows.length;
+      this.command = "SELECT";
+      this.fields = [];
+      this.oid = null;
+    }
+  }
+
+  for (const queryResult of [
+    new DriverResult([{ alive: 1 }]),
+    realPgResult("SELECT", [{ alive: 1 }]),
+  ]) {
+    const repository = createSyncRepository({
+      client: { query: async () => queryResult },
+    });
+    await repository.assertLockSession();
+  }
+});
+
+test("publication session and nested health rows reject accessors without invoking them", async () => {
+  let sessionReads = 0;
+  const sessionRow = {};
+  Object.defineProperty(sessionRow, "alive", {
+    enumerable: true,
+    get() {
+      sessionReads += 1;
+      return 1;
+    },
+  });
+  const sessionClient = fakePublicationClient({ sessionResult: result([sessionRow]) });
+  await assert.rejects(
+    createSyncRepository({ client: sessionClient }).publishBatch(approvedBatch()),
+    /accessor|data propert/i,
+  );
+  assert.equal(sessionReads, 0);
+  assert.equal(sessionClient.events.length, 0);
+
+  let healthReads = 0;
+  const nestedStatus = healthySourceStatus();
+  Object.defineProperty(nestedStatus[SOURCE_28HSE], "healthy", {
+    enumerable: true,
+    get() {
+      healthReads += 1;
+      return true;
+    },
+  });
+  const healthClient = fakePublicationClient({
+    runOverrides: { source_status: nestedStatus },
+  });
+  await assert.rejects(
+    createSyncRepository({ client: healthClient }).publishBatch(approvedBatch()),
+    /accessor|data propert/i,
+  );
+  assert.equal(healthReads, 0);
+  assert.equal(healthClient.events.at(-1), "ROLLBACK");
+});
+
+test("publication validates command and rowCount and accepts a real pg BEGIN result", async () => {
+  const realBegin = fakePublicationClient({
+    beginResult: realPgResult("BEGIN", [], null),
+  });
+  await createSyncRepository({ client: realBegin }).publishBatch(approvedBatch());
+
+  const wrongCommand = fakePublicationClient({
+    beginResult: commandResult("SELECT"),
+  });
+  await assert.rejects(
+    createSyncRepository({ client: wrongCommand }).publishBatch(approvedBatch()),
+    /BEGIN|command|database result/i,
+  );
+  assert.deepEqual(wrongCommand.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE"]);
+
+  const inconsistentCount = fakePublicationClient({
+    sessionResult: result([{ alive: 1 }], 0),
+  });
+  await assert.rejects(
+    createSyncRepository({ client: inconsistentCount }).publishBatch(approvedBatch()),
+    /rowCount|database result/i,
+  );
+  assert.equal(inconsistentCount.events.length, 0);
+});
+
+test("canonical images are resolved through the owned media asset URL, not the upstream source URL", () => {
+  const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
+  const attachmentSource = source.slice(
+    source.indexOf("async function attachImageMedia"),
+    source.indexOf("function eventIsReal"),
+  );
+  assert.match(attachmentSource, /JOIN\s+media_assets/i);
+  assert.match(attachmentSource, /owned_media_asset_id/i);
+  assert.match(attachmentSource, /(?:media_assets|\bma\b)\.url\s*=\s*ANY/i);
+  assert.doesNotMatch(attachmentSource, /source_url\s*=\s*ANY/i);
+});
+
+test("owned image records must originate from an exact candidate in the winning observation", async () => {
+  const client = fakePublicationClient({
+    mediaRows: [
+      {
+        id: MEDIA_RECORD_ID,
+        observation_id: OBSERVATION_ID,
+        property_id: null,
+        source_url: "https://images.28hse.test/not-in-observation.png",
+        eligibility: "eligible",
+        owned_media_asset_id: ASSET_ID,
+        record_content_hash: "a".repeat(64),
+        owned_url: "https://owned.example/mls/hash.png",
+        asset_content_hash: "a".repeat(64),
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /media.*candidate|upstream.*observation|winning observation.*media/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(
+    client.sql.some((statement) => /UPDATE listing_media_records/.test(statement)),
+    false,
+  );
+});
+
+test("active overrides publish the staff value while retaining an independent automated baseline", async () => {
+  const canonical = canonicalWrite({ price: 12_000_000 });
+  const batch = approvedBatch({ canonical });
+  const price = batch.proposals[0].fields.find((field) => field.fieldName === "price");
+  price.lastPublishedValue = 10_000_000;
+  price.overrideValue = 12_000_000;
+  price.activeOverride = true;
+  price.winningObservationId = null;
+  batch.proposals[0].events[0] = {
+    ...batch.proposals[0].events[0],
+    newValue: 12_000_000,
+    winningObservationId: null,
+    reason: "staff_override_preserved",
+  };
+
+  await createSyncRepository({ client: fakePublicationClient() }).publishBatch(batch);
+});
+
+test("candidate row versions preserve PostgreSQL microseconds and updates prove SQL timestamp equality", async () => {
+  const parseTimestamptz = neonTypes.getTypeParser(1184, "text");
+  const first = parseTimestamptz("2026-08-17 00:02:00.000001+00");
+  const second = parseTimestamptz("2026-08-17 00:02:00.000999+00");
+  assert.equal(first.toISOString(), second.toISOString());
+
+  const lossless = "2026-08-17T00:02:00.000001Z";
+  const candidateClient = fakeClient(() =>
+    result([
+      {
+        id: PROPERTY_ID,
+        listing_no: "EP-0001",
+        canonical_property_no: "EP-0001",
+        legacy_property_no: null,
+        deal_type: "sale",
+        updated_at: lossless,
+      },
+    ]),
+  );
+  const [candidate] = await createSyncRepository({
+    client: candidateClient,
+  }).findCanonicalCandidates(["sale:EP-0001"]);
+  assert.equal(candidate.updated_at, lossless);
+  assert.match(candidateClient.calls[0].statement, /to_char\s*\(\s*updated_at/i);
+  assert.match(candidateClient.calls[0].statement, /\.US/);
+
+  const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
+  const publication = source.slice(source.indexOf("async function writeCanonicalProperty"));
+  assert.match(
+    publication,
+    /updated_at\s*=\s*\$\d+::timestamptz\s+AS\s+updated_at_matches_expected/i,
+  );
+  assert.match(publication, /AND\s+updated_at\s*=\s*\$\d+::timestamptz/i);
+});
+
+test("winning observations load normalized payload and content evidence and events use the field winner", async () => {
+  const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
+  const winnerLoader = source.slice(
+    source.indexOf("async function loadWinningObservations"),
+    source.indexOf("const CANONICAL_PARAMS"),
+  );
+  assert.match(winnerLoader, /payload/);
+  assert.match(winnerLoader, /content_hash/);
+  assert.match(winnerLoader, /media_candidates/);
+
+  const batch = approvedBatch();
+  batch.proposals[0].events[0].winningObservationId = null;
+  await assert.rejects(
+    createSyncRepository({ client: fakePublicationClient() }).publishBatch(batch),
+    /event.*winner|field.*winner|provenance/i,
+  );
+});
+
+test("new proposals with no links, winners, or owned primary image fail before session SQL", async () => {
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.kind = "new";
+  delete proposal.propertyId;
+  delete proposal.expectedUpdatedAt;
+  proposal.canonical.images = [];
+  proposal.links = [];
+  proposal.fields = proposal.fields.map((field) => ({
+    ...field,
+    lastPublishedValue: structuredClone(proposal.canonical[field.fieldName]),
+    winningObservationId: null,
+  }));
+  proposal.events = [
+    {
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: structuredClone(proposal.canonical),
+      winningObservationId: null,
+      reason: "new_listing",
+    },
+  ];
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /new.*(?:link|winner|image)|owned primary image/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("canonical property number plus deal type is deduplicated before SQL", async () => {
+  const first = structuredClone(approvedBatch().proposals[0]);
+  first.links = [];
+  first.canonical.images = [];
+  first.fields = first.fields.map((field) => ({
+    ...field,
+    lastPublishedValue: structuredClone(first.canonical[field.fieldName]),
+    winningObservationId: null,
+  }));
+  first.events = [];
+  const second = structuredClone(first);
+  second.propertyId = PROPERTY_ID_2;
+  second.canonical.listing_no = "EP-0002";
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [first, second] })),
+    /duplicate canonical identity|property number.*deal type/i,
+  );
+  assert.equal(client.calls.length, 0);
+});
+
+test("new identities are transaction-serialized and updates cannot mutate locked identity", async () => {
+  const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
+  const canonicalWriter = source.slice(
+    source.indexOf("async function assertNewIdentityAvailable"),
+    source.indexOf("async function writeSourceLinks"),
+  );
+  assert.match(canonicalWriter, /pg_advisory_xact_lock/i);
+  assert.match(canonicalWriter, /canonical_property_no\s*=\s*\$\d+/i);
+  assert.match(canonicalWriter, /deal_type\s*=\s*\$\d+::deal_type/i);
+
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.canonical.canonical_property_no = "EP-CHANGED";
+  proposal.links = [];
+  proposal.canonical.images = [];
+  proposal.fields = proposal.fields.map((field) => ({
+    ...field,
+    lastPublishedValue: structuredClone(proposal.canonical[field.fieldName]),
+    winningObservationId: null,
+  }));
+  proposal.events = [];
+  await assert.rejects(
+    createSyncRepository({ client: fakePublicationClient() }).publishBatch(
+      approvedBatch({ proposals: [proposal] }),
+    ),
+    (error) => error?.name === "PublicationConflictError",
+  );
+});
+
+test("a new proposal locks both identities and publishes one exact new plus link event", async () => {
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.kind = "new";
+  delete proposal.propertyId;
+  delete proposal.expectedUpdatedAt;
+  proposal.events = [
+    {
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: structuredClone(proposal.canonical),
+      winningObservationId: OBSERVATION_ID,
+      reason: "new_listing",
+    },
+    proposal.events.find((event) => event.changeType === "link_change"),
+  ];
+  const client = fakePublicationClient();
+
+  assert.deepEqual(
+    await createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    { inserted: 1, updated: 0, events: 2 },
+  );
+  assert.equal(client.sql.filter((statement) => /pg_advisory_xact_lock/.test(statement)).length, 2);
+  assert.equal(
+    client.sql.some(
+      (statement) => /FROM properties/.test(statement) && /canonical_property_no/.test(statement),
+    ),
+    true,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE properties SET/.test(statement)),
+    false,
+  );
+});
+
+test("every changed field and real link delta requires one exact semantic event", async () => {
+  const canonical = canonicalWrite({ title_zh: "全新標題" });
+  const missingField = approvedBatch({ canonical });
+  missingField.proposals[0].fields.find(
+    (field) => field.fieldName === "title_zh",
+  ).lastPublishedValue = canonical.title_zh;
+  await assert.rejects(
+    createSyncRepository({
+      client: fakePublicationClient({ observationCanonical: canonical }),
+    }).publishBatch(missingField),
+    /every changed field|missing.*event|event coverage/i,
+  );
+
+  const missingLink = approvedBatch();
+  missingLink.proposals[0].events = missingLink.proposals[0].events.filter(
+    (event) => event.changeType !== "link_change",
+  );
+  await assert.rejects(
+    createSyncRepository({ client: fakePublicationClient() }).publishBatch(missingLink),
+    /link.*event|event coverage/i,
+  );
+});
+
+test("status transitions cannot hide as changed and lifecycle evidence is bound to inactive state", async () => {
+  const current = canonicalWrite({ status: "active" });
+  const canonical = canonicalWrite({ status: "inactive" });
+  const generic = approvedBatch({
+    canonical,
+    proposal: {
+      lifecycle: {
+        consecutiveAbsentHealthyRuns: 2,
+        inactiveReason: "absent_two_healthy_runs",
+        inactiveAt: "2026-08-17T04:00:00.000Z",
+      },
+      events: [
+        {
+          changeType: "changed",
+          fieldName: "status",
+          oldValue: "active",
+          newValue: "inactive",
+          winningObservationId: null,
+          reason: "absent_two_healthy_runs",
+        },
+      ],
+    },
+  });
+  const statusField = generic.proposals[0].fields.find((field) => field.fieldName === "status");
+  statusField.lastPublishedValue = "inactive";
+  statusField.winningObservationId = null;
+  await assert.rejects(
+    createSyncRepository({
+      client: fakePublicationClient({
+        lockedRow: { id: PROPERTY_ID, updated_at: EXPECTED_UPDATED_AT, ...current },
+      }),
+    }).publishBatch(generic),
+    /inactive event|status transition/i,
+  );
+
+  const wrongCounter = structuredClone(generic);
+  wrongCounter.proposals[0].events[0].changeType = "inactive";
+  wrongCounter.proposals[0].lifecycle.consecutiveAbsentHealthyRuns = 1;
+  await assert.rejects(
+    createSyncRepository({
+      client: fakePublicationClient({
+        lockedRow: { id: PROPERTY_ID, updated_at: EXPECTED_UPDATED_AT, ...current },
+      }),
+    }).publishBatch(wrongCounter),
+    /two healthy|counter|lifecycle/i,
+  );
+});
+
+test("inactive lifecycle effective time must equal the locked publish-run start", async () => {
+  const current = canonicalWrite({ status: "active" });
+  const canonical = canonicalWrite({ status: "inactive" });
+  const proposal = approvedBatch({ canonical }).proposals[0];
+  proposal.links = [];
+  proposal.fields = proposal.fields.map((field) => ({ ...field, winningObservationId: null }));
+  proposal.lifecycle = {
+    consecutiveAbsentHealthyRuns: 2,
+    inactiveReason: "absent_two_healthy_runs",
+    inactiveAt: "2026-08-18T04:00:00.000Z",
+  };
+  proposal.events = [
+    {
+      changeType: "inactive",
+      fieldName: "status",
+      oldValue: "active",
+      newValue: "inactive",
+      winningObservationId: null,
+      reason: "absent_two_healthy_runs",
+    },
+  ];
+  const client = fakePublicationClient({
+    lockedRow: {
+      id: PROPERTY_ID,
+      updated_at_token: EXPECTED_UPDATED_AT,
+      updated_at_matches_expected: true,
+      ...current,
+    },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /inactive.*time|effective.*run|run.*start/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("a new event contains the exact inserted canonical row", async () => {
+  const proposal = structuredClone(approvedBatch().proposals[0]);
+  proposal.kind = "new";
+  delete proposal.propertyId;
+  delete proposal.expectedUpdatedAt;
+  proposal.events = [
+    {
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: { listing_no: proposal.canonical.listing_no },
+      winningObservationId: OBSERVATION_ID,
+      reason: "new_listing",
+    },
+  ];
+  await assert.rejects(
+    createSyncRepository({ client: fakePublicationClient() }).publishBatch(
+      approvedBatch({ proposals: [proposal] }),
+    ),
+    /new event.*exact|exact.*canonical/i,
+  );
+});
+
+test("COMMIT ambiguity is typed and never followed by an illegal rollback", async () => {
+  const commitFailure = new Error("connection ended while awaiting COMMIT");
+  const client = fakePublicationClient({ commitError: commitFailure });
+  await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), (error) => {
+    assert.equal(error.name, "PublicationOutcomeUnknownError");
+    assert.equal(error.code, "MLS_PUBLICATION_OUTCOME_UNKNOWN");
+    assert.equal(error.cause, commitFailure);
+    return true;
+  });
+  assert.deepEqual(client.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "COMMIT"]);
+
+  const malformedCommit = fakePublicationClient({
+    commitResult: commandResult("UPDATE"),
+  });
+  await assert.rejects(
+    createSyncRepository({ client: malformedCommit }).publishBatch(approvedBatch()),
+    (error) => error?.name === "PublicationOutcomeUnknownError",
+  );
+  assert.deepEqual(malformedCommit.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "COMMIT"]);
+});
+
+test("publication cancellation preserves the exact abort reason and rolls back only an open transaction", async () => {
+  const preController = new AbortController();
+  const preReason = Object.freeze({ code: "pre-abort" });
+  preController.abort(preReason);
+  const preClient = fakePublicationClient();
+  await assert.rejects(
+    createSyncRepository({ client: preClient }).publishBatch({
+      ...approvedBatch(),
+      signal: preController.signal,
+    }),
+    (error) => error === preReason,
+  );
+  assert.equal(preClient.calls.length, 0);
+
+  const midController = new AbortController();
+  const midReason = Object.freeze({ code: "mid-transaction-abort" });
+  const midClient = fakePublicationClient({
+    onQuery(call) {
+      if (/FROM listing_sync_runs/.test(call.statement)) midController.abort(midReason);
+    },
+  });
+  await assert.rejects(
+    createSyncRepository({ client: midClient }).publishBatch({
+      ...approvedBatch(),
+      signal: midController.signal,
+    }),
+    (error) => error === midReason,
+  );
+  assert.deepEqual(midClient.events, ["BEGIN ISOLATION LEVEL SERIALIZABLE", "ROLLBACK"]);
+});
+
+test("an abort observed after a publication query beats a malformed local result", async () => {
+  const controller = new AbortController();
+  const reason = Object.freeze({ code: "abort-after-query" });
+  const client = fakePublicationClient({
+    sessionResult: commandResult("UPDATE"),
+    onQuery(call) {
+      if (/^SELECT 1 AS alive/.test(call.statement)) controller.abort(reason);
+    },
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch({
+      ...approvedBatch(),
+      signal: controller.signal,
+    }),
+    (error) => error === reason,
+  );
+  assert.equal(client.events.length, 0);
+});
+
+test("publication snapshots reject every non-index, hidden, symbol, or accessor array key before SQL", async () => {
+  const cases = [
+    (array) => Object.defineProperty(array, "hidden", { value: true }),
+    (array) => Object.defineProperty(array, "visible", { enumerable: true, value: true }),
+    (array) => Object.defineProperty(array, Symbol("evidence"), { value: true }),
+    (array, reads) =>
+      Object.defineProperty(array, "accessor", {
+        get() {
+          reads.count += 1;
+          return true;
+        },
+      }),
+  ];
+  for (const mutate of cases) {
+    const batch = approvedBatch();
+    const reads = { count: 0 };
+    mutate(batch.proposals, reads);
+    const client = fakePublicationClient();
+    await assert.rejects(
+      createSyncRepository({ client }).publishBatch(batch),
+      /array|hidden|symbol|accessor|unexpected/i,
+    );
+    assert.equal(reads.count, 0);
+    assert.equal(client.calls.length, 0);
+  }
+});
+
+test("Task 9 declarations expose cancellation and unknown publication outcomes", () => {
+  const declaration = readFileSync(new URL("./sync-repository.d.mts", import.meta.url), "utf8");
+  assert.match(declaration, /class PublicationOutcomeUnknownError/);
+  assert.match(declaration, /MLS_PUBLICATION_OUTCOME_UNKNOWN/);
+  assert.match(declaration, /interface PublicationBatchInput[\s\S]*signal\?:\s*AbortSignal/);
 });
 
 test("declarations preserve strict Task 6, 7, 9, and 10 handoffs", () => {
