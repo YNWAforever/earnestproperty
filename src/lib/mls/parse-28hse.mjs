@@ -84,6 +84,23 @@ function requireAgentPageUrl(pageUrl, dealType) {
   return url;
 }
 
+function requireDetailUrl(sourceUrl, dealType) {
+  let url;
+  try {
+    url = new URL(sourceUrl);
+  } catch {
+    throw new TypeError("Unexpected 28Hse detail source URL");
+  }
+  const pathDeal = dealType === "sale" ? "buy" : "rent";
+  const externalId = url.pathname.match(
+    new RegExp(`^/${pathDeal}/[^/]+/property-(\\d+)/?$`, "i"),
+  )?.[1];
+  if (url.protocol !== "https:" || url.hostname !== "www.28hse.com" || !externalId) {
+    throw new TypeError("Unexpected 28Hse detail source URL");
+  }
+  return { url, externalId };
+}
+
 function requiredText(value, name) {
   const text = normalizeText(value);
   if (!text) throw new Error(`Missing required ${name}`);
@@ -141,16 +158,20 @@ function detailPairs($) {
 }
 
 function imageIsExcluded($, image, url) {
-  const surrounding = [
-    url,
-    $(image).attr("alt"),
-    $(image).attr("class"),
-    $(image).closest("[class], [id]").attr("class"),
-    $(image).closest("[class], [id]").attr("id"),
-  ].join(" ");
-  return /(?:map|floor[ _-]?plan|unit[ _-]?plan|qr|\bvr\b|logo|avatar|\bad\b|sponsor|28hse[ _-]?(?:logo|brand))/i.test(
-    surrounding,
-  );
+  const forbidden =
+    /(?:map|floor[ _-]?plan|unit[ _-]?plan|qr|\bvr\b|logo|avatar|\bad\b|sponsor|28hse[ _-]?(?:logo|brand))/i;
+  let node = $(image);
+  const gallery = node.closest(".listing-gallery, [data-listing-gallery]");
+  while (node.length) {
+    const signals = [
+      node.is("img") ? url : "",
+      ...Object.entries(node.get(0)?.attribs ?? {}).flat(),
+    ].join(" ");
+    if (forbidden.test(signals)) return true;
+    if (gallery.length && node.get(0) === gallery.get(0)) break;
+    node = node.parent();
+  }
+  return false;
 }
 
 function extractGallery($, sourceUrl) {
@@ -177,10 +198,14 @@ export function build28HseAgentUrl(dealType, page) {
 }
 
 export function detect28HseChallenge(html) {
-  const text = normalizeText(load(String(html ?? ""))("body").text()).toLowerCase();
+  const markup = String(html ?? "").toLowerCase();
+  const text = normalizeText(load(markup).text()).toLowerCase();
   return (
     !text ||
-    /captcha|cloudflare|verify you are human|challenge|access denied|登入|login|sign in/.test(text)
+    /captcha|cloudflare|verify you are human|challenge|access denied|登入|login|sign in|just a moment/.test(
+      text,
+    ) ||
+    /cf-chl-|challenge-platform|data-cf-challenge-platform/.test(markup)
   );
 }
 
@@ -239,6 +264,9 @@ export function parse28HseAgentIndex(html, context) {
     linksById.set(externalId, { externalId, url, summaryTitle });
   });
   const links = [...linksById.values()].sort((a, b) => a.externalId.localeCompare(b.externalId));
+  if (counts[0] < links.length) {
+    throw new Error("Unexpected agent index count: advertised count is smaller than unique links");
+  }
   return {
     companyName,
     companyLicence: AGENT_LICENCE,
@@ -256,9 +284,7 @@ export function parse28HseAgentIndex(html, context) {
 
 export function parse28HseDetail(html, context) {
   requireDealType(context?.dealType);
-  const sourceUrl = new URL(context?.sourceUrl);
-  const externalId = sourceUrl.pathname.match(/^\/(?:buy|rent)\/[^/]+\/property-(\d+)\/?$/i)?.[1];
-  if (!externalId) throw new TypeError("Unexpected 28Hse listing source URL");
+  const { url: sourceUrl, externalId } = requireDetailUrl(context?.sourceUrl, context.dealType);
   if (detect28HseChallenge(html))
     throw new Error("Empty detail template or 28Hse challenge detected");
   if (!context?.fetchedAt) throw new TypeError("fetchedAt is required");

@@ -45,6 +45,7 @@ test("detail parser allowlists listing facts and excludes platform modules", () 
   assert.equal(item.fields.view_count, undefined);
   assert.ok(item.mediaCandidates.every((candidate) => candidate.category === "listing_photo"));
   assert.ok(item.mediaCandidates.every((candidate) => !/map|floorplan|qr|vr/i.test(candidate.url)));
+  assert.equal(item.mediaCandidates.length, 1);
 });
 
 test("challenge pages are detected before parsing", () => {
@@ -56,6 +57,76 @@ test("challenge pages are detected before parsing", () => {
         pageUrl: build28HseAgentUrl("sale", 1),
       }),
     /challenge/i,
+  );
+});
+
+test("detects Cloudflare challenge shells before parsing", () => {
+  const html = fixture("challenge-cloudflare.html");
+  assert.equal(detect28HseChallenge(html), true);
+  assert.throws(
+    () =>
+      parse28HseDetail(html, {
+        sourceUrl: "https://www.28hse.com/buy/apartment/property-3972991",
+        dealType: "sale",
+        summaryTitle: "Earnest Property - Blocked",
+        fetchedAt: "2026-08-17T02:00:00.000Z",
+      }),
+    /challenge/i,
+  );
+});
+
+test("requires an exact HTTPS 28Hse detail URL for the active deal", () => {
+  const context = {
+    dealType: "rent",
+    summaryTitle: "Earnest Property - Rental",
+    fetchedAt: "2026-08-17T02:00:00.000Z",
+  };
+  for (const sourceUrl of [
+    "http://www.28hse.com/rent/apartment/property-3976155",
+    "https://www.28hse.com.evil.test/rent/apartment/property-3976155",
+    "https://www.28hse.com/buy/apartment/property-3976155",
+    "not a URL",
+  ]) {
+    assert.throws(
+      () => parse28HseDetail(fixture("detail-rent-3976155.html"), { ...context, sourceUrl }),
+      /source URL/i,
+    );
+  }
+});
+
+test("parses page-local sale and rent indexes and rejects impossible counts", () => {
+  const sale = parse28HseAgentIndex(fixture("agent-sale-page-2.html"), {
+    dealType: "sale",
+    pageUrl: build28HseAgentUrl("sale", 2),
+  });
+  const rent = parse28HseAgentIndex(fixture("agent-rent-page-1.html"), {
+    dealType: "rent",
+    pageUrl: build28HseAgentUrl("rent", 1),
+  });
+  assert.deepEqual(
+    sale.links.map((link) => link.externalId),
+    ["3973002", "3973003"],
+  );
+  assert.match(sale.pageFingerprint, /^[a-f0-9]{64}$/);
+  assert.deepEqual(
+    rent.links.map((link) => link.externalId),
+    ["3976155"],
+  );
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(fixture("agent-sale-count-mismatch.html"), {
+        dealType: "sale",
+        pageUrl: build28HseAgentUrl("sale", 1),
+      }),
+    /count/i,
+  );
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(fixture("agent-sale-conflicting-counts.html"), {
+        dealType: "sale",
+        pageUrl: build28HseAgentUrl("sale", 1),
+      }),
+    /count/i,
   );
 });
 
