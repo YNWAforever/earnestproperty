@@ -19,6 +19,7 @@ import {
   createLatestRequestGuard,
   mergeAdminTeamPages,
   resetAdminTeamPage,
+  serverErrorStatus,
   teamActionPayload,
   teamMutationFailure,
 } from "@/components/admin/team/admin-team-route-utils";
@@ -87,17 +88,20 @@ export const Route = createFileRoute("/admin/team")({
 });
 
 function safeError(error: unknown, action?: TeamMemberAction) {
-  if (error instanceof Response) {
-    if (error.status === 401) return "登入狀態已過期，請重新登入。";
-    if (error.status === 403) return "你沒有管理團隊成員的權限。";
-    if (error.status === 400)
-      return action === "reset"
-        ? "這項密碼重設不能套用於目前成員。請確認選取的是其他已連結帳戶的成員；如要重設自己的密碼，請在登入頁面使用「忘記密碼」。"
-        : "這項團隊操作未能執行，請重新載入資料後再試。";
-    if (error.status === 404) return "此成員已不存在，目錄已重新整理。";
-    if (error.status === 409) return "資料已被其他管理員更新，請重新確認。";
-    if (error.status === 429) return "操作正在冷卻中，請於可重試時間後再試。";
-  }
+  // Status comes from serverErrorStatus, not `error instanceof Response`: a
+  // server-thrown Response reaches the client as a plain Error carrying the
+  // response body, so an instanceof check here would never match and every
+  // failure -- expired login included -- would render the generic fallback.
+  const status = serverErrorStatus(error);
+  if (status === 401) return "登入狀態已過期，請重新登入。";
+  if (status === 403) return "你沒有管理團隊成員的權限。";
+  if (status === 400)
+    return action === "reset"
+      ? "這項密碼重設不能套用於目前成員。請確認選取的是其他已連結帳戶的成員；如要重設自己的密碼，請在登入頁面使用「忘記密碼」。"
+      : "這項團隊操作未能執行，請重新載入資料後再試。";
+  if (status === 404) return "此成員已不存在，目錄已重新整理。";
+  if (status === 409) return "資料已被其他管理員更新，請重新確認。";
+  if (status === 429) return "操作正在冷卻中，請於可重試時間後再試。";
   return "暫時無法更新團隊資料，請稍後再試。";
 }
 
@@ -169,7 +173,7 @@ function AdminTeam() {
         setForbidden(false);
       } catch (reason) {
         if (request !== requestRef.current) return;
-        if (reason instanceof Response && reason.status === 403) {
+        if (serverErrorStatus(reason) === 403) {
           setForbidden(true);
           setTeam(null);
           teamRef.current = null;
@@ -226,7 +230,7 @@ function AdminTeam() {
         setError(null);
       } catch (reason) {
         if (!detailRequestRef.current.isCurrent(request)) return;
-        if (reason instanceof Response && reason.status === 404) {
+        if (serverErrorStatus(reason) === 404) {
           setSelectedMemberId(null);
           detailRef.current = null;
           setDetail(null);
@@ -391,7 +395,7 @@ function AdminTeam() {
       closeConfirmation(false);
       await refreshAll();
     } catch (reason) {
-      if (reason instanceof Response && reason.status === 409) {
+      if (serverErrorStatus(reason) === 409) {
         const conflictMessage = "資料已被其他管理員更新，已重新載入最新資料，請再次確認。";
         closeConfirmation(false);
         if (pending.memberId) await loadDetail(pending.memberId);

@@ -8,6 +8,43 @@ type LifecycleReply = {
   failureCode?: string;
 };
 
+/**
+ * Exact response bodies thrown by the admin server functions, mapped to their
+ * status. Must stay in sync with the `throw new Response(...)` sites in
+ * lib/neon/auth.server.ts (requireStaffAccess), lib/neon/staff-lifecycle.server.ts,
+ * lib/neon/admin-team.server.ts and lib/neon/admin-data.server.ts.
+ *
+ * Only statuses the UI meaningfully distinguishes are listed. An unrecognised
+ * body must stay unmapped so callers report an honest generic failure instead of
+ * mislabelling it.
+ */
+const SERVER_ERROR_BODY_STATUS = new Map<string, number>([
+  ["Unauthorized", 401],
+  ["Forbidden", 403],
+  ["Staff member not found.", 404],
+  ["Team member not found.", 404],
+  ["This change conflicted with another concurrent staff-access update. Please retry.", 409],
+]);
+
+/**
+ * Recover the HTTP status behind a failed admin call.
+ *
+ * A server-thrown `Response` does NOT survive the TanStack Start RPC boundary.
+ * The server handler returns the Response verbatim -- bare status, text/plain
+ * body, no `X-TSS-Serialized` header -- and the client fetcher then falls through
+ * to `throw new Error(await response.text())`. So for any server function the
+ * client receives a plain `Error` whose message is the response BODY, and
+ * `error instanceof Response` never matches. Matching the body is the only way to
+ * recover the status.
+ *
+ * The `Response` branch is retained because it still holds for direct/SSR calls.
+ */
+export function serverErrorStatus(error: unknown): number | null {
+  if (error instanceof Response) return error.status;
+  if (error instanceof Error) return SERVER_ERROR_BODY_STATUS.get(error.message.trim()) ?? null;
+  return null;
+}
+
 export function createLatestRequestGuard() {
   let current = 0;
 
