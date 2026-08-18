@@ -651,3 +651,53 @@ test("default lifecycle dependencies defer unrelated admin and audit modules", a
   assert.equal(typeof dependencies.setStaffActive, "function");
   assert.equal(typeof dependencies.writeAudit, "function");
 });
+
+// `dependencies.requestId ?? crypto.randomUUID` (no dependencies.requestId
+// override -- i.e. the real default path createDefaultStaffLifecycleDependencies
+// takes in production) stores the *unbound* method reference. Calling it later as
+// a bare `nextRequestId()` detaches it from `crypto`, which a spec-strict WebCrypto
+// implementation rejects with "Illegal invocation" / "Value of \"this\" must be of
+// type Crypto" -- exactly the error a live production request returned (captured
+// from the raw seroval response body of a real `/admin/team` password-reset call).
+// V8 as embedded in plain `node --test` does not enforce this (`crypto.randomUUID`
+// works fine detached there), which is exactly why this survived: every existing
+// fixture in this file also overrides `requestId`, so the buggy fallback line was
+// never exercised by any test, local run, or the discrepancy never surfaced until
+// production. This test does not rely on the local runtime being strict -- it
+// stubs `globalThis.crypto` with a wrapper that enforces the same branding a
+// spec-compliant Crypto interface does, so it fails on the current code
+// regardless of which V8 build runs it.
+test("lifecycle actions generate a request id without depending on crypto.randomUUID's `this` binding", async () => {
+  const realCrypto = globalThis.crypto;
+  // A Proxy wrapping the real crypto object can't simulate this: `this` inside a
+  // trapped method is the Proxy itself, not `target`, so even a correctly-bound
+  // `crypto.randomUUID()` call would appear to fail. Use a plain branded object
+  // instead -- the same shape a spec-strict native Crypto class enforces via an
+  // internal slot: only a call whose receiver *is* this exact object passes.
+  const strictCrypto = {
+    randomUUID() {
+      if (this !== strictCrypto) {
+        throw new TypeError('Value of "this" must be of type Crypto');
+      }
+      return realCrypto.randomUUID();
+    },
+  };
+  Object.defineProperty(globalThis, "crypto", { value: strictCrypto, configurable: true });
+  try {
+    const { service, staff } = fixture({ requestId: undefined });
+    staff.set(targetId, {
+      id: targetId,
+      email: "target@example.test",
+      auth_user_id: "auth-target",
+      active: true,
+    });
+
+    const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+    assert.equal(result.accepted, true);
+    assert.equal(typeof result.requestId, "string");
+    assert.ok(result.requestId.length > 0);
+  } finally {
+    Object.defineProperty(globalThis, "crypto", { value: realCrypto, configurable: true });
+  }
+});
