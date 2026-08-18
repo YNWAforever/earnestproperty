@@ -27,6 +27,10 @@ const ASSET_ID = "44444444-4444-4444-8444-444444444444";
 const MEDIA_RECORD_ID = "45454545-4545-4454-8454-454545454545";
 const EVENT_ID = "56565656-5656-4565-8565-565656565656";
 const EXPECTED_UPDATED_AT = "2026-08-17T00:02:00.000000Z";
+const CURRENT_OWNED_IMAGE_URL = "https://owned.example/mls/current.png";
+const CURRENT_CMS_IMAGE_URL = "https://owned.example/cms/current.png";
+const CURRENT_ARCHIVED_IMAGE_URL = "https://owned.example/mls/archived.png";
+const CURRENT_MISSING_IMAGE_URL = "https://owned.example/mls/missing.png";
 
 function result(rows = [], rowCount = rows.length, command = "SELECT") {
   return { rows, rowCount, command, fields: [], oid: command === "SELECT" ? 0 : null };
@@ -165,6 +169,63 @@ function mediaRow(overrides = {}) {
   };
 }
 
+function canonicalReadRow(overrides = {}) {
+  return {
+    id: PROPERTY_ID,
+    listing_no: "SALE-ONE",
+    canonical_property_no: "EP-0001",
+    legacy_property_no: "EP-0001",
+    title_zh: "Current title",
+    title_en: "Current title EN",
+    deal_type: "sale",
+    estate_id: PROPERTY_ID_2,
+    district_slug: "sham-tseng",
+    address: "1 Castle Peak Road",
+    price: 8_000_000,
+    rent: null,
+    saleable_area: 500,
+    gross_area: 650,
+    bedrooms: 2,
+    bathrooms: 1,
+    floor: "12",
+    orientation: "South",
+    features: ["Sea view", "Balcony"],
+    description: "Current canonical description",
+    images: [
+      CURRENT_OWNED_IMAGE_URL,
+      CURRENT_CMS_IMAGE_URL,
+      CURRENT_ARCHIVED_IMAGE_URL,
+      CURRENT_MISSING_IMAGE_URL,
+    ],
+    status: "active",
+    updated_at: EXPECTED_UPDATED_AT,
+    ...overrides,
+  };
+}
+
+function currentMediaReadRow(overrides = {}) {
+  return {
+    ...mediaRow({
+      url: CURRENT_OWNED_IMAGE_URL,
+      pathname: "mls/current.png",
+      ...overrides,
+    }),
+    archived_at: Object.hasOwn(overrides, "archived_at") ? overrides.archived_at : null,
+  };
+}
+
+function activeSourceLinkReadRow(overrides = {}) {
+  return {
+    property_id: PROPERTY_ID,
+    source: SOURCE_28HSE,
+    external_listing_id: "3972991",
+    deal_type: "sale",
+    match_key: "sale:EP-0001",
+    link_reason: "exact_property_no_and_deal_type",
+    status: "active",
+    ...overrides,
+  };
+}
 function ownedMediaInput(overrides = {}) {
   return {
     url: "https://owned.example/mls/new.png",
@@ -770,6 +831,9 @@ test("repository requires one dedicated query client and exposes the Task 9 surf
     "getApprovedHealthyShadowStreak",
     "getHealthyCountHistory",
     "getLatestRun",
+    "getRunStartedAt",
+    "listActiveLinkedPropertyIds",
+    "loadCanonicalReadModels",
     "loadEstateIdsBySlug",
     "loadFieldStates",
     "loadLifecycleStates",
@@ -6863,4 +6927,258 @@ test("self-review: reused CMS assets still reject cross-property and hash confli
     );
     assert.equal(client.events.at(-1), "ROLLBACK");
   }
+});
+
+test("canonical read models expose full current evidence, owned media, and active links", async () => {
+  const client = fakeClient((call) => {
+    if (/FROM properties/.test(call.statement)) return result([canonicalReadRow()]);
+    if (/FROM property_source_links/.test(call.statement))
+      return result([activeSourceLinkReadRow()]);
+    if (/FROM media_assets/.test(call.statement)) return result([currentMediaReadRow()]);
+    throw new Error("unexpected read-model query: " + call.statement);
+  });
+  const repository = createSyncRepository({ client });
+  assert.equal(typeof repository.loadCanonicalReadModels, "function");
+  const models = await repository.loadCanonicalReadModels([PROPERTY_ID]);
+  assert.deepEqual(models[0].property.address, "1 Castle Peak Road");
+  assert.deepEqual(models[0].currentOwnedImages, [CURRENT_OWNED_IMAGE_URL]);
+  assert.deepEqual(models[0].activeLinks, [activeSourceLinkReadRow()]);
+});
+
+test("canonical read models reject malformed or foreign rows before follow-up evidence", async () => {
+  const client = fakeClient((call) => {
+    if (/FROM properties/.test(call.statement)) {
+      return result([canonicalReadRow({ id: PROPERTY_ID_2 })]);
+    }
+    throw new Error("unexpected malformed-row query: " + call.statement);
+  });
+  await assert.rejects(
+    async () => createSyncRepository({ client }).loadCanonicalReadModels([PROPERTY_ID]),
+    /canonical|property|read model/i,
+  );
+  assert.equal(client.calls.length, 1);
+});
+
+test("run-start evidence returns the persisted lossless UTC token", async () => {
+  const client = fakeClient((call) => {
+    assert.match(call.statement, /FROM listing_sync_runs/);
+    assert.match(call.statement, /to_char\(started_at AT TIME ZONE 'UTC'/);
+    assert.deepEqual(call.params, [RUN_ID]);
+    return result([{ started_at: EXPECTED_UPDATED_AT }]);
+  });
+  const repository = createSyncRepository({ client });
+  assert.equal(typeof repository.getRunStartedAt, "function");
+  assert.equal(await repository.getRunStartedAt(RUN_ID), EXPECTED_UPDATED_AT);
+  assert.equal(client.calls.length, 1);
+});
+
+test("run-start evidence fails closed on lossy or duplicate database rows", async (t) => {
+  for (const [name, rows] of [
+    ["lossy timestamp", [{ started_at: "2026-08-17T00:02:00.000Z" }]],
+    ["duplicate run", [{ started_at: EXPECTED_UPDATED_AT }, { started_at: EXPECTED_UPDATED_AT }]],
+  ]) {
+    await t.test(name, async () => {
+      const repository = createSyncRepository({ client: fakeClient(() => result(rows)) });
+      assert.equal(typeof repository.getRunStartedAt, "function");
+      await assert.rejects(repository.getRunStartedAt(RUN_ID), /run-start|lossless|row count/i);
+    });
+  }
+});
+
+test("active-linked property pagination is independent of current observations", async () => {
+  const client = fakeClient((call) => {
+    if (/FROM property_source_links/.test(call.statement)) {
+      return result([{ property_id: PROPERTY_ID }, { property_id: PROPERTY_ID_2 }]);
+    }
+    throw new Error("unexpected active-link query: " + call.statement);
+  });
+  const repository = createSyncRepository({ client });
+  assert.equal(typeof repository.listActiveLinkedPropertyIds, "function");
+  const page = await repository.listActiveLinkedPropertyIds({ afterPropertyId: null, limit: 1 });
+  assert.deepEqual(page, { propertyIds: [PROPERTY_ID], nextCursor: PROPERTY_ID });
+});
+
+test("self-review: canonical read models enforce active-link bounds per property", async () => {
+  const links = Array.from({ length: 21 }, (_, index) =>
+    activeSourceLinkReadRow({ external_listing_id: String(index).padStart(3, "0") }),
+  );
+  const client = fakeClient((call) => {
+    if (/FROM properties/.test(call.statement)) {
+      return result([
+        canonicalReadRow({ images: [] }),
+        canonicalReadRow({
+          id: PROPERTY_ID_2,
+          listing_no: "SALE-TWO",
+          canonical_property_no: "EP-0002",
+          legacy_property_no: "EP-0002",
+          images: [],
+        }),
+      ]);
+    }
+    if (/FROM property_source_links/.test(call.statement)) return result(links);
+    throw new Error("unexpected active-link-bound query: " + call.statement);
+  });
+  await assert.rejects(
+    createSyncRepository({ client }).loadCanonicalReadModels([PROPERTY_ID, PROPERTY_ID_2]),
+    /active source-link|too many|bound/i,
+  );
+  assert.equal(client.calls.length, 2);
+});
+
+test("self-review: canonical read models chunk exact requested rows at 200", async () => {
+  const ids = Array.from(
+    { length: 201 },
+    (_, index) => "00000000-0000-4000-8000-" + String(index + 1).padStart(12, "0"),
+  );
+  const client = fakeClient((call) => {
+    if (/FROM properties/.test(call.statement)) {
+      return result(
+        call.params[0].map((id, index) => {
+          const propertyNo = "EP-" + String(ids.indexOf(id) + 1).padStart(4, "0");
+          return canonicalReadRow({
+            id,
+            listing_no: "SALE-" + (index + 1),
+            canonical_property_no: propertyNo,
+            legacy_property_no: propertyNo,
+            images: [],
+          });
+        }),
+      );
+    }
+    if (/FROM property_source_links/.test(call.statement)) return result([]);
+    throw new Error("unexpected chunk query: " + call.statement);
+  });
+  const models = await createSyncRepository({ client }).loadCanonicalReadModels(ids);
+  assert.equal(models.length, 201);
+  const propertyCalls = client.calls.filter((call) => /FROM properties/.test(call.statement));
+  assert.deepEqual(
+    propertyCalls.map((call) => [call.params[0].length, call.params[1]]),
+    [
+      [200, 201],
+      [1, 2],
+    ],
+  );
+});
+
+test("self-review: read-model inputs are snapshotted and cancellation stops follow-up SQL", async (t) => {
+  await t.test("hidden array key", async () => {
+    const ids = [PROPERTY_ID];
+    Object.defineProperty(ids, "hidden", { value: true });
+    const client = fakeClient();
+    await assert.rejects(
+      createSyncRepository({ client }).loadCanonicalReadModels(ids),
+      /array|property IDs|hidden/i,
+    );
+    assert.equal(client.calls.length, 0);
+  });
+  await t.test("abort after canonical row", async () => {
+    const controller = new AbortController();
+    const reason = new Error("stop before link evidence");
+    const client = fakeClient((call) => {
+      controller.abort(reason);
+      return result([canonicalReadRow({ images: [] })]);
+    });
+    await assert.rejects(
+      createSyncRepository({ client }).loadCanonicalReadModels([PROPERTY_ID], {
+        signal: controller.signal,
+      }),
+      (error) => error === reason,
+    );
+    assert.equal(client.calls.length, 1);
+  });
+});
+
+test("self-review: current media accepts reusable owners and preserves canonical image order", async () => {
+  const adminUrl = "https://owned.example/admin/current.png";
+  const images = [CURRENT_OWNED_IMAGE_URL, CURRENT_CMS_IMAGE_URL, adminUrl];
+  const client = fakeClient((call) => {
+    if (/FROM properties/.test(call.statement)) return result([canonicalReadRow({ images })]);
+    if (/FROM property_source_links/.test(call.statement)) return result([]);
+    if (/FROM media_assets/.test(call.statement)) {
+      return result([
+        currentMediaReadRow({
+          id: OBSERVATION_ID,
+          url: adminUrl,
+          pathname: "admin/current.png",
+          owner_type: "admin",
+          owner_id: PROPERTY_ID_2,
+          created_by: PROPERTY_ID_2,
+        }),
+        currentMediaReadRow({
+          id: OBSERVATION_ID_2,
+          url: CURRENT_CMS_IMAGE_URL,
+          pathname: "cms/current.png",
+          owner_type: "cms",
+          owner_id: PROPERTY_ID_2,
+          created_by: PROPERTY_ID_2,
+        }),
+        currentMediaReadRow(),
+      ]);
+    }
+    throw new Error("unexpected reusable-owner query: " + call.statement);
+  });
+  const [model] = await createSyncRepository({ client }).loadCanonicalReadModels([PROPERTY_ID]);
+  assert.deepEqual(model.currentOwnedImages, images);
+  assert.match(client.calls.at(-1).statement, /archived_at IS NULL/);
+  assert.deepEqual(client.calls.at(-1).params[1], images.length + 1);
+});
+
+test("self-review: current media fails closed on archived and malformed ownership rows", async (t) => {
+  for (const [name, overrides] of [
+    ["archived", { archived_at: "2026-08-17T00:00:00.000Z" }],
+    ["malformed owner", { owner_type: "cms\u0000owner" }],
+    ["shared owner mutation", { owner_type: "mls-shared", owner_id: PROPERTY_ID_2 }],
+  ]) {
+    await t.test(name, async () => {
+      const client = fakeClient((call) => {
+        if (/FROM properties/.test(call.statement)) return result([canonicalReadRow()]);
+        if (/FROM property_source_links/.test(call.statement)) return result([]);
+        if (/FROM media_assets/.test(call.statement))
+          return result([currentMediaReadRow(overrides)]);
+        throw new Error("unexpected malformed-media query: " + call.statement);
+      });
+      await assert.rejects(
+        createSyncRepository({ client }).loadCanonicalReadModels([PROPERTY_ID]),
+        /media|archived|ownership/i,
+      );
+    });
+  }
+});
+
+test("self-review: active-linked pagination rejects overflow and unordered rows", async (t) => {
+  await t.test("max-plus-one overflow", async () => {
+    const client = fakeClient(() =>
+      result([
+        { property_id: PROPERTY_ID },
+        { property_id: PROPERTY_ID_2 },
+        { property_id: OBSERVATION_ID },
+      ]),
+    );
+    await assert.rejects(
+      createSyncRepository({ client }).listActiveLinkedPropertyIds({ limit: 1 }),
+      /bound/i,
+    );
+    assert.deepEqual(client.calls[0].params, [null, 2]);
+  });
+  await t.test("duplicate ordering", async () => {
+    const client = fakeClient(() =>
+      result([{ property_id: PROPERTY_ID }, { property_id: PROPERTY_ID }]),
+    );
+    await assert.rejects(
+      createSyncRepository({ client }).listActiveLinkedPropertyIds({ limit: 2 }),
+      /invalid|unordered/i,
+    );
+  });
+});
+
+test("self-review: run-start lookup preserves an exact pre-abort reason without SQL", async () => {
+  const controller = new AbortController();
+  const reason = Object.freeze({ code: "cancel-run-start" });
+  controller.abort(reason);
+  const client = fakeClient();
+  await assert.rejects(
+    createSyncRepository({ client }).getRunStartedAt(RUN_ID, { signal: controller.signal }),
+    (error) => error === reason,
+  );
+  assert.equal(client.calls.length, 0);
 });

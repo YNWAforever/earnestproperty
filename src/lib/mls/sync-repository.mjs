@@ -279,6 +279,27 @@ const LOCKED_ACTIVE_SOURCE_LINK_ROW_KEYS = new Set([
   "link_reason",
   "status",
 ]);
+const CURRENT_CANONICAL_PROPERTY_ROW_KEYS = new Set([
+  "id",
+  ...CANONICAL_WRITE_KEYS,
+  "legacy_property_no",
+  "updated_at",
+]);
+const CURRENT_MEDIA_READ_MODEL_ROW_KEYS = new Set([
+  "id",
+  "url",
+  "pathname",
+  "content_type",
+  "size_bytes",
+  "content_hash",
+  "owner_type",
+  "owner_id",
+  "created_by",
+  "created_at",
+  "archived_at",
+]);
+const ACTIVE_LINKED_PROPERTY_ROW_KEYS = new Set(["property_id"]);
+const ACTIVE_LINKED_PAGE_INPUT_KEYS = new Set(["afterPropertyId", "limit"]);
 const PUBLICATION_MEDIA_ROW_KEYS = new Set([
   "id",
   "observation_id",
@@ -2214,6 +2235,23 @@ export function createSyncRepository(options = {}) {
     };
   }
 
+  async function getRunStartedAt(runId, operation) {
+    const signal = operationSignal(operation);
+    throwIfAborted(signal);
+    if (!isUuid(runId)) throw new TypeError("run ID is invalid");
+    const rows = await query(
+      "SELECT to_char(started_at AT TIME ZONE 'UTC', " +
+        '\'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') AS started_at ' +
+        "FROM listing_sync_runs WHERE id = $1::uuid LIMIT 2",
+      [runId],
+      "run-start lookup",
+      Object.freeze({ signal }),
+    );
+    if (rows.length !== 1) throw new TypeError("run-start lookup returned an invalid row count");
+    const row = exactPublicationRow(rows[0], new Set(["started_at"]), "run-start row");
+    return requireRowVersion(row.started_at, "run-start started_at");
+  }
+
   async function findCanonicalCandidates(matchKeys) {
     const requested = parseRequestedMatchKeys(matchKeys);
     if (requested.length === 0) return [];
@@ -2259,6 +2297,294 @@ export function createSyncRepository(options = {}) {
       const leftRank = rank.get(buildMatchKey(left.canonical_property_no, left.deal_type));
       const rightRank = rank.get(buildMatchKey(right.canonical_property_no, right.deal_type));
       return leftRank - rightRank || left.id.localeCompare(right.id);
+    });
+  }
+
+  function validateCurrentCanonicalPropertyRow(rawRow, requested) {
+    const row = exactPublicationRow(
+      rawRow,
+      CURRENT_CANONICAL_PROPERTY_ROW_KEYS,
+      "canonical read-model property row",
+    );
+    if (!isUuid(row.id) || !requested.has(row.id)) {
+      throw new TypeError("canonical read-model property row has a foreign UUID");
+    }
+    const current = lockedCanonicalValues(row);
+    requireSafeText(current.listing_no, "canonical read-model listing number", { max: 160 });
+    const canonicalPropertyNo = normalizePropertyNo(
+      current.canonical_property_no ?? current.legacy_property_no,
+    );
+    const legacyPropertyNo =
+      current.legacy_property_no === null ? null : normalizePropertyNo(current.legacy_property_no);
+    if (
+      canonicalPropertyNo === null ||
+      (current.legacy_property_no !== null && legacyPropertyNo === null)
+    ) {
+      throw new TypeError("canonical read-model property number is invalid");
+    }
+    return Object.freeze({
+      id: row.id,
+      ...current,
+      canonical_property_no: canonicalPropertyNo,
+      legacy_property_no: legacyPropertyNo,
+      features: current.features === null ? null : Object.freeze([...current.features]),
+      images: Object.freeze([...current.images]),
+      updated_at: requireRowVersion(row.updated_at, "canonical read-model property updated_at"),
+    });
+  }
+
+  function validateCurrentMediaReadModelRow(rawRow, requestedUrls) {
+    const row = exactPublicationRow(
+      rawRow,
+      CURRENT_MEDIA_READ_MODEL_ROW_KEYS,
+      "canonical read-model media row",
+    );
+    if (row.archived_at !== null) throw new TypeError("canonical read-model media row is archived");
+    const asset = validateMediaRow(row, { requestedUrls });
+    if (!isValidPublicationMediaOwner(asset.ownerType, asset.ownerId, asset.createdBy)) {
+      throw new TypeError("canonical read-model media ownership is invalid");
+    }
+    return Object.freeze(asset);
+  }
+
+  function validateActiveSourceLinkReadModelRow(rawRow, requested, propertiesById) {
+    const row = exactPublicationRow(
+      rawRow,
+      LOCKED_ACTIVE_SOURCE_LINK_ROW_KEYS,
+      "canonical read-model active source-link row",
+    );
+    const property = propertiesById.get(row.property_id);
+    if (
+      property == null ||
+      !requested.has(row.property_id) ||
+      !isSource(row.source) ||
+      !isExternalId(row.external_listing_id) ||
+      row.deal_type !== property.deal_type ||
+      row.match_key !== buildMatchKey(property.canonical_property_no, property.deal_type) ||
+      row.link_reason !== "exact_property_no_and_deal_type" ||
+      row.status !== "active"
+    ) {
+      throw new TypeError("canonical read-model active source-link row is invalid");
+    }
+    return Object.freeze({ ...row });
+  }
+
+  async function loadCanonicalPropertiesAndLinks(ids, safeOperation, signal) {
+    const propertiesById = new Map();
+    const activeLinksByPropertyId = new Map(ids.map((id) => [id, []]));
+    const activeLinkIdentities = new Set();
+    for (const batch of chunks(ids)) {
+      throwIfAborted(signal);
+      const requested = new Set(batch);
+      const propertySql =
+        "SELECT id, listing_no, canonical_property_no, legacy_property_no, " +
+        "title_zh, title_en, deal_type, estate_id, district_slug, address, " +
+        "price::float8 AS price, rent::float8 AS rent, saleable_area, gross_area, " +
+        "bedrooms, bathrooms, floor, orientation, features, description, images, status, " +
+        "to_char(updated_at AT TIME ZONE 'UTC', " +
+        '\'YYYY-MM-DD"T"HH24:MI:SS.US"Z"\') AS updated_at ' +
+        "FROM properties WHERE id = ANY($1::uuid[]) ORDER BY id LIMIT $2";
+      const propertyRows = await query(
+        propertySql,
+        [batch, batch.length + 1],
+        "canonical read-model property lookup",
+        safeOperation,
+      );
+      if (propertyRows.length !== batch.length) {
+        throw new TypeError("canonical read-model property lookup returned an invalid row count");
+      }
+      let priorPropertyId = null;
+      for (const rawRow of propertyRows) {
+        const property = validateCurrentCanonicalPropertyRow(rawRow, requested);
+        if (
+          propertiesById.has(property.id) ||
+          (priorPropertyId !== null && property.id <= priorPropertyId)
+        ) {
+          throw new TypeError("canonical read-model property rows are duplicated or unordered");
+        }
+        priorPropertyId = property.id;
+        propertiesById.set(property.id, property);
+      }
+      if (batch.some((id) => !propertiesById.has(id))) {
+        throw new TypeError("canonical read-model property lookup omitted a requested property");
+      }
+      const linkSql =
+        "SELECT property_id, source, external_listing_id, deal_type, match_key, " +
+        "link_reason, status FROM property_source_links " +
+        "WHERE property_id = ANY($1::uuid[]) AND status = 'active' " +
+        "ORDER BY property_id, source, external_listing_id, deal_type LIMIT $2";
+      const sourceLinkRows = await query(
+        linkSql,
+        [batch, batch.length * MAX_ACTIVE_PUBLICATION_SOURCE_LINKS + 1],
+        "canonical read-model active source-link lookup",
+        safeOperation,
+      );
+      if (sourceLinkRows.length > batch.length * MAX_ACTIVE_PUBLICATION_SOURCE_LINKS) {
+        throw new TypeError("canonical read-model active source-link lookup exceeded its bound");
+      }
+      let priorLinkOrder = null;
+      for (const rawRow of sourceLinkRows) {
+        const link = validateActiveSourceLinkReadModelRow(rawRow, requested, propertiesById);
+        const order =
+          link.property_id +
+          "\u0000" +
+          link.source +
+          "\u0000" +
+          link.external_listing_id +
+          "\u0000" +
+          link.deal_type;
+        if (priorLinkOrder !== null && order <= priorLinkOrder) {
+          throw new TypeError(
+            "canonical read-model active source-link rows are duplicated or unordered",
+          );
+        }
+        priorLinkOrder = order;
+        if (activeLinkIdentities.has(order)) {
+          throw new TypeError("canonical read-model active source-link identity is duplicated");
+        }
+        activeLinkIdentities.add(order);
+        const links = activeLinksByPropertyId.get(link.property_id);
+        if (links.length >= MAX_ACTIVE_PUBLICATION_SOURCE_LINKS) {
+          throw new TypeError("canonical read-model property has too many active source links");
+        }
+        links.push(link);
+      }
+    }
+    return { propertiesById, activeLinksByPropertyId };
+  }
+
+  async function loadCurrentMediaForProperties(ids, propertiesById, safeOperation, signal) {
+    const requestedImageUrls = [];
+    const requestedImageUrlSet = new Set();
+    for (const id of ids) {
+      for (const imageUrl of propertiesById.get(id).images) {
+        if (!requestedImageUrlSet.has(imageUrl)) {
+          requestedImageUrlSet.add(imageUrl);
+          requestedImageUrls.push(imageUrl);
+        }
+      }
+    }
+    const mediaByUrl = new Map();
+    const mediaIds = new Set();
+    for (const batch of chunks(requestedImageUrls, MAX_PUBLICATION_MEDIA_EVIDENCE_ROWS)) {
+      throwIfAborted(signal);
+      const requested = new Set(batch);
+      const mediaSql =
+        "SELECT id, url, pathname, content_type, size_bytes, content_hash, " +
+        "owner_type, owner_id, created_by, created_at, archived_at " +
+        "FROM media_assets WHERE url = ANY($1::text[]) AND archived_at IS NULL " +
+        "ORDER BY url, id LIMIT $2";
+      const mediaRows = await query(
+        mediaSql,
+        [batch, batch.length + 1],
+        "canonical read-model media lookup",
+        safeOperation,
+      );
+      if (mediaRows.length > batch.length) {
+        throw new TypeError("canonical read-model media lookup exceeded its bound");
+      }
+      let priorMediaOrder = null;
+      for (const rawRow of mediaRows) {
+        const asset = validateCurrentMediaReadModelRow(rawRow, requested);
+        const order = asset.url + "\u0000" + asset.id;
+        if (
+          (priorMediaOrder !== null && order <= priorMediaOrder) ||
+          mediaByUrl.has(asset.url) ||
+          mediaIds.has(asset.id)
+        ) {
+          throw new TypeError("canonical read-model media rows are duplicated or unordered");
+        }
+        priorMediaOrder = order;
+        mediaByUrl.set(asset.url, asset);
+        mediaIds.add(asset.id);
+      }
+    }
+    return mediaByUrl;
+  }
+
+  async function loadCanonicalReadModels(propertyIds, operation) {
+    const signal = operationSignal(operation);
+    throwIfAborted(signal);
+    const safeOperation = Object.freeze({ signal });
+    const suppliedIds = snapshotDataGraph(propertyIds, "canonical read-model property IDs");
+    const ids = validatePropertyIds(suppliedIds);
+    if (ids.length === 0) return Object.freeze([]);
+    const loaded = await loadCanonicalPropertiesAndLinks(ids, safeOperation, signal);
+    const mediaByUrl = await loadCurrentMediaForProperties(
+      ids,
+      loaded.propertiesById,
+      safeOperation,
+      signal,
+    );
+    return Object.freeze(
+      ids.map((id) => {
+        const property = loaded.propertiesById.get(id);
+        return Object.freeze({
+          property,
+          currentOwnedImages: Object.freeze(
+            property.images.filter((imageUrl) => mediaByUrl.has(imageUrl)),
+          ),
+          activeLinks: Object.freeze([...loaded.activeLinksByPropertyId.get(id)]),
+        });
+      }),
+    );
+  }
+
+  async function listActiveLinkedPropertyIds(input = {}, operation) {
+    const signal = operationSignal(operation);
+    throwIfAborted(signal);
+    const safeOperation = Object.freeze({ signal });
+    const suppliedInput = snapshotDataGraph(input, "active-linked property page input");
+    if (
+      !isPlainRecord(suppliedInput) ||
+      Reflect.ownKeys(suppliedInput).some(
+        (key) => typeof key !== "string" || !ACTIVE_LINKED_PAGE_INPUT_KEYS.has(key),
+      )
+    ) {
+      throw new TypeError("active-linked property page input is invalid");
+    }
+    const afterPropertyId = Object.hasOwn(suppliedInput, "afterPropertyId")
+      ? suppliedInput.afterPropertyId
+      : null;
+    const limit = Object.hasOwn(suppliedInput, "limit") ? suppliedInput.limit : BATCH_SIZE;
+    if (afterPropertyId !== null && !isUuid(afterPropertyId)) {
+      throw new TypeError("active-linked property cursor is invalid");
+    }
+    if (!Number.isInteger(limit) || limit < 1 || limit > BATCH_SIZE) {
+      throw new TypeError("active-linked property page limit is invalid");
+    }
+    const pageSql =
+      "SELECT DISTINCT property_id FROM property_source_links " +
+      "WHERE status = 'active' AND ($1::uuid IS NULL OR property_id > $1::uuid) " +
+      "ORDER BY property_id LIMIT $2";
+    const rows = await query(
+      pageSql,
+      [afterPropertyId, limit + 1],
+      "active-linked property page lookup",
+      safeOperation,
+    );
+    if (rows.length > limit + 1) {
+      throw new TypeError("active-linked property page exceeded its bound");
+    }
+    const propertyIds = [];
+    let prior = afterPropertyId;
+    for (const rawRow of rows) {
+      const row = exactPublicationRow(
+        rawRow,
+        ACTIVE_LINKED_PROPERTY_ROW_KEYS,
+        "active-linked property page row",
+      );
+      if (!isUuid(row.property_id) || (prior !== null && row.property_id <= prior)) {
+        throw new TypeError("active-linked property page rows are invalid or unordered");
+      }
+      prior = row.property_id;
+      propertyIds.push(row.property_id);
+    }
+    const hasMore = propertyIds.length > limit;
+    const pageIds = Object.freeze(propertyIds.slice(0, limit));
+    return Object.freeze({
+      propertyIds: pageIds,
+      nextCursor: hasMore ? pageIds.at(-1) : null,
     });
   }
 
@@ -5554,12 +5880,15 @@ export function createSyncRepository(options = {}) {
     assertLockSession,
     beginRun,
     findCanonicalCandidates,
+    listActiveLinkedPropertyIds,
+    loadCanonicalReadModels,
     findMediaByHash,
     findMediaByUrls,
     finishRun,
     getApprovedHealthyShadowStreak,
     getHealthyCountHistory,
     getLatestRun,
+    getRunStartedAt,
     loadEstateIdsBySlug,
     loadFieldStates,
     loadLifecycleStates,

@@ -228,6 +228,28 @@ export interface CanonicalPropertyWrite {
   status: "draft" | "active" | "sold" | "rented" | "offline" | "inactive";
 }
 
+export interface CurrentCanonicalProperty extends CanonicalPropertyWrite {
+  id: string;
+  legacy_property_no: string | null;
+  updated_at: string;
+}
+
+export interface CanonicalReconciliationReadModel {
+  property: CurrentCanonicalProperty;
+  currentOwnedImages: string[];
+  activeLinks: SourceLink[];
+}
+
+export interface ActiveLinkedPropertyPageInput {
+  afterPropertyId?: string | null;
+  limit?: number;
+}
+
+export interface ActiveLinkedPropertyPage {
+  propertyIds: string[];
+  nextCursor: string | null;
+}
+
 export interface NewCanonicalPropertyMetadata {
   featured: false;
   management_fee: null;
@@ -359,7 +381,16 @@ export interface SyncRepository {
   getApprovedHealthyShadowStreak(
     beforeDate: string,
   ): Promise<{ length: number; lastDate: string | null }>;
+  getRunStartedAt(runId: string, operation?: RepositoryOperation): Promise<string>;
   findCanonicalCandidates(matchKeys: string[]): Promise<CanonicalProperty[]>;
+  loadCanonicalReadModels(
+    propertyIds: string[],
+    operation?: RepositoryOperation,
+  ): Promise<CanonicalReconciliationReadModel[]>;
+  listActiveLinkedPropertyIds(
+    input?: ActiveLinkedPropertyPageInput,
+    operation?: RepositoryOperation,
+  ): Promise<ActiveLinkedPropertyPage>;
   loadSourceLinks(externalIdentities: ExternalIdentity[]): Promise<SourceLink[]>;
   saveProposedLinks(runId: string, links: ProposedSourceLink[]): Promise<void>;
   loadEstateIdsBySlug(slugs: string[]): Promise<Map<string, string>>;
