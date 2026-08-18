@@ -534,6 +534,30 @@ test("password reset reports a safe action-store failure before requesting provi
   assert.doesNotMatch(JSON.stringify(result), /raw database details/i);
 });
 
+test("password reset stays safe when recording a provider failure itself fails", async () => {
+  const { service, staff, identityActions } = fixture({
+    provider: {
+      resolveUser: async () => {
+        throw Object.assign(new Error("provider outage"), { code: "PROVIDER_UNAVAILABLE" });
+      },
+    },
+  });
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  identityActions.markIdentityActionRetryable = async () => {
+    throw new Error("transient connection reset while recording the failure");
+  };
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, false);
+  assert.equal(result.requestId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+});
+
 test("role changes delegate to the protected existing transaction and emit sanitized lifecycle audit", async () => {
   const { service, calls } = fixture();
   const result = await service.changeStaffRoles(

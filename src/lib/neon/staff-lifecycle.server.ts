@@ -286,20 +286,29 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
     cooldown: "invitation" | "password-reset";
   }) {
     const code = safeProviderCode(input.error);
-    if (code === "PROVIDER_INVITATION_NOT_FOUND") {
-      await actions.markIdentityActionTerminal({
+    // Recording the failure is itself a DB write and can fail on its own
+    // (e.g. a transient Neon connection reset). If it does, the original
+    // provider failure must still come back as a safe result instead of
+    // escaping as an unhandled exception -- the same reasoning safeAudit
+    // already applies to audit writes.
+    try {
+      if (code === "PROVIDER_INVITATION_NOT_FOUND") {
+        await actions.markIdentityActionTerminal({
+          operationId: input.operationId,
+          safeErrorCode: code,
+        });
+        return { code, terminal: true as const, retryAfter: null };
+      }
+      const retry = retryAfter(input.cooldown, now());
+      await actions.markIdentityActionRetryable({
         operationId: input.operationId,
         safeErrorCode: code,
+        retryAfter: retry,
       });
-      return { code, terminal: true as const, retryAfter: null };
+      return { code, terminal: false as const, retryAfter: retry };
+    } catch {
+      return { code, terminal: false as const, retryAfter: null };
     }
-    const retry = retryAfter(input.cooldown, now());
-    await actions.markIdentityActionRetryable({
-      operationId: input.operationId,
-      safeErrorCode: code,
-      retryAfter: retry,
-    });
-    return { code, terminal: false as const, retryAfter: retry };
   }
 
   return {
@@ -738,8 +747,7 @@ export async function createDefaultStaffLifecycleDependencies(
     provider: createStaffIdentityProvider({}),
     updateStaffRoles: async (input, actor) =>
       (await loadAdminData()).updateStaffRoles(input, actor),
-    setStaffActive: async (input, actor) =>
-      (await loadAdminData()).setStaffActive(input, actor),
+    setStaffActive: async (input, actor) => (await loadAdminData()).setStaffActive(input, actor),
     writeAudit: async (input) => {
       const audit = await loadAudit();
       await audit.writeAudit({
