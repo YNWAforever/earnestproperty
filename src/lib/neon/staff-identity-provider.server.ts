@@ -102,6 +102,29 @@ export function createStaffIdentityProvider(input: {
       throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
     }
     if (!response.ok) {
+      // TEMPORARY diagnostic for the persistent PROVIDER_UNAUTHORIZED (401) on
+      // resolveUser: safe_error_code recorded in staff_identity_actions shows the
+      // provider is rejecting the forwarded credential, but not why. Logs shape
+      // only (presence, Bearer prefix, whether the token looks like a signed
+      // cookie i.e. contains ".", rough length) plus the provider's own response
+      // status/body -- never the credential value itself. Remove once resolved.
+      const authHeader = input.request.headers.get("authorization");
+      const cookieHeader = input.request.headers.get("cookie");
+      const bearerToken = authHeader?.replace(/^Bearer\s+/i, "") ?? null;
+      const bodyText = await response.clone().text().catch(() => "<unreadable>");
+      console.error("[neon-auth-diag]", {
+        path: input.path,
+        method,
+        providerStatus: response.status,
+        providerBodyPreview: bodyText.slice(0, 200),
+        hasAuthorizationHeader: Boolean(authHeader),
+        authorizationLooksBearer: authHeader?.startsWith("Bearer ") ?? false,
+        bearerTokenLength: bearerToken?.length ?? null,
+        bearerTokenHasDot: bearerToken?.includes(".") ?? null,
+        hasCookieHeader: Boolean(cookieHeader),
+        cookieHeaderLength: cookieHeader?.length ?? null,
+        cookieHasNeonAuthSessionName: cookieHeader?.includes("neon-auth.session_token") ?? false,
+      });
       throw new StaffIdentityProviderError(
         mapProviderOutcome({ status: response.status, resource: input.resource }),
         response.status,
