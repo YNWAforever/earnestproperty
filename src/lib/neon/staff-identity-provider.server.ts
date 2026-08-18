@@ -76,20 +76,25 @@ export function createStaffIdentityProvider(input: {
 
   async function callProvider<T>(input: {
     path: string;
-    body: JsonRecord;
+    method?: "GET" | "POST";
+    body?: JsonRecord;
+    query?: Record<string, string>;
     request: Request;
     resource: ProviderResource;
     parse: (body: unknown) => T;
   }) {
     if (!authBaseUrl) throw new StaffIdentityProviderError("PROVIDER_CAPABILITY_UNAVAILABLE", 503);
+    const url = new URL(input.path, `${authBaseUrl.replace(/\/$/, "")}/`);
+    for (const [key, value] of Object.entries(input.query ?? {})) url.searchParams.set(key, value);
+    const method = input.method ?? "POST";
     let response: Response;
     try {
       response = await fetchImpl(
-        new URL(input.path, `${authBaseUrl.replace(/\/$/, "")}/`).toString(),
+        url.toString(),
         {
-          method: "POST",
+          method,
           headers: forwardedHeaders(input.request),
-          body: JSON.stringify(input.body),
+          ...(method === "POST" ? { body: JSON.stringify(input.body ?? {}) } : {}),
         },
       );
     } catch {
@@ -117,7 +122,9 @@ export function createStaffIdentityProvider(input: {
     async resolveUser({ authUserId, request }) {
       return callProvider({
         path: "/admin/get-user",
-        body: { id: authUserId },
+        method: "GET",
+        body: {},
+        query: { id: authUserId },
         request,
         resource: "identity",
         parse(body): ProviderIdentity {
