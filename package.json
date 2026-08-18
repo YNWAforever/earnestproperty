@@ -14,7 +14,8 @@
     "test:corridor": "node --test src/content/castle-peak-road.test.mjs",
     "test:seo": "node --test src/content/seo-source.test.mjs src/content/canonical-links.test.mjs src/lib/schema.test.mjs && bun test src/lib/schema.test.ts",
     "test:blog": "node --test src/routes/blog.routes.test.mjs",
-    "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs",
+    "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs src/lib/mls/mls-schema.test.mjs src/lib/mls/source-contract.test.mjs src/lib/mls/parse-28hse.test.mjs src/lib/mls/source-adapters.test.mjs src/lib/mls/health.test.mjs src/lib/mls/reconcile.test.mjs src/lib/mls/neon-lock.test.mjs src/lib/mls/sync-repository.test.mjs src/lib/mls/media.test.mjs src/lib/mls/orchestrator.test.mjs src/lib/mls/reporting.test.mjs src/lib/media/vercel-blob.test.mjs src/routes/api.admin.media.upload.test.mjs",
+    "test:mls:db": "node --test src/lib/mls/mls-db.integration.test.mjs",
     "test:listing-search": "node --test src/lib/neon/listing-search.contract.test.mjs",
     "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
     "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs",
@@ -36,7 +37,10 @@
     "migration:redirects": "node scripts/old-site-migration/redirects.mjs",
     "neon:migrate": "node scripts/neon/apply-migrations.mjs",
     "mls:import": "node scripts/old-site-migration/import.mjs",
-    "mls:sync": "node scripts/old-site-migration/import.mjs --max=200",
+    "mls:legacy-sync": "node scripts/old-site-migration/import.mjs --max=200",
+    "mls:shadow": "node scripts/mls/sync.mjs --mode=shadow",
+    "mls:sync": "node scripts/mls/sync.mjs --mode=publish",
+    "mls:approve-baseline": "node scripts/mls/approve-baseline.mjs",
     "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2"
   },
   "dependencies": {
