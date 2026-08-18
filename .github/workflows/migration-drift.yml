@@ -1,0 +1,48 @@
+# Catches a migration that shipped in the repo but was never applied to
+# production. 20260802100000_agent_specialties.sql sat unapplied for eleven days
+# and 20260817130000_youtube_channel_sync.sql for two, each surfacing as a 500 on
+# a live page. The control-plane health check detected both correctly -- but only
+# for someone who opened /admin/operations, which nobody does to find a problem
+# they have not heard about yet. This is the same diff, pushed instead of pulled.
+name: Migration drift
+
+on:
+  # Every merge to main is a deploy, and a deploy is exactly when the code can
+  # start depending on a column the database does not have.
+  push:
+    branches: [main]
+  # A migration merged on Friday and applied on Monday is not caught by the push
+  # run alone -- that run already failed and nobody re-triggers it. The daily run
+  # keeps failing until the database is actually migrated.
+  schedule:
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+
+# Two pushes to main in quick succession would otherwise race to report on the
+# same database. Only the newest answer is worth having.
+concurrency:
+  group: migration-drift
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Guards the manifest the drift check reads: if MIGRATION_VERSIONS has
+      # fallen behind neon/migrations, the check below would report "0 pending"
+      # while the database was missing a column.
+      - run: node --test src/lib/control-plane/migration-versions.test.mjs
+      - run: npm run check:migration-drift
+        env:
+          # Read-only usage: the script runs SELECTs and applies nothing. Prefer a
+          # role without DDL rights here -- CI never needs to write schema.
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
