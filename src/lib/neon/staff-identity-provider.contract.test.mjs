@@ -91,6 +91,48 @@ test("provider adapter uses the configured base URL, forwards only auth headers,
   assert.equal(requests[0].body, null);
 });
 
+test("a base URL with a path prefix keeps that prefix on every provider call", async () => {
+  // Production's Neon Auth base URL is not a bare origin -- it carries a path,
+  // e.g. https://<endpoint>.neonauth.<region>.aws.neon.tech/neondb/auth. Joining a
+  // leading-slash path against it makes the reference root-relative and silently
+  // DROPS "/neondb/auth", so every provider call 404s. Every fixture above uses a
+  // path-less base, where the bug is invisible -- hence this case.
+  const fixture = createFetchFixture([
+    response({ data: { user: { id: "auth-1", email: "agent@example.test", name: null } } }),
+    response({ data: {} }),
+    response({ data: { invitation: { status: "sent", expiresAt: null } } }),
+    response({ data: {} }),
+  ]);
+  const provider = createStaffIdentityProvider({
+    fetchImpl: fixture.fetchImpl,
+    authBaseUrl: "https://auth.example.test/neondb/auth",
+    organizationId: "org-earnest",
+  });
+
+  await provider.resolveUser({ authUserId: "auth-1", request: authorizedRequest });
+  await provider.requestPasswordReset({
+    email: "agent@example.test",
+    redirectTo: "https://earnest.example.test/auth/reset-password",
+    request: authorizedRequest,
+  });
+  await provider.sendInvitation({
+    email: "new@example.test",
+    organizationId: "org-earnest",
+    request: authorizedRequest,
+  });
+  await provider.revokeUserSessions({ userId: "auth-1", request: authorizedRequest });
+
+  assert.deepEqual(
+    fixture.requests.map((entry) => entry.path),
+    [
+      "/neondb/auth/admin/get-user?id=auth-1",
+      "/neondb/auth/request-password-reset",
+      "/neondb/auth/organization/invite-member",
+      "/neondb/auth/admin/revoke-user-sessions",
+    ],
+  );
+});
+
 test("empty server auth URL falls back to the configured VITE auth URL", async () => {
   const previousBaseUrl = process.env.NEON_AUTH_BASE_URL;
   const previousViteUrl = process.env.VITE_NEON_AUTH_URL;
