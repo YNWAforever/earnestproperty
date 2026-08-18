@@ -160,7 +160,12 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
   const runTransaction = dependencies.transactionRows ?? transactionRows;
   const actions = dependencies.identityActions ?? createIdentityActionStore();
   const now = dependencies.now ?? (() => new Date());
-  const nextRequestId = dependencies.requestId ?? crypto.randomUUID;
+  // Not `crypto.randomUUID` directly: that stores the method detached from its
+  // receiver, and calling it later as a bare `nextRequestId()` loses the `this`
+  // binding a spec-strict WebCrypto implementation requires -- reproduced (with
+  // the exact production error, "Value of \"this\" must be of type Crypto") in
+  // the regression test below.
+  const nextRequestId = dependencies.requestId ?? (() => crypto.randomUUID());
 
   async function memberById(staffId: string): Promise<LifecycleMember> {
     const rows = await runQuery<Record<string, unknown>>(
