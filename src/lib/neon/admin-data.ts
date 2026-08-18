@@ -3,6 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
+import { ServerFnResponseError, unwrapServerFnResponse } from "./server-fn-response.ts";
 import { deriveAgentProfileEditorContext } from "./staff-security-policy";
 import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
 import type {
@@ -140,16 +141,35 @@ const STAFF_ACCESS_ERROR_MESSAGES: Record<string, string> = {
  * client/server split (and therefore this exact resolve-not-reject behaviour)
  * only exists once Vite's build-time macro transform has run, so calling the
  * *Server stubs directly in a plain test process does not reproduce it.
+ *
+ * fetchStaffAccessSummary / updateStaffRoles / setStaffActive each call this
+ * WRAPPED AROUND callStaffServerFn, which -- since it now also unwraps a
+ * resolved Response via unwrapServerFnResponse -- may hand this a promise
+ * that REJECTS with a ServerFnResponseError rather than one that resolves
+ * with a raw Response. Both shapes carry the same body text and status, so
+ * both are translated through the same table below.
  */
+function translateStaffAccessMessage(text: string, status: number): string {
+  const trimmed = text.trim();
+  if (STAFF_ACCESS_ERROR_MESSAGES[trimmed]) return STAFF_ACCESS_ERROR_MESSAGES[trimmed];
+  if (trimmed && trimmed !== `HTTP ${status}`) return trimmed;
+  return `操作失敗（HTTP ${status}）`;
+}
+
 export async function unwrapStaffAccessResponse<T>(promise: Promise<T>): Promise<T> {
-  const result = await promise;
-  if (result instanceof Response) {
-    const text = (await result.text().catch(() => "")).trim();
-    const message =
-      STAFF_ACCESS_ERROR_MESSAGES[text] ?? (text ? text : `操作失敗（HTTP ${result.status}）`);
-    throw new Error(message);
+  try {
+    const result = await promise;
+    if (result instanceof Response) {
+      const text = (await result.text().catch(() => "")).trim();
+      throw new Error(translateStaffAccessMessage(text, result.status));
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof ServerFnResponseError) {
+      throw new Error(translateStaffAccessMessage(error.message, error.status));
+    }
+    throw error;
   }
-  return result;
 }
 
 const fetchStaffAccessSummaryServer = createServerFn({ method: "GET" })
@@ -242,6 +262,13 @@ function isStaffAuthorizationError(error: unknown) {
 }
 
 function isStaleServerFunctionError(error: unknown) {
+  // A ServerFnResponseError means the request reached a real handler, which
+  // explicitly threw a Response -- by construction that can never be the "this
+  // function ID no longer exists on the server" condition this heuristic exists
+  // to detect. Excluding it up front keeps a legitimate in-app 404 (e.g. "Staff
+  // member not found.") from forcing a page reload once callStaffServerFn starts
+  // surfacing those Responses as thrown errors instead of silently resolving.
+  if (error instanceof ServerFnResponseError) return false;
   const message = errorMessage(error);
   const status = errorStatus(error);
   if (status === 404 || status === 410) return true;
@@ -283,7 +310,14 @@ function reloadOnStaleServerFunction(error: unknown) {
 
 async function callStaffServerFn<T>(call: () => Promise<T>) {
   try {
-    const result = await call();
+    // TanStack Start RESOLVES rather than rejects when a server function
+    // handler throws a Response (see server-fn-response.ts for the traced
+    // mechanism). Without this unwrap, every 401/403/404/409 thrown by
+    // requireStaff or the admin-data.server.ts handlers arrives here as a
+    // successfully "resolved" Response object -- not caught below, not
+    // detected by isStaffAuthorizationError/isStaleServerFunctionError, and
+    // handed to callers as if it were the real result.
+    const result = await unwrapServerFnResponse(call());
     clearStorageFlag();
     return result;
   } catch (error) {

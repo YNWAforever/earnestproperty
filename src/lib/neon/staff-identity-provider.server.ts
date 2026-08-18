@@ -84,19 +84,20 @@ export function createStaffIdentityProvider(input: {
     parse: (body: unknown) => T;
   }) {
     if (!authBaseUrl) throw new StaffIdentityProviderError("PROVIDER_CAPABILITY_UNAVAILABLE", 503);
-    const url = new URL(input.path, `${authBaseUrl.replace(/\/$/, "")}/`);
+    // The path MUST be joined as a relative reference. Neon Auth base URLs carry a
+    // path of their own (".../neondb/auth"), and a leading slash would make the
+    // reference root-relative -- silently discarding that prefix and pointing every
+    // call at the wrong endpoint. Strip leading slashes so the base path survives.
+    const url = new URL(input.path.replace(/^\/+/, ""), `${authBaseUrl.replace(/\/$/, "")}/`);
     for (const [key, value] of Object.entries(input.query ?? {})) url.searchParams.set(key, value);
     const method = input.method ?? "POST";
     let response: Response;
     try {
-      response = await fetchImpl(
-        url.toString(),
-        {
-          method,
-          headers: forwardedHeaders(input.request),
-          ...(method === "POST" ? { body: JSON.stringify(input.body ?? {}) } : {}),
-        },
-      );
+      response = await fetchImpl(url.toString(), {
+        method,
+        headers: forwardedHeaders(input.request),
+        ...(method === "POST" ? { body: JSON.stringify(input.body ?? {}) } : {}),
+      });
     } catch {
       throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
     }

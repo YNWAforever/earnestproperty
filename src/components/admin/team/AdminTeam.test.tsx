@@ -12,6 +12,7 @@ import {
   createLatestRequestGuard,
   mergeAdminTeamPages,
   resetAdminTeamPage,
+  serverErrorStatus,
   teamActionPayload,
   teamMutationFailure,
 } from "./admin-team-route-utils";
@@ -247,6 +248,33 @@ describe("Admin Team request safety", () => {
         failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
       }),
     ).toContain("團隊資料");
+  });
+
+  test("server error statuses survive the server-function boundary as plain Errors", () => {
+    // TanStack Start does not preserve a thrown Response across the RPC boundary:
+    // the client receives `new Error(<response body text>)`. Recovering the status
+    // from that body is the only way the UI can tell an expired login from a
+    // permission problem from a write conflict.
+    expect(serverErrorStatus(new Error("Unauthorized"))).toBe(401);
+    expect(serverErrorStatus(new Error("Forbidden"))).toBe(403);
+    expect(serverErrorStatus(new Error("Team member not found."))).toBe(404);
+    expect(serverErrorStatus(new Error("Staff member not found."))).toBe(404);
+    expect(
+      serverErrorStatus(
+        new Error(
+          "This change conflicted with another concurrent staff-access update. Please retry.",
+        ),
+      ),
+    ).toBe(409);
+
+    // A real Response still works, for direct/SSR invocations.
+    expect(serverErrorStatus(new Response("Forbidden", { status: 403 }))).toBe(403);
+
+    // Anything unrecognised must stay null so the caller falls back honestly
+    // rather than mislabelling an unknown failure.
+    expect(serverErrorStatus(new Error("some unmapped provider text"))).toBeNull();
+    expect(serverErrorStatus("not an error")).toBeNull();
+    expect(serverErrorStatus(undefined)).toBeNull();
   });
 
   test("role and successor confirmations retain the selected payload", () => {

@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
 import { contentCopilotRequestSchema, type ContentCopilotRequest } from "./content-copilot.ts";
+import { unwrapServerFnResponse } from "../neon/server-fn-response.ts";
 
 const decisionSchema = z.object({
   proposalId: z.string().uuid(),
@@ -46,14 +47,17 @@ async function requireStaffAccess(request: Request, roles: Array<"admin" | "mana
 
 async function callStaffServerFn<T>(call: () => Promise<T>) {
   try {
-    return await call();
+    // TanStack Start resolves rather than rejects when a server function
+    // handler throws a Response (requireStaffAccess throws Response(401/403)),
+    // so unwrap first -- otherwise the `error instanceof Response` branch below
+    // is unreachable and a 401/403 is returned to the caller as if it were a
+    // real ContentCopilot result.
+    return await unwrapServerFnResponse(call());
   } catch (error) {
     const status =
-      error instanceof Response
-        ? error.status
-        : error && typeof error === "object" && "status" in error
-          ? Number((error as { status?: unknown }).status)
-          : 0;
+      error && typeof error === "object" && "status" in error
+        ? Number((error as { status?: unknown }).status)
+        : 0;
     if (status === 401 || status === 403) {
       return {
         ok: false,

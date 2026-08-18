@@ -8,6 +8,58 @@ type LifecycleReply = {
   failureCode?: string;
 };
 
+/**
+ * Legacy fallback: exact response bodies thrown by the admin server
+ * functions, mapped to their status. Kept only for an error that predates
+ * ServerFnResponseError or reaches this function some other way; every
+ * current call from admin.team.tsx already carries `.status` (see below).
+ * Must stay in sync with the `throw new Response(...)` sites in
+ * lib/neon/auth.server.ts (requireStaffAccess), lib/neon/staff-lifecycle.server.ts,
+ * lib/neon/admin-team.server.ts and lib/neon/admin-data.server.ts.
+ *
+ * Only statuses the UI meaningfully distinguishes are listed. An unrecognised
+ * body must stay unmapped so callers report an honest generic failure instead of
+ * mislabelling it.
+ */
+const SERVER_ERROR_BODY_STATUS = new Map<string, number>([
+  ["Unauthorized", 401],
+  ["Forbidden", 403],
+  ["Staff member not found.", 404],
+  ["Team member not found.", 404],
+  ["This change conflicted with another concurrent staff-access update. Please retry.", 409],
+]);
+
+/**
+ * Recover the HTTP status behind a failed admin call.
+ *
+ * A server-thrown `Response` does NOT survive as a rejection at the raw
+ * TanStack Start layer -- it RESOLVES. Confirmed live against a running dev
+ * server (real DB, real Neon Auth, real Vite-built client/server split, not
+ * just source reading): an unauthenticated call resolved with a raw
+ * `Response(401)` object instead of throwing. Full traced mechanism is in
+ * lib/neon/server-fn-response.ts's doc comment.
+ *
+ * `error instanceof Response` never matches here specifically because
+ * lib/neon/admin-team.ts's exported wrappers (listAdminTeam,
+ * sendStaffPasswordReset, etc.) already convert that resolved Response into a
+ * REJECTED `ServerFnResponseError` via `unwrapServerFnResponse` before this
+ * component ever awaits them -- so by the time a catch block here runs,
+ * `.status` is already a reliable property on the caught error. The body-text
+ * map below is a fallback for anything that reaches this function without
+ * going through that unwrap.
+ */
+export function serverErrorStatus(error: unknown): number | null {
+  if (error instanceof Response) return error.status;
+  // ServerFnResponseError carries the real status from the unwrapped Response.
+  // Preferred over the body map below, which matches prose that can drift.
+  if (error && typeof error === "object" && "status" in error) {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === "number" && Number.isFinite(status)) return status;
+  }
+  if (error instanceof Error) return SERVER_ERROR_BODY_STATUS.get(error.message.trim()) ?? null;
+  return null;
+}
+
 export function createLatestRequestGuard() {
   let current = 0;
 
