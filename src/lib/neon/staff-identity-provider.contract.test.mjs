@@ -18,7 +18,7 @@ function createFetchFixture(responses) {
   const fetchImpl = async (url, init = {}) => {
     requests.push({
       method: init.method,
-      path: new URL(url).pathname,
+      path: new URL(url).pathname + new URL(url).search,
       headers: Object.fromEntries(new Headers(init.headers).entries()),
       body: init.body ? JSON.parse(init.body) : null,
     });
@@ -77,18 +77,18 @@ test("provider adapter uses the configured base URL, forwards only auth headers,
   );
   assert.deepEqual(requests, [
     {
-      method: "POST",
-      path: "/admin/get-user",
+      method: "GET",
+      path: "/admin/get-user?id=auth-1",
       headers: {
         accept: "application/json",
         authorization: "Bearer access-secret",
         "content-type": "application/json",
         cookie: "better-auth.session_token=provider-secret",
       },
-      body: { id: "auth-1" },
+      body: null,
     },
   ]);
-  assert.equal("role" in requests[0].body, false);
+  assert.equal(requests[0].body, null);
 });
 
 test("empty server auth URL falls back to the configured VITE auth URL", async () => {
