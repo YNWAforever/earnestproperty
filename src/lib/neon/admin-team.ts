@@ -3,6 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import type { StaffAccess, StaffRole } from "./auth.server.ts";
+import { unwrapServerFnResponse } from "./server-fn-response.ts";
 import type {
   AdminTeamFilterState,
   AdminTeamList,
@@ -207,19 +208,23 @@ async function withStaffHeaders<T extends { data: unknown }>(options: T) {
   return withStaffAuthHeaders(options);
 }
 
+// Every call is unwrapped: TanStack Start resolves rather than rejects when a
+// handler throws a Response, so without this a 401/403/404/409 would arrive as a
+// resolved value -- reported to the admin as a successful mutation. See
+// unwrapServerFnResponse.
 export const listAdminTeam = async (options: { data: AdminTeamListInput }) =>
-  listAdminTeamServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(listAdminTeamServer(await withStaffHeaders(options)));
 export const getAdminTeamMember = async (options: { data: { staffId: string } }) =>
-  getAdminTeamMemberServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(getAdminTeamMemberServer(await withStaffHeaders(options)));
 export const inviteStaffMember = async (options: { data: InviteStaffMemberInput }) =>
-  inviteStaffMemberServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(inviteStaffMemberServer(await withStaffHeaders(options)));
 export const resendStaffInvitation = async (options: { data: ResendStaffInvitationInput }) =>
-  resendStaffInvitationServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(resendStaffInvitationServer(await withStaffHeaders(options)));
 export const sendStaffPasswordReset = async (options: { data: SendStaffPasswordResetInput }) =>
-  sendStaffPasswordResetServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(sendStaffPasswordResetServer(await withStaffHeaders(options)));
 export const changeStaffRoles = async (options: { data: ChangeStaffRolesInput }) =>
-  changeStaffRolesServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(changeStaffRolesServer(await withStaffHeaders(options)));
 export const changeStaffActive = async (options: { data: ChangeStaffActiveInput }) =>
-  changeStaffActiveServer(await withStaffHeaders(options));
+  unwrapServerFnResponse(changeStaffActiveServer(await withStaffHeaders(options)));
 
 export type { AdminTeamFilterState };

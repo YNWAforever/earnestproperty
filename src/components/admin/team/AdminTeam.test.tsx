@@ -261,7 +261,9 @@ describe("Admin Team request safety", () => {
     expect(serverErrorStatus(new Error("Staff member not found."))).toBe(404);
     expect(
       serverErrorStatus(
-        new Error("This change conflicted with another concurrent staff-access update. Please retry."),
+        new Error(
+          "This change conflicted with another concurrent staff-access update. Please retry.",
+        ),
       ),
     ).toBe(409);
 

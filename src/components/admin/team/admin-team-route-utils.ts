@@ -41,6 +41,12 @@ const SERVER_ERROR_BODY_STATUS = new Map<string, number>([
  */
 export function serverErrorStatus(error: unknown): number | null {
   if (error instanceof Response) return error.status;
+  // ServerFnResponseError carries the real status from the unwrapped Response.
+  // Preferred over the body map below, which matches prose that can drift.
+  if (error && typeof error === "object" && "status" in error) {
+    const status = (error as { status?: unknown }).status;
+    if (typeof status === "number" && Number.isFinite(status)) return status;
+  }
   if (error instanceof Error) return SERVER_ERROR_BODY_STATUS.get(error.message.trim()) ?? null;
   return null;
 }

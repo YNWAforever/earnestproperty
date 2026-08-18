@@ -26,7 +26,6 @@ test("Neon Auth TanStack Router integration is wired", () => {
   assert.match(authClient, /BetterAuthReactAdapter/);
   assert.match(authClient, /VITE_NEON_AUTH_URL/);
   assert.match(authClient, /withStaffAuthHeaders/);
-  assert.match(authClient, /getJWTToken/);
   assert.match(authClient, /getSession/);
   assert.match(authClient, /sessionTokenFromValue/);
   assert.match(authClient, /readStaffAuthToken/);
@@ -49,10 +48,18 @@ test("Neon Auth TanStack Router integration is wired", () => {
   assert.match(accountRoute, /from ["']@neondatabase\/auth-ui["']/);
 });
 
-test("admin auth headers fall back when Neon JWT endpoint is unavailable", () => {
+test("admin auth headers read the staff token from the session, not the broken JWT endpoint", () => {
   const authClient = read("src/auth.ts");
 
-  assert.match(authClient, /getJWTToken\?\.\(\)\.catch/);
+  // The installed @neondatabase/auth SDK's getJWTToken() always 404s (its
+  // better-auth client derives "/get-j-w-t-token" instead of "/get-jwt-token"
+  // -- see the comment on readStaffAuthToken in src/auth.ts). readStaffAuthToken
+  // must go straight to getSession() rather than attempting it first.
+  const readStaffAuthTokenBody = authClient.match(
+    /async function readStaffAuthToken\(\) \{[\s\S]*?\n\}/,
+  )?.[0];
+  assert.ok(readStaffAuthTokenBody, "readStaffAuthToken must be defined in src/auth.ts");
+  assert.doesNotMatch(readStaffAuthTokenBody, /client\.getJWTToken/);
   assert.match(authClient, /getSession\?\.\(\)\.catch/);
   assert.match(authClient, /sessionTokenFromValue\(session\)/);
   assert.match(authClient, /headers\.set\("authorization", `Bearer \$\{token\}`\)/);
