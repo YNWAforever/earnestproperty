@@ -721,15 +721,27 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
   };
 }
 
-async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
-  const adminData = await import("./admin-data.server.ts");
-  const audit = await import("../control-plane/audit.server.ts");
+type DefaultStaffLifecycleLoaders = {
+  loadAdminData?: () => Promise<
+    Pick<typeof import("./admin-data.server.ts"), "updateStaffRoles" | "setStaffActive">
+  >;
+  loadAudit?: () => Promise<Pick<typeof import("../control-plane/audit.server.ts"), "writeAudit">>;
+};
+
+export async function createDefaultStaffLifecycleDependencies(
+  loaders: DefaultStaffLifecycleLoaders = {},
+): Promise<StaffLifecycleDependencies> {
+  const loadAdminData = loaders.loadAdminData ?? (() => import("./admin-data.server.ts"));
+  const loadAudit = loaders.loadAudit ?? (() => import("../control-plane/audit.server.ts"));
   return {
     organizationId: process.env.NEON_AUTH_ORGANIZATION_ID ?? "",
     provider: createStaffIdentityProvider({}),
-    updateStaffRoles: adminData.updateStaffRoles,
-    setStaffActive: adminData.setStaffActive,
+    updateStaffRoles: async (input, actor) =>
+      (await loadAdminData()).updateStaffRoles(input, actor),
+    setStaffActive: async (input, actor) =>
+      (await loadAdminData()).setStaffActive(input, actor),
     writeAudit: async (input) => {
+      const audit = await loadAudit();
       await audit.writeAudit({
         actor: input.actor,
         permission: input.permission,
@@ -742,6 +754,10 @@ async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
       });
     },
   };
+}
+
+async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
+  return createDefaultStaffLifecycleDependencies();
 }
 
 let defaultService: ReturnType<typeof createStaffLifecycleService> | null = null;
