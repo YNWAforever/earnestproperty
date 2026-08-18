@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 const healthRoutePath = "src/routes/api.admin.control-plane.health.ts";
@@ -156,10 +157,66 @@ test("job and migration overview routes compose safe read models", () => {
   assert.doesNotMatch(migrationsSource, /migration\.statements/);
 });
 
+/**
+ * Resolves an import specifier to a file inside this repo, or null for anything
+ * from node_modules. `@/x` is the tsconfig alias for `src/x`.
+ *
+ * @param {string} specifier
+ * @param {string} fromFile
+ * @returns {string | null}
+ */
+function resolveLocalImport(specifier, fromFile) {
+  const base = specifier.startsWith("@/")
+    ? join("src", specifier.slice(2))
+    : specifier.startsWith(".")
+      ? join(dirname(fromFile), specifier)
+      : null;
+  if (!base) return null;
+
+  // Specifiers here are written both with and without an extension, and the
+  // `.js` ones are real .js files (see migration-versions.js), not TS output.
+  for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.mjs`]) {
+    if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  }
+  return null;
+}
+
+/**
+ * A route's source concatenated with the sources of the repo modules it imports,
+ * one level deep.
+ *
+ * @param {string} file
+ * @returns {string}
+ */
+function sourceWithLocalImports(file) {
+  const source = readFileSync(file, "utf8");
+  const imported = [...source.matchAll(/from\s+"([^"]+)"/g)]
+    .map((match) => resolveLocalImport(match[1], file))
+    .filter((path) => path !== null)
+    .map((path) => readFileSync(path, "utf8"));
+  return [source, ...imported].join("\n");
+}
+
 // Vercel Cron issues GET. A route registering POST only does not 405 under
 // TanStack -- it falls through to the SPA render -- so a scheduled job that can
 // never run looks exactly like one that runs fine. Both drain endpoints had
 // been dead since they were scheduled.
+//
+// The CRON_SECRET half of this used to grep the route file alone. That broke
+// when api.youtube-sync.ts was refactored to delegate to
+// createYouTubeSyncHttpHandlers(): the check moved into
+// lib/youtube-sync/youtube-http.server.ts, the literal string left the route,
+// and a correctly-authenticated endpoint started failing. Reading one file only
+// holds while nobody extracts a handler -- so follow the route's own imports one
+// level and require the secret to be read somewhere in that chain. That still
+// catches the thing worth catching (a cron route with no secret check reachable
+// from it) without dictating which file the check lives in.
+//
+// This asserts the wiring, not the behaviour. That the handler actually returns
+// 401 is proved in src/lib/youtube-sync/youtube-http.test.ts ("cron rejects
+// missing or invalid bearer authorization"), which can call it directly because
+// it runs under bun. This file runs under node --test and cannot import .ts,
+// which is why it reads source text at all.
 test("every path scheduled in vercel.ts has a GET handler", () => {
   const vercelConfig = readFileSync("vercel.ts", "utf8");
   const cronBlock = vercelConfig.slice(
@@ -179,9 +236,10 @@ test("every path scheduled in vercel.ts has a GET handler", () => {
     const source = readFileSync(file, "utf8");
     assert.match(source, /\bGET:/, `${file} must expose a GET handler for the ${path} cron`);
     assert.match(
-      source,
+      sourceWithLocalImports(file),
       /CRON_SECRET/,
-      `${file} must still require the CRON_SECRET bearer token on every verb`,
+      `${file} must still require the CRON_SECRET bearer token on every verb — ` +
+        `neither it nor the modules it imports reads CRON_SECRET`,
     );
   }
 });
