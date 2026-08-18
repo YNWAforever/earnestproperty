@@ -1,13 +1,200 @@
 import { evaluateRunGate, evaluateSourceHealth } from "./health.mjs";
 import { groupExactMatches, matchCanonicalProperty } from "./match.mjs";
-import { reconcileProperty } from "./reconcile.mjs";
+import { nextLifecycleState, reconcileProperty } from "./reconcile.mjs";
 import { SOURCE_28HSE, SOURCE_OLD_SITE } from "./source-contract.mjs";
 
 const SOURCES = [SOURCE_OLD_SITE, SOURCE_28HSE];
+const CANONICAL_KEYS = [
+  "listing_no",
+  "canonical_property_no",
+  "title_zh",
+  "title_en",
+  "deal_type",
+  "estate_id",
+  "district_slug",
+  "address",
+  "price",
+  "rent",
+  "saleable_area",
+  "gross_area",
+  "bedrooms",
+  "bathrooms",
+  "floor",
+  "orientation",
+  "features",
+  "description",
+  "images",
+  "status",
+];
+const NEW_CANONICAL_METADATA_KEYS = [
+  "featured",
+  "management_fee",
+  "video_url",
+  "floorplan_url",
+  "source_site",
+  "legacy_detail_id",
+  "legacy_property_no",
+  "legacy_url",
+];
+
+function plainData(value) {
+  if (Array.isArray(value)) return value.map(plainData);
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.keys(value).map((key) => [key, plainData(value[key])]));
+  return value;
+}
+
+function projectCanonical(canonical, kind) {
+  const keys =
+    kind === "new" ? [...CANONICAL_KEYS, ...NEW_CANONICAL_METADATA_KEYS] : CANONICAL_KEYS;
+  return Object.fromEntries(
+    keys
+      .filter((key) => Object.hasOwn(canonical, key))
+      .map((key) => [key, plainData(canonical[key])]),
+  );
+}
+
+function mediaResult(value) {
+  return {
+    candidateResults: Array.isArray(value.candidateResults)
+      ? value.candidateResults
+      : Array.isArray(value.results)
+        ? value.results
+        : [],
+    preparedMedia: value.preparedMedia ?? value.prepared ?? null,
+  };
+}
+
+function safeCurrentImages(match) {
+  const images = match.kind === "existing" ? match.property?.images : [];
+  return Array.isArray(images) ? plainData(images) : [];
+}
+
+function lifecycleFor(reconciliation, match, lifecycleState, gate) {
+  const current = match.kind === "existing" ? match.property : {};
+  const consecutive = lifecycleState?.consecutive_absent_healthy_runs ?? 0;
+  const next = nextLifecycleState({
+    consecutive: Number.isSafeInteger(consecutive) && consecutive >= 0 ? consecutive : 0,
+    seen: true,
+    mayAdvanceInactivity: gate.mayAdvanceInactivity === true,
+    currentStatus: current.status ?? reconciliation.canonical.status,
+    hasStatusOverride: reconciliation.fields.status?.nextFieldState?.active_override === true,
+  });
+  if (next.statusChange === "active" && reconciliation.canonical.status === "inactive") {
+    reconciliation.canonical.status = "active";
+    reconciliation.fields.status = {
+      ...reconciliation.fields.status,
+      value: "active",
+      changed: true,
+      observationId: null,
+      nextFieldState: {
+        last_published_value: "active",
+        override_value: null,
+        active_override: false,
+      },
+    };
+  }
+  return { consecutiveAbsentHealthyRuns: next.consecutive, inactiveReason: null, inactiveAt: null };
+}
+
+function sameLink(link, observation) {
+  return (
+    link?.source === observation.source &&
+    (link.external_listing_id ?? link.externalId) === observation.externalId &&
+    (link.deal_type ?? link.dealType) === observation.dealType
+  );
+}
+
+function changeEvents({
+  kind,
+  canonical,
+  reconciliation,
+  current,
+  observations,
+  sourceLinks,
+  lifecycle,
+}) {
+  const events = [];
+  if (kind === "new") {
+    events.push({
+      changeType: "new",
+      fieldName: null,
+      oldValue: null,
+      newValue: plainData(canonical),
+      winningObservationId: observations[0]?.id ?? null,
+      reason: null,
+    });
+  } else {
+    for (const [fieldName, field] of Object.entries(reconciliation.fields)) {
+      if (!field.changed) continue;
+      const oldValue = current[fieldName] ?? null;
+      const newValue = canonical[fieldName];
+      let changeType = "changed";
+      let reason = null;
+      let winningObservationId = field.observationId ?? null;
+      if (fieldName === "status" && newValue === "inactive") {
+        changeType = "inactive";
+        reason = lifecycle.inactiveReason;
+        winningObservationId = null;
+      } else if (fieldName === "status" && oldValue === "inactive") {
+        changeType = "reactivated";
+        winningObservationId = null;
+      }
+      events.push({
+        changeType,
+        fieldName,
+        oldValue: plainData(oldValue),
+        newValue: plainData(newValue),
+        winningObservationId,
+        reason,
+      });
+    }
+  }
+  for (const observation of observations) {
+    const existing = sourceLinks.find((link) => sameLink(link, observation));
+    if (existing?.status === "active") continue;
+    events.push({
+      changeType: "link_change",
+      fieldName: null,
+      oldValue: existing
+        ? {
+            source: observation.source,
+            externalId: observation.externalId,
+            dealType: observation.dealType,
+            matchKey: existing.match_key ?? existing.matchKey,
+            status: existing.status,
+          }
+        : null,
+      newValue: {
+        source: observation.source,
+        externalId: observation.externalId,
+        dealType: observation.dealType,
+        matchKey: observation.matchKey,
+        status: "active",
+      },
+      winningObservationId: observation.id ?? null,
+      reason: null,
+    });
+  }
+  return events;
+}
 
 function safeError(error) {
   const message = error instanceof Error ? error.message : String(error ?? "unknown failure");
-  return message.replace(/[\r\n\t]+/g, " ").slice(0, 240);
+  return message
+    .replace(/<[^>]*>/g, "[redacted_html]")
+    .replace(/\b(?:postgres(?:ql)?|mysql|mongodb):\/\/[^\s"'<>]+/gi, "[redacted_connection]")
+    .replace(
+      /\b(?:authorization|api[_-]?key|password|secret|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi,
+      (match) => `${match.split(/[:=]/)[0]}=[redacted]`,
+    )
+    .replace(
+      /\b(?:params?|parameters|values?)\s*[:=]\s*(?:\[[^\]]*\]|\{[^}]*\})/gi,
+      "[redacted_sql_parameters]",
+    )
+    .replace(/\$(?:\d+|\{[^}]+\})/g, "[redacted_sql_parameter]")
+    .replace(/[\r\n\t]+/g, " ")
+    .slice(0, 240);
 }
 
 function failedSource(source, error) {
@@ -107,6 +294,7 @@ export async function runDualSourceSync(input) {
   let runId = null;
   let evaluation = { sourceStatus: {}, counts: {}, baselines: {} };
   let publicationCommitted = false;
+  let postCommitPhase = null;
   try {
     runId = (
       await repository.beginRun({
@@ -226,9 +414,10 @@ export async function runDualSourceSync(input) {
       repository.loadLifecycleStates(propertyIds),
     ]);
     const lifecycleByProperty = new Map(lifecycleStates.map((item) => [item.property_id, item]));
-    const proposedLinks = [],
-      proposals = [],
-      quarantines = [...grouping.quarantined];
+    const proposedLinks = [];
+    const work = [];
+    const quarantines = [...grouping.quarantined];
+    const proposals = [];
     for (const group of groups) {
       const match = matchCanonicalProperty(group, candidates, links);
       if (match.kind === "ambiguous") {
@@ -239,16 +428,56 @@ export async function runDualSourceSync(input) {
         ...item,
         id: persisted.get(observationKey(item))?.id,
       }));
+      if (!observations[0]?.id) {
+        counts.quarantined += 1;
+        quarantines.push({ code: "persisted_observation_missing", matchKey: group.matchKey });
+        continue;
+      }
+      work.push({ group, match, observations });
+      if (match.kind === "existing") {
+        proposedLinks.push(
+          ...observations.map((item) => ({
+            propertyId: match.propertyId,
+            source: item.source,
+            externalId: item.externalId,
+            dealType: item.dealType,
+            matchKey: item.matchKey,
+            observedAt: item.fetchedAt,
+          })),
+        );
+      }
+    }
+    if (proposedLinks.length) await repository.saveProposedLinks(runId, proposedLinks);
+
+    let lockVerified = false;
+    for (const { group, match, observations } of work) {
+      const currentImages = safeCurrentImages(match);
+      if (input.mode === "publish" && !lockVerified) {
+        await repository.assertLockSession({ signal });
+        lockVerified = true;
+      }
       const prepared = await input.media.prepareListingMedia({
         mode: input.mode === "publish" ? "upload" : "validate",
         observation: observations[0],
+        observationId: observations[0].id,
+        propertyId: match.kind === "existing" ? match.propertyId : null,
+        currentImages,
+        allowedMediaHosts: input.mediaAllowedHosts,
+        blobStore: input.blobStore,
         isNew: match.kind === "new",
         rightsConfirmed: input.mediaRightsConfirmed,
         repository,
         signal,
       });
+      const media = mediaResult(prepared);
       counts.mediaValidated += input.mode === "shadow" ? 1 : 0;
       counts.mediaUploaded += prepared.uploadCount ?? 0;
+      if (match.kind === "existing") {
+        counts.existingMediaReused += media.candidateResults.filter(
+          (candidate) =>
+            candidate?.ownedMediaAssetId != null && candidate?.sourceUrl === candidate?.ownedUrl,
+        ).length;
+      }
       if (!prepared.publishable) {
         counts.mediaRejected += 1;
         counts.quarantined += 1;
@@ -273,13 +502,25 @@ export async function runDualSourceSync(input) {
             : [],
         lifecycleState: lifecycleByProperty.get(match.propertyId),
         estateIdsBySlug,
-        preparedImages: prepared.prepared ? [prepared.prepared] : [],
+        preparedImages: media.preparedMedia ? [media.preparedMedia] : [],
+        currentOwnedImages: currentImages,
       });
       if (reconciliation.validationEvidence.blockingCodes.length) {
+        counts.quarantined += Math.max(1, reconciliation.quarantines.length);
         quarantines.push(...reconciliation.quarantines);
         continue;
       }
-      reconciliation.canonical.images = prepared.images ?? reconciliation.canonical.images;
+      reconciliation.canonical.images = Array.isArray(prepared.images)
+        ? plainData(prepared.images)
+        : reconciliation.canonical.images;
+      const lifecycle = lifecycleFor(
+        reconciliation,
+        match,
+        lifecycleByProperty.get(match.propertyId),
+        gate,
+      );
+      const kind = match.kind === "existing" ? "update" : "new";
+      const canonical = projectCanonical(reconciliation.canonical, kind);
       const base = {
         links: observations.map((item) => ({
           source: item.source,
@@ -289,37 +530,33 @@ export async function runDualSourceSync(input) {
           observedAt: item.fetchedAt,
         })),
         fields: fieldWrites(reconciliation),
-        lifecycle: { consecutiveAbsentHealthyRuns: 0, inactiveReason: null, inactiveAt: null },
-        events: [],
+        lifecycle,
+        events: changeEvents({
+          kind,
+          canonical,
+          reconciliation,
+          current: match.kind === "existing" ? match.property : {},
+          observations,
+          sourceLinks: links,
+          lifecycle,
+        }),
       };
       const proposal =
-        match.kind === "existing"
+        kind === "update"
           ? {
               ...base,
-              kind: "update",
+              kind,
               propertyId: match.propertyId,
               expectedUpdatedAt: match.property.updated_at,
-              canonical: reconciliation.canonical,
+              canonical,
             }
-          : { ...base, kind: "new", canonical: reconciliation.canonical };
+          : { ...base, kind, canonical };
       proposals.push(proposal);
-      counts[proposal.kind === "new" ? "new" : "changed"] += 1;
+      counts[kind === "new" ? "new" : "changed"] += 1;
       counts.retainedOverrideFields += proposal.fields.filter(
         (field) => field.activeOverride,
       ).length;
-      if (match.kind === "existing")
-        proposedLinks.push(
-          ...observations.map((item) => ({
-            propertyId: match.propertyId,
-            source: item.source,
-            externalId: item.externalId,
-            dealType: item.dealType,
-            matchKey: item.matchKey,
-            observedAt: item.fetchedAt,
-          })),
-        );
     }
-    if (proposedLinks.length) await repository.saveProposedLinks(runId, proposedLinks);
     if (input.mode === "shadow") {
       const status = gate.mode === "degraded" ? "degraded" : "shadow_healthy";
       const outcome = { runId, status, evaluation, gate, counts, proposals, quarantines };
@@ -327,7 +564,7 @@ export async function runDualSourceSync(input) {
       await repository.finishRun(runId, completion(status, evaluation));
       return outcome;
     }
-    await repository.assertLockSession({ signal });
+    if (!lockVerified) await repository.assertLockSession({ signal });
     const published = await repository.publishBatch({
       runId,
       mode: "publish",
@@ -340,14 +577,18 @@ export async function runDualSourceSync(input) {
     counts.changed = published.updated;
     const status = gate.mode === "degraded" ? "degraded" : "healthy";
     const outcome = { runId, status, evaluation, gate, counts, proposals, quarantines };
+    postCommitPhase = "artifacts";
     await reporter.writeRunArtifacts(outcome);
+    postCommitPhase = "finish";
     await repository.finishRun(runId, completion(status, evaluation));
     return outcome;
   } catch (error) {
     if (runId) {
-      const failureCode = publicationCommitted
-        ? "artifact_write_failed_after_publish"
-        : "orchestrator_failed";
+      const failureCode = !publicationCommitted
+        ? "orchestrator_failed"
+        : postCommitPhase === "artifacts"
+          ? "artifact_write_failed_after_publish"
+          : "run_finalization_failed_after_publish";
       const failureSummary = safeError(error);
       try {
         await reporter.writeRunArtifacts({

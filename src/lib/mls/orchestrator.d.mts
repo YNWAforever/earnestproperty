@@ -1,18 +1,53 @@
 import type { SourceRunResult } from "./source-contract.mjs";
 import type { PublicationProposal, SyncRepository } from "./sync-repository.mjs";
 
-export interface MediaPreparer {
-  prepareListingMedia(input: Record<string, unknown>): Promise<{
-    publishable: boolean;
-    reasons: readonly string[];
-    images: readonly string[];
-    uploadCount: number;
-    wouldUploadCount: number;
-    results: readonly unknown[];
-    prepared: unknown;
-  }>;
+export interface BlobStore {
+  put(input: {
+    pathname: string;
+    body: Uint8Array;
+    contentType: string;
+    access: "public";
+  }): Promise<{ url: string; pathname: string }>;
 }
 
+export interface PreparedListingMedia {
+  observationId: string;
+  propertyId: string | null;
+  source: string;
+  externalId: string;
+  dealType: string;
+  matchKey: string;
+  images: readonly string[];
+}
+
+export interface MediaPreparationResult {
+  publishable: boolean;
+  reasons: readonly string[];
+  images: readonly string[];
+  uploadCount: number;
+  wouldUploadCount: number;
+  candidateResults: readonly Record<string, unknown>[];
+  preparedMedia: PreparedListingMedia | null;
+  /** Compatibility with pre-Task-10 preparers. */
+  results?: readonly Record<string, unknown>[];
+  prepared?: PreparedListingMedia | null;
+}
+
+export interface MediaPreparer {
+  prepareListingMedia(input: {
+    mode: "validate" | "upload";
+    observation: import("./source-contract.mjs").SourceObservation;
+    observationId: string;
+    propertyId: string | null;
+    currentImages: readonly string[];
+    allowedMediaHosts?: readonly string[] | string;
+    blobStore?: BlobStore;
+    isNew: boolean;
+    rightsConfirmed: boolean;
+    repository: SyncRepository;
+    signal?: AbortSignal;
+  }): Promise<MediaPreparationResult>;
+}
 export interface SyncRunResult {
   runId: string;
   status: "shadow_healthy" | "healthy" | "degraded" | "blocked" | "failed";
@@ -35,6 +70,8 @@ export declare function runDualSourceSync(input: {
   publishEnabled: boolean;
   mediaRightsConfirmed: boolean;
   parserVersion: string;
+  mediaAllowedHosts?: readonly string[] | string;
+  blobStore?: BlobStore;
   adapters: {
     oldSite: { collect(): Promise<SourceRunResult> };
     hse28: { collect(): Promise<SourceRunResult> };

@@ -255,3 +255,88 @@ test("publication rollback errors propagate and an unchanged rerun has no duplic
   });
   await assert.rejects(() => runDualSourceSync(failing), /rollback propagated/);
 });
+
+test("converts enumerable reconciliation evidence to Task 9 plain proposal evidence", async () => {
+  const outcome = await runDualSourceSync(input());
+  assert.equal(outcome.proposals.length, 1);
+  assert.deepEqual(Object.getOwnPropertySymbols(outcome.proposals[0].canonical), []);
+  assert.equal(Object.getOwnPropertySymbols(outcome.proposals[0]).length, 0);
+});
+
+test("asserts the locked session immediately before a complete publish-mode media handoff", async () => {
+  const calls = [];
+  const repository = fakeRepository({
+    async assertLockSession() {
+      calls.push("lock");
+    },
+    async publishBatch(input) {
+      calls.push("publish");
+      return { inserted: 0, updated: 0, events: 0 };
+    },
+  });
+  const value = input({
+    mode: "publish",
+    publishEnabled: true,
+    repository,
+    mediaAllowedHosts: ["images.example.test"],
+    blobStore: {
+      put: async () => {
+        throw new Error("not reached");
+      },
+    },
+    media: {
+      async prepareListingMedia(mediaInput) {
+        calls.push("media");
+        assert.match(mediaInput.observationId, /^00000000-0000-4000-8000-\d{12}$/);
+        assert.equal(mediaInput.propertyId, null);
+        assert.deepEqual(mediaInput.currentImages, []);
+        assert.deepEqual(mediaInput.allowedMediaHosts, ["images.example.test"]);
+        assert.equal(mediaInput.blobStore != null, true);
+        return {
+          publishable: false,
+          reasons: ["fixture_media"],
+          images: [],
+          uploadCount: 0,
+          wouldUploadCount: 0,
+          candidateResults: [],
+          preparedMedia: null,
+        };
+      },
+    },
+  });
+  await runDualSourceSync(value);
+  assert.deepEqual(calls, ["lock", "media", "publish"]);
+});
+
+test("emits lifecycle and provenance events for seen, absent, unknown, and quarantined linked details", async () => {
+  const outcome = await runDualSourceSync(input());
+  assert.equal(outcome.proposals.length, 1);
+  const proposal = outcome.proposals[0];
+  assert.ok(proposal.events.length > 0);
+  assert.ok(proposal.events.some((event) => event.winningObservationId));
+  assert.ok(
+    proposal.events.some((event) => ["new", "changed", "reactivated"].includes(event.changeType)),
+  );
+  assert.ok(Object.hasOwn(proposal.lifecycle, "consecutiveAbsentHealthyRuns"));
+});
+
+test("classifies post-commit finalization failures and redacts diagnostic evidence", async () => {
+  const artifacts = [];
+  let finishCalls = 0;
+  const value = input({
+    mode: "publish",
+    publishEnabled: true,
+    reporter: { writeRunArtifacts: async (artifact) => artifacts.push(artifact) },
+    repository: fakeRepository({
+      async finishRun() {
+        finishCalls += 1;
+        throw new Error("password=hunter2 <html>body</html> SQL params [$1]");
+      },
+    }),
+  });
+  await assert.rejects(() => runDualSourceSync(value), /password=hunter2/);
+  assert.ok(finishCalls >= 1);
+  const failure = artifacts.at(-1);
+  assert.equal(failure.failureCode, "run_finalization_failed_after_publish");
+  assert.doesNotMatch(failure.failureSummary, /hunter2|<html|\$1/);
+});
