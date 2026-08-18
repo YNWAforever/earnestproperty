@@ -739,6 +739,7 @@ function fakePublicationClient(options = {}) {
             asset_content_hash: "a".repeat(64),
             asset_owner_type: "mls-shared",
             asset_owner_id: null,
+            asset_created_by: null,
           },
         ],
       );
@@ -3919,6 +3920,7 @@ test("owned image records must originate from an exact candidate in the winning 
         asset_content_hash: "a".repeat(64),
         asset_owner_type: "mls-shared",
         asset_owner_id: null,
+        asset_created_by: null,
       },
     ],
   });
@@ -5989,16 +5991,27 @@ test("self-review: only a prior healthy publish run on the immediately previous 
   );
 });
 
-test("self-review: publication image locks project and verify shared asset ownership", () => {
+test("self-review: publication image locks validate reusable asset ownership", () => {
   const source = readFileSync(new URL("./sync-repository.mjs", import.meta.url), "utf8");
   const mediaEvidence = source.slice(
     source.indexOf("async function normalizedObservationFieldValue"),
     source.indexOf("async function deriveAutomatedFieldEvidence"),
   );
+  const ownerValidation = source.slice(
+    source.indexOf("function isValidPublicationMediaOwner"),
+    source.indexOf("function validateObservation"),
+  );
   assert.match(mediaEvidence, /ma\.owner_type\s+AS\s+asset_owner_type/i);
   assert.match(mediaEvidence, /ma\.owner_id\s+AS\s+asset_owner_id/i);
-  assert.match(mediaEvidence, /asset_owner_type\s*!==\s*"mls-shared"/i);
-  assert.match(mediaEvidence, /asset_owner_id\s*!==\s*null/i);
+  assert.match(mediaEvidence, /ma\.created_by\s+AS\s+asset_created_by/i);
+  assert.match(mediaEvidence, /isValidPublicationMediaOwner\(\s*row\.asset_owner_type/);
+  assert.match(ownerValidation, /ownerType === ownerType\.trim\(\)/);
+  assert.match(ownerValidation, /ownerId === null \|\| isUuid\(ownerId\)/);
+  assert.match(ownerValidation, /createdBy === null \|\| isUuid\(createdBy\)/);
+  assert.match(
+    ownerValidation,
+    /ownerType !== "mls-shared" \|\| \(ownerId === null && createdBy === null\)/,
+  );
 });
 
 test("self-review: a first field-state row cannot invent a no-op active override", async () => {
@@ -6379,6 +6392,7 @@ test("active-link and media evidence overflow are rejected by sentinel before ro
       asset_content_hash: "a".repeat(64),
       asset_owner_type: "mls-shared",
       asset_owner_id: null,
+      asset_created_by: null,
     })),
   });
   await assert.rejects(
@@ -6632,4 +6646,221 @@ test("self-review: field-history overflow is rejected at the SQL max-plus-one se
     client.sql.some((statement) => /INSERT INTO property_sync_fields/.test(statement)),
     false,
   );
+});
+
+test("new publication events require one exact non-null current-run winner", async () => {
+  const proposal = newPublicationProposal();
+  proposal.events.find((event) => event.changeType === "new").winningObservationId = null;
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch({ proposals: [proposal] })),
+    /winning observation|event coverage|current-run winner/i,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+  assert.equal(
+    client.sql.some((statement) => /INSERT INTO listing_change_events/.test(statement)),
+    false,
+  );
+});
+
+test("publication preserves valid reused CMS and admin asset ownership metadata", async () => {
+  const reusedOwners = [
+    {
+      asset_owner_type: "cms",
+      asset_owner_id: PROPERTY_ID_2,
+      asset_created_by: PROPERTY_ID_2,
+    },
+    {
+      asset_owner_type: "property",
+      asset_owner_id: null,
+      asset_created_by: PROPERTY_ID_2,
+    },
+  ];
+
+  for (const owner of reusedOwners) {
+    const client = fakePublicationClient({
+      mediaRows: [
+        {
+          id: MEDIA_RECORD_ID,
+          observation_id: OBSERVATION_ID,
+          property_id: null,
+          source_url: "https://images.28hse.test/photo.png",
+          eligibility: "eligible",
+          rejection_reason: null,
+          owned_media_asset_id: ASSET_ID,
+          record_content_hash: "a".repeat(64),
+          owned_url: "https://owned.example/mls/hash.png",
+          asset_content_hash: "a".repeat(64),
+          asset_created_by: null,
+          ...owner,
+        },
+      ],
+    });
+
+    assert.deepEqual(await createSyncRepository({ client }).publishBatch(approvedBatch()), {
+      inserted: 0,
+      updated: 1,
+      events: 2,
+    });
+    assert.equal(
+      client.sql.some((statement) =>
+        /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+media_assets/i.test(statement),
+      ),
+      false,
+    );
+    assert.equal(
+      client.sql.some((statement) => /UPDATE listing_media_records/.test(statement)),
+      true,
+    );
+  }
+});
+
+test("publication rejects malformed reused ownership without attaching media", async () => {
+  const malformedOwners = [
+    { asset_owner_type: "", asset_owner_id: null },
+    { asset_owner_type: " cms", asset_owner_id: PROPERTY_ID_2 },
+    { asset_owner_type: "x".repeat(161), asset_owner_id: null },
+    { asset_owner_type: 42, asset_owner_id: null },
+    { asset_owner_type: "cms", asset_owner_id: "not-a-uuid" },
+    { asset_owner_type: "cms", asset_owner_id: null, asset_created_by: "not-a-uuid" },
+    { asset_owner_type: "mls-shared", asset_owner_id: PROPERTY_ID_2 },
+    {
+      asset_owner_type: "mls-shared",
+      asset_owner_id: null,
+      asset_created_by: PROPERTY_ID_2,
+    },
+  ];
+
+  for (const owner of malformedOwners) {
+    const client = fakePublicationClient({
+      mediaRows: [
+        {
+          id: MEDIA_RECORD_ID,
+          observation_id: OBSERVATION_ID,
+          property_id: null,
+          source_url: "https://images.28hse.test/photo.png",
+          eligibility: "eligible",
+          rejection_reason: null,
+          owned_media_asset_id: ASSET_ID,
+          record_content_hash: "a".repeat(64),
+          owned_url: "https://owned.example/mls/hash.png",
+          asset_content_hash: "a".repeat(64),
+          asset_created_by: null,
+          ...owner,
+        },
+      ],
+    });
+
+    await assert.rejects(
+      createSyncRepository({ client }).publishBatch(approvedBatch()),
+      /media.*invalid|ownership/i,
+    );
+    assert.equal(
+      client.sql.some((statement) => /UPDATE listing_media_records/.test(statement)),
+      false,
+    );
+    assert.equal(client.events.at(-1), "ROLLBACK");
+  }
+});
+
+test("disposable new-row fixture carries exact primary-image evidence and cleanup", () => {
+  const source = readFileSync(new URL("./mls-db.integration.test.mjs", import.meta.url), "utf8");
+
+  for (const marker of [
+    /const newMediaAssetId = randomUUID\(\)/,
+    /const newMediaRecordId = randomUUID\(\)/,
+    /const newSourceImageUrl = .*upstream\.integration\.invalid\//,
+    /const newOwnedImageUrl = .*owned\.integration\.invalid\//,
+    /const newObservationMediaCandidates = \[/,
+    /url: newSourceImageUrl, category: "listing_photo", isPrimary: true/,
+    /mediaCandidates: newObservationMediaCandidates/,
+    /images: \[newOwnedImageUrl\]/,
+    /\[newMediaRecordId, newObservationId, newSourceImageUrl, newMediaHash, newMediaAssetId\]/,
+    /DELETE FROM listing_media_records WHERE id = \$1", \[newMediaRecordId\]/,
+    /DELETE FROM media_assets WHERE id = \$1", \[newMediaAssetId\]/,
+  ]) {
+    assert.match(source, marker);
+  }
+});
+
+test("self-review: reusable asset owner types reject control-bearing metadata", async () => {
+  const client = fakePublicationClient({
+    mediaRows: [
+      {
+        id: MEDIA_RECORD_ID,
+        observation_id: OBSERVATION_ID,
+        property_id: null,
+        source_url: "https://images.28hse.test/photo.png",
+        eligibility: "eligible",
+        rejection_reason: null,
+        owned_media_asset_id: ASSET_ID,
+        record_content_hash: "a".repeat(64),
+        owned_url: "https://owned.example/mls/hash.png",
+        asset_content_hash: "a".repeat(64),
+        asset_owner_type: "cms\u0000owner",
+        asset_owner_id: PROPERTY_ID_2,
+        asset_created_by: PROPERTY_ID_2,
+      },
+    ],
+  });
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(approvedBatch()),
+    /media.*invalid|ownership/i,
+  );
+  assert.equal(
+    client.sql.some((statement) => /UPDATE listing_media_records/.test(statement)),
+    false,
+  );
+  assert.equal(client.events.at(-1), "ROLLBACK");
+});
+
+test("self-review: reused CMS assets still reject cross-property and hash conflicts", async () => {
+  const cases = [
+    {
+      overrides: { property_id: PROPERTY_ID_2 },
+      error: PublicationConflictError,
+    },
+    {
+      overrides: { asset_content_hash: "b".repeat(64) },
+      error: /media.*invalid|hash/i,
+    },
+  ];
+
+  for (const { overrides, error } of cases) {
+    const client = fakePublicationClient({
+      mediaRows: [
+        {
+          id: MEDIA_RECORD_ID,
+          observation_id: OBSERVATION_ID,
+          property_id: null,
+          source_url: "https://images.28hse.test/photo.png",
+          eligibility: "eligible",
+          rejection_reason: null,
+          owned_media_asset_id: ASSET_ID,
+          record_content_hash: "a".repeat(64),
+          owned_url: "https://owned.example/mls/hash.png",
+          asset_content_hash: "a".repeat(64),
+          asset_owner_type: "cms",
+          asset_owner_id: PROPERTY_ID_2,
+          asset_created_by: PROPERTY_ID_2,
+          ...overrides,
+        },
+      ],
+    });
+
+    await assert.rejects(createSyncRepository({ client }).publishBatch(approvedBatch()), error);
+    assert.equal(
+      client.sql.some((statement) => /UPDATE listing_media_records/.test(statement)),
+      false,
+    );
+    assert.equal(
+      client.sql.some((statement) =>
+        /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+media_assets/i.test(statement),
+      ),
+      false,
+    );
+    assert.equal(client.events.at(-1), "ROLLBACK");
+  }
 });

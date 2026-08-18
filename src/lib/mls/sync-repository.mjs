@@ -292,6 +292,7 @@ const PUBLICATION_MEDIA_ROW_KEYS = new Set([
   "asset_content_hash",
   "asset_owner_type",
   "asset_owner_id",
+  "asset_created_by",
 ]);
 const LOCKED_PROPERTY_ROW_KEYS = new Set([
   "id",
@@ -1328,6 +1329,19 @@ function isPublicationImageCandidate(candidate) {
   return (
     candidate.category === "listing_photo" &&
     MEDIA_CANDIDATE_OPTIONAL_KEYS.every((key) => !Object.hasOwn(candidate, key))
+  );
+}
+
+function isValidPublicationMediaOwner(ownerType, ownerId, createdBy) {
+  return (
+    typeof ownerType === "string" &&
+    ownerType.length > 0 &&
+    ownerType.length <= 160 &&
+    ownerType === ownerType.trim() &&
+    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(ownerType) &&
+    (ownerId === null || isUuid(ownerId)) &&
+    (createdBy === null || isUuid(createdBy)) &&
+    (ownerType !== "mls-shared" || (ownerId === null && createdBy === null))
   );
 }
 
@@ -3546,7 +3560,8 @@ export function createSyncRepository(options = {}) {
                 lmr.eligibility, lmr.rejection_reason, lmr.owned_media_asset_id,
                 lmr.content_hash AS record_content_hash,
                 ma.url AS owned_url, ma.content_hash AS asset_content_hash,
-                ma.owner_type AS asset_owner_type, ma.owner_id AS asset_owner_id
+                ma.owner_type AS asset_owner_type, ma.owner_id AS asset_owner_id,
+                ma.created_by AS asset_created_by
            FROM listing_media_records AS lmr
            JOIN media_assets AS ma ON ma.id = lmr.owned_media_asset_id
           WHERE lmr.observation_id = $1::uuid
@@ -3595,8 +3610,11 @@ export function createSyncRepository(options = {}) {
           typeof row.asset_content_hash !== "string" ||
           !HASH_PATTERN.test(row.asset_content_hash) ||
           row.record_content_hash !== row.asset_content_hash ||
-          row.asset_owner_type !== "mls-shared" ||
-          row.asset_owner_id !== null ||
+          !isValidPublicationMediaOwner(
+            row.asset_owner_type,
+            row.asset_owner_id,
+            row.asset_created_by,
+          ) ||
           ownedBySourceUrl.has(row.source_url)
         ) {
           throw new TypeError("publication media candidate evidence is invalid");
@@ -5060,8 +5078,11 @@ export function createSyncRepository(options = {}) {
         typeof row.asset_content_hash !== "string" ||
         !HASH_PATTERN.test(row.asset_content_hash) ||
         row.record_content_hash !== row.asset_content_hash ||
-        row.asset_owner_type !== "mls-shared" ||
-        row.asset_owner_id !== null
+        !isValidPublicationMediaOwner(
+          row.asset_owner_type,
+          row.asset_owner_id,
+          row.asset_created_by,
+        )
       ) {
         throw new TypeError("publication media row is invalid");
       }
@@ -5126,7 +5147,7 @@ export function createSyncRepository(options = {}) {
     }
     if (expected.anyCurrentWinner) {
       if (
-        event.winningObservationId !== null &&
+        event.winningObservationId === null ||
         !winningObservations.has(event.winningObservationId)
       ) {
         return false;

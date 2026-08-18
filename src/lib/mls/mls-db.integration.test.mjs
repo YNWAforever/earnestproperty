@@ -198,6 +198,8 @@ test(
     const newObservationId = randomUUID();
     const mediaAssetId = randomUUID();
     const mediaRecordId = randomUUID();
+    const newMediaAssetId = randomUUID();
+    const newMediaRecordId = randomUUID();
     const shadowRunIds = Array.from({ length: 7 }, () => randomUUID());
     const tag = randomUUID();
     const publishDate = "2077-06-15";
@@ -209,8 +211,13 @@ test(
     const newLegacyUrl = `https://legacy.integration.invalid/${tag}`;
     const sourceImageUrl = `https://upstream.integration.invalid/${tag}.png`;
     const ownedImageUrl = `https://owned.integration.invalid/${tag}.png`;
+    const newSourceImageUrl = `https://upstream.integration.invalid/new-${tag}.png`;
+    const newOwnedImageUrl = `https://owned.integration.invalid/new-${tag}.png`;
     const observationMediaCandidates = [
       { url: sourceImageUrl, category: "listing_photo", isPrimary: true },
+    ];
+    const newObservationMediaCandidates = [
+      { url: newSourceImageUrl, category: "listing_photo", isPrimary: true },
     ];
     const observationFields = {
       title_zh: "After publication",
@@ -286,9 +293,10 @@ test(
       propertyNoNormalized: newListingNo,
       fields: newObservationFields,
       rawFields: {},
-      mediaCandidates: [],
+      mediaCandidates: newObservationMediaCandidates,
       sourceUpdatedAt: null,
     });
+    const newMediaHash = "b".repeat(64);
     const newCanonical = {
       listing_no: newListingNo,
       canonical_property_no: newListingNo,
@@ -308,7 +316,7 @@ test(
       orientation: null,
       features: [],
       description: null,
-      images: [],
+      images: [newOwnedImageUrl],
       status: "active",
       featured: false,
       management_fee: null,
@@ -425,7 +433,7 @@ test(
            property_no_raw, property_no_normalized, payload, media_candidates,
            content_hash, validation_state, discovered_at, fetched_at
          ) VALUES ($1, $2, $3, $4, 'sale', $5, $6, $6, $7::jsonb,
-           '[]'::jsonb, $8, 'valid', $9::timestamptz, $9::timestamptz)`,
+           $8::jsonb, $9, 'valid', $10::timestamptz, $10::timestamptz)`,
         [
           newObservationId,
           runId,
@@ -434,6 +442,7 @@ test(
           newLegacyUrl,
           newListingNo,
           JSON.stringify(newObservationPayload),
+          JSON.stringify(newObservationMediaCandidates),
           newObservationHash,
           `${publishDate}T00:02:00.000Z`,
         ],
@@ -451,6 +460,20 @@ test(
            detected_mime, size_bytes, width, height, eligibility, rejection_reason
          ) VALUES ($1, $2, $3, $4, $5, 'image/png', 123, 10, 8, 'eligible', NULL)`,
         [mediaRecordId, observationId, sourceImageUrl, mediaHash, mediaAssetId],
+      );
+      await client.query(
+        `INSERT INTO media_assets (
+           id, url, pathname, content_type, size_bytes, owner_type, owner_id,
+           content_hash, archived_at
+         ) VALUES ($1, $2, $3, 'image/png', 123, 'mls-shared', NULL, $4, NULL)`,
+        [newMediaAssetId, newOwnedImageUrl, `mls/integration/new-${tag}.png`, newMediaHash],
+      );
+      await client.query(
+        `INSERT INTO listing_media_records (
+           id, observation_id, source_url, content_hash, owned_media_asset_id,
+           detected_mime, size_bytes, width, height, eligibility, rejection_reason
+         ) VALUES ($1, $2, $3, $4, $5, 'image/png', 123, 10, 8, 'eligible', NULL)`,
+        [newMediaRecordId, newObservationId, newSourceImageUrl, newMediaHash, newMediaAssetId],
       );
       const fields = RECONCILED_FIELD_NAMES.map((fieldName) => ({
         fieldName,
@@ -716,7 +739,7 @@ test(
         },
       ]);
       const newPropertyRows = await client.query(
-        `SELECT id, listing_no, canonical_property_no, source_site,
+        `SELECT id, listing_no, canonical_property_no, images, source_site,
                 legacy_detail_id, legacy_property_no, legacy_url
            FROM properties
           WHERE listing_no = $1`,
@@ -728,6 +751,7 @@ test(
         {
           listing_no: newProperty.listing_no,
           canonical_property_no: newProperty.canonical_property_no,
+          images: newProperty.images,
           source_site: newProperty.source_site,
           legacy_detail_id: newProperty.legacy_detail_id,
           legacy_property_no: newProperty.legacy_property_no,
@@ -736,24 +760,56 @@ test(
         {
           listing_no: newListingNo,
           canonical_property_no: newListingNo,
+          images: [newOwnedImageUrl],
           source_site: "dual-source-mls",
           legacy_detail_id: newExternalId,
           legacy_property_no: newListingNo,
           legacy_url: newLegacyUrl,
         },
       );
-      const newEventRows = await client.query(
-        `SELECT change_type, old_value, new_value, winning_observation_id
-           FROM listing_change_events
-          WHERE property_id = $1 AND run_id = $2 AND change_type = 'new'`,
-        [newProperty.id, runId],
-      );
+      const [newEventRows, newMediaRows, newAssetRows] = await Promise.all([
+        client.query(
+          `SELECT change_type, old_value, new_value, winning_observation_id
+             FROM listing_change_events
+            WHERE property_id = $1 AND run_id = $2 AND change_type = 'new'`,
+          [newProperty.id, runId],
+        ),
+        client.query(
+          `SELECT id, observation_id, property_id, source_url, owned_media_asset_id,
+                  eligibility, rejection_reason
+             FROM listing_media_records WHERE id = $1`,
+          [newMediaRecordId],
+        ),
+        client.query(
+          "SELECT url, owner_type, owner_id, archived_at FROM media_assets WHERE id = $1",
+          [newMediaAssetId],
+        ),
+      ]);
       assert.deepEqual(newEventRows.rows, [
         {
           change_type: "new",
           old_value: null,
           new_value: effectiveNewCanonical,
           winning_observation_id: newObservationId,
+        },
+      ]);
+      assert.deepEqual(newMediaRows.rows, [
+        {
+          id: newMediaRecordId,
+          observation_id: newObservationId,
+          property_id: newProperty.id,
+          source_url: newSourceImageUrl,
+          owned_media_asset_id: newMediaAssetId,
+          eligibility: "eligible",
+          rejection_reason: null,
+        },
+      ]);
+      assert.deepEqual(newAssetRows.rows, [
+        {
+          url: newOwnedImageUrl,
+          owner_type: "mls-shared",
+          owner_id: null,
+          archived_at: null,
         },
       ]);
       const captured = structuredClone(published);
@@ -803,6 +859,7 @@ test(
         const cleanupSteps = [
           () => client.query("DELETE FROM listing_change_events WHERE run_id = $1", [runId]),
           () => client.query("DELETE FROM listing_media_records WHERE id = $1", [mediaRecordId]),
+          () => client.query("DELETE FROM listing_media_records WHERE id = $1", [newMediaRecordId]),
           () =>
             client.query("DELETE FROM property_sync_fields WHERE property_id = $1", [propertyId]),
           () =>
@@ -833,6 +890,7 @@ test(
           () => client.query("DELETE FROM properties WHERE listing_no = $1", [newListingNo]),
           () => client.query("DELETE FROM properties WHERE id = $1", [propertyId]),
           () => client.query("DELETE FROM media_assets WHERE id = $1", [mediaAssetId]),
+          () => client.query("DELETE FROM media_assets WHERE id = $1", [newMediaAssetId]),
           () =>
             client.query("DELETE FROM listing_sync_runs WHERE id = ANY($1::uuid[])", [
               [runId, ...shadowRunIds],
