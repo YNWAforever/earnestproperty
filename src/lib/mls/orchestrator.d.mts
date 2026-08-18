@@ -4,10 +4,16 @@ import type { PublicationProposal, SyncRepository } from "./sync-repository.mjs"
 export interface BlobStore {
   put(input: {
     pathname: string;
-    body: Uint8Array;
+    body: Blob | ArrayBuffer | ArrayBufferView;
     contentType: string;
-    access: "public";
-  }): Promise<{ url: string; pathname: string }>;
+    signal?: AbortSignal;
+  }): Promise<{
+    url: string;
+    downloadUrl: string;
+    pathname: string;
+    contentType: string;
+    size: number;
+  }>;
 }
 
 export interface PreparedListingMedia {

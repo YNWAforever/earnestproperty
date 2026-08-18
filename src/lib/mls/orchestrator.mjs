@@ -1,7 +1,8 @@
 import { evaluateRunGate, evaluateSourceHealth } from "./health.mjs";
 import { groupExactMatches, matchCanonicalProperty } from "./match.mjs";
-import { nextLifecycleState, reconcileProperty } from "./reconcile.mjs";
+import { nextLifecycleState, reconcileProperty, validateCanonicalProposal } from "./reconcile.mjs";
 import { SOURCE_28HSE, SOURCE_OLD_SITE } from "./source-contract.mjs";
+import { PublicationOutcomeUnknownError } from "./sync-repository.mjs";
 
 const SOURCES = [SOURCE_OLD_SITE, SOURCE_28HSE];
 const CANONICAL_KEYS = [
@@ -65,22 +66,42 @@ function mediaResult(value) {
   };
 }
 
-function safeCurrentImages(match) {
-  const images = match.kind === "existing" ? match.property?.images : [];
+function safeCurrentImages(match, currentOwnedImages = null) {
+  const images = currentOwnedImages ?? (match.kind === "existing" ? match.property?.images : []);
   return Array.isArray(images) ? plainData(images) : [];
 }
 
-function lifecycleFor(reconciliation, match, lifecycleState, gate) {
+function lifecycleFor(
+  reconciliation,
+  match,
+  lifecycleState,
+  gate,
+  classification = "seen",
+  inactiveAt = null,
+) {
   const current = match.kind === "existing" ? match.property : {};
   const consecutive = lifecycleState?.consecutive_absent_healthy_runs ?? 0;
   const next = nextLifecycleState({
     consecutive: Number.isSafeInteger(consecutive) && consecutive >= 0 ? consecutive : 0,
-    seen: true,
-    mayAdvanceInactivity: gate.mayAdvanceInactivity === true,
+    seen: classification === "seen",
+    mayAdvanceInactivity: classification === "absent" && gate.mayAdvanceInactivity === true,
     currentStatus: current.status ?? reconciliation.canonical.status,
     hasStatusOverride: reconciliation.fields.status?.nextFieldState?.active_override === true,
   });
-  if (next.statusChange === "active" && reconciliation.canonical.status === "inactive") {
+  if (next.statusChange === "inactive") {
+    reconciliation.canonical.status = "inactive";
+    reconciliation.fields.status = {
+      ...reconciliation.fields.status,
+      value: "inactive",
+      changed: true,
+      observationId: null,
+      nextFieldState: {
+        last_published_value: "inactive",
+        override_value: null,
+        active_override: false,
+      },
+    };
+  } else if (next.statusChange === "active" && current.status === "inactive") {
     reconciliation.canonical.status = "active";
     reconciliation.fields.status = {
       ...reconciliation.fields.status,
@@ -94,7 +115,11 @@ function lifecycleFor(reconciliation, match, lifecycleState, gate) {
       },
     };
   }
-  return { consecutiveAbsentHealthyRuns: next.consecutive, inactiveReason: null, inactiveAt: null };
+  return {
+    consecutiveAbsentHealthyRuns: next.consecutive,
+    inactiveReason: next.statusChange === "inactive" ? "absent_from_healthy_sources" : null,
+    inactiveAt: next.statusChange === "inactive" ? inactiveAt : null,
+  };
 }
 
 function sameLink(link, observation) {
@@ -103,6 +128,28 @@ function sameLink(link, observation) {
     (link.external_listing_id ?? link.externalId) === observation.externalId &&
     (link.deal_type ?? link.dealType) === observation.dealType
   );
+}
+
+function sourceIdentity(value) {
+  return [
+    value.source,
+    value.externalId ?? value.external_listing_id,
+    value.dealType ?? value.deal_type,
+  ].join("\u0000");
+}
+
+async function activeLinkedPropertyIds(repository, signal) {
+  const ids = new Set();
+  let afterPropertyId = null;
+  do {
+    const page = await repository.listActiveLinkedPropertyIds(
+      { afterPropertyId, limit: 200 },
+      { signal },
+    );
+    for (const id of page.propertyIds) ids.add(id);
+    afterPropertyId = page.nextCursor;
+  } while (afterPropertyId != null);
+  return [...ids];
 }
 
 function changeEvents({
@@ -122,7 +169,7 @@ function changeEvents({
       oldValue: null,
       newValue: plainData(canonical),
       winningObservationId: observations[0]?.id ?? null,
-      reason: null,
+      reason: "new_listing",
     });
   } else {
     for (const [fieldName, field] of Object.entries(reconciliation.fields)) {
@@ -130,14 +177,15 @@ function changeEvents({
       const oldValue = current[fieldName] ?? null;
       const newValue = canonical[fieldName];
       let changeType = "changed";
-      let reason = null;
+      let reason = "source_value_changed";
       let winningObservationId = field.observationId ?? null;
       if (fieldName === "status" && newValue === "inactive") {
         changeType = "inactive";
-        reason = lifecycle.inactiveReason;
+        reason = lifecycle.inactiveReason ?? "absent_from_healthy_sources";
         winningObservationId = null;
       } else if (fieldName === "status" && oldValue === "inactive") {
         changeType = "reactivated";
+        reason = "source_reactivated";
         winningObservationId = null;
       }
       events.push({
@@ -173,7 +221,7 @@ function changeEvents({
         status: "active",
       },
       winningObservationId: observation.id ?? null,
-      reason: null,
+      reason: "source_link_activated",
     });
   }
   return events;
@@ -182,8 +230,10 @@ function changeEvents({
 function safeError(error) {
   const message = error instanceof Error ? error.message : String(error ?? "unknown failure");
   return message
+    .replace(/<([a-z][a-z0-9:-]*)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "[redacted_html_body]")
     .replace(/<[^>]*>/g, "[redacted_html]")
     .replace(/\b(?:postgres(?:ql)?|mysql|mongodb):\/\/[^\s"'<>]+/gi, "[redacted_connection]")
+    .replace(/\bauthorization\s*[:=]\s*(?:bearer|basic)\s+\S+/gi, "Authorization=[redacted]")
     .replace(
       /\b(?:authorization|api[_-]?key|password|secret|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi,
       (match) => `${match.split(/[:=]/)[0]}=[redacted]`,
@@ -280,7 +330,10 @@ function checkInput(input) {
 function fieldWrites(reconciliation) {
   return Object.entries(reconciliation.fields).map(([fieldName, field]) => ({
     fieldName,
-    lastPublishedValue: field.nextFieldState?.last_published_value ?? field.value,
+    lastPublishedValue:
+      field.nextFieldState && Object.hasOwn(field.nextFieldState, "last_published_value")
+        ? field.nextFieldState.last_published_value
+        : field.value,
     overrideValue: field.nextFieldState?.override_value ?? null,
     activeOverride: field.nextFieldState?.active_override === true,
     winningObservationId: field.observationId ?? null,
@@ -394,25 +447,31 @@ export async function runDualSourceSync(input) {
     const candidates = await repository.findCanonicalCandidates(
       groups.map((group) => group.matchKey),
     );
-    const links = await repository.loadSourceLinks(
-      groups.flatMap((group) =>
-        group.observations.map((item) => ({
-          source: item.source,
-          externalId: item.externalId,
-          dealType: item.dealType,
-        })),
-      ),
+    const activePropertyIds = await activeLinkedPropertyIds(repository, signal);
+    const externalIdentities = groups.flatMap((group) =>
+      group.observations.map((item) => ({
+        source: item.source,
+        externalId: item.externalId,
+        dealType: item.dealType,
+      })),
     );
-    const propertyIds = candidates.map((candidate) => candidate.id);
-    const [estateIdsBySlug, fieldStates, lifecycleStates] = await Promise.all([
+    let links = await repository.loadSourceLinks(externalIdentities);
+    const allPropertyIds = [
+      ...new Set([...candidates.map((candidate) => candidate.id), ...activePropertyIds]),
+    ];
+    const [canonicalReadModels, estateIdsBySlug, fieldStates, lifecycleStates] = await Promise.all([
+      repository.loadCanonicalReadModels(allPropertyIds, { signal }),
       repository.loadEstateIdsBySlug(
         groups.flatMap((group) =>
           group.observations.map((item) => item.fields?.estate_slug).filter(Boolean),
         ),
       ),
-      repository.loadFieldStates(propertyIds),
-      repository.loadLifecycleStates(propertyIds),
+      repository.loadFieldStates(allPropertyIds),
+      repository.loadLifecycleStates(allPropertyIds),
     ]);
+    const readModelByPropertyId = new Map(
+      canonicalReadModels.map((readModel) => [readModel.property.id, readModel]),
+    );
     const lifecycleByProperty = new Map(lifecycleStates.map((item) => [item.property_id, item]));
     const proposedLinks = [];
     const work = [];
@@ -433,7 +492,20 @@ export async function runDualSourceSync(input) {
         quarantines.push({ code: "persisted_observation_missing", matchKey: group.matchKey });
         continue;
       }
-      work.push({ group, match, observations });
+      const readModel =
+        match.kind === "existing" ? readModelByPropertyId.get(match.propertyId) : null;
+      if (match.kind === "existing" && !readModel) {
+        counts.quarantined += 1;
+        quarantines.push({ code: "canonical_read_model_missing", matchKey: group.matchKey });
+        continue;
+      }
+      work.push({
+        group,
+        match,
+        observations,
+        current: readModel?.property ?? match.property,
+        currentOwnedImages: readModel?.currentOwnedImages ?? null,
+      });
       if (match.kind === "existing") {
         proposedLinks.push(
           ...observations.map((item) => ({
@@ -447,52 +519,68 @@ export async function runDualSourceSync(input) {
         );
       }
     }
-    if (proposedLinks.length) await repository.saveProposedLinks(runId, proposedLinks);
+    if (proposedLinks.length) {
+      await repository.saveProposedLinks(runId, proposedLinks);
+      links = await repository.loadSourceLinks(externalIdentities);
+    }
 
     let lockVerified = false;
-    for (const { group, match, observations } of work) {
-      const currentImages = safeCurrentImages(match);
+    for (const { group, match, observations, current, currentOwnedImages } of work) {
+      const currentImages = safeCurrentImages(match, currentOwnedImages);
       if (input.mode === "publish" && !lockVerified) {
         await repository.assertLockSession({ signal });
         lockVerified = true;
       }
-      const prepared = await input.media.prepareListingMedia({
-        mode: input.mode === "publish" ? "upload" : "validate",
-        observation: observations[0],
-        observationId: observations[0].id,
-        propertyId: match.kind === "existing" ? match.propertyId : null,
-        currentImages,
-        allowedMediaHosts: input.mediaAllowedHosts,
-        blobStore: input.blobStore,
-        isNew: match.kind === "new",
-        rightsConfirmed: input.mediaRightsConfirmed,
-        repository,
-        signal,
-      });
-      const media = mediaResult(prepared);
-      counts.mediaValidated += input.mode === "shadow" ? 1 : 0;
-      counts.mediaUploaded += prepared.uploadCount ?? 0;
+      let prepared = null;
+      let media = null;
+      const mediaReasons = [];
+      for (const observation of observations) {
+        const candidate = await input.media.prepareListingMedia({
+          mode: input.mode === "publish" ? "upload" : "validate",
+          observation,
+          observationId: observation.id,
+          propertyId: match.kind === "existing" ? match.propertyId : null,
+          currentImages,
+          allowedMediaHosts: input.mediaAllowedHosts,
+          blobStore: input.blobStore,
+          isNew: match.kind === "new",
+          rightsConfirmed: input.mediaRightsConfirmed,
+          repository,
+          signal,
+        });
+        counts.mediaValidated += 1;
+        counts.mediaUploaded += candidate.uploadCount ?? 0;
+        if (candidate.publishable) {
+          prepared = candidate;
+          media = mediaResult(candidate);
+          break;
+        }
+        mediaReasons.push(...(Array.isArray(candidate.reasons) ? candidate.reasons : []));
+      }
       if (match.kind === "existing") {
         counts.existingMediaReused += media.candidateResults.filter(
           (candidate) =>
             candidate?.ownedMediaAssetId != null && candidate?.sourceUrl === candidate?.ownedUrl,
         ).length;
       }
-      if (!prepared.publishable) {
+      if (!prepared) {
         counts.mediaRejected += 1;
         counts.quarantined += 1;
         quarantines.push({
           code: "media_preparation_failed",
           matchKey: group.matchKey,
-          reasons: prepared.reasons,
+          reasons: [...new Set(mediaReasons)],
         });
         continue;
       }
       const reconciliation = reconcileProperty({
         kind: match.kind === "existing" ? "update" : "new",
-        current: match.kind === "existing" ? match.property : {},
+        current: match.kind === "existing" ? current : {},
         listingNo: match.listingNo,
         observations,
+        linkedObservationIds: observations
+          .filter((item) => item.source === SOURCE_OLD_SITE)
+          .map((item) => item.id),
         persistedObservationRefs: observations
           .map((item) => persisted.get(observationKey(item)))
           .filter(Boolean),
@@ -510,16 +598,32 @@ export async function runDualSourceSync(input) {
         quarantines.push(...reconciliation.quarantines);
         continue;
       }
-      reconciliation.canonical.images = Array.isArray(prepared.images)
-        ? plainData(prepared.images)
-        : reconciliation.canonical.images;
+      const kind = match.kind === "existing" ? "update" : "new";
+      if (input.mode === "publish") {
+        const invariantCodes = validateCanonicalProposal(reconciliation.canonical, {
+          kind,
+          validationEvidence: reconciliation.validationEvidence,
+          preparedImages: Array.isArray(media.preparedMedia?.images)
+            ? media.preparedMedia.images
+            : [],
+          currentOwnedImages: currentImages,
+        });
+        if (invariantCodes.length) {
+          counts.quarantined += 1;
+          quarantines.push({
+            code: "canonical_validation_failed",
+            matchKey: group.matchKey,
+            invariantCodes,
+          });
+          continue;
+        }
+      }
       const lifecycle = lifecycleFor(
         reconciliation,
         match,
         lifecycleByProperty.get(match.propertyId),
         gate,
       );
-      const kind = match.kind === "existing" ? "update" : "new";
       const canonical = projectCanonical(reconciliation.canonical, kind);
       const base = {
         links: observations.map((item) => ({
@@ -535,7 +639,7 @@ export async function runDualSourceSync(input) {
           kind,
           canonical,
           reconciliation,
-          current: match.kind === "existing" ? match.property : {},
+          current: match.kind === "existing" ? current : {},
           observations,
           sourceLinks: links,
           lifecycle,
@@ -557,6 +661,100 @@ export async function runDualSourceSync(input) {
         (field) => field.activeOverride,
       ).length;
     }
+    const matchedExistingIds = new Set(
+      work.filter(({ match }) => match.kind === "existing").map(({ match }) => match.propertyId),
+    );
+    const rawObservationIdentities = new Set(
+      SOURCES.flatMap((source) =>
+        (Array.isArray(results[source].observations) ? results[source].observations : []).map(
+          sourceIdentity,
+        ),
+      ),
+    );
+    let runStartedAt = null;
+    for (const propertyId of activePropertyIds) {
+      if (matchedExistingIds.has(propertyId)) continue;
+      const readModel = readModelByPropertyId.get(propertyId);
+      if (!readModel) continue;
+      const classification = readModel.activeLinks.some((link) =>
+        rawObservationIdentities.has(sourceIdentity(link)),
+      )
+        ? "unknown"
+        : "absent";
+      const match = {
+        kind: "existing",
+        propertyId,
+        property: readModel.property,
+      };
+      const reconciliation = reconcileProperty({
+        kind: "update",
+        current: readModel.property,
+        listingNo: readModel.property.listing_no,
+        observations: [],
+        linkedObservationIds: [],
+        persistedObservationRefs: [],
+        fieldStates: fieldStates.filter((state) => state.property_id === propertyId),
+        lifecycleState: lifecycleByProperty.get(propertyId),
+        estateIdsBySlug,
+        preparedImages: [],
+        currentOwnedImages: readModel.currentOwnedImages,
+      });
+      if (reconciliation.validationEvidence.blockingCodes.length) {
+        counts.quarantined += 1;
+        quarantines.push({
+          code: "canonical_validation_failed",
+          matchKey: readModel.property.deal_type + ":" + readModel.property.canonical_property_no,
+        });
+        continue;
+      }
+      const shouldReadRunStart =
+        classification === "absent" &&
+        lifecycleByProperty.get(propertyId)?.consecutive_absent_healthy_runs >= 1 &&
+        readModel.property.status !== "inactive";
+      if (shouldReadRunStart && runStartedAt == null) {
+        runStartedAt = await repository.getRunStartedAt(runId, { signal });
+      }
+      const lifecycle = lifecycleFor(
+        reconciliation,
+        match,
+        lifecycleByProperty.get(propertyId),
+        gate,
+        classification,
+        runStartedAt,
+      );
+      const canonical = projectCanonical(reconciliation.canonical, "update");
+      const proposal = {
+        kind: "update",
+        propertyId,
+        expectedUpdatedAt: readModel.property.updated_at,
+        canonical,
+        links: [],
+        fields: fieldWrites(reconciliation),
+        lifecycle,
+        events: changeEvents({
+          kind: "update",
+          canonical,
+          reconciliation,
+          current: readModel.property,
+          observations: [],
+          sourceLinks: readModel.activeLinks,
+          lifecycle,
+        }),
+      };
+      proposals.push(proposal);
+      counts.changed += 1;
+      if (canonical.status === "inactive") counts.inactive += 1;
+    }
+    counts.inactive = proposals.reduce(
+      (sum, proposal) =>
+        sum + (proposal.events?.filter((event) => event.changeType === "inactive").length ?? 0),
+      0,
+    );
+    counts.reactivated = proposals.reduce(
+      (sum, proposal) =>
+        sum + (proposal.events?.filter((event) => event.changeType === "reactivated").length ?? 0),
+      0,
+    );
     if (input.mode === "shadow") {
       const status = gate.mode === "degraded" ? "degraded" : "shadow_healthy";
       const outcome = { runId, status, evaluation, gate, counts, proposals, quarantines };
@@ -584,11 +782,14 @@ export async function runDualSourceSync(input) {
     return outcome;
   } catch (error) {
     if (runId) {
-      const failureCode = !publicationCommitted
-        ? "orchestrator_failed"
-        : postCommitPhase === "artifacts"
-          ? "artifact_write_failed_after_publish"
-          : "run_finalization_failed_after_publish";
+      const failureCode =
+        error instanceof PublicationOutcomeUnknownError
+          ? "publication_outcome_unknown"
+          : !publicationCommitted
+            ? "orchestrator_failed"
+            : postCommitPhase === "artifacts"
+              ? "artifact_write_failed_after_publish"
+              : "run_finalization_failed_after_publish";
       const failureSummary = safeError(error);
       try {
         await reporter.writeRunArtifacts({

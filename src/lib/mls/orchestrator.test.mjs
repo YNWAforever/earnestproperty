@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createObservation, SOURCE_28HSE, SOURCE_OLD_SITE } from "./source-contract.mjs";
 import { runDualSourceSync } from "./orchestrator.mjs";
+import { PublicationOutcomeUnknownError } from "./sync-repository.mjs";
 
 const NOW = () => new Date("2026-08-18T01:00:00.000Z");
 
@@ -77,6 +78,20 @@ function fakeRepository(overrides = {}) {
     async getApprovedHealthyShadowStreak() {
       return { length: 7, lastDate: "2026-08-17" };
     },
+    async getRunStartedAt() {
+      return "2026-08-18T01:00:00.000000Z";
+    },
+    async loadCanonicalReadModels() {
+      const candidates = await this.findCanonicalCandidates();
+      return candidates.map((property) => ({
+        property,
+        currentOwnedImages: Array.isArray(property.images) ? property.images : [],
+        activeLinks: [],
+      }));
+    },
+    async listActiveLinkedPropertyIds() {
+      return { propertyIds: [], nextCursor: null };
+    },
     async findCanonicalCandidates() {
       return [];
     },
@@ -112,11 +127,39 @@ function fakeMedia(overrides = {}) {
         images: [],
         uploadCount: input.mode === "upload" ? 1 : 0,
         wouldUploadCount: input.mode === "validate" ? 1 : 0,
-        results: [],
-        prepared: null,
+        candidateResults: [],
+        preparedMedia: null,
       };
     },
     ...overrides,
+  };
+}
+
+function currentCandidate(id = "00000000-0000-4000-8000-000000000900") {
+  return {
+    id,
+    listing_no: "EP-100-L100-S",
+    canonical_property_no: "EP-100",
+    legacy_property_no: null,
+    deal_type: "sale",
+    updated_at: "2026-08-18T00:00:00.000000Z",
+    title_zh: "\u539f\u6709\u55ae\u4F4D",
+    title_en: null,
+    estate_id: null,
+    district_slug: "tsuen-wan",
+    address: null,
+    price: 12500000,
+    rent: null,
+    saleable_area: null,
+    gross_area: null,
+    bedrooms: null,
+    bathrooms: null,
+    floor: null,
+    orientation: null,
+    features: [],
+    description: null,
+    images: [],
+    status: "active",
   };
 }
 
@@ -171,12 +214,9 @@ test("degraded old site only permits safe 28Hse reconciliation and resets inacti
     async findCanonicalCandidates() {
       return [
         {
-          id: "00000000-0000-4000-8000-000000000900",
+          ...currentCandidate("00000000-0000-4000-8000-000000000900"),
           listing_no: "L100",
-          canonical_property_no: "EP-100",
-          legacy_property_no: null,
-          deal_type: "sale",
-          updated_at: "2026-08-18T00:00:00.000000Z",
+          images: ["https://owned.example/current.png"],
         },
       ];
     },
@@ -293,7 +333,7 @@ test("asserts the locked session immediately before a complete publish-mode medi
         assert.deepEqual(mediaInput.allowedMediaHosts, ["images.example.test"]);
         assert.equal(mediaInput.blobStore != null, true);
         return {
-          publishable: false,
+          publishable: true,
           reasons: ["fixture_media"],
           images: [],
           uploadCount: 0,
@@ -339,4 +379,392 @@ test("classifies post-commit finalization failures and redacts diagnostic eviden
   const failure = artifacts.at(-1);
   assert.equal(failure.failureCode, "run_finalization_failed_after_publish");
   assert.doesNotMatch(failure.failureSummary, /hunter2|<html|\$1/);
+});
+
+test("uses nonempty provenance reasons for every Task 9 change event", async () => {
+  const outcome = await runDualSourceSync(input());
+  assert.ok(outcome.proposals[0].events.length > 0);
+  assert.ok(
+    outcome.proposals[0].events.every(
+      (event) => typeof event.reason === "string" && event.reason.length > 0,
+    ),
+  );
+});
+
+test("quarantines media that invalidates the untouched reconciliation canonical", async () => {
+  const outcome = await runDualSourceSync(
+    input({
+      mode: "publish",
+      publishEnabled: true,
+      media: fakeMedia({
+        async prepareListingMedia(mediaInput) {
+          return {
+            publishable: true,
+            reasons: [],
+            images: ["https://cdn.example.test/owned.jpg"],
+            uploadCount: 0,
+            wouldUploadCount: mediaInput.mode === "validate" ? 1 : 0,
+            candidateResults: [],
+            preparedMedia: null,
+          };
+        },
+      }),
+    }),
+  );
+  assert.equal(outcome.proposals.length, 0);
+  assert.ok(outcome.quarantines.some((entry) => entry.code === "canonical_validation_failed"));
+});
+
+test("links old-site persisted evidence into the new canonical and its new event", async () => {
+  const outcome = await runDualSourceSync(input());
+  const proposal = outcome.proposals[0];
+  assert.equal(proposal.canonical.legacy_detail_id, "old-100");
+  assert.equal(proposal.canonical.legacy_property_no, "EP-100");
+  assert.equal(
+    proposal.events.find((event) => event.changeType === "new").newValue.legacy_url,
+    "https://example.test/old_site/old-100",
+  );
+});
+
+test("refreshes proposed-link state before deriving source-link events", async () => {
+  const propertyId = "00000000-0000-4000-8000-000000000900";
+  let linked = false;
+  let sourceLinkReads = 0;
+  const repository = fakeRepository({
+    async findCanonicalCandidates() {
+      return [currentCandidate(propertyId)];
+    },
+    async loadSourceLinks() {
+      sourceLinkReads += 1;
+      return [SOURCE_OLD_SITE, SOURCE_28HSE].map((source, index) => ({
+        property_id: propertyId,
+        source,
+        external_listing_id: index === 0 ? "old-100" : "28-100",
+        deal_type: "sale",
+        match_key: "sale:EP-100",
+        link_reason: "exact_property_no_and_deal_type",
+        status: linked ? "active" : "proposed",
+      }));
+    },
+    async saveProposedLinks() {
+      linked = true;
+    },
+  });
+  const outcome = await runDualSourceSync(input({ repository }));
+  assert.equal(sourceLinkReads, 2);
+  assert.equal(outcome.proposals.length, 1);
+  assert.equal(
+    outcome.proposals[0].events.some((event) => event.changeType === "link_change"),
+    false,
+  );
+});
+
+test("preserves explicit-null automated field baselines", async () => {
+  const propertyId = "00000000-0000-4000-8000-000000000900";
+  const repository = fakeRepository({
+    async findCanonicalCandidates() {
+      return [currentCandidate(propertyId)];
+    },
+    async loadFieldStates() {
+      return [
+        {
+          property_id: propertyId,
+          field_name: "features",
+          last_published_value: null,
+          override_value: ["staff-choice"],
+          active_override: true,
+          winning_observation_id: null,
+          updated_at: "2026-08-18T00:00:00.000000Z",
+        },
+      ];
+    },
+  });
+  const outcome = await runDualSourceSync(input({ repository }));
+  const field = outcome.proposals[0].fields.find((candidate) => candidate.fieldName === "features");
+  assert.equal(field.lastPublishedValue, null);
+  assert.equal(field.activeOverride, true);
+});
+
+test("uses the Task 8 current read model and owned current media for a matched property", async () => {
+  const propertyId = "00000000-0000-4000-8000-000000000900";
+  const current = {
+    ...currentCandidate(propertyId),
+    address: "Staff retained address",
+    images: ["https://earnestproperty.com/media/current.jpg"],
+  };
+  const repository = fakeRepository({
+    async findCanonicalCandidates() {
+      return [
+        {
+          id: propertyId,
+          listing_no: current.listing_no,
+          canonical_property_no: "EP-100",
+          legacy_property_no: null,
+          deal_type: "sale",
+          updated_at: current.updated_at,
+        },
+      ];
+    },
+    async loadCanonicalReadModels() {
+      return [{ property: current, currentOwnedImages: current.images, activeLinks: [] }];
+    },
+  });
+  const outcome = await runDualSourceSync(
+    input({
+      repository,
+      media: fakeMedia({
+        async prepareListingMedia(mediaInput) {
+          assert.deepEqual(mediaInput.currentImages, current.images);
+          return {
+            publishable: true,
+            reasons: [],
+            images: current.images,
+            uploadCount: 0,
+            wouldUploadCount: 0,
+            candidateResults: [],
+            preparedMedia: null,
+          };
+        },
+      }),
+    }),
+  );
+  assert.equal(outcome.proposals[0].canonical.address, "Staff retained address");
+});
+test("falls back from a rejected 28Hse media candidate to linked old-site media", async () => {
+  const old = createObservation({
+    source: SOURCE_OLD_SITE,
+    externalId: "old-100",
+    dealType: "sale",
+    sourceUrl: "https://example.test/old-100",
+    propertyNoRaw: "EP-100",
+    fetchedAt: "2026-08-18T01:00:00.000Z",
+    fields: {
+      title_zh: "測試單位",
+      district_slug: "tsuen-wan",
+      price: 12500000,
+      status: "active",
+    },
+    mediaCandidates: [
+      {
+        url: "https://images.example.test/old.jpg",
+        category: "listing_photo",
+        isPrimary: true,
+      },
+    ],
+  });
+  const hse = observation(SOURCE_28HSE, "28-100");
+  const calls = [];
+  const outcome = await runDualSourceSync(
+    input({
+      adapters: {
+        oldSite: {
+          collect: async () =>
+            result(SOURCE_OLD_SITE, [old], {
+              advertisedCounts: { sale: 1, rent: 0 },
+              pageCounts: { sale: 1, rent: 1 },
+            }),
+        },
+        hse28: {
+          collect: async () =>
+            result(SOURCE_28HSE, [hse], {
+              advertisedCounts: { sale: 1, rent: 0 },
+              pageCounts: { sale: 1, rent: 1 },
+            }),
+        },
+      },
+      media: fakeMedia({
+        async prepareListingMedia(mediaInput) {
+          calls.push(mediaInput.observation.externalId);
+          return mediaInput.observation.externalId === "28-100"
+            ? {
+                publishable: false,
+                reasons: ["primary_image_required"],
+                images: [],
+                uploadCount: 0,
+                wouldUploadCount: 0,
+                candidateResults: [],
+                preparedMedia: null,
+              }
+            : {
+                publishable: true,
+                reasons: [],
+                images: ["https://earnestproperty.com/media/old.jpg"],
+                uploadCount: 0,
+                wouldUploadCount: 1,
+                candidateResults: [],
+                preparedMedia: null,
+              };
+        },
+      }),
+    }),
+  );
+  assert.deepEqual(calls, ["28-100", "old-100"]);
+  assert.equal(outcome.proposals.length, 1);
+});
+
+test("classifies a publication outcome of unknown commit state without claiming rollback", async () => {
+  const artifacts = [];
+  const value = input({
+    mode: "publish",
+    publishEnabled: true,
+    reporter: {
+      writeRunArtifacts: async (artifact) => artifacts.push(artifact),
+    },
+    repository: fakeRepository({
+      async publishBatch() {
+        throw new PublicationOutcomeUnknownError("commit outcome unknown");
+      },
+    }),
+  });
+  await assert.rejects(() => runDualSourceSync(value), PublicationOutcomeUnknownError);
+  assert.equal(artifacts.at(-1).failureCode, "publication_outcome_unknown");
+});
+
+test("redacts complete HTML bodies and credential tails", async () => {
+  const artifacts = [];
+  const value = input({
+    mode: "publish",
+    publishEnabled: true,
+    reporter: {
+      writeRunArtifacts: async (artifact) => artifacts.push(artifact),
+    },
+    repository: fakeRepository({
+      async finishRun() {
+        throw new Error("<html>PRIVATE BODY</html> Authorization=Bearer secret-token");
+      },
+    }),
+  });
+  await assert.rejects(() => runDualSourceSync(value), /PRIVATE BODY/);
+  assert.doesNotMatch(artifacts.at(-1).failureSummary, /PRIVATE BODY|secret-token|Bearer/);
+});
+test("counts each quarantined observation once", async () => {
+  const invalid = {
+    ...observation(SOURCE_OLD_SITE, "old-invalid"),
+    validationState: "quarantined",
+    quarantineReasons: ["bad_fixture"],
+  };
+  const outcome = await runDualSourceSync(
+    input({
+      adapters: {
+        oldSite: {
+          collect: async () => result(SOURCE_OLD_SITE, [invalid]),
+        },
+        hse28: {
+          collect: async () => result(SOURCE_28HSE, [observation(SOURCE_28HSE, "28-100")]),
+        },
+      },
+    }),
+  );
+  assert.equal(outcome.counts.quarantined, 1);
+});
+test("uses Task 8 read models and run-start evidence for absent and unknown links", async () => {
+  const absentId = "00000000-0000-4000-8000-000000000901";
+  const unknownId = "00000000-0000-4000-8000-000000000902";
+  const absent = currentCandidate(absentId);
+  const unknown = currentCandidate(unknownId);
+  unknown.listing_no = "EP-200-L100-S";
+  unknown.canonical_property_no = "EP-200";
+  const invalid = observation(SOURCE_OLD_SITE, "old-unknown", "EP-200");
+  const repository = fakeRepository({
+    async listActiveLinkedPropertyIds() {
+      return { propertyIds: [absentId, unknownId], nextCursor: null };
+    },
+    async loadCanonicalReadModels(ids) {
+      return ids.map((id) => ({
+        property: id === absentId ? absent : unknown,
+        currentOwnedImages: [],
+        activeLinks: [
+          {
+            property_id: id,
+            source: SOURCE_OLD_SITE,
+            external_listing_id: id === absentId ? "old-absent" : "old-unknown",
+            deal_type: "sale",
+            match_key: id === absentId ? "sale:EP-100" : "sale:EP-200",
+            link_reason: "exact_property_no_and_deal_type",
+            status: "active",
+          },
+        ],
+      }));
+    },
+    async loadLifecycleStates() {
+      return [
+        {
+          property_id: absentId,
+          consecutive_absent_healthy_runs: 1,
+          last_evaluated_run_id: null,
+          inactive_reason: null,
+          inactive_at: null,
+          updated_at: "2026-08-18T00:00:00.000000Z",
+        },
+        {
+          property_id: unknownId,
+          consecutive_absent_healthy_runs: 1,
+          last_evaluated_run_id: null,
+          inactive_reason: null,
+          inactive_at: null,
+          updated_at: "2026-08-18T00:00:00.000000Z",
+        },
+      ];
+    },
+    async getRunStartedAt() {
+      return "2026-08-18T01:00:00.000000Z";
+    },
+  });
+  const outcome = await runDualSourceSync(
+    input({
+      repository,
+      adapters: {
+        oldSite: {
+          collect: async () =>
+            result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-current"), invalid], {
+              advertisedCounts: { sale: 2, rent: 0 },
+              pageCounts: { sale: 2, rent: 1 },
+            }),
+        },
+        hse28: {
+          collect: async () => result(SOURCE_28HSE, [observation(SOURCE_28HSE, "28-current")]),
+        },
+      },
+    }),
+  );
+  const absentProposal = outcome.proposals.find((proposal) => proposal.propertyId === absentId);
+  const unknownProposal = outcome.proposals.find((proposal) => proposal.propertyId === unknownId);
+  assert.equal(absentProposal.canonical.status, "inactive");
+  assert.equal(absentProposal.lifecycle.inactiveAt, "2026-08-18T01:00:00.000000Z");
+  assert.equal(unknownProposal.lifecycle.consecutiveAbsentHealthyRuns, 0);
+  assert.equal(unknownProposal.canonical.status, "active");
+});
+test("counts upload-mode media validation separately", async () => {
+  const published = await runDualSourceSync(input({ mode: "publish", publishEnabled: true }));
+  assert.equal(published.counts.mediaValidated, 1);
+  assert.equal(published.counts.mediaUploaded, 1);
+});
+
+test("counts reactivated matched properties separately", async () => {
+  const propertyId = "00000000-0000-4000-8000-000000000900";
+  const current = { ...currentCandidate(propertyId), status: "inactive" };
+  const repository = fakeRepository({
+    async findCanonicalCandidates() {
+      return [current];
+    },
+    async loadCanonicalReadModels() {
+      return [{ property: current, currentOwnedImages: [], activeLinks: [] }];
+    },
+    async loadFieldStates() {
+      return [
+        {
+          property_id: propertyId,
+          field_name: "status",
+          last_published_value: "inactive",
+          override_value: null,
+          active_override: false,
+          winning_observation_id: null,
+          updated_at: "2026-08-18T00:00:00.000000Z",
+        },
+      ];
+    },
+  });
+  const shadow = await runDualSourceSync(input({ repository }));
+  assert.equal(shadow.counts.reactivated, 1);
+  assert.ok(shadow.proposals[0].events.some((event) => event.changeType === "reactivated"));
 });
