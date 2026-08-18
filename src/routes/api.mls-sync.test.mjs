@@ -5,22 +5,22 @@ import { test } from "node:test";
 const source = readFileSync(new URL("./api.mls-sync.ts", import.meta.url), "utf8");
 const vercel = readFileSync(new URL("../../vercel.ts", import.meta.url), "utf8");
 
-test("mls sync route protects cron endpoint", () => {
+test("mls route is protected and read-only", () => {
   assert.match(source, /createFileRoute\(["']\/api\/mls-sync["']\)/);
   assert.match(source, /authorization/i);
   assert.match(source, /CRON_SECRET/);
   assert.match(source, /status:\s*401/);
   assert.match(source, /DATABASE_URL/);
-  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(source, /status:\s*503/);
-  assert.match(source, /createNeonMlsDb/);
-  assert.match(source, /createMlsImporter/);
+  assert.match(source, /getLatestSyncRun/);
+  assert.doesNotMatch(source, /createMlsImporter|\.sync\s*\(/);
 });
 
-test("vercel config registers the daily mls cron", () => {
+test("Vercel no longer schedules MLS but retains control-plane safety crons", () => {
   assert.match(vercel, /crons/);
-  assert.match(vercel, /\/api\/mls-sync/);
-  assert.match(vercel, /0 20 \* \* \*/);
+  assert.doesNotMatch(vercel, /\/api\/mls-sync/);
+  assert.match(vercel, /\/api\/admin\/control-plane\/worker/);
+  assert.match(vercel, /\/api\/admin\/jobs\/send-queue/);
 });
 
 // Vercel Hobby rejects any cron that would run more than once a day, and it fails
