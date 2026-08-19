@@ -34,6 +34,7 @@ import {
   sendAdminConversationReply,
   updateAdminConversation,
 } from "@/lib/neon/admin-data";
+import { conversationAttention } from "@/lib/neon/admin-workflow";
 import type {
   AdminAgentRow,
   AdminConversationAiAssist,
@@ -56,6 +57,9 @@ const statusLabels: Record<string, string> = {
 
 const inboxStatusFilterOptions = [
   { value: "all", label: "所有狀態" },
+  // Not a stored status -- derived from who spoke last. Listed first because it
+  // is the only entry that answers "what do I have to do now".
+  { value: "awaiting", label: "待回覆" },
   { value: "open", label: "開啟" },
   { value: "pending", label: "待跟進" },
   { value: "closed", label: "已關閉" },
@@ -557,7 +561,18 @@ function AdminWhatsapp() {
     if (!rows) return null;
     const needle = inboxQuery.trim().toLowerCase();
     return rows.filter((row) => {
-      if (inboxStatus !== "all" && row.status !== inboxStatus) return false;
+      if (inboxStatus === "awaiting") {
+        if (
+          !conversationAttention({
+            lastDirection: row.last_direction,
+            lastInboundAt: row.last_inbound_at,
+          }).awaitingReply
+        ) {
+          return false;
+        }
+      } else if (inboxStatus !== "all" && row.status !== inboxStatus) {
+        return false;
+      }
       if (!needle) return true;
       return [row.name, row.phone, row.last_text].some((value) =>
         (value ?? "").toLowerCase().includes(needle),
@@ -565,6 +580,21 @@ function AdminWhatsapp() {
     });
   }, [inboxQuery, inboxStatus, rows]);
   const hasInboxFilters = inboxQuery.trim() !== "" || inboxStatus !== "all";
+
+  // Counted over every loaded conversation rather than the filtered view: this
+  // is the number staff use to decide what to look at, so it must not change
+  // when they narrow the list to look at something else.
+  const awaitingCount = useMemo(
+    () =>
+      (rows ?? []).filter(
+        (row) =>
+          conversationAttention({
+            lastDirection: row.last_direction,
+            lastInboundAt: row.last_inbound_at,
+          }).awaitingReply,
+      ).length,
+    [rows],
+  );
 
   const replyBody = selectedId ? (replyDrafts[selectedId] ?? "") : "";
   const setReplyBody = useCallback((value: string) => {
@@ -768,6 +798,9 @@ function AdminWhatsapp() {
             <ConversationList
               rows={filteredRows}
               totalLoaded={rows?.length ?? 0}
+              awaitingCount={awaitingCount}
+              showingAwaitingOnly={inboxStatus === "awaiting"}
+              onShowAwaiting={() => setWhatsappSearch({ status: "awaiting" })}
               hasFilters={hasInboxFilters}
               onClearFilters={() => {
                 setQueryDraft("");
@@ -912,6 +945,9 @@ const INBOX_ROW_LIMIT = 100;
 function ConversationList({
   rows,
   totalLoaded,
+  awaitingCount,
+  showingAwaitingOnly,
+  onShowAwaiting,
   hasFilters,
   onClearFilters,
   selectedId,
@@ -920,6 +956,9 @@ function ConversationList({
 }: {
   rows: AdminConversationRow[] | null;
   totalLoaded: number;
+  awaitingCount: number;
+  showingAwaitingOnly: boolean;
+  onShowAwaiting: () => void;
   hasFilters: boolean;
   onClearFilters: () => void;
   selectedId: string | null;
@@ -951,6 +990,22 @@ function ConversationList({
 
   return (
     <div className="divide-y">
+      {/* The one number staff need before anything else: how many people are
+          waiting on us. It doubles as the control that narrows the list to
+          them, because reading a count you then have to hunt through is barely
+          better than not having it. Hidden once that filter is already on --
+          at that point every visible row is one of these. */}
+      {awaitingCount > 0 && !showingAwaitingOnly ? (
+        <button
+          type="button"
+          onClick={onShowAwaiting}
+          className="flex w-full items-center gap-2 bg-amber-100 px-4 py-2.5 text-left text-sm font-semibold text-amber-950 transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-950/80"
+        >
+          <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{awaitingCount} 個對話待回覆</span>
+          <span className="ml-auto text-xs font-medium underline">只看待回覆</span>
+        </button>
+      ) : null}
       {/* The inbox silently capped at 100 with no count anywhere, so a busy day
           looked identical to a quiet one and older conversations simply did not
           exist as far as the UI was concerned. */}
@@ -959,47 +1014,95 @@ function ConversationList({
         {hasFilters ? `（已載入 ${totalLoaded} 個）` : ""}
         {totalLoaded >= INBOX_ROW_LIMIT ? `，收件匣上限為最近 ${INBOX_ROW_LIMIT} 個` : ""}
       </p>
-      {rows.map((conversation) => (
-        <button
-          key={conversation.id}
-          type="button"
-          className={[
-            "grid w-full gap-2 px-4 py-3 text-left transition hover:bg-muted/50",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-            selectedId === conversation.id ? "bg-muted/70" : "",
-          ].join(" ")}
-          aria-current={selectedId === conversation.id ? "true" : undefined}
-          onClick={() => onOpen(conversation.id)}
-        >
-          <span className="flex items-start justify-between gap-3">
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">
-                {conversation.name ?? "WhatsApp 客戶"}
+      {rows.map((conversation) => {
+        const attention = conversationAttention({
+          lastDirection: conversation.last_direction,
+          lastInboundAt: conversation.last_inbound_at,
+        });
+        const waited = formatDuration(attention.waitedMs);
+        return (
+          <button
+            key={conversation.id}
+            type="button"
+            className={[
+              "grid w-full gap-2 border-l-2 px-4 py-3 text-left transition hover:bg-muted/50",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              // The accent bar is the thing that makes a queue scannable at a
+              // glance -- badges alone all sit at different x positions once
+              // names wrap, so the eye has to read each row to find the ones
+              // that need work.
+              attention.awaitingReply
+                ? "border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20"
+                : "border-l-transparent",
+              selectedId === conversation.id ? "bg-muted/70" : "",
+            ].join(" ")}
+            aria-current={selectedId === conversation.id ? "true" : undefined}
+            onClick={() => onOpen(conversation.id)}
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span className="flex min-w-0 items-start gap-2">
+                {attention.awaitingReply ? (
+                  <span
+                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="min-w-0">
+                  <span
+                    className={[
+                      "block truncate text-sm",
+                      attention.awaitingReply ? "font-bold" : "font-semibold",
+                    ].join(" ")}
+                  >
+                    {conversation.name ?? "WhatsApp 客戶"}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {conversation.phone ?? "未有電話"}
+                  </span>
+                </span>
               </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {conversation.phone ?? "未有電話"}
+              <StatusBadge status={conversation.status} />
+            </span>
+
+            <span
+              className={[
+                "line-clamp-2 text-sm",
+                attention.awaitingReply ? "text-foreground" : "text-muted-foreground",
+              ].join(" ")}
+            >
+              {conversation.last_text ?? "未有訊息內容"}
+            </span>
+
+            <span className="flex flex-wrap items-center gap-2">
+              {attention.awaitingReply ? (
+                <Badge className="border-transparent bg-amber-500 text-amber-950 hover:bg-amber-500">
+                  待回覆{waited ? ` · 已等 ${waited}` : ""}
+                </Badge>
+              ) : (
+                <Badge variant="outline">{formatDirection(conversation.last_direction)}</Badge>
+              )}
+
+              {/* Only worth showing while someone is actually waiting: on a
+                  conversation we already answered, the window is not a task. */}
+              {attention.awaitingReply && attention.windowState === "expired" ? (
+                <Badge variant="outline" className="border-destructive/40 text-destructive">
+                  已過 24 小時回覆窗口
+                </Badge>
+              ) : null}
+              {attention.awaitingReply && attention.windowState === "closing" ? (
+                <Badge variant="destructive">
+                  回覆窗口剩 {formatDuration(attention.windowRemainingMs)}
+                </Badge>
+              ) : null}
+
+              {conversation.opted_out_whatsapp ? <Badge variant="destructive">已拒收</Badge> : null}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {formatDate(conversation.last_message_at)}
               </span>
             </span>
-            <StatusBadge status={conversation.status} />
-          </span>
-
-          <span className="line-clamp-2 text-sm text-muted-foreground">
-            {conversation.last_text ?? "未有訊息內容"}
-          </span>
-
-          <span className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{formatDirection(conversation.last_direction)}</Badge>
-            {conversation.opted_out_whatsapp ? (
-              <Badge variant="destructive">已拒收</Badge>
-            ) : (
-              <Badge variant="secondary">可聯絡</Badge>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">
-              {formatDate(conversation.last_message_at)}
-            </span>
-          </span>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1471,6 +1574,21 @@ function formatDirection(direction: string | null) {
   if (direction === "inbound") return "客戶";
   if (direction === "outbound") return "客服";
   return "未有方向";
+}
+
+/**
+ * Coarse, glanceable durations -- "3 小時", not "3 小時 12 分鐘". This is read
+ * while scanning a queue, where the extra precision costs reading time and
+ * changes no decision.
+ */
+function formatDuration(ms: number | null) {
+  if (ms === null) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "少於 1 分鐘";
+  if (minutes < 60) return `${minutes} 分鐘`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小時`;
+  return `${Math.floor(hours / 24)} 日`;
 }
 
 function formatDate(value: string | null) {
