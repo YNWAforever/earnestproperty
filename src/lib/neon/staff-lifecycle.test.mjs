@@ -676,6 +676,52 @@ test("default lifecycle dependencies defer unrelated admin and audit modules", a
   assert.equal(typeof dependencies.writeAudit, "function");
 });
 
+test("identity resolution reads neon_auth.user locally instead of calling the provider's admin API", async () => {
+  // Every credential shape forwarded to Neon Auth's /admin/get-user has been
+  // rejected 401 in production (three distinct attempts, all captured live).
+  // The endpoint is redundant anyway: Neon Auth syncs its user table into this
+  // database, and auth.server.ts already treats neon_auth."user" as
+  // authoritative -- including emailVerified. Identity resolution must not
+  // depend on the provider's HTTP admin surface at all.
+  assert.equal(typeof lifecycleModule.createNeonAuthUserResolver, "function");
+
+  const queries = [];
+  const resolveUser = lifecycleModule.createNeonAuthUserResolver(async (statement, params) => {
+    queries.push({ statement, params });
+    return [
+      { id: "auth-target", email: "target@example.test", name: "Target", email_verified: true },
+    ];
+  });
+
+  const identity = await resolveUser({
+    authUserId: "auth-target",
+    request: new Request("https://earnest.test/admin/team"),
+  });
+
+  assert.deepEqual(identity, {
+    id: "auth-target",
+    email: "target@example.test",
+    name: "Target",
+    emailVerified: true,
+  });
+  assert.match(queries[0].statement, /FROM neon_auth\."user"/);
+  assert.deepEqual(queries[0].params, ["auth-target"]);
+
+  const missing = lifecycleModule.createNeonAuthUserResolver(async () => []);
+  await assert.rejects(
+    () => missing({ authUserId: "auth-gone", request: new Request("https://earnest.test/x") }),
+    (error) => error.code === "PROVIDER_IDENTITY_NOT_FOUND",
+  );
+
+  const broken = lifecycleModule.createNeonAuthUserResolver(async () => {
+    throw new Error("raw database details must not escape");
+  });
+  await assert.rejects(
+    () => broken({ authUserId: "auth-any", request: new Request("https://earnest.test/x") }),
+    (error) => error.code === "PROVIDER_UNAVAILABLE" && !/raw database/.test(error.message),
+  );
+});
+
 // `dependencies.requestId ?? crypto.randomUUID` (no dependencies.requestId
 // override -- i.e. the real default path createDefaultStaffLifecycleDependencies
 // takes in production) stores the *unbound* method reference. Calling it later as
