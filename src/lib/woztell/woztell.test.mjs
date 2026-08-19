@@ -71,7 +71,16 @@ test("normalizeWoztellEvent extracts inbound message identity and text", () => {
   });
 
   assert.equal(event.direction, "inbound");
-  assert.equal(event.externalMessageId, "inbound:channelId:memberId:1599536864:TEXT");
+  // The synthesized id keeps the readable direction:channel:member:timestamp:type
+  // prefix and appends a digest of the message body -- without that digest two
+  // messages in the same second collapse onto one UNIQUE key and one is lost.
+  assert.match(
+    event.externalMessageId,
+    /^inbound:channelId:memberId:1599536864:TEXT:[0-9a-f]{12}$/,
+  );
+  // The pre-digest key is carried alongside so ingest can recognise rows that
+  // were imported before the digest existed.
+  assert.equal(event.legacyExternalMessageId, "inbound:channelId:memberId:1599536864:TEXT");
   assert.equal(event.fromPhone, "85260903521");
   assert.equal(event.toPhone, "85268227287");
   assert.equal(event.text, "想睇碧堤半島");
@@ -463,4 +472,95 @@ test("an opt-out can be cleared by admin/manager, with a reason and an audit row
     client,
     /clearContactWhatsappOptOutServer[\s\S]{0,400}requireStaff\(\["admin", "manager"\]\)/,
   );
+});
+
+// WOZTELL does not put a messageId on every event -- inbound webhook payloads
+// routinely arrive without one -- so normalizeWoztellEvent synthesizes a
+// fallback. That fallback is written into whatsapp_messages.external_message_id,
+// which is UNIQUE and ingested with ON CONFLICT DO NOTHING. So any two DISTINCT
+// messages that synthesize the SAME id do not raise an error: the second one is
+// silently discarded and counted as an already-seen duplicate.
+//
+// Before this was fixed the key was direction:channel:member:timestamp:type, and
+// WOZTELL timestamps are unix SECONDS. Two messages in one second -- a customer
+// sending two lines in a row, or a bot answering in two bubbles -- collapsed
+// into a single row, and the inbox quietly showed one fewer message than the
+// WOZTELL console.
+test("two different messages in the same second get different fallback ids", () => {
+  const base = { member: "memberId", channel: "channelId", timestamp: "1599536864", type: "TEXT" };
+
+  const first = normalizeWoztellEvent({ ...base, data: { text: "你好" } });
+  const second = normalizeWoztellEvent({ ...base, data: { text: "想睇碧堤半島" } });
+
+  assert.notEqual(
+    first.externalMessageId,
+    second.externalMessageId,
+    "distinct messages must not share an external_message_id, or one is dropped",
+  );
+});
+
+// The degenerate case: an event carrying no timestamp at all fell back to the
+// literal string "time", so EVERY such message from one member collapsed onto
+// a single id.
+test("messages with no timestamp are still told apart", () => {
+  const first = normalizeWoztellEvent({ member: "m1", channel: "c1", data: { text: "第一則" } });
+  const second = normalizeWoztellEvent({ member: "m1", channel: "c1", data: { text: "第二則" } });
+
+  assert.notEqual(first.externalMessageId, second.externalMessageId);
+});
+
+// Non-text messages carry their payload in `data` rather than `data.text`, so
+// discriminating on text alone would still collapse two images sent together.
+test("two media messages in the same second get different fallback ids", () => {
+  const base = { member: "m1", channel: "c1", timestamp: "1599536864", type: "IMAGE" };
+
+  const first = normalizeWoztellEvent({ ...base, data: { url: "https://cdn/a.jpg" } });
+  const second = normalizeWoztellEvent({ ...base, data: { url: "https://cdn/b.jpg" } });
+
+  assert.notEqual(first.externalMessageId, second.externalMessageId);
+});
+
+// The other half of the property, and the reason the fix cannot just append a
+// random or positional value: the SAME message must still synthesize the SAME
+// id every time it is seen, or re-running the history import duplicates rows
+// the webhook already stored.
+test("the same message synthesizes a stable id on every pass", () => {
+  const event = {
+    member: "m1",
+    channel: "c1",
+    timestamp: "1599536864",
+    type: "TEXT",
+    data: { text: "睇樓" },
+  };
+
+  assert.equal(
+    normalizeWoztellEvent({ ...event }).externalMessageId,
+    normalizeWoztellEvent({ ...event }).externalMessageId,
+  );
+  // Key order must not matter either -- the two ingest surfaces build the
+  // record independently.
+  assert.equal(
+    normalizeWoztellEvent({ ...event, data: { text: "睇樓" } }).externalMessageId,
+    normalizeWoztellEvent({ data: { text: "睇樓" }, ...event }).externalMessageId,
+  );
+});
+
+// Adding the digest changed the shape of every synthesized id, so the rows
+// already sitting in the database no longer match what ingest now computes.
+// Two things have to stay true at once, and they pull in opposite directions:
+// a message the old import already stored must NOT come back a second time,
+// and a message the old import DROPPED on a collision must now get in.
+// Matching the legacy key together with the body is what separates the two --
+// on the key alone, the dropped twin looks exactly like the row that displaced
+// it and would be skipped forever.
+test("ingest reconciles pre-digest rows without re-dropping their lost twins", () => {
+  const ingest = read("src/lib/woztell/woztell-ingest.server.ts");
+
+  assert.match(ingest, /legacyExternalMessageId/);
+  assert.match(ingest, /NOT EXISTS/);
+  // The body comparison, and specifically the NULL-safe form -- `=` would never
+  // match the NULL text a media message carries, disabling the guard for them.
+  assert.match(ingest, /text IS NOT DISTINCT FROM \$5::text/);
+  // The new-id dedupe has to survive alongside it.
+  assert.match(ingest, /ON CONFLICT \(external_message_id\) DO NOTHING/);
 });
