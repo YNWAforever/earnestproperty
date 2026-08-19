@@ -111,7 +111,10 @@ export function createStaffIdentityProvider(input: {
       const authHeader = input.request.headers.get("authorization");
       const cookieHeader = input.request.headers.get("cookie");
       const bearerToken = authHeader?.replace(/^Bearer\s+/i, "") ?? null;
-      const bodyText = await response.clone().text().catch(() => "<unreadable>");
+      const bodyText = await response
+        .clone()
+        .text()
+        .catch(() => "<unreadable>");
       console.error("[neon-auth-diag]", {
         path: input.path,
         method,

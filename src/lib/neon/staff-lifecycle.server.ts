@@ -140,6 +140,20 @@ function retryAfter(action: "invitation" | "password-reset", now: Date) {
   return cooldownRetryAfter({ action, now: new Date(now.valueOf() - 1), lastRequestedAt: now });
 }
 
+// findIdentityActionCooldown returns a row's stored retry_after verbatim -- a
+// fixed timestamp written at the time of a prior failure that is never
+// re-evaluated once real time moves past it. Without this check, a single
+// retryable_failure row permanently blocks every future attempt: its
+// retryAfter stays truthy forever, regardless of how much time has actually
+// passed. localCooldown (computed from persisted.createdAt via
+// cooldownRetryAfter) already gets this right; this mirrors that same
+// still-in-the-future check for the DB-stored value.
+function activeRetryAfter(candidate: string | null | undefined, now: Date): string | null {
+  if (!candidate) return null;
+  const retryAt = new Date(candidate);
+  return Number.isNaN(retryAt.valueOf()) || retryAt <= now ? null : candidate;
+}
+
 async function safeAudit(writeAudit: StaffLifecycleDependencies["writeAudit"], input: AuditInput) {
   // All callers pass small allowlisted scalar/count metadata. This service is
   // the lifecycle audit boundary: no provider payload, token, cookie, body, or
@@ -409,10 +423,11 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
               lastRequestedAt: persisted.createdAt,
             })
           : null;
-      if (localCooldown || previous?.retryAfter)
+      const previousCooldown = activeRetryAfter(previous?.retryAfter, currentNow);
+      if (localCooldown || previousCooldown)
         return {
           accepted: false,
-          retryAfter: localCooldown ?? previous?.retryAfter ?? null,
+          retryAfter: localCooldown ?? previousCooldown,
           requestId,
         };
       if (
@@ -564,10 +579,11 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
               lastRequestedAt: persisted.createdAt,
             })
           : null;
-      if (localCooldown || previous?.retryAfter)
+      const previousCooldown = activeRetryAfter(previous?.retryAfter, currentNow);
+      if (localCooldown || previousCooldown)
         return {
           accepted: false,
-          retryAfter: localCooldown ?? previous?.retryAfter ?? null,
+          retryAfter: localCooldown ?? previousCooldown,
           requestId,
         };
       let operation: Awaited<ReturnType<typeof beginAction>>;
