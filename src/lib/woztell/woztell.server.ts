@@ -5,6 +5,18 @@ import crypto from "node:crypto";
 export type NormalizedWoztellEvent = {
   direction: "inbound" | "outbound";
   externalMessageId: string;
+  /**
+   * The id this event WOULD have synthesized before the content digest was
+   * added, or null when WOZTELL supplied a real messageId (in which case the
+   * id never changed and there is nothing to reconcile).
+   *
+   * Rows imported before that change are already stored under this key, so
+   * ingest has to treat a legacy hit as "already have it" -- otherwise the
+   * first import after deploying would re-insert every one of them under its
+   * new id and show the whole inbox twice. See the guard in
+   * woztell-ingest.server.ts.
+   */
+  legacyExternalMessageId: string | null;
   fromPhone: string | null;
   toPhone: string | null;
   timestamp: string;
@@ -220,6 +232,37 @@ function eventTimestamp(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
+/**
+ * Deterministic JSON: object keys sorted, so two records holding the same
+ * message hash identically no matter what order the two ingest surfaces
+ * happened to build them in.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const entries = Object.entries(value as AnyRecord)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(",")}}`;
+}
+
+/**
+ * A short fingerprint of the message body, used to tell apart two events that
+ * share a member, a direction, a type AND a timestamp.
+ *
+ * Hashes `data` rather than just `data.text` so media messages -- whose content
+ * lives in a url/id field and whose text is null -- are discriminated too.
+ * `data` is the one field both ingest surfaces read from the identical
+ * envelope, which is what keeps the digest stable across them.
+ */
+function contentDigest(data: AnyRecord) {
+  return crypto.createHash("sha256").update(canonicalJson(data)).digest("hex").slice(0, 12);
+}
+
 export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEvent {
   const wrappedEvent = record(payload.messageEvent);
   const source = Object.keys(wrappedEvent).length > 0 ? wrappedEvent : payload;
@@ -237,13 +280,27 @@ export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEven
   );
   const messageType = stringOrNull(source.type) ?? "UNKNOWN";
   const timestampRaw = source.timestamp ?? payload.timestamp;
-  const externalMessageId =
-    stringOrNull(source.messageId ?? payload.messageId) ??
-    `${direction}:${channelId ?? "channel"}:${memberId ?? "member"}:${stringOrNull(timestampRaw) ?? "time"}:${messageType}`;
+  const providedMessageId = stringOrNull(source.messageId ?? payload.messageId);
+
+  // WOZTELL omits messageId on plenty of events -- inbound webhook payloads
+  // routinely arrive without one -- so the id has to be synthesized. It lands
+  // in whatsapp_messages.external_message_id, which is UNIQUE and written with
+  // ON CONFLICT DO NOTHING, so two DISTINCT messages sharing a synthesized id
+  // do not error: the second is silently discarded and counted as a duplicate.
+  //
+  // The key used to stop at the timestamp, and WOZTELL timestamps are unix
+  // SECONDS. A customer sending two lines in a row, or a bot answering in two
+  // bubbles, produced one id for two messages -- so the inbox quietly held one
+  // fewer message than the WOZTELL console. The content digest is what makes
+  // the key discriminate; everything before it is kept so the id still reads as
+  // the message it belongs to.
+  const legacyKey = `${direction}:${channelId ?? "channel"}:${memberId ?? "member"}:${stringOrNull(timestampRaw) ?? "time"}:${messageType}`;
+  const externalMessageId = providedMessageId ?? `${legacyKey}:${contentDigest(data)}`;
 
   return {
     direction,
     externalMessageId,
+    legacyExternalMessageId: providedMessageId ? null : legacyKey,
     fromPhone: stringOrNull(source.from),
     toPhone: stringOrNull(source.to),
     timestamp: eventTimestamp(timestampRaw),

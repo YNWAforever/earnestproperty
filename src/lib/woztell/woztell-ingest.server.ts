@@ -179,13 +179,42 @@ export async function ingestWoztellEvent(event: NormalizedWoztellEvent): Promise
   // backfill safe to re-run and safe to overlap with the live webhook: whichever
   // path sees a message first wins, the other is a no-op. RETURNING id is empty
   // on conflict, which is how we count "already had it" without a second query.
+  // The WHERE NOT EXISTS arm covers rows stored before the synthesized id grew
+  // its content digest. Those rows are keyed on the bare
+  // direction:channel:member:timestamp:type string, which no longer matches
+  // what this event now computes -- so ON CONFLICT alone would not see them and
+  // the first import after the change would re-insert the entire back catalogue
+  // under new ids, showing every message twice.
+  //
+  // The `text IS NOT DISTINCT FROM` half is what makes the guard recover the
+  // lost messages instead of cementing them. The legacy key is precisely the
+  // ambiguous one: when two messages collided, ONE of them got stored under it
+  // and the other was thrown away. Matching on the key ALONE would skip the
+  // thrown-away one all over again -- the import would keep reporting it as an
+  // already-seen duplicate, and the message the WOZTELL console shows would
+  // never arrive. Comparing the body too means a legacy row only suppresses the
+  // message it actually holds; its lost twin no longer matches, so it inserts
+  // under its own digest and finally appears.
+  //
+  // IS NOT DISTINCT FROM rather than `=` because text is NULL for media, and
+  // NULL = NULL is NULL, which would make the guard never fire for them.
+  //
+  // Every parameter is cast explicitly: in INSERT ... SELECT with no FROM,
+  // Postgres has no column context to infer a bare $n from.
   const insertedMessages = await queryRows<{ id: string }>(
     `
     INSERT INTO whatsapp_messages (
       conversation_id, contact_id, direction, message_type, text,
       external_message_id, woztell_member_id, channel_id, payload, status, created_at
     )
-    VALUES ($1, $2, $3::whatsapp_message_direction, $4, $5, $6, $7, $8, $9::jsonb, 'received', $10)
+    SELECT $1::uuid, $2::uuid, $3::whatsapp_message_direction, $4::text, $5::text,
+           $6::text, $7::text, $8::text, $9::jsonb, 'received', $10::timestamptz
+    WHERE $11::text IS NULL
+       OR NOT EXISTS (
+         SELECT 1 FROM whatsapp_messages
+         WHERE external_message_id = $11::text
+           AND text IS NOT DISTINCT FROM $5::text
+       )
     ON CONFLICT (external_message_id) DO NOTHING
     RETURNING id
     `,
@@ -200,6 +229,7 @@ export async function ingestWoztellEvent(event: NormalizedWoztellEvent): Promise
       event.channelId,
       JSON.stringify(event.payload),
       event.timestamp,
+      event.legacyExternalMessageId,
     ],
   );
 
