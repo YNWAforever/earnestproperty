@@ -135,15 +135,30 @@ async function refreshCampaignDeliveryStatus(campaignId: string) {
  * have delivered the message and re-queueing would send (and bill) a second one.
  *
  * That makes it important not to over-apply. Only outcomes where delivery is
- * genuinely ambiguous belong here. A status that proves the request was
- * rejected BEFORE dispatch -- a 429 rate-limit, or the 4xx set below -- means
- * nothing was sent, so it stays retryable and the recipient can be re-queued.
+ * genuinely ambiguous belong here. Anything that proves the request was
+ * rejected BEFORE dispatch means nothing was sent, so it stays retryable and
+ * the recipient can be re-queued. Three things prove it: WOZTELL answering
+ * ok:0 (`refused`), a 429 rate-limit, and the 4xx set below.
+ *
+ * The status alone cannot carry that distinction, which is why `refused`
+ * exists: WOZTELL reports a refusal as HTTP 500, the same status a genuinely
+ * ambiguous mid-flight failure produces.
  */
-function providerFailureCode(result: { ok: boolean; status?: number }) {
+function providerFailureCode(result: { ok: boolean; status?: number; refused?: boolean }) {
   if (!result.status) return "WOZTELL_CONFIGURATION_UNAVAILABLE";
+  // WOZTELL said ok:0 -- it refused before handing anything to the integration
+  // server, so the recipient definitively did not get a message. That has to be
+  // decided before the status list, because WOZTELL answers a refusal with 500
+  // and would otherwise fall through to UNKNOWN, which is terminal: a single
+  // wrong token scope or unknown channel id would permanently strand every
+  // recipient in the blast, none of whom were ever contacted.
+  if (result.refused === true) return "WOZTELL_PROVIDER_REJECTED";
   // 429: the provider refused to accept the request at all. Definitively not
   // delivered, so this must not be misfiled as ambiguous and stranded forever.
   if ([400, 401, 403, 404, 422, 429].includes(result.status)) return "WOZTELL_PROVIDER_REJECTED";
+  // Anything else is genuinely ambiguous -- the send may have gone through
+  // before the failure -- and stays terminal so a retry cannot bill a customer
+  // for a second message.
   return "WOZTELL_DELIVERY_UNKNOWN";
 }
 
