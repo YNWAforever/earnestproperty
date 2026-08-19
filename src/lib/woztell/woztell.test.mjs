@@ -638,3 +638,45 @@ test("a genuine success is still a success", async () => {
   const result = await captureSend(200, { ok: 1, member: "m1", sendResult: { ok: 1 } });
   assert.equal(result.ok, true);
 });
+
+// WOZTELL_DELIVERY_UNKNOWN is terminal because the provider may already have
+// delivered the message, so re-queueing risks a second billable WhatsApp to a
+// real person. That reasoning does not hold when WOZTELL says ok:0 -- it
+// refused BEFORE sending, so nothing reached the customer and nothing is at
+// risk from a retry. Classifying purely on the HTTP status could not tell the
+// two apart, because WOZTELL answers a refusal with 500; `refused` is what
+// separates "never sent" from "sent, outcome unknown".
+test("a refused send is flagged as definitively not sent", async () => {
+  const result = await captureSend(500, { ok: 0, err: "User is not authorized." });
+  assert.equal(result.refused, true);
+});
+
+// A 5xx with no verdict in it stays genuinely ambiguous -- the request may have
+// been processed before the connection broke, so it must NOT be downgraded.
+test("a bare 5xx is not treated as a refusal", async () => {
+  const result = await captureSend(500, {});
+  assert.notEqual(result.refused, true);
+});
+
+test("a provider refusal stays retryable instead of stranding the recipient", async () => {
+  const result = await runSingleRecipientCampaign(async () => ({
+    ok: false,
+    status: 500,
+    refused: true,
+    error: "WOZTELL_112: Channel ID not found",
+  }));
+
+  assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_PROVIDER_REJECTED"]]);
+});
+
+// The guard on the other side: without an explicit refusal a 5xx is still
+// ambiguous and still terminal, or the whole double-send protection is gone.
+test("an ambiguous 5xx is still terminal unknown", async () => {
+  const result = await runSingleRecipientCampaign(async () => ({
+    ok: false,
+    status: 500,
+    error: "gateway blew up",
+  }));
+
+  assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN"]]);
+});

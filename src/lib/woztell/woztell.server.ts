@@ -397,7 +397,14 @@ export async function sendWoztellResponse(input: {
   // The body rides along so the send route can persist it into
   // whatsapp_messages.payload -- without it a failed row records the summary
   // and loses the provider's own account of what happened.
-  return { ok: false, error: providerError, status: res.status, body };
+  //
+  // `refused` reports the one thing the HTTP status cannot: that WOZTELL
+  // decided against sending rather than failing somewhere mid-flight. Both
+  // arrive as 500, and campaign delivery has to tell them apart -- an
+  // ambiguous failure is terminal there, because the customer may already have
+  // the message, while a refusal is safe to retry. Only an explicit ok:0
+  // counts, so anything less certain stays ambiguous.
+  return { ok: false, error: providerError, status: res.status, body, refused };
 }
 
 export { deliverWoztellCampaign } from "./campaign-delivery.server.ts";
