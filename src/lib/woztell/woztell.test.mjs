@@ -564,3 +564,77 @@ test("ingest reconciles pre-digest rows without re-dropping their lost twins", (
   // The new-id dedupe has to survive alongside it.
   assert.match(ingest, /ON CONFLICT \(external_message_id\) DO NOTHING/);
 });
+
+// WOZTELL reports a refused send as HTTP 500 with {"ok":0,"err":"..."} -- the
+// 500 is its normal "bot found an error before sending" channel, not a crash,
+// and the reason staff need is in `err` (with `err_code` on some failures).
+// Reading `error` instead never matched, so every refusal collapsed to the
+// bare status and the actual cause was thrown away.
+async function captureSend(status, body) {
+  const originalFetch = globalThis.fetch;
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  globalThis.fetch = async () => new Response(JSON.stringify(body), { status });
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+  try {
+    return await sendWoztellResponse({ memberId: "m1", response: [{ type: "TEXT", text: "hi" }] });
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
+}
+
+test("a refused send surfaces WOZTELL's reason instead of the bare status", async () => {
+  const result = await captureSend(500, { ok: 0, err: "User is not authorized." });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /User is not authorized\./);
+  assert.doesNotMatch(
+    result.error,
+    /^WOZTELL_HTTP_500$/,
+    "the opaque status must not replace a reason WOZTELL actually gave",
+  );
+});
+
+test("a refused send keeps err_code when WOZTELL sends one", async () => {
+  const result = await captureSend(500, { ok: 0, err_code: 112, err: "Channel ID not found" });
+
+  assert.match(result.error, /112/);
+  assert.match(result.error, /Channel ID not found/);
+});
+
+// Without a reason from the provider there is nothing better than the status,
+// so that path has to keep working.
+test("a refused send with no reason still reports the status", async () => {
+  const result = await captureSend(500, {});
+  assert.equal(result.error, "WOZTELL_HTTP_500");
+});
+
+// The raw provider response is what a later investigation has to read: the send
+// route persists this whole result into whatsapp_messages.payload.
+test("a refused send preserves the provider body for the message record", async () => {
+  const result = await captureSend(500, { ok: 0, err: "User is not authorized." });
+  assert.deepEqual(result.body, { ok: 0, err: "User is not authorized." });
+});
+
+// ok:0 is the provider saying it did NOT send. Trusting the HTTP status alone
+// would stamp the message 'sent' and show staff a delivered reply that never
+// left the building.
+test("ok:0 is a failure even when the status is 200", async () => {
+  const result = await captureSend(200, { ok: 0, err: "Parameter(s) is missing" });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Parameter\(s\) is missing/);
+});
+
+test("a genuine success is still a success", async () => {
+  const result = await captureSend(200, { ok: 1, member: "m1", sendResult: { ok: 1 } });
+  assert.equal(result.ok, true);
+});

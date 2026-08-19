@@ -361,13 +361,43 @@ export async function sendWoztellResponse(input: {
       return { ok: false, error: "WOZTELL_INVALID_RESPONSE", status: res.status };
     }
   }
-  if (res.ok) return { ok: true, body, status: res.status };
+  const envelope = record(body);
 
-  const providerError =
-    body && typeof body === "object" && "error" in body
-      ? String((body as Record<string, unknown>).error).slice(0, 500)
-      : `WOZTELL_HTTP_${res.status}`;
-  return { ok: false, error: providerError, status: res.status };
+  // `ok` is WOZTELL's own verdict and it is the authoritative one. A refusal
+  // normally arrives as HTTP 500 -- that status is its documented "bot found an
+  // error before sending the response out", NOT a crash -- but reading the
+  // status alone would stamp a 2xx carrying ok:0 as 'sent' and show staff a
+  // reply that never left the building.
+  const refused = envelope.ok === 0;
+  if (res.ok && !refused) return { ok: true, body, status: res.status };
+
+  // WOZTELL puts the reason in `err`, with `err_code` on some failures:
+  //   { "ok": 0, "err": "User is not authorized." }
+  // This used to read `error`, which WOZTELL never sends. The lookup therefore
+  // never matched and every refusal -- a wrong token scope, an unknown channel,
+  // a number with no WhatsApp account -- collapsed into the bare
+  // "WOZTELL_HTTP_500", discarding the one sentence that says what to fix.
+  // `error` is still accepted in case a surface does use it.
+  // https://doc.woztell.com/docs/reference/bot-api-reference/
+  const rawReason = envelope.err ?? envelope.error;
+  const reason =
+    rawReason === null || rawReason === undefined
+      ? null
+      : typeof rawReason === "object"
+        ? JSON.stringify(rawReason)
+        : String(rawReason);
+  const code = envelope.err_code ?? envelope.errCode;
+  const providerError = reason
+    ? (code === null || code === undefined ? reason : `WOZTELL_${String(code)}: ${reason}`).slice(
+        0,
+        500,
+      )
+    : `WOZTELL_HTTP_${res.status}`;
+
+  // The body rides along so the send route can persist it into
+  // whatsapp_messages.payload -- without it a failed row records the summary
+  // and loses the provider's own account of what happened.
+  return { ok: false, error: providerError, status: res.status, body };
 }
 
 export { deliverWoztellCampaign } from "./campaign-delivery.server.ts";
