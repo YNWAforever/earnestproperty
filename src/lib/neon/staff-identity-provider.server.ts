@@ -39,10 +39,18 @@ function providerData(value: unknown) {
 
 function forwardedHeaders(request: Request) {
   const headers = new Headers({ accept: "application/json", "content-type": "application/json" });
-  for (const header of ["cookie", "authorization"]) {
-    const value = request.headers.get(header);
-    if (value) headers.set(header, value);
-  }
+  const cookie = request.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
+  // Not this app's own `authorization` header: Neon Auth's admin API does not
+  // accept the JWT that header carries (this app's own requireStaffAccess
+  // does, via a different verification path -- see auth.ts's
+  // providerSessionTokenFromResponse for the full trace). withStaffAuthHeaders
+  // forwards a separately-fetched, provider-compatible session credential
+  // under x-neon-provider-session specifically so it can become the
+  // Authorization value sent here, without disturbing the JWT this app's own
+  // auth relies on.
+  const providerSession = request.headers.get("x-neon-provider-session");
+  if (providerSession) headers.set("authorization", `Bearer ${providerSession}`);
   return headers;
 }
 
