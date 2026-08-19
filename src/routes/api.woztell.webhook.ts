@@ -40,7 +40,7 @@ export const Route = createFileRoute("/api/woztell/webhook")({
             "[woztell] webhook REJECTED (401): signature did not verify. " +
               `signature header: ${signatureHeader ? "present" : "MISSING"}; ` +
               `WOZTELL_CHANNEL_SECRET: ${config.channelSecret ? "configured" : "NOT SET"}; ` +
-              `body bytes: ${raw.length}. ` +
+              `body length: ${raw.length} chars. ` +
               "If both are present, the stored secret no longer matches the channel.",
           );
           return Response.json({ ok: false, error: "Invalid signature" }, { status: 401 });
