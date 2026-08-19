@@ -680,3 +680,21 @@ test("an ambiguous 5xx is still terminal unknown", async () => {
 
   assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN"]]);
 });
+
+// A webhook rejected at the signature check drops a real customer message and
+// writes nothing, while WOZTELL's console still shows it delivered -- so the
+// inbox silently stops receiving and nothing anywhere says why. Rotating the
+// channel credentials produces exactly that, and it is indistinguishable from a
+// quiet day unless the rejection announces itself.
+test("a rejected webhook says so, and says which of the three causes it is", () => {
+  const route = read("src/routes/api.woztell.webhook.ts");
+
+  assert.match(route, /console\.warn\([\s\S]{0,400}REJECTED/);
+  // Each state has a different fix, so the log has to tell them apart.
+  assert.match(route, /signature header/);
+  assert.match(route, /WOZTELL_CHANNEL_SECRET/);
+  // The payload carries customer messages and the secret is a credential;
+  // neither belongs in a log line.
+  assert.doesNotMatch(route, /console\.warn\([\s\S]{0,400}\$\{raw\}/);
+  assert.doesNotMatch(route, /console\.warn\([\s\S]{0,400}\$\{config\.channelSecret\}/);
+});

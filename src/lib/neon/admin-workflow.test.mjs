@@ -6,6 +6,7 @@ import {
   canQueueAdminCampaign,
   canReplyToConversation,
   classifyCampaignDeliveryStatus,
+  conversationAttention,
   normalizeAdminPhone,
 } from "./admin-workflow.ts";
 
@@ -173,4 +174,70 @@ test("classifyCampaignDeliveryStatus updates only materialized active campaigns"
     }),
     null,
   );
+});
+
+// The inbox marks a conversation as needing a reply from who spoke last, not
+// from a read receipt: a message someone opened, meant to answer and never did
+// still needs answering, and a read flag would quietly drop it out of the queue.
+test("a conversation is awaiting a reply when the customer spoke last", () => {
+  const now = new Date("2026-08-19T12:00:00Z");
+  const inboundLast = conversationAttention({
+    lastDirection: "inbound",
+    lastInboundAt: "2026-08-19T11:00:00Z",
+    now,
+  });
+  const weReplied = conversationAttention({
+    lastDirection: "outbound",
+    lastInboundAt: "2026-08-19T11:00:00Z",
+    now,
+  });
+
+  assert.equal(inboundLast.awaitingReply, true);
+  assert.equal(weReplied.awaitingReply, false);
+  assert.equal(inboundLast.waitedMs, 60 * 60 * 1000);
+});
+
+// The 24-hour window is a deadline, not a detail: once it lapses
+// canReplyToConversation refuses the send outright.
+test("the reply window is reported as open, closing, then expired", () => {
+  const inboundAt = "2026-08-19T00:00:00Z";
+  const at = (iso) =>
+    conversationAttention({ lastDirection: "inbound", lastInboundAt: inboundAt, now: new Date(iso) })
+      .windowState;
+
+  assert.equal(at("2026-08-19T01:00:00Z"), "open");
+  assert.equal(at("2026-08-19T22:30:00Z"), "closing");
+  assert.equal(at("2026-08-20T00:00:01Z"), "expired");
+});
+
+test("a conversation with no inbound message has no window to report", () => {
+  const attention = conversationAttention({ lastDirection: "outbound", lastInboundAt: null });
+
+  assert.equal(attention.windowState, "none");
+  assert.equal(attention.waitedMs, null);
+  assert.equal(attention.windowRemainingMs, null);
+});
+
+// Clock skew between Postgres and the browser must not produce a negative wait
+// or a window longer than the 24 hours WhatsApp actually allows.
+test("an inbound timestamp in the future does not invert the wait", () => {
+  const attention = conversationAttention({
+    lastDirection: "inbound",
+    lastInboundAt: "2026-08-19T12:05:00Z",
+    now: new Date("2026-08-19T12:00:00Z"),
+  });
+
+  assert.equal(attention.waitedMs, 0);
+  assert.equal(attention.windowRemainingMs, 24 * 60 * 60 * 1000);
+  assert.equal(attention.windowState, "open");
+});
+
+test("an unparseable inbound timestamp degrades instead of throwing", () => {
+  const attention = conversationAttention({
+    lastDirection: "inbound",
+    lastInboundAt: "not a date",
+  });
+
+  assert.equal(attention.awaitingReply, true);
+  assert.equal(attention.windowState, "none");
 });
