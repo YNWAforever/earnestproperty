@@ -44,7 +44,12 @@ function createProvider(responses, options = {}) {
 const authorizedRequest = new Request("https://earnest.example.test/admin/team", {
   headers: {
     cookie: "better-auth.session_token=provider-secret",
-    authorization: "Bearer access-secret",
+    // Not `authorization`: Neon Auth's admin API rejects the JWT this app's
+    // own requireStaffAccess uses there (confirmed live -- see the doc
+    // comment on providerSessionTokenFromResponse in src/auth.ts). The
+    // provider adapter reads this separate, provider-compatible credential
+    // instead when forwarding Authorization to Neon Auth.
+    "x-neon-provider-session": "provider-session-secret",
   },
 });
 
@@ -57,7 +62,7 @@ test("password-reset redirects are derived from the current request origin", () 
   );
 });
 
-test("provider adapter uses the configured base URL, forwards only auth headers, and never sends app roles", async () => {
+test("provider adapter uses the configured base URL, forwards the provider-session credential (not this app's own JWT), and never sends app roles", async () => {
   const { provider, requests } = createProvider([
     response({
       data: {
@@ -81,7 +86,7 @@ test("provider adapter uses the configured base URL, forwards only auth headers,
       path: "/admin/get-user?id=auth-1",
       headers: {
         accept: "application/json",
-        authorization: "Bearer access-secret",
+        authorization: "Bearer provider-session-secret",
         "content-type": "application/json",
         cookie: "better-auth.session_token=provider-secret",
       },
@@ -89,6 +94,19 @@ test("provider adapter uses the configured base URL, forwards only auth headers,
     },
   ]);
   assert.equal(requests[0].body, null);
+});
+
+test("provider adapter never forwards this app's own authorization header to Neon Auth", async () => {
+  const { provider, requests } = createProvider([
+    response({ data: { user: { id: "auth-1", email: null, name: null } } }),
+  ]);
+  const requestWithOnlyAppAuth = new Request("https://earnest.example.test/admin/team", {
+    headers: { authorization: "Bearer this-apps-own-jwt" },
+  });
+
+  await provider.resolveUser({ authUserId: "auth-1", request: requestWithOnlyAppAuth });
+
+  assert.equal("authorization" in requests[0].headers, false);
 });
 
 test("a base URL with a path prefix keeps that prefix on every provider call", async () => {
