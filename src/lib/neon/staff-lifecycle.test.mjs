@@ -456,6 +456,30 @@ test("password reset rejects unsafe targets and only sends a provider reset link
   assert.equal("token" in (calls.audit[0].metadata ?? {}), false);
 });
 
+test("password reset ignores a stored cooldown once its retryAfter has actually passed", async () => {
+  // findIdentityActionCooldown's row-level retry_after is a fixed timestamp
+  // written at the time of a prior failure -- it never gets re-evaluated once
+  // real time moves past it. The caller must check it against "now" itself,
+  // exactly like it already does for the persisted/localCooldown path below.
+  const { service, calls, staff, identityActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  identityActions.findIdentityActionCooldown = async () => ({
+    state: "retryable_failure",
+    retryAfter: "2026-08-15T23:50:00.000Z", // 10 minutes before fixture's clock.current
+    providerExpiresAt: null,
+  });
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+  assert.equal(calls.provider.some((call) => call.method === "reset"), true);
+});
+
 test("password reset returns a serializable self-target denial before any store or provider call", async () => {
   const { service, calls, staff } = fixture();
   staff.set(admin.staffId, {
