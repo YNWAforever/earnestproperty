@@ -16,8 +16,12 @@ import {
   type IdentityActionState,
   type IdentityActionType,
 } from "./staff-identity-actions.server.ts";
-import { createStaffIdentityProvider } from "./staff-identity-provider.server.ts";
+import {
+  createStaffIdentityProvider,
+  StaffIdentityProviderError,
+} from "./staff-identity-provider.server.ts";
 import type {
+  ProviderIdentity,
   ProviderInvitation,
   ProviderOutcomeCode,
   StaffIdentityProvider,
@@ -758,6 +762,50 @@ type DefaultStaffLifecycleLoaders = {
   loadAudit?: () => Promise<Pick<typeof import("../control-plane/audit.server.ts"), "writeAudit">>;
 };
 
+/**
+ * Resolve a Neon Auth identity from the neon_auth."user" table this database
+ * already holds, instead of Neon Auth's HTTP admin API.
+ *
+ * The HTTP route (/admin/get-user) rejected every credential shape this app
+ * can forward -- three distinct attempts, each captured 401 in production
+ * with the diagnostic in staff-identity-provider.server.ts: the app's own
+ * session JWT (better-auth's bearer plugin cannot parse a 3-segment JWT), the
+ * getSession() body token (same JWT, injected by the jwt plugin), and the
+ * set-auth-token provider-session forwarding. The endpoint is also redundant:
+ * Neon Auth syncs its user table into this database, and auth.server.ts
+ * already treats neon_auth."user" as authoritative for id/email/name AND for
+ * the security-critical emailVerified gate. Reading it here keeps password
+ * reset working without any dependency on the provider's admin auth.
+ */
+export function createNeonAuthUserResolver(
+  runQuery: QueryRows = queryRows,
+): (input: { authUserId: string; request: Request }) => Promise<ProviderIdentity> {
+  return async ({ authUserId }) => {
+    let rows: DbRow[];
+    try {
+      rows = await runQuery(
+        `SELECT id::text AS id, email, name, "emailVerified" AS email_verified
+           FROM neon_auth."user"
+          WHERE id::text = $1
+          LIMIT 1`,
+        [authUserId],
+      );
+    } catch {
+      throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
+    }
+    const row = rows[0];
+    if (!row || typeof row.id !== "string" || !row.id) {
+      throw new StaffIdentityProviderError("PROVIDER_IDENTITY_NOT_FOUND", 404);
+    }
+    return {
+      id: row.id,
+      email: typeof row.email === "string" ? row.email : null,
+      name: typeof row.name === "string" ? row.name : null,
+      emailVerified: row.email_verified === true,
+    };
+  };
+}
+
 export async function createDefaultStaffLifecycleDependencies(
   loaders: DefaultStaffLifecycleLoaders = {},
 ): Promise<StaffLifecycleDependencies> {
@@ -765,7 +813,11 @@ export async function createDefaultStaffLifecycleDependencies(
   const loadAudit = loaders.loadAudit ?? (() => import("../control-plane/audit.server.ts"));
   return {
     organizationId: process.env.NEON_AUTH_ORGANIZATION_ID ?? "",
-    provider: createStaffIdentityProvider({}),
+    // resolveUser deliberately bypasses the HTTP adapter -- see
+    // createNeonAuthUserResolver. Delivery-side calls (request-password-reset,
+    // invitations, session revocation) stay on the HTTP provider: reset
+    // delivery is a public endpoint, and only the provider can send email.
+    provider: { ...createStaffIdentityProvider({}), resolveUser: createNeonAuthUserResolver() },
     updateStaffRoles: async (input, actor) =>
       (await loadAdminData()).updateStaffRoles(input, actor),
     setStaffActive: async (input, actor) => (await loadAdminData()).setStaffActive(input, actor),
