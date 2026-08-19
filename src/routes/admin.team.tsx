@@ -87,7 +87,11 @@ export const Route = createFileRoute("/admin/team")({
   component: AdminTeam,
 });
 
-function safeError(error: unknown, action?: TeamMemberAction) {
+// `action` is the dialog's union, not TeamMemberAction: the invite dialog also
+// routes its failures through here, and "invite" is not a member action. Only
+// the 400 branch reads it, and only to single out "reset", so widening costs
+// nothing and stops the call site below from lying about what it can pass.
+function safeError(error: unknown, action?: PendingTeamDialog["action"]) {
   // Status comes from serverErrorStatus, not `error instanceof Response`: a
   // server-thrown Response reaches the client as a plain Error carrying the
   // response body, so an instanceof check here would never match and every

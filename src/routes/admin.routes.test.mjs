@@ -43,7 +43,15 @@ test("Team route delegates lifecycle mutations to the Task 4 server boundary", (
 test("Team route removes member data for forbidden callers and carries edited lifecycle input", () => {
   const source = read("src/routes/admin.team.tsx");
 
-  assert.match(source, /reason\.status === 403[\s\S]*setTeam\(null\)[\s\S]*setDetail\(null\)/);
+  // Status is read through serverErrorStatus rather than off the error object:
+  // a server-thrown Response arrives on the client as a plain Error carrying the
+  // body, so `reason.status` is undefined there and the forbidden branch would
+  // never run. The behaviour asserted here is unchanged -- a 403 still drops
+  // both the list and the open member -- only the way the status is obtained.
+  assert.match(
+    source,
+    /serverErrorStatus\(reason\) === 403[\s\S]*setTeam\(null\)[\s\S]*setDetail\(null\)/,
+  );
   assert.match(source, /if \(forbidden\)[\s\S]*AdminError/);
   assert.match(source, /teamActionPayload\(\{[\s\S]*proposedRoles: pending\.proposedRoles/);
   assert.match(source, /reassignToStaffId: pendingOptions\.reassignToStaffId/);
@@ -56,7 +64,10 @@ test("Team route removes member data for forbidden callers and carries edited li
 
 test("Team route prevents self-reset confusion and gives a safe 400 recovery message", () => {
   const source = read("src/routes/admin.team.tsx");
-  assert.match(source, /error\.status === 400/);
+  // Same move as the 403 branch above: safeError resolves the status once via
+  // serverErrorStatus and then branches on it.
+  assert.match(source, /const status = serverErrorStatus\(error\);/);
+  assert.match(source, /if \(status === 400\)/);
   assert.match(source, /safeError\(reason, pending\.action\)/);
   assert.match(source, /currentUserEmail=\{user\?\.email \?\? null\}/);
 });
