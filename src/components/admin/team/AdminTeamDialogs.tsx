@@ -24,14 +24,16 @@ export function maskTeamEmail(email: string | null) {
 
 const copy = {
   invite: {
-    title: "確認發送邀請",
-    description: "確認後會向此成員發送帳戶邀請電郵。",
-    label: "發送邀請",
+    title: "確認邀請成員",
+    description:
+      "系統不會自動發送邀請電郵。確認後請將本網站的註冊連結（/auth/sign-up）分享給此成員；成員以此電郵註冊並完成驗證後，即自動獲得所選角色的權限。",
+    label: "確認邀請",
   },
   resend: {
-    title: "重新發送邀請",
-    description: "確認後會再發送一封帳戶邀請電郵。",
-    label: "重新發送邀請",
+    title: "更新邀請",
+    description:
+      "此操作只會重新記錄邀請狀態，不會發送電郵。如成員尚未註冊，請再次分享註冊連結（/auth/sign-up）。",
+    label: "更新邀請",
   },
   roles: {
     title: "確認變更角色",

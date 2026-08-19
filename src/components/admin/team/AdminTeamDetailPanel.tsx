@@ -166,7 +166,7 @@ export function AdminTeamDetailPanel({
             {canResend ? (
               <Button onClick={() => onAction("resend")} type="button" variant="outline">
                 <Mail aria-hidden="true" />
-                重新發送邀請
+                更新邀請
               </Button>
             ) : null}
             {active ? (

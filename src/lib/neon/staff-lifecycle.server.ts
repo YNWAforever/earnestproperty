@@ -806,18 +806,84 @@ export function createNeonAuthUserResolver(
   };
 }
 
+/**
+ * Revoke a user's Neon Auth sessions by deleting their rows in
+ * neon_auth.session, instead of POST /admin/revoke-user-sessions.
+ *
+ * The HTTP route is unusable from a server: Neon's docs state admin
+ * operations require the signed-in user's HTTP-only session cookie ("your
+ * admin tooling must run on the same site that can send those cookies"), and
+ * every credential this server can forward was rejected 401 in production.
+ * The route is also nothing more than this delete -- the vendored better-auth
+ * admin plugin's handler body is a permission check followed by
+ * internalAdapter.deleteSessions(userId), a delete on the session model where
+ * userId matches. neon_auth is the service's primary store (login verifies
+ * against neon_auth.jwks), so the direct delete severs the same sessions.
+ *
+ * Inherent limit shared by BOTH methods: already-issued JWTs stay valid until
+ * their exp (better-auth default 15m) because auth.server.ts's JWT path is
+ * exp-bound and session-blind. Suspension's real gate is immediate either
+ * way: findStaff requires staff_users.active = true.
+ */
+export function createNeonAuthSessionRevoker(
+  runQuery: QueryRows = queryRows,
+): (input: { userId: string; request: Request }) => Promise<void> {
+  return async ({ userId }) => {
+    try {
+      await runQuery(`DELETE FROM neon_auth.session WHERE "userId" = $1`, [userId]);
+    } catch {
+      throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
+    }
+  };
+}
+
+/**
+ * Record an invitation locally instead of POST /organization/invite-member.
+ *
+ * No server-side credential exists for the hosted organization endpoints
+ * (cookie-session only, same as the admin surface), and even a working call
+ * only sends email if the hosted service configured sendInvitationEmail --
+ * unknowable from here, so a "successful" call could silently send nothing.
+ * The provider invitation never carried access anyway: inviteStaffMember
+ * commits the staff row (email, roles, NULL auth_user_id) before the provider
+ * is consulted, and auth.server.ts's findStaff binds the member's Neon Auth
+ * account by verified email at first sign-up. The invitation email was pure
+ * notification; the Team UI now tells the admin to share the sign-up link
+ * instead, so the recorded state stays honest.
+ *
+ * state "sent" here means "invitation recorded; awaiting sign-up" (the UI
+ * labels it 已邀請); expiresAt is null because a locally recorded invitation
+ * does not expire.
+ */
+export function createLocalStaffInvitation(): (input: {
+  email: string;
+  organizationId: string;
+  request: Request;
+}) => Promise<ProviderInvitation> {
+  return async () => ({ state: "sent", expiresAt: null });
+}
+
 export async function createDefaultStaffLifecycleDependencies(
   loaders: DefaultStaffLifecycleLoaders = {},
 ): Promise<StaffLifecycleDependencies> {
   const loadAdminData = loaders.loadAdminData ?? (() => import("./admin-data.server.ts"));
   const loadAudit = loaders.loadAudit ?? (() => import("../control-plane/audit.server.ts"));
+  const localInvitation = createLocalStaffInvitation();
   return {
     organizationId: process.env.NEON_AUTH_ORGANIZATION_ID ?? "",
-    // resolveUser deliberately bypasses the HTTP adapter -- see
-    // createNeonAuthUserResolver. Delivery-side calls (request-password-reset,
-    // invitations, session revocation) stay on the HTTP provider: reset
-    // delivery is a public endpoint, and only the provider can send email.
-    provider: { ...createStaffIdentityProvider({}), resolveUser: createNeonAuthUserResolver() },
+    // Every identity operation that previously hit Neon Auth's authenticated
+    // admin/organization HTTP surface is served locally -- see
+    // createNeonAuthUserResolver, createNeonAuthSessionRevoker and
+    // createLocalStaffInvitation. The only HTTP call left on the provider is
+    // requestPasswordReset, whose endpoint is public (verified live) and is
+    // the one thing only the provider can do: send email.
+    provider: {
+      ...createStaffIdentityProvider({}),
+      resolveUser: createNeonAuthUserResolver(),
+      revokeUserSessions: createNeonAuthSessionRevoker(),
+      sendInvitation: localInvitation,
+      resendInvitation: localInvitation,
+    },
     updateStaffRoles: async (input, actor) =>
       (await loadAdminData()).updateStaffRoles(input, actor),
     setStaffActive: async (input, actor) => (await loadAdminData()).setStaffActive(input, actor),

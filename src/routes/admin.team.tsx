@@ -438,7 +438,9 @@ function AdminTeam() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>邀請成員</DialogTitle>
-                <DialogDescription>邀請電郵會由帳戶服務安全發送。</DialogDescription>
+                <DialogDescription>
+                  系統不會自動發送邀請電郵；確認後請將註冊連結分享給此成員。
+                </DialogDescription>
               </DialogHeader>
               <div className="grid gap-3">
                 <div className="grid gap-1.5">

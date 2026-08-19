@@ -29,7 +29,7 @@ const invitation = {
     className: "border-amber-700/20 bg-amber-700/10 text-amber-900",
   },
   sent: {
-    label: "已發送",
+    label: "已邀請",
     icon: CheckCircle2,
     className: "border-emerald-700/20 bg-emerald-700/10 text-emerald-800",
   },
@@ -39,7 +39,7 @@ const invitation = {
     className: "border-amber-700/20 bg-amber-700/10 text-amber-900",
   },
   failed: {
-    label: "發送失敗",
+    label: "邀請失敗",
     icon: XCircle,
     className: "border-destructive/20 bg-destructive/10 text-destructive",
   },

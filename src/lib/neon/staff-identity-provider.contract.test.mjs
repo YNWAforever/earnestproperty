@@ -44,12 +44,11 @@ function createProvider(responses, options = {}) {
 const authorizedRequest = new Request("https://earnest.example.test/admin/team", {
   headers: {
     cookie: "better-auth.session_token=provider-secret",
-    // Not `authorization`: Neon Auth's admin API rejects the JWT this app's
-    // own requireStaffAccess uses there (confirmed live -- see the doc
-    // comment on providerSessionTokenFromResponse in src/auth.ts). The
-    // provider adapter reads this separate, provider-compatible credential
-    // instead when forwarding Authorization to Neon Auth.
-    "x-neon-provider-session": "provider-session-secret",
+    // This app's own JWT. The adapter must NOT forward it: no credential this
+    // server holds is accepted by Neon Auth's authenticated endpoints (its
+    // docs make admin operations cookie-session only), and the calls left on
+    // this adapter are public.
+    authorization: "Bearer this-apps-own-jwt",
   },
 });
 
@@ -62,7 +61,7 @@ test("password-reset redirects are derived from the current request origin", () 
   );
 });
 
-test("provider adapter uses the configured base URL, forwards the provider-session credential (not this app's own JWT), and never sends app roles", async () => {
+test("provider adapter uses the configured base URL, forwards no credential, and never sends app roles", async () => {
   const { provider, requests } = createProvider([
     response({
       data: {
@@ -86,7 +85,6 @@ test("provider adapter uses the configured base URL, forwards the provider-sessi
       path: "/admin/get-user?id=auth-1",
       headers: {
         accept: "application/json",
-        authorization: "Bearer provider-session-secret",
         "content-type": "application/json",
         cookie: "better-auth.session_token=provider-secret",
       },
