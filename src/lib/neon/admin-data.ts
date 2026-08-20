@@ -1032,6 +1032,28 @@ export async function sendAdminConversationReply(options: {
   };
 }
 
+export async function sendAdminConversationTemplate(options: {
+  data: { conversationId: string; templateId: string };
+}) {
+  const request = await withStaffAuthHeaders({
+    headers: { "Content-Type": "application/json" },
+  });
+  const response = await fetch("/api/admin/woztell/send-template", {
+    method: "POST",
+    headers: request.headers,
+    body: JSON.stringify(options.data),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (payload && typeof payload === "object") {
+    return payload as { ok: boolean; error?: string };
+  }
+  return {
+    ok: false,
+    error: response.statusText || "WhatsApp template send failed",
+  };
+}
+
 export type WoztellBackfillResult = {
   ok: boolean;
   error?: string;
@@ -1080,6 +1102,22 @@ const fetchAdminBlastOptionsServer = createServerFn({ method: "GET" }).handler(a
 
 export async function fetchAdminBlastOptions() {
   return callStaffServerFn(async () => fetchAdminBlastOptionsServer(await withStaffAuthHeaders()));
+}
+
+// Agent role too: matches the WhatsApp inbox's own access level
+// (requireStaffAccess(..., ["admin", "manager", "agent"]) on
+// /api/admin/woztell/send), unlike fetchAdminBlastOptions which is
+// admin/manager-only for campaign authoring.
+const fetchAdminWhatsappTemplatesServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager", "agent"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminWhatsappTemplates();
+});
+
+export async function fetchAdminWhatsappTemplates() {
+  return callStaffServerFn(async () =>
+    fetchAdminWhatsappTemplatesServer(await withStaffAuthHeaders()),
+  );
 }
 
 const saveAdminAudienceServer = createServerFn({ method: "POST" })
