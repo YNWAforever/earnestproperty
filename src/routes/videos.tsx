@@ -91,12 +91,28 @@ function VideosPage() {
     return rows.sort((a, b) => time(b) - time(a));
   }, [matchingCmsVideos, sort]);
 
+  // The estate chip filters this section too, matched against the listing's own
+  // estates relation rather than a parsed title -- a database join is a more
+  // reliable signal than the ＃ marker, not a reason to skip filtering.
+  //
+  // The spec originally excluded this section, and preview verification showed
+  // why that was wrong: filtering to 豪景花園 still rendered a 麗都花園 listing
+  // video underneath, and counted it in 搵到 N 條影片. A filter that shows a
+  // different estate than the one selected reads as broken.
   const matchingListingVideos = useMemo(() => {
-    if (!trimmedQuery) return listingVideos;
-    return listingVideos.filter((listing) =>
-      `${listing.title_zh} ${listing.estates?.name_zh ?? ""}`.toLowerCase().includes(trimmedQuery),
-    );
-  }, [listingVideos, trimmedQuery]);
+    return listingVideos.filter((listing) => {
+      if (estate && listing.estates?.name_zh !== estate) return false;
+      if (
+        trimmedQuery &&
+        !`${listing.title_zh} ${listing.estates?.name_zh ?? ""}`
+          .toLowerCase()
+          .includes(trimmedQuery)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [listingVideos, estate, trimmedQuery]);
 
   // Every filter change resets paging: page 3 of an old filter is meaningless
   // against a new one.
