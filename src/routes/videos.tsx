@@ -6,11 +6,19 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SITE_YOUTUBE_CHANNEL, whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
 import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
 import { summarizeVideoDescription } from "@/lib/video-description.js";
+import { buildTagCounts, deriveEstateTag } from "@/lib/video-tags.js";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-url.js";
 
 // The channel sync imports the full back catalogue, so this page went from 1
@@ -44,19 +52,44 @@ export const Route = createFileRoute("/videos")({
   component: VideosPage,
 });
 
+// The three sort values the URL ever carries. Radix's onValueChange hands back
+// a plain string, so this guard is what lets updateSearch accept it without
+// widening VideoSearch["sort"] to string or reaching for `as any`.
+const SORT_VALUES = ["newest", "oldest", "featured"] as const;
+type SortValue = (typeof SORT_VALUES)[number];
+function isSortValue(value: string): value is SortValue {
+  return (SORT_VALUES as readonly string[]).includes(value);
+}
+
 function VideosPage() {
   const { cmsVideos, listingVideos } = Route.useLoaderData();
+  const { estate, sort, q } = Route.useSearch();
+  const navigate = useNavigate({ from: "/videos" });
+  const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
+  const [showAllTags, setShowAllTags] = useState(false);
+
   const inquiryUrl = whatsappUrl("你好，我想睇深井／青山公路／汀九樓盤影片");
   const hasVideos = cmsVideos.length > 0 || listingVideos.length > 0;
+  const trimmedQuery = (q ?? "").trim().toLowerCase();
 
-  const [query, setQuery] = useState("");
-  const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
-  const trimmedQuery = query.trim().toLowerCase();
+  const tagCounts = useMemo(() => buildTagCounts(cmsVideos), [cmsVideos]);
 
   const matchingCmsVideos = useMemo(() => {
-    if (!trimmedQuery) return cmsVideos;
-    return cmsVideos.filter((video) => video.title?.toLowerCase().includes(trimmedQuery));
-  }, [cmsVideos, trimmedQuery]);
+    return cmsVideos.filter((video) => {
+      if (estate && deriveEstateTag(video.title)?.tag !== estate) return false;
+      if (trimmedQuery && !video.title?.toLowerCase().includes(trimmedQuery)) return false;
+      return true;
+    });
+  }, [cmsVideos, estate, trimmedQuery]);
+
+  const sortedCmsVideos = useMemo(() => {
+    const rows = [...matchingCmsVideos];
+    const time = (video: CmsVideo) =>
+      new Date(video.youtube_published_at ?? video.created_at ?? 0).getTime();
+    if (sort === "oldest") return rows.sort((a, b) => time(a) - time(b));
+    if (sort === "featured") return rows.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    return rows.sort((a, b) => time(b) - time(a));
+  }, [matchingCmsVideos, sort]);
 
   const matchingListingVideos = useMemo(() => {
     if (!trimmedQuery) return listingVideos;
@@ -65,9 +98,20 @@ function VideosPage() {
     );
   }, [listingVideos, trimmedQuery]);
 
-  const visibleCmsVideos = matchingCmsVideos.slice(0, visibleCount);
-  const remainingCount = matchingCmsVideos.length - visibleCmsVideos.length;
-  const hasMatches = matchingCmsVideos.length > 0 || matchingListingVideos.length > 0;
+  // Every filter change resets paging: page 3 of an old filter is meaningless
+  // against a new one.
+  type VideoSearch = { estate?: string; sort: SortValue; q?: string };
+  const updateSearch = (next: Partial<VideoSearch>) => {
+    setVisibleCount(VIDEOS_PER_PAGE);
+    navigate({
+      search: (prev) => ({ ...prev, ...next }),
+      replace: true,
+    });
+  };
+
+  const visibleCmsVideos = sortedCmsVideos.slice(0, visibleCount);
+  const remainingCount = sortedCmsVideos.length - visibleCmsVideos.length;
+  const hasMatches = sortedCmsVideos.length > 0 || matchingListingVideos.length > 0;
 
   return (
     <div className="bg-background">
@@ -97,30 +141,95 @@ function VideosPage() {
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         {hasVideos ? (
           <div className="space-y-12">
-            <div>
-              <label htmlFor="video-search" className="text-sm font-semibold text-primary">
-                搜尋影片
-              </label>
-              <div className="relative mt-2 max-w-md">
-                <Search
-                  aria-hidden="true"
-                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  id="video-search"
-                  type="search"
-                  value={query}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setVisibleCount(VIDEOS_PER_PAGE);
-                  }}
-                  placeholder="輸入屋苑或影片名稱"
-                  className="pl-9"
-                />
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-primary">屋苑</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateSearch({ estate: undefined })}
+                    aria-pressed={!estate}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                      !estate
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-input bg-background hover:bg-muted"
+                    }`}
+                  >
+                    全部 {cmsVideos.length}
+                  </button>
+                  {(showAllTags ? tagCounts : tagCounts.slice(0, 8)).map((entry) => (
+                    <button
+                      key={entry.tag}
+                      type="button"
+                      onClick={() => updateSearch({ estate: entry.tag })}
+                      aria-pressed={estate === entry.tag}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                        estate === entry.tag
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-background hover:bg-muted"
+                      }`}
+                    >
+                      {entry.tag} {entry.count}
+                    </button>
+                  ))}
+                  {!showAllTags && tagCounts.length > 8 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllTags(true)}
+                      className="rounded-full border border-dashed border-input px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                    >
+                      更多 {tagCounts.length - 8} ▾
+                    </button>
+                  )}
+                </div>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground" aria-live="polite">
-                {trimmedQuery
-                  ? `搵到 ${matchingCmsVideos.length + matchingListingVideos.length} 條影片`
+
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label htmlFor="video-sort" className="text-sm font-semibold text-primary">
+                    排序
+                  </label>
+                  <Select
+                    value={sort}
+                    onValueChange={(value) => {
+                      if (isSortValue(value)) updateSearch({ sort: value });
+                    }}
+                  >
+                    <SelectTrigger id="video-sort" className="mt-2 w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="newest">最新</SelectItem>
+                      <SelectItem value="oldest">最舊</SelectItem>
+                      <SelectItem value="featured">精選</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex-1">
+                  <label htmlFor="video-search" className="text-sm font-semibold text-primary">
+                    搜尋影片
+                  </label>
+                  <div className="relative mt-2 max-w-md">
+                    <Search
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                    />
+                    <Input
+                      id="video-search"
+                      type="search"
+                      value={q ?? ""}
+                      onChange={(event) => updateSearch({ q: event.target.value || undefined })}
+                      placeholder="輸入屋苑或影片名稱"
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {estate || trimmedQuery
+                  ? `搵到 ${sortedCmsVideos.length + matchingListingVideos.length} 條影片`
                   : `共 ${cmsVideos.length + listingVideos.length} 條影片`}
               </p>
             </div>
@@ -131,13 +240,17 @@ function VideosPage() {
                 <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-muted-foreground">
                   試下其他關鍵字，或者 WhatsApp 我哋直接索取影片。
                 </p>
-                <Button variant="outline" className="mt-4" onClick={() => setQuery("")}>
-                  清除搜尋
+                <Button
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => updateSearch({ estate: undefined, q: undefined })}
+                >
+                  清除篩選
                 </Button>
               </div>
             )}
 
-            {matchingCmsVideos.length > 0 && (
+            {sortedCmsVideos.length > 0 && (
               <VideoSection title="官方頻道影片">
                 {visibleCmsVideos.map((video) => (
                   <CmsVideoCard key={video.id} video={video} />
