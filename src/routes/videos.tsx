@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { ExternalLink, MessageCircle, PlayCircle, Search, Video } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +73,40 @@ function VideosPage() {
   const trimmedQuery = (q ?? "").trim().toLowerCase();
 
   const tagCounts = useMemo(() => buildTagCounts(cmsVideos), [cmsVideos]);
+
+  // The chip row collapses to the top 8, but the URL can name any estate. A link
+  // to a long-tail estate filtered correctly while leaving every chip
+  // unpressed, so the filter read as inactive on exactly the shared links this
+  // feature exists to produce. Derived rather than stored: the row auto-expands
+  // whenever the active estate would otherwise be hidden.
+  const topTags = tagCounts.slice(0, 8);
+  const activeTagHidden = Boolean(estate) && !topTags.some((entry) => entry.tag === estate);
+  const tagsExpanded = showAllTags || activeTagHidden;
+
+  // The search box keeps its own buffer and commits to the URL on a delay. The
+  // input's value must never come from the router: `q` only updates after
+  // navigate() resolves, and a controlled input lagging behind the keystroke
+  // cancels an in-flight IME composition. Public copy here is zh-HK, so nearly
+  // every real search is typed through an IME -- syncing per keystroke garbles
+  // exactly the input this box exists to receive. listings.tsx buffers for the
+  // same reason, committing on an explicit apply; a debounce keeps filtering
+  // live without putting the router in the typing path.
+  const [queryInput, setQueryInput] = useState(q ?? "");
+
+  // Re-sync when the URL changes from somewhere else: the back button, or the
+  // 清除篩選 button in the empty state.
+  useEffect(() => {
+    setQueryInput(q ?? "");
+  }, [q]);
+
+  useEffect(() => {
+    if (queryInput === (q ?? "")) return;
+    const timer = setTimeout(() => {
+      setVisibleCount(VIDEOS_PER_PAGE);
+      navigate({ search: (prev) => ({ ...prev, q: queryInput || undefined }), replace: true });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [queryInput, q, navigate]);
 
   const matchingCmsVideos = useMemo(() => {
     return cmsVideos.filter((video) => {
@@ -173,7 +207,7 @@ function VideosPage() {
                   >
                     全部 {cmsVideos.length}
                   </button>
-                  {(showAllTags ? tagCounts : tagCounts.slice(0, 8)).map((entry) => (
+                  {(tagsExpanded ? tagCounts : topTags).map((entry) => (
                     <button
                       key={entry.tag}
                       type="button"
@@ -188,7 +222,7 @@ function VideosPage() {
                       {entry.tag} {entry.count}
                     </button>
                   ))}
-                  {!showAllTags && tagCounts.length > 8 && (
+                  {!tagsExpanded && tagCounts.length > 8 && (
                     <button
                       type="button"
                       onClick={() => setShowAllTags(true)}
@@ -234,8 +268,8 @@ function VideosPage() {
                     <Input
                       id="video-search"
                       type="search"
-                      value={q ?? ""}
-                      onChange={(event) => updateSearch({ q: event.target.value || undefined })}
+                      value={queryInput}
+                      onChange={(event) => setQueryInput(event.target.value)}
                       placeholder="輸入屋苑或影片名稱"
                       className="pl-9"
                     />
