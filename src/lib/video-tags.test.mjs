@@ -28,3 +28,24 @@ test("titles without a marker yield no tag", () => {
   assert.equal(deriveEstateTag(null), null);
   assert.equal(deriveEstateTag(undefined), null);
 });
+
+// 浪翠園一期 and 浪翠園三期 are one estate. Left raw they become two chips,
+// which reads as broken to anyone who knows the area.
+test("phases fold into their parent estate", () => {
+  assert.equal(deriveEstateTag("💚＃浪翠園一期💚 《800呎》3房海景")?.tag, "浪翠園");
+  assert.equal(deriveEstateTag("💚＃浪翠園三期💚 《900呎》4房")?.tag, "浪翠園");
+  assert.equal(deriveEstateTag("💚＃黃金海灣意嵐 💚 《306呎 345萬》1房高層開揚")?.tag, "黃金海灣");
+  assert.equal(deriveEstateTag("💚＃黃金海灣.珀岸💚 《417呎》2房")?.tag, "黃金海灣");
+});
+
+// 晉誠地產 is the agency's own market-commentary tag, not a place. A 晉誠地產
+// chip on an estate filter is a category error.
+test("non-estate tokens are dropped", () => {
+  assert.equal(deriveEstateTag("＃晉誠地產 樓市分析 2026"), null);
+});
+
+// An estate nobody has curated still filters -- this is the degradation path.
+test("unknown estates still produce a tag", () => {
+  assert.equal(deriveEstateTag("💚＃漣山💚 《650呎》2房")?.tag, "漣山");
+  assert.equal(deriveEstateTag("💚＃愛琴海岸💚 《700呎》3房")?.tag, "愛琴海岸");
+});

@@ -21,6 +21,36 @@
 // token stops at punctuation, so "＃黃金海灣.珀岸" yields "黃金海灣".
 const MARKER = /[＃#]\s*([一-鿿A-Za-z0-9]{2,10})/;
 
+/** Tokens that match the marker but are not places. */
+const DROPPED_TAGS = new Set(["晉誠地產", "晉誠", "樓市當面講"]);
+
+/**
+ * Sub-developments marketed under their own name. Generic phase-suffix
+ * stripping cannot catch these because the child name shares no substring with
+ * the parent.
+ */
+const TAG_ALIASES = new Map([
+  ["黃金海灣意嵐", "黃金海灣"],
+  ["黃金海灣珀岸", "黃金海灣"],
+  ["意嵐", "黃金海灣"],
+  ["珀岸", "黃金海灣"],
+]);
+
+/** 浪翠園一期 / 浪翠園三期 -> 浪翠園 */
+const PHASE_SUFFIX = /(?:第?[一二三四五六七八九十\d]+期)$/;
+
+/**
+ * @param {string} token
+ * @returns {string | null}
+ */
+function normalizeTag(token) {
+  const aliased = TAG_ALIASES.get(token) ?? token;
+  const stripped = aliased.replace(PHASE_SUFFIX, "");
+  const final = stripped.length >= 2 ? stripped : aliased;
+  if (DROPPED_TAGS.has(final)) return null;
+  return final;
+}
+
 /**
  * @param {string | null | undefined} title
  * @returns {{ tag: string, district: string | null } | null}
@@ -29,5 +59,7 @@ export function deriveEstateTag(title) {
   if (typeof title !== "string") return null;
   const match = title.match(MARKER);
   if (!match) return null;
-  return { tag: match[1], district: null };
+  const tag = normalizeTag(match[1]);
+  if (!tag) return null;
+  return { tag, district: null };
 }
