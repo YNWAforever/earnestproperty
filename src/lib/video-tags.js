@@ -40,6 +40,29 @@ const TAG_ALIASES = new Map([
 const PHASE_SUFFIX = /(?:第?[一二三四五六七八九十\d]+期)$/;
 
 /**
+ * Estate -> district, mirroring src/content/core-estates.ts.
+ *
+ * Duplicated rather than imported because core-estates.ts is TypeScript and this
+ * module must stay importable by `node --test` with no build step -- the same
+ * constraint that makes this file plain JS. video-tags.test.mjs asserts this map
+ * agrees with core-estates.ts, so drift is a red test rather than a silent
+ * mismatch.
+ *
+ * Estates the curated list has no district for are absent here and resolve to
+ * null. That is deliberate: core-estates.ts refuses to guess a district rather
+ * than put a false location on a real estate.
+ */
+export const ESTATE_DISTRICTS = new Map([
+  ["碧堤半島", "深井"],
+  ["浪翠園", "深井"],
+  ["麗都花園", "深井"],
+  ["海韻花園", "深井"],
+  ["豪景花園", "青山公路"],
+  ["海雲軒", "汀九"],
+  ["縉皇居", "汀九"],
+]);
+
+/**
  * @param {string} token
  * @returns {string | null}
  */
@@ -61,5 +84,5 @@ export function deriveEstateTag(title) {
   if (!match) return null;
   const tag = normalizeTag(match[1]);
   if (!tag) return null;
-  return { tag, district: null };
+  return { tag, district: ESTATE_DISTRICTS.get(tag) ?? null };
 }

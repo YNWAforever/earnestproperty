@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-import { deriveEstateTag } from "./video-tags.js";
+import { deriveEstateTag, ESTATE_DISTRICTS } from "./video-tags.js";
 
 // Real titles from the production channel. The full-width ＃ is what this
 // channel actually types; the ASCII # appears occasionally.
@@ -48,4 +50,42 @@ test("non-estate tokens are dropped", () => {
 test("unknown estates still produce a tag", () => {
   assert.equal(deriveEstateTag("💚＃漣山💚 《650呎》2房")?.tag, "漣山");
   assert.equal(deriveEstateTag("💚＃愛琴海岸💚 《700呎》3房")?.tag, "愛琴海岸");
+});
+
+// core-estates.ts deliberately leaves district null where the client has not
+// said, rather than putting a false location on a real estate. Tags inherit that
+// discipline: an estate the curated list does not know gets null, never a guess.
+test("district comes from the curated list, and is null when unknown", () => {
+  assert.equal(deriveEstateTag("💚＃豪景花園💚 《700呎》3房")?.district, "青山公路");
+  assert.equal(deriveEstateTag("💚＃碧堤半島💚 《900呎》4房")?.district, "深井");
+  // 帝華軒 is in the curated list but its district is deliberately null there.
+  assert.equal(deriveEstateTag("💚＃帝華軒💚 《500呎》2房")?.district, null);
+  // 漣山 is not in the curated list at all.
+  assert.equal(deriveEstateTag("💚＃漣山💚 《650呎》2房")?.district, null);
+});
+
+// ESTATE_DISTRICTS is hand-duplicated from src/content/core-estates.ts (see the
+// comment on ESTATE_DISTRICTS for why it isn't imported). Without this guard, a
+// district edited in one file and not the other would fail silently -- the site
+// would just show a video under the wrong district with no test to catch it.
+test("ESTATE_DISTRICTS agrees with src/content/core-estates.ts", () => {
+  const coreEstatesPath = fileURLToPath(new URL("../content/core-estates.ts", import.meta.url));
+  const source = readFileSync(coreEstatesPath, "utf8");
+
+  for (const [name, expectedDistrict] of ESTATE_DISTRICTS) {
+    const nameIndex = source.indexOf(`name: "${name}"`);
+    assert.notEqual(nameIndex, -1, `${name} is no longer in core-estates.ts`);
+
+    const entry = source.slice(nameIndex);
+    const districtMatch = entry.match(/district:\s*("(?:[^"\\]|\\.)*"|null)/);
+    assert.ok(districtMatch, `${name}'s entry in core-estates.ts has no district field`);
+
+    const declaredDistrict = districtMatch[1] === "null" ? null : JSON.parse(districtMatch[1]);
+    assert.equal(
+      declaredDistrict,
+      expectedDistrict,
+      `ESTATE_DISTRICTS says ${name} -> ${JSON.stringify(expectedDistrict)}, ` +
+        `but core-estates.ts declares ${JSON.stringify(declaredDistrict)}`,
+    );
+  }
 });
