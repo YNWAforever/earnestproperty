@@ -312,6 +312,8 @@ export type CmsVideo = {
   description: string | null;
   sort_order: number;
   created_at: string | null;
+  /** Real upload date from YouTube. Null for videos added by hand in the CMS. */
+  youtube_published_at: string | null;
 };
 
 export async function fetchCmsVideos(): Promise<CmsVideo[]> {
