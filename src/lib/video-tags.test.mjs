@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { deriveEstateTag, ESTATE_DISTRICTS } from "./video-tags.js";
+import { buildTagCounts, deriveEstateTag, ESTATE_DISTRICTS } from "./video-tags.js";
 
 // Real titles from the production channel. The full-width ＃ is what this
 // channel actually types; the ASCII # appears occasionally.
@@ -88,4 +88,42 @@ test("ESTATE_DISTRICTS agrees with src/content/core-estates.ts", () => {
         `but core-estates.ts declares ${JSON.stringify(declaredDistrict)}`,
     );
   }
+});
+
+test("tags are counted and ordered by frequency", () => {
+  const videos = [
+    { title: "＃豪景花園 A" },
+    { title: "＃豪景花園 B" },
+    { title: "＃漣山 C" },
+    { title: "【北都】無標記" },
+    { title: "＃晉誠地產 樓市" },
+  ];
+
+  assert.deepEqual(buildTagCounts(videos), [
+    { tag: "豪景花園", district: "青山公路", count: 2 },
+    { tag: "漣山", district: null, count: 1 },
+  ]);
+});
+
+// Chip order must not depend on row order, or the row shuffles between renders
+// for no visible reason.
+test("equal counts break alphabetically", () => {
+  const counts = buildTagCounts([{ title: "＃漣山 A" }, { title: "＃上源 B" }]);
+  assert.deepEqual(
+    counts.map((entry) => entry.tag),
+    ["上源", "漣山"],
+  );
+});
+
+// Also test the reverse order to ensure stability regardless of input order
+test("equal counts break alphabetically regardless of input order", () => {
+  const counts = buildTagCounts([{ title: "＃上源 A" }, { title: "＃漣山 B" }]);
+  assert.deepEqual(
+    counts.map((entry) => entry.tag),
+    ["上源", "漣山"],
+  );
+});
+
+test("an empty list yields no tags", () => {
+  assert.deepEqual(buildTagCounts([]), []);
 });

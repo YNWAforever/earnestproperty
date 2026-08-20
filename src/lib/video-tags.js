@@ -86,3 +86,32 @@ export function deriveEstateTag(title) {
   if (!tag) return null;
   return { tag, district: ESTATE_DISTRICTS.get(tag) ?? null };
 }
+
+/**
+ * Counts derived tags across a video list, most frequent first.
+ *
+ * Ties break alphabetically so the chip row is stable between renders rather
+ * than reflecting whatever order the rows arrived in.
+ *
+ * @param {ReadonlyArray<{ title?: string | null }>} videos
+ * @returns {Array<{ tag: string, district: string | null, count: number }>}
+ */
+export function buildTagCounts(videos) {
+  /** @type {Map<string, { tag: string, district: string | null, count: number }>} */
+  const counts = new Map();
+
+  for (const video of videos) {
+    const derived = deriveEstateTag(video?.title);
+    if (!derived) continue;
+    const existing = counts.get(derived.tag);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      counts.set(derived.tag, { ...derived, count: 1 });
+    }
+  }
+
+  return [...counts.values()].sort(
+    (a, b) => b.count - a.count || a.tag.localeCompare(b.tag, "zh-Hant"),
+  );
+}
