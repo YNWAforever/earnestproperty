@@ -1,4 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { zodValidator, fallback } from "@tanstack/zod-adapter";
+import { z } from "zod";
 import { ExternalLink, MessageCircle, PlayCircle, Search, Video } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -18,7 +20,16 @@ import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-
 // what a human scrolls through, not what a crawler indexes.
 const VIDEOS_PER_PAGE = 12;
 
+// Values are English and decoupled from the Chinese labels (最新 / 最舊 / 精選) so
+// rewording a label never invalidates a link someone already shared.
+const searchSchema = z.object({
+  estate: fallback(z.string().optional(), undefined),
+  sort: fallback(z.enum(["newest", "oldest", "featured"]), "newest").default("newest"),
+  q: fallback(z.string().optional(), undefined),
+});
+
 export const Route = createFileRoute("/videos")({
+  validateSearch: zodValidator(searchSchema),
   loader: async () => fetchVideosPageData(),
   head: () => ({
     meta: [
