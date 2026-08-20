@@ -329,7 +329,6 @@ export type AdminConversationAiAssist = {
   detectedIntent: string | null;
   urgency: string | null;
   suggestedReply: string | null;
-  suggestedTemplate: string | null;
   handoffNote: string | null;
 };
 
@@ -380,6 +379,19 @@ export type AdminBlastOptions = {
     description: string | null;
     filters: AdminAudienceInput["filters"];
   }>;
+};
+
+/** An approved WhatsApp template an agent can send outside the 24-hour reply
+ * window. Same shape as AdminBlastOptions["templates"][number], scoped down to
+ * what a 1:1 send needs -- no `status`, since the server only ever returns
+ * templates whose status already starts with "active". */
+export type AdminWhatsappTemplateRow = {
+  id: string;
+  element_name: string;
+  language_code: string;
+  category: string;
+  description: string | null;
+  components: unknown;
 };
 
 export type AdminAiKnowledgeStatus = {

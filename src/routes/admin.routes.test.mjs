@@ -240,6 +240,7 @@ test("Woztell API routes are present and server-only", () => {
   const files = [
     "src/routes/api.woztell.webhook.ts",
     "src/routes/api.admin.woztell.send.ts",
+    "src/routes/api.admin.woztell.send-template.ts",
     "src/routes/api.admin.campaigns.$id.queue.ts",
     "src/routes/api.admin.jobs.send-queue.ts",
   ];
@@ -325,6 +326,40 @@ test("admin WhatsApp reply delegates recipient identity to the server", () => {
   assert.match(whatsappRoute, /status === "failed"/);
   assert.match(whatsappRoute, /傳送中/);
   assert.match(whatsappRoute, /送出失敗/);
+});
+
+test("WhatsApp reply pre-flight check reuses the server's canReplyToConversation guard", () => {
+  const whatsappRoute = read("src/routes/admin.whatsapp.tsx");
+
+  // replyAvailability used to re-derive its own checks with their own reason
+  // strings, and those leaked raw values ("WOZTELL_ENABLED 未啟用", "缺少
+  // Woztell member ID") straight into the reply footer, in the same file that
+  // already had a proper Chinese label for the same failure on the real send
+  // path (replyErrorLabels, used when an actual send attempt fails).
+  assert.match(whatsappRoute, /canReplyToConversation,\s*conversationAttention/);
+  assert.match(whatsappRoute, /const guard = canReplyToConversation\(/);
+  assert.match(whatsappRoute, /formatReplyError\(guard\.reason\)/);
+  assert.doesNotMatch(whatsappRoute, /"WOZTELL_ENABLED 未啟用"/);
+  assert.doesNotMatch(whatsappRoute, /"正在確認 WOZTELL_ENABLED"/);
+  assert.doesNotMatch(whatsappRoute, /"缺少 Woztell member ID"/);
+  assert.doesNotMatch(whatsappRoute, /"客戶已 Opt-out WhatsApp"/);
+});
+
+test("WhatsApp AI assist values match the frontend's Chinese label maps", () => {
+  const adminData = read("src/lib/neon/admin-data.server.ts");
+  const whatsappRoute = read("src/routes/admin.whatsapp.tsx");
+
+  // "renter"/"active" used to be returned here and matched neither
+  // AI_INTENT_LABELS nor AI_URGENCY_LABELS below, so every rental inquiry and
+  // every conversation with 3+ messages showed raw English ("renter",
+  // "active") to a Cantonese-only agent instead of a translated label.
+  assert.doesNotMatch(
+    adminData,
+    /detectedIntent = \/租\|rent\/i\.test\(latestInboundText\)\s*\?\s*"renter"/,
+  );
+  assert.doesNotMatch(adminData, /urgency: messages\.length >= 3 \? "active"/);
+  assert.match(whatsappRoute, /tenant:\s*"租客"/);
+  assert.match(whatsappRoute, /high:\s*"高"/);
 });
 
 test("admin routes expose functional workflows, not only read-only tables", () => {
@@ -664,6 +699,23 @@ test("WhatsApp send route scopes the conversation lookup to the acting agent", (
   assert.match(route, /const scope = agentScope\(staff\)/);
   assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
   assert.match(route, /\[conversationId, scope\]/);
+});
+
+// Same blast radius as the test above, for the template-send path added
+// alongside it.
+test("WhatsApp template send route scopes the conversation lookup to the acting agent", () => {
+  const route = read("src/routes/api.admin.woztell.send-template.ts");
+
+  assert.match(route, /import \{ agentScope \} from "@\/lib\/neon\/admin-data\.server"/);
+  assert.match(route, /const scope = agentScope\(staff\)/);
+  assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
+  assert.match(route, /\[conversationId, scope\]/);
+  assert.match(route, /status LIKE 'active%'/);
+  // A template is the only WhatsApp-compliant way to message a customer once
+  // the 24-hour window has closed, so this route must not gate on the same
+  // window check /api/admin/woztell/send uses -- that would silently recreate
+  // the exact dead end this route exists to fix.
+  assert.doesNotMatch(route, /canReplyToConversation\(/);
 });
 
 test("agentScope is exported once and not redefined per call site", () => {

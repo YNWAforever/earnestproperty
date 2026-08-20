@@ -2542,8 +2542,12 @@ export async function fetchAdminConversationAiAssist(
   const messages = parseConversationAiMessages(row.messages).slice(0, 10);
   const latestInbound = messages.find((message) => message.direction === "inbound");
   const latestInboundText = latestInbound?.text ?? "";
+  // Values are picked to match AI_INTENT_LABELS/AI_URGENCY_LABELS in
+  // admin.whatsapp.tsx exactly -- "renter"/"active" used to be sent here and
+  // silently fell through both maps, showing raw English to a Cantonese-only
+  // agent on every rental inquiry and every conversation with 3+ messages.
   const detectedIntent = /租|rent/i.test(latestInboundText)
-    ? "renter"
+    ? "tenant"
     : /估價|放盤|sell|valuation/i.test(latestInboundText)
       ? "seller"
       : latestInboundText
@@ -2556,9 +2560,8 @@ export async function fetchAdminConversationAiAssist(
       ? `最近 ${messages.length} 則 WhatsApp 訊息，客戶需要跟進。`
       : "未有足夠訊息。",
     detectedIntent,
-    urgency: messages.length >= 3 ? "active" : "normal",
+    urgency: messages.length >= 3 ? "high" : "normal",
     suggestedReply: optedOut ? null : "你好，多謝查詢。請問你想了解買樓、租樓，還是放盤估價？",
-    suggestedTemplate: optedOut ? null : "earnest_follow_up_zh_hk",
     handoffNote: stringOrNull(row.name)
       ? `${stringOrNull(row.name)} 由 WhatsApp 查詢，請查看最近訊息。`
       : "WhatsApp 查詢，請查看最近訊息。",
@@ -2719,6 +2722,30 @@ export async function fetchAdminBlastOptions() {
       filters: normalizeAudienceFilters(parseAudienceFilters(row.filters)),
     })),
   };
+}
+
+/**
+ * Active, approved templates an agent can send from the WhatsApp inbox once
+ * the 24-hour reply window has closed. Unlike fetchAdminBlastOptions this is
+ * available to the "agent" role too -- the inbox itself is agent-usable, and
+ * gating template listing to admin/manager would leave every agent stuck at
+ * the same dead end the raw window-closed message used to be.
+ */
+export async function fetchAdminWhatsappTemplates() {
+  const templates = await queryRows(
+    `SELECT id, element_name, language_code, category, description, components
+     FROM whatsapp_templates
+     WHERE status LIKE 'active%'
+     ORDER BY element_name ASC`,
+  );
+  return templates.map((row) => ({
+    id: stringOrEmpty(row.id),
+    element_name: stringOrEmpty(row.element_name),
+    language_code: stringOrEmpty(row.language_code),
+    category: stringOrEmpty(row.category),
+    description: stringOrNull(row.description),
+    components: Array.isArray(row.components) ? row.components : [],
+  }));
 }
 
 export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffAccess) {

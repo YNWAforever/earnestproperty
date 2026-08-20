@@ -94,20 +94,35 @@ function RootComponent() {
   const location = useLocation();
   const showLiveAgentWidget = isPublicWidgetPath(location.pathname);
   const showStickyWhatsAppBar = shouldShowStickyWhatsAppBar(location.pathname);
+  const showSiteChrome = isPublicSitePath(location.pathname);
 
   return (
     <NeonAuthUIProvider authClient={authClient} defaultTheme="light">
       <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-16 lg:pb-0" : ""}`}>
-        <SiteHeader />
+        {showSiteChrome ? <SiteHeader /> : null}
         <main className="flex-1">
           <Outlet />
         </main>
-        <SiteFooter />
+        {showSiteChrome ? <SiteFooter /> : null}
       </div>
       {showStickyWhatsAppBar ? <StickyWhatsAppBar /> : null}
       {showLiveAgentWidget ? <LiveAgentWidget /> : null}
     </NeonAuthUIProvider>
   );
+}
+
+// AdminShell renders its own header, nav, and identity block, so the public
+// marketing SiteHeader/SiteFooter were pure duplication on every /admin
+// page -- a second, redundant "banner" landmark above AdminShell's own, and a
+// full district/estate/legal marketing footer at the bottom of an internal
+// CRM tool, past which agents had to scroll on every long WhatsApp thread.
+// Deliberately narrower than isPublicWidgetPath/shouldShowStickyWhatsAppBar
+// below: /auth and /account render a bare AuthView/AccountView with no header
+// of their own (see auth.$pathname.tsx, account.$pathname.tsx), so excluding
+// them here the same way would leave staff on an unbranded, logo-less sign-in
+// page instead of removing a duplicate.
+function isPublicSitePath(pathname: string) {
+  return pathname !== "/admin" && !pathname.startsWith("/admin/");
 }
 
 function isPublicWidgetPath(pathname: string) {
