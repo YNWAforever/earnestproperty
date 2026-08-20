@@ -38,7 +38,19 @@ test("every named structured-data gap is wired into its route", () => {
 
   const videos = read("src/routes/videos.tsx");
   assert.match(videos, /videoObjectSchema\(\{/);
-  assert.match(videos, /uploadDate=\{video\.created_at\}/);
+  // Matches both the JSX-prop and object-property forms. The schema moved out of
+  // the card and into a block rendered once for the whole catalogue, so pinning
+  // the old `uploadDate={video.created_at}` spelling would fail on a refactor
+  // that kept the wiring perfectly intact.
+  assert.match(videos, /uploadDate[:=]\s*\{?\s*video\.created_at/);
+  // Paging and the search filter must never shrink the structured data: the
+  // cards render twelve at a time, but crawlers have to see every video, so the
+  // schema block takes the unfiltered lists.
+  assert.match(
+    videos,
+    /<AllVideoSchemas[\s\S]*?cmsVideos=\{cmsVideos\}[\s\S]*?listingVideos=\{listingVideos\}/,
+    "AllVideoSchemas must receive the full lists, not the paged or filtered slice",
+  );
 });
 
 // jsonLdScript's own behaviour is asserted in schema.test.ts (bun). This is the
