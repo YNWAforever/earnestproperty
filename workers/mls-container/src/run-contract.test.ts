@@ -107,6 +107,25 @@ describe("Cloudflare MLS run identity", () => {
     });
   });
 
+  test("reads kind once and preserves the validated scheduled semantics", () => {
+    let kindReads = 0;
+    const envelope = buildRunEnvelope({
+      environment: "production",
+      scheduledTime: "2026-08-20T18:00:00.000Z",
+      get kind() {
+        kindReads += 1;
+        return kindReads === 1 ? "scheduled" : "manual";
+      },
+      mode: "shadow",
+      commitSha: "d".repeat(40),
+    });
+
+    expect(envelope.kind).toBe("scheduled");
+    expect(envelope.attemptId).toBe("scheduled:production:2026-08-21");
+    expect(envelope.manualReason).toBeNull();
+    expect(kindReads).toBe(1);
+  });
+
   test("builds a manual envelope with a trimmed reason and composed attempt ID", () => {
     expect(
       buildRunEnvelope({

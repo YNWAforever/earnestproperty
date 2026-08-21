@@ -84,9 +84,13 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
   const commitSha = value.commitSha;
   if (typeof commitSha !== "string" || !SHA_PATTERN.test(commitSha))
     throw new TypeError("commit SHA is invalid");
+  const kind = value.kind;
+  if (kind !== "scheduled" && kind !== "manual") {
+    throw new TypeError("run kind is invalid");
+  }
   let attemptId = scheduledAttemptId(environment, hkDate);
   let manualReason: string | null = null;
-  if (value.kind === "manual") {
+  if (kind === "manual") {
     manualReason =
       typeof value.manualReason === "string" ? value.manualReason.trim() : "";
     if (manualReason.length < 8 || manualReason.length > 240) {
@@ -100,14 +104,12 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
       throw new TypeError("manual suffix is invalid");
     }
     attemptId = `${attemptId}:manual:${manualSuffix}`;
-  } else if (value.kind !== "scheduled") {
-    throw new TypeError("run kind is invalid");
   }
   return Object.freeze({
     environment,
     hkDate,
     attemptId,
-    kind: value.kind,
+    kind,
     mode,
     scheduledTime: scheduled.toISOString(),
     manualReason,
