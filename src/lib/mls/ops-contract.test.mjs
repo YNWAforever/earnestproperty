@@ -14,21 +14,56 @@ const runbook = await readFile(
   new URL("../../../docs/mls-production-activation.md", import.meta.url),
   "utf8",
 );
+const baseConfig = await readFile(
+  new URL("../../../workers/mls-container/wrangler.jsonc", import.meta.url),
+  "utf8",
+);
+const scheduledConfig = await readFile(
+  new URL(
+    "../../../workers/mls-container/wrangler.scheduled.jsonc",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const cronReadme = await readFile(
+  new URL("../../../workers/cron/README.md", import.meta.url),
+  "utf8",
+);
+const cronConfig = await readFile(
+  new URL("../../../workers/cron/wrangler.jsonc", import.meta.url),
+  "utf8",
+);
+const cronWorker = await readFile(
+  new URL("../../../workers/cron/src/index.ts", import.meta.url),
+  "utf8",
+);
 
-test("VPS timer and service are non-secret and least-privilege", () => {
-  assert.match(timer, /OnCalendar=\*-\*-\* 02:00:00 Asia\/Hong_Kong/);
-  assert.match(timer, /Persistent=true/);
-  assert.match(timer, /Unit=earnest-mls-sync\.service/);
-  assert.match(service, /User=earnest-mls/);
-  assert.match(service, /Group=earnest-mls/);
-  assert.match(service, /WorkingDirectory=\/opt\/earnestproperty\/current/);
-  assert.match(service, /EnvironmentFile=\/etc\/earnestproperty\/mls-sync\.env/);
-  assert.match(service, /ExecStart=.*npm run mls:sync/);
-  assert.match(service, /ReadWritePaths=\/var\/lib\/earnestproperty\/mls-sync/);
+test("VPS systemd units are inert and Cloudflare configs own the schedule", () => {
+  assert.match(service, /RETIRED.*Cloudflare/i);
+  assert.match(timer, /RETIRED.*Cloudflare/i);
+  assert.doesNotMatch(service, /^ExecStart=.*scripts\/mls\/sync\.mjs/m);
+  assert.doesNotMatch(timer, /^OnCalendar=/m);
+  assert.match(baseConfig, /"workers_dev"\s*:\s*false/);
+  assert.doesNotMatch(baseConfig, /"schedules"/);
+  assert.match(scheduledConfig, /"schedules"\s*:\s*\[\s*"0 18 \* \* \*"\s*\]/);
+  assert.doesNotMatch(
+    baseConfig + scheduledConfig,
+    /DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|MLS_R2_SECRET_ACCESS_KEY/,
+  );
+});
+
+test("retired VPS units contain no executable MLS command or credentials", () => {
   assert.doesNotMatch(
     service + "\n" + timer,
     /DATABASE_URL|BLOB_READ_WRITE_TOKEN|CRON_SECRET|postgres(?:ql)?:\/\//i,
   );
+  assert.doesNotMatch(service + "\n" + timer, /^ExecStart=/m);
+  assert.doesNotMatch(timer, /^OnCalendar=/m);
+});
+
+test("the existing cron worker snapshot remains MLS-free", () => {
+  const snapshot = cronReadme + "\n" + cronConfig + "\n" + cronWorker;
+  assert.doesNotMatch(snapshot, /MlsRunWorkflow|MlsRunContainer|MLS_RUN_/);
 });
 
 test("runbook records gated migration, shadow, cutover, monitoring, and rollback", () => {

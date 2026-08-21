@@ -1,10 +1,7 @@
 [Unit]
-Description=Run Earnest MLS synchronization daily at 02:00 Hong Kong time
+Description=RETIRED - Earnest MLS schedule moved to Cloudflare Workflow
+Documentation=../../docs/mls-production-activation.md
+RefuseManualStart=yes
 
 [Timer]
-OnCalendar=*-*-* 02:00:00 Asia/Hong_Kong
-Persistent=true
-Unit=earnest-mls-sync.service
-
-[Install]
-WantedBy=timers.target
+Persistent=false
