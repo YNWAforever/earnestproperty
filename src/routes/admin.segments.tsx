@@ -31,6 +31,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
+  createAdminAudienceFromSegment,
   fetchAdminCrmSegments,
   materializeAdminCrmSegment,
   previewAdminCrmSegment,
@@ -75,6 +76,7 @@ function AdminSegments() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [materializing, setMaterializing] = useState(false);
+  const [creatingAudienceSegmentId, setCreatingAudienceSegmentId] = useState<string | null>(null);
   const [materializeOpen, setMaterializeOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRequestRef = useRef(0);
@@ -291,6 +293,25 @@ function AdminSegments() {
     }
   }
 
+  // Segments and 推廣活動 audiences previously shared no data path at all: a
+  // segment built here never showed up as something a blast could send to, so
+  // this is the one bridge between the two features.
+  async function createAudienceFromSegment(segmentId: string, segmentName: string) {
+    setCreatingAudienceSegmentId(segmentId);
+    try {
+      const result = (await createAdminAudienceFromSegment({ data: { segmentId } })) as {
+        id?: string;
+        error?: string;
+      };
+      if (result.error || !result.id) throw new Error(result.error || "建立收件群組失敗");
+      toast.success(`已在推廣活動建立收件群組「${segmentName}」，可在 WhatsApp 群發選用。`);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setCreatingAudienceSegmentId(null);
+    }
+  }
+
   return (
     <AdminShell
       title="AI 客戶分群"
@@ -460,24 +481,36 @@ function AdminSegments() {
           <CardContent className="space-y-3">
             {segments?.length ? (
               segments.map((segment) => (
-                <button
-                  key={segment.id}
-                  type="button"
-                  className="w-full rounded-md border p-3 text-left transition hover:bg-accent"
-                  onClick={() => selectSegment(segment.id)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{segment.name}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {segment.members} 位客戶，其中 {segment.eligible_members} 位合資格
-                      </p>
+                <div key={segment.id} className="w-full rounded-md border p-3">
+                  <button
+                    type="button"
+                    className="-m-1 w-[calc(100%+0.5rem)] rounded p-1 text-left transition hover:bg-accent"
+                    onClick={() => selectSegment(segment.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{segment.name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {segment.members} 位客戶，其中 {segment.eligible_members} 位合資格
+                        </p>
+                      </div>
+                      <Badge variant={segment.status === "active" ? "default" : "secondary"}>
+                        {segment.status}
+                      </Badge>
                     </div>
-                    <Badge variant={segment.status === "active" ? "default" : "secondary"}>
-                      {segment.status}
-                    </Badge>
-                  </div>
-                </button>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={creatingAudienceSegmentId === segment.id}
+                    onClick={() => void createAudienceFromSegment(segment.id, segment.name)}
+                  >
+                    <Users />
+                    {creatingAudienceSegmentId === segment.id ? "建立中…" : "建立收件群組"}
+                  </Button>
+                </div>
               ))
             ) : (
               <AdminEmptyState

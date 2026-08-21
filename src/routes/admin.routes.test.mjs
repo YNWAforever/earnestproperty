@@ -672,6 +672,45 @@ test("admin segment editor guards selected segment and preview context", () => {
   assert.match(source, /disabled=\{!canMaterializeSegment \|\| materializing\}/);
 });
 
+// crm_segments and whatsapp_audiences previously shared no data path at all:
+// a segment built in 客戶分群 never appeared as something a blast could send
+// to. RECIPIENT_ELIGIBILITY_SQL is extended to carry the same filter
+// vocabulary fetchSegmentContacts (segments.server.ts) already validates, so
+// createAdminAudienceFromSegment can translate a segment's filters onto an
+// audience losslessly.
+test("audience eligibility SQL carries the same filter vocabulary segments already validate", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+
+  assert.match(
+    server,
+    /RECIPIENT_ELIGIBILITY_SQL = `[\s\S]*?l\.preferred_estates && \$4::text\[\][\s\S]*?estate\.slug = ANY\(\$4::text\[\]\)[\s\S]*?p\.district_slug = \$5[\s\S]*?l\.budget_max >= \$6[\s\S]*?l\.budget_min <= \$7[\s\S]*?\$8::int IS NULL OR l\.updated_at >= now\(\)[\s\S]*?c\.opt_in_whatsapp = true/,
+  );
+
+  // An empty estates array must not silently defeat the filter: `[]` is not
+  // NULL, and `preferred_estates && ARRAY[]` is always false, which would
+  // exclude every contact instead of matching "any estate".
+  assert.match(
+    server,
+    /function normalizeAudienceFilters\([\s\S]{0,700}estates\.length \? estates : undefined/,
+  );
+});
+
+test("createAdminAudienceFromSegment bridges a saved segment into a WhatsApp audience, admin/manager only", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+  const server = read("src/lib/neon/admin-data.server.ts");
+
+  const clientStart = client.indexOf("createAdminAudienceFromSegmentServer = createServerFn");
+  assert.notEqual(clientStart, -1, "client wrapper must exist");
+  assert.match(
+    client.slice(clientStart, clientStart + 400),
+    /requireStaff\(\["admin", "manager"\]\)/,
+  );
+
+  assert.match(server, /export async function createAdminAudienceFromSegment/);
+  assert.match(server, /getSegmentForAudience/);
+  assert.match(server, /saveAdminAudience\(/);
+});
+
 test("command center route is registered, noindex, and admin-guarded", () => {
   const route = read("src/routes/admin.leads_.command-center.tsx");
   assert.match(route, /createFileRoute\("\/admin\/leads_\/command-center"\)/);

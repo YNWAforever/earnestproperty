@@ -756,6 +756,11 @@ type AudienceSummary = {
   notOptedIn: number;
 };
 
+// Extended to carry the same filter vocabulary as fetchSegmentContacts
+// (segments.server.ts) -- budget range, recency, opt-in requirement, multiple
+// estates, district -- so a segment's filters translate onto an audience
+// without silently dropping the ones an audience previously had no field for.
+// See createAdminAudienceFromSegment.
 const RECIPIENT_ELIGIBILITY_SQL = `
 SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp
 FROM crm_contacts c
@@ -765,7 +770,12 @@ LEFT JOIN estates estate ON estate.id = p.estate_id
 WHERE ($1::text IS NULL OR l.intent = $1)
   AND ($2::text IS NULL OR c.source = $2)
   AND ($3::uuid IS NULL OR c.assigned_agent_id = $3::uuid OR l.assigned_agent_id = $3::uuid)
-  AND ($4::text IS NULL OR $4::text = ANY(l.preferred_estates) OR estate.slug = $4::text)
+  AND ($4::text[] IS NULL OR l.preferred_estates && $4::text[] OR estate.slug = ANY($4::text[]))
+  AND ($5::text IS NULL OR p.district_slug = $5 OR estate.district_slug = $5)
+  AND ($6::numeric IS NULL OR l.budget_max IS NULL OR l.budget_max >= $6)
+  AND ($7::numeric IS NULL OR l.budget_min IS NULL OR l.budget_min <= $7)
+  AND ($8::int IS NULL OR l.updated_at >= now() - ($8::text || ' days')::interval)
+  AND ($9::boolean = false OR c.opt_in_whatsapp = true)
 ORDER BY c.id, l.updated_at DESC NULLS LAST, l.created_at DESC NULLS LAST
 `;
 
@@ -783,20 +793,45 @@ function optionalText(value: unknown) {
 }
 
 function normalizeAudienceFilters(filters: AudienceFilters | null | undefined): AudienceFilters {
+  // An empty array must become undefined, not `[]`: `$4::text[] IS NULL` would
+  // be false for `[]`, and `preferred_estates && ARRAY[]` is always false --
+  // silently excluding every contact instead of matching "any estate".
+  const estates = Array.isArray(filters?.estates)
+    ? filters.estates.map((value) => String(value).trim()).filter(Boolean)
+    : [];
   return {
     intent: optionalText(filters?.intent),
     source: optionalText(filters?.source),
-    estate: optionalText(filters?.estate),
+    estates: estates.length ? estates : undefined,
+    district_slug: optionalText(filters?.district_slug),
     assigned_agent_id: optionalText(filters?.assigned_agent_id),
+    budget_min: numberOrNull(filters?.budget_min) ?? undefined,
+    budget_max: numberOrNull(filters?.budget_max) ?? undefined,
+    last_activity_days: numberOrNull(filters?.last_activity_days) ?? undefined,
+    require_whatsapp_opt_in: filters?.require_whatsapp_opt_in === true ? true : undefined,
   };
 }
 
 function audienceFiltersFromRecord(value: Record<string, unknown>): AudienceFilters {
+  // `estate` (singular string) is the pre-migration shape stored by any
+  // audience saved before estates became an array; still parsed so an old row
+  // doesn't silently lose its filter.
+  const legacyEstate = optionalText(value.estate);
+  const estates = Array.isArray(value.estates)
+    ? value.estates
+    : legacyEstate
+      ? [legacyEstate]
+      : undefined;
   return normalizeAudienceFilters({
     intent: optionalText(value.intent),
     source: optionalText(value.source),
-    estate: optionalText(value.estate),
+    estates,
+    district_slug: optionalText(value.district_slug),
     assigned_agent_id: optionalText(value.assigned_agent_id),
+    budget_min: numberOrNull(value.budget_min) ?? undefined,
+    budget_max: numberOrNull(value.budget_max) ?? undefined,
+    last_activity_days: numberOrNull(value.last_activity_days) ?? undefined,
+    require_whatsapp_opt_in: value.require_whatsapp_opt_in === true ? true : undefined,
   });
 }
 
@@ -820,7 +855,12 @@ function audienceFilterParams(filters: AudienceFilters) {
     normalized.intent ?? null,
     normalized.source ?? null,
     normalized.assigned_agent_id ?? null,
-    normalized.estate ?? null,
+    normalized.estates?.length ? normalized.estates : null,
+    normalized.district_slug ?? null,
+    normalized.budget_min ?? null,
+    normalized.budget_max ?? null,
+    normalized.last_activity_days ?? null,
+    normalized.require_whatsapp_opt_in === true,
   ];
 }
 
@@ -1444,6 +1484,42 @@ export async function materializeAdminCrmSegment(input: { segmentId: string }, a
   const result = await materializeCrmSegment({ segmentId: input.segmentId });
   await writeAudit(actor.staffId, "ai.segment.materialize", "crm_segment", input.segmentId, result);
   return result;
+}
+
+/**
+ * Builds a whatsapp_audiences row from a saved segment's filters, so a
+ * segment built in 客戶分群 becomes an actual selectable audience in 推廣活動
+ * instead of being a dead end -- the two features previously shared no data
+ * path at all, despite sitting next to each other in the nav and both talking
+ * about "合資格" customers. Reuses the exact filter vocabulary
+ * fetchSegmentContacts already validates, so nothing about the segment (its
+ * budget range, recency, opt-in requirement) is silently dropped in
+ * translation the way a lossy field-by-field mapping would.
+ */
+export async function createAdminAudienceFromSegment(
+  input: { segmentId: string },
+  actor: StaffAccess,
+) {
+  const { getSegmentForAudience } = await import("../ai/segments.server");
+  const segment = await getSegmentForAudience(input.segmentId);
+  if (!segment) throw new Error("Segment not found");
+
+  const filters = normalizeAudienceFilters({
+    intent: segment.filters.intent,
+    source: segment.filters.source,
+    estates: segment.filters.preferred_estates,
+    district_slug: segment.filters.district_slug,
+    assigned_agent_id: segment.filters.assigned_agent_id,
+    budget_min: segment.filters.budget?.min ?? undefined,
+    budget_max: segment.filters.budget?.max ?? undefined,
+    last_activity_days: segment.filters.last_activity_days,
+    require_whatsapp_opt_in: segment.filters.require_whatsapp_opt_in,
+  });
+
+  return saveAdminAudience(
+    { name: segment.name, description: `從客戶分群「${segment.name}」建立`, filters },
+    actor,
+  );
 }
 
 export async function listAdminCms() {
