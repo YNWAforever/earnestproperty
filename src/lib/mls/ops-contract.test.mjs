@@ -83,3 +83,28 @@ test("runbook records gated migration, shadow, cutover, monitoring, and rollback
   assert.doesNotMatch(runbook, /DATABASE_URL_UNPOOLED\s*=\s*postgres/i);
   assert.doesNotMatch(runbook, /BLOB_READ_WRITE_TOKEN\s*=\s*\S+/i);
 });
+
+test("Cloudflare runbook exposes the gated operator contract", () => {
+  for (const marker of [
+    "Workers Paid",
+    "wrangler.jsonc",
+    "wrangler.scheduled.jsonc",
+    "0 18 * * *",
+    "MLS_SCHEDULED_MODE=shadow",
+    "MLS_PUBLISH_ENABLED=false",
+    "MLS_MEDIA_RIGHTS_CONFIRMED=false",
+    "90-day bucket lock",
+    "manual first publish",
+    "seven approved healthy Hong Kong dates",
+    "publication_outcome_unknown",
+    "publisher: cloudflare-container",
+    "No provider command in this runbook is authorized by code approval",
+  ]) {
+    assert.match(
+      runbook,
+      new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+      marker,
+    );
+  }
+  assert.doesNotMatch(runbook, /systemctl enable|systemctl start|place.*VPS/i);
+});

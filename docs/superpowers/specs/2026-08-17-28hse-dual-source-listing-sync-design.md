@@ -1,5 +1,7 @@
 # 28Hse Dual-Source Listing Synchronization Design
 
+> **Hosting supersession (2026-08-21):** The dedicated `2026-08-21-cloudflare-mls-container-design.md` project supersedes only VPS/systemd hosting and scheduling. The source, matching, reconciliation, media, lifecycle, and publication contracts in this design remain authoritative.
+
 Date: 2026-08-17
 
 ## Status
