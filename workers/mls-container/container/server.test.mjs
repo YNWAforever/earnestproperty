@@ -383,6 +383,129 @@ test("child error wins before exit, clears timers, and never exposes raw errors"
   assert.deepEqual(supervisor.status(), terminal);
 });
 
+test("keeps a timeout latched through child error until exit and terminal IPC", async () => {
+  const child = new FakeChild();
+  const timers = idleTimers();
+  const times = [
+    new Date("2026-08-21T02:30:00.000Z"),
+    new Date("2026-08-21T06:30:00.000Z"),
+  ];
+  let reads = 0;
+  const supervisor = createSupervisor({
+    spawnChild: () => child,
+    readTerminalStatus: async () => {
+      reads += 1;
+      return terminalRecord({
+        status: "failed",
+        exitCode: 143,
+        failureCode: "process_interrupted",
+      });
+    },
+    now: () => times.shift(),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+  await supervisor.start(envelope());
+  timers.runDelay(4 * 60 * 60 * 1_000);
+  child.emit("error", new Error("post-spawn timeout race"));
+  assert.equal(supervisor.status().state, "running");
+  assert.equal(reads, 0);
+  child.emit("exit", 143, "SIGTERM");
+  const terminal = await supervisor.waitForTerminal();
+  assert.equal(reads, 1);
+  assert.equal(terminal.state, "failed");
+  assert.equal(terminal.failureCode, "run_timeout");
+  assert.equal(terminal.exitCode, 143);
+  assert.equal(terminal.manifestPresent, true);
+});
+
+test("keeps a supervisor clock failure latched through child error until exit", async () => {
+  const child = new FakeChild();
+  const timers = idleTimers();
+  const times = [
+    new Date("2026-08-21T02:30:00.000Z"),
+    new Date(Number.NaN),
+    new Date("2026-08-21T02:31:00.000Z"),
+  ];
+  let reads = 0;
+  const supervisor = createSupervisor({
+    spawnChild: () => child,
+    readTerminalStatus: async () => {
+      reads += 1;
+      return terminalRecord({
+        status: "failed",
+        exitCode: 40,
+        failureCode: "mls_run_failed",
+        manifestKey: null,
+        manifestPresent: false,
+      });
+    },
+    now: () => times.shift(),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+  await supervisor.start(envelope());
+  timers.runDelay(30_000);
+  child.emit("error", new Error("post-spawn clock race"));
+  assert.equal(supervisor.status().state, "running");
+  assert.equal(reads, 0);
+  child.emit("exit", 40, null);
+  const terminal = await supervisor.waitForTerminal();
+  assert.equal(reads, 1);
+  assert.equal(terminal.state, "unknown");
+  assert.equal(terminal.failureCode, "supervisor_clock_failed");
+  assert.equal(terminal.exitCode, 40);
+});
+
+test("falls back atomically when the completion clock is invalid", async () => {
+  const child = new FakeChild();
+  const timers = idleTimers();
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date(Number.NaN)];
+  const supervisor = createSupervisor({
+    spawnChild: () => child,
+    readTerminalStatus: async () => terminalRecord(),
+    now: () => times.shift(),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+  await supervisor.start(envelope());
+  let resolutions = 0;
+  const waiting = supervisor.waitForTerminal().then((status) => {
+    resolutions += 1;
+    return status;
+  });
+  child.emit("exit", 0, null);
+  const outcome = await Promise.race([
+    waiting.then((status) => ({ status })),
+    new Promise((resolve) => setImmediate(() => resolve({ status: null }))),
+  ]);
+  assert.notEqual(outcome.status, null);
+  assert.equal(outcome.status.state, "unknown");
+  assert.equal(outcome.status.failureCode, "supervisor_clock_failed");
+  assert.equal(outcome.status.completedAt, "2026-08-21T02:30:00.000Z");
+  assert.equal(outcome.status.exitCode, 0);
+  assert.equal(Object.isFrozen(outcome.status), true);
+  assert.equal(resolutions, 1);
+  child.emit("error", new Error("late event"));
+  child.emit("exit", 40, null);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(resolutions, 1);
+  assert.deepEqual(supervisor.status(), outcome.status);
+  assert.equal(timers.callbacks.size, 0);
+});
+
 test("normalizes synchronous spawn throws and asynchronous spawn rejection", async () => {
   for (const spawnChild of [
     () => {
@@ -441,6 +564,120 @@ async function exitAndWait(harness, code) {
   harness.child.emit("exit", code, null);
   return harness.supervisor.waitForTerminal();
 }
+
+function fakeTerminalFile(content, { readError = null } = {}) {
+  const bytes = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  const calls = { open: 0, read: 0, close: 0 };
+  return {
+    calls,
+    async openTerminalFile(file, flags) {
+      calls.open += 1;
+      assert.equal(file, TERMINAL_FILE);
+      assert.equal(flags, "r");
+      return {
+        async read(buffer, offset, length, position) {
+          calls.read += 1;
+          if (readError) throw readError;
+          const bytesRead = Math.min(
+            length,
+            Math.max(0, bytes.length - position),
+          );
+          bytes.copy(buffer, offset, position, position + bytesRead);
+          return { bytesRead, buffer };
+        },
+        async close() {
+          calls.close += 1;
+        },
+      };
+    },
+  };
+}
+
+function boundedReaderHarness(openTerminalFile) {
+  const child = new FakeChild();
+  const timers = idleTimers();
+  const times = [
+    new Date("2026-08-21T02:30:00.000Z"),
+    new Date("2026-08-21T02:31:00.000Z"),
+  ];
+  const supervisor = createSupervisor({
+    spawnChild: () => child,
+    openTerminalFile,
+    now: () => times.shift(),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+  return { child, supervisor, timers };
+}
+
+test("the bounded terminal reader rejects an empty file and closes it", async () => {
+  const file = fakeTerminalFile(Buffer.alloc(0));
+  const status = await exitAndWait(
+    boundedReaderHarness(file.openTerminalFile),
+    0,
+  );
+  assert.equal(status.state, "unknown");
+  assert.equal(status.failureCode, "terminal_status_missing");
+  assert.deepEqual(file.calls, { open: 1, read: 1, close: 1 });
+});
+
+test("the bounded terminal reader rejects malformed JSON and closes it", async () => {
+  const file = fakeTerminalFile("{");
+  const status = await exitAndWait(
+    boundedReaderHarness(file.openTerminalFile),
+    0,
+  );
+  assert.equal(status.state, "unknown");
+  assert.equal(status.failureCode, "terminal_status_missing");
+  assert.equal(file.calls.open, 1);
+  assert.equal(file.calls.close, 1);
+});
+
+test("the bounded terminal reader contains read errors and closes the file", async () => {
+  const file = fakeTerminalFile("ignored", {
+    readError: new Error("read failed BLOB_READ_WRITE_TOKEN=secret"),
+  });
+  const status = await exitAndWait(
+    boundedReaderHarness(file.openTerminalFile),
+    0,
+  );
+  assert.equal(status.state, "unknown");
+  assert.equal(status.failureCode, "terminal_status_missing");
+  assert.deepEqual(file.calls, { open: 1, read: 1, close: 1 });
+  assert.equal(JSON.stringify(status).includes("BLOB_READ_WRITE_TOKEN"), false);
+});
+
+test("the bounded terminal reader accepts valid JSON at exactly 32 KiB", async () => {
+  const serialized = Buffer.from(JSON.stringify(terminalRecord()), "utf8");
+  const exact = Buffer.concat([
+    serialized,
+    Buffer.alloc(32 * 1024 - serialized.byteLength, 0x20),
+  ]);
+  const file = fakeTerminalFile(exact);
+  const status = await exitAndWait(
+    boundedReaderHarness(file.openTerminalFile),
+    0,
+  );
+  assert.equal(status.state, "succeeded");
+  assert.equal(status.failureCode, null);
+  assert.equal(file.calls.open, 1);
+  assert.equal(file.calls.close, 1);
+});
+
+test("the bounded terminal reader rejects a file over 32 KiB", async () => {
+  const file = fakeTerminalFile(Buffer.alloc(32 * 1024 + 1, 0x20));
+  const status = await exitAndWait(
+    boundedReaderHarness(file.openTerminalFile),
+    0,
+  );
+  assert.equal(status.state, "unknown");
+  assert.equal(status.failureCode, "terminal_status_missing");
+  assert.deepEqual(file.calls, { open: 1, read: 1, close: 1 });
+});
 
 test("accepts the exact successful terminal record and snapshots its correlation", async () => {
   let readArguments;
@@ -538,6 +775,46 @@ test("rejects mismatched identity and non-exact terminal records without invokin
     assert.equal(status.state, "unknown");
     assert.equal(status.failureCode, "terminal_status_missing");
   }
+  assert.equal(accessorCalls, 0);
+});
+
+test("rejects non-primitive terminal statuses without coercion", async () => {
+  let coercions = 0;
+  let accessorCalls = 0;
+  const arrayStatus = ["succeeded"];
+  Object.defineProperty(arrayStatus, "toString", {
+    value() {
+      coercions += 1;
+      return "succeeded";
+    },
+  });
+  const coercibleStatus = {
+    [Symbol.toPrimitive]() {
+      coercions += 1;
+      return "succeeded";
+    },
+  };
+  const accessorStatus = {};
+  Object.defineProperty(accessorStatus, Symbol.toPrimitive, {
+    get() {
+      accessorCalls += 1;
+      return () => "succeeded";
+    },
+  });
+  for (const statusValue of [
+    { nested: "succeeded" },
+    arrayStatus,
+    coercibleStatus,
+    accessorStatus,
+  ]) {
+    const harness = terminalHarness(async () =>
+      terminalRecord({ status: statusValue }),
+    );
+    const status = await exitAndWait(harness, 0);
+    assert.equal(status.state, "unknown");
+    assert.equal(status.failureCode, "terminal_status_missing");
+  }
+  assert.equal(coercions, 0);
   assert.equal(accessorCalls, 0);
 });
 
@@ -880,6 +1157,42 @@ test("installs removable signal handlers that close the server and forward once 
   interrupt();
   await closed;
   assert.deepEqual(signals, ["SIGTERM", "SIGINT"]);
+  assert.deepEqual(process.listeners("SIGTERM"), beforeTerm);
+  assert.deepEqual(process.listeners("SIGINT"), beforeInt);
+});
+
+test("latches a host signal before listening and closes after listen completes", async (t) => {
+  const beforeTerm = process.listeners("SIGTERM");
+  const beforeInt = process.listeners("SIGINT");
+  const { signals, supervisor } = fakeSupervisor();
+  const server = createSupervisorServer({
+    supervisor,
+    token: CONTROL_TOKEN,
+    port: 0,
+    host: "127.0.0.1",
+  });
+  t.after(async () => {
+    for (const listener of process.listeners("SIGTERM"))
+      if (!beforeTerm.includes(listener))
+        process.removeListener("SIGTERM", listener);
+    for (const listener of process.listeners("SIGINT"))
+      if (!beforeInt.includes(listener))
+        process.removeListener("SIGINT", listener);
+    await closeServer(server);
+  });
+  assert.equal(server.listening, false);
+  const listening = once(server, "listening");
+  const closed = once(server, "close");
+  const term = process
+    .listeners("SIGTERM")
+    .find((listener) => !beforeTerm.includes(listener));
+  assert.equal(typeof term, "function");
+  term();
+  await listening;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(server.listening, false);
+  await closed;
+  assert.deepEqual(signals, ["SIGTERM"]);
   assert.deepEqual(process.listeners("SIGTERM"), beforeTerm);
   assert.deepEqual(process.listeners("SIGINT"), beforeInt);
 });

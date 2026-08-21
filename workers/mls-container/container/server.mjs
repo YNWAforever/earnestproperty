@@ -219,10 +219,10 @@ function publicStatus(state) {
   });
 }
 
-async function readBoundedTerminalStatus(file, maxBytes) {
+async function readBoundedTerminalStatus(openTerminalFile, file, maxBytes) {
   if (file !== TERMINAL_FILE || maxBytes !== 32 * 1024)
     throw fixedError("terminal_status_missing");
-  const handle = await open(file, "r");
+  const handle = await openTerminalFile(file, "r");
   try {
     const buffer = Buffer.alloc(maxBytes + 1);
     let offset = 0;
@@ -278,7 +278,10 @@ function captureTerminalRecord(record, envelope, operatingSystemExitCode) {
   }
   if (captured.neonRunId !== null && captured.neonRunId !== captured.runId)
     throw fixedError("terminal_status_missing");
-  if (!/^(succeeded|failed|degraded|blocked|unknown)$/.test(captured.status))
+  if (
+    typeof captured.status !== "string" ||
+    !/^(succeeded|failed|degraded|blocked|unknown)$/.test(captured.status)
+  )
     throw fixedError("terminal_status_missing");
   if (
     !Number.isInteger(captured.exitCode) ||
@@ -328,7 +331,9 @@ function captureTerminalRecord(record, envelope, operatingSystemExitCode) {
 
 export function createSupervisor({
   spawnChild = spawn,
-  readTerminalStatus = readBoundedTerminalStatus,
+  openTerminalFile = open,
+  readTerminalStatus = (file, maxBytes) =>
+    readBoundedTerminalStatus(openTerminalFile, file, maxBytes),
   now = () => new Date(),
   setTimer = setTimeout,
   clearTimer = clearTimeout,
@@ -339,6 +344,7 @@ export function createSupervisor({
 } = {}) {
   if (
     typeof spawnChild !== "function" ||
+    typeof openTerminalFile !== "function" ||
     typeof readTerminalStatus !== "function" ||
     typeof now !== "function" ||
     typeof setTimer !== "function" ||
@@ -399,17 +405,35 @@ export function createSupervisor({
 
   function completeTerminal(patch) {
     if (terminalFinalized) return publicStatus(state);
+    let completedAt;
+    let terminalPatch = patch;
+    try {
+      completedAt = exactTimestamp(now());
+    } catch {
+      completedAt = validExactTimestamp(state.heartbeatAt)
+        ? state.heartbeatAt
+        : state.startedAt;
+      terminalPatch = {
+        ...patch,
+        state: "unknown",
+        failureCode: "supervisor_clock_failed",
+      };
+    }
+    const nextState = {
+      ...state,
+      state: terminalPatch.state,
+      completedAt,
+      exitCode: terminalPatch.exitCode,
+      failureCode: terminalPatch.failureCode,
+      runId: terminalPatch.runId ?? null,
+      neonRunId: terminalPatch.neonRunId ?? null,
+      evidencePrefix: terminalPatch.evidencePrefix ?? null,
+      manifestKey: terminalPatch.manifestKey ?? null,
+      manifestPresent: terminalPatch.manifestPresent === true,
+    };
+    const status = publicStatus(nextState);
     terminalFinalized = true;
-    state.state = patch.state;
-    state.completedAt = exactTimestamp(now());
-    state.exitCode = patch.exitCode;
-    state.failureCode = patch.failureCode;
-    state.runId = patch.runId ?? null;
-    state.neonRunId = patch.neonRunId ?? null;
-    state.evidencePrefix = patch.evidencePrefix ?? null;
-    state.manifestKey = patch.manifestKey ?? null;
-    state.manifestPresent = patch.manifestPresent === true;
-    const status = publicStatus(state);
+    Object.assign(state, nextState);
     resolveCompletion?.(status);
     return status;
   }
@@ -555,24 +579,7 @@ export function createSupervisor({
     state.child = child;
     child.on("error", () => {
       if (terminalClaimed) return;
-      if (timeoutForced) {
-        claimTerminal();
-        completeTerminal({
-          state: "failed",
-          exitCode: null,
-          failureCode: "run_timeout",
-        });
-        return;
-      }
-      if (supervisorFailureCode !== null) {
-        claimTerminal();
-        completeTerminal({
-          state: "unknown",
-          exitCode: null,
-          failureCode: supervisorFailureCode,
-        });
-        return;
-      }
+      if (timeoutForced || supervisorFailureCode !== null) return;
       childStartFailed();
     });
     child.on("exit", (code) => {
@@ -912,9 +919,11 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
   });
 
   const handledSignals = new Set();
+  let shutdownRequested = false;
   const handleSignal = (signal) => {
     if (handledSignals.has(signal)) return;
     handledSignals.add(signal);
+    shutdownRequested = true;
     try {
       controller.forwardSignal(signal);
     } catch {}
@@ -933,6 +942,9 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
   };
   server.once("close", removeSignalHandlers);
   server.once("error", removeSignalHandlers);
+  server.once("listening", () => {
+    if (shutdownRequested && server.listening) server.close();
+  });
   server.listen({ host, port });
   return server;
 }
