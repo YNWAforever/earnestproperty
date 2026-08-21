@@ -381,6 +381,9 @@ function ownDataValue(value, key) {
 
 function safeErrorCode(error, fallback) {
   const code = ownDataValue(error, "code");
+  if (code === "MLS_PUBLICATION_OUTCOME_UNKNOWN") {
+    return "publication_outcome_unknown";
+  }
   return typeof code === "string" && /^[a-z][a-z0-9_-]{0,79}$/.test(code)
     ? code
     : fallback;

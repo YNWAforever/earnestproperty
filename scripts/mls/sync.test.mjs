@@ -801,3 +801,47 @@ test("missing R2 manifest never turns a bounded primary error code into terminal
   assert.equal(terminalRecords[0].status, "unknown");
   assert.equal(terminalRecords[0].failureCode, "database_unavailable");
 });
+
+test("maps only the authoritative uppercase publication-unknown code to bounded terminal state", async () => {
+  async function runWithCode(errorCode) {
+    const terminalRecords = [];
+    const error = new Error("commit outcome uncertain");
+    error.code = errorCode;
+    const code = await main(["--mode=shadow"], {
+      environment: r2Environment(),
+      loadEnvironmentFiles: async () => {},
+      createEvidenceReporter: () => ({
+        reporter: { writeRunArtifacts: async () => ({}) },
+        finalize: async () => {
+          throw new Error("artifact metadata unavailable");
+        },
+        getEvidenceState: () => ({
+          evidencePrefix: null,
+          manifestKey: null,
+          manifestPresent: false,
+        }),
+      }),
+      createVercelBlobStore: () => {
+        throw new Error("Blob must not be constructed in shadow mode");
+      },
+      withMlsAdvisoryLock: async () => {
+        throw error;
+      },
+      logRunEvent: () => {},
+      writeTerminalStatusRecord: async ({ record }) =>
+        terminalRecords.push(record),
+      now: () => new Date("2026-08-21T02:30:00.000Z"),
+    });
+    return { code, record: terminalRecords[0] };
+  }
+
+  const known = await runWithCode("MLS_PUBLICATION_OUTCOME_UNKNOWN");
+  assert.equal(known.code, 40);
+  assert.equal(known.record.status, "unknown");
+  assert.equal(known.record.failureCode, "publication_outcome_unknown");
+
+  const arbitrary = await runWithCode("MLS_ARBITRARY_UPPERCASE_CODE");
+  assert.equal(arbitrary.code, 40);
+  assert.equal(arbitrary.record.status, "unknown");
+  assert.equal(arbitrary.record.failureCode, "terminal_manifest_missing");
+});
