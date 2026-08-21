@@ -691,6 +691,10 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
 }
 
 export interface Env extends Cloudflare.Env {
+  MLS_RUN_CONTAINER: DurableObjectNamespace<MlsRunContainer>;
+  MLS_ENVIRONMENT: string;
+  MLS_SCHEDULED_MODE: string;
+  MLS_GIT_COMMIT_SHA: string;
   DATABASE_URL_UNPOOLED: string;
   BLOB_READ_WRITE_TOKEN?: string;
   MLS_CRAWLER_CONTACT_URL: string;
