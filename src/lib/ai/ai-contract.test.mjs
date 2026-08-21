@@ -299,3 +299,20 @@ test("admin data layer exposes staff-guarded AI functions", () => {
     );
   }
 });
+
+// The saved-segment card ("X 位客戶，其中 Y 位合資格") used to read
+// crm_segment_memberships, a snapshot only ever refreshed by an explicit
+// 建立名單 re-materialize. A segment could sit at 0/0 indefinitely even after
+// a real, eligible customer started matching its filters -- confirmed live: a
+// segment's saved card showed 0/0 while re-running its exact prompt through
+// the preview path (which was always live) found 1 matching, eligible
+// contact. listCrmSegments must compute live counts instead, the same way
+// previewCrmSegment already does.
+test("segment list counts are computed live, not read from a stale materialize snapshot", () => {
+  const segmentsServer = read("src/lib/ai/segments.server.ts");
+  const listBody = functionSource(segmentsServer, "listCrmSegments");
+
+  assert.doesNotMatch(listBody, /crm_segment_memberships/);
+  assert.match(listBody, /fetchSegmentContacts\(/);
+  assert.match(listBody, /eligibility_status === "eligible"/);
+});
