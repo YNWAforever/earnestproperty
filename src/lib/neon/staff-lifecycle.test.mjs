@@ -705,6 +705,37 @@ test("session revocation deletes neon_auth.session rows instead of calling the p
   );
 });
 
+test("a legacy terminal invitation failure no longer bricks the member permanently", async () => {
+  // Production evidence: Neon Auth's organization plugin is disabled on this
+  // instance, so POST /organization/invite-member answered 404 ->
+  // PROVIDER_INVITATION_NOT_FOUND -> markIdentityActionTerminal. A terminal
+  // row then blocked BOTH paths with no escape hatch: resend threw
+  // 400 "Invitation is not available to resend." (surfaced as 這項團隊操作未能執行)
+  // and re-inviting hit the same idempotency key and returned "failed"
+  // forever. Invitations are recorded locally now, so no provider can declare
+  // one permanently gone -- the terminal guard only poisons legacy rows.
+  const { service, staff, latestActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "kevinfong@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "terminal_failure",
+      created_at: "2026-08-20T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+
+  const result = await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+});
+
 test("invitations are recorded locally without any provider HTTP call", async () => {
   // No server-side credential exists for /organization/invite-member (Neon
   // docs: cookie-session only), and even an authenticated call only emails if

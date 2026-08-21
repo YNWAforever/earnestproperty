@@ -443,10 +443,17 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           status: 400,
         });
       }
-      if (
-        (!persisted && !previous) ||
-        (persisted?.state === "terminal_failure" && previous?.state !== "retryable_failure")
-      ) {
+      // Only "never invited" blocks a resend. A terminal_failure row must NOT:
+      // terminal is reachable solely via PROVIDER_INVITATION_NOT_FOUND, i.e. a
+      // 404 from the provider's organization endpoint -- which is exactly what
+      // this deployment returns, because Neon Auth's organization plugin is
+      // disabled here. Since createLocalStaffInvitation records invitations
+      // locally, no provider can declare one permanently gone, so the guard now
+      // only poisons legacy rows. It had no escape hatch either: re-inviting
+      // reuses the same idempotency key and returns "failed" forever, so a
+      // member whose invite 404'd was bricked (surfaced as
+      // 這項團隊操作未能執行). Resending re-records locally and clears the state.
+      if (!persisted && !previous) {
         throw new Response("Invitation is not available to resend.", { status: 400 });
       }
       const operation = await beginAction({
@@ -457,9 +464,6 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         keyValue: cooldownWindowKey("invitation", member.id, currentNow),
       });
       if (operation.isExisting) {
-        if (operation.state === "terminal_failure") {
-          throw new Response("Invitation is not available to resend.", { status: 400 });
-        }
         return {
           accepted: operation.state === "pending" || operation.state === "succeeded",
           retryAfter: null,
