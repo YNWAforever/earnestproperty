@@ -84,6 +84,21 @@ test("uses explicit local identity only when the evidence backend is absent", ()
   assert.deepEqual(configuration.evidence, { artifactRoot: "C:/safe/mls" });
 });
 
+test("rejects R2 terminal IPC paths outside the attempt-local Container directory", () => {
+  assert.throws(
+    () =>
+      readConfiguration(
+        "shadow",
+        r2Environment({
+          MLS_TERMINAL_STATUS_FILE: "/etc/earnest-mls-terminal.json",
+        }),
+      ),
+    (error) =>
+      error instanceof MlsConfigurationError &&
+      error.code === "invalid_mls_terminal_status_file",
+  );
+});
+
 test("keeps Blob credentials out of shadow configuration and retains publish gates", () => {
   const shadow = readConfiguration(
     "shadow",
@@ -525,7 +540,7 @@ test("main preserves the lock exit code while persisting a bounded non-success t
       neonRunId: null,
       status: "blocked",
       exitCode: 75,
-      failureCode: "terminal_manifest_missing",
+      failureCode: "lock_unavailable",
       evidencePrefix: null,
       manifestKey: null,
       manifestPresent: false,
@@ -559,4 +574,230 @@ test("main persists a bounded terminal failure when R2 reporter construction is 
       manifestPresent: false,
     }),
   ]);
+});
+
+test("main sanitizes accessor-backed errors and still finalizes evidence plus terminal IPC", async () => {
+  const runId = "00000000-0000-4000-8000-000000000001";
+  const calls = [];
+  const error = new Error("source failure");
+  Object.defineProperty(error, "code", {
+    enumerable: true,
+    get() {
+      throw new Error("error code accessor must not run");
+    },
+  });
+  const code = await main(["--mode=shadow"], {
+    environment: r2Environment(),
+    loadEnvironmentFiles: async () => {},
+    createEvidenceReporter: () => ({
+      reporter: { writeRunArtifacts: async () => ({}) },
+      finalize: async (input) => {
+        calls.push({ kind: "finalize", input });
+        return {
+          manifestKey:
+            "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+          manifestPresent: true,
+        };
+      },
+      getEvidenceState: () => ({
+        evidencePrefix: "mls-sync/production/2026-08-21/run/attempt",
+        manifestKey: "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+        manifestPresent: true,
+      }),
+    }),
+    createVercelBlobStore: () => {
+      throw new Error("Blob must not be constructed in shadow mode");
+    },
+    withMlsAdvisoryLock: async () => {
+      throw error;
+    },
+    logRunEvent: (event) => calls.push({ kind: "log", event }),
+    writeTerminalStatusRecord: async (input) =>
+      calls.push({ kind: "terminal", input }),
+    now: () => new Date("2026-08-21T02:30:00.000Z"),
+  });
+
+  assert.equal(code, 40);
+  assert.equal(
+    calls.some((call) => call.kind === "finalize"),
+    true,
+  );
+  assert.deepEqual(calls.at(-1), {
+    kind: "terminal",
+    input: {
+      statusFile: "/tmp/earnest-mls-terminal.json",
+      evidenceBackend: "r2",
+      record: terminalRecord({
+        runId: null,
+        neonRunId: null,
+        status: "failed",
+        exitCode: 40,
+        failureCode: "mls_run_failed",
+        evidencePrefix: "mls-sync/production/2026-08-21/run/attempt",
+        manifestKey: "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+        manifestPresent: true,
+      }),
+    },
+  });
+  assert.equal(runId.length, 36);
+});
+
+test("R2 finalization rejects an available outcome run ID that differs from its artifact run", async () => {
+  const runId = "00000000-0000-4000-8000-000000000001";
+  const otherRunId = "00000000-0000-4000-8000-000000000002";
+  const artifacts = Object.freeze(
+    [
+      ["report.json", "application/json; charset=utf-8"],
+      ["listings.csv", "text/csv; charset=utf-8"],
+      ["observations.csv", "text/csv; charset=utf-8"],
+      ["diagnostics.json", "application/json; charset=utf-8"],
+    ].map(([name, contentType]) =>
+      Object.freeze({
+        name,
+        key: `evidence/${name}`,
+        byteLength: 1,
+        contentType,
+        sha256: "a".repeat(64),
+      }),
+    ),
+  );
+  let finalizeCalls = 0;
+  const selection = createEvidenceReporter({
+    configuration: readConfiguration("shadow", r2Environment()),
+    dependencies: {
+      createFilesystemReporter: () => {
+        throw new Error("filesystem must not be constructed in R2 mode");
+      },
+      createR2S3ObjectStore: () => ({ putIfAbsent: async () => {} }),
+      createR2Reporter: () => ({
+        writeRunArtifacts: async () => ({
+          prefix: "evidence",
+          objects: artifacts,
+        }),
+        finalizeTerminal: async () => {
+          finalizeCalls += 1;
+          return { manifestKey: "evidence/manifest.json" };
+        },
+      }),
+      pruneArtifacts: async () => {
+        throw new Error("R2 evidence must not be pruned locally");
+      },
+    },
+  });
+
+  await selection.reporter.writeRunArtifacts({
+    runId,
+    status: "shadow_healthy",
+  });
+  await assert.rejects(
+    () =>
+      selection.finalize({
+        outcome: { runId: otherRunId, status: "shadow_healthy" },
+        exitCode: 0,
+        completedAt: "2026-08-21T02:30:00.000Z",
+      }),
+    /outcome run ID/i,
+  );
+  assert.equal(finalizeCalls, 0);
+
+  const accessorOutcome = { status: "shadow_healthy" };
+  Object.defineProperty(accessorOutcome, "runId", {
+    enumerable: true,
+    get() {
+      throw new Error("outcome run ID accessor must not run");
+    },
+  });
+  await assert.rejects(
+    () =>
+      selection.finalize({
+        outcome: accessorOutcome,
+        exitCode: 0,
+        completedAt: "2026-08-21T02:30:00.000Z",
+      }),
+    /outcome run ID/i,
+  );
+  assert.equal(finalizeCalls, 0);
+});
+
+test("main preserves a finalized R2 exit code when terminal IPC persistence fails", async () => {
+  const runId = "00000000-0000-4000-8000-000000000001";
+  const code = await main(["--mode=shadow"], {
+    environment: r2Environment(),
+    loadEnvironmentFiles: async () => {},
+    createEvidenceReporter: () => ({
+      reporter: {
+        writeRunArtifacts: async () => ({
+          prefix: "mls-sync/production/2026-08-21/run/attempt",
+          objects: [],
+        }),
+      },
+      finalize: async () => ({
+        manifestKey: "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+        manifestPresent: true,
+      }),
+      getEvidenceState: () => ({
+        evidencePrefix: "mls-sync/production/2026-08-21/run/attempt",
+        manifestKey: "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+        manifestPresent: true,
+      }),
+    }),
+    createVercelBlobStore: () => {
+      throw new Error("Blob must not be constructed in shadow mode");
+    },
+    withMlsAdvisoryLock: async ({ work }) => work({}),
+    createSyncRepository: () => ({}),
+    createOldSiteSourceAdapter: () => ({}),
+    create28HseAgentSourceAdapter: () => ({}),
+    runDualSourceSync: async () => ({
+      runId,
+      status: "shadow_healthy",
+      counts: {},
+    }),
+    prepareListingMedia: () => {
+      throw new Error("media must not run in this fake");
+    },
+    logRunEvent: () => {},
+    writeTerminalStatusRecord: async () => {
+      throw new Error("supervisor IPC write failed");
+    },
+    now: () => new Date("2026-08-21T02:30:00.000Z"),
+  });
+
+  assert.equal(code, 0);
+});
+
+test("missing R2 manifest never turns a bounded primary error code into terminal_manifest_missing", async () => {
+  const terminalRecords = [];
+  const error = new Error("database unavailable");
+  error.code = "database_unavailable";
+  const code = await main(["--mode=shadow"], {
+    environment: r2Environment(),
+    loadEnvironmentFiles: async () => {},
+    createEvidenceReporter: () => ({
+      reporter: { writeRunArtifacts: async () => ({}) },
+      finalize: async () => {
+        throw new Error("artifact metadata unavailable");
+      },
+      getEvidenceState: () => ({
+        evidencePrefix: null,
+        manifestKey: null,
+        manifestPresent: false,
+      }),
+    }),
+    createVercelBlobStore: () => {
+      throw new Error("Blob must not be constructed in shadow mode");
+    },
+    withMlsAdvisoryLock: async () => {
+      throw error;
+    },
+    logRunEvent: () => {},
+    writeTerminalStatusRecord: async ({ record }) =>
+      terminalRecords.push(record),
+    now: () => new Date("2026-08-21T02:30:00.000Z"),
+  });
+
+  assert.equal(code, 40);
+  assert.equal(terminalRecords.length, 1);
+  assert.equal(terminalRecords[0].status, "unknown");
+  assert.equal(terminalRecords[0].failureCode, "database_unavailable");
 });

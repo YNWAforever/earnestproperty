@@ -172,18 +172,10 @@ function requireTimestamp(value, name) {
 }
 
 function requireTerminalStatusFile(value) {
-  const pathApi =
-    typeof value === "string" && value.startsWith("/") ? path.posix : path;
-  if (
-    typeof value !== "string" ||
-    !pathApi.isAbsolute(value) ||
-    value.includes("\0") ||
-    value.split(/[\\/]+/).includes("..") ||
-    pathApi.basename(value) !== "earnest-mls-terminal.json"
-  ) {
+  if (typeof value !== "string" || value !== "/tmp/earnest-mls-terminal.json") {
     throw new MlsConfigurationError("invalid_mls_terminal_status_file");
   }
-  return pathApi.normalize(value);
+  return value;
 }
 
 function requireR2RunIdentity(environment) {
@@ -381,6 +373,31 @@ function captureDataField(value, key, label) {
   return descriptor.value;
 }
 
+function ownDataValue(value, key) {
+  if (!value || typeof value !== "object") return undefined;
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  return descriptor && "value" in descriptor ? descriptor.value : undefined;
+}
+
+function safeErrorCode(error, fallback) {
+  const code = ownDataValue(error, "code");
+  return typeof code === "string" && /^[a-z][a-z0-9_-]{0,79}$/.test(code)
+    ? code
+    : fallback;
+}
+
+function snapshotOutcome(value) {
+  if (!value || typeof value !== "object") return null;
+  const gate = ownDataValue(value, "gate");
+  return Object.freeze({
+    kind: ownDataValue(value, "kind"),
+    status: ownDataValue(value, "status"),
+    runId: ownDataValue(value, "runId"),
+    counts: ownDataValue(value, "counts"),
+    gateMode: ownDataValue(gate, "mode"),
+  });
+}
+
 function captureArtifactResult(value) {
   const result = captureExactDataRecord(
     value,
@@ -414,14 +431,14 @@ function captureArtifactResult(value) {
 }
 
 function boundedTerminalStatus(outcome, error) {
-  const status =
-    outcome && typeof outcome === "object" && typeof outcome.status === "string"
-      ? outcome.status
-      : "error";
+  const outcomeStatus = ownDataValue(outcome, "status");
+  const outcomeKind = ownDataValue(outcome, "kind");
+  const status = typeof outcomeStatus === "string" ? outcomeStatus : "error";
   const terminalClassification =
-    error?.code === "publication_outcome_unknown" || status === "unknown"
+    safeErrorCode(error, null) === "publication_outcome_unknown" ||
+    status === "unknown"
       ? "outcome-unknown"
-      : outcome?.kind === "lock_unavailable" || status === "lock_unavailable"
+      : outcomeKind === "lock_unavailable" || status === "lock_unavailable"
         ? "lock"
         : status === "degraded"
           ? "degraded"
@@ -644,6 +661,23 @@ export function createEvidenceReporter({ configuration, dependencies }) {
         if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
           throw new TypeError("exitCode is invalid");
         }
+        if (outcome !== null && outcome !== undefined) {
+          if (typeof outcome !== "object") {
+            throw new TypeError("outcome run ID is invalid");
+          }
+          const descriptor = Object.getOwnPropertyDescriptor(outcome, "runId");
+          if (!descriptor || !("value" in descriptor)) {
+            throw new TypeError("outcome run ID is invalid");
+          }
+          const outcomeRunId = descriptor.value;
+          if (
+            typeof outcomeRunId !== "string" ||
+            !UUID_PATTERN.test(outcomeRunId) ||
+            outcomeRunId !== artifactRunId
+          ) {
+            throw new TypeError("outcome run ID is invalid");
+          }
+        }
         const completed = requireTimestamp(completedAt, "completedAt");
         const started = configuration.attemptStartedAt;
         const durationMs = Date.parse(completed) - Date.parse(started);
@@ -704,7 +738,7 @@ function exitCodeForOutcome(outcome) {
     return 0;
   if (outcome?.status === "degraded") return 2;
   if (outcome?.status === "blocked") {
-    return outcome.gate?.mode === "blocked" ? 20 : 30;
+    return outcome.gateMode === "blocked" ? 20 : 30;
   }
   return 40;
 }
@@ -716,10 +750,7 @@ function terminalRecordFor({
   exitCode,
   evidence,
 }) {
-  const runId =
-    outcome && typeof outcome === "object" && Object.hasOwn(outcome, "runId")
-      ? captureDataField(outcome, "runId", "outcome")
-      : null;
+  const runId = outcome?.runId ?? null;
   const terminal = boundedTerminalStatus(outcome, error);
   const success =
     exitCode === 0 &&
@@ -747,15 +778,17 @@ function terminalRecordFor({
     exitCode,
     failureCode: success
       ? null
-      : configuration.evidenceBackend === "r2" && !evidence.manifestPresent
-        ? "terminal_manifest_missing"
-        : terminal.terminalClassification === "lock"
-          ? "lock_unavailable"
-          : terminal.terminalClassification === "outcome-unknown"
-            ? "publication_outcome_unknown"
-            : error?.code && /^[a-z][a-z0-9_-]{0,79}$/.test(error.code)
-              ? error.code
-              : "mls_run_failed",
+      : terminal.terminalClassification === "lock"
+        ? "lock_unavailable"
+        : terminal.terminalClassification === "outcome-unknown"
+          ? "publication_outcome_unknown"
+          : safeErrorCode(
+              error,
+              configuration.evidenceBackend === "r2" &&
+                !evidence.manifestPresent
+                ? "terminal_manifest_missing"
+                : "mls_run_failed",
+            ),
     evidencePrefix: evidence.evidencePrefix,
     manifestKey: evidence.manifestKey,
     manifestPresent: evidence.manifestPresent,
@@ -794,7 +827,7 @@ export async function main(argv = process.argv.slice(2), overrides = {}) {
     dependencies.logRunEvent({
       level: "error",
       event: "mls_configuration_rejected",
-      code: error.code ?? "invalid_configuration",
+      code: safeErrorCode(error, "invalid_configuration"),
     });
     return 30;
   }
@@ -855,7 +888,7 @@ export async function main(argv = process.argv.slice(2), overrides = {}) {
     dependencies.logRunEvent({
       level: "error",
       event: "mls_configuration_rejected",
-      code: error.code ?? "invalid_evidence_configuration",
+      code: safeErrorCode(error, "invalid_evidence_configuration"),
     });
     await persistEarlyTerminalFailure("invalid_evidence_configuration");
     return 30;
@@ -920,7 +953,6 @@ export async function main(argv = process.argv.slice(2), overrides = {}) {
           }),
         });
       } catch {
-        if (effectiveExitCode === 0) effectiveExitCode = 40;
         dependencies.logRunEvent({
           level: "error",
           event: "mls_terminal_status_failed",
@@ -962,30 +994,35 @@ export async function main(argv = process.argv.slice(2), overrides = {}) {
         });
       },
     });
-    if (locked?.kind === "lock_unavailable") {
+    const outcome = snapshotOutcome(locked);
+    if (outcome?.kind === "lock_unavailable") {
       dependencies.logRunEvent({
         level: "warn",
         event: "mls_lock_unavailable",
         code: "lock_unavailable",
       });
-      return complete({ outcome: locked, exitCode: 75 });
+      return complete({ outcome, exitCode: 75 });
     }
     dependencies.logRunEvent({
       level:
-        locked?.status === "healthy" || locked?.status === "shadow_healthy"
+        outcome?.status === "healthy" || outcome?.status === "shadow_healthy"
           ? "info"
           : "warn",
       event: "mls_run_finished",
-      code: locked?.status ?? "unknown_status",
-      runId: locked?.runId ?? null,
-      counts: locked?.counts ?? {},
+      code:
+        typeof outcome?.status === "string" ? outcome.status : "unknown_status",
+      runId: typeof outcome?.runId === "string" ? outcome.runId : null,
+      counts:
+        outcome?.counts && typeof outcome.counts === "object"
+          ? outcome.counts
+          : {},
     });
-    return complete({ outcome: locked, exitCode: exitCodeForOutcome(locked) });
+    return complete({ outcome, exitCode: exitCodeForOutcome(outcome) });
   } catch (error) {
     dependencies.logRunEvent({
       level: "error",
       event: "mls_run_failed",
-      code: error?.code ?? "mls_run_failed",
+      code: safeErrorCode(error, "mls_run_failed"),
     });
     return complete({ error, exitCode: 40 });
   } finally {
