@@ -91,8 +91,11 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
   let attemptId = scheduledAttemptId(environment, hkDate);
   let manualReason: string | null = null;
   if (kind === "manual") {
+    const suppliedManualReason = value.manualReason;
     manualReason =
-      typeof value.manualReason === "string" ? value.manualReason.trim() : "";
+      typeof suppliedManualReason === "string"
+        ? suppliedManualReason.trim()
+        : "";
     if (manualReason.length < 8 || manualReason.length > 240) {
       throw new TypeError("manual reason is invalid");
     }

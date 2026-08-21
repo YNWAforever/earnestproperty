@@ -126,6 +126,28 @@ describe("Cloudflare MLS run identity", () => {
     expect(kindReads).toBe(1);
   });
 
+  test("reads manualReason once and keeps its stable trimmed value", () => {
+    let manualReasonReads = 0;
+    const envelope = buildRunEnvelope({
+      environment: "production",
+      scheduledTime: "2026-08-20T18:00:00.000Z",
+      kind: "manual",
+      mode: "shadow",
+      get manualReason() {
+        manualReasonReads += 1;
+        return manualReasonReads === 1 ? "  operator retry  " : "";
+      },
+      manualSuffix: "retry-0001",
+      commitSha: "e".repeat(40),
+    });
+
+    expect(envelope.manualReason).toBe("operator retry");
+    expect(envelope.attemptId).toBe(
+      "scheduled:production:2026-08-21:manual:retry-0001",
+    );
+    expect(manualReasonReads).toBe(1);
+  });
+
   test("builds a manual envelope with a trimmed reason and composed attempt ID", () => {
     expect(
       buildRunEnvelope({
