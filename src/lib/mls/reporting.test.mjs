@@ -306,6 +306,30 @@ test("report serialization redacts an entire Authorization value for every authe
   );
 });
 
+test("diagnostic serialization preserves safe text after a redacted Authorization newline", () => {
+  const run = reportFixture();
+  run.evaluation.sourceStatus.old_site.failures = [
+    {
+      code: "upstream Authorization: Bearer code-secret",
+      detail:
+        "Authorization: Digest username=alice, response=secret\nsafe-after-newline",
+    },
+  ];
+  const diagnostics = JSON.parse(
+    buildRunArtifactObjects(run).find(({ name }) => name === "diagnostics.json")
+      .body,
+  );
+
+  assert.deepEqual(diagnostics.at(-1), {
+    code: "upstream Authorization=[redacted]",
+    detail: "Authorization=[redacted] safe-after-newline",
+  });
+  assert.doesNotMatch(
+    JSON.stringify(diagnostics),
+    /alice|response=secret|code-secret/i,
+  );
+});
+
 test("retention removes only old run directories beneath the configured root", async () => {
   const fixture = await retentionFixture();
   try {

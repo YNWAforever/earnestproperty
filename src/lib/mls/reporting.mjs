@@ -344,7 +344,7 @@ function diagnosticsFor(run) {
       ? status.failures
       : []) {
       diagnostics.push({
-        code: failure.code ?? "source_failure",
+        code: safeErrorText(failure.code ?? "source_failure"),
         detail: safeErrorText(failure.detail),
       });
     }
@@ -409,7 +409,7 @@ export function buildRunArtifactObjects(run) {
     artifactObject("observations.csv", observations, "text/csv; charset=utf-8"),
     artifactObject(
       "diagnostics.json",
-      `${JSON.stringify(jsonSafe(diagnosticsFor(run)), null, 2)}\n`,
+      `${JSON.stringify(diagnosticsFor(run), null, 2)}\n`,
       "application/json; charset=utf-8",
     ),
   ]);
