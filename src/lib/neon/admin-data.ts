@@ -521,6 +521,21 @@ export const materializeAdminCrmSegment = async function materializeAdminCrmSegm
   );
 };
 
+const createAdminAudienceFromSegmentServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { segmentId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.createAdminAudienceFromSegment(data, staff);
+  });
+
+export const createAdminAudienceFromSegment =
+  async function createAdminAudienceFromSegment(options: { data: { segmentId: string } }) {
+    return callStaffServerFn(async () =>
+      createAdminAudienceFromSegmentServer(await withStaffAuthHeaders(options)),
+    );
+  };
+
 const fetchAdminLeadsServer = createServerFn({ method: "GET" }).handler(async () => {
   const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");

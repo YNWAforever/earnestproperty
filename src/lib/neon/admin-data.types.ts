@@ -339,8 +339,16 @@ export type AdminAudienceInput = {
   filters: {
     intent?: string;
     source?: string;
-    estate?: string;
+    /** Multiple estate slugs are OR'd together. Renamed from the old singular
+     * `estate` so a segment's preferred_estates list translates without loss
+     * -- see createAudienceFromSegment. */
+    estates?: string[];
+    district_slug?: string;
     assigned_agent_id?: string;
+    budget_min?: number;
+    budget_max?: number;
+    last_activity_days?: number;
+    require_whatsapp_opt_in?: boolean;
   };
 };
 

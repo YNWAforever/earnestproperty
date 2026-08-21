@@ -133,6 +133,29 @@ export async function previewCrmSegment(input: {
   };
 }
 
+/** Resolves a saved segment's stored/parsed filters, for callers outside the
+ * segments feature that need to translate them (e.g. building a WhatsApp
+ * audience from a segment). */
+export async function getSegmentForAudience(
+  segmentId: string,
+): Promise<{ name: string; filters: CrmSegmentFilters } | null> {
+  const segments = await queryRows(
+    `SELECT name, natural_language_prompt, structured_filters
+     FROM crm_segments
+     WHERE id = $1
+     LIMIT 1`,
+    [segmentId],
+  );
+  const segment = segments[0];
+  if (!segment) return null;
+
+  const prompt = stringOrEmpty(segment.natural_language_prompt);
+  const filters = normalizeSegmentFilters(
+    parseStoredSegmentFilters(segment.structured_filters) ?? parseSegmentPromptToFilters(prompt),
+  );
+  return { name: stringOrEmpty(segment.name), filters };
+}
+
 export async function saveCrmSegment(input: {
   id?: string;
   name: string;
