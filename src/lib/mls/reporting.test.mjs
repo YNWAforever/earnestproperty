@@ -1,10 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { pruneArtifacts, toCsvCell, writeRunArtifacts } from "./reporting.mjs";
+import {
+  buildRunArtifactObjects,
+  pruneArtifacts,
+  toCsvCell,
+  writeRunArtifacts,
+} from "./reporting.mjs";
 
 async function makeTemporaryArtifactRoot() {
   return mkdtemp(path.join(os.tmpdir(), "earnest-mls-report-"));
@@ -19,7 +31,11 @@ function reportFixture() {
     evaluation: {
       sourceStatus: {
         old_site: { healthy: true, reasons: [], counts: { sale: 1, rent: 0 } },
-        "28hse_agent_540": { healthy: true, reasons: [], counts: { sale: 1, rent: 0 } },
+        "28hse_agent_540": {
+          healthy: true,
+          reasons: [],
+          counts: { sale: 1, rent: 0 },
+        },
       },
       baselines: { old_site: { sale: 1 }, "28hse_agent_540": { sale: 1 } },
     },
@@ -64,13 +80,18 @@ function reportFixture() {
           features: ["Balcony"],
           description: "<html>private description</html>",
         },
-        rawFields: { view_count: "123", mortgage: "secret-token", school: "raw" },
+        rawFields: {
+          view_count: "123",
+          mortgage: "secret-token",
+          school: "raw",
+        },
         mediaCandidates: [],
         sourceUpdatedAt: "2026-08-17T01:00:00.000Z",
         validationState: "valid",
         quarantineReasons: [],
         contentHash: "a".repeat(64),
-        sourceUrl: "https://www.earnestproperty.com/property-detail/old-1?token=test-token",
+        sourceUrl:
+          "https://www.earnestproperty.com/property-detail/old-1?token=test-token",
       },
     ],
     quarantines: [{ code: "diagnostic", reason: "none" }],
@@ -110,7 +131,8 @@ function reportFixture() {
     ],
     diagnostics: [
       {
-        sourceUrl: "https://www.earnestproperty.com/robots.txt?api_key=secret-token",
+        sourceUrl:
+          "https://www.earnestproperty.com/robots.txt?api_key=secret-token",
         responseStatus: 200,
         attempts: 1,
         templateFingerprint: "fingerprint-1",
@@ -128,9 +150,20 @@ function reportFixture() {
 
 async function retentionFixture() {
   const root = await makeTemporaryArtifactRoot();
-  const oldRun = path.join(root, "2026-05-01", "00000000-0000-4000-8000-000000000001");
-  const recentRun = path.join(root, "2026-08-01", "00000000-0000-4000-8000-000000000002");
-  const outsideSentinel = path.join(path.dirname(root), "earnest-mls-outside-sentinel");
+  const oldRun = path.join(
+    root,
+    "2026-05-01",
+    "00000000-0000-4000-8000-000000000001",
+  );
+  const recentRun = path.join(
+    root,
+    "2026-08-01",
+    "00000000-0000-4000-8000-000000000002",
+  );
+  const outsideSentinel = path.join(
+    path.dirname(root),
+    "earnest-mls-outside-sentinel",
+  );
   await mkdir(oldRun, { recursive: true });
   await mkdir(recentRun, { recursive: true });
   await writeFile(path.join(oldRun, "report.json"), "{}\n");
@@ -152,8 +185,14 @@ test("report artifacts contain provenance and decisions but no raw HTML or secre
       csv,
       /source,external_id,deal_type,property_no,match_key,canonical_property_id,decision/,
     );
-    assert.match(observationsCsv, /title_zh,title_en,estate_slug,district_slug,address,price,rent/);
-    assert.doesNotMatch(observationsCsv, /view_count|mortgage|school|transport|editorial/i);
+    assert.match(
+      observationsCsv,
+      /title_zh,title_en,estate_slug,district_slug,address,price,rent/,
+    );
+    assert.doesNotMatch(
+      observationsCsv,
+      /view_count|mortgage|school|transport|editorial/i,
+    );
     assert.doesNotMatch(
       csv + "\n" + observationsCsv,
       /test-token|secret-token|private description|<html/i,
@@ -168,6 +207,31 @@ test("report artifacts contain provenance and decisions but no raw HTML or secre
   }
 });
 
+test("artifact serialization is deterministic and independent of storage", () => {
+  const objects = buildRunArtifactObjects(reportFixture());
+  assert.deepEqual(
+    objects.map(({ name, contentType }) => [name, contentType]),
+    [
+      ["report.json", "application/json; charset=utf-8"],
+      ["listings.csv", "text/csv; charset=utf-8"],
+      ["observations.csv", "text/csv; charset=utf-8"],
+      ["diagnostics.json", "application/json; charset=utf-8"],
+    ],
+  );
+  assert.ok(Object.isFrozen(objects));
+  assert.ok(objects.every(Object.isFrozen));
+  assert.ok(
+    objects.every(
+      (object) => object.byteLength === Buffer.byteLength(object.body),
+    ),
+  );
+  assert.ok(objects.every((object) => /^[0-9a-f]{64}$/.test(object.sha256)));
+  assert.doesNotMatch(
+    objects.map((object) => object.body).join("\n"),
+    /secret-token|<html>/i,
+  );
+});
+
 test("retention removes only old run directories beneath the configured root", async () => {
   const fixture = await retentionFixture();
   try {
@@ -177,7 +241,9 @@ test("retention removes only old run directories beneath the configured root", a
       retentionDays: 90,
     });
     assert.deepEqual(result.removed, [fixture.oldRun]);
-    await assert.doesNotReject(() => readFile(path.join(fixture.recentRun, "report.json")));
+    await assert.doesNotReject(() =>
+      readFile(path.join(fixture.recentRun, "report.json")),
+    );
     await assert.doesNotReject(() => readFile(fixture.outsideSentinel));
   } finally {
     await rm(fixture.root, { recursive: true, force: true });
@@ -206,7 +272,10 @@ test("retention rejects broad roots, traversal, and symlinks", async () => {
 });
 
 test("sync CLI passes mode and environment flags through the lock and orchestrator", async () => {
-  const source = await readFile(new URL("../../../scripts/mls/sync.mjs", import.meta.url), "utf8");
+  const source = await readFile(
+    new URL("../../../scripts/mls/sync.mjs", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /--mode=shadow|mode/);
   assert.match(source, /MLS_PUBLISH_ENABLED/);
   assert.match(source, /MLS_MEDIA_RIGHTS_CONFIRMED/);
