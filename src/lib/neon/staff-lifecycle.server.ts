@@ -260,31 +260,37 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       [input.targetStaffId, input.actions],
     );
     const row = rows[0];
+    if (!row) return null;
+    // The Neon driver hands back timestamptz as Date objects, not strings --
+    // db.server.ts's dateOrNull tests `value instanceof Date` for exactly that
+    // reason, and the sibling readers (staff-identity-actions' timestampOrNull,
+    // admin-team's dateString) coerce rather than type-check. A `typeof
+    // created_at === "string"` guard here therefore rejected EVERY production
+    // row, so this returned null always: resend saw no prior action and threw
+    // 400 "Invitation is not available to resend." for members who had plainly
+    // been invited, and every cooldown computed from `persisted` silently
+    // never applied.
+    const date = (value: unknown) => {
+      if (value === null || value === undefined) return null;
+      const parsed = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
+    };
+    const createdAt = date(row.created_at);
     if (
-      !row ||
       typeof row.action !== "string" ||
       !input.actions.includes(row.action as IdentityActionType) ||
       typeof row.state !== "string" ||
       !["pending", "succeeded", "retryable_failure", "terminal_failure"].includes(row.state) ||
-      typeof row.created_at !== "string" ||
-      Number.isNaN(new Date(row.created_at).valueOf())
+      !createdAt
     ) {
       return null;
     }
-    const date = (value: unknown) => {
-      const parsed = new Date(String(value));
-      return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
-    };
     return {
       action: row.action as IdentityActionType,
       state: row.state as IdentityActionState,
-      createdAt: new Date(row.created_at).toISOString(),
-      retryAfter:
-        row.retry_after === null || row.retry_after === undefined ? null : date(row.retry_after),
-      providerExpiresAt:
-        row.provider_expires_at === null || row.provider_expires_at === undefined
-          ? null
-          : date(row.provider_expires_at),
+      createdAt,
+      retryAfter: date(row.retry_after),
+      providerExpiresAt: date(row.provider_expires_at),
     };
   }
 

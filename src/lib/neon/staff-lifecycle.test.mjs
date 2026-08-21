@@ -736,6 +736,37 @@ test("a legacy terminal invitation failure no longer bricks the member permanent
   assert.equal(result.accepted, true);
 });
 
+test("timestamp columns returned as Date objects still resolve the latest action", async () => {
+  // The Neon driver returns timestamptz as Date objects, not strings -- which
+  // is why db.server.ts's dateOrNull tests `value instanceof Date`, and why the
+  // sibling helpers (staff-identity-actions' timestampOrNull, admin-team's
+  // dateString) all coerce with new Date(String(value)). latestActionFor was
+  // the one place demanding `typeof row.created_at === "string"`, so in
+  // production it returned null for EVERY row. resend then saw no prior action
+  // at all and threw 400 "Invitation is not available to resend."
+  // (這項團隊操作未能執行) for a member who plainly had been invited.
+  const { service, staff, latestActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "kevinfong@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "retryable_failure",
+      created_at: new Date("2026-08-15T00:00:00.000Z"),
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+
+  const result = await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+});
+
 test("invitations are recorded locally without any provider HTTP call", async () => {
   // No server-side credential exists for /organization/invite-member (Neon
   // docs: cookie-session only), and even an authenticated call only emails if
