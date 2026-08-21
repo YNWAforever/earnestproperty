@@ -8,6 +8,9 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const OUTCOME_PATTERN = /^[a-z][a-z0-9_]{0,79}$/;
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MANUAL_ATTEMPT_SUFFIX_PATTERN = /^[a-z0-9][a-z0-9-]{7,63}$/;
 
 const CONTEXT_KEYS = [
   "environment",
@@ -120,6 +123,27 @@ function requireOutcome(value, label) {
   return value;
 }
 
+function requireCanonicalUuid(value, label) {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    throw new TypeError(`${label} is invalid`);
+  }
+  return value;
+}
+
+function requireAttemptId({ environment, hkDate, attemptId }) {
+  const scheduledAttemptId = `scheduled:${environment}:${hkDate}`;
+  const manualAttemptPrefix = `${scheduledAttemptId}:manual:`;
+  const manualSuffix = attemptId.slice(manualAttemptPrefix.length);
+  if (
+    attemptId !== scheduledAttemptId &&
+    (!attemptId.startsWith(manualAttemptPrefix) ||
+      !MANUAL_ATTEMPT_SUFFIX_PATTERN.test(manualSuffix))
+  ) {
+    throw new TypeError("attemptId is invalid");
+  }
+  return attemptId;
+}
+
 function requireTimestamp(value, label) {
   if (typeof value !== "string" || !TIMESTAMP_PATTERN.test(value)) {
     throw new TypeError(`${label} is invalid`);
@@ -141,8 +165,9 @@ function captureContext(context) {
     throw new TypeError("environment is invalid");
   }
   if (!isValidDate(captured.hkDate)) throw new TypeError("HK date is invalid");
-  safeSegment(captured.attemptId, "attemptId");
-  requireOutcome(captured.mode, "mode");
+  requireAttemptId(captured);
+  if (!/^(shadow|publish)$/.test(captured.mode))
+    throw new TypeError("mode is invalid");
   if (
     typeof captured.commitSha !== "string" ||
     !SHA_PATTERN.test(captured.commitSha)
@@ -207,21 +232,20 @@ export function buildEvidencePrefix(value) {
     throw new TypeError("environment is invalid");
   }
   if (!isValidDate(captured.hkDate)) throw new TypeError("HK date is invalid");
+  requireAttemptId(captured);
   return [
     "mls-sync",
     captured.environment,
     captured.hkDate,
-    safeSegment(captured.runId, "runId"),
+    requireCanonicalUuid(captured.runId, "runId"),
     safeSegment(captured.attemptId, "attemptId"),
   ].join("/");
 }
 
-export function createR2S3ObjectStore({
-  accountId,
-  bucket,
-  accessKeyId,
-  secretAccessKey,
-}) {
+export function createR2S3ObjectStore(
+  { accountId, bucket, accessKeyId, secretAccessKey },
+  { createClient = (config) => new S3Client(config) } = {},
+) {
   for (const [name, value] of Object.entries({
     accountId,
     bucket,
@@ -234,11 +258,15 @@ export function createR2S3ObjectStore({
   if (!SAFE_SEGMENT.test(accountId) || accountId.includes("..")) {
     throw new TypeError("accountId is invalid");
   }
-  const client = new S3Client({
+  if (typeof createClient !== "function")
+    throw new TypeError("createClient is invalid");
+  const client = createClient({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId, secretAccessKey },
   });
+  if (!client || typeof client.send !== "function")
+    throw new TypeError("S3 client is invalid");
   return Object.freeze({
     async putIfAbsent({ key, body, contentType, metadata }) {
       if (
@@ -335,9 +363,14 @@ export function createR2Reporter({ objectStore, context }) {
         throw new TypeError("durationMs is invalid");
       }
       if (
-        terminal.neonRunId !== null &&
-        (typeof terminal.neonRunId !== "string" ||
-          !SAFE_SEGMENT.test(terminal.neonRunId))
+        terminal.durationMs !==
+        Date.parse(completedAt) - Date.parse(startedAt)
+      ) {
+        throw new TypeError("durationMs is invalid");
+      }
+      if (
+        typeof terminal.neonRunId !== "string" ||
+        !UUID_PATTERN.test(terminal.neonRunId)
       ) {
         throw new TypeError("neonRunId is invalid");
       }

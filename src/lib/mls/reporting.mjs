@@ -85,7 +85,9 @@ const DIAGNOSTIC_KEYS = [
 ];
 
 const SECRET_PATTERN =
-  /\b(?:authorization|api[_-]?key|password|secret|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi;
+  /\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi;
+const AUTHORIZATION_CREDENTIAL_PATTERN =
+  /\bauthorization\s*[:=]\s*(?:(?:bearer|basic)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
 const CONNECTION_PATTERN =
   /\b(?:postgres(?:ql)?|mysql|mongodb):\/\/[^\s"'<>]+/gi;
 
@@ -97,6 +99,7 @@ function safeErrorText(value) {
     )
     .replace(/<[^>]*>/g, "[redacted_html]")
     .replace(CONNECTION_PATTERN, "[redacted_connection]")
+    .replace(AUTHORIZATION_CREDENTIAL_PATTERN, "Authorization=[redacted]")
     .replace(SECRET_PATTERN, (match) => `${match.split(/[:=]/)[0]}=[redacted]`)
     .replace(/[\r\n\t]+/g, " ")
     .slice(0, 240);

@@ -232,6 +232,39 @@ test("artifact serialization is deterministic and independent of storage", () =>
   );
 });
 
+test("report serialization redacts complete Authorization credentials in summary and diagnostic details", () => {
+  const run = reportFixture();
+  run.failureSummary =
+    "sync failed: Authorization: Bearer secret-token; retry remains safe";
+  run.evaluation.sourceStatus.old_site.failures = [
+    {
+      code: "upstream_failed",
+      detail:
+        "remote failed: Authorization: Basic dXNlcjpzZWNyZXQ=; preserve this prose",
+    },
+  ];
+  const objects = buildRunArtifactObjects(run);
+  const report = JSON.parse(
+    objects.find(({ name }) => name === "report.json").body,
+  );
+  const diagnostics = JSON.parse(
+    objects.find(({ name }) => name === "diagnostics.json").body,
+  );
+
+  assert.equal(
+    report.failureSummary,
+    "sync failed: Authorization=[redacted]; retry remains safe",
+  );
+  assert.equal(
+    diagnostics.at(-1).detail,
+    "remote failed: Authorization=[redacted]; preserve this prose",
+  );
+  assert.doesNotMatch(
+    JSON.stringify({ report, diagnostics }),
+    /secret-token|dXNlcjpzZWNyZXQ=/i,
+  );
+});
+
 test("retention removes only old run directories beneath the configured root", async () => {
   const fixture = await retentionFixture();
   try {

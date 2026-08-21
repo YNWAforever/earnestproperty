@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { S3Client } from "@aws-sdk/client-s3";
 
-import { buildEvidencePrefix, createR2Reporter } from "./r2-reporting.mjs";
+import {
+  buildEvidencePrefix,
+  createR2Reporter,
+  createR2S3ObjectStore,
+} from "./r2-reporting.mjs";
 
 const context = Object.freeze({
   environment: "production",
@@ -37,7 +42,7 @@ function terminalInput(artifactObjects, overrides = {}) {
     startedAt: "2026-08-21T02:00:00.000Z",
     completedAt: "2026-08-21T02:30:00.000Z",
     durationMs: 1_800_000,
-    neonRunId: "neon-run-1",
+    neonRunId: "00000000-0000-4000-8000-000000000002",
     artifactObjects,
     ...overrides,
   };
@@ -91,6 +96,125 @@ test("buildEvidencePrefix permits one valid safe prefix and rejects malformed se
   );
 });
 
+test("R2 provenance accepts only Task1 modes, attempts, and canonical UUID identities", async () => {
+  const objectStore = memoryObjectStore();
+  assert.throws(
+    () =>
+      createR2Reporter({
+        objectStore,
+        context: { ...context, mode: "emergency" },
+      }),
+    /mode/i,
+  );
+  assert.throws(
+    () =>
+      createR2Reporter({
+        objectStore,
+        context: { ...context, attemptId: "scheduled:preview:2026-08-21" },
+      }),
+    /attemptId/i,
+  );
+  assert.throws(
+    () =>
+      buildEvidencePrefix({
+        ...context,
+        runId: runFixture().runId,
+        attemptId: "scheduled-production-2026-08-21",
+      }),
+    /attemptId/i,
+  );
+  assert.throws(
+    () => buildEvidencePrefix({ ...context, runId: "run-1" }),
+    /runId/i,
+  );
+
+  const mutableContext = { ...context };
+  const reporter = createR2Reporter({ objectStore, context: mutableContext });
+  mutableContext.mode = "publish";
+  mutableContext.attemptId =
+    "scheduled:production:2026-08-21:manual:operator-1234567";
+  const artifacts = await reporter.writeRunArtifacts(runFixture());
+  assert.match(artifacts.prefix, /\/scheduled-production-2026-08-21$/);
+
+  await assert.rejects(
+    () =>
+      reporter.finalizeTerminal(
+        terminalInput(artifacts.objects, { neonRunId: null }),
+      ),
+    /neonRunId/i,
+  );
+  assert.equal(objectStore.writes.length, 4);
+
+  const accessorContext = { ...context };
+  Object.defineProperty(accessorContext, "attemptId", {
+    enumerable: true,
+    get() {
+      throw new Error("attempt accessor must not run");
+    },
+  });
+  assert.throws(
+    () => createR2Reporter({ objectStore, context: accessorContext }),
+    /plain|data/i,
+  );
+});
+
+test("R2 S3 adapter configures one immutable conditional UTF-8 PutObject without network access", async () => {
+  const accountId = "a".repeat(32);
+  const credentials = {
+    accessKeyId: "access-key",
+    secretAccessKey: "secret-key",
+  };
+  let factoryConfig;
+  let sentCommand;
+  let fallbackCommand;
+  const originalSend = S3Client.prototype.send;
+  S3Client.prototype.send = async function sendWithoutNetwork(command) {
+    fallbackCommand = command;
+  };
+  try {
+    const objectStore = createR2S3ObjectStore(
+      { accountId, bucket: "mls-evidence", ...credentials },
+      {
+        createClient(config) {
+          factoryConfig = config;
+          return {
+            async send(command) {
+              sentCommand = command;
+            },
+          };
+        },
+      },
+    );
+    const metadata = { sha256: "a".repeat(64) };
+    await objectStore.putIfAbsent({
+      key: "mls-sync/production/2026-08-21/run/report.json",
+      body: "測試",
+      contentType: "application/json; charset=utf-8",
+      metadata,
+    });
+
+    assert.deepEqual(factoryConfig, {
+      region: "auto",
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials,
+    });
+    assert.deepEqual(sentCommand.input, {
+      Bucket: "mls-evidence",
+      Key: "mls-sync/production/2026-08-21/run/report.json",
+      Body: "測試",
+      ContentLength: Buffer.byteLength("測試"),
+      ContentType: "application/json; charset=utf-8",
+      Metadata: metadata,
+      IfNoneMatch: "*",
+    });
+    assert.equal(fallbackCommand, undefined);
+    assert.deepEqual(Object.keys(objectStore), ["putIfAbsent"]);
+    assert.equal(typeof objectStore.delete, "undefined");
+  } finally {
+    S3Client.prototype.send = originalSend;
+  }
+});
+
 test("writeRunArtifacts writes exactly four immutable artifacts and no manifest", async () => {
   const objectStore = memoryObjectStore();
   const reporter = createR2Reporter({ objectStore, context });
@@ -136,7 +260,7 @@ test("finalizeTerminal writes one complete manifest after all artifact objects",
   assert.equal(manifest.containerDeploymentId, context.containerDeploymentId);
   assert.equal(manifest.workflowInstanceId, context.workflowInstanceId);
   assert.equal(manifest.containerId, context.containerId);
-  assert.equal(manifest.neonRunId, "neon-run-1");
+  assert.equal(manifest.neonRunId, "00000000-0000-4000-8000-000000000002");
   assert.equal(manifest.terminalClassification, "shadow_healthy");
   assert.equal(manifest.exitCode, 0);
 });
@@ -194,6 +318,24 @@ test("finalizeTerminal requires the complete successful artifact metadata for it
     /artifact/i,
   );
   assert.equal(objectStore.writes.length, 0);
+});
+
+test("finalizeTerminal rejects a duration that contradicts its timestamps before writing a manifest", async () => {
+  const objectStore = memoryObjectStore();
+  const reporter = createR2Reporter({ objectStore, context });
+  const artifacts = await reporter.writeRunArtifacts(runFixture());
+
+  await assert.rejects(
+    () =>
+      reporter.finalizeTerminal(
+        terminalInput(artifacts.objects, { durationMs: 1 }),
+      ),
+    /durationMs/i,
+  );
+  assert.equal(objectStore.writes.length, 4);
+  assert.ok(
+    objectStore.writes.every((write) => !write.key.endsWith("manifest.json")),
+  );
 });
 
 test("finalizeTerminal rejects missing, malformed, accessor, and extra terminal fields before writing", async () => {
