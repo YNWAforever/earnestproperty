@@ -1,0 +1,36 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "earnest-mls-container",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-21",
+  "workers_dev": false,
+  "preview_urls": false,
+  "containers": [
+    {
+      "class_name": "MlsRunContainer",
+      "image": "./Dockerfile",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "MLS_RUN_CONTAINER", "class_name": "MlsRunContainer" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MlsRunContainer"] }],
+  "workflows": [
+    {
+      "name": "earnest-mls-runner",
+      "binding": "MLS_RUN_WORKFLOW",
+      "class_name": "MlsRunWorkflow"
+    }
+  ],
+  "vars": {
+    "MLS_ENVIRONMENT": "production",
+    "MLS_SCHEDULED_MODE": "shadow",
+    "MLS_PUBLISH_ENABLED": "false",
+    "MLS_MEDIA_RIGHTS_CONFIRMED": "false",
+    "MLS_EVIDENCE_RETENTION_DAYS": "90"
+  }
+}

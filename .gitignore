@@ -44,3 +44,5 @@ supabase/.temp/
 # resized web assets under public/ belong in history.
 docs/client-feedback/
 artifacts/mls-sync/
+workers/mls-container/.dev.vars
+workers/mls-container/.wrangler/

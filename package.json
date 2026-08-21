@@ -3,6 +3,16 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "prettier": {
+    "overrides": [
+      {
+        "files": "workers/mls-container/*.jsonc",
+        "options": {
+          "trailingComma": "none"
+        }
+      }
+    ]
+  },
   "scripts": {
     "dev": "vite dev",
     "prebuild": "node scripts/check-required-env.mjs",
@@ -41,9 +51,13 @@
     "mls:shadow": "node scripts/mls/sync.mjs --mode=shadow",
     "mls:sync": "node scripts/mls/sync.mjs --mode=publish",
     "mls:approve-baseline": "node scripts/mls/approve-baseline.mjs",
-    "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2"
+    "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2",
+    "test:mls:cloudflare": "bun test workers/mls-container/src/*.test.ts && node --test workers/mls-container/container/*.test.mjs src/lib/mls/r2-reporting.test.mjs scripts/mls/sync.test.mjs",
+    "check:mls:cloudflare": "tsc --noEmit -p workers/mls-container/tsconfig.json && wrangler deploy --dry-run --config workers/mls-container/wrangler.jsonc"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1115.0",
+    "@cloudflare/containers": "0.3.7",
     "@cloudflare/vite-plugin": "^1.25.5",
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/auth-ui": "^0.2.1-beta",
@@ -106,6 +120,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260820.1",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^1.4.0",
     "@types/bun": "^1.3.14",
@@ -122,6 +137,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "wrangler": "4.125.0"
   }
 }
