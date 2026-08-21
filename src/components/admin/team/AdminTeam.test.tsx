@@ -81,7 +81,7 @@ describe("Admin Team responsive directory", () => {
       ),
     );
 
-    for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "已發送"]) {
+    for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "已邀請"]) {
       expect(table.text()).toContain(value);
       expect(card.text()).toContain(value);
     }
@@ -99,7 +99,7 @@ describe("Admin Team responsive directory", () => {
     );
 
     expect($.text()).toContain("已啟用");
-    expect($.text()).toContain("發送失敗");
+    expect($.text()).toContain("邀請失敗");
     expect($.text()).toContain("需要跟進");
   });
 });
@@ -121,7 +121,7 @@ describe("Admin Team role-aware detail and confirmations", () => {
       }),
     );
 
-    for (const label of ["重新發送邀請", "變更角色", "停用帳戶", "發送密碼重設連結"]) {
+    for (const label of ["更新邀請", "變更角色", "停用帳戶", "發送密碼重設連結"]) {
       expect(admin.text()).toContain(label);
       expect(manager.text()).not.toContain(label);
     }
@@ -217,7 +217,7 @@ describe("Admin Team request safety", () => {
 
   test("failed invitations and cooldowns stay in their dialog with safe recovery text", () => {
     expect(teamMutationFailure({ invitationState: "failed", requestId: "request-1" })).toContain(
-      "邀請未能發送",
+      "邀請未能建立",
     );
     expect(
       teamMutationFailure({

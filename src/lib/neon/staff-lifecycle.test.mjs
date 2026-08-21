@@ -477,7 +477,10 @@ test("password reset ignores a stored cooldown once its retryAfter has actually 
   const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
 
   assert.equal(result.accepted, true);
-  assert.equal(calls.provider.some((call) => call.method === "reset"), true);
+  assert.equal(
+    calls.provider.some((call) => call.method === "reset"),
+    true,
+  );
 });
 
 test("password reset returns a serializable self-target denial before any store or provider call", async () => {
@@ -489,11 +492,7 @@ test("password reset returns a serializable self-target denial before any store 
     active: true,
   });
 
-  const result = await service.sendStaffPasswordReset(
-    { staffId: admin.staffId },
-    admin,
-    request,
-  );
+  const result = await service.sendStaffPasswordReset({ staffId: admin.staffId }, admin, request);
 
   assert.deepEqual(result, {
     accepted: false,
@@ -674,6 +673,87 @@ test("default lifecycle dependencies defer unrelated admin and audit modules", a
   assert.equal(typeof dependencies.updateStaffRoles, "function");
   assert.equal(typeof dependencies.setStaffActive, "function");
   assert.equal(typeof dependencies.writeAudit, "function");
+});
+
+test("session revocation deletes neon_auth.session rows instead of calling the provider's admin API", async () => {
+  // POST /admin/revoke-user-sessions requires a browser session cookie this
+  // server can never hold (Neon's docs state admin ops are cookie-session
+  // only; every forwarded credential was rejected 401 live). The endpoint's
+  // entire server-side effect is internalAdapter.deleteSessions(userId) -- a
+  // delete on the same neon_auth.session table this database holds -- so the
+  // direct delete is equivalent, and strictly better than the always-401 call.
+  assert.equal(typeof lifecycleModule.createNeonAuthSessionRevoker, "function");
+
+  const queries = [];
+  const revoke = lifecycleModule.createNeonAuthSessionRevoker(async (statement, params) => {
+    queries.push({ statement, params });
+    return [];
+  });
+
+  await revoke({ userId: "auth-target", request: new Request("https://earnest.test/x") });
+
+  assert.match(queries[0].statement, /DELETE FROM neon_auth\.session/);
+  assert.match(queries[0].statement, /"userId" = \$1/);
+  assert.deepEqual(queries[0].params, ["auth-target"]);
+
+  const broken = lifecycleModule.createNeonAuthSessionRevoker(async () => {
+    throw new Error("raw database details must not escape");
+  });
+  await assert.rejects(
+    () => broken({ userId: "auth-any", request: new Request("https://earnest.test/x") }),
+    (error) => error.code === "PROVIDER_UNAVAILABLE" && !/raw database/.test(error.message),
+  );
+});
+
+test("a legacy terminal invitation failure no longer bricks the member permanently", async () => {
+  // Production evidence: Neon Auth's organization plugin is disabled on this
+  // instance, so POST /organization/invite-member answered 404 ->
+  // PROVIDER_INVITATION_NOT_FOUND -> markIdentityActionTerminal. A terminal
+  // row then blocked BOTH paths with no escape hatch: resend threw
+  // 400 "Invitation is not available to resend." (surfaced as 這項團隊操作未能執行)
+  // and re-inviting hit the same idempotency key and returned "failed"
+  // forever. Invitations are recorded locally now, so no provider can declare
+  // one permanently gone -- the terminal guard only poisons legacy rows.
+  const { service, staff, latestActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "kevinfong@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "terminal_failure",
+      created_at: "2026-08-20T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+
+  const result = await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+});
+
+test("invitations are recorded locally without any provider HTTP call", async () => {
+  // No server-side credential exists for /organization/invite-member (Neon
+  // docs: cookie-session only), and even an authenticated call only emails if
+  // the hosted service configured sendInvitationEmail. Access never depended
+  // on the provider invitation anyway: the staff row is committed before the
+  // provider call, and auth.server.ts binds the account by verified email at
+  // first sign-up. Invitations are therefore recorded locally; the UI tells
+  // the admin to share the sign-up link.
+  assert.equal(typeof lifecycleModule.createLocalStaffInvitation, "function");
+
+  const invite = lifecycleModule.createLocalStaffInvitation();
+  const result = await invite({
+    email: "new@example.test",
+    organizationId: "",
+    request: new Request("https://earnest.test/x"),
+  });
+
+  assert.deepEqual(result, { state: "sent", expiresAt: null });
 });
 
 test("identity resolution reads neon_auth.user locally instead of calling the provider's admin API", async () => {

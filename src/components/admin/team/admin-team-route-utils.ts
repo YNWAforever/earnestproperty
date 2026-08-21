@@ -95,7 +95,7 @@ export function teamMutationFailure(value: unknown): string | null {
     (value as { invitationState?: unknown }).invitationState === "failed"
   ) {
     const requestId = (value as { requestId?: unknown }).requestId;
-    return `邀請未能發送，請稍後再試。${typeof requestId === "string" ? `參考編號：${requestId}` : ""}`;
+    return `邀請未能建立，請稍後再試。${typeof requestId === "string" ? `參考編號：${requestId}` : ""}`;
   }
   if (
     value &&
