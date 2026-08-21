@@ -413,11 +413,13 @@ export function createSupervisor({
       completedAt = validExactTimestamp(state.heartbeatAt)
         ? state.heartbeatAt
         : state.startedAt;
-      terminalPatch = {
-        ...patch,
-        state: "unknown",
-        failureCode: "supervisor_clock_failed",
-      };
+      if (patch.failureCode === null) {
+        terminalPatch = {
+          ...patch,
+          state: "unknown",
+          failureCode: "supervisor_clock_failed",
+        };
+      }
     }
     const nextState = {
       ...state,

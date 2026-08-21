@@ -423,6 +423,38 @@ test("keeps a timeout latched through child error until exit and terminal IPC", 
   assert.equal(terminal.manifestPresent, true);
 });
 
+test("preserves a timeout when its completion clock is invalid", async () => {
+  const child = new FakeChild();
+  const timers = idleTimers();
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date(Number.NaN)];
+  const supervisor = createSupervisor({
+    spawnChild: () => child,
+    readTerminalStatus: async () =>
+      terminalRecord({
+        status: "failed",
+        exitCode: 143,
+        failureCode: "process_interrupted",
+      }),
+    now: () => times.shift(),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+  await supervisor.start(envelope());
+  timers.runDelay(4 * 60 * 60 * 1_000);
+  child.emit("exit", 143, "SIGTERM");
+  const terminal = await supervisor.waitForTerminal();
+  assert.equal(terminal.state, "failed");
+  assert.equal(terminal.failureCode, "run_timeout");
+  assert.equal(terminal.completedAt, "2026-08-21T02:30:00.000Z");
+  assert.equal(terminal.exitCode, 143);
+  assert.equal(Object.isFrozen(terminal), true);
+  assert.equal(timers.callbacks.size, 0);
+});
+
 test("keeps a supervisor clock failure latched through child error until exit", async () => {
   const child = new FakeChild();
   const timers = idleTimers();
@@ -536,6 +568,32 @@ test("normalizes synchronous spawn throws and asynchronous spawn rejection", asy
     assert.equal(status.failureCode, "child_start_failed");
     assert.equal(timers.callbacks.size, 0);
   }
+});
+
+test("preserves child start failure when its completion clock is invalid", async () => {
+  const timers = idleTimers();
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date(Number.NaN)];
+  const supervisor = createSupervisor({
+    spawnChild() {
+      throw new Error("spawn failed with credential=secret");
+    },
+    readTerminalStatus: async () => terminalRecord(),
+    now: () => times.shift(),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+  const terminal = await supervisor.start(envelope());
+  assert.equal(terminal.state, "unknown");
+  assert.equal(terminal.failureCode, "child_start_failed");
+  assert.equal(terminal.completedAt, "2026-08-21T02:30:00.000Z");
+  assert.equal(terminal.exitCode, null);
+  assert.equal(Object.isFrozen(terminal), true);
+  assert.deepEqual(await supervisor.waitForTerminal(), terminal);
+  assert.equal(timers.callbacks.size, 0);
 });
 
 function terminalHarness(readTerminalStatus) {
