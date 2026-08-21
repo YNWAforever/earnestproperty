@@ -71,14 +71,20 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
   const value = input as EnvelopeInput;
   const scheduled = requireDate(new Date(value.scheduledTime));
   const hkDate = hongKongDate(scheduled);
-  if (!/^(preview|production)$/.test(value.environment)) {
+  const environment = value.environment;
+  if (
+    typeof environment !== "string" ||
+    !/^(preview|production)$/.test(environment)
+  ) {
     throw new TypeError("run environment is invalid");
   }
-  if (!/^(shadow|publish)$/.test(value.mode))
+  const mode = value.mode;
+  if (typeof mode !== "string" || !/^(shadow|publish)$/.test(mode))
     throw new TypeError("run mode is invalid");
-  if (!SHA_PATTERN.test(value.commitSha))
+  const commitSha = value.commitSha;
+  if (typeof commitSha !== "string" || !SHA_PATTERN.test(commitSha))
     throw new TypeError("commit SHA is invalid");
-  let attemptId = scheduledAttemptId(value.environment, hkDate);
+  let attemptId = scheduledAttemptId(environment, hkDate);
   let manualReason: string | null = null;
   if (value.kind === "manual") {
     manualReason =
@@ -86,22 +92,26 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
     if (manualReason.length < 8 || manualReason.length > 240) {
       throw new TypeError("manual reason is invalid");
     }
-    if (!SAFE_SUFFIX_PATTERN.test(value.manualSuffix ?? "")) {
+    const manualSuffix = value.manualSuffix;
+    if (
+      typeof manualSuffix !== "string" ||
+      !SAFE_SUFFIX_PATTERN.test(manualSuffix)
+    ) {
       throw new TypeError("manual suffix is invalid");
     }
-    attemptId = `${attemptId}:manual:${value.manualSuffix}`;
+    attemptId = `${attemptId}:manual:${manualSuffix}`;
   } else if (value.kind !== "scheduled") {
     throw new TypeError("run kind is invalid");
   }
   return Object.freeze({
-    environment: value.environment,
+    environment,
     hkDate,
     attemptId,
     kind: value.kind,
-    mode: value.mode,
+    mode,
     scheduledTime: scheduled.toISOString(),
     manualReason,
-    commitSha: value.commitSha,
+    commitSha,
   });
 }
 

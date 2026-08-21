@@ -36,6 +36,100 @@ describe("Cloudflare MLS run identity", () => {
     ).toThrow(/manual reason/i);
   });
 
+  test("rejects coercible non-string fields without invoking toString", () => {
+    let toStringCalls = 0;
+    const coercible = (literal: string) => ({
+      toString() {
+        toStringCalls += 1;
+        return literal;
+      },
+    });
+    const base = {
+      environment: "production",
+      scheduledTime: "2026-08-20T18:00:00.000Z",
+      kind: "scheduled",
+      mode: "shadow",
+      commitSha: "a".repeat(40),
+    };
+
+    expect(() =>
+      buildRunEnvelope({ ...base, environment: coercible("production") }),
+    ).toThrow(/environment/i);
+    expect(() =>
+      buildRunEnvelope({ ...base, mode: coercible("shadow") }),
+    ).toThrow(/mode/i);
+    expect(() =>
+      buildRunEnvelope({ ...base, commitSha: coercible("a".repeat(40)) }),
+    ).toThrow(/commit SHA/i);
+    expect(() =>
+      buildRunEnvelope({
+        ...base,
+        kind: "manual",
+        manualReason: "operator retry",
+        manualSuffix: coercible("retry-0001"),
+      }),
+    ).toThrow(/manual suffix/i);
+    expect(toStringCalls).toBe(0);
+  });
+
+  test("does not reread validated accessor values while composing a manual envelope", () => {
+    const reads = { environment: 0, mode: 0, commitSha: 0, manualSuffix: 0 };
+    const envelope = buildRunEnvelope({
+      get environment() {
+        reads.environment += 1;
+        return "production";
+      },
+      scheduledTime: "2026-08-20T18:00:00.000Z",
+      kind: "manual",
+      get mode() {
+        reads.mode += 1;
+        return "publish";
+      },
+      manualReason: "operator retry",
+      get manualSuffix() {
+        reads.manualSuffix += 1;
+        return "retry-0001";
+      },
+      get commitSha() {
+        reads.commitSha += 1;
+        return "c".repeat(40);
+      },
+    });
+
+    expect(envelope.attemptId).toBe(
+      "scheduled:production:2026-08-21:manual:retry-0001",
+    );
+    expect(reads).toEqual({
+      environment: 1,
+      mode: 1,
+      commitSha: 1,
+      manualSuffix: 1,
+    });
+  });
+
+  test("builds a manual envelope with a trimmed reason and composed attempt ID", () => {
+    expect(
+      buildRunEnvelope({
+        environment: "production",
+        scheduledTime: "2026-08-20T18:00:00.000Z",
+        kind: "manual",
+        mode: "publish",
+        manualReason: "  operator retry  ",
+        manualSuffix: "retry-0001",
+        commitSha: "b".repeat(40),
+      }),
+    ).toEqual({
+      environment: "production",
+      hkDate: "2026-08-21",
+      attemptId: "scheduled:production:2026-08-21:manual:retry-0001",
+      kind: "manual",
+      mode: "publish",
+      scheduledTime: "2026-08-20T18:00:00.000Z",
+      manualReason: "operator retry",
+      commitSha: "b".repeat(40),
+    });
+  });
+
   test("keeps terminal states immutable", () => {
     expect(transitionRunState("pending", "running")).toBe("running");
     expect(transitionRunState("running", "unknown")).toBe("unknown");
