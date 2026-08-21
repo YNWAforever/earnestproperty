@@ -52,7 +52,7 @@
     "mls:sync": "node scripts/mls/sync.mjs --mode=publish",
     "mls:approve-baseline": "node scripts/mls/approve-baseline.mjs",
     "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2",
-    "test:mls:cloudflare": "bun test workers/mls-container/src/*.test.ts && node --test workers/mls-container/container/*.test.mjs src/lib/mls/r2-reporting.test.mjs scripts/mls/sync.test.mjs",
+    "test:mls:cloudflare": "bun test workers/mls-container/src/run-contract.test.ts workers/mls-container/src/container.test.ts workers/mls-container/src/workflow.test.ts && node --test workers/mls-container/container/*.test.mjs src/lib/mls/r2-reporting.test.mjs scripts/mls/sync.test.mjs",
     "check:mls:cloudflare": "tsc --noEmit -p workers/mls-container/tsconfig.json && wrangler deploy --dry-run --config workers/mls-container/wrangler.jsonc"
   },
   "dependencies": {
