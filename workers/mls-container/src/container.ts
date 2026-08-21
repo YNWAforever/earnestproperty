@@ -535,7 +535,13 @@ async function stopAfterPersistence(container: ContainerPort): Promise<void> {
 }
 
 export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
-  const inFlight = new Map<string, Promise<AttemptRecord>>();
+  const inFlight = new Map<
+    string,
+    {
+      input: Readonly<ClaimAndStartInput>;
+      claim: Promise<AttemptRecord>;
+    }
+  >();
 
   async function readMatchingRecord(
     key: string,
@@ -544,10 +550,7 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
     const stored = await options.store.get(key);
     if (stored === undefined) return undefined;
     const record = captureAttemptRecord(stored);
-    if (
-      !sameEnvelope(record.envelope, input.envelope) ||
-      record.workflowInstanceId !== input.workflowInstanceId
-    )
+    if (!sameEnvelope(record.envelope, input.envelope))
       invalid("attempt claim does not match existing record");
     return record;
   }
@@ -556,7 +559,11 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
     const capturedInput = captureInput(input);
     const key = `attempt:${capturedInput.envelope.attemptId}`;
     const active = inFlight.get(key);
-    if (active) return active;
+    if (active) {
+      if (!sameEnvelope(active.input.envelope, capturedInput.envelope))
+        invalid("attempt claim does not match existing record");
+      return active.claim;
+    }
 
     const claim = (async () => {
       const existing = await readMatchingRecord(key, capturedInput);
@@ -598,13 +605,13 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
       const current = await readMatchingRecord(key, capturedInput);
       return snapshotRecord(current ?? record);
     })();
-    inFlight.set(key, claim);
+    inFlight.set(key, { input: capturedInput, claim });
     void claim.then(
       () => {
-        if (inFlight.get(key) === claim) inFlight.delete(key);
+        if (inFlight.get(key)?.claim === claim) inFlight.delete(key);
       },
       () => {
-        if (inFlight.get(key) === claim) inFlight.delete(key);
+        if (inFlight.get(key)?.claim === claim) inFlight.delete(key);
       },
     );
     return claim;
@@ -719,6 +726,7 @@ const PASSED_ENVIRONMENT_KEYS: readonly PassedEnvironmentKey[] = [
   "MLS_R2_ACCESS_KEY_ID",
   "MLS_R2_SECRET_ACCESS_KEY",
 ];
+const ACTIVE_ATTEMPT_KEY = "active-attempt-id";
 
 export class MlsRunContainer extends Container<Env> {
   defaultPort = 8080;
@@ -727,6 +735,54 @@ export class MlsRunContainer extends Container<Env> {
 
   private coordinator?: ReturnType<typeof createAttemptCoordinator>;
   private activeAttemptId: string | null = null;
+
+  private async rememberActiveAttempt(
+    attemptId: string,
+    allowNew: boolean,
+  ): Promise<void> {
+    const capturedAttemptId = safeIdentifier(
+      attemptId,
+      "attempt id is invalid",
+    );
+    if (
+      this.activeAttemptId !== null &&
+      this.activeAttemptId !== capturedAttemptId
+    )
+      invalid("active attempt does not match existing pointer");
+    const stored = await this.ctx.storage.get(ACTIVE_ATTEMPT_KEY);
+    if (stored !== undefined) {
+      const storedAttemptId = safeIdentifier(
+        stored,
+        "active attempt pointer is invalid",
+      );
+      if (storedAttemptId !== capturedAttemptId)
+        invalid("active attempt does not match existing pointer");
+    } else if (!allowNew) {
+      const storedAttempt = await this.ctx.storage.get(
+        `attempt:${capturedAttemptId}`,
+      );
+      if (storedAttempt === undefined) invalid("attempt record not found");
+      const capturedStoredAttempt = captureAttemptRecord(storedAttempt);
+      if (capturedStoredAttempt.envelope.attemptId !== capturedAttemptId)
+        invalid("attempt record is invalid");
+      await this.ctx.storage.put(ACTIVE_ATTEMPT_KEY, capturedAttemptId);
+    } else {
+      await this.ctx.storage.put(ACTIVE_ATTEMPT_KEY, capturedAttemptId);
+    }
+    this.activeAttemptId = capturedAttemptId;
+  }
+
+  private async resolveActiveAttempt(): Promise<string | null> {
+    if (this.activeAttemptId !== null) return this.activeAttemptId;
+    const stored = await this.ctx.storage.get(ACTIVE_ATTEMPT_KEY);
+    if (stored === undefined) return null;
+    const capturedAttemptId = safeIdentifier(
+      stored,
+      "active attempt pointer is invalid",
+    );
+    this.activeAttemptId = capturedAttemptId;
+    return capturedAttemptId;
+  }
 
   private environmentValue(
     name: keyof Env,
@@ -824,35 +880,45 @@ export class MlsRunContainer extends Container<Env> {
     return this.coordinator;
   }
 
-  claimAndStart(input: ClaimAndStartInput): Promise<AttemptRecord> {
-    const attemptId = captureInput(input).envelope.attemptId;
-    this.activeAttemptId = attemptId;
-    return this.getCoordinator().claimAndStart(input);
+  async claimAndStart(input: ClaimAndStartInput): Promise<AttemptRecord> {
+    const capturedInput = captureInput(input);
+    await this.rememberActiveAttempt(capturedInput.envelope.attemptId, true);
+    return this.getCoordinator().claimAndStart(capturedInput);
   }
 
-  readAttempt(attemptId: string): Promise<AttemptRecord> {
-    this.activeAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
-    return this.getCoordinator().readAttempt(attemptId);
+  async readAttempt(attemptId: string): Promise<AttemptRecord> {
+    const capturedAttemptId = safeIdentifier(
+      attemptId,
+      "attempt id is invalid",
+    );
+    await this.rememberActiveAttempt(capturedAttemptId, false);
+    return this.getCoordinator().readAttempt(capturedAttemptId);
   }
 
-  markUnknown(attemptId: string, code: string): Promise<AttemptRecord> {
-    this.activeAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
-    return this.getCoordinator().markUnknown(attemptId, code);
+  async markUnknown(attemptId: string, code: string): Promise<AttemptRecord> {
+    const capturedAttemptId = safeIdentifier(
+      attemptId,
+      "attempt id is invalid",
+    );
+    await this.rememberActiveAttempt(capturedAttemptId, false);
+    return this.getCoordinator().markUnknown(capturedAttemptId, code);
   }
 
   override async onStop(_params: StopParams): Promise<void> {
-    if (this.activeAttemptId === null) return;
+    const attemptId = await this.resolveActiveAttempt();
+    if (attemptId === null) return;
     await this.getCoordinator().markUnknown(
-      this.activeAttemptId,
+      attemptId,
       "container_stopped",
       false,
     );
   }
 
   override async onError(_error: unknown): Promise<void> {
-    if (this.activeAttemptId === null) return;
+    const attemptId = await this.resolveActiveAttempt();
+    if (attemptId === null) return;
     await this.getCoordinator().markUnknown(
-      this.activeAttemptId,
+      attemptId,
       "container_runtime_error",
       false,
     );

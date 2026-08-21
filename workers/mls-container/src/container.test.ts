@@ -124,10 +124,11 @@ interface WrapperHarnessOptions {
   environment?: Record<string, string>;
   status?: SupervisorStatus;
   initial?: AttemptRecord;
+  values?: Map<string, unknown>;
 }
 
 function wrapperHarness(options: WrapperHarnessOptions = {}) {
-  const values = new Map<string, unknown>();
+  const values = options.values ?? new Map<string, unknown>();
   if (options.initial) {
     values.set(
       `attempt:${options.initial.envelope.attemptId}`,
@@ -146,7 +147,13 @@ function wrapperHarness(options: WrapperHarnessOptions = {}) {
         return values.get(key);
       },
       async put(key: string, value: unknown) {
-        events.push(`put:${(value as AttemptRecord).state}`);
+        if (
+          value !== null &&
+          typeof value === "object" &&
+          "state" in value &&
+          typeof value.state === "string"
+        )
+          events.push(`put:${value.state}`);
         values.set(key, structuredClone(value));
       },
     },
@@ -291,7 +298,7 @@ describe("attempt coordinator claims", () => {
 });
 
 describe("attempt coordinator adversarial claims", () => {
-  test("rejects envelope and workflow conflicts without another start", async () => {
+  test("rejects envelope conflicts but returns duplicate delivery across workflow instances", async () => {
     const values = new Map<string, unknown>();
     let starts = 0;
     const coordinator = coordinatorHarness({
@@ -314,12 +321,17 @@ describe("attempt coordinator adversarial claims", () => {
         workflowInstanceId: "workflow-1",
       }),
     ).rejects.toThrow("attempt claim does not match existing record");
-    await expect(
-      coordinator.claimAndStart({
+    expect(
+      await coordinator.claimAndStart({
         envelope,
         workflowInstanceId: "workflow-2",
       }),
-    ).rejects.toThrow("attempt claim does not match existing record");
+    ).toEqual(
+      await coordinator.claimAndStart({
+        envelope,
+        workflowInstanceId: "workflow-1",
+      }),
+    );
     expect(starts).toBe(1);
   });
 
@@ -750,6 +762,109 @@ describe("Cloudflare Container wrapper", () => {
     expect(JSON.stringify(erroredRecord)).not.toContain(DATABASE_URL);
     expect(errored.events).toEqual(["put:unknown"]);
   });
+
+  test("recovers the active attempt for lifecycle hooks after wrapper reconstruction", async () => {
+    for (const hook of ["stop", "error"] as const) {
+      const first = wrapperHarness();
+      await first.instance.claimAndStart({
+        envelope: scheduledEnvelope(),
+        workflowInstanceId: "workflow-1",
+      });
+      const reconstructed = wrapperHarness({ values: first.values });
+      reconstructed.events.length = 0;
+      if (hook === "stop")
+        await reconstructed.instance.onStop({ exitCode: 1, reason: "exit" });
+      else
+        await reconstructed.instance.onError(
+          new Error(`runtime ${DATABASE_URL}`),
+        );
+      const record = reconstructed.values.get(
+        `attempt:${scheduledEnvelope().attemptId}`,
+      );
+      expect(record).toMatchObject({
+        state: "unknown",
+        failureCode:
+          hook === "stop" ? "container_stopped" : "container_runtime_error",
+      });
+      expect(JSON.stringify([...reconstructed.values.entries()])).not.toContain(
+        DATABASE_URL,
+      );
+      expect(reconstructed.events).toEqual(["put:unknown"]);
+    }
+  });
+
+  test("does not persist an active pointer for an absent read or mark", async () => {
+    for (const operation of ["read", "mark"] as const) {
+      const harness = wrapperHarness();
+      const absentAttemptId = "scheduled:production:2026-08-22";
+      if (operation === "read")
+        await expect(
+          harness.instance.readAttempt(absentAttemptId),
+        ).rejects.toThrow("attempt record not found");
+      else
+        await expect(
+          harness.instance.markUnknown(
+            absentAttemptId,
+            "workflow_poll_deadline",
+          ),
+        ).rejects.toThrow("attempt record not found");
+      expect(harness.values.has("active-attempt-id")).toBe(false);
+      const record = await harness.instance.claimAndStart({
+        envelope: scheduledEnvelope(),
+        workflowInstanceId: "workflow-1",
+      });
+      expect(record.envelope.attemptId).toBe(scheduledEnvelope().attemptId);
+      expect(harness.starts).toHaveLength(1);
+    }
+  });
+
+  test("persists a recovered pointer and rejects a mis-keyed canonical record", async () => {
+    const attemptId = scheduledEnvelope().attemptId;
+    const terminal = pendingRecord({
+      state: "failed",
+      completedAt: "2026-08-20T18:02:00.000Z",
+      exitCode: 40,
+      failureCode: "configuration_failed",
+    });
+    const values = new Map<string, unknown>([
+      [`attempt:${attemptId}`, structuredClone(terminal)],
+    ]);
+    const recovered = wrapperHarness({ values });
+    await expect(
+      recovered.instance.readAttempt(attemptId),
+    ).resolves.toMatchObject({ state: "failed" });
+    expect(values.get("active-attempt-id")).toBe(attemptId);
+    const reconstructed = wrapperHarness({ values });
+    await reconstructed.instance.onStop({ exitCode: 1, reason: "exit" });
+    expect(reconstructed.events).toEqual([]);
+
+    const misKeyedValues = new Map<string, unknown>([
+      [
+        `attempt:${attemptId}`,
+        structuredClone(
+          pendingRecord({
+            envelope: {
+              ...scheduledEnvelope(),
+              environment: "preview",
+              attemptId: "scheduled:preview:2026-08-21",
+            },
+          }),
+        ),
+      ],
+    ]);
+    const misKeyed = wrapperHarness({ values: misKeyedValues });
+    await expect(misKeyed.instance.readAttempt(attemptId)).rejects.toThrow(
+      "attempt record is invalid",
+    );
+    expect(misKeyedValues.has("active-attempt-id")).toBe(false);
+    misKeyedValues.delete(`attempt:${attemptId}`);
+    const claimed = await misKeyed.instance.claimAndStart({
+      envelope: scheduledEnvelope(),
+      workflowInstanceId: "workflow-1",
+    });
+    expect(claimed.envelope.attemptId).toBe(attemptId);
+    expect(misKeyed.starts).toHaveLength(1);
+  });
 });
 
 describe("attempt coordinator in-flight terminal races", () => {
@@ -842,6 +957,40 @@ describe("attempt coordinator in-flight terminal races", () => {
     expect(duplicate).toBe(first);
     releaseGet?.();
     expect(await duplicate).toEqual(await first);
+    expect(starts).toBe(1);
+  });
+
+  test("rejects a concurrent envelope conflict before sharing an active claim", async () => {
+    let releaseGet: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => {
+      releaseGet = resolve;
+    });
+    let starts = 0;
+    const coordinator = coordinatorHarness({
+      get: async () => {
+        await gate;
+        return undefined;
+      },
+      start: async () => {
+        starts += 1;
+      },
+    });
+    const shadow = scheduledEnvelope();
+    const first = coordinator.claimAndStart({
+      envelope: shadow,
+      workflowInstanceId: "workflow-1",
+    });
+    const conflict = Promise.resolve().then(() =>
+      coordinator.claimAndStart({
+        envelope: { ...shadow, mode: "publish" },
+        workflowInstanceId: "workflow-2",
+      }),
+    );
+    releaseGet?.();
+    await expect(conflict).rejects.toThrow(
+      "attempt claim does not match existing record",
+    );
+    await first;
     expect(starts).toBe(1);
   });
 });
