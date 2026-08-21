@@ -86,8 +86,7 @@ const DIAGNOSTIC_KEYS = [
 
 const SECRET_PATTERN =
   /\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*(?:"[^"]*"|'[^']*'|\S+)/gi;
-const AUTHORIZATION_CREDENTIAL_PATTERN =
-  /\bauthorization\s*[:=]\s*(?:(?:bearer|basic)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
+const AUTHORIZATION_CREDENTIAL_PATTERN = /\bauthorization\s*[:=][^;\r\n]*/gi;
 const CONNECTION_PATTERN =
   /\b(?:postgres(?:ql)?|mysql|mongodb):\/\/[^\s"'<>]+/gi;
 

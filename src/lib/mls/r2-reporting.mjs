@@ -131,6 +131,8 @@ function requireCanonicalUuid(value, label) {
 }
 
 function requireAttemptId({ environment, hkDate, attemptId }) {
+  if (typeof attemptId !== "string")
+    throw new TypeError("attemptId is invalid");
   const scheduledAttemptId = `scheduled:${environment}:${hkDate}`;
   const manualAttemptPrefix = `${scheduledAttemptId}:manual:`;
   const manualSuffix = attemptId.slice(manualAttemptPrefix.length);
@@ -369,8 +371,9 @@ export function createR2Reporter({ objectStore, context }) {
         throw new TypeError("durationMs is invalid");
       }
       if (
-        typeof terminal.neonRunId !== "string" ||
-        !UUID_PATTERN.test(terminal.neonRunId)
+        terminal.neonRunId !== null &&
+        (typeof terminal.neonRunId !== "string" ||
+          !UUID_PATTERN.test(terminal.neonRunId))
       ) {
         throw new TypeError("neonRunId is invalid");
       }

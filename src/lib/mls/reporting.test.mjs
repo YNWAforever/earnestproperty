@@ -265,6 +265,47 @@ test("report serialization redacts complete Authorization credentials in summary
   );
 });
 
+test("report serialization redacts an entire Authorization value for every authentication scheme", () => {
+  const run = reportFixture();
+  run.failureSummary =
+    "sync failed: Authorization: AWS4-HMAC-SHA256 Credential=AKIAFAKE/signature; retry remains safe";
+  run.evaluation.sourceStatus.old_site.failures = [
+    {
+      code: "digest_failed",
+      detail:
+        "remote failed: Authorization: Digest username=alice, response=secret; preserve prose",
+    },
+    {
+      code: "custom_failed",
+      detail:
+        "remote failed: Authorization: Custom token=opaque-value; preserve prose",
+    },
+  ];
+  const objects = buildRunArtifactObjects(run);
+  const report = JSON.parse(
+    objects.find(({ name }) => name === "report.json").body,
+  );
+  const diagnostics = JSON.parse(
+    objects.find(({ name }) => name === "diagnostics.json").body,
+  );
+
+  assert.equal(
+    report.failureSummary,
+    "sync failed: Authorization=[redacted]; retry remains safe",
+  );
+  assert.deepEqual(
+    diagnostics.slice(-2).map(({ detail }) => detail),
+    [
+      "remote failed: Authorization=[redacted]; preserve prose",
+      "remote failed: Authorization=[redacted]; preserve prose",
+    ],
+  );
+  assert.doesNotMatch(
+    JSON.stringify({ report, diagnostics }),
+    /AWS4-HMAC|Credential=|AKIAFAKE|username=alice|response=secret|opaque-value/i,
+  );
+});
+
 test("retention removes only old run directories beneath the configured root", async () => {
   const fixture = await retentionFixture();
   try {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { S3Client } from "@aws-sdk/client-s3";
 
 import {
   buildEvidencePrefix,
@@ -139,7 +139,7 @@ test("R2 provenance accepts only Task1 modes, attempts, and canonical UUID ident
   await assert.rejects(
     () =>
       reporter.finalizeTerminal(
-        terminalInput(artifacts.objects, { neonRunId: null }),
+        terminalInput(artifacts.objects, { neonRunId: "neon-run-1" }),
       ),
     /neonRunId/i,
   );
@@ -158,6 +158,32 @@ test("R2 provenance accepts only Task1 modes, attempts, and canonical UUID ident
   );
 });
 
+test("R2 provenance rejects non-string attempt IDs without invoking attacker-controlled methods", () => {
+  const objectStore = memoryObjectStore();
+  let methodCalls = 0;
+  const maliciousAttemptId = {
+    slice() {
+      methodCalls += 1;
+      throw new Error("slice must not run");
+    },
+    startsWith() {
+      methodCalls += 1;
+      throw new Error("startsWith must not run");
+    },
+  };
+
+  assert.throws(
+    () =>
+      createR2Reporter({
+        objectStore,
+        context: { ...context, attemptId: maliciousAttemptId },
+      }),
+    /attemptId/i,
+  );
+  assert.equal(methodCalls, 0);
+  assert.equal(objectStore.writes.length, 0);
+});
+
 test("R2 S3 adapter configures one immutable conditional UTF-8 PutObject without network access", async () => {
   const accountId = "a".repeat(32);
   const credentials = {
@@ -166,53 +192,51 @@ test("R2 S3 adapter configures one immutable conditional UTF-8 PutObject without
   };
   let factoryConfig;
   let sentCommand;
-  let fallbackCommand;
-  const originalSend = S3Client.prototype.send;
-  S3Client.prototype.send = async function sendWithoutNetwork(command) {
-    fallbackCommand = command;
-  };
-  try {
-    const objectStore = createR2S3ObjectStore(
-      { accountId, bucket: "mls-evidence", ...credentials },
-      {
-        createClient(config) {
-          factoryConfig = config;
-          return {
-            async send(command) {
-              sentCommand = command;
-            },
-          };
-        },
+  const objectStore = createR2S3ObjectStore(
+    { accountId, bucket: "mls-evidence", ...credentials },
+    {
+      createClient(config) {
+        factoryConfig = config;
+        return {
+          async send(command) {
+            sentCommand = command;
+          },
+        };
       },
-    );
-    const metadata = { sha256: "a".repeat(64) };
-    await objectStore.putIfAbsent({
-      key: "mls-sync/production/2026-08-21/run/report.json",
-      body: "測試",
-      contentType: "application/json; charset=utf-8",
-      metadata,
-    });
+    },
+  );
+  const metadata = { sha256: "a".repeat(64) };
+  await objectStore.putIfAbsent({
+    key: "mls-sync/production/2026-08-21/run/report.json",
+    body: "測試",
+    contentType: "application/json; charset=utf-8",
+    metadata,
+  });
 
-    assert.deepEqual(factoryConfig, {
-      region: "auto",
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      credentials,
-    });
-    assert.deepEqual(sentCommand.input, {
-      Bucket: "mls-evidence",
-      Key: "mls-sync/production/2026-08-21/run/report.json",
-      Body: "測試",
-      ContentLength: Buffer.byteLength("測試"),
-      ContentType: "application/json; charset=utf-8",
-      Metadata: metadata,
-      IfNoneMatch: "*",
-    });
-    assert.equal(fallbackCommand, undefined);
-    assert.deepEqual(Object.keys(objectStore), ["putIfAbsent"]);
-    assert.equal(typeof objectStore.delete, "undefined");
-  } finally {
-    S3Client.prototype.send = originalSend;
-  }
+  assert.deepEqual(factoryConfig, {
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials,
+  });
+  assert.deepEqual(sentCommand.input, {
+    Bucket: "mls-evidence",
+    Key: "mls-sync/production/2026-08-21/run/report.json",
+    Body: "測試",
+    ContentLength: Buffer.byteLength("測試"),
+    ContentType: "application/json; charset=utf-8",
+    Metadata: metadata,
+    IfNoneMatch: "*",
+  });
+  assert.deepEqual(Object.keys(objectStore), ["putIfAbsent"]);
+  assert.equal(typeof objectStore.delete, "undefined");
+});
+
+test("R2 adapter test has no global S3Client prototype mutation", async () => {
+  const source = await readFile(
+    new URL("./r2-reporting.test.mjs", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /S3Client\s*\.\s*prototype/);
 });
 
 test("writeRunArtifacts writes exactly four immutable artifacts and no manifest", async () => {
@@ -318,6 +342,19 @@ test("finalizeTerminal requires the complete successful artifact metadata for it
     /artifact/i,
   );
   assert.equal(objectStore.writes.length, 0);
+});
+
+test("finalizeTerminal preserves a null Neon run ID when it is unavailable", async () => {
+  const objectStore = memoryObjectStore();
+  const reporter = createR2Reporter({ objectStore, context });
+  const artifacts = await reporter.writeRunArtifacts(runFixture());
+
+  await reporter.finalizeTerminal(
+    terminalInput(artifacts.objects, { neonRunId: null }),
+  );
+
+  assert.equal(objectStore.writes.length, 5);
+  assert.equal(JSON.parse(objectStore.writes.at(-1).body).neonRunId, null);
 });
 
 test("finalizeTerminal rejects a duration that contradicts its timestamps before writing a manifest", async () => {
