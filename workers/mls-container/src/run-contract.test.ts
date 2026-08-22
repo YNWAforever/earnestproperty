@@ -195,6 +195,7 @@ test("base deploy is private, unscheduled, and single-container", () => {
     {
       class_name: "MlsRunContainer",
       image: "./Dockerfile",
+      image_build_context: "../..",
       max_instances: 1,
       instance_type: "standard-1",
     },

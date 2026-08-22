@@ -33,6 +33,12 @@
     "MLS_SCHEDULED_MODE": "shadow",
     "MLS_PUBLISH_ENABLED": "false",
     "MLS_MEDIA_RIGHTS_CONFIRMED": "false",
-    "MLS_EVIDENCE_RETENTION_DAYS": "90"
+    "MLS_EVIDENCE_RETENTION_DAYS": "90",
+    "MLS_GIT_COMMIT_SHA": "7be383913d4d3fb697f43ba96948def7edb11591",
+    "MLS_CRAWLER_CONTACT_URL": "https://www.earnestproperty.com/contact",
+    "MLS_MEDIA_ALLOWED_HOSTS": "imgs.property.hk,i1.28hse.com",
+    "CLOUDFLARE_ACCOUNT_ID": "e387dfbeded3deb5b8f0023a78a660b5",
+    "MLS_EVIDENCE_BUCKET": "earnest-mls-evidence",
+    "CLOUDFLARE_DEPLOYMENT_ID": "a03778f0-e273-48dd-9915-d5edcf224cbe"
   }
 }
