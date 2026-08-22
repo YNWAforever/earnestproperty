@@ -398,10 +398,11 @@ function captureSupervisorStatus(
   const manifestPresent = value.manifestPresent;
   if (typeof manifestPresent !== "boolean")
     invalid("supervisor status is invalid");
+  const normalizedAttemptId = envelope.attemptId.replaceAll(":", "-");
   const expectedPrefix =
     runId === null
       ? null
-      : `mls-sync/${envelope.environment}/${envelope.hkDate}/${runId}/${envelope.attemptId}`;
+      : `mls-sync/${envelope.environment}/${envelope.hkDate}/${runId}/${normalizedAttemptId}`;
   if (evidencePrefix !== null && evidencePrefix !== expectedPrefix)
     invalid("supervisor status is invalid");
   if (manifestPresent) {

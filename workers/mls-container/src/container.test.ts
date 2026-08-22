@@ -59,7 +59,7 @@ function succeededStatus(
   overrides: Partial<SupervisorStatus> = {},
 ): SupervisorStatus {
   const attemptId = scheduledEnvelope().attemptId;
-  const evidencePrefix = `mls-sync/production/2026-08-21/${RUN_ID}/${attemptId}`;
+  const evidencePrefix = `mls-sync/production/2026-08-21/${RUN_ID}/${attemptId.replaceAll(":", "-")}`;
   return {
     attemptId,
     state: "succeeded",
@@ -568,6 +568,23 @@ describe("attempt coordinator status", () => {
     expect(record).not.toHaveProperty("manifestKey");
     expect(writes).toEqual([record]);
     expect(events).toEqual(["status", "put:succeeded", "stop"]);
+  });
+
+  test("accepts R2-normalized evidence prefixes from the supervisor", async () => {
+    const status = succeededStatus();
+    const normalized = {
+      ...status,
+      evidencePrefix: status.evidencePrefix?.replaceAll(":", "-") ?? null,
+      manifestKey: status.manifestKey?.replaceAll(":", "-") ?? null,
+    };
+    const coordinator = coordinatorHarness({
+      get: async () => pendingRecord(),
+      status: async () => normalized,
+    });
+    const record = await coordinator.readAttempt(scheduledEnvelope().attemptId);
+    expect(record.state).toBe("succeeded");
+    expect(record.evidencePrefix).toBe(normalized.evidencePrefix);
+    expect(record.manifestPresent).toBe(true);
   });
 
   test("markUnknown persists before stop and cannot rewrite a terminal record", async () => {
