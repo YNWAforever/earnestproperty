@@ -775,3 +775,65 @@ test("CLI bounds input reads before rejecting oversized JSON", async () => {
   assert.equal(closes, 2);
   assert.deepEqual(writes, []);
 });
+
+test("CLI drains short reads through the size sentinel before parsing", async () => {
+  const preflightPath = "preflight.json";
+  const evidencePath = "evidence.json";
+  const prefixes = new Map([
+    [preflightPath, Buffer.from(JSON.stringify(validPreflight()), "utf8")],
+    [evidencePath, Buffer.from(JSON.stringify(validEvidence()), "utf8")],
+  ]);
+  const reads = new Map();
+  const writes = [];
+  let closes = 0;
+  const { dependencies } = cliDependencies({
+    open: async (filePath) => {
+      const prefix = prefixes.get(filePath);
+      assert.ok(prefix);
+      const fileReads = [];
+      reads.set(filePath, fileReads);
+      let call = 0;
+      return {
+        read: async (buffer, offset, length, position) => {
+          fileReads.push({ length, offset, position });
+          if (call++ === 0) {
+            prefix.copy(buffer, offset);
+            return { bytesRead: prefix.length };
+          }
+          return { bytesRead: length };
+        },
+        close: async () => {
+          closes += 1;
+        },
+      };
+    },
+    writeFile: async (...args) => writes.push(args),
+  });
+
+  const exitCode = await main(
+    [
+      "--preflight",
+      preflightPath,
+      "--evidence",
+      evidencePath,
+      "--output",
+      "output.json",
+    ],
+    dependencies,
+  );
+
+  assert.equal(exitCode, 2);
+  assert.equal(closes, 2);
+  assert.deepEqual(writes, []);
+  for (const [filePath, prefix] of prefixes) {
+    const fileReads = reads.get(filePath);
+    assert.deepEqual(fileReads, [
+      { length: 256 * 1024 + 1, offset: 0, position: 0 },
+      {
+        length: 256 * 1024 + 1 - prefix.length,
+        offset: prefix.length,
+        position: prefix.length,
+      },
+    ]);
+  }
+});

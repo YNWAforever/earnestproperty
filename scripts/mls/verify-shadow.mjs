@@ -717,15 +717,29 @@ async function readBoundedJson(filePath, openFile) {
   const handle = await openFile(filePath, "r");
   try {
     const buffer = Buffer.allocUnsafe(MAX_CLI_JSON_BYTES + 1);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (
-      !Number.isSafeInteger(bytesRead) ||
-      bytesRead < 0 ||
-      bytesRead > MAX_CLI_JSON_BYTES
-    ) {
+    let totalBytes = 0;
+    while (totalBytes < buffer.length) {
+      const remainingBytes = buffer.length - totalBytes;
+      const { bytesRead } = await handle.read(
+        buffer,
+        totalBytes,
+        remainingBytes,
+        totalBytes,
+      );
+      if (
+        !Number.isSafeInteger(bytesRead) ||
+        bytesRead < 0 ||
+        bytesRead > remainingBytes
+      ) {
+        throw new TypeError("cli_input_invalid");
+      }
+      totalBytes += bytesRead;
+      if (bytesRead === 0) break;
+    }
+    if (totalBytes > MAX_CLI_JSON_BYTES) {
       throw new TypeError("cli_input_invalid");
     }
-    return JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+    return JSON.parse(buffer.subarray(0, totalBytes).toString("utf8"));
   } finally {
     await handle.close();
   }
