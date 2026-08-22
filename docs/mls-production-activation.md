@@ -34,7 +34,7 @@ The Docker check is an operator prerequisite, not evidence that an image was bui
 
 This section is a manual, approval-gated readiness check. It does not authorize automatic schedule activation or publication. Keep the run in `shadow` with `publishEnabled:false`; the later, separately approved scheduled-deployment and first-publish examples remain outside this section.
 
-1. Copy Vercel Production variables interactively. Map `DATABASE_URL_UNPOOLED` to the Neon production value, `BLOB_READ_WRITE_TOKEN` to the Vercel Blob token retained for a later publish only, and the R2 keys to the private evidence bucket. Do not put values in files, command history, Docker arguments, or logs.
+1. Only after the separately approved secret-placement gate, copy Vercel Production variables interactively. Map `DATABASE_URL_UNPOOLED` to the Neon production value, `BLOB_READ_WRITE_TOKEN` to the Vercel Blob token retained for a later publish only, and the R2 keys to the private evidence bucket. Do not put values in files, command history, Docker arguments, or logs.
 2. Run the read-only capability, secret-name, and lock checks below. Record names and booleans only, including Cloudflare capability, Container and Workflow registration, migration status, object-lock status, and `publishEnabled:false`.
 3. With the distinct unscheduled-deployment approval, deploy only the reviewed base configuration. Verify `workers_dev=false`, no routes, no schedules, and `MLS_PUBLISH_ENABLED=false`.
 4. With the distinct manual-shadow approval, trigger exactly one manual production shadow workflow. Capture the Workflow, attempt, deployment, Neon run, R2 prefix, terminal-status, and side-effect snapshots.
@@ -63,14 +63,14 @@ Verifier acceptance record:
 node scripts/mls/verify-shadow.mjs --preflight <path> --evidence <path> --output <path>
 ```
 
-| Captured snapshot | Source | Acceptance rule |
-| --- | --- | --- |
-| Workflow and attempt | Workflow status | One manual shadow attempt reaches a terminal success state. |
-| Deployment | Container and Workflow describe output | Both report the reviewed deployment identifier. |
-| Neon run | Shadow-run record | It is healthy, remains shadow-only, and releases its lock. |
-| R2 prefix | Private evidence-bucket manifest | The exact prefix has the required manifest artifacts and lock coverage. |
-| Terminal status | Workflow, Container, and status route | States correlate, exit code is zero, and the manifest is present. |
-| Side effects | Shadow evidence summary | Blob uploads and publication attempts are both zero. |
+| Captured snapshot    | Source                                 | Acceptance rule                                                         |
+| -------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
+| Workflow and attempt | Workflow status                        | One manual shadow attempt reaches a terminal success state.             |
+| Deployment           | Container and Workflow describe output | Both report the reviewed deployment identifier.                         |
+| Neon run             | Shadow-run record                      | It is healthy, remains shadow-only, and releases its lock.              |
+| R2 prefix            | Private evidence-bucket manifest       | The exact prefix has the required manifest artifacts and lock coverage. |
+| Terminal status      | Workflow, Container, and status route  | States correlate, exit code is zero, and the manifest is present.       |
+| Side effects         | Shadow evidence summary                | Blob uploads and publication attempts are both zero.                    |
 
 If a check fails, preserve evidence and stop for explicit operator direction. The following rollback examples are intentionally commented; they are not executable defaults:
 

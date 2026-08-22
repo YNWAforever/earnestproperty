@@ -11,23 +11,25 @@ import {
   verifyShadowPreflight,
 } from "./verify-shadow.mjs";
 
-test("runbook manual shadow readiness verifier remains approval-gated", async () => {
-  const runbook = await readFile(
-    new URL("../../docs/mls-production-activation.md", import.meta.url),
-    "utf8",
-  );
+function manualShadowReadinessSection(runbook) {
   const heading = "## 3. Manual shadow readiness verifier";
   const start = runbook.indexOf(heading);
   assert.notEqual(start, -1);
   const nextHeading = runbook.indexOf("\n## ", start + heading.length);
-  const section = runbook.slice(start, nextHeading === -1 ? undefined : nextHeading);
+  return runbook.slice(start, nextHeading === -1 ? undefined : nextHeading);
+}
 
+function assertManualShadowReadinessSection(section) {
   for (const command of [
     "npm.cmd exec wrangler -- secret list --config workers/mls-container/wrangler.jsonc",
     "npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.jsonc",
     "node scripts/mls/verify-shadow.mjs --preflight <path> --evidence <path> --output <path>",
   ]) {
-    assert.equal(section.includes(command), true, `missing runbook command: ${command}`);
+    assert.equal(
+      section.includes(command),
+      true,
+      `missing runbook command: ${command}`,
+    );
   }
 
   for (const requiredTerm of [
@@ -37,26 +39,93 @@ test("runbook manual shadow readiness verifier remains approval-gated", async ()
     "migration",
     "rollback",
   ]) {
-    assert.equal(section.includes(requiredTerm), true, `missing runbook term: ${requiredTerm}`);
+    assert.equal(
+      section.includes(requiredTerm),
+      true,
+      `missing runbook term: ${requiredTerm}`,
+    );
   }
 
-  for (const secretName of [
-    "DATABASE_URL_UNPOOLED",
-    "BLOB_READ_WRITE_TOKEN",
-    "MLS_R2_SECRET_ACCESS_KEY",
+  assert.match(section, /separately approved secret-placement gate/i);
+
+  for (const credentialPattern of [
+    new RegExp("\\bBearer\\s+\\S+", "i"),
+    new RegExp(
+      "\\b(?:postgres(?:ql)?|https?):\\/\\/\\S*(?::[^@\\s]+@|[?&](?:token|key|secret|password|credential|access_token)=\\S+)",
+      "i",
+    ),
+    new RegExp(
+      "\\b[A-Za-z_][\\w-]*(?:token|key|secret|password|credential)[\\w-]*\\s*(?:=|:)\\s*[^\\s,;]+",
+      "i",
+    ),
   ]) {
-    assert.equal(section.includes(`${secretName}=`), false);
-    assert.equal(section.includes(`${secretName} =`), false);
+    assert.doesNotMatch(
+      section,
+      credentialPattern,
+      "the section must not contain a credential value",
+    );
   }
 
-  for (const automaticCommand of [
-    "wrangler.scheduled.jsonc",
-    "schedule enable",
-    "schedule create",
-    '"mode":"publish"',
+  for (const automaticActivation of [
+    new RegExp("\\bwrangler\\s+(?:schedule|schedules|publish)\\b", "i"),
+    new RegExp(
+      "\\b(?:cron|schedule)\\s+(?:activate|enable|create|install)\\b",
+      "i",
+    ),
+    new RegExp(
+      "\\b(?:workflows?\\s+trigger|workflow\\s+trigger)\\b[\\s\\S]*?\\bmode\\s*[=:]\\s*[^a-zA-Z]*publish\\b",
+      "i",
+    ),
+    new RegExp(
+      "\\b[A-Za-z_][\\w-]*publish[\\w-]*\\s*(?:=|:)\\s*(?:true|1|[^a-zA-Z]*publish\\b)",
+      "i",
+    ),
+  ]) {
+    assert.doesNotMatch(
+      section,
+      automaticActivation,
+      "the section must not activate schedule or publication",
+    );
+  }
+}
+
+test("runbook manual shadow readiness verifier remains approval-gated", async () => {
+  const runbook = await readFile(
+    new URL("../../docs/mls-production-activation.md", import.meta.url),
+    "utf8",
+  );
+
+  assertManualShadowReadinessSection(manualShadowReadinessSection(runbook));
+});
+
+test("runbook verifier rejects credential and automatic activation variants", async () => {
+  const runbook = await readFile(
+    new URL("../../docs/mls-production-activation.md", import.meta.url),
+    "utf8",
+  );
+  const safeSection = [
+    manualShadowReadinessSection(runbook),
+    "After the separately approved secret-placement gate.",
+  ].join("\n");
+
+  for (const unsafeAddition of [
+    "Authorization: Bearer example-token-value",
+    "postgresql://operator:password@example.test/database",
+    "https://example.test/hook?access_token=example-token-value",
+    "serviceApiToken: example-token-value",
+    "backup-key = example-key-value",
+    "npm.cmd exec wrangler schedule create",
+    "npm.cmd exec wrangler publish",
+    "npm.cmd exec wrangler workflows trigger runner mode=publish",
+    "cron activate now",
     "MLS_PUBLISH_ENABLED=true",
   ]) {
-    assert.equal(section.includes(automaticCommand), false);
+    assert.throws(
+      () =>
+        assertManualShadowReadinessSection(`${safeSection}\n${unsafeAddition}`),
+      assert.AssertionError,
+      unsafeAddition,
+    );
   }
 });
 
