@@ -737,9 +737,10 @@ function projectPublicStatus(value) {
   if (typeof projected.manifestPresent !== "boolean") {
     throw fixedError("supervisor_unavailable");
   }
+  const normalizedAttemptId = projected.attemptId?.replaceAll(":", "-") ?? null;
   const expectedEvidencePrefix =
     attemptMatch && projected.runId !== null
-      ? `mls-sync/${attemptMatch[1]}/${attemptMatch[2]}/${projected.runId}/${projected.attemptId}`
+      ? `mls-sync/${attemptMatch[1]}/${attemptMatch[2]}/${projected.runId}/${normalizedAttemptId}`
       : null;
   if (
     projected.evidencePrefix !== null &&

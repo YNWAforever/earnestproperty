@@ -113,6 +113,31 @@ test("accepts R2-normalized evidence prefixes for terminal correlation", async (
   assert.equal(status.manifestKey, `${evidencePrefix}/manifest.json`);
 });
 
+test("serves R2-normalized evidence prefixes through the status projection", async (t) => {
+  const record = terminalRecord();
+  const { supervisor } = fakeSupervisor({
+    status: () =>
+      statusFixture({
+        attemptId: record.attemptId,
+        state: "failed",
+        completedAt: "2026-08-21T02:31:00.000Z",
+        exitCode: 20,
+        failureCode: "mls_run_failed",
+        runId: record.runId,
+        neonRunId: record.neonRunId,
+        evidencePrefix: record.evidencePrefix,
+        manifestKey: record.manifestKey,
+        manifestPresent: true,
+      }),
+  });
+  const { server, origin } = await serve(supervisor);
+  t.after(() => closeServer(server));
+  const response = await responseJson(await fetch(`${origin}/status`));
+  assert.equal(response.status, 200);
+  assert.equal(response.body.evidencePrefix, record.evidencePrefix);
+  assert.equal(response.body.manifestKey, record.manifestKey);
+});
+
 test("starts one exact CLI child, snapshots metadata, and replays idempotently", async () => {
   const child = new FakeChild();
   const spawns = [];
