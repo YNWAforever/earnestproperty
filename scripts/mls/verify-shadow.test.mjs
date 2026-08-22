@@ -276,7 +276,7 @@ function validManifest(objects = validArtifactObjects()) {
     containerId: "container-20260823-01",
     runId: VALID_RUN_ID,
     status: "shadow_healthy",
-    terminalClassification: "shadow_healthy",
+    terminalClassification: "healthy",
     exitCode: 0,
     startedAt: "2026-08-23T01:00:00.000Z",
     completedAt: "2026-08-23T01:02:00.000Z",
@@ -509,7 +509,7 @@ test("accepts fully correlated shadow evidence", () => {
   assert.equal(Object.isFrozen(result.checks), true);
   assert.equal(Object.isFrozen(result.identity), true);
   assert.equal(result.manifest.commitSha, VALID_COMMIT_SHA);
-  assert.equal(result.manifest.terminalClassification, "shadow_healthy");
+  assert.equal(result.manifest.terminalClassification, "healthy");
   assert.equal(Object.isFrozen(result.manifest), true);
   assert.equal(Object.isFrozen(result.manifest.artifacts), true);
   assert.equal(Object.isFrozen(result.manifest.artifacts[0]), true);
@@ -661,7 +661,7 @@ test("rejects self-hashed manifest metadata that mismatches captured identity", 
     (manifest) => (manifest.containerDeploymentId = "deployment-other-01"),
     (manifest) => (manifest.workflowInstanceId = "workflow-other-01"),
     (manifest) => (manifest.attemptId = "scheduled:production:2026-08-24"),
-    (manifest) => (manifest.terminalClassification = "shadow_degraded"),
+    (manifest) => (manifest.terminalClassification = "shadow_healthy"),
   ]) {
     const snapshot = validEvidence();
     mutate(snapshot.r2.manifest);
@@ -837,7 +837,7 @@ test("builds a frozen JSON-safe acceptance record", () => {
     record.manifest.manifestSha256,
     validEvidence().r2.manifestSha256,
   );
-  assert.equal(record.manifest.terminalClassification, "shadow_healthy");
+  assert.equal(record.manifest.terminalClassification, "healthy");
   assert.equal(record.manifest.commitSha, VALID_COMMIT_SHA);
   assert.equal(record.manifest.containerDeploymentId, VALID_DEPLOYMENT_ID);
   assert.equal(record.manifest.workflowInstanceId, VALID_WORKFLOW_ID);

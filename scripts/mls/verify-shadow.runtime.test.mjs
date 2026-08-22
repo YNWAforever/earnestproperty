@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-import { buildRunArtifactObjects } from "../../src/lib/mls/reporting.mjs";
 import { verifyShadowEvidence } from "./verify-shadow.mjs";
 
 registerHooks({
@@ -18,21 +17,43 @@ registerHooks({
   },
 });
 
-const { buildEvidencePrefix } =
-  await import("../../src/lib/mls/r2-reporting.mjs");
+const { createR2Reporter } = await import("../../src/lib/mls/r2-reporting.mjs");
+const { createEvidenceReporter } = await import("./sync.mjs");
 
-test("accepts evidence shaped by the runtime prefix and artifact builders", () => {
+test("accepts evidence finalized by the runtime reporters", async () => {
   const attemptId = "scheduled:production:2026-08-23";
   const runId = "00000000-0000-4000-8000-000000000001";
   const workflowId = "workflow-20260823-01";
   const deploymentId = "deployment-20260823-01";
-  const evidencePrefix = buildEvidencePrefix({
-    environment: "production",
-    hkDate: "2026-08-23",
-    runId,
-    attemptId,
+  const objectWrites = [];
+  const evidenceReporter = createEvidenceReporter({
+    configuration: {
+      evidenceBackend: "r2",
+      evidence: {},
+      environment: "production",
+      scheduledFor: "2026-08-23",
+      attemptId,
+      mode: "shadow",
+      commitSha: "a".repeat(40),
+      containerDeploymentId: deploymentId,
+      workflowInstanceId: workflowId,
+      containerId: "container-20260823-01",
+      attemptStartedAt: "2026-08-23T01:00:00.000Z",
+    },
+    dependencies: {
+      createFilesystemReporter: () => {
+        throw new Error("filesystem reporter must not be used");
+      },
+      createR2S3ObjectStore: () => ({
+        putIfAbsent: async (input) => objectWrites.push(input),
+      }),
+      createR2Reporter,
+      pruneArtifacts: async () => {
+        throw new Error("R2 evidence must not be pruned locally");
+      },
+    },
   });
-  const artifacts = buildRunArtifactObjects({
+  const artifactResult = await evidenceReporter.reporter.writeRunArtifacts({
     runId,
     scheduledFor: "2026-08-23",
     mode: "shadow",
@@ -42,39 +63,21 @@ test("accepts evidence shaped by the runtime prefix and artifact builders", () =
     observations: [],
     quarantines: [],
   });
-  const objects = artifacts.map(
-    ({ name, byteLength, contentType, sha256 }) => ({
-      name,
-      key: `${evidencePrefix}/${name}`,
-      byteLength,
-      contentType,
-      sha256,
-    }),
-  );
-  const manifest = {
-    schemaVersion: 1,
-    environment: "production",
-    hkDate: "2026-08-23",
-    attemptId,
-    mode: "shadow",
-    commitSha: "a".repeat(40),
-    containerDeploymentId: deploymentId,
-    workflowInstanceId: workflowId,
-    containerId: "container-20260823-01",
-    runId,
-    status: "shadow_healthy",
-    terminalClassification: "shadow_healthy",
+  await evidenceReporter.finalize({
+    outcome: { runId, status: "shadow_healthy" },
     exitCode: 0,
-    startedAt: "2026-08-23T01:00:00.000Z",
     completedAt: "2026-08-23T01:02:00.000Z",
-    durationMs: 120_000,
-    neonRunId: runId,
-    artifacts: objects.map(({ key: _key, ...artifact }) => artifact),
-  };
-  const objectKeys = [
-    ...objects.map(({ key }) => key),
-    `${evidencePrefix}/manifest.json`,
-  ];
+  });
+  const evidencePrefix = artifactResult.prefix;
+  const manifestWrite = objectWrites.find(
+    ({ key }) => key === `${evidencePrefix}/manifest.json`,
+  );
+  assert.ok(manifestWrite);
+  const manifest = JSON.parse(manifestWrite.body);
+  assert.equal(manifest.status, "shadow_healthy");
+  assert.equal(manifest.terminalClassification, "healthy");
+  const objects = artifactResult.objects;
+  const objectKeys = objectWrites.map(({ key }) => key);
   const manifestSha256 = createHash("sha256")
     .update(`${JSON.stringify(manifest, null, 2)}\\n`)
     .digest("hex");

@@ -391,7 +391,7 @@ function captureRuntimeManifest(value, identity, manifestSha256) {
     !validIdentifier(manifest.containerId) ||
     manifest.runId !== identity.runId ||
     manifest.status !== "shadow_healthy" ||
-    manifest.terminalClassification !== "shadow_healthy" ||
+    manifest.terminalClassification !== "healthy" ||
     manifest.exitCode !== 0 ||
     !validUtcTimestamp(manifest.startedAt) ||
     !validUtcTimestamp(manifest.completedAt) ||
