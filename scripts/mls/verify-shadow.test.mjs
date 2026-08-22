@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -142,11 +143,36 @@ test("runbook verifier rejects credential and automatic activation variants", as
   }
 });
 
+test("runbook contains exact capture templates and commented stop rollback", async () => {
+  const runbook = await readFile(
+    new URL("../../docs/mls-production-activation.md", import.meta.url),
+    "utf8",
+  );
+  for (const fragment of [
+    "workflows instances describe earnest-mls-runner <workflow-instance-id>",
+    'Invoke-RestMethod -Method Get -Uri "http://localhost/status" -Headers $statusHeaders',
+    "FROM listing_sync_runs",
+    "pg_try_advisory_lock(hashtext('earnestproperty:mls-sync'))",
+    "aws s3api list-objects-v2",
+    "Get-FileHash -Algorithm SHA256",
+    '"blobUploads": 0',
+    '"publicationAttempts": 0',
+    '"secretsAbsent": true',
+    '"credentialPatternsAbsent": true',
+    "# npm.cmd exec wrangler workflows instances terminate earnest-mls-runner <workflow-instance-id>",
+    "# npm.cmd exec wrangler containers delete <container-application-name>",
+    "# Copy-Item -LiteralPath <recorded-prior-base-config>",
+  ]) {
+    assert.equal(runbook.includes(fragment), true, fragment);
+  }
+});
+
 const VALID_ATTEMPT_ID = "scheduled:production:2026-08-23";
 const VALID_RUN_ID = "00000000-0000-4000-8000-000000000001";
 const VALID_WORKFLOW_ID = "workflow-20260823-01";
 const VALID_DEPLOYMENT_ID = "deployment-20260823-01";
-const VALID_PREFIX = `mls-sync/production/2026-08-23/${VALID_RUN_ID}/${VALID_ATTEMPT_ID}`;
+const VALID_COMMIT_SHA = "a".repeat(40);
+const VALID_PREFIX = `mls-sync/production/2026-08-23/${VALID_RUN_ID}/${VALID_ATTEMPT_ID.replaceAll(":", "-")}`;
 const REQUIRED_SECRET_NAMES = [
   "DATABASE_URL_UNPOOLED",
   "MLS_R2_ACCESS_KEY_ID",
@@ -157,14 +183,38 @@ const REQUIRED_SECRET_NAMES = [
   "MLS_EVIDENCE_BUCKET",
   "CLOUDFLARE_DEPLOYMENT_ID",
 ];
+const OPTIONAL_RUNTIME_NAMES = [
+  "BLOB_READ_WRITE_TOKEN",
+  "MLS_ENVIRONMENT",
+  "MLS_SCHEDULED_MODE",
+  "MLS_PUBLISH_ENABLED",
+  "MLS_MEDIA_RIGHTS_CONFIRMED",
+  "MLS_EVIDENCE_BACKEND",
+  "MLS_EVIDENCE_RETENTION_DAYS",
+  "MLS_GIT_COMMIT_SHA",
+  "MLS_SCHEDULED_FOR",
+  "MLS_ATTEMPT_ID",
+  "MLS_WORKFLOW_INSTANCE_ID",
+  "MLS_CONTAINER_ID",
+  "MLS_ATTEMPT_STARTED_AT",
+  "MLS_TERMINAL_STATUS_FILE",
+  "MLS_ARTIFACT_DIR",
+];
 
 function validPreflight() {
   return {
     account: { capability: true },
     worker: { workersDev: false, routes: [], schedules: [] },
     container: { registered: true, deploymentId: VALID_DEPLOYMENT_ID },
-    workflow: { registered: true, deploymentId: VALID_DEPLOYMENT_ID },
-    migration: { applied: true, version: "2026-08-22-mls-evidence" },
+    workflow: {
+      registered: true,
+      deploymentId: VALID_DEPLOYMENT_ID,
+      commitSha: VALID_COMMIT_SHA,
+    },
+    migration: {
+      applied: true,
+      version: "20260817120000_dual_source_listing_sync.sql",
+    },
     secrets: { names: [...REQUIRED_SECRET_NAMES] },
     r2: {
       bucket: "earnest-mls-evidence",
@@ -180,12 +230,77 @@ function validPreflight() {
   };
 }
 
+function validArtifactObjects() {
+  return [
+    {
+      name: "report.json",
+      key: `${VALID_PREFIX}/report.json`,
+      byteLength: 101,
+      contentType: "application/json; charset=utf-8",
+      sha256: "1".repeat(64),
+    },
+    {
+      name: "listings.csv",
+      key: `${VALID_PREFIX}/listings.csv`,
+      byteLength: 102,
+      contentType: "text/csv; charset=utf-8",
+      sha256: "2".repeat(64),
+    },
+    {
+      name: "observations.csv",
+      key: `${VALID_PREFIX}/observations.csv`,
+      byteLength: 103,
+      contentType: "text/csv; charset=utf-8",
+      sha256: "3".repeat(64),
+    },
+    {
+      name: "diagnostics.json",
+      key: `${VALID_PREFIX}/diagnostics.json`,
+      byteLength: 104,
+      contentType: "application/json; charset=utf-8",
+      sha256: "4".repeat(64),
+    },
+  ];
+}
+
+function validManifest(objects = validArtifactObjects()) {
+  return {
+    schemaVersion: 1,
+    environment: "production",
+    hkDate: "2026-08-23",
+    attemptId: VALID_ATTEMPT_ID,
+    mode: "shadow",
+    commitSha: VALID_COMMIT_SHA,
+    containerDeploymentId: VALID_DEPLOYMENT_ID,
+    workflowInstanceId: VALID_WORKFLOW_ID,
+    containerId: "container-20260823-01",
+    runId: VALID_RUN_ID,
+    status: "shadow_healthy",
+    terminalClassification: "shadow_healthy",
+    exitCode: 0,
+    startedAt: "2026-08-23T01:00:00.000Z",
+    completedAt: "2026-08-23T01:02:00.000Z",
+    durationMs: 120_000,
+    neonRunId: VALID_RUN_ID,
+    artifacts: objects.map(({ key: _key, ...artifact }) => artifact),
+  };
+}
+
+function manifestSha256(manifest) {
+  return createHash("sha256")
+    .update(`${JSON.stringify(manifest, null, 2)}\\n`)
+    .digest("hex");
+}
+
 function validEvidence() {
+  const objects = validArtifactObjects();
+  const manifest = validManifest(objects);
   return {
     identity: {
       attemptId: VALID_ATTEMPT_ID,
       workflowId: VALID_WORKFLOW_ID,
       deploymentId: VALID_DEPLOYMENT_ID,
+      commitSha: VALID_COMMIT_SHA,
       runId: VALID_RUN_ID,
       evidencePrefix: VALID_PREFIX,
     },
@@ -203,6 +318,7 @@ function validEvidence() {
       attemptId: VALID_ATTEMPT_ID,
       workflowId: VALID_WORKFLOW_ID,
       deploymentId: VALID_DEPLOYMENT_ID,
+      commitSha: VALID_COMMIT_SHA,
       runId: VALID_RUN_ID,
       evidencePrefix: VALID_PREFIX,
     },
@@ -214,13 +330,13 @@ function validEvidence() {
     r2: {
       evidencePrefix: VALID_PREFIX,
       manifestPresent: true,
-      manifestSha256: "a".repeat(64),
+      manifestSha256: manifestSha256(manifest),
       objectKeys: [
-        `${VALID_PREFIX}/run.json`,
-        `${VALID_PREFIX}/diagnostics.json`,
-        `${VALID_PREFIX}/summary.json`,
+        ...objects.map(({ key }) => key),
         `${VALID_PREFIX}/manifest.json`,
       ],
+      objects,
+      manifest,
     },
     statusRoute: {
       attemptId: VALID_ATTEMPT_ID,
@@ -319,8 +435,55 @@ test("reports each missing required secret name without reading values", () => {
     assertFailure(
       verifyShadowPreflight,
       snapshot,
-      `missing_secret_name:${secretName}`,
+      `missing_secret_name_${secretName.toLowerCase()}`,
     );
+  }
+});
+
+test("rejects Container and Workflow deployment mismatch before a run", () => {
+  const snapshot = validPreflight();
+  snapshot.workflow.deploymentId = "deployment-other-01";
+  assertFailure(verifyShadowPreflight, snapshot, "deployment_id_mismatch");
+});
+
+test("requires an explicit reviewed commit identity in preflight", () => {
+  const snapshot = validPreflight();
+  snapshot.workflow.commitSha = "not-a-commit";
+  assertFailure(verifyShadowPreflight, snapshot, "commit_identity_invalid");
+});
+
+test("allows documented optional runtime names and rejects unknown names", () => {
+  for (const name of OPTIONAL_RUNTIME_NAMES) {
+    const snapshot = validPreflight();
+    snapshot.secrets.names.push(name);
+    const result = verifyShadowPreflight(snapshot);
+    assert.equal(result.accepted, true, name);
+  }
+
+  const snapshot = validPreflight();
+  snapshot.secrets.names.push("UNDOCUMENTED_RUNTIME_NAME");
+  assertFailure(verifyShadowPreflight, snapshot, "runtime_names_invalid");
+});
+
+test("returns frozen preflight release identity", () => {
+  const result = verifyShadowPreflight(validPreflight());
+  assert.deepEqual(result.identity, {
+    deploymentId: VALID_DEPLOYMENT_ID,
+    commitSha: VALID_COMMIT_SHA,
+  });
+  assert.equal(Object.isFrozen(result.identity), true);
+});
+
+test("base and scheduled Wrangler configs do not hardcode a stale commit", async () => {
+  for (const relativePath of [
+    "../../workers/mls-container/wrangler.jsonc",
+    "../../workers/mls-container/wrangler.scheduled.jsonc",
+  ]) {
+    const source = await readFile(
+      new URL(relativePath, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(source, /"MLS_GIT_COMMIT_SHA"\s*:/);
   }
 });
 
@@ -345,6 +508,11 @@ test("accepts fully correlated shadow evidence", () => {
   assert.equal(Object.isFrozen(result), true);
   assert.equal(Object.isFrozen(result.checks), true);
   assert.equal(Object.isFrozen(result.identity), true);
+  assert.equal(result.manifest.commitSha, VALID_COMMIT_SHA);
+  assert.equal(result.manifest.terminalClassification, "shadow_healthy");
+  assert.equal(Object.isFrozen(result.manifest), true);
+  assert.equal(Object.isFrozen(result.manifest.artifacts), true);
+  assert.equal(Object.isFrozen(result.manifest.artifacts[0]), true);
 });
 
 test("rejects malformed identity values, UUIDs, traversal, and free text", () => {
@@ -467,15 +635,52 @@ test("rejects invalid SHA-256 and each missing exact-prefix R2 object", () => {
   assertFailure(verifyShadowEvidence, invalidSha, "manifest_invalid");
 
   for (const suffix of [
-    "run.json",
+    "report.json",
+    "listings.csv",
+    "observations.csv",
     "diagnostics.json",
-    "summary.json",
     "manifest.json",
   ]) {
     const snapshot = validEvidence();
     snapshot.r2.objectKeys = snapshot.r2.objectKeys.filter(
       (key) => key !== `${VALID_PREFIX}/${suffix}`,
     );
+    assertFailure(verifyShadowEvidence, snapshot, "manifest_invalid");
+  }
+});
+
+test("rejects a manifest hash that does not match runtime serialization", () => {
+  const snapshot = validEvidence();
+  snapshot.r2.manifestSha256 = "f".repeat(64);
+  assertFailure(verifyShadowEvidence, snapshot, "manifest_invalid");
+});
+
+test("rejects self-hashed manifest metadata that mismatches captured identity", () => {
+  for (const mutate of [
+    (manifest) => (manifest.commitSha = "b".repeat(40)),
+    (manifest) => (manifest.containerDeploymentId = "deployment-other-01"),
+    (manifest) => (manifest.workflowInstanceId = "workflow-other-01"),
+    (manifest) => (manifest.attemptId = "scheduled:production:2026-08-24"),
+    (manifest) => (manifest.terminalClassification = "shadow_degraded"),
+  ]) {
+    const snapshot = validEvidence();
+    mutate(snapshot.r2.manifest);
+    snapshot.r2.manifestSha256 = manifestSha256(snapshot.r2.manifest);
+    assertFailure(verifyShadowEvidence, snapshot, "manifest_invalid");
+  }
+});
+
+test("rejects artifact digest, metadata, and key mismatches", () => {
+  for (const mutate of [
+    (value) => (value.r2.manifest.artifacts[0].sha256 = "f".repeat(64)),
+    (value) =>
+      (value.r2.manifest.artifacts[1].contentType = "application/octet-stream"),
+    (value) => (value.r2.objects[2].byteLength += 1),
+    (value) => (value.r2.objects[3].key = `${VALID_PREFIX}/other.json`),
+  ]) {
+    const snapshot = validEvidence();
+    mutate(snapshot);
+    snapshot.r2.manifestSha256 = manifestSha256(snapshot.r2.manifest);
     assertFailure(verifyShadowEvidence, snapshot, "manifest_invalid");
   }
 });
@@ -541,6 +746,22 @@ test("fails closed on malformed, inherited, extra, and symbol-bearing records", 
   }
 });
 
+test("rejects impossible calendar dates in attempt identities", () => {
+  const snapshot = validEvidence();
+  snapshot.identity.attemptId = "scheduled:production:2026-02-30";
+  assertFailure(verifyShadowEvidence, snapshot, "attempt_id_invalid");
+});
+
+test("rejects arrays whose direct prototype was altered", () => {
+  const preflight = validPreflight();
+  Object.setPrototypeOf(preflight.worker.routes, null);
+  assertFailure(verifyShadowPreflight, preflight, "routes_present");
+
+  const evidence = validEvidence();
+  Object.setPrototypeOf(evidence.r2.objectKeys, null);
+  assertFailure(verifyShadowEvidence, evidence, "manifest_invalid");
+});
+
 test("never invokes accessors or coercion hooks", () => {
   let getterCalls = 0;
   const accessor = validEvidence();
@@ -603,6 +824,7 @@ test("builds a frozen JSON-safe acceptance record", () => {
     "preflightChecks",
     "evidenceChecks",
     "identity",
+    "manifest",
   ]);
   assert.equal(record.accepted, true);
   assert.equal(record.checkedAt, checkedAt);
@@ -611,6 +833,21 @@ test("builds a frozen JSON-safe acceptance record", () => {
   assert.equal(Object.isFrozen(record.preflightChecks), true);
   assert.equal(Object.isFrozen(record.evidenceChecks), true);
   assert.equal(Object.isFrozen(record.identity), true);
+  assert.equal(
+    record.manifest.manifestSha256,
+    validEvidence().r2.manifestSha256,
+  );
+  assert.equal(record.manifest.terminalClassification, "shadow_healthy");
+  assert.equal(record.manifest.commitSha, VALID_COMMIT_SHA);
+  assert.equal(record.manifest.containerDeploymentId, VALID_DEPLOYMENT_ID);
+  assert.equal(record.manifest.workflowInstanceId, VALID_WORKFLOW_ID);
+  assert.deepEqual(
+    record.manifest.artifacts,
+    validEvidence().r2.manifest.artifacts,
+  );
+  assert.equal(Object.isFrozen(record.manifest), true);
+  assert.equal(Object.isFrozen(record.manifest.artifacts), true);
+  assert.equal(Object.isFrozen(record.manifest.artifacts[0]), true);
   const serialized = JSON.stringify(record);
   assert.equal(serialized.includes("DATABASE_URL_UNPOOLED"), false);
   assert.equal(serialized.includes("MLS_R2_SECRET_ACCESS_KEY"), false);
@@ -663,6 +900,49 @@ test("rejects unaccepted inputs and non-millisecond UTC checkedAt values", () =>
     },
   ]) {
     assert.throws(() => buildShadowAcceptanceRecord(input), TypeError);
+  }
+});
+
+test("acceptance rejects forged manifest evidence results", () => {
+  const preflight = verifyShadowPreflight(validPreflight());
+  const evidence = verifyShadowEvidence(validEvidence());
+  const forged = {
+    ...evidence,
+    manifest: { ...evidence.manifest, commitSha: "b".repeat(40) },
+  };
+  assert.throws(
+    () =>
+      buildShadowAcceptanceRecord({
+        preflight,
+        evidence: forged,
+        checkedAt: "2026-08-23T01:02:03.456Z",
+      }),
+    TypeError,
+  );
+});
+
+test("acceptance binds preflight release identity to manifest provenance", () => {
+  const evidence = verifyShadowEvidence(validEvidence());
+  for (const mutate of [
+    (snapshot) => {
+      snapshot.container.deploymentId = "deployment-other-01";
+      snapshot.workflow.deploymentId = "deployment-other-01";
+    },
+    (snapshot) => (snapshot.workflow.commitSha = "b".repeat(40)),
+  ]) {
+    const snapshot = validPreflight();
+    mutate(snapshot);
+    const preflight = verifyShadowPreflight(snapshot);
+    assert.equal(preflight.accepted, true);
+    assert.throws(
+      () =>
+        buildShadowAcceptanceRecord({
+          preflight,
+          evidence,
+          checkedAt: "2026-08-23T01:02:03.456Z",
+        }),
+      TypeError,
+    );
   }
 });
 
@@ -781,6 +1061,43 @@ test("CLI returns bounded evidence failures without accepting", async () => {
     const output = JSON.parse(await readFile(outputPath, "utf8"));
     assert.equal(output.accepted, false);
     assert.deepEqual(output.failures, ["publication_side_effect_detected"]);
+    assert.equal(
+      output.failures.every((code) => /^[a-z][a-z0-9_-]{0,79}$/.test(code)),
+      true,
+    );
+  });
+});
+
+test("CLI emits only bounded lowercase missing-name failure codes", async () => {
+  await withCliFiles(async (directory) => {
+    const preflightPath = path.join(directory, "preflight.json");
+    const evidencePath = path.join(directory, "evidence.json");
+    const outputPath = path.join(directory, "acceptance.json");
+    const preflight = validPreflight();
+    preflight.secrets.names = preflight.secrets.names.filter(
+      (name) => name !== "DATABASE_URL_UNPOOLED",
+    );
+    await writeFile(preflightPath, JSON.stringify(preflight), "utf8");
+    await writeFile(evidencePath, JSON.stringify(validEvidence()), "utf8");
+    const { dependencies } = cliDependencies();
+
+    const exitCode = await main(
+      [
+        "--preflight",
+        preflightPath,
+        "--evidence",
+        evidencePath,
+        "--output",
+        outputPath,
+      ],
+      dependencies,
+    );
+
+    assert.equal(exitCode, 30);
+    const output = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.deepEqual(output.failures, [
+      "missing_secret_name_database_url_unpooled",
+    ]);
     assert.equal(
       output.failures.every((code) => /^[a-z][a-z0-9_-]{0,79}$/.test(code)),
       true,

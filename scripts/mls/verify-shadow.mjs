@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, open, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,6 +8,7 @@ const ATTEMPT =
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
 const FAILURE = /^[a-z][a-z0-9_-]{0,79}$/;
 const SOURCE = /^[a-z0-9][a-z0-9_-]{0,79}$/;
 const REQUIRED_SECRET_NAMES = [
@@ -18,6 +20,24 @@ const REQUIRED_SECRET_NAMES = [
   "CLOUDFLARE_ACCOUNT_ID",
   "MLS_EVIDENCE_BUCKET",
   "CLOUDFLARE_DEPLOYMENT_ID",
+];
+const ALLOWED_RUNTIME_NAMES = [
+  ...REQUIRED_SECRET_NAMES,
+  "BLOB_READ_WRITE_TOKEN",
+  "MLS_ENVIRONMENT",
+  "MLS_SCHEDULED_MODE",
+  "MLS_PUBLISH_ENABLED",
+  "MLS_MEDIA_RIGHTS_CONFIRMED",
+  "MLS_EVIDENCE_BACKEND",
+  "MLS_EVIDENCE_RETENTION_DAYS",
+  "MLS_GIT_COMMIT_SHA",
+  "MLS_SCHEDULED_FOR",
+  "MLS_ATTEMPT_ID",
+  "MLS_WORKFLOW_INSTANCE_ID",
+  "MLS_CONTAINER_ID",
+  "MLS_ATTEMPT_STARTED_AT",
+  "MLS_TERMINAL_STATUS_FILE",
+  "MLS_ARTIFACT_DIR",
 ];
 
 const PREFLIGHT_KEYS = [
@@ -46,15 +66,65 @@ const IDENTITY_KEYS = [
   "attemptId",
   "workflowId",
   "deploymentId",
+  "commitSha",
   "runId",
   "evidencePrefix",
 ];
+const PREFLIGHT_IDENTITY_KEYS = ["deploymentId", "commitSha"];
 const REQUIRED_OBJECT_SUFFIXES = [
-  "run.json",
+  "report.json",
+  "listings.csv",
+  "observations.csv",
   "diagnostics.json",
-  "summary.json",
   "manifest.json",
 ];
+const ARTIFACT_SPECS = Object.freeze([
+  Object.freeze({
+    name: "report.json",
+    contentType: "application/json; charset=utf-8",
+  }),
+  Object.freeze({
+    name: "listings.csv",
+    contentType: "text/csv; charset=utf-8",
+  }),
+  Object.freeze({
+    name: "observations.csv",
+    contentType: "text/csv; charset=utf-8",
+  }),
+  Object.freeze({
+    name: "diagnostics.json",
+    contentType: "application/json; charset=utf-8",
+  }),
+]);
+const ARTIFACT_KEYS = ["name", "byteLength", "contentType", "sha256"];
+const ARTIFACT_OBJECT_KEYS = [
+  "name",
+  "key",
+  "byteLength",
+  "contentType",
+  "sha256",
+];
+const MANIFEST_KEYS = [
+  "schemaVersion",
+  "environment",
+  "hkDate",
+  "attemptId",
+  "mode",
+  "commitSha",
+  "containerDeploymentId",
+  "workflowInstanceId",
+  "containerId",
+  "runId",
+  "status",
+  "terminalClassification",
+  "exitCode",
+  "startedAt",
+  "completedAt",
+  "durationMs",
+  "neonRunId",
+  "artifacts",
+];
+const MANIFEST_EVIDENCE_KEYS = ["manifestSha256", ...MANIFEST_KEYS];
 const PREFLIGHT_CHECK_KEYS = [
   "cloudflareCapability",
   "workersDevDisabled",
@@ -62,6 +132,8 @@ const PREFLIGHT_CHECK_KEYS = [
   "schedulesAbsent",
   "containerRegistered",
   "workflowRegistered",
+  "deploymentIdentity",
+  "commitIdentity",
   "migrationApplied",
   "shadowEnvironment",
   "publishDisabled",
@@ -150,12 +222,15 @@ function inspectDynamicRecord(value) {
 function inspectArray(value) {
   if (!Array.isArray(value)) return null;
 
+  let prototype;
   let descriptors;
   try {
+    prototype = Object.getPrototypeOf(value);
     descriptors = Object.getOwnPropertyDescriptors(value);
   } catch {
     return null;
   }
+  if (prototype !== Array.prototype) return null;
 
   const lengthDescriptor = descriptors.length;
   if (!lengthDescriptor || !("value" in lengthDescriptor)) return null;
@@ -202,11 +277,26 @@ function isString(value, pattern) {
   return typeof value === "string" && pattern.test(value);
 }
 
+function validCalendarDate(value) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.toISOString().slice(0, 10) === value;
+}
+
+function validAttempt(value) {
+  if (typeof value !== "string") return false;
+  const match = ATTEMPT.exec(value);
+  return match !== null && validCalendarDate(value.split(":")[2]);
+}
+
 function expectedPrefix(attemptId, runId) {
-  const match = ATTEMPT.exec(attemptId);
+  const match = validAttempt(attemptId) ? ATTEMPT.exec(attemptId) : null;
   if (!match) return null;
   const date = attemptId.split(":")[2];
-  return `mls-sync/${match[1]}/${date}/${runId}/${attemptId}`;
+  return `mls-sync/${match[1]}/${date}/${runId}/${attemptId.replaceAll(":", "-")}`;
 }
 
 function validIdentifier(value) {
@@ -217,6 +307,168 @@ function validStringArray(value, predicate) {
   const values = inspectArray(value);
   if (!values || !values.every(predicate)) return null;
   return values;
+}
+
+function validUtcTimestamp(value) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
+  ) {
+    return false;
+  }
+  const timestamp = Date.parse(value);
+  return (
+    Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
+  );
+}
+
+function captureManifestArtifacts(value) {
+  const values = inspectArray(value);
+  if (!values || values.length !== ARTIFACT_SPECS.length) return null;
+  const artifacts = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const artifact = inspectRecord(values[index], ARTIFACT_KEYS);
+    const spec = ARTIFACT_SPECS[index];
+    if (
+      !artifact ||
+      artifact.name !== spec.name ||
+      artifact.contentType !== spec.contentType ||
+      !Number.isSafeInteger(artifact.byteLength) ||
+      artifact.byteLength < 0 ||
+      !isString(artifact.sha256, SHA256)
+    ) {
+      return null;
+    }
+    artifacts.push(Object.freeze({ ...artifact }));
+  }
+  return Object.freeze(artifacts);
+}
+
+function captureArtifactObjects(value, prefix) {
+  const values = inspectArray(value);
+  if (!values || values.length !== ARTIFACT_SPECS.length) return null;
+  const objects = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const object = inspectRecord(values[index], ARTIFACT_OBJECT_KEYS);
+    const spec = ARTIFACT_SPECS[index];
+    if (
+      !object ||
+      object.name !== spec.name ||
+      object.key !== `${prefix}/${spec.name}` ||
+      object.contentType !== spec.contentType ||
+      !Number.isSafeInteger(object.byteLength) ||
+      object.byteLength < 0 ||
+      !isString(object.sha256, SHA256)
+    ) {
+      return null;
+    }
+    objects.push(Object.freeze({ ...object }));
+  }
+  return Object.freeze(objects);
+}
+
+function sameArtifactMetadata(artifacts, objects) {
+  return artifacts.every((artifact, index) =>
+    ARTIFACT_KEYS.every((key) => artifact[key] === objects[index][key]),
+  );
+}
+
+function captureRuntimeManifest(value, identity, manifestSha256) {
+  const manifest = inspectRecord(value, MANIFEST_KEYS);
+  if (!manifest || !identity || !isString(manifestSha256, SHA256)) return null;
+  const attemptMatch = ATTEMPT.exec(identity.attemptId);
+  const artifacts = captureManifestArtifacts(manifest.artifacts);
+  if (!attemptMatch || !artifacts) return null;
+  if (
+    manifest.schemaVersion !== 1 ||
+    manifest.environment !== attemptMatch[1] ||
+    manifest.hkDate !== identity.attemptId.split(":")[2] ||
+    manifest.attemptId !== identity.attemptId ||
+    manifest.mode !== "shadow" ||
+    manifest.commitSha !== identity.commitSha ||
+    manifest.containerDeploymentId !== identity.deploymentId ||
+    manifest.workflowInstanceId !== identity.workflowId ||
+    !validIdentifier(manifest.containerId) ||
+    manifest.runId !== identity.runId ||
+    manifest.status !== "shadow_healthy" ||
+    manifest.terminalClassification !== "shadow_healthy" ||
+    manifest.exitCode !== 0 ||
+    !validUtcTimestamp(manifest.startedAt) ||
+    !validUtcTimestamp(manifest.completedAt) ||
+    !Number.isSafeInteger(manifest.durationMs) ||
+    manifest.durationMs < 0 ||
+    Date.parse(manifest.completedAt) - Date.parse(manifest.startedAt) !==
+      manifest.durationMs ||
+    !isString(manifest.neonRunId, UUID)
+  ) {
+    return null;
+  }
+  const canonical = Object.freeze({
+    schemaVersion: manifest.schemaVersion,
+    environment: manifest.environment,
+    hkDate: manifest.hkDate,
+    attemptId: manifest.attemptId,
+    mode: manifest.mode,
+    commitSha: manifest.commitSha,
+    containerDeploymentId: manifest.containerDeploymentId,
+    workflowInstanceId: manifest.workflowInstanceId,
+    containerId: manifest.containerId,
+    runId: manifest.runId,
+    status: manifest.status,
+    terminalClassification: manifest.terminalClassification,
+    exitCode: manifest.exitCode,
+    startedAt: manifest.startedAt,
+    completedAt: manifest.completedAt,
+    durationMs: manifest.durationMs,
+    neonRunId: manifest.neonRunId,
+    artifacts,
+  });
+  const computedSha256 = createHash("sha256")
+    .update(`${JSON.stringify(canonical, null, 2)}\\n`)
+    .digest("hex");
+  if (computedSha256 !== manifestSha256) return null;
+  return Object.freeze({ manifestSha256, ...canonical });
+}
+
+function captureEvidenceManifest(r2, identity) {
+  if (!r2 || !identity) return null;
+  const manifest = captureRuntimeManifest(
+    r2.manifest,
+    identity,
+    r2.manifestSha256,
+  );
+  const objects = captureArtifactObjects(r2.objects, identity.evidencePrefix);
+  const objectKeys = validStringArray(
+    r2.objectKeys,
+    (key) => typeof key === "string",
+  );
+  if (!manifest || !objects || !objectKeys) return null;
+  const expectedObjectKeys = [
+    ...objects.map(({ key }) => key),
+    `${identity.evidencePrefix}/manifest.json`,
+  ];
+  if (
+    objectKeys.length !== expectedObjectKeys.length ||
+    new Set(objectKeys).size !== expectedObjectKeys.length ||
+    !expectedObjectKeys.every((key) => objectKeys.includes(key)) ||
+    !sameArtifactMetadata(manifest.artifacts, objects)
+  ) {
+    return null;
+  }
+  return manifest;
+}
+
+function captureAcceptedManifest(value, identity) {
+  const captured = inspectRecord(value, MANIFEST_EVIDENCE_KEYS);
+  if (!captured) return null;
+  const runtimeManifest = Object.fromEntries(
+    MANIFEST_KEYS.map((key) => [key, captured[key]]),
+  );
+  return captureRuntimeManifest(
+    runtimeManifest,
+    identity,
+    captured.manifestSha256,
+  );
 }
 
 export function verifyShadowPreflight(snapshot) {
@@ -236,6 +488,7 @@ export function verifyShadowPreflight(snapshot) {
       accepted: false,
       failures: frozenFailures(failures),
       checks: Object.freeze(checks),
+      identity: null,
     });
   }
 
@@ -289,13 +542,36 @@ export function verifyShadowPreflight(snapshot) {
     "container_not_registered",
   );
 
-  const workflow = inspectRecord(root.workflow, ["registered", "deploymentId"]);
+  const workflow = inspectRecord(root.workflow, [
+    "registered",
+    "deploymentId",
+    "commitSha",
+  ]);
   addCheck(
     checks,
     failures,
     "workflowRegistered",
     workflow?.registered === true && validIdentifier(workflow.deploymentId),
     "workflow_not_registered",
+  );
+  const deploymentIdentity =
+    container !== null &&
+    workflow !== null &&
+    container.deploymentId === workflow.deploymentId;
+  addCheck(
+    checks,
+    failures,
+    "deploymentIdentity",
+    deploymentIdentity,
+    "deployment_id_mismatch",
+  );
+  const commitIdentity = isString(workflow?.commitSha, COMMIT_SHA);
+  addCheck(
+    checks,
+    failures,
+    "commitIdentity",
+    commitIdentity,
+    "commit_identity_invalid",
   );
 
   const migration = inspectRecord(root.migration, ["applied", "version"]);
@@ -304,7 +580,7 @@ export function verifyShadowPreflight(snapshot) {
     failures,
     "migrationApplied",
     migration?.applied === true &&
-      migration.version === "2026-08-22-mls-evidence",
+      migration.version === "20260817120000_dual_source_listing_sync.sql",
     "migration_not_applied",
   );
 
@@ -345,20 +621,20 @@ export function verifyShadowPreflight(snapshot) {
     const present = secretSet.has(name);
     if (!present) {
       requiredSecretsPresent = false;
-      failures.push(`missing_secret_name:${name}`);
+      failures.push(`missing_secret_name_${name.toLowerCase()}`);
     }
   }
   checks.requiredSecretsPresent = requiredSecretsPresent;
   const boundedSecretSet =
     secretNames !== null &&
     secretSet.size === secretNames.length &&
-    secretNames.every((name) => REQUIRED_SECRET_NAMES.includes(name));
+    secretNames.every((name) => ALLOWED_RUNTIME_NAMES.includes(name));
   addCheck(
     checks,
     failures,
     "secretNamesBounded",
     boundedSecretSet,
-    "shadow_environment_invalid",
+    "runtime_names_invalid",
   );
 
   const r2 = inspectRecord(root.r2, [
@@ -390,10 +666,18 @@ export function verifyShadowPreflight(snapshot) {
   );
 
   const frozen = frozenFailures(failures);
+  const identity =
+    deploymentIdentity && commitIdentity
+      ? Object.freeze({
+          deploymentId: workflow.deploymentId,
+          commitSha: workflow.commitSha,
+        })
+      : null;
   return freezeResult({
     accepted: frozen.length === 0,
     failures: frozen,
     checks: Object.freeze({ ...checks }),
+    identity,
   });
 }
 
@@ -401,9 +685,10 @@ function inspectIdentity(value) {
   const identity = inspectRecord(value, IDENTITY_KEYS);
   if (!identity) return null;
   if (
-    !isString(identity.attemptId, ATTEMPT) ||
+    !validAttempt(identity.attemptId) ||
     !validIdentifier(identity.workflowId) ||
     !validIdentifier(identity.deploymentId) ||
+    !isString(identity.commitSha, COMMIT_SHA) ||
     !isString(identity.runId, UUID) ||
     typeof identity.evidencePrefix !== "string"
   ) {
@@ -425,7 +710,7 @@ export function verifyShadowEvidence(snapshot) {
   checkEntries.push(["shadowIdentity", identityValid]);
   if (!identityValid) {
     failures.push(
-      rawIdentity !== null && !isString(rawIdentity.attemptId, ATTEMPT)
+      rawIdentity !== null && !validAttempt(rawIdentity.attemptId)
         ? "attempt_id_invalid"
         : "shadow_identity_invalid",
     );
@@ -437,6 +722,7 @@ export function verifyShadowEvidence(snapshot) {
       failures: frozenFailures(failures),
       checks: makeChecks(checkEntries),
       identity: null,
+      manifest: null,
     });
   }
 
@@ -446,6 +732,7 @@ export function verifyShadowEvidence(snapshot) {
       failures: frozenFailures(failures),
       checks: makeChecks(checkEntries),
       identity: null,
+      manifest: null,
     });
   }
 
@@ -494,6 +781,7 @@ export function verifyShadowEvidence(snapshot) {
     run.attemptId === identity.attemptId &&
     run.workflowId === identity.workflowId &&
     run.deploymentId === identity.deploymentId &&
+    run.commitSha === identity.commitSha &&
     run.runId === identity.runId;
   checkEntries.push(["runIdentity", runIdentity]);
   if (!runIdentity) failures.push("run_identity_mismatch");
@@ -503,6 +791,8 @@ export function verifyShadowEvidence(snapshot) {
     "manifestPresent",
     "manifestSha256",
     "objectKeys",
+    "objects",
+    "manifest",
   ]);
   const evidencePrefix =
     identityValid &&
@@ -549,21 +839,8 @@ export function verifyShadowEvidence(snapshot) {
   checkEntries.push(["neonShadowHealthy", neonHealthy]);
   if (!neonHealthy) failures.push("neon_shadow_not_healthy");
 
-  const objectKeys = r2
-    ? validStringArray(r2.objectKeys, (key) => typeof key === "string")
-    : null;
-  const expectedObjects = identityValid
-    ? REQUIRED_OBJECT_SUFFIXES.map(
-        (suffix) => `${identity.evidencePrefix}/${suffix}`,
-      )
-    : [];
-  const manifestValid =
-    r2 !== null &&
-    isString(r2.manifestSha256, SHA256) &&
-    objectKeys !== null &&
-    objectKeys.length === expectedObjects.length &&
-    new Set(objectKeys).size === expectedObjects.length &&
-    expectedObjects.every((key) => objectKeys.includes(key));
+  const manifestEvidence = captureEvidenceManifest(r2, identity);
+  const manifestValid = manifestEvidence !== null;
   checkEntries.push(["manifestValid", manifestValid]);
   if (!manifestValid) failures.push("manifest_invalid");
 
@@ -608,6 +885,7 @@ export function verifyShadowEvidence(snapshot) {
     failures: frozen,
     checks: makeChecks(checkEntries),
     identity: identitySnapshot,
+    manifest: manifestEvidence,
   });
 }
 
@@ -623,15 +901,6 @@ function snapshotBooleanChecks(value, expectedKeys) {
 }
 
 function acceptedPreflightResult(value) {
-  const result = inspectRecord(value, ["accepted", "failures", "checks"]);
-  if (!result || result.accepted !== true) return null;
-  const failures = inspectArray(result.failures);
-  const checks = snapshotBooleanChecks(result.checks, PREFLIGHT_CHECK_KEYS);
-  if (!failures || failures.length !== 0 || !checks) return null;
-  return { checks };
-}
-
-function acceptedEvidenceResult(value) {
   const result = inspectRecord(value, [
     "accepted",
     "failures",
@@ -640,23 +909,42 @@ function acceptedEvidenceResult(value) {
   ]);
   if (!result || result.accepted !== true) return null;
   const failures = inspectArray(result.failures);
+  const checks = snapshotBooleanChecks(result.checks, PREFLIGHT_CHECK_KEYS);
+  const identity = inspectRecord(result.identity, PREFLIGHT_IDENTITY_KEYS);
+  if (
+    !failures ||
+    failures.length !== 0 ||
+    !checks ||
+    !identity ||
+    !validIdentifier(identity.deploymentId) ||
+    !isString(identity.commitSha, COMMIT_SHA)
+  ) {
+    return null;
+  }
+  return { checks, identity: Object.freeze({ ...identity }) };
+}
+
+function acceptedEvidenceResult(value) {
+  const result = inspectRecord(value, [
+    "accepted",
+    "failures",
+    "checks",
+    "identity",
+    "manifest",
+  ]);
+  if (!result || result.accepted !== true) return null;
+  const failures = inspectArray(result.failures);
   const checks = snapshotBooleanChecks(result.checks, EVIDENCE_CHECK_KEYS);
   const identity = inspectIdentity(result.identity);
-  if (!failures || failures.length !== 0 || !checks || !identity) return null;
-  return { checks, identity };
+  const manifest = captureAcceptedManifest(result.manifest, identity);
+  if (!failures || failures.length !== 0 || !checks || !identity || !manifest) {
+    return null;
+  }
+  return { checks, identity, manifest };
 }
 
 function validCheckedAt(value) {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
-  ) {
-    return false;
-  }
-  const timestamp = Date.parse(value);
-  return (
-    Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
-  );
+  return validUtcTimestamp(value);
 }
 
 export function buildShadowAcceptanceRecord(input) {
@@ -673,6 +961,13 @@ export function buildShadowAcceptanceRecord(input) {
     throw new TypeError("checkedAt must be a millisecond UTC timestamp");
   }
 
+  if (
+    preflight.identity.deploymentId !==
+      evidence.manifest.containerDeploymentId ||
+    preflight.identity.commitSha !== evidence.manifest.commitSha
+  ) {
+    throw new TypeError("preflight and manifest provenance must match");
+  }
   const identity = Object.freeze(
     Object.fromEntries(
       IDENTITY_KEYS.map((key) => [key, evidence.identity[key]]),
@@ -684,6 +979,7 @@ export function buildShadowAcceptanceRecord(input) {
     preflightChecks: preflight.checks,
     evidenceChecks: evidence.checks,
     identity,
+    manifest: evidence.manifest,
   });
 }
 

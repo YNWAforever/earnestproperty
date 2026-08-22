@@ -35,13 +35,14 @@ The Docker check is an operator prerequisite, not evidence that an image was bui
 This section is a manual, approval-gated readiness check. It does not authorize automatic schedule activation or publication. Keep the run in `shadow` with `publishEnabled:false`; the later, separately approved scheduled-deployment and first-publish examples remain outside this section.
 
 1. Only after the separately approved secret-placement gate, copy Vercel Production variables interactively. Map `DATABASE_URL_UNPOOLED` to the Neon production value, `BLOB_READ_WRITE_TOKEN` to the Vercel Blob token retained for a later publish only, and the R2 keys to the private evidence bucket. Do not put values in files, command history, Docker arguments, or logs.
-2. Run the read-only capability, secret-name, and lock checks below. Record names and booleans only, including Cloudflare capability, Container and Workflow registration, migration status, object-lock status, and `publishEnabled:false`.
-3. With the distinct unscheduled-deployment approval, deploy only the reviewed base configuration. Verify `workers_dev=false`, no routes, no schedules, and `MLS_PUBLISH_ENABLED=false`.
-4. With the distinct manual-shadow approval, trigger exactly one manual production shadow workflow. Capture the Workflow, attempt, deployment, Neon run, R2 prefix, terminal-status, and side-effect snapshots.
-5. Run the verifier CLI and retain its JSON acceptance output.
-6. Stop and roll back if any check fails. Do not retry, publish, enable a schedule, or run a migration rollback automatically.
+2. Run the read-only capability, runtime-name, migration, object-lock, and lifecycle checks. Record names and booleans only.
+3. Record the reviewed commit SHA and the same Container/Workflow deployment identifier in the preflight capture. A repository value is not runtime provenance.
+4. With the distinct unscheduled-deployment approval, deploy only the reviewed base configuration. Verify `workers_dev=false`, no routes, no schedules, and `MLS_PUBLISH_ENABLED=false`.
+5. With the distinct manual-shadow approval, trigger exactly one manual production shadow Workflow from the later manual-shadow section. Capture the Workflow, attempt, authenticated private Container status, Neon run/lock, R2 objects/manifest, side effects, and redaction results below.
+6. Run the verifier CLI and retain its frozen, secret-free JSON acceptance output.
+7. Stop and roll back if any check fails. Do not retry, publish, enable a schedule, or run a migration rollback automatically.
 
-Read-only checks (record names and booleans, never values):
+Read-only capability and configuration checks:
 
 ```powershell
 npm.cmd exec wrangler -- secret list --config workers/mls-container/wrangler.jsonc
@@ -51,10 +52,226 @@ npm.cmd exec wrangler -- r2 bucket lock list <approved-bucket-name>
 npm.cmd exec wrangler -- r2 bucket lifecycle list <approved-bucket-name>
 ```
 
-Unscheduled deployment, after its separate approval:
+Unscheduled deployment, only after its separate approval:
 
 ```powershell
 npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.jsonc
+```
+
+Capture the exact Workflow instance and attempt after the separately approved manual shadow has been triggered:
+
+```powershell
+npm.cmd exec wrangler -- workflows instances list earnest-mls-runner --config workers/mls-container/wrangler.jsonc
+npm.cmd exec wrangler -- workflows instances describe earnest-mls-runner <workflow-instance-id> --config workers/mls-container/wrangler.jsonc
+```
+
+Capture the authenticated private Container `/status` response only from the approved diagnostic context. Build `$statusHeaders` there from the ephemeral in-memory authorization material; never print or persist that map:
+
+```powershell
+$status = Invoke-RestMethod -Method Get -Uri "http://localhost/status" -Headers $statusHeaders
+$status | ConvertTo-Json -Depth 8
+```
+
+Capture the exact Neon shadow run and confirm the advisory lock can be acquired and released after the run. Both `acquired_after_run` and `released_probe` must be true; the probe uses one session and releases anything it acquires:
+
+```powershell
+psql "$env:DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -c "SELECT id::text AS run_id, scheduled_for::text, mode, status, source_status, counts, failure_code FROM listing_sync_runs WHERE id = '<run-id>'::uuid;"
+psql "$env:DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -c "SELECT pg_try_advisory_lock(hashtext('earnestproperty:mls-sync')) AS acquired_after_run;" -c "SELECT pg_advisory_unlock(hashtext('earnestproperty:mls-sync')) AS released_probe;"
+psql "$env:DATABASE_URL_UNPOOLED" -X -v ON_ERROR_STOP=1 -c "SELECT count(*)::int AS publication_attempts FROM listing_change_events WHERE run_id = '<run-id>'::uuid;"
+```
+
+Capture the private R2 prefix, complete object list, per-artifact metadata, terminal manifest, and hash. The expected object names are `report.json`, `listings.csv`, `observations.csv`, `diagnostics.json`, and `manifest.json`:
+
+```powershell
+aws s3api list-objects-v2 --endpoint-url "https://$env:CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" --bucket <approved-bucket-name> --prefix <exact-evidence-prefix> --output json
+$artifactNames = @("report.json", "listings.csv", "observations.csv", "diagnostics.json")
+$artifactNames | ForEach-Object { aws s3api head-object --endpoint-url "https://$env:CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" --bucket <approved-bucket-name> --key "<exact-evidence-prefix>/$($_)" --output json }
+aws s3api get-object --endpoint-url "https://$env:CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com" --bucket <approved-bucket-name> --key "<exact-evidence-prefix>/manifest.json" <captured-manifest-path>
+Get-FileHash -Algorithm SHA256 <captured-manifest-path>
+```
+
+Derive `blobUploads` from `report.json.counts.mediaUploaded` and `publicationAttempts` from the Neon count above. Both must be zero. Scan the complete capture bundle before setting the redaction booleans; any match is a failed gate:
+
+```powershell
+rg -n --pcre2 "(Authorization|postgres(?:ql)?://|access[_-]?token|secret[_-]?access|private[_-]?key|password)" <capture-bundle-directory>
+```
+
+Use these exact JSON shapes. Replace angle-bracket operands from the captured outputs, keep the listed keys exact, and never paste a credential value.
+
+```json
+{
+  "account": { "capability": true },
+  "worker": { "workersDev": false, "routes": [], "schedules": [] },
+  "container": {
+    "registered": true,
+    "deploymentId": "<container-and-workflow-deployment-id>"
+  },
+  "workflow": {
+    "registered": true,
+    "deploymentId": "<container-and-workflow-deployment-id>",
+    "commitSha": "<reviewed-40-character-commit-sha>"
+  },
+  "migration": {
+    "applied": true,
+    "version": "20260817120000_dual_source_listing_sync.sql"
+  },
+  "secrets": {
+    "names": [
+      "DATABASE_URL_UNPOOLED",
+      "MLS_R2_ACCESS_KEY_ID",
+      "MLS_R2_SECRET_ACCESS_KEY",
+      "MLS_CRAWLER_CONTACT_URL",
+      "MLS_MEDIA_ALLOWED_HOSTS",
+      "CLOUDFLARE_ACCOUNT_ID",
+      "MLS_EVIDENCE_BUCKET",
+      "CLOUDFLARE_DEPLOYMENT_ID"
+    ]
+  },
+  "r2": {
+    "bucket": "earnest-mls-evidence",
+    "objectLock": "COMPLIANCE",
+    "retentionDays": 90,
+    "lifecycleDays": 90
+  },
+  "flags": {
+    "mode": "shadow",
+    "publishEnabled": false,
+    "mediaRightsConfirmed": false
+  }
+}
+```
+
+The optional runtime-name inventory may additionally include documented non-secret names and `BLOB_READ_WRITE_TOKEN`, which remains publish-only and is never required for shadow. Unknown names fail closed.
+
+```json
+{
+  "identity": {
+    "attemptId": "<scheduled-production-attempt-id>",
+    "workflowId": "<workflow-instance-id>",
+    "deploymentId": "<container-and-workflow-deployment-id>",
+    "commitSha": "<reviewed-40-character-commit-sha>",
+    "runId": "<run-uuid>",
+    "evidencePrefix": "<exact-evidence-prefix>"
+  },
+  "workflow": {
+    "attemptId": "<scheduled-production-attempt-id>",
+    "deploymentId": "<container-and-workflow-deployment-id>",
+    "state": "succeeded"
+  },
+  "container": {
+    "deploymentId": "<container-and-workflow-deployment-id>",
+    "state": "succeeded",
+    "exitCode": 0
+  },
+  "run": {
+    "attemptId": "<scheduled-production-attempt-id>",
+    "workflowId": "<workflow-instance-id>",
+    "deploymentId": "<container-and-workflow-deployment-id>",
+    "commitSha": "<reviewed-40-character-commit-sha>",
+    "runId": "<run-uuid>",
+    "evidencePrefix": "<exact-evidence-prefix>"
+  },
+  "sources": {
+    "configured": ["old_site", "28hse_agent_540"],
+    "health": { "old_site": "full", "28hse_agent_540": "full" }
+  },
+  "neon": { "shadow": true, "healthy": true, "lockReleased": true },
+  "r2": {
+    "evidencePrefix": "<exact-evidence-prefix>",
+    "manifestPresent": true,
+    "manifestSha256": "<64-character-lowercase-sha256>",
+    "objectKeys": [
+      "<exact-evidence-prefix>/report.json",
+      "<exact-evidence-prefix>/listings.csv",
+      "<exact-evidence-prefix>/observations.csv",
+      "<exact-evidence-prefix>/diagnostics.json",
+      "<exact-evidence-prefix>/manifest.json"
+    ],
+    "objects": [
+      {
+        "name": "report.json",
+        "key": "<exact-evidence-prefix>/report.json",
+        "byteLength": 0,
+        "contentType": "application/json; charset=utf-8",
+        "sha256": "<report-sha256>"
+      },
+      {
+        "name": "listings.csv",
+        "key": "<exact-evidence-prefix>/listings.csv",
+        "byteLength": 0,
+        "contentType": "text/csv; charset=utf-8",
+        "sha256": "<listings-sha256>"
+      },
+      {
+        "name": "observations.csv",
+        "key": "<exact-evidence-prefix>/observations.csv",
+        "byteLength": 0,
+        "contentType": "text/csv; charset=utf-8",
+        "sha256": "<observations-sha256>"
+      },
+      {
+        "name": "diagnostics.json",
+        "key": "<exact-evidence-prefix>/diagnostics.json",
+        "byteLength": 0,
+        "contentType": "application/json; charset=utf-8",
+        "sha256": "<diagnostics-sha256>"
+      }
+    ],
+    "manifest": {
+      "schemaVersion": 1,
+      "environment": "production",
+      "hkDate": "<Hong-Kong-date>",
+      "attemptId": "<scheduled-production-attempt-id>",
+      "mode": "shadow",
+      "commitSha": "<reviewed-40-character-commit-sha>",
+      "containerDeploymentId": "<container-and-workflow-deployment-id>",
+      "workflowInstanceId": "<workflow-instance-id>",
+      "containerId": "<container-id>",
+      "runId": "<run-uuid>",
+      "status": "shadow_healthy",
+      "terminalClassification": "shadow_healthy",
+      "exitCode": 0,
+      "startedAt": "<millisecond-UTC-start>",
+      "completedAt": "<millisecond-UTC-completion>",
+      "durationMs": 0,
+      "neonRunId": "<neon-run-uuid>",
+      "artifacts": [
+        {
+          "name": "report.json",
+          "byteLength": 0,
+          "contentType": "application/json; charset=utf-8",
+          "sha256": "<report-sha256>"
+        },
+        {
+          "name": "listings.csv",
+          "byteLength": 0,
+          "contentType": "text/csv; charset=utf-8",
+          "sha256": "<listings-sha256>"
+        },
+        {
+          "name": "observations.csv",
+          "byteLength": 0,
+          "contentType": "text/csv; charset=utf-8",
+          "sha256": "<observations-sha256>"
+        },
+        {
+          "name": "diagnostics.json",
+          "byteLength": 0,
+          "contentType": "application/json; charset=utf-8",
+          "sha256": "<diagnostics-sha256>"
+        }
+      ]
+    }
+  },
+  "statusRoute": {
+    "attemptId": "<scheduled-production-attempt-id>",
+    "state": "succeeded",
+    "exitCode": 0,
+    "manifestPresent": true
+  },
+  "sideEffects": { "blobUploads": 0, "publicationAttempts": 0 },
+  "redaction": { "secretsAbsent": true, "credentialPatternsAbsent": true }
+}
 ```
 
 Verifier acceptance record:
@@ -63,20 +280,13 @@ Verifier acceptance record:
 node scripts/mls/verify-shadow.mjs --preflight <path> --evidence <path> --output <path>
 ```
 
-| Captured snapshot    | Source                                 | Acceptance rule                                                         |
-| -------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
-| Workflow and attempt | Workflow status                        | One manual shadow attempt reaches a terminal success state.             |
-| Deployment           | Container and Workflow describe output | Both report the reviewed deployment identifier.                         |
-| Neon run             | Shadow-run record                      | It is healthy, remains shadow-only, and releases its lock.              |
-| R2 prefix            | Private evidence-bucket manifest       | The exact prefix has the required manifest artifacts and lock coverage. |
-| Terminal status      | Workflow, Container, and status route  | States correlate, exit code is zero, and the manifest is present.       |
-| Side effects         | Shadow evidence summary                | Blob uploads and publication attempts are both zero.                    |
-
-If a check fails, preserve evidence and stop for explicit operator direction. The following rollback examples are intentionally commented; they are not executable defaults:
+If a check fails, preserve evidence and stop for explicit operator direction. These rollback commands are intentionally commented and require a separate rollback approval. They terminate the recorded Workflow instance, remove the recorded Container application, restore the exact prior base configuration captured before deployment, and redeploy that prior base. They are not executable defaults:
 
 ```powershell
+# npm.cmd exec wrangler workflows instances terminate earnest-mls-runner <workflow-instance-id> --config workers/mls-container/wrangler.jsonc
+# npm.cmd exec wrangler containers delete <container-application-name> --config workers/mls-container/wrangler.jsonc
+# Copy-Item -LiteralPath <recorded-prior-base-config> -Destination workers/mls-container/wrangler.jsonc
 # npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.jsonc
-# npm.cmd exec wrangler -- workflows instances list earnest-mls-runner --config workers/mls-container/wrangler.jsonc
 ```
 
 ## 4. R2 evidence resource
