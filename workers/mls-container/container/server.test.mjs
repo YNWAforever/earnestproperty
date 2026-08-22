@@ -1278,7 +1278,7 @@ test("Dockerfile is pinned, amd64, non-root, health-checked, and narrowly copied
   assert.match(dockerfile, /^COPY package\.json package-lock\.json \.\/$/m);
   assert.match(
     dockerfile,
-    /^RUN npm ci --omit=dev --ignore-scripts=false && npm cache clean --force$/m,
+    /^RUN npm ci --omit=dev --ignore-scripts=true && npm cache clean --force$/m,
   );
   assert.match(dockerfile, /^COPY scripts \.\/scripts$/m);
   assert.match(dockerfile, /^COPY src \.\/src$/m);
@@ -1487,4 +1487,13 @@ test("contains an invalid heartbeat clock, signals the child, and waits for immu
   assert.equal(status.state, "unknown");
   assert.equal(status.failureCode, "supervisor_clock_failed");
   assert.equal(timers.callbacks.size, 0);
+});
+test("pins both Wrangler container configs to the repository-root build context", () => {
+  for (const name of ["wrangler.jsonc", "wrangler.scheduled.jsonc"]) {
+    const config = JSON.parse(
+      readFileSync(new URL("../" + name, import.meta.url), "utf8"),
+    );
+    assert.equal(config.containers[0].image, "./Dockerfile");
+    assert.equal(config.containers[0].image_build_context, "../..");
+  }
 });

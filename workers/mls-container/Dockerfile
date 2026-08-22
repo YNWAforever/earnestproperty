@@ -2,7 +2,7 @@ FROM --platform=linux/amd64 node:22.23.2-bookworm-slim
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts=false && npm cache clean --force
+RUN npm ci --omit=dev --ignore-scripts=true && npm cache clean --force
 COPY scripts ./scripts
 COPY src ./src
 COPY workers/mls-container/container ./workers/mls-container/container
