@@ -11,6 +11,55 @@ import {
   verifyShadowPreflight,
 } from "./verify-shadow.mjs";
 
+test("runbook manual shadow readiness verifier remains approval-gated", async () => {
+  const runbook = await readFile(
+    new URL("../../docs/mls-production-activation.md", import.meta.url),
+    "utf8",
+  );
+  const heading = "## 3. Manual shadow readiness verifier";
+  const start = runbook.indexOf(heading);
+  assert.notEqual(start, -1);
+  const nextHeading = runbook.indexOf("\n## ", start + heading.length);
+  const section = runbook.slice(start, nextHeading === -1 ? undefined : nextHeading);
+
+  for (const command of [
+    "npm.cmd exec wrangler -- secret list --config workers/mls-container/wrangler.jsonc",
+    "npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.jsonc",
+    "node scripts/mls/verify-shadow.mjs --preflight <path> --evidence <path> --output <path>",
+  ]) {
+    assert.equal(section.includes(command), true, `missing runbook command: ${command}`);
+  }
+
+  for (const requiredTerm of [
+    "shadow",
+    "publishEnabled:false",
+    "BLOB_READ_WRITE_TOKEN",
+    "migration",
+    "rollback",
+  ]) {
+    assert.equal(section.includes(requiredTerm), true, `missing runbook term: ${requiredTerm}`);
+  }
+
+  for (const secretName of [
+    "DATABASE_URL_UNPOOLED",
+    "BLOB_READ_WRITE_TOKEN",
+    "MLS_R2_SECRET_ACCESS_KEY",
+  ]) {
+    assert.equal(section.includes(`${secretName}=`), false);
+    assert.equal(section.includes(`${secretName} =`), false);
+  }
+
+  for (const automaticCommand of [
+    "wrangler.scheduled.jsonc",
+    "schedule enable",
+    "schedule create",
+    '"mode":"publish"',
+    "MLS_PUBLISH_ENABLED=true",
+  ]) {
+    assert.equal(section.includes(automaticCommand), false);
+  }
+});
+
 const VALID_ATTEMPT_ID = "scheduled:production:2026-08-23";
 const VALID_RUN_ID = "00000000-0000-4000-8000-000000000001";
 const VALID_WORKFLOW_ID = "workflow-20260823-01";
