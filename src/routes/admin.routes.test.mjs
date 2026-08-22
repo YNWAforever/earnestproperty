@@ -708,7 +708,39 @@ test("createAdminAudienceFromSegment bridges a saved segment into a WhatsApp aud
 
   assert.match(server, /export async function createAdminAudienceFromSegment/);
   assert.match(server, /getSegmentForAudience/);
-  assert.match(server, /saveAdminAudience\(/);
+});
+
+// Verified live: the first version of this function always INSERTed, so one
+// click of 建立收件群組 -- a plain double-click, no special timing needed --
+// created two identical "audience from this segment" rows with no way to
+// tell them apart. Idempotent per segment via source_segment_id (see
+// neon/migrations/20260822120000_whatsapp_audience_segment_link.sql): a
+// second run must UPDATE the one linked audience, not INSERT another.
+test("createAdminAudienceFromSegment upserts by source_segment_id instead of always inserting", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const migration = read("neon/migrations/20260822120000_whatsapp_audience_segment_link.sql");
+
+  const start = server.indexOf("export async function createAdminAudienceFromSegment");
+  assert.notEqual(start, -1);
+  const body = server.slice(start, start + 2000);
+
+  assert.match(body, /SELECT id FROM whatsapp_audiences WHERE source_segment_id = \$1/);
+  assert.match(body, /existingId\s*\?\s*[\s\S]*?UPDATE whatsapp_audiences/);
+  assert.match(body, /INSERT INTO whatsapp_audiences \([\s\S]*?source_segment_id/);
+
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS source_segment_id/);
+});
+
+test("segment list surfaces whether a WhatsApp audience already exists for it", () => {
+  const segmentsServer = read("src/lib/ai/segments.server.ts");
+  const segmentsRoute = read("src/routes/admin.segments.tsx");
+
+  assert.match(
+    segmentsServer,
+    /EXISTS \(\s*SELECT 1 FROM whatsapp_audiences a WHERE a\.source_segment_id = s\.id\s*\) AS has_audience/,
+  );
+  assert.match(segmentsRoute, /segment\.has_audience/);
+  assert.match(segmentsRoute, /更新收件群組/);
 });
 
 test("command center route is registered, noindex, and admin-guarded", () => {
