@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import {
   buildShadowAcceptanceRecord,
+  main,
   verifyShadowEvidence,
   verifyShadowPreflight,
 } from "./verify-shadow.mjs";
@@ -562,4 +566,170 @@ test("rejects accepted records with any known failed check", () => {
       }),
     TypeError,
   );
+});
+
+async function withCliFiles(run) {
+  const directory = await mkdtemp(path.join(tmpdir(), "earnest-mls-shadow-"));
+  try {
+    await run(directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+function cliDependencies(overrides = {}) {
+  const stdout = [];
+  const stderr = [];
+  return {
+    dependencies: {
+      readFile,
+      writeFile,
+      mkdir,
+      now: () => new Date("2026-08-23T01:02:03.456Z"),
+      writeStdout: (value) => stdout.push(value),
+      writeStderr: (value) => stderr.push(value),
+      ...overrides,
+    },
+    stderr,
+    stdout,
+  };
+}
+
+test("CLI writes a bounded accepted shadow record", async () => {
+  await withCliFiles(async (directory) => {
+    const preflightPath = path.join(directory, "preflight.json");
+    const evidencePath = path.join(directory, "evidence.json");
+    const outputPath = path.join(directory, "acceptance.json");
+    await writeFile(preflightPath, JSON.stringify(validPreflight()), "utf8");
+    await writeFile(evidencePath, JSON.stringify(validEvidence()), "utf8");
+    const { dependencies } = cliDependencies();
+
+    const exitCode = await main(
+      [
+        "--preflight",
+        preflightPath,
+        "--evidence",
+        evidencePath,
+        "--output",
+        outputPath,
+      ],
+      dependencies,
+    );
+
+    assert.equal(exitCode, 0);
+    const output = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(output.accepted, true);
+    assert.equal(output.checkedAt, "2026-08-23T01:02:03.456Z");
+  });
+});
+
+test("CLI returns bounded evidence failures without accepting", async () => {
+  await withCliFiles(async (directory) => {
+    const preflightPath = path.join(directory, "preflight.json");
+    const evidencePath = path.join(directory, "evidence.json");
+    const outputPath = path.join(directory, "acceptance.json");
+    const evidence = validEvidence();
+    evidence.sideEffects.publicationAttempts = 1;
+    await writeFile(preflightPath, JSON.stringify(validPreflight()), "utf8");
+    await writeFile(evidencePath, JSON.stringify(evidence), "utf8");
+    const { dependencies } = cliDependencies();
+
+    const exitCode = await main(
+      [
+        "--preflight",
+        preflightPath,
+        "--evidence",
+        evidencePath,
+        "--output",
+        outputPath,
+      ],
+      dependencies,
+    );
+
+    assert.equal(exitCode, 30);
+    const output = JSON.parse(await readFile(outputPath, "utf8"));
+    assert.equal(output.accepted, false);
+    assert.deepEqual(output.failures, ["publication_side_effect_detected"]);
+    assert.equal(
+      output.failures.every((code) => /^[a-z][a-z0-9_-]{0,79}$/.test(code)),
+      true,
+    );
+  });
+});
+
+test("CLI rejects missing arguments without reading or writing files", async () => {
+  const writes = [];
+  const { dependencies } = cliDependencies({
+    readFile: async () => assert.fail("readFile must not be called"),
+    writeFile: async (...args) => writes.push(args),
+    mkdir: async () => assert.fail("mkdir must not be called"),
+  });
+
+  const exitCode = await main(["--preflight", "preflight.json"], dependencies);
+
+  assert.equal(exitCode, 2);
+  assert.deepEqual(writes, []);
+});
+
+test("CLI rejects output paths whose parent would require nested creation", async () => {
+  await withCliFiles(async (directory) => {
+    const preflightPath = path.join(directory, "preflight.json");
+    const evidencePath = path.join(directory, "evidence.json");
+    const outputPath = path.join(
+      directory,
+      "missing",
+      "nested",
+      "acceptance.json",
+    );
+    await writeFile(preflightPath, JSON.stringify(validPreflight()), "utf8");
+    await writeFile(evidencePath, JSON.stringify(validEvidence()), "utf8");
+    const { dependencies } = cliDependencies();
+
+    const exitCode = await main(
+      [
+        "--preflight",
+        preflightPath,
+        "--evidence",
+        evidencePath,
+        "--output",
+        outputPath,
+      ],
+      dependencies,
+    );
+
+    assert.equal(exitCode, 2);
+    await assert.rejects(readFile(outputPath, "utf8"));
+  });
+});
+
+test("CLI never serializes credentials from rejected evidence", async () => {
+  await withCliFiles(async (directory) => {
+    const credential = "Authorization: Bearer super-secret-credential";
+    const preflightPath = path.join(directory, "preflight.json");
+    const evidencePath = path.join(directory, "evidence.json");
+    const outputPath = path.join(directory, "acceptance.json");
+    const evidence = validEvidence();
+    evidence.credential = credential;
+    await writeFile(preflightPath, JSON.stringify(validPreflight()), "utf8");
+    await writeFile(evidencePath, JSON.stringify(evidence), "utf8");
+    const { dependencies, stderr, stdout } = cliDependencies();
+
+    const exitCode = await main(
+      [
+        "--preflight",
+        preflightPath,
+        "--evidence",
+        evidencePath,
+        "--output",
+        outputPath,
+      ],
+      dependencies,
+    );
+
+    assert.equal(exitCode, 30);
+    const output = await readFile(outputPath, "utf8");
+    assert.equal(output.includes(credential), false);
+    assert.equal(stdout.join("").includes(credential), false);
+    assert.equal(stderr.join("").includes(credential), false);
+  });
 });

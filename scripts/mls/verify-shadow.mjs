@@ -1,3 +1,7 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { pathToFileURL } from "node:url";
+
 const ATTEMPT =
   /^scheduled:(preview|production):\d{4}-\d{2}-\d{2}(?::manual:[a-z0-9][a-z0-9-]{7,63})?$/;
 const UUID =
@@ -681,4 +685,137 @@ export function buildShadowAcceptanceRecord(input) {
     evidenceChecks: evidence.checks,
     identity,
   });
+}
+
+const MAX_CLI_JSON_BYTES = 256 * 1024;
+const CLI_FAILURE = /^[a-z][a-z0-9_-]{0,79}$/;
+
+function exactCliArguments(argv) {
+  if (!Array.isArray(argv) || argv.length !== 6) return null;
+  const [
+    preflightFlag,
+    preflightPath,
+    evidenceFlag,
+    evidencePath,
+    outputFlag,
+    outputPath,
+  ] = argv;
+  if (
+    preflightFlag !== "--preflight" ||
+    evidenceFlag !== "--evidence" ||
+    outputFlag !== "--output" ||
+    [preflightPath, evidencePath, outputPath].some(
+      (value) => typeof value !== "string" || value.length === 0,
+    )
+  ) {
+    return null;
+  }
+  return { preflightPath, evidencePath, outputPath };
+}
+
+async function readBoundedJson(filePath, read) {
+  const serialized = await read(filePath, "utf8");
+  if (
+    typeof serialized !== "string" ||
+    Buffer.byteLength(serialized, "utf8") > MAX_CLI_JSON_BYTES
+  ) {
+    throw new TypeError("cli_input_invalid");
+  }
+  return JSON.parse(serialized);
+}
+
+function boundedFailures(...results) {
+  const failures = [];
+  for (const result of results) {
+    for (const failure of result.failures) {
+      if (typeof failure === "string" && CLI_FAILURE.test(failure)) {
+        failures.push(failure);
+      }
+    }
+  }
+  return [...new Set(failures)];
+}
+
+function writeDiagnostic(write, code) {
+  try {
+    write(`${code}\n`);
+  } catch {
+    // Diagnostics must not change the CLI result or disclose thrown error details.
+  }
+}
+
+async function ensureOutputParent(outputPath, makeDirectory) {
+  const parent = dirname(outputPath);
+  try {
+    await makeDirectory(parent);
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw new TypeError("cli_output_invalid");
+  }
+}
+
+export async function main(argv, dependencies = {}) {
+  const {
+    readFile: read = readFile,
+    writeFile: write = writeFile,
+    mkdir: makeDirectory = mkdir,
+    now = () => new Date(),
+    writeStderr = (value) => process.stderr.write(value),
+  } = dependencies;
+  const arguments_ = exactCliArguments(argv);
+  if (!arguments_) {
+    writeDiagnostic(writeStderr, "cli_input_invalid");
+    return 2;
+  }
+
+  let preflight;
+  let evidence;
+  try {
+    [preflight, evidence] = await Promise.all([
+      readBoundedJson(arguments_.preflightPath, read),
+      readBoundedJson(arguments_.evidencePath, read),
+    ]);
+  } catch {
+    writeDiagnostic(writeStderr, "cli_input_invalid");
+    return 2;
+  }
+
+  let record;
+  let exitCode;
+  try {
+    const preflightResult = verifyShadowPreflight(preflight);
+    const evidenceResult = verifyShadowEvidence(evidence);
+    if (preflightResult.accepted && evidenceResult.accepted) {
+      record = buildShadowAcceptanceRecord({
+        preflight: preflightResult,
+        evidence: evidenceResult,
+        checkedAt: now().toISOString(),
+      });
+      exitCode = 0;
+    } else {
+      const failures = boundedFailures(preflightResult, evidenceResult);
+      record = {
+        accepted: false,
+        failures:
+          failures.length > 0 ? failures : ["shadow_verification_failed"],
+      };
+      exitCode = 30;
+    }
+  } catch {
+    writeDiagnostic(writeStderr, "cli_input_invalid");
+    return 2;
+  }
+
+  try {
+    await ensureOutputParent(arguments_.outputPath, makeDirectory);
+    await write(arguments_.outputPath, `${JSON.stringify(record)}\n`, "utf8");
+  } catch {
+    writeDiagnostic(writeStderr, "cli_output_invalid");
+    return 2;
+  }
+  return exitCode;
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const exitCode = await main(process.argv.slice(2));
+  process.exitCode = exitCode;
 }
