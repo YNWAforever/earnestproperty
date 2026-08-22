@@ -733,3 +733,45 @@ test("CLI never serializes credentials from rejected evidence", async () => {
     assert.equal(stderr.join("").includes(credential), false);
   });
 });
+
+test("CLI bounds input reads before rejecting oversized JSON", async () => {
+  const readFileCalls = [];
+  const readLengths = [];
+  const writes = [];
+  let closes = 0;
+  const requestedBytes = 256 * 1024 + 1;
+  const { dependencies } = cliDependencies({
+    readFile: async (...args) => {
+      readFileCalls.push(args);
+      throw new Error("unbounded readFile must not be called");
+    },
+    open: async () => ({
+      read: async (_buffer, _offset, length) => {
+        readLengths.push(length);
+        return { bytesRead: length };
+      },
+      close: async () => {
+        closes += 1;
+      },
+    }),
+    writeFile: async (...args) => writes.push(args),
+  });
+
+  const exitCode = await main(
+    [
+      "--preflight",
+      "preflight.json",
+      "--evidence",
+      "evidence.json",
+      "--output",
+      "output.json",
+    ],
+    dependencies,
+  );
+
+  assert.equal(exitCode, 2);
+  assert.equal(readFileCalls.length, 0);
+  assert.deepEqual(readLengths, [requestedBytes, requestedBytes]);
+  assert.equal(closes, 2);
+  assert.deepEqual(writes, []);
+});

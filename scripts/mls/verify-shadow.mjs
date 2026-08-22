@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -713,15 +713,22 @@ function exactCliArguments(argv) {
   return { preflightPath, evidencePath, outputPath };
 }
 
-async function readBoundedJson(filePath, read) {
-  const serialized = await read(filePath, "utf8");
-  if (
-    typeof serialized !== "string" ||
-    Buffer.byteLength(serialized, "utf8") > MAX_CLI_JSON_BYTES
-  ) {
-    throw new TypeError("cli_input_invalid");
+async function readBoundedJson(filePath, openFile) {
+  const handle = await openFile(filePath, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(MAX_CLI_JSON_BYTES + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (
+      !Number.isSafeInteger(bytesRead) ||
+      bytesRead < 0 ||
+      bytesRead > MAX_CLI_JSON_BYTES
+    ) {
+      throw new TypeError("cli_input_invalid");
+    }
+    return JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+  } finally {
+    await handle.close();
   }
-  return JSON.parse(serialized);
 }
 
 function boundedFailures(...results) {
@@ -755,7 +762,7 @@ async function ensureOutputParent(outputPath, makeDirectory) {
 
 export async function main(argv, dependencies = {}) {
   const {
-    readFile: read = readFile,
+    open: openFile = open,
     writeFile: write = writeFile,
     mkdir: makeDirectory = mkdir,
     now = () => new Date(),
@@ -771,8 +778,8 @@ export async function main(argv, dependencies = {}) {
   let evidence;
   try {
     [preflight, evidence] = await Promise.all([
-      readBoundedJson(arguments_.preflightPath, read),
-      readBoundedJson(arguments_.evidencePath, read),
+      readBoundedJson(arguments_.preflightPath, openFile),
+      readBoundedJson(arguments_.evidencePath, openFile),
     ]);
   } catch {
     writeDiagnostic(writeStderr, "cli_input_invalid");
