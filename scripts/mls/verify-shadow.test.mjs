@@ -530,3 +530,36 @@ test("rejects unaccepted inputs and non-millisecond UTC checkedAt values", () =>
     assert.throws(() => buildShadowAcceptanceRecord(input), TypeError);
   }
 });
+
+test("rejects accepted records with any known failed check", () => {
+  const acceptedPreflight = verifyShadowPreflight(validPreflight());
+  const acceptedEvidence = verifyShadowEvidence(validEvidence());
+  const falsePreflight = {
+    ...acceptedPreflight,
+    checks: { ...acceptedPreflight.checks, cloudflareCapability: false },
+  };
+  const falseEvidence = {
+    ...acceptedEvidence,
+    checks: { ...acceptedEvidence.checks, redaction: false },
+  };
+  const checkedAt = "2026-08-23T01:02:03.456Z";
+
+  assert.throws(
+    () =>
+      buildShadowAcceptanceRecord({
+        preflight: falsePreflight,
+        evidence: acceptedEvidence,
+        checkedAt,
+      }),
+    TypeError,
+  );
+  assert.throws(
+    () =>
+      buildShadowAcceptanceRecord({
+        preflight: acceptedPreflight,
+        evidence: falseEvidence,
+        checkedAt,
+      }),
+    TypeError,
+  );
+});

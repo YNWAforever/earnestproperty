@@ -610,7 +610,7 @@ export function verifyShadowEvidence(snapshot) {
 function snapshotBooleanChecks(value, expectedKeys) {
   const record = inspectRecord(value, expectedKeys);
   if (!record) return null;
-  if (expectedKeys.some((key) => typeof record[key] !== "boolean")) {
+  if (expectedKeys.some((key) => record[key] !== true)) {
     return null;
   }
   return Object.freeze(
