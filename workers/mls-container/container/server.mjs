@@ -305,7 +305,8 @@ function captureTerminalRecord(record, envelope, operatingSystemExitCode) {
     throw fixedError("terminal_status_missing");
   if (captured.evidencePrefix !== null) {
     if (captured.runId === null) throw fixedError("terminal_status_missing");
-    const expectedPrefix = `mls-sync/${envelope.environment}/${envelope.hkDate}/${captured.runId}/${envelope.attemptId}`;
+    const normalizedAttemptId = envelope.attemptId.replaceAll(":", "-");
+    const expectedPrefix = `mls-sync/${envelope.environment}/${envelope.hkDate}/${captured.runId}/${normalizedAttemptId}`;
     if (
       captured.evidencePrefix !== expectedPrefix ||
       expectedPrefix.length > 512

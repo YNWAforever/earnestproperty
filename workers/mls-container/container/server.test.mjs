@@ -65,7 +65,7 @@ function terminalRecord(overrides = {}) {
   const runId = "00000000-0000-4000-8000-000000000001";
   const evidencePrefix =
     `mls-sync/production/2026-08-21/${runId}/` +
-    "scheduled:production:2026-08-21";
+    "scheduled-production-2026-08-21";
   return {
     attemptId: "scheduled:production:2026-08-21",
     runId,
@@ -79,6 +79,39 @@ function terminalRecord(overrides = {}) {
     ...overrides,
   };
 }
+
+test("accepts R2-normalized evidence prefixes for terminal correlation", async () => {
+  const child = new FakeChild();
+  const timers = idleTimers();
+  const runId = "00000000-0000-4000-8000-000000000001";
+  const evidencePrefix =
+    `mls-sync/production/2026-08-21/${runId}/` +
+    "scheduled-production-2026-08-21";
+  const supervisor = createSupervisor({
+    spawnChild: () => child,
+    readTerminalStatus: async () =>
+      terminalRecord({
+        evidencePrefix,
+        manifestKey: `${evidencePrefix}/manifest.json`,
+      }),
+    now: () => new Date("2026-08-21T02:30:00.000Z"),
+    setTimer: timers.setTimer,
+    clearTimer: timers.clearTimer,
+    heartbeatMs: 30_000,
+    timeoutMs: 4 * 60 * 60 * 1_000,
+    environment: {},
+    terminalStatusFile: TERMINAL_FILE,
+  });
+
+  await supervisor.start(envelope());
+  child.emit("exit", 0, null);
+  const status = await supervisor.waitForTerminal();
+
+  assert.equal(status.state, "succeeded");
+  assert.equal(status.failureCode, null);
+  assert.equal(status.evidencePrefix, evidencePrefix);
+  assert.equal(status.manifestKey, `${evidencePrefix}/manifest.json`);
+});
 
 test("starts one exact CLI child, snapshots metadata, and replays idempotently", async () => {
   const child = new FakeChild();
