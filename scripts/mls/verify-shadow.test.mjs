@@ -67,13 +67,20 @@ function assertManualShadowReadinessSection(section) {
   }
 
   for (const automaticActivation of [
-    new RegExp("\\bwrangler\\s+(?:schedule|schedules|publish)\\b", "i"),
+    new RegExp(
+      "\\bwrangler\\b(?:\\s+--)?\\s+(?:schedule|schedules|publish)\\b",
+      "i",
+    ),
+    new RegExp(
+      "\\bwrangler\\b[\\s\\S]*?\\bdeploy\\b[\\s\\S]*?workers\\/mls-container\\/wrangler\\.scheduled\\.jsonc\\b",
+      "i",
+    ),
     new RegExp(
       "\\b(?:cron|schedule)\\s+(?:activate|enable|create|install)\\b",
       "i",
     ),
     new RegExp(
-      "\\b(?:workflows?\\s+trigger|workflow\\s+trigger)\\b[\\s\\S]*?\\bmode\\s*[=:]\\s*[^a-zA-Z]*publish\\b",
+      "\\b(?:workflows?\\s+trigger|workflow\\s+trigger)\\b[\\s\\S]*?\\bmode\\b(?:[^\\w\\s]?\\s*(?:=|:)\\s*|\\s+)[^a-zA-Z]*publish\\b",
       "i",
     ),
     new RegExp(
@@ -116,7 +123,13 @@ test("runbook verifier rejects credential and automatic activation variants", as
     "backup-key = example-key-value",
     "npm.cmd exec wrangler schedule create",
     "npm.cmd exec wrangler publish",
+    "npm.cmd exec wrangler -- schedule create",
+    "npm.cmd exec wrangler -- publish",
+    "npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.scheduled.jsonc",
     "npm.cmd exec wrangler workflows trigger runner mode=publish",
+    "npm.cmd exec wrangler workflows trigger runner --mode publish",
+    "npm.cmd exec wrangler workflows trigger runner --mode=publish",
+    "npm.cmd exec wrangler workflows trigger runner --mode: publish",
     "cron activate now",
     "MLS_PUBLISH_ENABLED=true",
   ]) {
