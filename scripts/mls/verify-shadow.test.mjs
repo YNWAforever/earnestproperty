@@ -140,6 +140,20 @@ test("runbook requires a legacy source access gate before shadow activation", as
   assertLegacySourceAccessGateSection(legacySourceAccessGateSection(runbook));
 });
 
+test("legacy gate detail discovery pattern matches a legacy detail path", async () => {
+  const runbook = await readFile(
+    new URL("../../docs/mls-production-activation.md", import.meta.url),
+    "utf8",
+  );
+  const section = legacySourceAccessGateSection(runbook);
+  const pattern = section.match(
+    /\[regex\]::Match\(\(Get-Content -Raw -LiteralPath \$seedPath\), "([^"]+)"\)/,
+  )?.[1];
+
+  assert.ok(pattern, "legacy gate must document a detail discovery pattern");
+  assert.equal(new RegExp(pattern).test("/property-detail/123.html"), true);
+});
+
 test("runbook verifier rejects credential and automatic activation variants", async () => {
   const runbook = await readFile(
     new URL("../../docs/mls-production-activation.md", import.meta.url),

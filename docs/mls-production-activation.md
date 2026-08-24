@@ -73,7 +73,7 @@ try {
 
   node --input-type=module -e 'import { readFileSync } from "node:fs"; import { CRAWLER_USER_AGENT, parseRobots } from "./src/lib/mls/access-policy.mjs"; const policy = parseRobots(readFileSync(process.argv[1], "utf8"), CRAWLER_USER_AGENT); console.log(JSON.stringify({ crawlerUserAgent: CRAWLER_USER_AGENT, safelyInterpretable: policy.safelyInterpretable, propertyC1Allowed: policy.isAllowed("/property/c1") })); if (!policy.safelyInterpretable || !policy.isAllowed("/property/c1")) throw new Error("robots policy is not safe for /property/c1");' $robotsPath
 
-  $detailMatch = [regex]::Match((Get-Content -Raw -LiteralPath $seedPath), "/property-detail/\\d+\\.html")
+  $detailMatch = [regex]::Match((Get-Content -Raw -LiteralPath $seedPath), "/property-detail/\d+\.html")
   if (-not $detailMatch.Success) { throw "seed has no legacy detail link" }
   $detailUri = [Uri]::new($seedResponse.BaseResponse.ResponseUri, $detailMatch.Value)
   $detailResponse = Invoke-WebRequest -Uri $detailUri -OutFile $detailPath -PassThru -MaximumRedirection 5

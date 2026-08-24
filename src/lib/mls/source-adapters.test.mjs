@@ -810,7 +810,6 @@ test("old-site adapter also checks robots, retries safely, and reports page loop
     htmlRobots.failures.some(({ code }) => code === "robots_malformed"),
   );
 
-
   const repeated = createOldSiteSourceAdapter({
     fetchImpl: withOldRobots(async (url) => {
       if (url === seedUrl) return new Response(twoPageIndexFromFixture(), { status: 200 });
