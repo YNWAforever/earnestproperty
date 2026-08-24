@@ -285,6 +285,56 @@ test("rejects a unique non-Earnest company heading at the parser boundary", () =
   );
 });
 
+test("detects dotted CAPTCHA actions on populated valid agent pages", () => {
+  const results = ["/captcha.php", "/CAPTCHA.aspx"].map((action) => {
+    const html = [
+      "<title>晉誠地產 Earnest Property</title>",
+      "<h1>晉誠地產 Earnest Property</h1>",
+      "<p>公司牌照: C-018613</p>",
+      "<p>共有 1 個放售樓盤</p>",
+      "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+      `<form action="${action}"><div data-sitekey="challenge-widget"></div></form>`,
+    ].join("");
+    return detect28HseChallenge(html);
+  });
+
+  assert.deepEqual(results, [true, true]);
+});
+
+test("accepts only exact normalized approved agent company headings", () => {
+  const parseCompany = (companyName) =>
+    parse28HseAgentIndex(
+      [
+        `<h1>${companyName}</h1>`,
+        "<p>公司牌照: C-018613</p>",
+        "<p>共有 1 個放售樓盤</p>",
+        "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+      ].join(""),
+      {
+        dealType: "sale",
+        pageUrl: build28HseAgentUrl("sale", 1),
+      },
+    );
+
+  for (const approved of [
+    "晉誠地產",
+    "Earnest Property",
+    "晉誠地產 Earnest Property",
+    "Earnest Property 晉誠地產",
+  ]) {
+    assert.equal(parseCompany(approved).companyName, approved);
+  }
+
+  for (const impostor of [
+    "Not Earnest Property",
+    "Earnest Property Holdings",
+    "假冒晉誠地產",
+    "晉誠地產分行",
+  ]) {
+    assert.throws(() => parseCompany(impostor), /company|identity|template/i);
+  }
+});
+
 test("detects punctuated challenge headings with a bounded vendor suffix", () => {
   for (const heading of [
     "Access Denied!",

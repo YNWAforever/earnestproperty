@@ -150,15 +150,20 @@ function requiredText(value, name) {
   return text;
 }
 
-function companyIdentityValid(companyName) {
+const APPROVED_AGENT_COMPANY_NAMES = new Set([
+  "晉誠地產",
+  "earnest property",
+  "晉誠地產 earnest property",
+  "earnest property 晉誠地產",
+]);
+
+export function is28HseAgentCompanyName(companyName) {
   const normalized = String(companyName ?? "")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
-  return (
-    normalized.includes("晉誠地產") || normalized.includes("earnest property")
-  );
+  return APPROVED_AGENT_COMPANY_NAMES.has(normalized);
 }
 
 function propertyNumber(value) {
@@ -285,7 +290,7 @@ export function detect28HseChallenge(html) {
             .join(" "),
         ) ||
         (container.is("form") &&
-          /(?:^|[/?#&=_-])(?:captcha|recaptcha|hcaptcha|turnstile|challenge|verification|verify|login|sign-?in|authenticate|auth)(?:$|[/?#&=_-])/i.test(
+          /(?:^|[^a-z0-9])(?:captcha|recaptcha|hcaptcha|turnstile|challenge|verification|verify|login|sign-?in|authenticate|auth)(?:$|[^a-z0-9])/i.test(
             container.attr("action") ?? "",
           ))
       ) {
@@ -316,7 +321,7 @@ export function parse28HseAgentIndex(html, context) {
   if (companyNames.length !== 1)
     throw new Error("Unexpected agent company template");
   const companyName = companyNames[0];
-  if (!companyIdentityValid(companyName))
+  if (!is28HseAgentCompanyName(companyName))
     throw new Error("Unexpected agent company identity");
 
   const documentText = normalizeText($.root().text());

@@ -12,6 +12,7 @@ import {
 import {
   build28HseAgentUrl,
   detect28HseChallenge,
+  is28HseAgentCompanyName,
   parse28HseAgentIndex,
   parse28HseDetail,
 } from "../parse-28hse.mjs";
@@ -84,15 +85,6 @@ function pushFailure(failures, code, externalId) {
     code,
     detail: boundedFailureDetail(code),
   });
-}
-
-function companyIdentityValid(companyName) {
-  const normalized = String(companyName ?? "")
-    .normalize("NFKC")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
-  return normalized.includes("晉誠地產") || normalized.includes("earnest property");
 }
 
 function stubObservation(record, fetchedAt, reason = "detail_fetch_or_parse_failed") {
@@ -287,7 +279,7 @@ export function create28HseAgentSourceAdapter({
           );
           if (
             parsed.companyLicence !== AGENT_LICENCE ||
-            !companyIdentityValid(parsed.companyName)
+            !is28HseAgentCompanyName(parsed.companyName)
           ) {
             identityValid = false;
             paginationComplete = false;
