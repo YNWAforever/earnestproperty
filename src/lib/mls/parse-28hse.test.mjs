@@ -71,6 +71,7 @@ test("rejects malformed semantic identity, count, and contradictory listing link
     "<h1>晉誠地產</h1><p>C-018613</p><a href='/buy/apartment/property-1'>一號</a>",
     "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放售樓盤</p>",
     "<h1>晉誠地產</h1><p>C-018613</p><p>共有 2 個放售樓盤</p><a href='/buy/apartment/property-1'>一號</a><a href='/buy/house/property-1'>另一個一號</a>",
+    "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放售樓盤</p><a href='/buy/a/b/property-9'>過深路徑</a>",
   ];
 
   for (const html of invalidPages) {
@@ -97,6 +98,9 @@ test("rejects unsafe agent index URLs at the exact trust boundary", () => {
     "https://user:pass@www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
     "https://www.28hse.com:444/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
     "https://www.28hse.com:443/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    " https://www.28hse.com:443/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://@www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://:@www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
     "https://28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
     "https://www.28hse.com/agent/541?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
     "https://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=541&propertyDoSearchVersion=2.0",
@@ -104,6 +108,8 @@ test("rejects unsafe agent index URLs at the exact trust boundary", () => {
     "https://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0&extra=1",
     "https://www.28hse.com/agent/540?buyRent=buy&page=0&plan_id=540&propertyDoSearchVersion=2.0",
     "https://www.28hse.com/agent/540?buyRent=buy&page=101&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1.0&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1e0&plan_id=540&propertyDoSearchVersion=2.0",
     "https://www.28hse.com/agent/540?buyRent=buy&page=1&page=2&plan_id=540&propertyDoSearchVersion=2.0",
   ];
 

@@ -78,14 +78,21 @@ function requireDealType(dealType) {
 
 function requireAgentPageUrl(pageUrl, dealType) {
   const rawPageUrl = String(pageUrl ?? "");
+  const rawAuthority = rawPageUrl.match(/^https:\/\/([^/?#]*)/i)?.[1] ?? "";
+  if (
+    rawPageUrl !== rawPageUrl.trim() ||
+    !rawAuthority ||
+    rawAuthority.includes("@") ||
+    rawAuthority.includes(":")
+  ) {
+    throw new TypeError("Unexpected 28Hse agent source URL");
+  }
   let url;
   try {
     url = new URL(rawPageUrl);
   } catch {
     throw new TypeError("Unexpected 28Hse agent source URL");
   }
-  const authority = rawPageUrl.match(/^https:\/\/([^/?#]+)/i)?.[1] ?? "";
-  const hasExplicitPort = /:\d+$/.test(authority);
   const expectedKeys = new Set([
     "buyRent",
     "page",
@@ -93,13 +100,12 @@ function requireAgentPageUrl(pageUrl, dealType) {
     "propertyDoSearchVersion",
   ]);
   const keys = [...url.searchParams.keys()];
-  const page = Number(url.searchParams.get("page"));
+  const pageText = url.searchParams.get("page");
   if (
     url.protocol !== "https:" ||
     url.username ||
     url.password ||
     url.port ||
-    hasExplicitPort ||
     url.hostname !== "www.28hse.com" ||
     url.pathname !== `/agent/${AGENT_ID}` ||
     url.hash ||
@@ -107,9 +113,7 @@ function requireAgentPageUrl(pageUrl, dealType) {
     keys.some((key) => !expectedKeys.has(key)) ||
     url.searchParams.get("plan_id") !== AGENT_ID ||
     url.searchParams.get("propertyDoSearchVersion") !== "2.0" ||
-    !Number.isInteger(page) ||
-    page < 1 ||
-    page > 100
+    !/^(?:[1-9]\d?|100)$/.test(pageText ?? "")
   ) {
     throw new TypeError("Unexpected 28Hse agent source URL");
   }
@@ -299,7 +303,7 @@ export function parse28HseAgentIndex(html, context) {
   const linksById = new Map();
   $("a[href]").each((_, anchor) => {
     const href = $(anchor).attr("href");
-    const match = href?.match(/^\/(buy|rent)\/[^"?#]*\/property-(\d+)\/?$/i);
+    const match = href?.match(/^\/(buy|rent)\/[^/?#]+\/property-(\d+)\/?$/i);
     if (
       !match ||
       (context.dealType === "sale"
