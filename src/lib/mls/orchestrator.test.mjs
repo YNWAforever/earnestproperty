@@ -915,3 +915,90 @@ test("preserves descriptor-safe source diagnostics independently of adapters", a
     },
   ]);
 });
+
+test("preserves source diagnostics across the complete terminal outcome matrix", async () => {
+  const diagnostic = {
+    sourceUrl: "https://example.test/source?token=secret",
+    responseStatus: 200,
+    attempts: 1,
+    templateFingerprint: "fixture-fingerprint",
+    selectorCounts: { listings: 1 },
+    failureCode: null,
+  };
+  const adapters = {
+    oldSite: {
+      collect: async () =>
+        result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")], {
+          diagnostics: [diagnostic],
+        }),
+    },
+    hse28: {
+      collect: async () =>
+        result(SOURCE_28HSE, [observation(SOURCE_28HSE, "28-100")], {
+          diagnostics: [diagnostic],
+        }),
+    },
+  };
+  const cases = [
+    {
+      name: "source-health blocked",
+      value: input({
+        adapters: {
+          ...adapters,
+          hse28: {
+            collect: async () =>
+              result(SOURCE_28HSE, [], {
+                challengeDetected: true,
+                diagnostics: [diagnostic],
+              }),
+          },
+        },
+      }),
+      status: "blocked",
+    },
+    {
+      name: "publish gate blocked",
+      value: input({ mode: "publish", publishEnabled: false, adapters }),
+      status: "blocked",
+    },
+    {
+      name: "healthy shadow",
+      value: input({ adapters }),
+      status: "shadow_healthy",
+    },
+    {
+      name: "publish success",
+      value: input({ mode: "publish", publishEnabled: true, adapters }),
+      status: "healthy",
+    },
+  ];
+
+  for (const item of cases) {
+    const outcome = await runDualSourceSync(item.value);
+    assert.equal(outcome.status, item.status, item.name);
+    assert.equal(outcome.diagnostics.length, 2, item.name);
+    assert.deepEqual(
+      item.value.artifacts.at(-1).diagnostics,
+      outcome.diagnostics,
+    );
+  }
+
+  const failureArtifacts = [];
+  const failing = input({
+    adapters,
+    reporter: {
+      writeRunArtifacts: async (artifact) => failureArtifacts.push(artifact),
+    },
+    repository: fakeRepository({
+      async findCanonicalCandidates() {
+        throw new Error("post-collection failure");
+      },
+    }),
+  });
+  await assert.rejects(
+    () => runDualSourceSync(failing),
+    /post-collection failure/,
+  );
+  assert.equal(failureArtifacts.at(-1).status, "failed");
+  assert.equal(failureArtifacts.at(-1).diagnostics.length, 2);
+});

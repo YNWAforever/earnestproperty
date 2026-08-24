@@ -61,7 +61,7 @@ const DETAIL_LABELS = new Map([
 ]);
 
 const BLOCKING_HEADING =
-  /^(?:just a moment(?:[.?!…]+)?|access denied|attention required|verify you are human|captcha challenge)$/i;
+  /^(?:just a moment|access denied|attention required|verify you are human|captcha challenge)(?:[.?!…]+)?(?:\s*[|–—-]\s*(?:cloudflare|28hse))?$/i;
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -77,10 +77,12 @@ function requireDealType(dealType) {
 }
 
 function requireAgentPageUrl(pageUrl, dealType) {
-  const rawPageUrl = String(pageUrl ?? "");
+  if (typeof pageUrl !== "string" || /[\u0000-\u0020\u007f]/.test(pageUrl)) {
+    throw new TypeError("Unexpected 28Hse agent source URL");
+  }
+  const rawPageUrl = pageUrl;
   const rawAuthority = rawPageUrl.match(/^https:\/\/([^/?#]*)/i)?.[1] ?? "";
   if (
-    rawPageUrl !== rawPageUrl.trim() ||
     !rawAuthority ||
     rawAuthority.includes("@") ||
     rawAuthority.includes(":")
@@ -157,7 +159,9 @@ function parseCount(text, dealType) {
   const match = normalizeText(text)
     .replaceAll(",", "")
     .match(new RegExp(`共有\\s*(\\d+)\\s*個${label}`, "u"));
-  return match ? Number(match[1]) : Number.NaN;
+  if (!match) return Number.NaN;
+  const count = Number(match[1]);
+  return Number.isSafeInteger(count) && count >= 0 ? count : Number.NaN;
 }
 
 function safeAbsoluteUrl(value, baseUrl) {
@@ -247,22 +251,42 @@ export function detect28HseChallenge(html) {
   if (!text) return true;
   if (/cf-chl-|challenge-platform|\/cdn-cgi\/challenge-platform/i.test(markup))
     return true;
-  const hasCaptchaStructure =
-    $("[data-sitekey]").length > 0 ||
-    $("iframe[src], form[action]")
-      .toArray()
-      .some((node) =>
-        /captcha/i.test($(node).attr("src") ?? $(node).attr("action") ?? ""),
+  const hasAgentIdentity = /C-018613/i.test(text);
+  const hasPropertyLink = $("a[href*='/property-']").length > 0;
+  const hasValidAgentContent = hasAgentIdentity && hasPropertyLink;
+  const captchaNodes = $("[data-sitekey], iframe[src], form[action]")
+    .toArray()
+    .filter((node) => {
+      if ($(node).attr("data-sitekey") != null) return true;
+      return /(?:captcha|recaptcha|hcaptcha|turnstile)/i.test(
+        $(node).attr("src") ?? $(node).attr("action") ?? "",
       );
-  if (hasCaptchaStructure) return true;
+    });
+  const hasBlockingCaptcha = captchaNodes.some((node) => {
+    if (!hasValidAgentContent) return true;
+    let container = $(node);
+    while (container.length) {
+      if (
+        container.is("form, [role='dialog'], [aria-modal='true']") ||
+        /(?:^|[\s_-])(?:captcha|challenge|verification|verify|overlay|modal|gate)(?:$|[\s_-])/i.test(
+          [container.attr("id"), container.attr("class")]
+            .filter(Boolean)
+            .join(" "),
+        )
+      ) {
+        return true;
+      }
+      container = container.parent();
+    }
+    return false;
+  });
+  if (hasBlockingCaptcha) return true;
   const hasBlockingHeading = $("title, h1, [role='heading']")
     .toArray()
     .some((node) => BLOCKING_HEADING.test(normalizeText($(node).text())));
   if (hasBlockingHeading) return true;
   const hasPasswordForm = $("form input[type='password']").length > 0;
-  const hasAgentIdentity = /C-018613/i.test(text);
-  const hasPropertyLink = $("a[href*='/property-']").length > 0;
-  return hasPasswordForm && !hasAgentIdentity && !hasPropertyLink;
+  return hasPasswordForm && !hasValidAgentContent;
 }
 
 export function parse28HseAgentIndex(html, context) {
@@ -312,8 +336,9 @@ export function parse28HseAgentIndex(html, context) {
     )
       return;
     const externalId = match[2];
-    const summaryTitle = requiredText($(anchor).text(), "listing title");
-    const url = safeAbsoluteUrl(href, pageUrl);
+    const summaryTitle = normalizeText($(anchor).text());
+    const canonicalHref = href.endsWith("/") ? href.slice(0, -1) : href;
+    const url = safeAbsoluteUrl(canonicalHref, pageUrl);
     const previous = linksById.get(externalId);
     if (previous && previous.url !== url) {
       throw new Error(
@@ -327,6 +352,9 @@ export function parse28HseAgentIndex(html, context) {
   const links = [...linksById.values()].sort((a, b) =>
     a.externalId.localeCompare(b.externalId),
   );
+  if (links.some((link) => !link.summaryTitle)) {
+    throw new Error("Unexpected agent index template: missing listing title");
+  }
   if (advertisedCount > 0 && links.length === 0) {
     throw new Error(
       "Unexpected agent index count: positive count has no listing links",

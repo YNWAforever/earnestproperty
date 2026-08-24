@@ -43,6 +43,32 @@ function assertLegacySourceAccessGateSection(section) {
       `missing legacy gate: ${fragment}`,
     );
   }
+
+  assert.doesNotMatch(
+    section,
+    /BaseResponse\.ResponseUri/,
+    "PowerShell 7 does not expose BaseResponse.ResponseUri",
+  );
+  for (const fragment of [
+    "BaseResponse.RequestMessage.RequestUri",
+    "function Assert-LegacyFinalUri",
+    '$Actual.Scheme -ne "https"',
+    "$Actual.Host",
+    "$ExpectedOrigin.Host",
+    "$Actual.Port",
+    "$ExpectedOrigin.Port",
+    "[string]::Equals($Actual.AbsolutePath, $ExpectedPath",
+    "cross-origin redirect",
+    'Assert-LegacyFinalUri -Actual $robotsFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath "/robots.txt"',
+    'Assert-LegacyFinalUri -Actual $seedFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath "/property/c1"',
+    "Assert-LegacyFinalUri -Actual $detailFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath $detailUri.AbsolutePath",
+  ]) {
+    assert.equal(
+      section.includes(fragment),
+      true,
+      `missing final-URI contract: ${fragment}`,
+    );
+  }
 }
 
 function assertManualShadowReadinessSection(section) {

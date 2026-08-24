@@ -123,6 +123,90 @@ test("rejects unsafe agent index URLs at the exact trust boundary", () => {
   }
 });
 
+test("rejects non-string agent URLs and embedded ASCII whitespace before URL parsing", () => {
+  const validHtml = fixture("agent-sale-page-1.html");
+  const validUrl = build28HseAgentUrl("sale", 1);
+  const unsafeUrls = [
+    new URL(validUrl),
+    validUrl.replace("/540", "/5\n40"),
+    validUrl.replace("buyRent=buy", "buyRent=b\tuy"),
+    validUrl.replace("&page=1", "\n&page=1"),
+  ];
+
+  for (const pageUrl of unsafeUrls) {
+    assert.throws(
+      () =>
+        parse28HseAgentIndex(validHtml, {
+          dealType: "sale",
+          pageUrl,
+        }),
+      /source URL/i,
+    );
+  }
+});
+
+test("deduplicates empty and image-only anchors before choosing the longest title", () => {
+  const page = parse28HseAgentIndex(
+    [
+      "<h1>晉誠地產 Earnest Property</h1>",
+      "<p>公司牌照: C-018613</p>",
+      "<p>共有 1 個放售樓盤</p>",
+      "<a href='/buy/apartment/property-3972991/'><img src='/listing.jpg' alt=''></a>",
+      "<a href='/buy/apartment/property-3972991'>較短標題</a>",
+      "<a href='/buy/apartment/property-3972991/'>較完整樓盤標題</a>",
+    ].join(""),
+    {
+      dealType: "sale",
+      pageUrl: build28HseAgentUrl("sale", 1),
+    },
+  );
+
+  assert.deepEqual(page.links, [
+    {
+      externalId: "3972991",
+      url: "https://www.28hse.com/buy/apartment/property-3972991",
+      summaryTitle: "較完整樓盤標題",
+    },
+  ]);
+});
+
+test("rejects a listing ID only after all duplicate anchors lack a title", () => {
+  const html = [
+    "<h1>晉誠地產 Earnest Property</h1>",
+    "<p>公司牌照: C-018613</p>",
+    "<p>共有 1 個放售樓盤</p>",
+    "<a href='/buy/apartment/property-3972991'><img src='/one.jpg' alt=''></a>",
+    "<a href='/buy/apartment/property-3972991/' aria-label='listing'></a>",
+  ].join("");
+
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(html, {
+        dealType: "sale",
+        pageUrl: build28HseAgentUrl("sale", 1),
+      }),
+    /title|template/i,
+  );
+});
+
+test("rejects advertised counts outside the non-negative safe-integer range", () => {
+  const html = [
+    "<h1>晉誠地產 Earnest Property</h1>",
+    "<p>公司牌照: C-018613</p>",
+    "<p>共有 9007199254740992 個放售樓盤</p>",
+    "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+  ].join("");
+
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(html, {
+        dealType: "sale",
+        pageUrl: build28HseAgentUrl("sale", 1),
+      }),
+    /count|template/i,
+  );
+});
+
 test("detail parser allowlists listing facts and excludes platform modules", () => {
   const item = parse28HseDetail(fixture("detail-sale-3972991.html"), {
     sourceUrl: "https://www.28hse.com/buy/apartment/property-3972991",
@@ -155,6 +239,35 @@ test("challenge pages are detected before parsing", () => {
 test("does not classify a normal agent page as a challenge from nav/help text", () => {
   const html = fixture("agent-live-login-nav.html");
   assert.equal(detect28HseChallenge(html), false);
+});
+
+test("does not classify populated agent content from an unrelated sitekey", () => {
+  const html = [
+    "<title>晉誠地產 Earnest Property</title>",
+    "<h1>晉誠地產 Earnest Property</h1>",
+    "<p>公司牌照: C-018613</p>",
+    "<p>共有 1 個放售樓盤</p>",
+    "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+    "<aside data-sitekey='newsletter-widget'>訂閱市場資訊</aside>",
+  ].join("");
+
+  assert.equal(detect28HseChallenge(html), false);
+});
+
+test("detects punctuated challenge headings with a bounded vendor suffix", () => {
+  for (const heading of [
+    "Access Denied!",
+    "Attention Required! | Cloudflare",
+    "Verify you are human.",
+  ]) {
+    assert.equal(
+      detect28HseChallenge(
+        "<title>" + heading + "</title><h1>" + heading + "</h1>",
+      ),
+      true,
+      heading,
+    );
+  }
 });
 
 test("detects canonical Cloudflare headings with terminal punctuation", () => {

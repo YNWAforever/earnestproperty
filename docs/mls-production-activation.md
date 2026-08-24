@@ -39,8 +39,29 @@ Before requesting a new approval, prove that the legacy source is independently 
 Use the approved independent legacy origin and canonical current-application host for this one proof. Save only the fetched response bodies in a uniquely named temporary directory, display the response metadata, and delete only that exact directory in `finally`:
 
 ```powershell
+function Assert-LegacyFinalUri {
+  param(
+    [Parameter(Mandatory = $true)][Uri] $Actual,
+    [Parameter(Mandatory = $true)][Uri] $ExpectedOrigin,
+    [Parameter(Mandatory = $true)][string] $ExpectedPath,
+    [Parameter(Mandatory = $true)][string] $Label
+  )
+
+  if ($Actual.Scheme -ne "https") { throw "$Label final URI is not HTTPS" }
+  if (-not [string]::Equals($Actual.Host, $ExpectedOrigin.Host, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "$Label followed a cross-origin redirect"
+  }
+  $allowedPort = if ($ExpectedOrigin.IsDefaultPort) { 443 } else { $ExpectedOrigin.Port }
+  if ($Actual.Port -ne $allowedPort) { throw "$Label final URI uses an unapproved port" }
+  if (-not [string]::Equals($Actual.AbsolutePath, $ExpectedPath, [StringComparison]::Ordinal)) {
+    throw "$Label final URI has an unexpected path"
+  }
+  if ($Actual.Query -or $Actual.Fragment) { throw "$Label final URI contains an unexpected query or fragment" }
+}
+
 $legacyOrigin = [Uri] "<approved-independent-legacy-origin>"
 $canonicalCurrentApplicationHost = "<canonical-current-application-host>"
+if ($legacyOrigin.Scheme -ne "https") { throw "approved legacy origin must use HTTPS" }
 $legacyGateDirectory = Join-Path ([IO.Path]::GetTempPath()) ("earnest-mls-legacy-gate-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Path $legacyGateDirectory -ErrorAction Stop | Out-Null
 try {
@@ -50,43 +71,49 @@ try {
 
   $robotsResponse = Invoke-WebRequest -Uri ([Uri]::new($legacyOrigin, "/robots.txt")) -OutFile $robotsPath -PassThru -MaximumRedirection 5
   $seedResponse = Invoke-WebRequest -Uri ([Uri]::new($legacyOrigin, "/property/c1")) -OutFile $seedPath -PassThru -MaximumRedirection 5
+  $robotsFinalUri = $robotsResponse.BaseResponse.RequestMessage.RequestUri
+  $seedFinalUri = $seedResponse.BaseResponse.RequestMessage.RequestUri
+  if ($null -eq $robotsFinalUri -or $null -eq $seedFinalUri) { throw "response final URI is unavailable" }
+  Assert-LegacyFinalUri -Actual $robotsFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath "/robots.txt" -Label "robots.txt"
+  Assert-LegacyFinalUri -Actual $seedFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath "/property/c1" -Label "seed"
 
   @(
     [pscustomobject]@{
       request = "robots.txt"
       httpStatus = $robotsResponse.StatusCode
-      finalUrl = $robotsResponse.BaseResponse.ResponseUri.AbsoluteUri
+      finalUrl = $robotsFinalUri.AbsoluteUri
       contentType = $robotsResponse.Headers["Content-Type"]
     }
     [pscustomobject]@{
       request = "/property/c1"
       httpStatus = $seedResponse.StatusCode
-      finalUrl = $seedResponse.BaseResponse.ResponseUri.AbsoluteUri
+      finalUrl = $seedFinalUri.AbsoluteUri
       contentType = $seedResponse.Headers["Content-Type"]
     }
   ) | Format-List
 
   if ($robotsResponse.Headers["Content-Type"] -notmatch "^text/plain") { throw "robots.txt is not text" }
-  if ($seedResponse.BaseResponse.ResponseUri.Host -eq $canonicalCurrentApplicationHost) { throw "seed resolved to the canonical current application" }
-  if ($seedResponse.BaseResponse.ResponseUri.Host -ne $legacyOrigin.Host) { throw "seed did not remain on the approved independent legacy origin" }
-  if ($seedResponse.BaseResponse.ResponseUri.AbsolutePath -eq "/") { throw "seed resolved to a homepage fallback" }
+  if ([string]::Equals($seedFinalUri.Host, $canonicalCurrentApplicationHost, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "seed resolved to the canonical current application"
+  }
 
   node --input-type=module -e 'import { readFileSync } from "node:fs"; import { CRAWLER_USER_AGENT, parseRobots } from "./src/lib/mls/access-policy.mjs"; const policy = parseRobots(readFileSync(process.argv[1], "utf8"), CRAWLER_USER_AGENT); console.log(JSON.stringify({ crawlerUserAgent: CRAWLER_USER_AGENT, safelyInterpretable: policy.safelyInterpretable, propertyC1Allowed: policy.isAllowed("/property/c1") })); if (!policy.safelyInterpretable || !policy.isAllowed("/property/c1")) throw new Error("robots policy is not safe for /property/c1");' $robotsPath
 
   $detailMatch = [regex]::Match((Get-Content -Raw -LiteralPath $seedPath), "/property-detail/\d+\.html")
   if (-not $detailMatch.Success) { throw "seed has no legacy detail link" }
-  $detailUri = [Uri]::new($seedResponse.BaseResponse.ResponseUri, $detailMatch.Value)
+  $detailUri = [Uri]::new($seedFinalUri, $detailMatch.Value)
   $detailResponse = Invoke-WebRequest -Uri $detailUri -OutFile $detailPath -PassThru -MaximumRedirection 5
+  $detailFinalUri = $detailResponse.BaseResponse.RequestMessage.RequestUri
+  if ($null -eq $detailFinalUri) { throw "detail response final URI is unavailable" }
+  Assert-LegacyFinalUri -Actual $detailFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath $detailUri.AbsolutePath -Label "detail"
   [pscustomobject]@{
     request = $detailUri.AbsoluteUri
     httpStatus = $detailResponse.StatusCode
-    finalUrl = $detailResponse.BaseResponse.ResponseUri.AbsoluteUri
+    finalUrl = $detailFinalUri.AbsoluteUri
     contentType = $detailResponse.Headers["Content-Type"]
   } | Format-List
-  if ($detailResponse.BaseResponse.ResponseUri.Host -ne $legacyOrigin.Host) { throw "detail did not remain on the approved independent legacy origin" }
-  if ($detailResponse.BaseResponse.ResponseUri.AbsolutePath -eq "/") { throw "detail resolved to a homepage fallback" }
 
-  node --input-type=module -e 'import { readFileSync } from "node:fs"; import { parseListingDetail } from "./src/lib/mls/parse-old-site.mjs"; const listing = parseListingDetail(readFileSync(process.argv[1], "utf8"), process.argv[2]); console.log(JSON.stringify({ parsed: Boolean(listing), externalId: listing?.externalId ?? null })); if (!listing) throw new Error("legacy detail parser returned no listing");' $detailPath $detailResponse.BaseResponse.ResponseUri.AbsoluteUri
+  node --input-type=module -e 'import { readFileSync } from "node:fs"; import { parseListingDetail } from "./src/lib/mls/parse-old-site.mjs"; const listing = parseListingDetail(readFileSync(process.argv[1], "utf8"), process.argv[2]); console.log(JSON.stringify({ parsed: Boolean(listing), externalId: listing?.externalId ?? null })); if (!listing) throw new Error("legacy detail parser returned no listing");' $detailPath $detailFinalUri.AbsoluteUri
 } finally {
   Remove-Item -LiteralPath $legacyGateDirectory -Recurse -Force -ErrorAction SilentlyContinue
 }
