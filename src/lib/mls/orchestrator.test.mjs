@@ -779,13 +779,16 @@ test("records a stable source-health diagnostic when 28Hse blocks a run", async 
     }),
     adapters: {
       oldSite: {
-        collect: async () => result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")]),
+        collect: async () =>
+          result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")]),
       },
       hse28: {
         collect: async () =>
           result(SOURCE_28HSE, [], {
             challengeDetected: true,
-            failures: [{ code: "challenge_detected", detail: "upstream challenge" }],
+            failures: [
+              { code: "challenge_detected", detail: "upstream challenge" },
+            ],
           }),
       },
     },
@@ -884,7 +887,11 @@ test("preserves descriptor-safe source diagnostics independently of adapters", a
   ]);
   assert.ok(Object.isFrozen(outcome.diagnostics));
   assert.ok(outcome.diagnostics.every(Object.isFrozen));
-  assert.ok(outcome.diagnostics.every((diagnostic) => Object.isFrozen(diagnostic.selectorCounts)));
+  assert.ok(
+    outcome.diagnostics.every((diagnostic) =>
+      Object.isFrozen(diagnostic.selectorCounts),
+    ),
+  );
 
   oldDiagnostic.selectorCounts.changed = 1;
   hseDiagnostic.failureCode = "changed";
