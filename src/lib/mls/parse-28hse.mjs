@@ -150,6 +150,17 @@ function requiredText(value, name) {
   return text;
 }
 
+function companyIdentityValid(companyName) {
+  const normalized = String(companyName ?? "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+  return (
+    normalized.includes("晉誠地產") || normalized.includes("earnest property")
+  );
+}
+
 function propertyNumber(value) {
   return normalizeText(value).match(/([A-Z0-9-]+)\s*(?:\([^)]*\))?$/i)?.[1] ?? null;
 }
@@ -267,12 +278,16 @@ export function detect28HseChallenge(html) {
     let container = $(node);
     while (container.length) {
       if (
-        container.is("form, [role='dialog'], [aria-modal='true']") ||
+        container.is("[role='dialog'], [aria-modal='true']") ||
         /(?:^|[\s_-])(?:captcha|challenge|verification|verify|overlay|modal|gate)(?:$|[\s_-])/i.test(
           [container.attr("id"), container.attr("class")]
             .filter(Boolean)
             .join(" "),
-        )
+        ) ||
+        (container.is("form") &&
+          /(?:^|[/?#&=_-])(?:captcha|recaptcha|hcaptcha|turnstile|challenge|verification|verify|login|sign-?in|authenticate|auth)(?:$|[/?#&=_-])/i.test(
+            container.attr("action") ?? "",
+          ))
       ) {
         return true;
       }
@@ -301,6 +316,8 @@ export function parse28HseAgentIndex(html, context) {
   if (companyNames.length !== 1)
     throw new Error("Unexpected agent company template");
   const companyName = companyNames[0];
+  if (!companyIdentityValid(companyName))
+    throw new Error("Unexpected agent company identity");
 
   const documentText = normalizeText($.root().text());
   const licences = unique(

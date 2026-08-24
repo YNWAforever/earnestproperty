@@ -254,6 +254,37 @@ test("does not classify populated agent content from an unrelated sitekey", () =
   assert.equal(detect28HseChallenge(html), false);
 });
 
+test("does not classify populated agent content from an unrelated CAPTCHA form", () => {
+  const html = [
+    "<title>晉誠地產 Earnest Property</title>",
+    "<h1>晉誠地產 Earnest Property</h1>",
+    "<p>公司牌照: C-018613</p>",
+    "<p>共有 1 個放售樓盤</p>",
+    "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+    "<form action='/newsletter'><input name='email'><div data-sitekey='newsletter-widget'></div><button type='submit'>訂閱</button></form>",
+  ].join("");
+
+  assert.equal(detect28HseChallenge(html), false);
+});
+
+test("rejects a unique non-Earnest company heading at the parser boundary", () => {
+  const html = [
+    "<h1>另一地產 Another Property</h1>",
+    "<p>公司牌照: C-018613</p>",
+    "<p>共有 1 個放售樓盤</p>",
+    "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+  ].join("");
+
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(html, {
+        dealType: "sale",
+        pageUrl: build28HseAgentUrl("sale", 1),
+      }),
+    /company|identity|template/i,
+  );
+});
+
 test("detects punctuated challenge headings with a bounded vendor suffix", () => {
   for (const heading of [
     "Access Denied!",
