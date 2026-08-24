@@ -20,6 +20,31 @@ function manualShadowReadinessSection(runbook) {
   return runbook.slice(start, nextHeading === -1 ? undefined : nextHeading);
 }
 
+function legacySourceAccessGateSection(runbook) {
+  const heading = "### Legacy source access gate";
+  const start = runbook.indexOf(heading);
+  assert.notEqual(start, -1);
+  const nextHeading = runbook.indexOf("\n### ", start + heading.length);
+  return runbook.slice(start, nextHeading === -1 ? undefined : nextHeading);
+}
+
+function assertLegacySourceAccessGateSection(section) {
+  for (const fragment of [
+    "Legacy source access gate",
+    "robots.txt must be a parseable robots policy",
+    "must allow /property/c1",
+    "must expose at least one /property-detail/<id>.html link",
+    "independent legacy origin",
+    "STOP: do not trigger or retry the shadow Workflow",
+  ]) {
+    assert.equal(
+      section.includes(fragment),
+      true,
+      `missing legacy gate: ${fragment}`,
+    );
+  }
+}
+
 function assertManualShadowReadinessSection(section) {
   for (const command of [
     "npm.cmd exec wrangler -- secret list --config workers/mls-container/wrangler.jsonc",
@@ -104,6 +129,15 @@ test("runbook manual shadow readiness verifier remains approval-gated", async ()
   );
 
   assertManualShadowReadinessSection(manualShadowReadinessSection(runbook));
+});
+
+test("runbook requires a legacy source access gate before shadow activation", async () => {
+  const runbook = await readFile(
+    new URL("../../docs/mls-production-activation.md", import.meta.url),
+    "utf8",
+  );
+
+  assertLegacySourceAccessGateSection(legacySourceAccessGateSection(runbook));
 });
 
 test("runbook verifier rejects credential and automatic activation variants", async () => {

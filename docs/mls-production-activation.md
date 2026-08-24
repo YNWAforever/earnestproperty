@@ -32,6 +32,72 @@ The Docker check is an operator prerequisite, not evidence that an image was bui
 
 ## 3. Manual shadow readiness verifier
 
+### Legacy source access gate
+
+Before requesting a new approval, prove that the legacy source is independently reachable and parseable. This is read-only evidence gathering; it does not authorize a source retry, deployment, Workflow trigger, schedule, secret placement, database write, or publication.
+
+Use the approved independent legacy origin and canonical current-application host for this one proof. Save only the fetched response bodies in a uniquely named temporary directory, display the response metadata, and delete only that exact directory in `finally`:
+
+```powershell
+$legacyOrigin = [Uri] "<approved-independent-legacy-origin>"
+$canonicalCurrentApplicationHost = "<canonical-current-application-host>"
+$legacyGateDirectory = Join-Path ([IO.Path]::GetTempPath()) ("earnest-mls-legacy-gate-" + [Guid]::NewGuid().ToString("N"))
+New-Item -ItemType Directory -Path $legacyGateDirectory -ErrorAction Stop | Out-Null
+try {
+  $robotsPath = Join-Path $legacyGateDirectory "robots.txt"
+  $seedPath = Join-Path $legacyGateDirectory "property-c1.html"
+  $detailPath = Join-Path $legacyGateDirectory "property-detail.html"
+
+  $robotsResponse = Invoke-WebRequest -Uri ([Uri]::new($legacyOrigin, "/robots.txt")) -OutFile $robotsPath -PassThru -MaximumRedirection 5
+  $seedResponse = Invoke-WebRequest -Uri ([Uri]::new($legacyOrigin, "/property/c1")) -OutFile $seedPath -PassThru -MaximumRedirection 5
+
+  @(
+    [pscustomobject]@{
+      request = "robots.txt"
+      httpStatus = $robotsResponse.StatusCode
+      finalUrl = $robotsResponse.BaseResponse.ResponseUri.AbsoluteUri
+      contentType = $robotsResponse.Headers["Content-Type"]
+    }
+    [pscustomobject]@{
+      request = "/property/c1"
+      httpStatus = $seedResponse.StatusCode
+      finalUrl = $seedResponse.BaseResponse.ResponseUri.AbsoluteUri
+      contentType = $seedResponse.Headers["Content-Type"]
+    }
+  ) | Format-List
+
+  if ($robotsResponse.Headers["Content-Type"] -notmatch "^text/plain") { throw "robots.txt is not text" }
+  if ($seedResponse.BaseResponse.ResponseUri.Host -eq $canonicalCurrentApplicationHost) { throw "seed resolved to the canonical current application" }
+  if ($seedResponse.BaseResponse.ResponseUri.Host -ne $legacyOrigin.Host) { throw "seed did not remain on the approved independent legacy origin" }
+  if ($seedResponse.BaseResponse.ResponseUri.AbsolutePath -eq "/") { throw "seed resolved to a homepage fallback" }
+
+  node --input-type=module -e 'import { readFileSync } from "node:fs"; import { CRAWLER_USER_AGENT, parseRobots } from "./src/lib/mls/access-policy.mjs"; const policy = parseRobots(readFileSync(process.argv[1], "utf8"), CRAWLER_USER_AGENT); console.log(JSON.stringify({ crawlerUserAgent: CRAWLER_USER_AGENT, safelyInterpretable: policy.safelyInterpretable, propertyC1Allowed: policy.isAllowed("/property/c1") })); if (!policy.safelyInterpretable || !policy.isAllowed("/property/c1")) throw new Error("robots policy is not safe for /property/c1");' $robotsPath
+
+  $detailMatch = [regex]::Match((Get-Content -Raw -LiteralPath $seedPath), "/property-detail/\\d+\\.html")
+  if (-not $detailMatch.Success) { throw "seed has no legacy detail link" }
+  $detailUri = [Uri]::new($seedResponse.BaseResponse.ResponseUri, $detailMatch.Value)
+  $detailResponse = Invoke-WebRequest -Uri $detailUri -OutFile $detailPath -PassThru -MaximumRedirection 5
+  [pscustomobject]@{
+    request = $detailUri.AbsoluteUri
+    httpStatus = $detailResponse.StatusCode
+    finalUrl = $detailResponse.BaseResponse.ResponseUri.AbsoluteUri
+    contentType = $detailResponse.Headers["Content-Type"]
+  } | Format-List
+  if ($detailResponse.BaseResponse.ResponseUri.Host -ne $legacyOrigin.Host) { throw "detail did not remain on the approved independent legacy origin" }
+  if ($detailResponse.BaseResponse.ResponseUri.AbsolutePath -eq "/") { throw "detail resolved to a homepage fallback" }
+
+  node --input-type=module -e 'import { readFileSync } from "node:fs"; import { parseListingDetail } from "./src/lib/mls/parse-old-site.mjs"; const listing = parseListingDetail(readFileSync(process.argv[1], "utf8"), process.argv[2]); console.log(JSON.stringify({ parsed: Boolean(listing), externalId: listing?.externalId ?? null })); if (!listing) throw new Error("legacy detail parser returned no listing");' $detailPath $detailResponse.BaseResponse.ResponseUri.AbsoluteUri
+} finally {
+  Remove-Item -LiteralPath $legacyGateDirectory -Recurse -Force -ErrorAction SilentlyContinue
+}
+```
+
+robots.txt must be a parseable robots policy and must allow /property/c1 for the configured crawler user agent. The legacy seed response must come from an independent legacy origin, not the canonical current application or a homepage fallback. It must expose at least one /property-detail/<id>.html link, and one fetched detail page must parse with the existing legacy parser.
+
+Any redirect to HTML/homepage, missing legacy link, denial, or parse failure is an immediate stop. **STOP: do not trigger or retry the shadow Workflow.** Preserve the read-only evidence for review and request a new explicit approval only after every check succeeds.
+
+### Manual shadow readiness checks
+
 This section is a manual, approval-gated readiness check. It does not authorize automatic schedule activation or publication. Keep the run in `shadow` with `publishEnabled:false`; the later, separately approved scheduled-deployment and first-publish examples remain outside this section.
 
 1. Only after the separately approved secret-placement gate, copy Vercel Production variables interactively. Map `DATABASE_URL_UNPOOLED` to the Neon production value, `BLOB_READ_WRITE_TOKEN` to the Vercel Blob token retained for a later publish only, and the R2 keys to the private evidence bucket. Do not put values in files, command history, Docker arguments, or logs.
