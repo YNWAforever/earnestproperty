@@ -61,7 +61,7 @@ const DETAIL_LABELS = new Map([
 ]);
 
 const BLOCKING_HEADING =
-  /^(?:just a moment|access denied|attention required|verify you are human|captcha challenge)$/i;
+  /^(?:just a moment(?:[.?!…]+)?|access denied|attention required|verify you are human|captcha challenge)$/i;
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -207,10 +207,14 @@ export function detect28HseChallenge(html) {
   if (!text) return true;
   if (/cf-chl-|challenge-platform|\/cdn-cgi\/challenge-platform/i.test(markup))
     return true;
-  if (
-    $("[data-sitekey], iframe[src*='captcha'], form[action*='captcha']").length
-  )
-    return true;
+  const hasCaptchaStructure =
+    $("[data-sitekey]").length > 0 ||
+    $("iframe[src], form[action]")
+      .toArray()
+      .some((node) =>
+        /captcha/i.test($(node).attr("src") ?? $(node).attr("action") ?? ""),
+      );
+  if (hasCaptchaStructure) return true;
   const hasBlockingHeading = $("title, h1, [role='heading']")
     .toArray()
     .some((node) => BLOCKING_HEADING.test(normalizeText($(node).text())));

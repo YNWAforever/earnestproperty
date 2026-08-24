@@ -65,6 +65,20 @@ test("does not classify a normal agent page as a challenge from nav/help text", 
   assert.equal(detect28HseChallenge(html), false);
 });
 
+test("detects canonical Cloudflare headings with terminal punctuation", () => {
+  assert.equal(
+    detect28HseChallenge(fixture("challenge-cloudflare-punctuated.html")),
+    true,
+  );
+});
+
+test("detects uppercase CAPTCHA iframe and form structure", () => {
+  assert.equal(
+    detect28HseChallenge(fixture("challenge-captcha-uppercase.html")),
+    true,
+  );
+});
+
 test("detects Cloudflare challenge shells before parsing", () => {
   const html = fixture("challenge-cloudflare.html");
   assert.equal(detect28HseChallenge(html), true);
