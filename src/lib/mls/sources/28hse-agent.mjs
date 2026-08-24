@@ -132,8 +132,8 @@ export function create28HseAgentSourceAdapter({
 
   return {
     async collect({ maxPages = 100 } = {}) {
-      if (!Number.isInteger(maxPages) || maxPages < 1) {
-        throw new TypeError("maxPages must be a positive integer");
+      if (!Number.isInteger(maxPages) || maxPages < 1 || maxPages > 100) {
+        throw new TypeError("maxPages must be an integer from 1 to 100");
       }
       const failures = [];
       const diagnosticsByUrl = new Map();

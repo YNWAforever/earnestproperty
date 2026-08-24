@@ -77,11 +77,45 @@ function requireDealType(dealType) {
 }
 
 function requireAgentPageUrl(pageUrl, dealType) {
-  const url = new URL(pageUrl);
-  if (url.hostname !== "www.28hse.com" || url.pathname !== `/agent/${AGENT_ID}`) {
+  const rawPageUrl = String(pageUrl ?? "");
+  let url;
+  try {
+    url = new URL(rawPageUrl);
+  } catch {
     throw new TypeError("Unexpected 28Hse agent source URL");
   }
-  if (url.searchParams.get("buyRent") !== (dealType === "sale" ? "buy" : "rent")) {
+  const authority = rawPageUrl.match(/^https:\/\/([^/?#]+)/i)?.[1] ?? "";
+  const hasExplicitPort = /:\d+$/.test(authority);
+  const expectedKeys = new Set([
+    "buyRent",
+    "page",
+    "plan_id",
+    "propertyDoSearchVersion",
+  ]);
+  const keys = [...url.searchParams.keys()];
+  const page = Number(url.searchParams.get("page"));
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    hasExplicitPort ||
+    url.hostname !== "www.28hse.com" ||
+    url.pathname !== `/agent/${AGENT_ID}` ||
+    url.hash ||
+    keys.length !== expectedKeys.size ||
+    keys.some((key) => !expectedKeys.has(key)) ||
+    url.searchParams.get("plan_id") !== AGENT_ID ||
+    url.searchParams.get("propertyDoSearchVersion") !== "2.0" ||
+    !Number.isInteger(page) ||
+    page < 1 ||
+    page > 100
+  ) {
+    throw new TypeError("Unexpected 28Hse agent source URL");
+  }
+  if (
+    url.searchParams.get("buyRent") !== (dealType === "sale" ? "buy" : "rent")
+  ) {
     throw new TypeError("Agent source URL deal type does not match context");
   }
   return url;
@@ -115,10 +149,11 @@ function propertyNumber(value) {
 }
 
 function parseCount(text, dealType) {
-  const normalized = normalizeText(text).replace(/,/g, "");
-  const dealWord = dealType === "sale" ? "(?:出售|買|buy|sale)" : "(?:出租|租|rent)";
-  const match = normalized.match(new RegExp(`${dealWord}[^0-9]*(\\d+(?:\\.\\d+)?)`, "i"));
-  return match ? Number(match[1]) : null;
+  const label = dealType === "sale" ? "放售樓盤" : "放租樓盤";
+  const match = normalizeText(text)
+    .replaceAll(",", "")
+    .match(new RegExp(`共有\\s*(\\d+)\\s*個${label}`, "u"));
+  return match ? Number(match[1]) : Number.NaN;
 }
 
 function safeAbsoluteUrl(value, baseUrl) {
@@ -195,7 +230,8 @@ function extractGallery($, sourceUrl) {
 
 export function build28HseAgentUrl(dealType, page) {
   requireDealType(dealType);
-  if (!Number.isInteger(page) || page < 1) throw new TypeError("page must be a positive integer");
+  if (!Number.isInteger(page) || page < 1 || page > 100)
+    throw new TypeError("page must be an integer from 1 to 100");
   const buyRent = dealType === "sale" ? "buy" : "rent";
   return `https://www.28hse.com/agent/${AGENT_ID}?buyRent=${buyRent}&page=${page}&plan_id=${AGENT_ID}&propertyDoSearchVersion=2.0`;
 }
@@ -230,37 +266,38 @@ export function parse28HseAgentIndex(html, context) {
   const pageUrl = requireAgentPageUrl(context?.pageUrl, context.dealType);
   if (detect28HseChallenge(html)) throw new Error("28Hse challenge detected");
   const $ = load(String(html));
-  const profile = $("[data-agent-profile='540'] .agent-profile");
-  const results = $(
-    `[data-agent-profile='540'] [data-agent-results][data-deal-type='${context.dealType}']`,
-  );
-  if (profile.length !== 1 || results.length !== 1)
-    throw new Error("Unexpected agent index template");
+  const companyNames = $("h1")
+    .toArray()
+    .map((node) => normalizeText($(node).text()))
+    .filter(Boolean);
+  if (companyNames.length !== 1)
+    throw new Error("Unexpected agent company template");
+  const companyName = companyNames[0];
 
-  const companyName = requiredText(profile.find("h1").first().text(), "company name");
+  const documentText = normalizeText($.root().text());
   const licences = unique(
-    profile
-      .find(".licence")
-      .map((_, node) =>
-        normalizeText($(node).text())
-          .match(/C-\d{6}/i)?.[0]
-          ?.toUpperCase(),
-      )
-      .get(),
+    [...documentText.matchAll(/C-\d{6}/gi)].map(([licence]) =>
+      licence.toUpperCase(),
+    ),
   );
   if (licences.length !== 1 || licences[0] !== AGENT_LICENCE)
     throw new Error("Unexpected agent licence template");
-  const counts = unique(
-    results
-      .find(".result-count")
-      .map((_, node) => parseCount($(node).text(), context.dealType))
-      .get(),
-  );
-  if (counts.length !== 1 || !Number.isFinite(counts[0]) || counts[0] < 0)
+
+  const counts = new Set();
+  $("body *").each((_, node) => {
+    const ownText = $(node)
+      .contents()
+      .filter((__, child) => child.type === "text")
+      .text();
+    const count = parseCount(ownText, context.dealType);
+    if (Number.isFinite(count)) counts.add(count);
+  });
+  if (counts.size !== 1)
     throw new Error("Unexpected advertised count template");
+  const advertisedCount = [...counts][0];
 
   const linksById = new Map();
-  results.find("a[href]").each((_, anchor) => {
+  $("a[href]").each((_, anchor) => {
     const href = $(anchor).attr("href");
     const match = href?.match(/^\/(buy|rent)\/[^"?#]*\/property-(\d+)\/?$/i);
     if (
@@ -274,19 +311,32 @@ export function parse28HseAgentIndex(html, context) {
     const summaryTitle = requiredText($(anchor).text(), "listing title");
     const url = safeAbsoluteUrl(href, pageUrl);
     const previous = linksById.get(externalId);
-    if (previous && (previous.url !== url || previous.summaryTitle !== summaryTitle)) {
-      throw new Error("Unexpected agent index template: contradictory listing link");
+    if (previous && previous.url !== url) {
+      throw new Error(
+        "Unexpected agent index template: contradictory listing link",
+      );
     }
-    linksById.set(externalId, { externalId, url, summaryTitle });
+    if (!previous || summaryTitle.length > previous.summaryTitle.length) {
+      linksById.set(externalId, { externalId, url, summaryTitle });
+    }
   });
-  const links = [...linksById.values()].sort((a, b) => a.externalId.localeCompare(b.externalId));
-  if (counts[0] < links.length) {
-    throw new Error("Unexpected agent index count: advertised count is smaller than unique links");
+  const links = [...linksById.values()].sort((a, b) =>
+    a.externalId.localeCompare(b.externalId),
+  );
+  if (advertisedCount > 0 && links.length === 0) {
+    throw new Error(
+      "Unexpected agent index count: positive count has no listing links",
+    );
+  }
+  if (advertisedCount < links.length) {
+    throw new Error(
+      "Unexpected agent index count: advertised count is smaller than unique links",
+    );
   }
   return {
     companyName,
     companyLicence: AGENT_LICENCE,
-    advertisedCount: counts[0],
+    advertisedCount,
     dealType: context.dealType,
     links,
     pageFingerprint: sha256(

@@ -31,6 +31,92 @@ test("extracts exact agent identity, advertised count, and unique links", () => 
   assert.ok(page.advertisedCount >= page.links.length);
 });
 
+test("parses semantic agent identity, deal count, strict links, and longest duplicate title", () => {
+  const sale = parse28HseAgentIndex(fixture("agent-sale-page-1.html"), {
+    dealType: "sale",
+    pageUrl: build28HseAgentUrl("sale", 1),
+  });
+  const rent = parse28HseAgentIndex(fixture("agent-rent-page-1.html"), {
+    dealType: "rent",
+    pageUrl: build28HseAgentUrl("rent", 1),
+  });
+
+  assert.equal(sale.companyName, "晉誠地產 Earnest Property");
+  assert.equal(sale.companyLicence, "C-018613");
+  assert.equal(sale.advertisedCount, 3);
+  assert.deepEqual(
+    sale.links.map(({ externalId }) => externalId),
+    ["3972991", "3973002"],
+  );
+  assert.equal(
+    sale.links.find(({ externalId }) => externalId === "3972991")?.summaryTitle,
+    "較完整樓盤標題",
+  );
+  assert.deepEqual(
+    rent.links.map(({ externalId }) => externalId),
+    ["3976155"],
+  );
+  assert.equal(rent.advertisedCount, 1);
+});
+
+test("rejects malformed semantic identity, count, and contradictory listing links", () => {
+  const context = {
+    dealType: "sale",
+    pageUrl: build28HseAgentUrl("sale", 1),
+  };
+  const invalidPages = [
+    "<h1>晉誠地產</h1><p>公司牌照: C-999999</p><p>共有 1 個放售樓盤</p><a href='/buy/apartment/property-1'>一號</a>",
+    "<h1>晉誠地產</h1><p>C-018613 C-999999</p><p>共有 1 個放售樓盤</p><a href='/buy/apartment/property-1'>一號</a>",
+    "<h1>晉誠地產</h1><h1>另一公司</h1><p>C-018613</p><p>共有 1 個放售樓盤</p><a href='/buy/apartment/property-1'>一號</a>",
+    "<h1>晉誠地產</h1><p>C-018613</p><a href='/buy/apartment/property-1'>一號</a>",
+    "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放售樓盤</p>",
+    "<h1>晉誠地產</h1><p>C-018613</p><p>共有 2 個放售樓盤</p><a href='/buy/apartment/property-1'>一號</a><a href='/buy/house/property-1'>另一個一號</a>",
+  ];
+
+  for (const html of invalidPages) {
+    assert.throws(
+      () => parse28HseAgentIndex(html, context),
+      /template|licence|company|count/i,
+    );
+  }
+  for (const name of [
+    "agent-sale-count-mismatch.html",
+    "agent-sale-conflicting-counts.html",
+  ]) {
+    assert.throws(
+      () => parse28HseAgentIndex(fixture(name), context),
+      /count|template/i,
+    );
+  }
+});
+
+test("rejects unsafe agent index URLs at the exact trust boundary", () => {
+  const validHtml = fixture("agent-sale-page-1.html");
+  const unsafeUrls = [
+    "http://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://user:pass@www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com:444/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com:443/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/541?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=541&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=1.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0&extra=1",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=0&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=101&plan_id=540&propertyDoSearchVersion=2.0",
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1&page=2&plan_id=540&propertyDoSearchVersion=2.0",
+  ];
+
+  for (const pageUrl of unsafeUrls) {
+    assert.throws(() =>
+      parse28HseAgentIndex(validHtml, {
+        dealType: "sale",
+        pageUrl,
+      }),
+    );
+  }
+});
+
 test("detail parser allowlists listing facts and excludes platform modules", () => {
   const item = parse28HseDetail(fixture("detail-sale-3972991.html"), {
     sourceUrl: "https://www.28hse.com/buy/apartment/property-3972991",

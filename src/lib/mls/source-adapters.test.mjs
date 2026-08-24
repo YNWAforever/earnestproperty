@@ -580,6 +580,19 @@ test("policy fetch retries retryable responses at most three total attempts", as
   assert.deepEqual(sleeps, [2500, 2500]);
 });
 
+test("28Hse adapter rejects maxPages above 100 before any fetch", async () => {
+  let requests = 0;
+  const adapter = create28HseAgentSourceAdapter({
+    fetchImpl: async () => {
+      requests += 1;
+      throw new Error("fetch must not run");
+    },
+  });
+
+  await assert.rejects(() => adapter.collect({ maxPages: 101 }), /maxPages/i);
+  assert.equal(requests, 0);
+});
+
 test("28Hse adapter preserves the active deal filter across pagination", async () => {
   const requested = [];
   const sleeps = [];
