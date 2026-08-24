@@ -60,6 +60,11 @@ test("challenge pages are detected before parsing", () => {
   );
 });
 
+test("does not classify a normal agent page as a challenge from nav/help text", () => {
+  const html = fixture("agent-live-login-nav.html");
+  assert.equal(detect28HseChallenge(html), false);
+});
+
 test("detects Cloudflare challenge shells before parsing", () => {
   const html = fixture("challenge-cloudflare.html");
   assert.equal(detect28HseChallenge(html), true);

@@ -60,6 +60,9 @@ const DETAIL_LABELS = new Map([
   ["標籤", "features"],
 ]);
 
+const BLOCKING_HEADING =
+  /^(?:just a moment|access denied|attention required|verify you are human|captcha challenge)$/i;
+
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -198,15 +201,24 @@ export function build28HseAgentUrl(dealType, page) {
 }
 
 export function detect28HseChallenge(html) {
-  const markup = String(html ?? "").toLowerCase();
-  const text = normalizeText(load(markup).text()).toLowerCase();
-  return (
-    !text ||
-    /captcha|cloudflare|verify you are human|challenge|access denied|登入|login|sign in|just a moment/.test(
-      text,
-    ) ||
-    /cf-chl-|challenge-platform|data-cf-challenge-platform/.test(markup)
-  );
+  const markup = String(html ?? "");
+  const $ = load(markup);
+  const text = normalizeText($.root().text());
+  if (!text) return true;
+  if (/cf-chl-|challenge-platform|\/cdn-cgi\/challenge-platform/i.test(markup))
+    return true;
+  if (
+    $("[data-sitekey], iframe[src*='captcha'], form[action*='captcha']").length
+  )
+    return true;
+  const hasBlockingHeading = $("title, h1, [role='heading']")
+    .toArray()
+    .some((node) => BLOCKING_HEADING.test(normalizeText($(node).text())));
+  if (hasBlockingHeading) return true;
+  const hasPasswordForm = $("form input[type='password']").length > 0;
+  const hasAgentIdentity = /C-018613/i.test(text);
+  const hasPropertyLink = $("a[href*='/property-']").length > 0;
+  return hasPasswordForm && !hasAgentIdentity && !hasPropertyLink;
 }
 
 export function parse28HseAgentIndex(html, context) {
