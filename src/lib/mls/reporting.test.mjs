@@ -385,3 +385,48 @@ test("sync CLI passes mode and environment flags through the lock and orchestrat
     /console\.log\([^)]*(?:DATABASE_URL|BLOB_READ_WRITE_TOKEN|process\.env)/i,
   );
 });
+
+test("top-level diagnostics remain allowlisted and redact URL credentials", () => {
+  const run = reportFixture();
+  run.evaluation.sourceStatus = {};
+  run.diagnostics = [
+    {
+      sourceUrl: "https://legacy.invalid/property/c1?token=secret",
+      responseStatus: 200,
+      attempts: 1,
+      templateFingerprint: null,
+      selectorCounts: { listings: 0 },
+      failureCode: "robots_disallowed",
+      rawBody: "secret raw body",
+    },
+    {
+      sourceUrl:
+        "https://www.28hse.com/agent/540?buyRent=1&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+      responseStatus: 200,
+      attempts: 1,
+      templateFingerprint: "fixture-fingerprint",
+      selectorCounts: { listings: 0 },
+      failureCode: "unexpected_template",
+      rawHeaders: { authorization: "Bearer secret" },
+    },
+  ];
+
+  const artifact = buildRunArtifactObjects(run).find(
+    ({ name }) => name === "diagnostics.json",
+  );
+  assert.ok(artifact);
+  const diagnostics = JSON.parse(artifact.body);
+
+  assert.equal(diagnostics.length, 2);
+  assert.deepEqual(Object.keys(diagnostics[0]), [
+    "sourceUrl",
+    "responseStatus",
+    "attempts",
+    "templateFingerprint",
+    "selectorCounts",
+    "failureCode",
+  ]);
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  assert.equal(Object.hasOwn(diagnostics[0], "rawBody"), false);
+  assert.equal(Object.hasOwn(diagnostics[1], "rawHeaders"), false);
+});

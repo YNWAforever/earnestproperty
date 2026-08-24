@@ -62,6 +62,7 @@ export interface SyncRunResult {
   counts: Record<string, number>;
   proposals?: PublicationProposal[];
   quarantines?: unknown[];
+  diagnostics?: SourceRunResult["diagnostics"];
   failureCode?: string;
   failureSummary?: string;
 }

@@ -5,6 +5,14 @@ import { SOURCE_28HSE, SOURCE_OLD_SITE } from "./source-contract.mjs";
 import { PublicationOutcomeUnknownError } from "./sync-repository.mjs";
 
 const SOURCES = [SOURCE_OLD_SITE, SOURCE_28HSE];
+const DIAGNOSTIC_KEYS = [
+  "sourceUrl",
+  "responseStatus",
+  "attempts",
+  "templateFingerprint",
+  "selectorCounts",
+  "failureCode",
+];
 const CANONICAL_KEYS = [
   "listing_no",
   "canonical_property_no",
@@ -319,6 +327,80 @@ function completion(status, evaluation, failureCode = null, failureSummary = nul
   return { status, ...evaluation, failureCode, failureSummary };
 }
 
+function sourceHealthDiagnostic(evaluation, gate) {
+  const gateReasons = Array.isArray(gate.reasons)
+    ? gate.reasons.filter((reason) => typeof reason === "string")
+    : [];
+  const sourceReasons = Object.entries(evaluation.sourceStatus ?? {})
+    .map(([source, status]) => {
+      const reasons = Array.isArray(status?.reasons)
+        ? status.reasons.filter((reason) => typeof reason === "string")
+        : [];
+      return reasons.length ? `${source}:${reasons.join(",")}` : null;
+    })
+    .filter(Boolean);
+  const reasons = [...gateReasons, ...sourceReasons];
+  return {
+    failureCode: "source_health_blocked",
+    failureSummary: `source health blocked: ${reasons.length ? reasons.join("; ") : "unknown"}`,
+  };
+}
+
+function snapshotSelectorCounts(input) {
+  if (!input || Object.getPrototypeOf(input) !== Object.prototype) return null;
+  const captured = {};
+  for (const key of Object.keys(input)) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor || !("value" in descriptor) || !Number.isFinite(descriptor.value)) return null;
+    captured[key] = descriptor.value;
+  }
+  return Object.freeze(captured);
+}
+
+function snapshotDiagnostic(input) {
+  try {
+    if (!input || Object.getPrototypeOf(input) !== Object.prototype) return null;
+    const captured = {};
+    for (const key of DIAGNOSTIC_KEYS) {
+      const descriptor = Object.getOwnPropertyDescriptor(input, key);
+      if (!descriptor || !("value" in descriptor)) return null;
+      captured[key] = descriptor.value;
+    }
+    if (
+      typeof captured.sourceUrl !== "string" ||
+      (captured.responseStatus !== null &&
+        (!Number.isInteger(captured.responseStatus) ||
+          captured.responseStatus < 100 ||
+          captured.responseStatus > 599)) ||
+      !Number.isInteger(captured.attempts) ||
+      captured.attempts < 0 ||
+      (captured.templateFingerprint !== null &&
+        typeof captured.templateFingerprint !== "string") ||
+      (captured.failureCode !== null && typeof captured.failureCode !== "string")
+    ) {
+      return null;
+    }
+    const selectorCounts = snapshotSelectorCounts(captured.selectorCounts);
+    if (!selectorCounts) return null;
+    return Object.freeze({ ...captured, selectorCounts });
+  } catch {
+    return null;
+  }
+}
+
+function snapshotDiagnostics(results) {
+  const diagnostics = [];
+  for (const source of SOURCES) {
+    const sourceDiagnostics = results[source]?.diagnostics;
+    if (!Array.isArray(sourceDiagnostics)) continue;
+    for (const item of sourceDiagnostics) {
+      const snapshot = snapshotDiagnostic(item);
+      if (snapshot) diagnostics.push(snapshot);
+    }
+  }
+  return Object.freeze(diagnostics);
+}
+
 function checkInput(input) {
   if (!input || typeof input !== "object")
     throw new TypeError("runDualSourceSync input is required");
@@ -348,6 +430,7 @@ export async function runDualSourceSync(input) {
   let evaluation = { sourceStatus: {}, counts: {}, baselines: {} };
   let publicationCommitted = false;
   let postCommitPhase = null;
+  let diagnostics = Object.freeze([]);
   try {
     runId = (
       await repository.beginRun({
@@ -370,6 +453,7 @@ export async function runDualSourceSync(input) {
           ? settled[1].value
           : failedSource(SOURCE_28HSE, settled[1].reason),
     };
+    diagnostics = snapshotDiagnostics(results);
     const persisted = new Map();
     for (const source of SOURCES) {
       const observations = results[source].observations;
@@ -410,17 +494,23 @@ export async function runDualSourceSync(input) {
       sourceFailures,
     );
     if (gate.mode === "blocked") {
+      const diagnostic = sourceHealthDiagnostic(evaluation, gate);
       const outcome = {
         runId,
         status: "blocked",
         evaluation,
         gate,
         counts,
+        diagnostics,
         proposals: [],
         quarantines: grouping.quarantined,
+        ...diagnostic,
       };
       await reporter.writeRunArtifacts(outcome);
-      await repository.finishRun(runId, completion("blocked", evaluation));
+      await repository.finishRun(
+        runId,
+        completion("blocked", evaluation, diagnostic.failureCode, diagnostic.failureSummary),
+      );
       return outcome;
     }
     if (input.mode === "publish") {
@@ -432,6 +522,7 @@ export async function runDualSourceSync(input) {
           evaluation,
           gate,
           counts,
+          diagnostics,
           proposals: [],
           quarantines: grouping.quarantined,
         };
@@ -757,7 +848,7 @@ export async function runDualSourceSync(input) {
     );
     if (input.mode === "shadow") {
       const status = gate.mode === "degraded" ? "degraded" : "shadow_healthy";
-      const outcome = { runId, status, evaluation, gate, counts, proposals, quarantines };
+      const outcome = { runId, status, evaluation, gate, counts, diagnostics, proposals, quarantines };
       await reporter.writeRunArtifacts(outcome);
       await repository.finishRun(runId, completion(status, evaluation));
       return outcome;
@@ -774,7 +865,7 @@ export async function runDualSourceSync(input) {
     counts.new = published.inserted;
     counts.changed = published.updated;
     const status = gate.mode === "degraded" ? "degraded" : "healthy";
-    const outcome = { runId, status, evaluation, gate, counts, proposals, quarantines };
+    const outcome = { runId, status, evaluation, gate, counts, diagnostics, proposals, quarantines };
     postCommitPhase = "artifacts";
     await reporter.writeRunArtifacts(outcome);
     postCommitPhase = "finish";
@@ -797,6 +888,7 @@ export async function runDualSourceSync(input) {
           status: "failed",
           evaluation,
           counts: {},
+          diagnostics,
           failureCode,
           failureSummary,
         });

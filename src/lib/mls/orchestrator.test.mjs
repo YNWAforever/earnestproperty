@@ -768,3 +768,143 @@ test("counts reactivated matched properties separately", async () => {
   assert.equal(shadow.counts.reactivated, 1);
   assert.ok(shadow.proposals[0].events.some((event) => event.changeType === "reactivated"));
 });
+
+test("records a stable source-health diagnostic when 28Hse blocks a run", async () => {
+  const completions = [];
+  const value = input({
+    repository: fakeRepository({
+      async finishRun(_runId, completion) {
+        completions.push(completion);
+      },
+    }),
+    adapters: {
+      oldSite: {
+        collect: async () => result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")]),
+      },
+      hse28: {
+        collect: async () =>
+          result(SOURCE_28HSE, [], {
+            challengeDetected: true,
+            failures: [{ code: "challenge_detected", detail: "upstream challenge" }],
+          }),
+      },
+    },
+  });
+
+  const outcome = await runDualSourceSync(value);
+
+  assert.equal(outcome.status, "blocked");
+  assert.equal(outcome.failureCode, "source_health_blocked");
+  assert.equal(
+    outcome.failureSummary,
+    "source health blocked: 28hse_unhealthy; 28hse_agent_540:pagination_evidence_invalid,challenge_detected,zero_inventory,sale_count_below_floor,combined_count_below_floor,parse_rate_below_minimum",
+  );
+  assert.equal(completions.length, 1);
+  assert.equal(completions[0].failureCode, "source_health_blocked");
+  assert.equal(completions[0].failureSummary, outcome.failureSummary);
+});
+
+test("preserves descriptor-safe source diagnostics independently of adapters", async () => {
+  const oldDiagnostic = {
+    sourceUrl: "https://legacy.invalid/property/c1?token=secret",
+    responseStatus: 200,
+    attempts: 1,
+    templateFingerprint: null,
+    selectorCounts: {},
+    failureCode: "robots_disallowed",
+  };
+  const hseDiagnostic = {
+    sourceUrl:
+      "https://www.28hse.com/agent/540?buyRent=1&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+    responseStatus: 200,
+    attempts: 1,
+    templateFingerprint: "fixture-fingerprint",
+    selectorCounts: { listings: 0 },
+    failureCode: "unexpected_template",
+  };
+  const malformedDiagnostic = {
+    sourceUrl: "https://example.test/malformed",
+    responseStatus: 200,
+    attempts: "1",
+    templateFingerprint: null,
+    selectorCounts: {},
+    failureCode: null,
+  };
+  const accessorDiagnostic = {
+    sourceUrl: "https://example.test/accessor",
+    responseStatus: 200,
+    attempts: 1,
+    templateFingerprint: null,
+    selectorCounts: {},
+    failureCode: null,
+  };
+  Object.defineProperty(accessorDiagnostic, "failureCode", {
+    enumerable: true,
+    get() {
+      throw new Error("diagnostic accessor must not run");
+    },
+  });
+  const outcome = await runDualSourceSync(
+    input({
+      adapters: {
+        oldSite: {
+          collect: async () =>
+            result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")], {
+              diagnostics: [oldDiagnostic, malformedDiagnostic],
+            }),
+        },
+        hse28: {
+          collect: async () =>
+            result(SOURCE_28HSE, [], {
+              challengeDetected: true,
+              diagnostics: [hseDiagnostic, accessorDiagnostic],
+            }),
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(outcome.diagnostics, [
+    {
+      sourceUrl: oldDiagnostic.sourceUrl,
+      responseStatus: 200,
+      attempts: 1,
+      templateFingerprint: null,
+      selectorCounts: {},
+      failureCode: "robots_disallowed",
+    },
+    {
+      sourceUrl: hseDiagnostic.sourceUrl,
+      responseStatus: 200,
+      attempts: 1,
+      templateFingerprint: "fixture-fingerprint",
+      selectorCounts: { listings: 0 },
+      failureCode: "unexpected_template",
+    },
+  ]);
+  assert.ok(Object.isFrozen(outcome.diagnostics));
+  assert.ok(outcome.diagnostics.every(Object.isFrozen));
+  assert.ok(outcome.diagnostics.every((diagnostic) => Object.isFrozen(diagnostic.selectorCounts)));
+
+  oldDiagnostic.selectorCounts.changed = 1;
+  hseDiagnostic.failureCode = "changed";
+  assert.deepEqual(outcome.diagnostics, [
+    {
+      sourceUrl: "https://legacy.invalid/property/c1?token=secret",
+      responseStatus: 200,
+      attempts: 1,
+      templateFingerprint: null,
+      selectorCounts: {},
+      failureCode: "robots_disallowed",
+    },
+    {
+      sourceUrl:
+        "https://www.28hse.com/agent/540?buyRent=1&page=1&plan_id=540&propertyDoSearchVersion=2.0",
+      responseStatus: 200,
+      attempts: 1,
+      templateFingerprint: "fixture-fingerprint",
+      selectorCounts: { listings: 0 },
+      failureCode: "unexpected_template",
+    },
+  ]);
+});
