@@ -37,6 +37,7 @@ export type CrmSegmentPreviewContact = {
 export type CrmSegmentRow = CrmSegment & {
   members: number;
   eligible_members: number;
+  has_audience: boolean;
 };
 
 // Preview is for UI display only, so it is capped. Materialize must enroll the full
@@ -274,10 +275,13 @@ export async function materializeCrmSegment(input: { segmentId: string }) {
 
 export async function listCrmSegments(): Promise<CrmSegmentRow[]> {
   const rows = await queryRows(
-    `SELECT id, name, description, natural_language_prompt, structured_filters, status,
-            created_at, updated_at
-     FROM crm_segments
-     ORDER BY updated_at DESC, created_at DESC
+    `SELECT s.id, s.name, s.description, s.natural_language_prompt, s.structured_filters, s.status,
+            s.created_at, s.updated_at,
+            EXISTS (
+              SELECT 1 FROM whatsapp_audiences a WHERE a.source_segment_id = s.id
+            ) AS has_audience
+     FROM crm_segments s
+     ORDER BY s.updated_at DESC, s.created_at DESC
      LIMIT 100`,
   );
 
@@ -306,6 +310,7 @@ export async function listCrmSegments(): Promise<CrmSegmentRow[]> {
         members: contacts.length,
         eligible_members: contacts.filter((contact) => contact.eligibility_status === "eligible")
           .length,
+        has_audience: row.has_audience === true,
       };
     }),
   );

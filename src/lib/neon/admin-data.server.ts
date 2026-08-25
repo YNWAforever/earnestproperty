@@ -1495,6 +1495,12 @@ export async function materializeAdminCrmSegment(input: { segmentId: string }, a
  * fetchSegmentContacts already validates, so nothing about the segment (its
  * budget range, recency, opt-in requirement) is silently dropped in
  * translation the way a lossy field-by-field mapping would.
+ *
+ * Idempotent per segment via source_segment_id: re-running this (a
+ * double-click, or re-syncing after the segment's prompt changed) UPDATEs the
+ * one linked audience instead of INSERTing a duplicate every time. Verified
+ * live that the naive insert-only version does exactly that -- two identical
+ * "WhatsApp Segment" audiences from what was meant to be a single click.
  */
 export async function createAdminAudienceFromSegment(
   input: { segmentId: string },
@@ -1515,11 +1521,36 @@ export async function createAdminAudienceFromSegment(
     last_activity_days: segment.filters.last_activity_days,
     require_whatsapp_opt_in: segment.filters.require_whatsapp_opt_in,
   });
+  const description = `從客戶分群「${segment.name}」建立`;
 
-  return saveAdminAudience(
-    { name: segment.name, description: `從客戶分群「${segment.name}」建立`, filters },
-    actor,
+  const existingRows = await queryRows<{ id: unknown }>(
+    `SELECT id FROM whatsapp_audiences WHERE source_segment_id = $1 LIMIT 1`,
+    [input.segmentId],
   );
+  const existingId = stringOrNull(existingRows[0]?.id);
+
+  const rows = existingId
+    ? await queryRows(
+        `UPDATE whatsapp_audiences SET name=$1, description=$2, filters=$3::jsonb, updated_at=now()
+         WHERE id=$4 RETURNING id`,
+        [segment.name, description, JSON.stringify(filters), existingId],
+      )
+    : await queryRows(
+        `INSERT INTO whatsapp_audiences (name, description, filters, created_by, source_segment_id)
+         VALUES ($1,$2,$3::jsonb,$4,$5)
+         RETURNING id`,
+        [segment.name, description, JSON.stringify(filters), actor.staffId, input.segmentId],
+      );
+
+  const id = stringOrEmpty(rows[0]?.id);
+  await writeAudit(
+    actor.staffId,
+    existingId ? "audience.update_from_segment" : "audience.create_from_segment",
+    "audience",
+    id,
+    { segmentId: input.segmentId },
+  );
+  return { id };
 }
 
 export async function listAdminCms() {

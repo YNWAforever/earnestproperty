@@ -77,6 +77,7 @@ function AdminSegments() {
   const [saving, setSaving] = useState(false);
   const [materializing, setMaterializing] = useState(false);
   const [creatingAudienceSegmentId, setCreatingAudienceSegmentId] = useState<string | null>(null);
+  const creatingAudienceSegmentIdRef = useRef<string | null>(null);
   const [materializeOpen, setMaterializeOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const previewRequestRef = useRef(0);
@@ -296,7 +297,19 @@ function AdminSegments() {
   // Segments and 推廣活動 audiences previously shared no data path at all: a
   // segment built here never showed up as something a blast could send to, so
   // this is the one bridge between the two features.
-  async function createAudienceFromSegment(segmentId: string, segmentName: string) {
+  //
+  // creatingAudienceSegmentIdRef guards the actual double-request race (state
+  // updates are not visible synchronously to a second click fired before
+  // React re-renders the disabled button), on top of the server's own
+  // upsert-by-segment idempotency -- verified live that without either guard,
+  // one click could produce two identical audiences.
+  async function createAudienceFromSegment(
+    segmentId: string,
+    segmentName: string,
+    hadAudience: boolean,
+  ) {
+    if (creatingAudienceSegmentIdRef.current) return;
+    creatingAudienceSegmentIdRef.current = segmentId;
     setCreatingAudienceSegmentId(segmentId);
     try {
       const result = (await createAdminAudienceFromSegment({ data: { segmentId } })) as {
@@ -304,10 +317,16 @@ function AdminSegments() {
         error?: string;
       };
       if (result.error || !result.id) throw new Error(result.error || "建立收件群組失敗");
-      toast.success(`已在推廣活動建立收件群組「${segmentName}」，可在 WhatsApp 群發選用。`);
+      await refreshSegments(selectedSegmentId || undefined);
+      toast.success(
+        hadAudience
+          ? `已更新推廣活動的收件群組「${segmentName}」。`
+          : `已在推廣活動建立收件群組「${segmentName}」，可在 WhatsApp 群發選用。`,
+      );
     } catch (err) {
       toast.error(errorText(err));
     } finally {
+      creatingAudienceSegmentIdRef.current = null;
       setCreatingAudienceSegmentId(null);
     }
   }
@@ -505,10 +524,16 @@ function AdminSegments() {
                     size="sm"
                     className="mt-2 w-full"
                     disabled={creatingAudienceSegmentId === segment.id}
-                    onClick={() => void createAudienceFromSegment(segment.id, segment.name)}
+                    onClick={() =>
+                      void createAudienceFromSegment(segment.id, segment.name, segment.has_audience)
+                    }
                   >
                     <Users />
-                    {creatingAudienceSegmentId === segment.id ? "建立中…" : "建立收件群組"}
+                    {creatingAudienceSegmentId === segment.id
+                      ? "同步中…"
+                      : segment.has_audience
+                        ? "更新收件群組"
+                        : "建立收件群組"}
                   </Button>
                 </div>
               ))

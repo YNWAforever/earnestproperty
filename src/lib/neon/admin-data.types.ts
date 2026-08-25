@@ -439,6 +439,10 @@ export type AdminCrmSegmentPreview = {
 export type AdminCrmSegmentRow = CrmSegment & {
   members: number;
   eligible_members: number;
+  /** Whether a WhatsApp audience already exists for this segment (see
+   * createAdminAudienceFromSegment) -- toggles 建立收件群組/更新收件群組 in the
+   * segments UI so a second click reads as a sync, not a fresh creation. */
+  has_audience: boolean;
 };
 
 export type CommandCenterFilterKey =
