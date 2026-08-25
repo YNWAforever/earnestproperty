@@ -133,6 +133,29 @@ export async function previewCrmSegment(input: {
   };
 }
 
+/** Resolves a saved segment's stored/parsed filters, for callers outside the
+ * segments feature that need to translate them (e.g. building a WhatsApp
+ * audience from a segment). */
+export async function getSegmentForAudience(
+  segmentId: string,
+): Promise<{ name: string; filters: CrmSegmentFilters } | null> {
+  const segments = await queryRows(
+    `SELECT name, natural_language_prompt, structured_filters
+     FROM crm_segments
+     WHERE id = $1
+     LIMIT 1`,
+    [segmentId],
+  );
+  const segment = segments[0];
+  if (!segment) return null;
+
+  const prompt = stringOrEmpty(segment.natural_language_prompt);
+  const filters = normalizeSegmentFilters(
+    parseStoredSegmentFilters(segment.structured_filters) ?? parseSegmentPromptToFilters(prompt),
+  );
+  return { name: stringOrEmpty(segment.name), filters };
+}
+
 export async function saveCrmSegment(input: {
   id?: string;
   name: string;
@@ -251,36 +274,41 @@ export async function materializeCrmSegment(input: { segmentId: string }) {
 
 export async function listCrmSegments(): Promise<CrmSegmentRow[]> {
   const rows = await queryRows(
-    `SELECT
-       s.id,
-       s.name,
-       s.description,
-       s.natural_language_prompt,
-       s.structured_filters,
-       s.status,
-       s.created_at,
-       s.updated_at,
-       count(m.id)::int AS members,
-       count(m.id) FILTER (WHERE m.eligibility_status = 'eligible')::int AS eligible_members
-     FROM crm_segments s
-     LEFT JOIN crm_segment_memberships m ON m.segment_id = s.id
-     GROUP BY s.id
-     ORDER BY s.updated_at DESC, s.created_at DESC
+    `SELECT id, name, description, natural_language_prompt, structured_filters, status,
+            created_at, updated_at
+     FROM crm_segments
+     ORDER BY updated_at DESC, created_at DESC
      LIMIT 100`,
   );
 
-  return rows.map((row) => ({
-    id: stringOrEmpty(row.id),
-    name: stringOrEmpty(row.name),
-    description: stringOrNull(row.description),
-    natural_language_prompt: stringOrEmpty(row.natural_language_prompt),
-    structured_filters: parseStoredSegmentFilters(row.structured_filters) ?? {},
-    status: segmentStatus(row.status),
-    created_at: dateOrNull(row.created_at) ?? new Date().toISOString(),
-    updated_at: dateOrNull(row.updated_at) ?? new Date().toISOString(),
-    members: numberOrNull(row.members) ?? 0,
-    eligible_members: numberOrNull(row.eligible_members) ?? 0,
-  }));
+  // members/eligible_members are computed live (same query preview uses), not
+  // read from the materialize table below. That table is only ever refreshed
+  // when someone explicitly re-materializes via 建立名單, so a segment sat at
+  // "0 位客戶，其中 0 位合資格" indefinitely -- even once a real, eligible
+  // customer started matching its filters -- until someone happened to
+  // re-save it.
+  return Promise.all(
+    rows.map(async (row) => {
+      const prompt = stringOrEmpty(row.natural_language_prompt);
+      const filters = normalizeSegmentFilters(
+        parseStoredSegmentFilters(row.structured_filters) ?? parseSegmentPromptToFilters(prompt),
+      );
+      const contacts = await fetchSegmentContacts(prompt, filters, SEGMENT_PREVIEW_LIMIT);
+      return {
+        id: stringOrEmpty(row.id),
+        name: stringOrEmpty(row.name),
+        description: stringOrNull(row.description),
+        natural_language_prompt: prompt,
+        structured_filters: filters,
+        status: segmentStatus(row.status),
+        created_at: dateOrNull(row.created_at) ?? new Date().toISOString(),
+        updated_at: dateOrNull(row.updated_at) ?? new Date().toISOString(),
+        members: contacts.length,
+        eligible_members: contacts.filter((contact) => contact.eligibility_status === "eligible")
+          .length,
+      };
+    }),
+  );
 }
 
 function parseStoredSegmentFilters(value: unknown): CrmSegmentFilters | null {

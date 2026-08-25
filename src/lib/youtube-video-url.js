@@ -36,3 +36,15 @@ export function getYouTubeEmbedUrl(value) {
   const videoId = getYouTubeVideoId(value);
   return videoId ? `https://www.youtube.com/embed/${videoId}` : null;
 }
+
+/**
+ * Poster frame for a video, used to render a facade in place of a live embed.
+ *
+ * hqdefault is the one thumbnail YouTube generates for every upload; maxresdefault
+ * only exists for videos uploaded above 720p and 404s silently for the rest,
+ * which would leave holes in the grid.
+ */
+export function getYouTubeThumbnailUrl(value) {
+  const videoId = getYouTubeVideoId(value);
+  return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
+}

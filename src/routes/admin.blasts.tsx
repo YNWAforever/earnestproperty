@@ -18,6 +18,7 @@ import { AdminToolbar } from "@/components/admin/AdminToolbar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -1201,12 +1202,22 @@ function AudienceDialog({
                 }
               />
               <TextField
-                label="屋苑 slug"
-                value={audience.filters.estate ?? ""}
+                label="屋苑 slug（可用逗號分隔多個）"
+                value={(audience.filters.estates ?? []).join(", ")}
                 onChange={(value) =>
                   onChange({
                     ...audience,
-                    filters: { ...audience.filters, estate: undefinedIfBlank(value) },
+                    filters: { ...audience.filters, estates: splitCommaList(value) },
+                  })
+                }
+              />
+              <TextField
+                label="地區 slug"
+                value={audience.filters.district_slug ?? ""}
+                onChange={(value) =>
+                  onChange({
+                    ...audience,
+                    filters: { ...audience.filters, district_slug: undefinedIfBlank(value) },
                   })
                 }
               />
@@ -1223,6 +1234,59 @@ function AudienceDialog({
                   })
                 }
               />
+              <TextField
+                label="預算下限（HKD）"
+                type="number"
+                value={audience.filters.budget_min?.toString() ?? ""}
+                onChange={(value) =>
+                  onChange({
+                    ...audience,
+                    filters: { ...audience.filters, budget_min: undefinedIfBlankNumber(value) },
+                  })
+                }
+              />
+              <TextField
+                label="預算上限（HKD）"
+                type="number"
+                value={audience.filters.budget_max?.toString() ?? ""}
+                onChange={(value) =>
+                  onChange({
+                    ...audience,
+                    filters: { ...audience.filters, budget_max: undefinedIfBlankNumber(value) },
+                  })
+                }
+              />
+              <TextField
+                label="最近幾天內查詢"
+                type="number"
+                value={audience.filters.last_activity_days?.toString() ?? ""}
+                onChange={(value) =>
+                  onChange({
+                    ...audience,
+                    filters: {
+                      ...audience.filters,
+                      last_activity_days: undefinedIfBlankNumber(value),
+                    },
+                  })
+                }
+              />
+              <Field label="WhatsApp 同意接收">
+                <label className="flex h-10 items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={audience.filters.require_whatsapp_opt_in === true}
+                    onCheckedChange={(checked) =>
+                      onChange({
+                        ...audience,
+                        filters: {
+                          ...audience.filters,
+                          require_whatsapp_opt_in: checked === true ? true : undefined,
+                        },
+                      })
+                    }
+                  />
+                  只包含已同意接收 WhatsApp 的客戶
+                </label>
+              </Field>
             </div>
 
             <div className="rounded-md border p-4">
@@ -1485,9 +1549,29 @@ function normalizeAudienceFilters(filters: AdminAudienceInput["filters"]) {
   return {
     intent: undefinedIfBlank(filters.intent ?? ""),
     source: undefinedIfBlank(filters.source ?? ""),
-    estate: undefinedIfBlank(filters.estate ?? ""),
+    estates: filters.estates?.length ? filters.estates : undefined,
+    district_slug: undefinedIfBlank(filters.district_slug ?? ""),
     assigned_agent_id: undefinedIfBlank(filters.assigned_agent_id ?? ""),
+    budget_min: filters.budget_min,
+    budget_max: filters.budget_max,
+    last_activity_days: filters.last_activity_days,
+    require_whatsapp_opt_in: filters.require_whatsapp_opt_in,
   };
+}
+
+function splitCommaList(value: string): string[] | undefined {
+  const items = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return items.length ? items : undefined;
+}
+
+function undefinedIfBlankNumber(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function nullIfBlank(value: string) {

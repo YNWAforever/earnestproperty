@@ -756,6 +756,11 @@ type AudienceSummary = {
   notOptedIn: number;
 };
 
+// Extended to carry the same filter vocabulary as fetchSegmentContacts
+// (segments.server.ts) -- budget range, recency, opt-in requirement, multiple
+// estates, district -- so a segment's filters translate onto an audience
+// without silently dropping the ones an audience previously had no field for.
+// See createAdminAudienceFromSegment.
 const RECIPIENT_ELIGIBILITY_SQL = `
 SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp
 FROM crm_contacts c
@@ -765,7 +770,12 @@ LEFT JOIN estates estate ON estate.id = p.estate_id
 WHERE ($1::text IS NULL OR l.intent = $1)
   AND ($2::text IS NULL OR c.source = $2)
   AND ($3::uuid IS NULL OR c.assigned_agent_id = $3::uuid OR l.assigned_agent_id = $3::uuid)
-  AND ($4::text IS NULL OR $4::text = ANY(l.preferred_estates) OR estate.slug = $4::text)
+  AND ($4::text[] IS NULL OR l.preferred_estates && $4::text[] OR estate.slug = ANY($4::text[]))
+  AND ($5::text IS NULL OR p.district_slug = $5 OR estate.district_slug = $5)
+  AND ($6::numeric IS NULL OR l.budget_max IS NULL OR l.budget_max >= $6)
+  AND ($7::numeric IS NULL OR l.budget_min IS NULL OR l.budget_min <= $7)
+  AND ($8::int IS NULL OR l.updated_at >= now() - ($8::text || ' days')::interval)
+  AND ($9::boolean = false OR c.opt_in_whatsapp = true)
 ORDER BY c.id, l.updated_at DESC NULLS LAST, l.created_at DESC NULLS LAST
 `;
 
@@ -783,20 +793,45 @@ function optionalText(value: unknown) {
 }
 
 function normalizeAudienceFilters(filters: AudienceFilters | null | undefined): AudienceFilters {
+  // An empty array must become undefined, not `[]`: `$4::text[] IS NULL` would
+  // be false for `[]`, and `preferred_estates && ARRAY[]` is always false --
+  // silently excluding every contact instead of matching "any estate".
+  const estates = Array.isArray(filters?.estates)
+    ? filters.estates.map((value) => String(value).trim()).filter(Boolean)
+    : [];
   return {
     intent: optionalText(filters?.intent),
     source: optionalText(filters?.source),
-    estate: optionalText(filters?.estate),
+    estates: estates.length ? estates : undefined,
+    district_slug: optionalText(filters?.district_slug),
     assigned_agent_id: optionalText(filters?.assigned_agent_id),
+    budget_min: numberOrNull(filters?.budget_min) ?? undefined,
+    budget_max: numberOrNull(filters?.budget_max) ?? undefined,
+    last_activity_days: numberOrNull(filters?.last_activity_days) ?? undefined,
+    require_whatsapp_opt_in: filters?.require_whatsapp_opt_in === true ? true : undefined,
   };
 }
 
 function audienceFiltersFromRecord(value: Record<string, unknown>): AudienceFilters {
+  // `estate` (singular string) is the pre-migration shape stored by any
+  // audience saved before estates became an array; still parsed so an old row
+  // doesn't silently lose its filter.
+  const legacyEstate = optionalText(value.estate);
+  const estates = Array.isArray(value.estates)
+    ? value.estates
+    : legacyEstate
+      ? [legacyEstate]
+      : undefined;
   return normalizeAudienceFilters({
     intent: optionalText(value.intent),
     source: optionalText(value.source),
-    estate: optionalText(value.estate),
+    estates,
+    district_slug: optionalText(value.district_slug),
     assigned_agent_id: optionalText(value.assigned_agent_id),
+    budget_min: numberOrNull(value.budget_min) ?? undefined,
+    budget_max: numberOrNull(value.budget_max) ?? undefined,
+    last_activity_days: numberOrNull(value.last_activity_days) ?? undefined,
+    require_whatsapp_opt_in: value.require_whatsapp_opt_in === true ? true : undefined,
   });
 }
 
@@ -820,7 +855,12 @@ function audienceFilterParams(filters: AudienceFilters) {
     normalized.intent ?? null,
     normalized.source ?? null,
     normalized.assigned_agent_id ?? null,
-    normalized.estate ?? null,
+    normalized.estates?.length ? normalized.estates : null,
+    normalized.district_slug ?? null,
+    normalized.budget_min ?? null,
+    normalized.budget_max ?? null,
+    normalized.last_activity_days ?? null,
+    normalized.require_whatsapp_opt_in === true,
   ];
 }
 
@@ -1444,6 +1484,42 @@ export async function materializeAdminCrmSegment(input: { segmentId: string }, a
   const result = await materializeCrmSegment({ segmentId: input.segmentId });
   await writeAudit(actor.staffId, "ai.segment.materialize", "crm_segment", input.segmentId, result);
   return result;
+}
+
+/**
+ * Builds a whatsapp_audiences row from a saved segment's filters, so a
+ * segment built in 客戶分群 becomes an actual selectable audience in 推廣活動
+ * instead of being a dead end -- the two features previously shared no data
+ * path at all, despite sitting next to each other in the nav and both talking
+ * about "合資格" customers. Reuses the exact filter vocabulary
+ * fetchSegmentContacts already validates, so nothing about the segment (its
+ * budget range, recency, opt-in requirement) is silently dropped in
+ * translation the way a lossy field-by-field mapping would.
+ */
+export async function createAdminAudienceFromSegment(
+  input: { segmentId: string },
+  actor: StaffAccess,
+) {
+  const { getSegmentForAudience } = await import("../ai/segments.server");
+  const segment = await getSegmentForAudience(input.segmentId);
+  if (!segment) throw new Error("Segment not found");
+
+  const filters = normalizeAudienceFilters({
+    intent: segment.filters.intent,
+    source: segment.filters.source,
+    estates: segment.filters.preferred_estates,
+    district_slug: segment.filters.district_slug,
+    assigned_agent_id: segment.filters.assigned_agent_id,
+    budget_min: segment.filters.budget?.min ?? undefined,
+    budget_max: segment.filters.budget?.max ?? undefined,
+    last_activity_days: segment.filters.last_activity_days,
+    require_whatsapp_opt_in: segment.filters.require_whatsapp_opt_in,
+  });
+
+  return saveAdminAudience(
+    { name: segment.name, description: `從客戶分群「${segment.name}」建立`, filters },
+    actor,
+  );
 }
 
 export async function listAdminCms() {
@@ -2542,8 +2618,12 @@ export async function fetchAdminConversationAiAssist(
   const messages = parseConversationAiMessages(row.messages).slice(0, 10);
   const latestInbound = messages.find((message) => message.direction === "inbound");
   const latestInboundText = latestInbound?.text ?? "";
+  // Values are picked to match AI_INTENT_LABELS/AI_URGENCY_LABELS in
+  // admin.whatsapp.tsx exactly -- "renter"/"active" used to be sent here and
+  // silently fell through both maps, showing raw English to a Cantonese-only
+  // agent on every rental inquiry and every conversation with 3+ messages.
   const detectedIntent = /租|rent/i.test(latestInboundText)
-    ? "renter"
+    ? "tenant"
     : /估價|放盤|sell|valuation/i.test(latestInboundText)
       ? "seller"
       : latestInboundText
@@ -2556,9 +2636,8 @@ export async function fetchAdminConversationAiAssist(
       ? `最近 ${messages.length} 則 WhatsApp 訊息，客戶需要跟進。`
       : "未有足夠訊息。",
     detectedIntent,
-    urgency: messages.length >= 3 ? "active" : "normal",
+    urgency: messages.length >= 3 ? "high" : "normal",
     suggestedReply: optedOut ? null : "你好，多謝查詢。請問你想了解買樓、租樓，還是放盤估價？",
-    suggestedTemplate: optedOut ? null : "earnest_follow_up_zh_hk",
     handoffNote: stringOrNull(row.name)
       ? `${stringOrNull(row.name)} 由 WhatsApp 查詢，請查看最近訊息。`
       : "WhatsApp 查詢，請查看最近訊息。",
@@ -2719,6 +2798,30 @@ export async function fetchAdminBlastOptions() {
       filters: normalizeAudienceFilters(parseAudienceFilters(row.filters)),
     })),
   };
+}
+
+/**
+ * Active, approved templates an agent can send from the WhatsApp inbox once
+ * the 24-hour reply window has closed. Unlike fetchAdminBlastOptions this is
+ * available to the "agent" role too -- the inbox itself is agent-usable, and
+ * gating template listing to admin/manager would leave every agent stuck at
+ * the same dead end the raw window-closed message used to be.
+ */
+export async function fetchAdminWhatsappTemplates() {
+  const templates = await queryRows(
+    `SELECT id, element_name, language_code, category, description, components
+     FROM whatsapp_templates
+     WHERE status LIKE 'active%'
+     ORDER BY element_name ASC`,
+  );
+  return templates.map((row) => ({
+    id: stringOrEmpty(row.id),
+    element_name: stringOrEmpty(row.element_name),
+    language_code: stringOrEmpty(row.language_code),
+    category: stringOrEmpty(row.category),
+    description: stringOrNull(row.description),
+    components: Array.isArray(row.components) ? row.components : [],
+  }));
 }
 
 export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffAccess) {

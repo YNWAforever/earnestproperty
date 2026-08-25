@@ -71,7 +71,16 @@ test("normalizeWoztellEvent extracts inbound message identity and text", () => {
   });
 
   assert.equal(event.direction, "inbound");
-  assert.equal(event.externalMessageId, "inbound:channelId:memberId:1599536864:TEXT");
+  // The synthesized id keeps the readable direction:channel:member:timestamp:type
+  // prefix and appends a digest of the message body -- without that digest two
+  // messages in the same second collapse onto one UNIQUE key and one is lost.
+  assert.match(
+    event.externalMessageId,
+    /^inbound:channelId:memberId:1599536864:TEXT:[0-9a-f]{12}$/,
+  );
+  // The pre-digest key is carried alongside so ingest can recognise rows that
+  // were imported before the digest existed.
+  assert.equal(event.legacyExternalMessageId, "inbound:channelId:memberId:1599536864:TEXT");
   assert.equal(event.fromPhone, "85260903521");
   assert.equal(event.toPhone, "85268227287");
   assert.equal(event.text, "想睇碧堤半島");
@@ -463,4 +472,229 @@ test("an opt-out can be cleared by admin/manager, with a reason and an audit row
     client,
     /clearContactWhatsappOptOutServer[\s\S]{0,400}requireStaff\(\["admin", "manager"\]\)/,
   );
+});
+
+// WOZTELL does not put a messageId on every event -- inbound webhook payloads
+// routinely arrive without one -- so normalizeWoztellEvent synthesizes a
+// fallback. That fallback is written into whatsapp_messages.external_message_id,
+// which is UNIQUE and ingested with ON CONFLICT DO NOTHING. So any two DISTINCT
+// messages that synthesize the SAME id do not raise an error: the second one is
+// silently discarded and counted as an already-seen duplicate.
+//
+// Before this was fixed the key was direction:channel:member:timestamp:type, and
+// WOZTELL timestamps are unix SECONDS. Two messages in one second -- a customer
+// sending two lines in a row, or a bot answering in two bubbles -- collapsed
+// into a single row, and the inbox quietly showed one fewer message than the
+// WOZTELL console.
+test("two different messages in the same second get different fallback ids", () => {
+  const base = { member: "memberId", channel: "channelId", timestamp: "1599536864", type: "TEXT" };
+
+  const first = normalizeWoztellEvent({ ...base, data: { text: "你好" } });
+  const second = normalizeWoztellEvent({ ...base, data: { text: "想睇碧堤半島" } });
+
+  assert.notEqual(
+    first.externalMessageId,
+    second.externalMessageId,
+    "distinct messages must not share an external_message_id, or one is dropped",
+  );
+});
+
+// The degenerate case: an event carrying no timestamp at all fell back to the
+// literal string "time", so EVERY such message from one member collapsed onto
+// a single id.
+test("messages with no timestamp are still told apart", () => {
+  const first = normalizeWoztellEvent({ member: "m1", channel: "c1", data: { text: "第一則" } });
+  const second = normalizeWoztellEvent({ member: "m1", channel: "c1", data: { text: "第二則" } });
+
+  assert.notEqual(first.externalMessageId, second.externalMessageId);
+});
+
+// Non-text messages carry their payload in `data` rather than `data.text`, so
+// discriminating on text alone would still collapse two images sent together.
+test("two media messages in the same second get different fallback ids", () => {
+  const base = { member: "m1", channel: "c1", timestamp: "1599536864", type: "IMAGE" };
+
+  const first = normalizeWoztellEvent({ ...base, data: { url: "https://cdn/a.jpg" } });
+  const second = normalizeWoztellEvent({ ...base, data: { url: "https://cdn/b.jpg" } });
+
+  assert.notEqual(first.externalMessageId, second.externalMessageId);
+});
+
+// The other half of the property, and the reason the fix cannot just append a
+// random or positional value: the SAME message must still synthesize the SAME
+// id every time it is seen, or re-running the history import duplicates rows
+// the webhook already stored.
+test("the same message synthesizes a stable id on every pass", () => {
+  const event = {
+    member: "m1",
+    channel: "c1",
+    timestamp: "1599536864",
+    type: "TEXT",
+    data: { text: "睇樓" },
+  };
+
+  assert.equal(
+    normalizeWoztellEvent({ ...event }).externalMessageId,
+    normalizeWoztellEvent({ ...event }).externalMessageId,
+  );
+  // Key order must not matter either -- the two ingest surfaces build the
+  // record independently.
+  assert.equal(
+    normalizeWoztellEvent({ ...event, data: { text: "睇樓" } }).externalMessageId,
+    normalizeWoztellEvent({ data: { text: "睇樓" }, ...event }).externalMessageId,
+  );
+});
+
+// Adding the digest changed the shape of every synthesized id, so the rows
+// already sitting in the database no longer match what ingest now computes.
+// Two things have to stay true at once, and they pull in opposite directions:
+// a message the old import already stored must NOT come back a second time,
+// and a message the old import DROPPED on a collision must now get in.
+// Matching the legacy key together with the body is what separates the two --
+// on the key alone, the dropped twin looks exactly like the row that displaced
+// it and would be skipped forever.
+test("ingest reconciles pre-digest rows without re-dropping their lost twins", () => {
+  const ingest = read("src/lib/woztell/woztell-ingest.server.ts");
+
+  assert.match(ingest, /legacyExternalMessageId/);
+  assert.match(ingest, /NOT EXISTS/);
+  // The body comparison, and specifically the NULL-safe form -- `=` would never
+  // match the NULL text a media message carries, disabling the guard for them.
+  assert.match(ingest, /text IS NOT DISTINCT FROM \$5::text/);
+  // The new-id dedupe has to survive alongside it.
+  assert.match(ingest, /ON CONFLICT \(external_message_id\) DO NOTHING/);
+});
+
+// WOZTELL reports a refused send as HTTP 500 with {"ok":0,"err":"..."} -- the
+// 500 is its normal "bot found an error before sending" channel, not a crash,
+// and the reason staff need is in `err` (with `err_code` on some failures).
+// Reading `error` instead never matched, so every refusal collapsed to the
+// bare status and the actual cause was thrown away.
+async function captureSend(status, body) {
+  const originalFetch = globalThis.fetch;
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  globalThis.fetch = async () => new Response(JSON.stringify(body), { status });
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+  try {
+    return await sendWoztellResponse({ memberId: "m1", response: [{ type: "TEXT", text: "hi" }] });
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
+}
+
+test("a refused send surfaces WOZTELL's reason instead of the bare status", async () => {
+  const result = await captureSend(500, { ok: 0, err: "User is not authorized." });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /User is not authorized\./);
+  assert.doesNotMatch(
+    result.error,
+    /^WOZTELL_HTTP_500$/,
+    "the opaque status must not replace a reason WOZTELL actually gave",
+  );
+});
+
+test("a refused send keeps err_code when WOZTELL sends one", async () => {
+  const result = await captureSend(500, { ok: 0, err_code: 112, err: "Channel ID not found" });
+
+  assert.match(result.error, /112/);
+  assert.match(result.error, /Channel ID not found/);
+});
+
+// Without a reason from the provider there is nothing better than the status,
+// so that path has to keep working.
+test("a refused send with no reason still reports the status", async () => {
+  const result = await captureSend(500, {});
+  assert.equal(result.error, "WOZTELL_HTTP_500");
+});
+
+// The raw provider response is what a later investigation has to read: the send
+// route persists this whole result into whatsapp_messages.payload.
+test("a refused send preserves the provider body for the message record", async () => {
+  const result = await captureSend(500, { ok: 0, err: "User is not authorized." });
+  assert.deepEqual(result.body, { ok: 0, err: "User is not authorized." });
+});
+
+// ok:0 is the provider saying it did NOT send. Trusting the HTTP status alone
+// would stamp the message 'sent' and show staff a delivered reply that never
+// left the building.
+test("ok:0 is a failure even when the status is 200", async () => {
+  const result = await captureSend(200, { ok: 0, err: "Parameter(s) is missing" });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Parameter\(s\) is missing/);
+});
+
+test("a genuine success is still a success", async () => {
+  const result = await captureSend(200, { ok: 1, member: "m1", sendResult: { ok: 1 } });
+  assert.equal(result.ok, true);
+});
+
+// WOZTELL_DELIVERY_UNKNOWN is terminal because the provider may already have
+// delivered the message, so re-queueing risks a second billable WhatsApp to a
+// real person. That reasoning does not hold when WOZTELL says ok:0 -- it
+// refused BEFORE sending, so nothing reached the customer and nothing is at
+// risk from a retry. Classifying purely on the HTTP status could not tell the
+// two apart, because WOZTELL answers a refusal with 500; `refused` is what
+// separates "never sent" from "sent, outcome unknown".
+test("a refused send is flagged as definitively not sent", async () => {
+  const result = await captureSend(500, { ok: 0, err: "User is not authorized." });
+  assert.equal(result.refused, true);
+});
+
+// A 5xx with no verdict in it stays genuinely ambiguous -- the request may have
+// been processed before the connection broke, so it must NOT be downgraded.
+test("a bare 5xx is not treated as a refusal", async () => {
+  const result = await captureSend(500, {});
+  assert.notEqual(result.refused, true);
+});
+
+test("a provider refusal stays retryable instead of stranding the recipient", async () => {
+  const result = await runSingleRecipientCampaign(async () => ({
+    ok: false,
+    status: 500,
+    refused: true,
+    error: "WOZTELL_112: Channel ID not found",
+  }));
+
+  assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_PROVIDER_REJECTED"]]);
+});
+
+// The guard on the other side: without an explicit refusal a 5xx is still
+// ambiguous and still terminal, or the whole double-send protection is gone.
+test("an ambiguous 5xx is still terminal unknown", async () => {
+  const result = await runSingleRecipientCampaign(async () => ({
+    ok: false,
+    status: 500,
+    error: "gateway blew up",
+  }));
+
+  assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN"]]);
+});
+
+// A webhook rejected at the signature check drops a real customer message and
+// writes nothing, while WOZTELL's console still shows it delivered -- so the
+// inbox silently stops receiving and nothing anywhere says why. Rotating the
+// channel credentials produces exactly that, and it is indistinguishable from a
+// quiet day unless the rejection announces itself.
+test("a rejected webhook says so, and says which of the three causes it is", () => {
+  const route = read("src/routes/api.woztell.webhook.ts");
+
+  assert.match(route, /console\.warn\([\s\S]{0,400}REJECTED/);
+  // Each state has a different fix, so the log has to tell them apart.
+  assert.match(route, /signature header/);
+  assert.match(route, /WOZTELL_CHANNEL_SECRET/);
+  // The payload carries customer messages and the secret is a credential;
+  // neither belongs in a log line.
+  assert.doesNotMatch(route, /console\.warn\([\s\S]{0,400}\$\{raw\}/);
+  assert.doesNotMatch(route, /console\.warn\([\s\S]{0,400}\$\{config\.channelSecret\}/);
 });

@@ -36,6 +36,7 @@ import { Route as CastlePeakRoadSegmentRouteImport } from './routes/castle-peak-
 import { Route as BlogSlugRouteImport } from './routes/blog_.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
+import { Route as ApiYoutubeSyncRouteImport } from './routes/api.youtube-sync'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
@@ -48,6 +49,7 @@ import { Route as AdminCmsRouteImport } from './routes/admin.cms'
 import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
 import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
 import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
+import { Route as ApiYoutubeSyncFullRouteImport } from './routes/api.youtube-sync.full'
 import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webhook'
 import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
 import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
@@ -57,6 +59,7 @@ import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$i
 import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
 import { Route as AdminAgentsNewRouteImport } from './routes/admin.agents_.new'
 import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
+import { Route as ApiAdminWoztellSendTemplateRouteImport } from './routes/api.admin.woztell.send-template'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminWoztellBackfillRouteImport } from './routes/api.admin.woztell.backfill'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
@@ -208,6 +211,11 @@ const AuthPathnameRoute = AuthPathnameRouteImport.update({
   path: '/auth/$pathname',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiYoutubeSyncRoute = ApiYoutubeSyncRouteImport.update({
+  id: '/api/youtube-sync',
+  path: '/api/youtube-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMlsSyncRoute = ApiMlsSyncRouteImport.update({
   id: '/api/mls-sync',
   path: '/api/mls-sync',
@@ -268,6 +276,11 @@ const AccountPathnameRoute = AccountPathnameRouteImport.update({
   path: '/account/$pathname',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiYoutubeSyncFullRoute = ApiYoutubeSyncFullRouteImport.update({
+  id: '/full',
+  path: '/full',
+  getParentRoute: () => ApiYoutubeSyncRoute,
+} as any)
 const ApiWoztellWebhookRoute = ApiWoztellWebhookRouteImport.update({
   id: '/api/woztell/webhook',
   path: '/api/woztell/webhook',
@@ -313,6 +326,12 @@ const AdminAgentsIdRoute = AdminAgentsIdRouteImport.update({
   path: '/agents/$id',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiAdminWoztellSendTemplateRoute =
+  ApiAdminWoztellSendTemplateRouteImport.update({
+    id: '/api/admin/woztell/send-template',
+    path: '/api/admin/woztell/send-template',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminWoztellSendRoute = ApiAdminWoztellSendRouteImport.update({
   id: '/api/admin/woztell/send',
   path: '/api/admin/woztell/send',
@@ -429,6 +448,7 @@ export interface FileRoutesByFullPath {
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
+  '/api/youtube-sync': typeof ApiYoutubeSyncRouteWithChildren
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -449,6 +469,7 @@ export interface FileRoutesByFullPath {
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
+  '/api/youtube-sync/full': typeof ApiYoutubeSyncFullRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
@@ -459,6 +480,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/woztell/send-template': typeof ApiAdminWoztellSendTemplateRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
   '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
   '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
@@ -492,6 +514,7 @@ export interface FileRoutesByTo {
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
+  '/api/youtube-sync': typeof ApiYoutubeSyncRouteWithChildren
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
@@ -512,6 +535,7 @@ export interface FileRoutesByTo {
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
+  '/api/youtube-sync/full': typeof ApiYoutubeSyncFullRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
@@ -522,6 +546,7 @@ export interface FileRoutesByTo {
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/woztell/send-template': typeof ApiAdminWoztellSendTemplateRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
   '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
   '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
@@ -558,6 +583,7 @@ export interface FileRoutesById {
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents_/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
+  '/api/youtube-sync': typeof ApiYoutubeSyncRouteWithChildren
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog_/$slug': typeof BlogSlugRoute
@@ -578,6 +604,7 @@ export interface FileRoutesById {
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
   '/api/woztell/webhook': typeof ApiWoztellWebhookRoute
+  '/api/youtube-sync/full': typeof ApiYoutubeSyncFullRoute
   '/api/admin/ai/rebuild-knowledge': typeof ApiAdminAiRebuildKnowledgeRoute
   '/api/admin/control-plane/audit': typeof ApiAdminControlPlaneAuditRoute
   '/api/admin/control-plane/health': typeof ApiAdminControlPlaneHealthRoute
@@ -588,6 +615,7 @@ export interface FileRoutesById {
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
   '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
+  '/api/admin/woztell/send-template': typeof ApiAdminWoztellSendTemplateRoute
   '/api/admin/campaigns/$id/queue': typeof ApiAdminCampaignsIdQueueRoute
   '/api/admin/control-plane/jobs/$id/cancel': typeof ApiAdminControlPlaneJobsIdCancelRoute
   '/api/admin/control-plane/jobs/$id/retry': typeof ApiAdminControlPlaneJobsIdRetryRoute
@@ -625,6 +653,7 @@ export interface FileRouteTypes {
     | '/admin/whatsapp'
     | '/agents/$slug'
     | '/api/mls-sync'
+    | '/api/youtube-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
@@ -645,6 +674,7 @@ export interface FileRouteTypes {
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/woztell/webhook'
+    | '/api/youtube-sync/full'
     | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
@@ -655,6 +685,7 @@ export interface FileRouteTypes {
     | '/api/admin/media/upload'
     | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
+    | '/api/admin/woztell/send-template'
     | '/api/admin/campaigns/$id/queue'
     | '/api/admin/control-plane/jobs/$id/cancel'
     | '/api/admin/control-plane/jobs/$id/retry'
@@ -688,6 +719,7 @@ export interface FileRouteTypes {
     | '/admin/whatsapp'
     | '/agents/$slug'
     | '/api/mls-sync'
+    | '/api/youtube-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
@@ -708,6 +740,7 @@ export interface FileRouteTypes {
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/woztell/webhook'
+    | '/api/youtube-sync/full'
     | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
@@ -718,6 +751,7 @@ export interface FileRouteTypes {
     | '/api/admin/media/upload'
     | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
+    | '/api/admin/woztell/send-template'
     | '/api/admin/campaigns/$id/queue'
     | '/api/admin/control-plane/jobs/$id/cancel'
     | '/api/admin/control-plane/jobs/$id/retry'
@@ -753,6 +787,7 @@ export interface FileRouteTypes {
     | '/admin/whatsapp'
     | '/agents_/$slug'
     | '/api/mls-sync'
+    | '/api/youtube-sync'
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog_/$slug'
@@ -773,6 +808,7 @@ export interface FileRouteTypes {
     | '/api/live-agent/message'
     | '/api/live-agent/session'
     | '/api/woztell/webhook'
+    | '/api/youtube-sync/full'
     | '/api/admin/ai/rebuild-knowledge'
     | '/api/admin/control-plane/audit'
     | '/api/admin/control-plane/health'
@@ -783,6 +819,7 @@ export interface FileRouteTypes {
     | '/api/admin/media/upload'
     | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
+    | '/api/admin/woztell/send-template'
     | '/api/admin/campaigns/$id/queue'
     | '/api/admin/control-plane/jobs/$id/cancel'
     | '/api/admin/control-plane/jobs/$id/retry'
@@ -810,6 +847,7 @@ export interface RootRouteChildren {
   AccountPathnameRoute: typeof AccountPathnameRoute
   AgentsSlugRoute: typeof AgentsSlugRoute
   ApiMlsSyncRoute: typeof ApiMlsSyncRoute
+  ApiYoutubeSyncRoute: typeof ApiYoutubeSyncRouteWithChildren
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
   BlogSlugRoute: typeof BlogSlugRoute
@@ -832,6 +870,7 @@ export interface RootRouteChildren {
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
   ApiAdminWoztellBackfillRoute: typeof ApiAdminWoztellBackfillRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
+  ApiAdminWoztellSendTemplateRoute: typeof ApiAdminWoztellSendTemplateRoute
   ApiAdminCampaignsIdQueueRoute: typeof ApiAdminCampaignsIdQueueRoute
 }
 
@@ -1026,6 +1065,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthPathnameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/youtube-sync': {
+      id: '/api/youtube-sync'
+      path: '/api/youtube-sync'
+      fullPath: '/api/youtube-sync'
+      preLoaderRoute: typeof ApiYoutubeSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/mls-sync': {
       id: '/api/mls-sync'
       path: '/api/mls-sync'
@@ -1110,6 +1156,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountPathnameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/youtube-sync/full': {
+      id: '/api/youtube-sync/full'
+      path: '/full'
+      fullPath: '/api/youtube-sync/full'
+      preLoaderRoute: typeof ApiYoutubeSyncFullRouteImport
+      parentRoute: typeof ApiYoutubeSyncRoute
+    }
     '/api/woztell/webhook': {
       id: '/api/woztell/webhook'
       path: '/api/woztell/webhook'
@@ -1172,6 +1225,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/agents/$id'
       preLoaderRoute: typeof AdminAgentsIdRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/api/admin/woztell/send-template': {
+      id: '/api/admin/woztell/send-template'
+      path: '/api/admin/woztell/send-template'
+      fullPath: '/api/admin/woztell/send-template'
+      preLoaderRoute: typeof ApiAdminWoztellSendTemplateRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/admin/woztell/send': {
       id: '/api/admin/woztell/send'
@@ -1333,6 +1393,18 @@ const CastlePeakRoadRouteWithChildren = CastlePeakRoadRoute._addFileChildren(
   CastlePeakRoadRouteChildren,
 )
 
+interface ApiYoutubeSyncRouteChildren {
+  ApiYoutubeSyncFullRoute: typeof ApiYoutubeSyncFullRoute
+}
+
+const ApiYoutubeSyncRouteChildren: ApiYoutubeSyncRouteChildren = {
+  ApiYoutubeSyncFullRoute: ApiYoutubeSyncFullRoute,
+}
+
+const ApiYoutubeSyncRouteWithChildren = ApiYoutubeSyncRoute._addFileChildren(
+  ApiYoutubeSyncRouteChildren,
+)
+
 interface ApiAdminControlPlaneJobsRouteChildren {
   ApiAdminControlPlaneJobsIdCancelRoute: typeof ApiAdminControlPlaneJobsIdCancelRoute
   ApiAdminControlPlaneJobsIdRetryRoute: typeof ApiAdminControlPlaneJobsIdRetryRoute
@@ -1388,6 +1460,7 @@ const rootRouteChildren: RootRouteChildren = {
   AccountPathnameRoute: AccountPathnameRoute,
   AgentsSlugRoute: AgentsSlugRoute,
   ApiMlsSyncRoute: ApiMlsSyncRoute,
+  ApiYoutubeSyncRoute: ApiYoutubeSyncRouteWithChildren,
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
   BlogSlugRoute: BlogSlugRoute,
@@ -1411,6 +1484,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
   ApiAdminWoztellBackfillRoute: ApiAdminWoztellBackfillRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,
+  ApiAdminWoztellSendTemplateRoute: ApiAdminWoztellSendTemplateRoute,
   ApiAdminCampaignsIdQueueRoute: ApiAdminCampaignsIdQueueRoute,
 }
 export const routeTree = rootRouteImport

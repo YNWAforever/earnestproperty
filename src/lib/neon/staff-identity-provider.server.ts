@@ -39,10 +39,16 @@ function providerData(value: unknown) {
 
 function forwardedHeaders(request: Request) {
   const headers = new Headers({ accept: "application/json", "content-type": "application/json" });
-  for (const header of ["cookie", "authorization"]) {
-    const value = request.headers.get(header);
-    if (value) headers.set(header, value);
-  }
+  // Deliberately no `authorization`: no credential this server can forward is
+  // accepted by Neon Auth's authenticated endpoints (its docs make admin
+  // operations cookie-session only, and every attempt was rejected 401 live),
+  // which is why the default lifecycle dependencies serve identity reads,
+  // session revocation and invitations from the local neon_auth tables
+  // instead -- see staff-lifecycle.server.ts. The calls left on this adapter
+  // (request-password-reset) are public and need no credential; the browser
+  // cookie is passed through unchanged for parity when one exists.
+  const cookie = request.headers.get("cookie");
+  if (cookie) headers.set("cookie", cookie);
   return headers;
 }
 
@@ -76,26 +82,58 @@ export function createStaffIdentityProvider(input: {
 
   async function callProvider<T>(input: {
     path: string;
-    body: JsonRecord;
+    method?: "GET" | "POST";
+    body?: JsonRecord;
+    query?: Record<string, string>;
     request: Request;
     resource: ProviderResource;
     parse: (body: unknown) => T;
   }) {
     if (!authBaseUrl) throw new StaffIdentityProviderError("PROVIDER_CAPABILITY_UNAVAILABLE", 503);
+    // The path MUST be joined as a relative reference. Neon Auth base URLs carry a
+    // path of their own (".../neondb/auth"), and a leading slash would make the
+    // reference root-relative -- silently discarding that prefix and pointing every
+    // call at the wrong endpoint. Strip leading slashes so the base path survives.
+    const url = new URL(input.path.replace(/^\/+/, ""), `${authBaseUrl.replace(/\/$/, "")}/`);
+    for (const [key, value] of Object.entries(input.query ?? {})) url.searchParams.set(key, value);
+    const method = input.method ?? "POST";
     let response: Response;
     try {
-      response = await fetchImpl(
-        new URL(input.path, `${authBaseUrl.replace(/\/$/, "")}/`).toString(),
-        {
-          method: "POST",
-          headers: forwardedHeaders(input.request),
-          body: JSON.stringify(input.body),
-        },
-      );
+      response = await fetchImpl(url.toString(), {
+        method,
+        headers: forwardedHeaders(input.request),
+        ...(method === "POST" ? { body: JSON.stringify(input.body ?? {}) } : {}),
+      });
     } catch {
       throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
     }
     if (!response.ok) {
+      // TEMPORARY diagnostic for the persistent PROVIDER_UNAUTHORIZED (401) on
+      // resolveUser: safe_error_code recorded in staff_identity_actions shows the
+      // provider is rejecting the forwarded credential, but not why. Logs shape
+      // only (presence, Bearer prefix, whether the token looks like a signed
+      // cookie i.e. contains ".", rough length) plus the provider's own response
+      // status/body -- never the credential value itself. Remove once resolved.
+      const authHeader = input.request.headers.get("authorization");
+      const cookieHeader = input.request.headers.get("cookie");
+      const bearerToken = authHeader?.replace(/^Bearer\s+/i, "") ?? null;
+      const bodyText = await response
+        .clone()
+        .text()
+        .catch(() => "<unreadable>");
+      console.error("[neon-auth-diag]", {
+        path: input.path,
+        method,
+        providerStatus: response.status,
+        providerBodyPreview: bodyText.slice(0, 200),
+        hasAuthorizationHeader: Boolean(authHeader),
+        authorizationLooksBearer: authHeader?.startsWith("Bearer ") ?? false,
+        bearerTokenLength: bearerToken?.length ?? null,
+        bearerTokenHasDot: bearerToken?.includes(".") ?? null,
+        hasCookieHeader: Boolean(cookieHeader),
+        cookieHeaderLength: cookieHeader?.length ?? null,
+        cookieHasNeonAuthSessionName: cookieHeader?.includes("neon-auth.session_token") ?? false,
+      });
       throw new StaffIdentityProviderError(
         mapProviderOutcome({ status: response.status, resource: input.resource }),
         response.status,
@@ -117,7 +155,9 @@ export function createStaffIdentityProvider(input: {
     async resolveUser({ authUserId, request }) {
       return callProvider({
         path: "/admin/get-user",
-        body: { id: authUserId },
+        method: "GET",
+        body: {},
+        query: { id: authUserId },
         request,
         resource: "identity",
         parse(body): ProviderIdentity {

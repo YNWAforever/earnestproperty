@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createStaffLifecycleService } from "./staff-lifecycle.server.ts";
+import * as lifecycleModule from "./staff-lifecycle.server.ts";
+
+const { createStaffLifecycleService } = lifecycleModule;
 
 const admin = {
   staffId: "11111111-1111-4111-8111-111111111111",
@@ -436,10 +438,12 @@ test("password reset rejects unsafe targets and only sends a provider reset link
   });
   const cooldown = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
   assert.equal(cooldown.accepted, false);
-  await assert.rejects(
-    () => service.sendStaffPasswordReset({ staffId: admin.staffId }, admin, request),
-    (error) => error instanceof Response && error.status === 400,
+  const selfReset = await service.sendStaffPasswordReset(
+    { staffId: admin.staffId },
+    admin,
+    request,
   );
+  assert.equal(selfReset.failureCode, "SELF_RESET_NOT_ALLOWED");
   await assert.rejects(
     () => service.sendStaffPasswordReset({ staffId: targetId }, manager, request),
     (error) => error instanceof Response && error.status === 403,
@@ -450,6 +454,131 @@ test("password reset rejects unsafe targets and only sends a provider reset link
   assert.equal("token" in calls.actions[0].input, false);
   assert.equal("password" in (calls.audit[0].metadata ?? {}), false);
   assert.equal("token" in (calls.audit[0].metadata ?? {}), false);
+});
+
+test("password reset ignores a stored cooldown once its retryAfter has actually passed", async () => {
+  // findIdentityActionCooldown's row-level retry_after is a fixed timestamp
+  // written at the time of a prior failure -- it never gets re-evaluated once
+  // real time moves past it. The caller must check it against "now" itself,
+  // exactly like it already does for the persisted/localCooldown path below.
+  const { service, calls, staff, identityActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  identityActions.findIdentityActionCooldown = async () => ({
+    state: "retryable_failure",
+    retryAfter: "2026-08-15T23:50:00.000Z", // 10 minutes before fixture's clock.current
+    providerExpiresAt: null,
+  });
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+  assert.equal(
+    calls.provider.some((call) => call.method === "reset"),
+    true,
+  );
+});
+
+test("password reset returns a serializable self-target denial before any store or provider call", async () => {
+  const { service, calls, staff } = fixture();
+  staff.set(admin.staffId, {
+    id: admin.staffId,
+    email: admin.email,
+    auth_user_id: admin.authUserId,
+    active: true,
+  });
+
+  const result = await service.sendStaffPasswordReset({ staffId: admin.staffId }, admin, request);
+
+  assert.deepEqual(result, {
+    accepted: false,
+    retryAfter: null,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    failureCode: "SELF_RESET_NOT_ALLOWED",
+  });
+  assert.equal(calls.provider.length, 0);
+  assert.equal(calls.actions.length, 0);
+});
+
+test("password reset uses the linked provider identity email instead of a stale staff directory email", async () => {
+  const { service, calls, staff } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "info@earnesrproperty.com",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+  assert.deepEqual(calls.provider, [
+    {
+      method: "resolve",
+      input: { authUserId: "auth-target", request },
+    },
+    {
+      method: "reset",
+      input: {
+        email: "target@example.test",
+        redirectTo: "https://earnest.test/auth/reset-password",
+        request,
+      },
+    },
+  ]);
+});
+
+test("password reset reports a safe action-store failure before requesting provider delivery", async () => {
+  const { service, calls, staff, identityActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  identityActions.findIdentityActionCooldown = async () => {
+    throw new Error("raw database details must not escape");
+  };
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.deepEqual(result, {
+    accepted: false,
+    retryAfter: null,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+  });
+  assert.equal(calls.provider.length, 0);
+  assert.equal(calls.actions.filter((call) => call.method === "begin").length, 0);
+  assert.doesNotMatch(JSON.stringify(result), /raw database details/i);
+});
+
+test("password reset stays safe when recording a provider failure itself fails", async () => {
+  const { service, staff, identityActions } = fixture({
+    provider: {
+      resolveUser: async () => {
+        throw Object.assign(new Error("provider outage"), { code: "PROVIDER_UNAVAILABLE" });
+      },
+    },
+  });
+  staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  identityActions.markIdentityActionRetryable = async () => {
+    throw new Error("transient connection reset while recording the failure");
+  };
+
+  const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, false);
+  assert.equal(result.requestId, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
 });
 
 test("role changes delegate to the protected existing transaction and emit sanitized lifecycle audit", async () => {
@@ -521,4 +650,235 @@ test("suspension preserves local deactivation when revocation fails, while react
     (error) => error instanceof Response && error.status === 400,
   );
   assert.equal(absent.calls.activeChanges.length, 0);
+});
+
+test("default lifecycle dependencies defer unrelated admin and audit modules", async () => {
+  assert.equal(typeof lifecycleModule.createDefaultStaffLifecycleDependencies, "function");
+
+  let adminDataLoads = 0;
+  let auditLoads = 0;
+  const dependencies = await lifecycleModule.createDefaultStaffLifecycleDependencies({
+    loadAdminData: async () => {
+      adminDataLoads += 1;
+      throw new Error("admin data should stay lazy");
+    },
+    loadAudit: async () => {
+      auditLoads += 1;
+      throw new Error("audit should stay lazy");
+    },
+  });
+
+  assert.equal(adminDataLoads, 0);
+  assert.equal(auditLoads, 0);
+  assert.equal(typeof dependencies.updateStaffRoles, "function");
+  assert.equal(typeof dependencies.setStaffActive, "function");
+  assert.equal(typeof dependencies.writeAudit, "function");
+});
+
+test("session revocation deletes neon_auth.session rows instead of calling the provider's admin API", async () => {
+  // POST /admin/revoke-user-sessions requires a browser session cookie this
+  // server can never hold (Neon's docs state admin ops are cookie-session
+  // only; every forwarded credential was rejected 401 live). The endpoint's
+  // entire server-side effect is internalAdapter.deleteSessions(userId) -- a
+  // delete on the same neon_auth.session table this database holds -- so the
+  // direct delete is equivalent, and strictly better than the always-401 call.
+  assert.equal(typeof lifecycleModule.createNeonAuthSessionRevoker, "function");
+
+  const queries = [];
+  const revoke = lifecycleModule.createNeonAuthSessionRevoker(async (statement, params) => {
+    queries.push({ statement, params });
+    return [];
+  });
+
+  await revoke({ userId: "auth-target", request: new Request("https://earnest.test/x") });
+
+  assert.match(queries[0].statement, /DELETE FROM neon_auth\.session/);
+  assert.match(queries[0].statement, /"userId" = \$1/);
+  assert.deepEqual(queries[0].params, ["auth-target"]);
+
+  const broken = lifecycleModule.createNeonAuthSessionRevoker(async () => {
+    throw new Error("raw database details must not escape");
+  });
+  await assert.rejects(
+    () => broken({ userId: "auth-any", request: new Request("https://earnest.test/x") }),
+    (error) => error.code === "PROVIDER_UNAVAILABLE" && !/raw database/.test(error.message),
+  );
+});
+
+test("a legacy terminal invitation failure no longer bricks the member permanently", async () => {
+  // Production evidence: Neon Auth's organization plugin is disabled on this
+  // instance, so POST /organization/invite-member answered 404 ->
+  // PROVIDER_INVITATION_NOT_FOUND -> markIdentityActionTerminal. A terminal
+  // row then blocked BOTH paths with no escape hatch: resend threw
+  // 400 "Invitation is not available to resend." (surfaced as 這項團隊操作未能執行)
+  // and re-inviting hit the same idempotency key and returned "failed"
+  // forever. Invitations are recorded locally now, so no provider can declare
+  // one permanently gone -- the terminal guard only poisons legacy rows.
+  const { service, staff, latestActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "kevinfong@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "terminal_failure",
+      created_at: "2026-08-20T00:00:00.000Z",
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+
+  const result = await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+});
+
+test("timestamp columns returned as Date objects still resolve the latest action", async () => {
+  // The Neon driver returns timestamptz as Date objects, not strings -- which
+  // is why db.server.ts's dateOrNull tests `value instanceof Date`, and why the
+  // sibling helpers (staff-identity-actions' timestampOrNull, admin-team's
+  // dateString) all coerce with new Date(String(value)). latestActionFor was
+  // the one place demanding `typeof row.created_at === "string"`, so in
+  // production it returned null for EVERY row. resend then saw no prior action
+  // at all and threw 400 "Invitation is not available to resend."
+  // (這項團隊操作未能執行) for a member who plainly had been invited.
+  const { service, staff, latestActions } = fixture();
+  staff.set(targetId, {
+    id: targetId,
+    email: "kevinfong@example.test",
+    auth_user_id: null,
+    active: true,
+  });
+  latestActions.set(targetId, [
+    {
+      action: "invite",
+      state: "retryable_failure",
+      created_at: new Date("2026-08-15T00:00:00.000Z"),
+      retry_after: null,
+      provider_expires_at: null,
+    },
+  ]);
+
+  const result = await service.resendStaffInvitation({ staffId: targetId }, admin, request);
+
+  assert.equal(result.accepted, true);
+});
+
+test("invitations are recorded locally without any provider HTTP call", async () => {
+  // No server-side credential exists for /organization/invite-member (Neon
+  // docs: cookie-session only), and even an authenticated call only emails if
+  // the hosted service configured sendInvitationEmail. Access never depended
+  // on the provider invitation anyway: the staff row is committed before the
+  // provider call, and auth.server.ts binds the account by verified email at
+  // first sign-up. Invitations are therefore recorded locally; the UI tells
+  // the admin to share the sign-up link.
+  assert.equal(typeof lifecycleModule.createLocalStaffInvitation, "function");
+
+  const invite = lifecycleModule.createLocalStaffInvitation();
+  const result = await invite({
+    email: "new@example.test",
+    organizationId: "",
+    request: new Request("https://earnest.test/x"),
+  });
+
+  assert.deepEqual(result, { state: "sent", expiresAt: null });
+});
+
+test("identity resolution reads neon_auth.user locally instead of calling the provider's admin API", async () => {
+  // Every credential shape forwarded to Neon Auth's /admin/get-user has been
+  // rejected 401 in production (three distinct attempts, all captured live).
+  // The endpoint is redundant anyway: Neon Auth syncs its user table into this
+  // database, and auth.server.ts already treats neon_auth."user" as
+  // authoritative -- including emailVerified. Identity resolution must not
+  // depend on the provider's HTTP admin surface at all.
+  assert.equal(typeof lifecycleModule.createNeonAuthUserResolver, "function");
+
+  const queries = [];
+  const resolveUser = lifecycleModule.createNeonAuthUserResolver(async (statement, params) => {
+    queries.push({ statement, params });
+    return [
+      { id: "auth-target", email: "target@example.test", name: "Target", email_verified: true },
+    ];
+  });
+
+  const identity = await resolveUser({
+    authUserId: "auth-target",
+    request: new Request("https://earnest.test/admin/team"),
+  });
+
+  assert.deepEqual(identity, {
+    id: "auth-target",
+    email: "target@example.test",
+    name: "Target",
+    emailVerified: true,
+  });
+  assert.match(queries[0].statement, /FROM neon_auth\."user"/);
+  assert.deepEqual(queries[0].params, ["auth-target"]);
+
+  const missing = lifecycleModule.createNeonAuthUserResolver(async () => []);
+  await assert.rejects(
+    () => missing({ authUserId: "auth-gone", request: new Request("https://earnest.test/x") }),
+    (error) => error.code === "PROVIDER_IDENTITY_NOT_FOUND",
+  );
+
+  const broken = lifecycleModule.createNeonAuthUserResolver(async () => {
+    throw new Error("raw database details must not escape");
+  });
+  await assert.rejects(
+    () => broken({ authUserId: "auth-any", request: new Request("https://earnest.test/x") }),
+    (error) => error.code === "PROVIDER_UNAVAILABLE" && !/raw database/.test(error.message),
+  );
+});
+
+// `dependencies.requestId ?? crypto.randomUUID` (no dependencies.requestId
+// override -- i.e. the real default path createDefaultStaffLifecycleDependencies
+// takes in production) stores the *unbound* method reference. Calling it later as
+// a bare `nextRequestId()` detaches it from `crypto`, which a spec-strict WebCrypto
+// implementation rejects with "Illegal invocation" / "Value of \"this\" must be of
+// type Crypto" -- exactly the error a live production request returned (captured
+// from the raw seroval response body of a real `/admin/team` password-reset call).
+// V8 as embedded in plain `node --test` does not enforce this (`crypto.randomUUID`
+// works fine detached there), which is exactly why this survived: every existing
+// fixture in this file also overrides `requestId`, so the buggy fallback line was
+// never exercised by any test, local run, or the discrepancy never surfaced until
+// production. This test does not rely on the local runtime being strict -- it
+// stubs `globalThis.crypto` with a wrapper that enforces the same branding a
+// spec-compliant Crypto interface does, so it fails on the current code
+// regardless of which V8 build runs it.
+test("lifecycle actions generate a request id without depending on crypto.randomUUID's `this` binding", async () => {
+  const realCrypto = globalThis.crypto;
+  // A Proxy wrapping the real crypto object can't simulate this: `this` inside a
+  // trapped method is the Proxy itself, not `target`, so even a correctly-bound
+  // `crypto.randomUUID()` call would appear to fail. Use a plain branded object
+  // instead -- the same shape a spec-strict native Crypto class enforces via an
+  // internal slot: only a call whose receiver *is* this exact object passes.
+  const strictCrypto = {
+    randomUUID() {
+      if (this !== strictCrypto) {
+        throw new TypeError('Value of "this" must be of type Crypto');
+      }
+      return realCrypto.randomUUID();
+    },
+  };
+  Object.defineProperty(globalThis, "crypto", { value: strictCrypto, configurable: true });
+  try {
+    const { service, staff } = fixture({ requestId: undefined });
+    staff.set(targetId, {
+      id: targetId,
+      email: "target@example.test",
+      auth_user_id: "auth-target",
+      active: true,
+    });
+
+    const result = await service.sendStaffPasswordReset({ staffId: targetId }, admin, request);
+
+    assert.equal(result.accepted, true);
+    assert.equal(typeof result.requestId, "string");
+    assert.ok(result.requestId.length > 0);
+  } finally {
+    Object.defineProperty(globalThis, "crypto", { value: realCrypto, configurable: true });
+  }
 });

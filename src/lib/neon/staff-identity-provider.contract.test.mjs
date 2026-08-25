@@ -18,7 +18,7 @@ function createFetchFixture(responses) {
   const fetchImpl = async (url, init = {}) => {
     requests.push({
       method: init.method,
-      path: new URL(url).pathname,
+      path: new URL(url).pathname + new URL(url).search,
       headers: Object.fromEntries(new Headers(init.headers).entries()),
       body: init.body ? JSON.parse(init.body) : null,
     });
@@ -44,7 +44,11 @@ function createProvider(responses, options = {}) {
 const authorizedRequest = new Request("https://earnest.example.test/admin/team", {
   headers: {
     cookie: "better-auth.session_token=provider-secret",
-    authorization: "Bearer access-secret",
+    // This app's own JWT. The adapter must NOT forward it: no credential this
+    // server holds is accepted by Neon Auth's authenticated endpoints (its
+    // docs make admin operations cookie-session only), and the calls left on
+    // this adapter are public.
+    authorization: "Bearer this-apps-own-jwt",
   },
 });
 
@@ -57,7 +61,7 @@ test("password-reset redirects are derived from the current request origin", () 
   );
 });
 
-test("provider adapter uses the configured base URL, forwards only auth headers, and never sends app roles", async () => {
+test("provider adapter uses the configured base URL, forwards no credential, and never sends app roles", async () => {
   const { provider, requests } = createProvider([
     response({
       data: {
@@ -77,18 +81,72 @@ test("provider adapter uses the configured base URL, forwards only auth headers,
   );
   assert.deepEqual(requests, [
     {
-      method: "POST",
-      path: "/admin/get-user",
+      method: "GET",
+      path: "/admin/get-user?id=auth-1",
       headers: {
         accept: "application/json",
-        authorization: "Bearer access-secret",
         "content-type": "application/json",
         cookie: "better-auth.session_token=provider-secret",
       },
-      body: { id: "auth-1" },
+      body: null,
     },
   ]);
-  assert.equal("role" in requests[0].body, false);
+  assert.equal(requests[0].body, null);
+});
+
+test("provider adapter never forwards this app's own authorization header to Neon Auth", async () => {
+  const { provider, requests } = createProvider([
+    response({ data: { user: { id: "auth-1", email: null, name: null } } }),
+  ]);
+  const requestWithOnlyAppAuth = new Request("https://earnest.example.test/admin/team", {
+    headers: { authorization: "Bearer this-apps-own-jwt" },
+  });
+
+  await provider.resolveUser({ authUserId: "auth-1", request: requestWithOnlyAppAuth });
+
+  assert.equal("authorization" in requests[0].headers, false);
+});
+
+test("a base URL with a path prefix keeps that prefix on every provider call", async () => {
+  // Production's Neon Auth base URL is not a bare origin -- it carries a path,
+  // e.g. https://<endpoint>.neonauth.<region>.aws.neon.tech/neondb/auth. Joining a
+  // leading-slash path against it makes the reference root-relative and silently
+  // DROPS "/neondb/auth", so every provider call 404s. Every fixture above uses a
+  // path-less base, where the bug is invisible -- hence this case.
+  const fixture = createFetchFixture([
+    response({ data: { user: { id: "auth-1", email: "agent@example.test", name: null } } }),
+    response({ data: {} }),
+    response({ data: { invitation: { status: "sent", expiresAt: null } } }),
+    response({ data: {} }),
+  ]);
+  const provider = createStaffIdentityProvider({
+    fetchImpl: fixture.fetchImpl,
+    authBaseUrl: "https://auth.example.test/neondb/auth",
+    organizationId: "org-earnest",
+  });
+
+  await provider.resolveUser({ authUserId: "auth-1", request: authorizedRequest });
+  await provider.requestPasswordReset({
+    email: "agent@example.test",
+    redirectTo: "https://earnest.example.test/auth/reset-password",
+    request: authorizedRequest,
+  });
+  await provider.sendInvitation({
+    email: "new@example.test",
+    organizationId: "org-earnest",
+    request: authorizedRequest,
+  });
+  await provider.revokeUserSessions({ userId: "auth-1", request: authorizedRequest });
+
+  assert.deepEqual(
+    fixture.requests.map((entry) => entry.path),
+    [
+      "/neondb/auth/admin/get-user?id=auth-1",
+      "/neondb/auth/request-password-reset",
+      "/neondb/auth/organization/invite-member",
+      "/neondb/auth/admin/revoke-user-sessions",
+    ],
+  );
 });
 
 test("empty server auth URL falls back to the configured VITE auth URL", async () => {

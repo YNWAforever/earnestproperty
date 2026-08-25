@@ -46,3 +46,6 @@ docs/client-feedback/
 artifacts/mls-sync/
 workers/mls-container/.dev.vars
 workers/mls-container/.wrangler/
+
+# Brainstorm session artifacts (superpowers visual companion)
+.superpowers/

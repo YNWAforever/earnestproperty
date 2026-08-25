@@ -43,7 +43,15 @@ test("Team route delegates lifecycle mutations to the Task 4 server boundary", (
 test("Team route removes member data for forbidden callers and carries edited lifecycle input", () => {
   const source = read("src/routes/admin.team.tsx");
 
-  assert.match(source, /reason\.status === 403[\s\S]*setTeam\(null\)[\s\S]*setDetail\(null\)/);
+  // Status is read through serverErrorStatus rather than off the error object:
+  // a server-thrown Response arrives on the client as a plain Error carrying the
+  // body, so `reason.status` is undefined there and the forbidden branch would
+  // never run. The behaviour asserted here is unchanged -- a 403 still drops
+  // both the list and the open member -- only the way the status is obtained.
+  assert.match(
+    source,
+    /serverErrorStatus\(reason\) === 403[\s\S]*setTeam\(null\)[\s\S]*setDetail\(null\)/,
+  );
   assert.match(source, /if \(forbidden\)[\s\S]*AdminError/);
   assert.match(source, /teamActionPayload\(\{[\s\S]*proposedRoles: pending\.proposedRoles/);
   assert.match(source, /reassignToStaffId: pendingOptions\.reassignToStaffId/);
@@ -52,6 +60,16 @@ test("Team route removes member data for forbidden callers and carries edited li
   assert.match(source, /resetAdminTeamPage\(search\)/);
   assert.match(source, /await loadTeam\(true\)/);
   assert.match(source, /teamMutationFailure\(result\)/);
+});
+
+test("Team route prevents self-reset confusion and gives a safe 400 recovery message", () => {
+  const source = read("src/routes/admin.team.tsx");
+  // Same move as the 403 branch above: safeError resolves the status once via
+  // serverErrorStatus and then branches on it.
+  assert.match(source, /const status = serverErrorStatus\(error\);/);
+  assert.match(source, /if \(status === 400\)/);
+  assert.match(source, /safeError\(reason, pending\.action\)/);
+  assert.match(source, /currentUserEmail=\{user\?\.email \?\? null\}/);
 });
 
 test("operations shell follows the approved navigation groups and exact Team state", () => {
@@ -222,6 +240,7 @@ test("Woztell API routes are present and server-only", () => {
   const files = [
     "src/routes/api.woztell.webhook.ts",
     "src/routes/api.admin.woztell.send.ts",
+    "src/routes/api.admin.woztell.send-template.ts",
     "src/routes/api.admin.campaigns.$id.queue.ts",
     "src/routes/api.admin.jobs.send-queue.ts",
   ];
@@ -307,6 +326,40 @@ test("admin WhatsApp reply delegates recipient identity to the server", () => {
   assert.match(whatsappRoute, /status === "failed"/);
   assert.match(whatsappRoute, /傳送中/);
   assert.match(whatsappRoute, /送出失敗/);
+});
+
+test("WhatsApp reply pre-flight check reuses the server's canReplyToConversation guard", () => {
+  const whatsappRoute = read("src/routes/admin.whatsapp.tsx");
+
+  // replyAvailability used to re-derive its own checks with their own reason
+  // strings, and those leaked raw values ("WOZTELL_ENABLED 未啟用", "缺少
+  // Woztell member ID") straight into the reply footer, in the same file that
+  // already had a proper Chinese label for the same failure on the real send
+  // path (replyErrorLabels, used when an actual send attempt fails).
+  assert.match(whatsappRoute, /canReplyToConversation,\s*conversationAttention/);
+  assert.match(whatsappRoute, /const guard = canReplyToConversation\(/);
+  assert.match(whatsappRoute, /formatReplyError\(guard\.reason\)/);
+  assert.doesNotMatch(whatsappRoute, /"WOZTELL_ENABLED 未啟用"/);
+  assert.doesNotMatch(whatsappRoute, /"正在確認 WOZTELL_ENABLED"/);
+  assert.doesNotMatch(whatsappRoute, /"缺少 Woztell member ID"/);
+  assert.doesNotMatch(whatsappRoute, /"客戶已 Opt-out WhatsApp"/);
+});
+
+test("WhatsApp AI assist values match the frontend's Chinese label maps", () => {
+  const adminData = read("src/lib/neon/admin-data.server.ts");
+  const whatsappRoute = read("src/routes/admin.whatsapp.tsx");
+
+  // "renter"/"active" used to be returned here and matched neither
+  // AI_INTENT_LABELS nor AI_URGENCY_LABELS below, so every rental inquiry and
+  // every conversation with 3+ messages showed raw English ("renter",
+  // "active") to a Cantonese-only agent instead of a translated label.
+  assert.doesNotMatch(
+    adminData,
+    /detectedIntent = \/租\|rent\/i\.test\(latestInboundText\)\s*\?\s*"renter"/,
+  );
+  assert.doesNotMatch(adminData, /urgency: messages\.length >= 3 \? "active"/);
+  assert.match(whatsappRoute, /tenant:\s*"租客"/);
+  assert.match(whatsappRoute, /high:\s*"高"/);
 });
 
 test("admin routes expose functional workflows, not only read-only tables", () => {
@@ -619,6 +672,45 @@ test("admin segment editor guards selected segment and preview context", () => {
   assert.match(source, /disabled=\{!canMaterializeSegment \|\| materializing\}/);
 });
 
+// crm_segments and whatsapp_audiences previously shared no data path at all:
+// a segment built in 客戶分群 never appeared as something a blast could send
+// to. RECIPIENT_ELIGIBILITY_SQL is extended to carry the same filter
+// vocabulary fetchSegmentContacts (segments.server.ts) already validates, so
+// createAdminAudienceFromSegment can translate a segment's filters onto an
+// audience losslessly.
+test("audience eligibility SQL carries the same filter vocabulary segments already validate", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+
+  assert.match(
+    server,
+    /RECIPIENT_ELIGIBILITY_SQL = `[\s\S]*?l\.preferred_estates && \$4::text\[\][\s\S]*?estate\.slug = ANY\(\$4::text\[\]\)[\s\S]*?p\.district_slug = \$5[\s\S]*?l\.budget_max >= \$6[\s\S]*?l\.budget_min <= \$7[\s\S]*?\$8::int IS NULL OR l\.updated_at >= now\(\)[\s\S]*?c\.opt_in_whatsapp = true/,
+  );
+
+  // An empty estates array must not silently defeat the filter: `[]` is not
+  // NULL, and `preferred_estates && ARRAY[]` is always false, which would
+  // exclude every contact instead of matching "any estate".
+  assert.match(
+    server,
+    /function normalizeAudienceFilters\([\s\S]{0,700}estates\.length \? estates : undefined/,
+  );
+});
+
+test("createAdminAudienceFromSegment bridges a saved segment into a WhatsApp audience, admin/manager only", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+  const server = read("src/lib/neon/admin-data.server.ts");
+
+  const clientStart = client.indexOf("createAdminAudienceFromSegmentServer = createServerFn");
+  assert.notEqual(clientStart, -1, "client wrapper must exist");
+  assert.match(
+    client.slice(clientStart, clientStart + 400),
+    /requireStaff\(\["admin", "manager"\]\)/,
+  );
+
+  assert.match(server, /export async function createAdminAudienceFromSegment/);
+  assert.match(server, /getSegmentForAudience/);
+  assert.match(server, /saveAdminAudience\(/);
+});
+
 test("command center route is registered, noindex, and admin-guarded", () => {
   const route = read("src/routes/admin.leads_.command-center.tsx");
   assert.match(route, /createFileRoute\("\/admin\/leads_\/command-center"\)/);
@@ -646,6 +738,23 @@ test("WhatsApp send route scopes the conversation lookup to the acting agent", (
   assert.match(route, /const scope = agentScope\(staff\)/);
   assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
   assert.match(route, /\[conversationId, scope\]/);
+});
+
+// Same blast radius as the test above, for the template-send path added
+// alongside it.
+test("WhatsApp template send route scopes the conversation lookup to the acting agent", () => {
+  const route = read("src/routes/api.admin.woztell.send-template.ts");
+
+  assert.match(route, /import \{ agentScope \} from "@\/lib\/neon\/admin-data\.server"/);
+  assert.match(route, /const scope = agentScope\(staff\)/);
+  assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
+  assert.match(route, /\[conversationId, scope\]/);
+  assert.match(route, /status LIKE 'active%'/);
+  // A template is the only WhatsApp-compliant way to message a customer once
+  // the 24-hour window has closed, so this route must not gate on the same
+  // window check /api/admin/woztell/send uses -- that would silently recreate
+  // the exact dead end this route exists to fix.
+  assert.doesNotMatch(route, /canReplyToConversation\(/);
 });
 
 test("agentScope is exported once and not redefined per call site", () => {

@@ -329,7 +329,6 @@ export type AdminConversationAiAssist = {
   detectedIntent: string | null;
   urgency: string | null;
   suggestedReply: string | null;
-  suggestedTemplate: string | null;
   handoffNote: string | null;
 };
 
@@ -340,8 +339,16 @@ export type AdminAudienceInput = {
   filters: {
     intent?: string;
     source?: string;
-    estate?: string;
+    /** Multiple estate slugs are OR'd together. Renamed from the old singular
+     * `estate` so a segment's preferred_estates list translates without loss
+     * -- see createAudienceFromSegment. */
+    estates?: string[];
+    district_slug?: string;
     assigned_agent_id?: string;
+    budget_min?: number;
+    budget_max?: number;
+    last_activity_days?: number;
+    require_whatsapp_opt_in?: boolean;
   };
 };
 
@@ -380,6 +387,19 @@ export type AdminBlastOptions = {
     description: string | null;
     filters: AdminAudienceInput["filters"];
   }>;
+};
+
+/** An approved WhatsApp template an agent can send outside the 24-hour reply
+ * window. Same shape as AdminBlastOptions["templates"][number], scoped down to
+ * what a 1:1 send needs -- no `status`, since the server only ever returns
+ * templates whose status already starts with "active". */
+export type AdminWhatsappTemplateRow = {
+  id: string;
+  element_name: string;
+  language_code: string;
+  category: string;
+  description: string | null;
+  components: unknown;
 };
 
 export type AdminAiKnowledgeStatus = {

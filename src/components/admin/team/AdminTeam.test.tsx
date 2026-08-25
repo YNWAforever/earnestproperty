@@ -12,6 +12,7 @@ import {
   createLatestRequestGuard,
   mergeAdminTeamPages,
   resetAdminTeamPage,
+  serverErrorStatus,
   teamActionPayload,
   teamMutationFailure,
 } from "./admin-team-route-utils";
@@ -80,7 +81,7 @@ describe("Admin Team responsive directory", () => {
       ),
     );
 
-    for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "已發送"]) {
+    for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "已邀請"]) {
       expect(table.text()).toContain(value);
       expect(card.text()).toContain(value);
     }
@@ -98,7 +99,7 @@ describe("Admin Team responsive directory", () => {
     );
 
     expect($.text()).toContain("已啟用");
-    expect($.text()).toContain("發送失敗");
+    expect($.text()).toContain("邀請失敗");
     expect($.text()).toContain("需要跟進");
   });
 });
@@ -120,7 +121,7 @@ describe("Admin Team role-aware detail and confirmations", () => {
       }),
     );
 
-    for (const label of ["重新發送邀請", "變更角色", "停用帳戶", "發送密碼重設連結"]) {
+    for (const label of ["更新邀請", "變更角色", "停用帳戶", "發送密碼重設連結"]) {
       expect(admin.text()).toContain(label);
       expect(manager.text()).not.toContain(label);
     }
@@ -154,6 +155,20 @@ describe("Admin Team role-aware detail and confirmations", () => {
 
     expect($.text()).toContain("重新啟用帳戶");
     expect($.text()).not.toContain("發送密碼重設連結");
+  });
+
+  test("does not offer self password reset and explains the recovery path", () => {
+    const $ = render(
+      createElement(AdminTeamDetailPanel, {
+        currentUserEmail: member.email,
+        detail,
+        canManage: true,
+        onAction: () => undefined,
+      }),
+    );
+
+    expect($.text()).not.toContain("發送密碼重設連結");
+    expect($.text()).toContain("登入頁面");
   });
 });
 
@@ -202,7 +217,7 @@ describe("Admin Team request safety", () => {
 
   test("failed invitations and cooldowns stay in their dialog with safe recovery text", () => {
     expect(teamMutationFailure({ invitationState: "failed", requestId: "request-1" })).toContain(
-      "邀請未能發送",
+      "邀請未能建立",
     );
     expect(
       teamMutationFailure({
@@ -214,6 +229,52 @@ describe("Admin Team request safety", () => {
     expect(
       teamMutationFailure({ accepted: true, retryAfter: null, requestId: "request-3" }),
     ).toBeNull();
+  });
+
+  test("structured reset failures explain the safe recovery path", () => {
+    expect(
+      teamMutationFailure({
+        accepted: false,
+        retryAfter: null,
+        requestId: "request-self",
+        failureCode: "SELF_RESET_NOT_ALLOWED",
+      }),
+    ).toContain("登入頁面");
+    expect(
+      teamMutationFailure({
+        accepted: false,
+        retryAfter: null,
+        requestId: "request-store",
+        failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+      }),
+    ).toContain("團隊資料");
+  });
+
+  test("server error statuses survive the server-function boundary as plain Errors", () => {
+    // TanStack Start does not preserve a thrown Response across the RPC boundary:
+    // the client receives `new Error(<response body text>)`. Recovering the status
+    // from that body is the only way the UI can tell an expired login from a
+    // permission problem from a write conflict.
+    expect(serverErrorStatus(new Error("Unauthorized"))).toBe(401);
+    expect(serverErrorStatus(new Error("Forbidden"))).toBe(403);
+    expect(serverErrorStatus(new Error("Team member not found."))).toBe(404);
+    expect(serverErrorStatus(new Error("Staff member not found."))).toBe(404);
+    expect(
+      serverErrorStatus(
+        new Error(
+          "This change conflicted with another concurrent staff-access update. Please retry.",
+        ),
+      ),
+    ).toBe(409);
+
+    // A real Response still works, for direct/SSR invocations.
+    expect(serverErrorStatus(new Response("Forbidden", { status: 403 }))).toBe(403);
+
+    // Anything unrecognised must stay null so the caller falls back honestly
+    // rather than mislabelling an unknown failure.
+    expect(serverErrorStatus(new Error("some unmapped provider text"))).toBeNull();
+    expect(serverErrorStatus("not an error")).toBeNull();
+    expect(serverErrorStatus(undefined)).toBeNull();
   });
 
   test("role and successor confirmations retain the selected payload", () => {

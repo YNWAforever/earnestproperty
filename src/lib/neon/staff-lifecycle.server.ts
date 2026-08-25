@@ -8,6 +8,7 @@ import type {
   InviteStaffMemberInput,
   ResendStaffInvitationInput,
   SendStaffPasswordResetInput,
+  StaffLifecycleFailureCode,
 } from "./admin-team.types.ts";
 import { queryRows, transactionRows, type DbRow, type TransactionStatement } from "./db.server.ts";
 import {
@@ -15,8 +16,12 @@ import {
   type IdentityActionState,
   type IdentityActionType,
 } from "./staff-identity-actions.server.ts";
-import { createStaffIdentityProvider } from "./staff-identity-provider.server.ts";
+import {
+  createStaffIdentityProvider,
+  StaffIdentityProviderError,
+} from "./staff-identity-provider.server.ts";
 import type {
+  ProviderIdentity,
   ProviderInvitation,
   ProviderOutcomeCode,
   StaffIdentityProvider,
@@ -73,7 +78,12 @@ export type StaffLifecycleDependencies = {
   requestId?: () => string;
 };
 
-type LifecycleResult = { accepted: boolean; retryAfter: string | null; requestId: string };
+type LifecycleResult = {
+  accepted: boolean;
+  retryAfter: string | null;
+  requestId: string;
+  failureCode?: StaffLifecycleFailureCode;
+};
 
 const providerFailureCodes = new Set<ProviderOutcomeCode>([
   "PROVIDER_CAPABILITY_UNAVAILABLE",
@@ -134,6 +144,20 @@ function retryAfter(action: "invitation" | "password-reset", now: Date) {
   return cooldownRetryAfter({ action, now: new Date(now.valueOf() - 1), lastRequestedAt: now });
 }
 
+// findIdentityActionCooldown returns a row's stored retry_after verbatim -- a
+// fixed timestamp written at the time of a prior failure that is never
+// re-evaluated once real time moves past it. Without this check, a single
+// retryable_failure row permanently blocks every future attempt: its
+// retryAfter stays truthy forever, regardless of how much time has actually
+// passed. localCooldown (computed from persisted.createdAt via
+// cooldownRetryAfter) already gets this right; this mirrors that same
+// still-in-the-future check for the DB-stored value.
+function activeRetryAfter(candidate: string | null | undefined, now: Date): string | null {
+  if (!candidate) return null;
+  const retryAt = new Date(candidate);
+  return Number.isNaN(retryAt.valueOf()) || retryAt <= now ? null : candidate;
+}
+
 async function safeAudit(writeAudit: StaffLifecycleDependencies["writeAudit"], input: AuditInput) {
   // All callers pass small allowlisted scalar/count metadata. This service is
   // the lifecycle audit boundary: no provider payload, token, cookie, body, or
@@ -154,7 +178,12 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
   const runTransaction = dependencies.transactionRows ?? transactionRows;
   const actions = dependencies.identityActions ?? createIdentityActionStore();
   const now = dependencies.now ?? (() => new Date());
-  const nextRequestId = dependencies.requestId ?? crypto.randomUUID;
+  // Not `crypto.randomUUID` directly: that stores the method detached from its
+  // receiver, and calling it later as a bare `nextRequestId()` loses the `this`
+  // binding a spec-strict WebCrypto implementation requires -- reproduced (with
+  // the exact production error, "Value of \"this\" must be of type Crypto") in
+  // the regression test below.
+  const nextRequestId = dependencies.requestId ?? (() => crypto.randomUUID());
 
   async function memberById(staffId: string): Promise<LifecycleMember> {
     const rows = await runQuery<Record<string, unknown>>(
@@ -231,31 +260,37 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       [input.targetStaffId, input.actions],
     );
     const row = rows[0];
+    if (!row) return null;
+    // The Neon driver hands back timestamptz as Date objects, not strings --
+    // db.server.ts's dateOrNull tests `value instanceof Date` for exactly that
+    // reason, and the sibling readers (staff-identity-actions' timestampOrNull,
+    // admin-team's dateString) coerce rather than type-check. A `typeof
+    // created_at === "string"` guard here therefore rejected EVERY production
+    // row, so this returned null always: resend saw no prior action and threw
+    // 400 "Invitation is not available to resend." for members who had plainly
+    // been invited, and every cooldown computed from `persisted` silently
+    // never applied.
+    const date = (value: unknown) => {
+      if (value === null || value === undefined) return null;
+      const parsed = value instanceof Date ? value : new Date(String(value));
+      return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
+    };
+    const createdAt = date(row.created_at);
     if (
-      !row ||
       typeof row.action !== "string" ||
       !input.actions.includes(row.action as IdentityActionType) ||
       typeof row.state !== "string" ||
       !["pending", "succeeded", "retryable_failure", "terminal_failure"].includes(row.state) ||
-      typeof row.created_at !== "string" ||
-      Number.isNaN(new Date(row.created_at).valueOf())
+      !createdAt
     ) {
       return null;
     }
-    const date = (value: unknown) => {
-      const parsed = new Date(String(value));
-      return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
-    };
     return {
       action: row.action as IdentityActionType,
       state: row.state as IdentityActionState,
-      createdAt: new Date(row.created_at).toISOString(),
-      retryAfter:
-        row.retry_after === null || row.retry_after === undefined ? null : date(row.retry_after),
-      providerExpiresAt:
-        row.provider_expires_at === null || row.provider_expires_at === undefined
-          ? null
-          : date(row.provider_expires_at),
+      createdAt,
+      retryAfter: date(row.retry_after),
+      providerExpiresAt: date(row.provider_expires_at),
     };
   }
 
@@ -280,20 +315,29 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
     cooldown: "invitation" | "password-reset";
   }) {
     const code = safeProviderCode(input.error);
-    if (code === "PROVIDER_INVITATION_NOT_FOUND") {
-      await actions.markIdentityActionTerminal({
+    // Recording the failure is itself a DB write and can fail on its own
+    // (e.g. a transient Neon connection reset). If it does, the original
+    // provider failure must still come back as a safe result instead of
+    // escaping as an unhandled exception -- the same reasoning safeAudit
+    // already applies to audit writes.
+    try {
+      if (code === "PROVIDER_INVITATION_NOT_FOUND") {
+        await actions.markIdentityActionTerminal({
+          operationId: input.operationId,
+          safeErrorCode: code,
+        });
+        return { code, terminal: true as const, retryAfter: null };
+      }
+      const retry = retryAfter(input.cooldown, now());
+      await actions.markIdentityActionRetryable({
         operationId: input.operationId,
         safeErrorCode: code,
+        retryAfter: retry,
       });
-      return { code, terminal: true as const, retryAfter: null };
+      return { code, terminal: false as const, retryAfter: retry };
+    } catch {
+      return { code, terminal: false as const, retryAfter: null };
     }
-    const retry = retryAfter(input.cooldown, now());
-    await actions.markIdentityActionRetryable({
-      operationId: input.operationId,
-      safeErrorCode: code,
-      retryAfter: retry,
-    });
-    return { code, terminal: false as const, retryAfter: retry };
   }
 
   return {
@@ -389,10 +433,11 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
               lastRequestedAt: persisted.createdAt,
             })
           : null;
-      if (localCooldown || previous?.retryAfter)
+      const previousCooldown = activeRetryAfter(previous?.retryAfter, currentNow);
+      if (localCooldown || previousCooldown)
         return {
           accepted: false,
-          retryAfter: localCooldown ?? previous?.retryAfter ?? null,
+          retryAfter: localCooldown ?? previousCooldown,
           requestId,
         };
       if (
@@ -404,10 +449,17 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           status: 400,
         });
       }
-      if (
-        (!persisted && !previous) ||
-        (persisted?.state === "terminal_failure" && previous?.state !== "retryable_failure")
-      ) {
+      // Only "never invited" blocks a resend. A terminal_failure row must NOT:
+      // terminal is reachable solely via PROVIDER_INVITATION_NOT_FOUND, i.e. a
+      // 404 from the provider's organization endpoint -- which is exactly what
+      // this deployment returns, because Neon Auth's organization plugin is
+      // disabled here. Since createLocalStaffInvitation records invitations
+      // locally, no provider can declare one permanently gone, so the guard now
+      // only poisons legacy rows. It had no escape hatch either: re-inviting
+      // reuses the same idempotency key and returns "failed" forever, so a
+      // member whose invite 404'd was bricked (surfaced as
+      // 這項團隊操作未能執行). Resending re-records locally and clears the state.
+      if (!persisted && !previous) {
         throw new Response("Invitation is not available to resend.", { status: 400 });
       }
       const operation = await beginAction({
@@ -418,9 +470,6 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         keyValue: cooldownWindowKey("invitation", member.id, currentNow),
       });
       if (operation.isExisting) {
-        if (operation.state === "terminal_failure") {
-          throw new Response("Invitation is not available to resend.", { status: 400 });
-        }
         return {
           accepted: operation.state === "pending" || operation.state === "succeeded",
           retryAfter: null,
@@ -482,22 +531,60 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       request: Request,
     ): Promise<LifecycleResult> {
       requireAdmin(actor);
-      if (actor.staffId === input.staffId)
-        throw new Response("Self password reset is not permitted.", { status: 400 });
       const requestId = nextRequestId();
-      const member = await memberById(input.staffId);
+      if (actor.staffId === input.staffId)
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "SELF_RESET_NOT_ALLOWED",
+        };
+      let member: LifecycleMember;
+      try {
+        member = await memberById(input.staffId);
+      } catch (error) {
+        if (error instanceof Response && error.status === 404)
+          return {
+            accepted: false,
+            retryAfter: null,
+            requestId,
+            failureCode: "STAFF_IDENTITY_UNAVAILABLE",
+          };
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+        };
+      }
       if (!member.active || !member.authUserId)
-        throw new Response("Staff identity is unavailable.", { status: 400 });
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_IDENTITY_UNAVAILABLE",
+        };
       const currentNow = now();
-      const persisted = await latestActionFor({
-        targetStaffId: member.id,
-        actions: ["password_reset"],
-      });
-      const previous = await actions.findIdentityActionCooldown({
-        targetStaffId: member.id,
-        action: "password_reset",
-        now: currentNow.toISOString(),
-      });
+      let persisted: Awaited<ReturnType<typeof latestActionFor>>;
+      let previous: Awaited<ReturnType<typeof actions.findIdentityActionCooldown>>;
+      try {
+        persisted = await latestActionFor({
+          targetStaffId: member.id,
+          actions: ["password_reset"],
+        });
+        previous = await actions.findIdentityActionCooldown({
+          targetStaffId: member.id,
+          action: "password_reset",
+          now: currentNow.toISOString(),
+        });
+      } catch {
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+        };
+      }
       const localCooldown =
         persisted && ["pending", "succeeded", "retryable_failure"].includes(persisted.state)
           ? cooldownRetryAfter({
@@ -506,19 +593,30 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
               lastRequestedAt: persisted.createdAt,
             })
           : null;
-      if (localCooldown || previous?.retryAfter)
+      const previousCooldown = activeRetryAfter(previous?.retryAfter, currentNow);
+      if (localCooldown || previousCooldown)
         return {
           accepted: false,
-          retryAfter: localCooldown ?? previous?.retryAfter ?? null,
+          retryAfter: localCooldown ?? previousCooldown,
           requestId,
         };
-      const operation = await beginAction({
-        action: "password_reset",
-        actor,
-        member,
-        requestId,
-        keyValue: cooldownWindowKey("password-reset", member.id, currentNow),
-      });
+      let operation: Awaited<ReturnType<typeof beginAction>>;
+      try {
+        operation = await beginAction({
+          action: "password_reset",
+          actor,
+          member,
+          requestId,
+          keyValue: cooldownWindowKey("password-reset", member.id, currentNow),
+        });
+      } catch {
+        return {
+          accepted: false,
+          retryAfter: null,
+          requestId,
+          failureCode: "STAFF_ACTION_STORE_UNAVAILABLE",
+        };
+      }
       if (operation.isExisting) {
         return {
           accepted: operation.state === "pending" || operation.state === "succeeded",
@@ -527,8 +625,18 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         };
       }
       try {
+        // The local staff directory can contain a stale/typoed email. The
+        // linked identity provider is authoritative for where a reset link is
+        // delivered, so never send a reset using member.email alone.
+        const identity = await dependencies.provider.resolveUser({
+          authUserId: member.authUserId,
+          request,
+        });
+        const providerEmail = identity.email?.trim().toLowerCase();
+        if (!providerEmail)
+          throw Object.assign(new Error(), { code: "PROVIDER_IDENTITY_NOT_FOUND" });
         await dependencies.provider.requestPasswordReset({
-          email: member.email,
+          email: providerEmail,
           redirectTo: new URL("/auth/reset-password", request.url).toString(),
           request,
         });
@@ -657,15 +765,140 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
   };
 }
 
-async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
-  const adminData = await import("./admin-data.server.ts");
-  const audit = await import("../control-plane/audit.server.ts");
+type DefaultStaffLifecycleLoaders = {
+  loadAdminData?: () => Promise<
+    Pick<typeof import("./admin-data.server.ts"), "updateStaffRoles" | "setStaffActive">
+  >;
+  loadAudit?: () => Promise<Pick<typeof import("../control-plane/audit.server.ts"), "writeAudit">>;
+};
+
+/**
+ * Resolve a Neon Auth identity from the neon_auth."user" table this database
+ * already holds, instead of Neon Auth's HTTP admin API.
+ *
+ * The HTTP route (/admin/get-user) rejected every credential shape this app
+ * can forward -- three distinct attempts, each captured 401 in production
+ * with the diagnostic in staff-identity-provider.server.ts: the app's own
+ * session JWT (better-auth's bearer plugin cannot parse a 3-segment JWT), the
+ * getSession() body token (same JWT, injected by the jwt plugin), and the
+ * set-auth-token provider-session forwarding. The endpoint is also redundant:
+ * Neon Auth syncs its user table into this database, and auth.server.ts
+ * already treats neon_auth."user" as authoritative for id/email/name AND for
+ * the security-critical emailVerified gate. Reading it here keeps password
+ * reset working without any dependency on the provider's admin auth.
+ */
+export function createNeonAuthUserResolver(
+  runQuery: QueryRows = queryRows,
+): (input: { authUserId: string; request: Request }) => Promise<ProviderIdentity> {
+  return async ({ authUserId }) => {
+    let rows: DbRow[];
+    try {
+      rows = await runQuery(
+        `SELECT id::text AS id, email, name, "emailVerified" AS email_verified
+           FROM neon_auth."user"
+          WHERE id::text = $1
+          LIMIT 1`,
+        [authUserId],
+      );
+    } catch {
+      throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
+    }
+    const row = rows[0];
+    if (!row || typeof row.id !== "string" || !row.id) {
+      throw new StaffIdentityProviderError("PROVIDER_IDENTITY_NOT_FOUND", 404);
+    }
+    return {
+      id: row.id,
+      email: typeof row.email === "string" ? row.email : null,
+      name: typeof row.name === "string" ? row.name : null,
+      emailVerified: row.email_verified === true,
+    };
+  };
+}
+
+/**
+ * Revoke a user's Neon Auth sessions by deleting their rows in
+ * neon_auth.session, instead of POST /admin/revoke-user-sessions.
+ *
+ * The HTTP route is unusable from a server: Neon's docs state admin
+ * operations require the signed-in user's HTTP-only session cookie ("your
+ * admin tooling must run on the same site that can send those cookies"), and
+ * every credential this server can forward was rejected 401 in production.
+ * The route is also nothing more than this delete -- the vendored better-auth
+ * admin plugin's handler body is a permission check followed by
+ * internalAdapter.deleteSessions(userId), a delete on the session model where
+ * userId matches. neon_auth is the service's primary store (login verifies
+ * against neon_auth.jwks), so the direct delete severs the same sessions.
+ *
+ * Inherent limit shared by BOTH methods: already-issued JWTs stay valid until
+ * their exp (better-auth default 15m) because auth.server.ts's JWT path is
+ * exp-bound and session-blind. Suspension's real gate is immediate either
+ * way: findStaff requires staff_users.active = true.
+ */
+export function createNeonAuthSessionRevoker(
+  runQuery: QueryRows = queryRows,
+): (input: { userId: string; request: Request }) => Promise<void> {
+  return async ({ userId }) => {
+    try {
+      await runQuery(`DELETE FROM neon_auth.session WHERE "userId" = $1`, [userId]);
+    } catch {
+      throw new StaffIdentityProviderError("PROVIDER_UNAVAILABLE", 503);
+    }
+  };
+}
+
+/**
+ * Record an invitation locally instead of POST /organization/invite-member.
+ *
+ * No server-side credential exists for the hosted organization endpoints
+ * (cookie-session only, same as the admin surface), and even a working call
+ * only sends email if the hosted service configured sendInvitationEmail --
+ * unknowable from here, so a "successful" call could silently send nothing.
+ * The provider invitation never carried access anyway: inviteStaffMember
+ * commits the staff row (email, roles, NULL auth_user_id) before the provider
+ * is consulted, and auth.server.ts's findStaff binds the member's Neon Auth
+ * account by verified email at first sign-up. The invitation email was pure
+ * notification; the Team UI now tells the admin to share the sign-up link
+ * instead, so the recorded state stays honest.
+ *
+ * state "sent" here means "invitation recorded; awaiting sign-up" (the UI
+ * labels it 已邀請); expiresAt is null because a locally recorded invitation
+ * does not expire.
+ */
+export function createLocalStaffInvitation(): (input: {
+  email: string;
+  organizationId: string;
+  request: Request;
+}) => Promise<ProviderInvitation> {
+  return async () => ({ state: "sent", expiresAt: null });
+}
+
+export async function createDefaultStaffLifecycleDependencies(
+  loaders: DefaultStaffLifecycleLoaders = {},
+): Promise<StaffLifecycleDependencies> {
+  const loadAdminData = loaders.loadAdminData ?? (() => import("./admin-data.server.ts"));
+  const loadAudit = loaders.loadAudit ?? (() => import("../control-plane/audit.server.ts"));
+  const localInvitation = createLocalStaffInvitation();
   return {
     organizationId: process.env.NEON_AUTH_ORGANIZATION_ID ?? "",
-    provider: createStaffIdentityProvider({}),
-    updateStaffRoles: adminData.updateStaffRoles,
-    setStaffActive: adminData.setStaffActive,
+    // Every identity operation that previously hit Neon Auth's authenticated
+    // admin/organization HTTP surface is served locally -- see
+    // createNeonAuthUserResolver, createNeonAuthSessionRevoker and
+    // createLocalStaffInvitation. The only HTTP call left on the provider is
+    // requestPasswordReset, whose endpoint is public (verified live) and is
+    // the one thing only the provider can do: send email.
+    provider: {
+      ...createStaffIdentityProvider({}),
+      resolveUser: createNeonAuthUserResolver(),
+      revokeUserSessions: createNeonAuthSessionRevoker(),
+      sendInvitation: localInvitation,
+      resendInvitation: localInvitation,
+    },
+    updateStaffRoles: async (input, actor) =>
+      (await loadAdminData()).updateStaffRoles(input, actor),
+    setStaffActive: async (input, actor) => (await loadAdminData()).setStaffActive(input, actor),
     writeAudit: async (input) => {
+      const audit = await loadAudit();
       await audit.writeAudit({
         actor: input.actor,
         permission: input.permission,
@@ -678,6 +911,10 @@ async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
       });
     },
   };
+}
+
+async function defaultDependencies(): Promise<StaffLifecycleDependencies> {
+  return createDefaultStaffLifecycleDependencies();
 }
 
 let defaultService: ReturnType<typeof createStaffLifecycleService> | null = null;

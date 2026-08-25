@@ -5,6 +5,18 @@ import crypto from "node:crypto";
 export type NormalizedWoztellEvent = {
   direction: "inbound" | "outbound";
   externalMessageId: string;
+  /**
+   * The id this event WOULD have synthesized before the content digest was
+   * added, or null when WOZTELL supplied a real messageId (in which case the
+   * id never changed and there is nothing to reconcile).
+   *
+   * Rows imported before that change are already stored under this key, so
+   * ingest has to treat a legacy hit as "already have it" -- otherwise the
+   * first import after deploying would re-insert every one of them under its
+   * new id and show the whole inbox twice. See the guard in
+   * woztell-ingest.server.ts.
+   */
+  legacyExternalMessageId: string | null;
   fromPhone: string | null;
   toPhone: string | null;
   timestamp: string;
@@ -220,6 +232,37 @@ function eventTimestamp(value: unknown) {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
+/**
+ * Deterministic JSON: object keys sorted, so two records holding the same
+ * message hash identically no matter what order the two ingest surfaces
+ * happened to build them in.
+ */
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  const entries = Object.entries(value as AnyRecord)
+    .filter(([, entry]) => entry !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(",")}}`;
+}
+
+/**
+ * A short fingerprint of the message body, used to tell apart two events that
+ * share a member, a direction, a type AND a timestamp.
+ *
+ * Hashes `data` rather than just `data.text` so media messages -- whose content
+ * lives in a url/id field and whose text is null -- are discriminated too.
+ * `data` is the one field both ingest surfaces read from the identical
+ * envelope, which is what keeps the digest stable across them.
+ */
+function contentDigest(data: AnyRecord) {
+  return crypto.createHash("sha256").update(canonicalJson(data)).digest("hex").slice(0, 12);
+}
+
 export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEvent {
   const wrappedEvent = record(payload.messageEvent);
   const source = Object.keys(wrappedEvent).length > 0 ? wrappedEvent : payload;
@@ -237,13 +280,27 @@ export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEven
   );
   const messageType = stringOrNull(source.type) ?? "UNKNOWN";
   const timestampRaw = source.timestamp ?? payload.timestamp;
-  const externalMessageId =
-    stringOrNull(source.messageId ?? payload.messageId) ??
-    `${direction}:${channelId ?? "channel"}:${memberId ?? "member"}:${stringOrNull(timestampRaw) ?? "time"}:${messageType}`;
+  const providedMessageId = stringOrNull(source.messageId ?? payload.messageId);
+
+  // WOZTELL omits messageId on plenty of events -- inbound webhook payloads
+  // routinely arrive without one -- so the id has to be synthesized. It lands
+  // in whatsapp_messages.external_message_id, which is UNIQUE and written with
+  // ON CONFLICT DO NOTHING, so two DISTINCT messages sharing a synthesized id
+  // do not error: the second is silently discarded and counted as a duplicate.
+  //
+  // The key used to stop at the timestamp, and WOZTELL timestamps are unix
+  // SECONDS. A customer sending two lines in a row, or a bot answering in two
+  // bubbles, produced one id for two messages -- so the inbox quietly held one
+  // fewer message than the WOZTELL console. The content digest is what makes
+  // the key discriminate; everything before it is kept so the id still reads as
+  // the message it belongs to.
+  const legacyKey = `${direction}:${channelId ?? "channel"}:${memberId ?? "member"}:${stringOrNull(timestampRaw) ?? "time"}:${messageType}`;
+  const externalMessageId = providedMessageId ?? `${legacyKey}:${contentDigest(data)}`;
 
   return {
     direction,
     externalMessageId,
+    legacyExternalMessageId: providedMessageId ? null : legacyKey,
     fromPhone: stringOrNull(source.from),
     toPhone: stringOrNull(source.to),
     timestamp: eventTimestamp(timestampRaw),
@@ -304,13 +361,50 @@ export async function sendWoztellResponse(input: {
       return { ok: false, error: "WOZTELL_INVALID_RESPONSE", status: res.status };
     }
   }
-  if (res.ok) return { ok: true, body, status: res.status };
+  const envelope = record(body);
 
-  const providerError =
-    body && typeof body === "object" && "error" in body
-      ? String((body as Record<string, unknown>).error).slice(0, 500)
-      : `WOZTELL_HTTP_${res.status}`;
-  return { ok: false, error: providerError, status: res.status };
+  // `ok` is WOZTELL's own verdict and it is the authoritative one. A refusal
+  // normally arrives as HTTP 500 -- that status is its documented "bot found an
+  // error before sending the response out", NOT a crash -- but reading the
+  // status alone would stamp a 2xx carrying ok:0 as 'sent' and show staff a
+  // reply that never left the building.
+  const refused = envelope.ok === 0;
+  if (res.ok && !refused) return { ok: true, body, status: res.status };
+
+  // WOZTELL puts the reason in `err`, with `err_code` on some failures:
+  //   { "ok": 0, "err": "User is not authorized." }
+  // This used to read `error`, which WOZTELL never sends. The lookup therefore
+  // never matched and every refusal -- a wrong token scope, an unknown channel,
+  // a number with no WhatsApp account -- collapsed into the bare
+  // "WOZTELL_HTTP_500", discarding the one sentence that says what to fix.
+  // `error` is still accepted in case a surface does use it.
+  // https://doc.woztell.com/docs/reference/bot-api-reference/
+  const rawReason = envelope.err ?? envelope.error;
+  const reason =
+    rawReason === null || rawReason === undefined
+      ? null
+      : typeof rawReason === "object"
+        ? JSON.stringify(rawReason)
+        : String(rawReason);
+  const code = envelope.err_code ?? envelope.errCode;
+  const providerError = reason
+    ? (code === null || code === undefined ? reason : `WOZTELL_${String(code)}: ${reason}`).slice(
+        0,
+        500,
+      )
+    : `WOZTELL_HTTP_${res.status}`;
+
+  // The body rides along so the send route can persist it into
+  // whatsapp_messages.payload -- without it a failed row records the summary
+  // and loses the provider's own account of what happened.
+  //
+  // `refused` reports the one thing the HTTP status cannot: that WOZTELL
+  // decided against sending rather than failing somewhere mid-flight. Both
+  // arrive as 500, and campaign delivery has to tell them apart -- an
+  // ambiguous failure is terminal there, because the customer may already have
+  // the message, while a refusal is safe to retry. Only an explicit ok:0
+  // counts, so anything less certain stays ambiguous.
+  return { ok: false, error: providerError, status: res.status, body, refused };
 }
 
 export { deliverWoztellCampaign } from "./campaign-delivery.server.ts";

@@ -29,17 +29,22 @@ import {
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
   fetchAdminConversations,
+  fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
   runAdminWoztellBackfill,
   sendAdminConversationReply,
+  sendAdminConversationTemplate,
   updateAdminConversation,
 } from "@/lib/neon/admin-data";
+import { canReplyToConversation, conversationAttention } from "@/lib/neon/admin-workflow";
+import { describeTemplateParameters } from "@/lib/woztell/template-preview";
 import type {
   AdminAgentRow,
   AdminConversationAiAssist,
   AdminConversationDetail,
   AdminConversationMessageRow,
   AdminConversationRow,
+  AdminWhatsappTemplateRow,
 } from "@/lib/neon/admin-data.types";
 
 const conversationStatusOptions = [
@@ -56,6 +61,9 @@ const statusLabels: Record<string, string> = {
 
 const inboxStatusFilterOptions = [
   { value: "all", label: "所有狀態" },
+  // Not a stored status -- derived from who spoke last. Listed first because it
+  // is the only entry that answers "what do I have to do now".
+  { value: "awaiting", label: "待回覆" },
   { value: "open", label: "開啟" },
   { value: "pending", label: "待跟進" },
   { value: "closed", label: "已關閉" },
@@ -73,7 +81,9 @@ const replyErrorLabels: Record<string, string> = {
   CONTACT_OPTED_OUT: "客戶已拒收 WhatsApp 訊息。",
   OUTSIDE_24_HOUR_WINDOW: "超過 24 小時回覆窗口",
   CONVERSATION_NOT_FOUND: "找不到 WhatsApp 對話",
-  MISSING_WOZTELL_MEMBER_ID: "缺少 Woztell member ID",
+  MISSING_WOZTELL_MEMBER_ID: "此客戶尚未連接 WhatsApp 帳戶，請聯絡技術支援。",
+  TEMPLATE_NOT_FOUND: "找不到此範本，可能已被停用，請重新整理後再試。",
+  MESSAGE_CREATE_FAILED: "訊息未能建立，請再試一次。",
 };
 
 // The open conversation and the inbox filters live in the URL, so a chat is
@@ -106,6 +116,8 @@ function AdminWhatsapp() {
   const isDesktop = useDesktopBreakpoint();
   const [rows, setRows] = useState<AdminConversationRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
+  const [templates, setTemplates] = useState<AdminWhatsappTemplateRow[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
   const [woztellEnabled, setWoztellEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
@@ -306,6 +318,18 @@ function AdminWhatsapp() {
       })
       .catch((err) => {
         if (!cancelled) setError(errorText(err));
+      });
+
+    // Not fatal if this fails or comes back empty -- TemplateSendPanel already
+    // has its own "no templates configured" state, so a failed fetch just
+    // falls back to that same message instead of blocking the inbox.
+    fetchAdminWhatsappTemplates()
+      .then((data) => {
+        if (!cancelled) setTemplates(data as AdminWhatsappTemplateRow[]);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTemplatesLoading(false);
       });
 
     fetchAdminWoztellStatus()
@@ -549,6 +573,41 @@ function AdminWhatsapp() {
     }
   }
 
+  // Deliberately does not call replyAvailability -- an approved template is
+  // exactly the WhatsApp-compliant way to message a customer once the 24-hour
+  // window (which replyAvailability guards) has closed, so gating this on the
+  // same check would defeat the point of offering it.
+  async function sendTemplate(templateId: string) {
+    if (!detail || detail.id !== selectedIdRef.current) {
+      toast.error("請先選擇對話");
+      return;
+    }
+
+    const targetId = detail.id;
+    setMutatingAction("template");
+    setReplyError(null);
+    try {
+      const result = await sendAdminConversationTemplate({
+        data: { conversationId: targetId, templateId },
+      });
+      assertNoMutationError(result);
+      await refreshConversations();
+      if (!canApplyConversationDetail(targetId)) return;
+
+      const refreshed = await loadConversationDetail(targetId);
+      if (refreshed && canApplyConversationDetail(targetId)) toast.success("範本已送出");
+    } catch (err) {
+      if (!canApplyConversationDetail(targetId)) return;
+      const message = formatReplyError(errorText(err));
+      setReplyError(message);
+      toast.error(message);
+      await refreshConversations();
+      await loadConversationDetail(targetId, { background: true });
+    } finally {
+      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
+    }
+  }
+
   const isMutating = mutatingAction !== null;
   // The inbox had no search and no status filter at all -- the toolbar's filter
   // slot held two static badges -- so finding a conversation meant scrolling a
@@ -557,7 +616,18 @@ function AdminWhatsapp() {
     if (!rows) return null;
     const needle = inboxQuery.trim().toLowerCase();
     return rows.filter((row) => {
-      if (inboxStatus !== "all" && row.status !== inboxStatus) return false;
+      if (inboxStatus === "awaiting") {
+        if (
+          !conversationAttention({
+            lastDirection: row.last_direction,
+            lastInboundAt: row.last_inbound_at,
+          }).awaitingReply
+        ) {
+          return false;
+        }
+      } else if (inboxStatus !== "all" && row.status !== inboxStatus) {
+        return false;
+      }
       if (!needle) return true;
       return [row.name, row.phone, row.last_text].some((value) =>
         (value ?? "").toLowerCase().includes(needle),
@@ -565,6 +635,21 @@ function AdminWhatsapp() {
     });
   }, [inboxQuery, inboxStatus, rows]);
   const hasInboxFilters = inboxQuery.trim() !== "" || inboxStatus !== "all";
+
+  // Counted over every loaded conversation rather than the filtered view: this
+  // is the number staff use to decide what to look at, so it must not change
+  // when they narrow the list to look at something else.
+  const awaitingCount = useMemo(
+    () =>
+      (rows ?? []).filter(
+        (row) =>
+          conversationAttention({
+            lastDirection: row.last_direction,
+            lastInboundAt: row.last_inbound_at,
+          }).awaitingReply,
+      ).length,
+    [rows],
+  );
 
   const replyBody = selectedId ? (replyDrafts[selectedId] ?? "") : "";
   const setReplyBody = useCallback((value: string) => {
@@ -768,6 +853,9 @@ function AdminWhatsapp() {
             <ConversationList
               rows={filteredRows}
               totalLoaded={rows?.length ?? 0}
+              awaitingCount={awaitingCount}
+              showingAwaitingOnly={inboxStatus === "awaiting"}
+              onShowAwaiting={() => setWhatsappSearch({ status: "awaiting" })}
               hasFilters={hasInboxFilters}
               onClearFilters={() => {
                 setQueryDraft("");
@@ -792,11 +880,15 @@ function AdminWhatsapp() {
               replyError={replyError}
               aiAssist={aiAssist}
               woztellEnabled={woztellEnabled}
+              templates={templates}
+              templatesLoading={templatesLoading}
               disabled={isMutating}
               savingConversation={mutatingAction === "conversation"}
               sendingReply={mutatingAction === "reply"}
+              sendingTemplate={mutatingAction === "template"}
               onReplyBodyChange={setReplyBody}
               onSendReply={sendReply}
+              onSendTemplate={sendTemplate}
               onRequestClearOptOut={() => setClearOptOutOpen(true)}
               onStatusChange={(status) =>
                 detail
@@ -835,11 +927,15 @@ function AdminWhatsapp() {
           replyError={replyError}
           aiAssist={aiAssist}
           woztellEnabled={woztellEnabled}
+          templates={templates}
+          templatesLoading={templatesLoading}
           disabled={isMutating}
           savingConversation={mutatingAction === "conversation"}
           sendingReply={mutatingAction === "reply"}
+          sendingTemplate={mutatingAction === "template"}
           onReplyBodyChange={setReplyBody}
           onSendReply={sendReply}
+          onSendTemplate={sendTemplate}
           onRequestClearOptOut={() => setClearOptOutOpen(true)}
           onStatusChange={(status) =>
             detail
@@ -912,6 +1008,9 @@ const INBOX_ROW_LIMIT = 100;
 function ConversationList({
   rows,
   totalLoaded,
+  awaitingCount,
+  showingAwaitingOnly,
+  onShowAwaiting,
   hasFilters,
   onClearFilters,
   selectedId,
@@ -920,6 +1019,9 @@ function ConversationList({
 }: {
   rows: AdminConversationRow[] | null;
   totalLoaded: number;
+  awaitingCount: number;
+  showingAwaitingOnly: boolean;
+  onShowAwaiting: () => void;
   hasFilters: boolean;
   onClearFilters: () => void;
   selectedId: string | null;
@@ -951,6 +1053,22 @@ function ConversationList({
 
   return (
     <div className="divide-y">
+      {/* The one number staff need before anything else: how many people are
+          waiting on us. It doubles as the control that narrows the list to
+          them, because reading a count you then have to hunt through is barely
+          better than not having it. Hidden once that filter is already on --
+          at that point every visible row is one of these. */}
+      {awaitingCount > 0 && !showingAwaitingOnly ? (
+        <button
+          type="button"
+          onClick={onShowAwaiting}
+          className="flex w-full items-center gap-2 bg-amber-100 px-4 py-2.5 text-left text-sm font-semibold text-amber-950 transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-950/80"
+        >
+          <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{awaitingCount} 個對話待回覆</span>
+          <span className="ml-auto text-xs font-medium underline">只看待回覆</span>
+        </button>
+      ) : null}
       {/* The inbox silently capped at 100 with no count anywhere, so a busy day
           looked identical to a quiet one and older conversations simply did not
           exist as far as the UI was concerned. */}
@@ -959,47 +1077,103 @@ function ConversationList({
         {hasFilters ? `（已載入 ${totalLoaded} 個）` : ""}
         {totalLoaded >= INBOX_ROW_LIMIT ? `，收件匣上限為最近 ${INBOX_ROW_LIMIT} 個` : ""}
       </p>
-      {rows.map((conversation) => (
-        <button
-          key={conversation.id}
-          type="button"
-          className={[
-            "grid w-full gap-2 px-4 py-3 text-left transition hover:bg-muted/50",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-            selectedId === conversation.id ? "bg-muted/70" : "",
-          ].join(" ")}
-          aria-current={selectedId === conversation.id ? "true" : undefined}
-          onClick={() => onOpen(conversation.id)}
-        >
-          <span className="flex items-start justify-between gap-3">
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">
-                {conversation.name ?? "WhatsApp 客戶"}
+      {rows.map((conversation) => {
+        const attention = conversationAttention({
+          lastDirection: conversation.last_direction,
+          lastInboundAt: conversation.last_inbound_at,
+        });
+        const waited = formatDuration(attention.waitedMs);
+        return (
+          <button
+            key={conversation.id}
+            type="button"
+            className={[
+              "grid w-full gap-2 border-l-2 px-4 py-3 text-left transition hover:bg-muted/50",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              // The accent bar is the thing that makes a queue scannable at a
+              // glance -- badges alone all sit at different x positions once
+              // names wrap, so the eye has to read each row to find the ones
+              // that need work.
+              attention.awaitingReply
+                ? "border-l-amber-500 bg-amber-50/50 dark:bg-amber-950/20"
+                : "border-l-transparent",
+              selectedId === conversation.id ? "bg-muted/70" : "",
+            ].join(" ")}
+            aria-current={selectedId === conversation.id ? "true" : undefined}
+            onClick={() => onOpen(conversation.id)}
+          >
+            <span className="flex items-start justify-between gap-3">
+              <span className="flex min-w-0 items-start gap-2">
+                {attention.awaitingReply ? (
+                  <span
+                    className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500"
+                    aria-hidden="true"
+                  />
+                ) : null}
+                <span className="min-w-0">
+                  <span
+                    className={[
+                      "block truncate text-sm",
+                      attention.awaitingReply ? "font-bold" : "font-semibold",
+                    ].join(" ")}
+                  >
+                    {conversation.name ?? "WhatsApp 客戶"}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {conversation.phone ?? "未有電話"}
+                  </span>
+                </span>
               </span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {conversation.phone ?? "未有電話"}
+              <StatusBadge status={conversation.status} />
+            </span>
+
+            <span
+              className={[
+                "line-clamp-2 text-sm",
+                attention.awaitingReply ? "text-foreground" : "text-muted-foreground",
+              ].join(" ")}
+            >
+              {/* last_text is only ever the TEXT of the latest message. A
+                  photo/voice/sticker message leaves it null too, which used to
+                  render as "未有訊息內容" (no message at all) -- indistinguishable
+                  from a conversation with nothing to see, so a real unread
+                  message could read as an empty row in a busy queue. Mirrors
+                  the same fallback MessageTimeline already uses for a message
+                  with no text. */}
+              {conversation.last_text ??
+                (conversation.last_message_at ? "（非文字訊息）" : "未有訊息內容")}
+            </span>
+
+            <span className="flex flex-wrap items-center gap-2">
+              {attention.awaitingReply ? (
+                <Badge className="border-transparent bg-amber-500 text-amber-950 hover:bg-amber-500">
+                  待回覆{waited ? ` · 已等 ${waited}` : ""}
+                </Badge>
+              ) : (
+                <Badge variant="outline">{formatDirection(conversation.last_direction)}</Badge>
+              )}
+
+              {/* Only worth showing while someone is actually waiting: on a
+                  conversation we already answered, the window is not a task. */}
+              {attention.awaitingReply && attention.windowState === "expired" ? (
+                <Badge variant="outline" className="border-destructive/40 text-destructive">
+                  已過 24 小時回覆窗口
+                </Badge>
+              ) : null}
+              {attention.awaitingReply && attention.windowState === "closing" ? (
+                <Badge variant="destructive">
+                  回覆窗口剩 {formatDuration(attention.windowRemainingMs)}
+                </Badge>
+              ) : null}
+
+              {conversation.opted_out_whatsapp ? <Badge variant="destructive">已拒收</Badge> : null}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {formatDate(conversation.last_message_at)}
               </span>
             </span>
-            <StatusBadge status={conversation.status} />
-          </span>
-
-          <span className="line-clamp-2 text-sm text-muted-foreground">
-            {conversation.last_text ?? "未有訊息內容"}
-          </span>
-
-          <span className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline">{formatDirection(conversation.last_direction)}</Badge>
-            {conversation.opted_out_whatsapp ? (
-              <Badge variant="destructive">已拒收</Badge>
-            ) : (
-              <Badge variant="secondary">可聯絡</Badge>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">
-              {formatDate(conversation.last_message_at)}
-            </span>
-          </span>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1014,11 +1188,15 @@ function ConversationWorkspace({
   replyError,
   aiAssist,
   woztellEnabled,
+  templates,
+  templatesLoading,
   disabled,
   savingConversation,
   sendingReply,
+  sendingTemplate,
   onReplyBodyChange,
   onSendReply,
+  onSendTemplate,
   onStatusChange,
   onAgentChange,
   onRequestClearOptOut,
@@ -1032,11 +1210,15 @@ function ConversationWorkspace({
   replyError: string | null;
   aiAssist: AdminConversationAiAssist | null;
   woztellEnabled: boolean | null;
+  templates: AdminWhatsappTemplateRow[];
+  templatesLoading: boolean;
   disabled: boolean;
   savingConversation: boolean;
   sendingReply: boolean;
+  sendingTemplate: boolean;
   onReplyBodyChange: (value: string) => void;
   onSendReply: () => void;
+  onSendTemplate: (templateId: string) => Promise<void>;
   onStatusChange: (status: string) => void;
   onAgentChange: (assignedAgentId: string | null) => void;
   onRequestClearOptOut: () => void;
@@ -1062,10 +1244,19 @@ function ConversationWorkspace({
   const availability = replyAvailability(detail, woztellEnabled);
   const canSendReply = !disabled && !availability.reason && Boolean(replyBody.trim());
   const windowRemaining = replyWindowRemaining(detail.last_inbound_at);
+  // Only the window-closed case routes to a template: the other block reasons
+  // (integration disabled, opted out, no Woztell member id) would fail a
+  // template send for the exact same underlying reason, so offering the
+  // picker there would just be a second dead end instead of one.
+  const showTemplateSend = availability.code === "OUTSIDE_24_HOUR_WINDOW";
 
   return (
     <div className="flex min-h-[32rem] flex-col">
-      <header className="border-b p-4">
+      {/* Plain divs, not <header>/<footer>: nested inside AdminShell's own
+          <header> and the outer site <header>/<footer>, the semantic tags
+          produced three "banner" and two "contentinfo" landmarks on one page,
+          which a screen reader's landmark navigation cannot disambiguate. */}
+      <div className="border-b p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -1129,11 +1320,11 @@ function ConversationWorkspace({
         {savingConversation ? (
           <p className="mt-3 text-xs text-muted-foreground">正在儲存對話設定…</p>
         ) : null}
-      </header>
+      </div>
 
       <MessageTimeline messages={detail.messages} />
 
-      <footer className="border-t p-4">
+      <div className="border-t p-4">
         <AiAssistPanel
           aiAssist={aiAssist}
           loading={aiAssistLoading}
@@ -1144,16 +1335,23 @@ function ConversationWorkspace({
             onReplyBodyChange(value);
           }}
         />
-        <div
-          className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
-          title="WOZTELL_ENABLED"
-        >
+        <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           回覆只可在客戶最後一次來訊後 24 小時內發送。
           {windowRemaining ? <span className="block">{windowRemaining}</span> : null}
           {availability.reason ? (
             <span className="block font-medium text-destructive">{availability.reason}</span>
           ) : null}
         </div>
+        {showTemplateSend ? (
+          <TemplateSendPanel
+            key={detail.id}
+            templates={templates}
+            loading={templatesLoading}
+            disabled={disabled}
+            sending={sendingTemplate}
+            onSend={onSendTemplate}
+          />
+        ) : null}
         {replyError ? (
           <p
             role="alert"
@@ -1193,7 +1391,7 @@ function ConversationWorkspace({
             </Button>
           </div>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
@@ -1240,6 +1438,108 @@ function AiAssistPanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Offered in place of the free-text composer once the 24-hour window has
+ * closed. Backed by the same whatsapp_templates rows the 推廣活動 campaign
+ * picker uses (fetchAdminWhatsappTemplates), so a template only appears here
+ * once it is genuinely approved and configured -- no more pointing an agent at
+ * a template name that does not exist anywhere in the system.
+ */
+function TemplateSendPanel({
+  templates,
+  loading,
+  disabled,
+  sending,
+  onSend,
+}: {
+  templates: AdminWhatsappTemplateRow[];
+  loading: boolean;
+  disabled: boolean;
+  sending: boolean;
+  onSend: (templateId: string) => Promise<void>;
+}) {
+  const [templateId, setTemplateId] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const selected = templates.find((template) => template.id === templateId) ?? null;
+
+  if (loading) {
+    return (
+      <div className="mb-3 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+        正在載入已審批範本…
+      </div>
+    );
+  }
+
+  if (templates.length === 0) {
+    return (
+      <div className="mb-3 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+        目前未有已審批範本，請聯絡技術支援新增範本，或改用其他方式聯絡客戶。
+      </div>
+    );
+  }
+
+  const parameters = selected ? describeTemplateParameters(selected.components) : [];
+
+  return (
+    <div className="mb-3 grid gap-2 rounded-md border p-3">
+      <p className="text-xs font-medium">傳送已審批範本</p>
+      <Select value={templateId} onValueChange={setTemplateId} disabled={disabled || sending}>
+        <SelectTrigger aria-label="選擇範本">
+          <SelectValue placeholder="選擇範本" />
+        </SelectTrigger>
+        <SelectContent>
+          {templates.map((template) => (
+            <SelectItem key={template.id} value={template.id}>
+              {template.element_name}（{template.language_code}）
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {/* No approved body text to preview (see template-preview.ts) -- this is
+          every value the system will substitute into it, which is the closest
+          staff can get to knowing what the customer will actually receive. */}
+      {selected && parameters.length > 0 ? (
+        <dl className="grid gap-1 text-xs text-muted-foreground">
+          {parameters.map((line) => (
+            <p key={line.label}>
+              {line.label}：{line.value}
+            </p>
+          ))}
+        </dl>
+      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={!selected || disabled || sending}
+        onClick={() => setConfirmOpen(true)}
+      >
+        <Send className="h-4 w-4" />
+        {sending ? "傳送中…" : "傳送範本"}
+      </Button>
+      <AdminConfirmDialog
+        open={confirmOpen}
+        title="確認傳送範本？"
+        description={
+          selected
+            ? `將向客戶傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
+            : "將向客戶傳送已審批範本。範本一經傳送即無法收回。"
+        }
+        confirmLabel="傳送"
+        isPending={sending}
+        onOpenChange={setConfirmOpen}
+        onConfirm={() => {
+          if (!selected) return;
+          void (async () => {
+            await onSend(selected.id);
+            setConfirmOpen(false);
+          })();
+        }}
+      />
+    </div>
   );
 }
 
@@ -1426,23 +1726,32 @@ function statusOptionsFor(status: string) {
   return [{ value: status, label: statusLabel(status) }, ...conversationStatusOptions];
 }
 
+// Delegates to canReplyToConversation -- the same guard /api/admin/woztell/send
+// enforces server-side -- instead of re-deriving the same checks with their own
+// reason strings. The duplication used to let the two drift: this pre-flight
+// copy leaked the raw env-var name and the raw Woztell field name straight
+// into the reply footer, while the real send path already had a proper
+// Chinese label for the same failure in replyErrorLabels above.
 function replyAvailability(
   detail: AdminConversationDetail,
   woztellEnabled: boolean | null,
-): { reason: string | null } {
-  if (woztellEnabled === null) return { reason: "正在確認 WOZTELL_ENABLED" };
-  if (!woztellEnabled) return { reason: "WOZTELL_ENABLED 未啟用" };
-  if (detail.opted_out_whatsapp) return { reason: "客戶已 Opt-out WhatsApp" };
-  if (!detail.woztell_member_id) return { reason: "缺少 Woztell member ID" };
-  if (!isWithin24Hours(detail.last_inbound_at)) return { reason: "超過 24 小時回覆窗口" };
-  return { reason: null };
-}
-
-function isWithin24Hours(value: string | null) {
-  if (!value) return false;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return false;
-  return Date.now() - date.getTime() <= 24 * 60 * 60 * 1000;
+): { reason: string | null; code: string | null } {
+  if (woztellEnabled === null) {
+    return { reason: "正在確認 WhatsApp 發送狀態…", code: "LOADING" };
+  }
+  if (!detail.woztell_member_id) {
+    return {
+      reason: replyErrorLabels.MISSING_WOZTELL_MEMBER_ID,
+      code: "MISSING_WOZTELL_MEMBER_ID",
+    };
+  }
+  const guard = canReplyToConversation({
+    woztellEnabled,
+    optedOut: detail.opted_out_whatsapp === true,
+    lastInboundAt: detail.last_inbound_at,
+  });
+  if (!guard.ok) return { reason: formatReplyError(guard.reason), code: guard.reason };
+  return { reason: null, code: null };
 }
 
 function useDesktopBreakpoint() {
@@ -1471,6 +1780,21 @@ function formatDirection(direction: string | null) {
   if (direction === "inbound") return "客戶";
   if (direction === "outbound") return "客服";
   return "未有方向";
+}
+
+/**
+ * Coarse, glanceable durations -- "3 小時", not "3 小時 12 分鐘". This is read
+ * while scanning a queue, where the extra precision costs reading time and
+ * changes no decision.
+ */
+function formatDuration(ms: number | null) {
+  if (ms === null) return null;
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) return "少於 1 分鐘";
+  if (minutes < 60) return `${minutes} 分鐘`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} 小時`;
+  return `${Math.floor(hours / 24)} 日`;
 }
 
 function formatDate(value: string | null) {
