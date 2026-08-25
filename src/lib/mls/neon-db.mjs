@@ -50,11 +50,61 @@ function rowValues(row) {
   ];
 }
 
+function latestSyncRunFromRow(row) {
+  if (row == null || typeof row !== "object" || Array.isArray(row)) {
+    throw new TypeError("listing_sync_runs returned a malformed latest-run row");
+  }
+  if (row.mode !== "shadow" && row.mode !== "publish") {
+    throw new TypeError("listing_sync_runs returned an unsupported run mode");
+  }
+  return {
+    id: row.id,
+    scheduledFor: row.scheduled_for,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at ?? null,
+    mode: row.mode,
+    status: row.status,
+    sourceStatus: row.source_status,
+    counts: row.counts,
+    failureCode: row.failure_code ?? null,
+    failureSummary: row.failure_summary ?? null,
+  };
+}
+
 export function createNeonMlsDb(sql) {
   return {
     async listEstateIdsBySlug() {
       const rows = await sql.query("SELECT id, slug FROM estates");
       return new Map(rows.map((row) => [row.slug, row.id]));
+    },
+
+    async getLatestSyncRun() {
+      const rows = await sql.query(`
+        SELECT
+          id,
+          scheduled_for::text AS scheduled_for,
+          to_char(
+            started_at AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+          ) AS started_at,
+          CASE
+            WHEN finished_at IS NULL THEN NULL
+            ELSE to_char(
+              finished_at AT TIME ZONE 'UTC',
+              'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+            )
+          END AS finished_at,
+          mode,
+          status,
+          source_status,
+          counts,
+          failure_code,
+          failure_summary
+        FROM listing_sync_runs
+        ORDER BY started_at DESC
+        LIMIT 1
+      `);
+      return rows.length === 0 ? null : latestSyncRunFromRow(rows[0]);
     },
 
     async upsertProperties(rows) {

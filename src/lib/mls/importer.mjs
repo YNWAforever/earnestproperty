@@ -1,16 +1,9 @@
-import {
-  buildPagedListingUrl,
-  parseListingDetail,
-  parseListingIndex,
-  parseMaxListingPage,
-} from "./parse-old-site.mjs";
+import { parseListingDetail } from "./parse-old-site.mjs";
 import { normalizeListingDetail } from "./normalize-old-site.mjs";
+import { DEFAULT_OLD_SITE_SEED_URLS, discoverOldSitePages } from "./sources/old-site.mjs";
 
-export const DEFAULT_SEED_URLS = [
-  "https://www.earnestproperty.com/property/c1",
-  "https://www.earnestproperty.com/property/c2",
-  "https://www.earnestproperty.com/property/c5",
-];
+export const DEFAULT_SEED_URLS = DEFAULT_OLD_SITE_SEED_URLS.map(({ url }) => url);
+export { DEFAULT_OLD_SITE_SEED_URLS };
 
 function unique(values) {
   return [...new Set(values.filter(Boolean))];
@@ -23,21 +16,7 @@ function legacyIdFromUrl(url) {
 export function createMlsImporter({ fetchText, db, now = () => new Date() }) {
   return {
     async discover(seedUrls = DEFAULT_SEED_URLS, { maxPages = 50 } = {}) {
-      const discovered = [];
-
-      for (const seedUrl of seedUrls) {
-        const firstHtml = await fetchText(seedUrl);
-        discovered.push(...parseListingIndex(firstHtml, seedUrl));
-
-        const maxPage = Math.min(parseMaxListingPage(firstHtml), maxPages);
-        for (let page = 2; page <= maxPage; page += 1) {
-          const pageUrl = buildPagedListingUrl(seedUrl, page);
-          const html = await fetchText(pageUrl);
-          discovered.push(...parseListingIndex(html, pageUrl));
-        }
-      }
-
-      return unique(discovered);
+      return discoverOldSitePages({ fetchText, seedUrls, maxPages });
     },
 
     async sync({

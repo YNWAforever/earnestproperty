@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /private/
+Allow: /
+
+User-agent: EarnestPropertyBot
+Disallow: /private/
+Disallow: /agent/540
+Allow: /agent/540
+Allow: /buy/
+Allow: /rent/
+Crawl-delay: 2.5

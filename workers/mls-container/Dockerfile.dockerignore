@@ -1,0 +1,16 @@
+.git
+.env*
+!.env.example
+node_modules
+dist
+build
+.next
+.output
+.vercel
+coverage
+.wrangler
+docs
+ops
+.superpowers
+artifacts
+workers/cron

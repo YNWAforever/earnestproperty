@@ -1,0 +1,7 @@
+[Unit]
+Description=RETIRED - Earnest MLS schedule moved to Cloudflare Workflow
+Documentation=../../docs/mls-production-activation.md
+RefuseManualStart=yes
+
+[Timer]
+Persistent=false

@@ -46,6 +46,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260802090000_listing_search_indexes.sql",
   "20260802100000_agent_specialties.sql",
   "20260816120000_staff_identity_actions.sql",
+  "20260817120000_dual_source_listing_sync.sql",
   "20260817130000_youtube_channel_sync.sql",
 ]);
 

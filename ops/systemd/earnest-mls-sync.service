@@ -1,0 +1,8 @@
+[Unit]
+Description=RETIRED - Earnest MLS execution moved to Cloudflare Workflow and Container
+Documentation=../../docs/mls-production-activation.md
+RefuseManualStart=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=no

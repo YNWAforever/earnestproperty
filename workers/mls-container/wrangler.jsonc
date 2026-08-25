@@ -1,0 +1,42 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "earnest-mls-container",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-21",
+  "workers_dev": false,
+  "preview_urls": false,
+  "containers": [
+    {
+      "class_name": "MlsRunContainer",
+      "image": "./Dockerfile",
+      "image_build_context": "../..",
+      "max_instances": 1,
+      "instance_type": "standard-1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "MLS_RUN_CONTAINER", "class_name": "MlsRunContainer" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MlsRunContainer"] }],
+  "workflows": [
+    {
+      "name": "earnest-mls-runner",
+      "binding": "MLS_RUN_WORKFLOW",
+      "class_name": "MlsRunWorkflow"
+    }
+  ],
+  "vars": {
+    "MLS_ENVIRONMENT": "production",
+    "MLS_SCHEDULED_MODE": "shadow",
+    "MLS_PUBLISH_ENABLED": "false",
+    "MLS_MEDIA_RIGHTS_CONFIRMED": "false",
+    "MLS_EVIDENCE_RETENTION_DAYS": "90",
+    "MLS_CRAWLER_CONTACT_URL": "https://www.earnestproperty.com/contact",
+    "MLS_MEDIA_ALLOWED_HOSTS": "imgs.property.hk,i1.28hse.com",
+    "CLOUDFLARE_ACCOUNT_ID": "e387dfbeded3deb5b8f0023a78a660b5",
+    "MLS_EVIDENCE_BUCKET": "earnest-mls-evidence",
+    "CLOUDFLARE_DEPLOYMENT_ID": "a03778f0-e273-48dd-9915-d5edcf224cbe"
+  }
+}

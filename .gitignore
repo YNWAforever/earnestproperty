@@ -43,6 +43,9 @@ supabase/.temp/
 # and individual licence numbers, plus ~37 MB of raw photos. Only the derived,
 # resized web assets under public/ belong in history.
 docs/client-feedback/
+artifacts/mls-sync/
+workers/mls-container/.dev.vars
+workers/mls-container/.wrangler/
 
 # Brainstorm session artifacts (superpowers visual companion)
 .superpowers/

@@ -3,6 +3,16 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "prettier": {
+    "overrides": [
+      {
+        "files": "workers/mls-container/*.jsonc",
+        "options": {
+          "trailingComma": "none"
+        }
+      }
+    ]
+  },
   "scripts": {
     "dev": "vite dev",
     "prebuild": "node scripts/check-required-env.mjs",
@@ -16,12 +26,13 @@
     "test:blog": "node --test src/routes/blog.routes.test.mjs",
     "test:videos": "node --test src/lib/video-presentation.test.mjs src/lib/video-tags.test.mjs src/routes/videos.contract.test.mjs",
     "test:homepage": "node --test src/components/site/SiteHeader.contract.test.mjs src/routes/homepage-copy.contract.test.mjs",
-    "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs",
+    "test:mls": "node --test src/lib/mls/mls-fixtures.test.mjs src/lib/mls/mls-schema.test.mjs src/lib/mls/source-contract.test.mjs src/lib/mls/parse-28hse.test.mjs src/lib/mls/source-adapters.test.mjs src/lib/mls/health.test.mjs src/lib/mls/reconcile.test.mjs src/lib/mls/neon-lock.test.mjs src/lib/mls/sync-repository.test.mjs src/lib/mls/media.test.mjs src/lib/mls/orchestrator.test.mjs src/lib/mls/reporting.test.mjs src/lib/media/vercel-blob.test.mjs src/routes/api.admin.media.upload.test.mjs src/lib/mls/ops-contract.test.mjs",
+    "test:mls:db": "node --test src/lib/mls/mls-db.integration.test.mjs",
     "test:listing-search": "node --test src/lib/neon/listing-search.contract.test.mjs",
     "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
     "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs",
     "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs",
-    "test:neon-auth": "node --test src/config/neon-auth.test.mjs src/config/neon-only.test.mjs && bun test src/auth.test.ts",
+    "test:neon-auth": "node --test src/config/neon-auth.test.mjs src/config/neon-only.test.mjs",
     "test:command-center": "node --test src/lib/neon/command-center.test.mjs src/lib/neon/admin-data.contract.test.mjs src/routes/admin.routes.test.mjs",
     "test:woztell": "node --test src/lib/woztell/woztell.test.mjs src/lib/woztell/woztell-history.test.mjs src/lib/neon/admin-workflow.test.mjs src/routes/admin.routes.test.mjs && bun test src/lib/woztell/template-preview.test.ts",
     "test:operations": "node --test src/lib/admin/operations/operations.test.mjs src/routes/admin.operations.test.mjs && bun test src/components/admin/operations/operations-components.test.tsx",
@@ -41,10 +52,17 @@
     "neon:migrate": "node scripts/neon/apply-migrations.mjs",
     "check:migration-drift": "node scripts/neon/check-migration-drift.mjs",
     "mls:import": "node scripts/old-site-migration/import.mjs",
-    "mls:sync": "node scripts/old-site-migration/import.mjs --max=200",
-    "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2"
+    "mls:legacy-sync": "node scripts/old-site-migration/import.mjs --max=200",
+    "mls:shadow": "node scripts/mls/sync.mjs --mode=shadow",
+    "mls:sync": "node scripts/mls/sync.mjs --mode=publish",
+    "mls:approve-baseline": "node scripts/mls/approve-baseline.mjs",
+    "mls:dry-run": "node scripts/old-site-migration/import.mjs --dry-run --max=10 --max-pages=2",
+    "test:mls:cloudflare": "bun test workers/mls-container/src/run-contract.test.ts workers/mls-container/src/container.test.ts workers/mls-container/src/workflow.test.ts && node --test workers/mls-container/container/*.test.mjs src/lib/mls/r2-reporting.test.mjs scripts/mls/sync.test.mjs",
+    "check:mls:cloudflare": "tsc --noEmit -p workers/mls-container/tsconfig.json && wrangler deploy --dry-run --config workers/mls-container/wrangler.jsonc"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1115.0",
+    "@cloudflare/containers": "0.3.7",
     "@cloudflare/vite-plugin": "^1.25.5",
     "@hookform/resolvers": "^5.2.2",
     "@neondatabase/auth-ui": "^0.2.1-beta",
@@ -97,6 +115,7 @@
     "react-hook-form": "^7.71.2",
     "react-resizable-panels": "^4.6.5",
     "recharts": "^2.15.4",
+    "sharp": "^0.34.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
@@ -106,6 +125,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260820.1",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^1.4.0",
     "@types/bun": "^1.3.14",
@@ -122,6 +142,7 @@
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "wrangler": "4.125.0"
   }
 }
