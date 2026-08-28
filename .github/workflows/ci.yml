@@ -1,0 +1,138 @@
+# P0 of the frontend revamp (docs/superpowers/plans/2026-08-28-frontend-revamp.md): the
+# first CI gate this repo has had beyond migration-drift.yml. Runs on every PR and push
+# to main so a regression is caught before merge instead of found in production.
+#
+# Two steps below are ratchets, not zero-defect gates, and seven test steps are marked
+# continue-on-error: all of that is pre-existing breakage recorded at P0 baseline
+# (docs/superpowers/reports/2026-08-28-revamp-baseline.md), not something this phase
+# fixes as a side effect. Each is commented with why. Raise a ratchet baseline, or drop
+# a continue-on-error, only when a PR's own description explains and justifies it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: npm ci
+
+      # Ratchet, not a zero-error gate. At P0, `npm run lint` reports 6185 problems
+      # across 350 files, 6182 of them "prettier/prettier" formatting drift (prettier
+      # is pinned ^3.7.3 but resolves 3.8.2; the repo hasn't been reformatted since).
+      # Reformatting all 350 files is a mechanical, out-of-scope diff for a phase whose
+      # own rule is "ships no behaviour change" -- this fails only if a PR adds MORE
+      # problems than the recorded baseline, real rule violations included.
+      - name: Lint (ratchet against recorded baseline)
+        env:
+          ESLINT_BASELINE: 6185
+        run: |
+          set +e
+          npx eslint . --format json > eslint-report.json
+          set -e
+          PROBLEM_COUNT=$(jq '[.[] | (.errorCount + .warningCount)] | add // 0' eslint-report.json)
+          echo "eslint reported $PROBLEM_COUNT problem(s); baseline is $ESLINT_BASELINE"
+          if [ "$PROBLEM_COUNT" -gt "$ESLINT_BASELINE" ]; then
+            npx eslint . || true
+            echo "::error::eslint problem count ($PROBLEM_COUNT) exceeds the recorded baseline ($ESLINT_BASELINE) -- this PR introduced new lint problems"
+            exit 1
+          fi
+
+      # Ratchet, not a zero-error gate. The P0 baseline measured 0 tsc errors (the
+      # CHANGELOG's older "56 errors" note is stale) -- this fails on any new error.
+      - name: Typecheck (ratchet against recorded baseline)
+        env:
+          TSC_BASELINE: 0
+        run: |
+          set +e
+          npx tsc --noEmit > tsc-output.txt 2>&1
+          set -e
+          cat tsc-output.txt
+          ERROR_COUNT=$(grep -c "error TS" tsc-output.txt || true)
+          echo "tsc reported $ERROR_COUNT error(s); baseline is $TSC_BASELINE"
+          if [ "$ERROR_COUNT" -gt "$TSC_BASELINE" ]; then
+            echo "::error::tsc error count ($ERROR_COUNT) exceeds the recorded baseline ($TSC_BASELINE) -- this PR introduced new type errors"
+            exit 1
+          fi
+
+      - run: npm run build
+
+      # Full non-":db" test:* matrix from package.json. The three ":db"-suffixed
+      # scripts (test:mls:db, test:control-plane:db, test:youtube-sync:db) need a
+      # live database and are intentionally excluded here -- see the P0 baseline
+      # report for what each script covers and its current pass/fail state.
+      - run: npm run test:corridor
+      - run: npm run test:seo
+
+      # Pre-existing failure: expects src/routes/api.youtube-sync.tsx; the actual
+      # route file has a different extension/name. See baseline report.
+      - run: npm run test:blog
+        continue-on-error: true
+
+      - run: npm run test:videos
+      - run: npm run test:homepage
+      - run: npm run test:mls
+      - run: npm run test:listing-search
+      - run: npm run test:cron
+
+      # Pre-existing failure: src/config/site.test.mjs "videos page orders CMS videos
+      # above listing videos" assertion. See baseline report.
+      - run: npm run test:contact
+        continue-on-error: true
+
+      # Pre-existing failure: estate-conversion.test.mjs "featured listings section
+      # should carry its eyebrow" assertion. See baseline report.
+      - run: npm run test:estate-conversion
+        continue-on-error: true
+
+      - run: npm run test:neon-auth
+      - run: npm run test:command-center
+      - run: npm run test:woztell
+      - run: npm run test:operations
+
+      # Pre-existing failure: MIGRATION_VERSIONS manifest is missing
+      # 20260822120000_whatsapp_audience_segment_link.sql. Real drift -- fix by
+      # updating the manifest, not by loosening this check. See baseline report.
+      - run: npm run test:control-plane
+        continue-on-error: true
+
+      # Pre-existing failure: admin-team.contract.test.mjs fixture dates
+      # (invitationExpiresAt 2026-08-17) are now in the past, so the computed
+      # invitation state legitimately differs from the hardcoded expectation.
+      # See baseline report.
+      - run: npm run test:team
+        continue-on-error: true
+
+      # Pre-existing failure: shares src/config/site.test.mjs with test:contact
+      # above (same video-ordering assertion). See baseline report.
+      - run: npm run test:property-experience
+        continue-on-error: true
+
+      # Pre-existing failure: ai-contract.test.mjs's secret-scan regex flags an
+      # error-message string in neon-lock.mjs that names an env var ("...is
+      # required") rather than leaking its value -- a false positive. See baseline
+      # report.
+      - run: npm run test:content-copilot
+        continue-on-error: true
+
+      - run: npm run test:cms
+      - run: npm run test:youtube-sync
+      - run: npm run test:migration
+      - run: npm run test:mls:cloudflare
