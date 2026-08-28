@@ -59,8 +59,8 @@ vercel.ts         Vercel config-as-TS: crons + redirects (not vercel.json)
   Never import one from a client component.
 - **Two-file DB boundary**: `x.ts` holds `createServerFn` wrappers (+ Zod
   `inputValidator`) and lazily `await import("./x.server")`; `x.server.ts` holds the
-  SQL. Types live in `x.types.ts`. Only `public-data.ts`, `admin-data.ts`,
-  `admin-cms.ts`, `content-copilot-admin.ts` define server functions.
+  SQL. Types live in `x.types.ts`. `public-data.ts`, `admin-data.ts`, `admin-cms.ts`,
+  `content-copilot-admin.ts`, and `admin-team.ts` define server functions.
 - **`.js` + `.d.ts` pairs** (`website-inquiry.js`, `property-decision.js`,
   `site-branches.js`): pure logic authored as plain JS so `node --test` `.mjs` tests
   import it with no build step. Import with the explicit `.js` extension.
