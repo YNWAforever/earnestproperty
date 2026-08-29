@@ -231,7 +231,13 @@ test("the listings route forwards the keyword it already validates", () => {
     route,
     /searchListings\(\{[\s\S]*?keyword: deps\.keyword\?\.trim\(\) \|\| undefined/,
   );
-  assert.match(route, /id="listing-keyword"/);
+  // Task 2 split the panel into a shared FilterFields component rendered
+  // once for the desktop sidebar and once inside the mobile sheet -- both
+  // copies are mounted simultaneously (desktop is `hidden lg:block`, not
+  // unmounted), so the id is prefixed per-surface to stay unique rather
+  // than the old bare "listing-keyword" literal.
+  assert.match(route, /const keywordId = `\$\{idPrefix\}-listing-keyword`;/);
+  assert.match(route, /id={keywordId}/);
   assert.match(route, /const \[keyword, setKeyword\] = useState\(initial\.keyword \?\? ""\)/);
   assert.match(route, /keyword: keyword\.trim\(\) \|\| undefined/);
   assert.doesNotMatch(
