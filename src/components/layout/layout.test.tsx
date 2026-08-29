@@ -231,6 +231,18 @@ describe("DataNote", () => {
     expect($("p").first().text()).toContain("2026年8月");
     expect($("p").last().text()).toBe("實際派位以教育局最新公布為準");
   });
+
+  test("renders children as the primary content, above the source attribution", () => {
+    const $ = render(
+      createElement(
+        DataNote,
+        { source: "教育局", "data-testid": "note" },
+        createElement("p", { "data-testid": "claim" }, "荃灣區 62 校網"),
+      ),
+    );
+    expect($('[data-testid="claim"]').text()).toBe("荃灣區 62 校網");
+    expect($('[data-testid="note"]').text()).toContain("資料來源");
+  });
 });
 
 describe("FreshnessStamp", () => {

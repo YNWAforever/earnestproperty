@@ -26,9 +26,9 @@ const VerificationBadge = React.forwardRef<
     {...props}
   >
     {verified ? (
-      <CheckCircle2 className="h-3 w-3" />
+      <CheckCircle2 aria-hidden="true" className="h-3 w-3" />
     ) : (
-      <HelpCircle className="h-3 w-3" />
+      <HelpCircle aria-hidden="true" className="h-3 w-3" />
     )}
     {verified ? "已核實" : "待核實"}
   </span>

@@ -13,7 +13,7 @@ export interface DataNoteProps
 }
 
 const DataNote = React.forwardRef<HTMLDivElement, DataNoteProps>(
-  ({ className, source, sourceUrl, asOf, caveat, ...props }, ref) => (
+  ({ className, source, sourceUrl, asOf, caveat, children, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -22,7 +22,8 @@ const DataNote = React.forwardRef<HTMLDivElement, DataNoteProps>(
       )}
       {...props}
     >
-      <p>
+      {children ? <div className="text-foreground">{children}</div> : null}
+      <p className={children ? "mt-2" : undefined}>
         資料來源：
         {sourceUrl ? (
           <a
