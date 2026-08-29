@@ -21,11 +21,13 @@ describe("formatHkd", () => {
     expect(formatHkd(1234.6)).toBe("$1,235");
   });
 
-  test("returns null for null, undefined, and non-finite input", () => {
+  test("returns null for null, undefined, zero, negative, and non-finite input", () => {
     expect(formatHkd(null)).toBeNull();
     expect(formatHkd(undefined)).toBeNull();
     expect(formatHkd(Number.NaN)).toBeNull();
     expect(formatHkd(Number.POSITIVE_INFINITY)).toBeNull();
+    expect(formatHkd(0)).toBeNull();
+    expect(formatHkd(-500)).toBeNull();
   });
 });
 

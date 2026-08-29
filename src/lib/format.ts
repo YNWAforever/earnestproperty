@@ -5,7 +5,7 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 export function formatHkd(amount: number | null | undefined): string | null {
-  if (!isFiniteNumber(amount)) return null;
+  if (!isFiniteNumber(amount) || amount <= 0) return null;
   return `$${Math.round(amount).toLocaleString(HK_NUMBER_LOCALE)}`;
 }
 
