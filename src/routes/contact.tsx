@@ -13,6 +13,7 @@ import { toWhatsAppHref } from "@/lib/contact-links";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
+import { AppImage } from "@/components/media/AppImage";
 
 const branchesSchema = {
   "@context": "https://schema.org",
@@ -115,12 +116,11 @@ function ContactPage() {
               className="overflow-hidden rounded-lg border border-border bg-card"
             >
               {branch.photo ? (
-                <img
+                <AppImage
                   src={branch.photo}
                   alt={`${branch.name}舖面`}
-                  loading="lazy"
-                  width={branch.photoWidth}
-                  height={branch.photoHeight}
+                  width={branch.photoWidth ?? 1600}
+                  height={branch.photoHeight ?? 1200}
                   className="h-64 w-full object-cover sm:h-72"
                 />
               ) : null}

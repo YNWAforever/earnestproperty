@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { MapPin, Phone, Mail } from "lucide-react";
+import { AppImage } from "@/components/media/AppImage";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import logoMark from "@/assets/logo-earnest-mark.png";
 
@@ -10,7 +11,7 @@ export function SiteFooter() {
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>
             <div className="flex items-center gap-2.5">
-              <img
+              <AppImage
                 src={logoMark}
                 alt=""
                 width={48}
