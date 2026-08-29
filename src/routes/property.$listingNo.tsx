@@ -171,12 +171,14 @@ function PropertyPage() {
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
 
   const isRent = property.deal_type === "rent";
+  const rentDisplay = formatHkd(Number(property.rent));
+  const saleDisplay = formatSaleDisplay(Number(property.price));
   const priceLabel = isRent
-    ? property.rent
-      ? `$${Number(property.rent).toLocaleString()} / 月`
+    ? rentDisplay
+      ? `${rentDisplay} / 月`
       : "—"
-    : property.price
-      ? `$${(Number(property.price) / 1_000_000).toFixed(2)}M`
+    : saleDisplay
+      ? saleDisplay
       : "—";
   const psf =
     property.price && property.saleable_area
@@ -396,12 +398,12 @@ function PropertyPage() {
           {priceLabel}
           {psf && !isRent ? (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              實呎 ${psf.toLocaleString()}
+              實呎 {formatHkd(psf)}
             </span>
           ) : null}
           {grossPsf && !isRent ? (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              · 建呎 ${grossPsf.toLocaleString()}
+              · 建呎 {formatHkd(grossPsf)}
             </span>
           ) : null}
         </p>
