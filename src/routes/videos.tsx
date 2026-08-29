@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ExternalLink, MessageCircle, PlayCircle, Search, Video } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -492,10 +493,9 @@ function VideoFrame({
             {thumbnailUrl && (
               /* alt="" because the button already carries the video's name; a
                  described thumbnail would announce the title twice. */
-              <img
+              <AppImage
                 src={thumbnailUrl}
                 alt=""
-                loading="lazy"
                 width={480}
                 height={360}
                 className="absolute inset-0 h-full w-full object-cover"

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowLeft, Bed, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
+import { AppImage } from "@/components/media/AppImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
@@ -75,20 +76,18 @@ function AgentProfilePage() {
         <section className="mt-7 grid gap-8 border-y py-8 md:grid-cols-[minmax(0,1fr)_240px]">
           <div className="flex min-w-0 flex-col gap-6 sm:flex-row">
             <div className="h-32 w-32 shrink-0 overflow-hidden rounded-lg bg-muted">
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={`${name} 個人相片`}
-                  loading="lazy"
-                  width={128}
-                  height={128}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                  <UserRound className="h-10 w-10" aria-hidden="true" />
-                </div>
-              )}
+              <AppImage
+                src={profile.avatar_url}
+                alt={`${name} 個人相片`}
+                width={128}
+                height={128}
+                className="h-full w-full object-cover"
+                fallback={
+                  <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                    <UserRound className="h-10 w-10" aria-hidden="true" />
+                  </div>
+                }
+              />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
@@ -210,10 +209,9 @@ function AgentListingCard({ listing }: { listing: ListingRow }) {
       className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">
-        <img
+        <AppImage
           src={img}
           alt={listing.title_zh}
-          loading="lazy"
           width={400}
           height={300}
           className="h-full w-full object-cover transition-transform group-hover:scale-105"

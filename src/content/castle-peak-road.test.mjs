@@ -455,8 +455,11 @@ test("castle peak road links and media use route-aware safeguards", () => {
   assert.doesNotMatch(inventory, /<a href=\{listingsHref\}/);
   assert.match(segment, /target="_blank"/);
   assert.match(segment, /rel="noopener noreferrer"/);
-  assert.match(inventory, /loading="lazy"/);
-  assert.match(inventory, /decoding="async"/);
+  // ListingMiniCard's cover image renders via AppImage, which defaults loading
+  // to "lazy" and decoding to "async" internally (see
+  // src/components/media/AppImage.tsx), so the literal attributes no longer
+  // appear in this file's source -- assert the component is used instead.
+  assert.match(inventory, /<AppImage\b/);
 });
 
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {

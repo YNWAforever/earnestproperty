@@ -42,6 +42,13 @@ import {
 } from "@/lib/queries";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
 import {
+  formatArea,
+  formatHkd,
+  formatHkDate,
+  formatSaleDisplay,
+} from "@/lib/format";
+import { AppImage } from "@/components/media/AppImage";
+import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
 } from "@/components/property/PropertyDecisionActions";
@@ -61,6 +68,18 @@ type PropertyHeadData = {
   >;
 };
 
+function formatDealPrice(
+  isRent: boolean,
+  rent: number | null,
+  price: number | null,
+): string {
+  if (isRent) {
+    const rentDisplay = formatHkd(rent);
+    return rentDisplay ? `${rentDisplay} / 月` : "—";
+  }
+  return formatSaleDisplay(price) ?? "—";
+}
+
 export const Route = createFileRoute("/property/$listingNo")({
   loader: async ({ params }) => {
     const property = await fetchPropertyByListingNo(params.listingNo);
@@ -79,13 +98,15 @@ export const Route = createFileRoute("/property/$listingNo")({
     const p = (loaderData as PropertyHeadData | undefined)?.property;
     if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
     const canonical = canonicalLink(`/property/${p.listing_no}`);
+    const rentDisplay = formatHkd(Number(p.rent));
+    const saleDisplay = formatSaleDisplay(Number(p.price));
     const priceStr =
       p.deal_type === "rent"
-        ? p.rent
-          ? `月租 $${Number(p.rent).toLocaleString()}`
+        ? rentDisplay
+          ? `月租 ${rentDisplay}`
           : ""
-        : p.price
-          ? `售 $${(Number(p.price) / 1_000_000).toFixed(2)}M`
+        : saleDisplay
+          ? `售 ${saleDisplay}`
           : "";
     const title = `${p.title_zh}｜${priceStr}｜晉誠地產`;
     const desc = (p.description ?? "").slice(0, 150) || `${p.title_zh} ${priceStr}`;
@@ -168,13 +189,11 @@ function PropertyPage() {
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
 
   const isRent = property.deal_type === "rent";
-  const priceLabel = isRent
-    ? property.rent
-      ? `$${Number(property.rent).toLocaleString()} / 月`
-      : "—"
-    : property.price
-      ? `$${(Number(property.price) / 1_000_000).toFixed(2)}M`
-      : "—";
+  const priceLabel = formatDealPrice(
+    isRent,
+    Number(property.rent),
+    Number(property.price),
+  );
   const psf =
     property.price && property.saleable_area
       ? Math.round(Number(property.price) / property.saleable_area)
@@ -325,9 +344,7 @@ function PropertyPage() {
     ],
   };
 
-  const updatedAt = property.updated_at
-    ? new Date(property.updated_at).toLocaleDateString("zh-HK")
-    : null;
+  const updatedAt = formatHkDate(property.updated_at);
 
   const mapSrc =
     estate?.lat && estate?.lng
@@ -391,14 +408,19 @@ function PropertyPage() {
         ) : null}
         <p className="mt-4 text-3xl font-bold text-primary">
           {priceLabel}
+          {/* psf/grossPsf guard the raw value, not formatHkd's return -- a negative
+              property.price (no DB CHECK stops one; see 872c338/f9eeeb2) makes
+              formatHkd return null, which React drops silently as a bare JSX child,
+              leaving a dangling "實呎 "/"建呎 " label with no number (not literal
+              "null" text, unlike index.tsx's PropertyCard, commit bd9f1bf). */}
           {psf && !isRent ? (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              實呎 ${psf.toLocaleString()}
+              實呎 {formatHkd(psf)}
             </span>
           ) : null}
           {grossPsf && !isRent ? (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
-              · 建呎 ${grossPsf.toLocaleString()}
+              · 建呎 {formatHkd(grossPsf)}
             </span>
           ) : null}
         </p>
@@ -424,9 +446,7 @@ function PropertyPage() {
           <Spec label="座向" value={property.orientation ?? "—"} />
           <Spec
             label="管理費"
-            value={
-              property.management_fee ? `$${Number(property.management_fee).toLocaleString()}` : "—"
-            }
+            value={formatHkd(property.management_fee) ?? "—"}
           />
           <Spec
             icon={<Calendar className="h-4 w-4" />}
@@ -472,9 +492,11 @@ function PropertyPage() {
 
             <TabsContent value="photos">
               <div className="overflow-hidden rounded-lg border bg-muted">
-                <img
+                <AppImage
                   src={images[activeImg]}
                   alt={property.title_zh}
+                  width={1200}
+                  height={900}
                   className="aspect-[4/3] w-full object-cover"
                   loading="eager"
                 />
@@ -490,11 +512,12 @@ function PropertyPage() {
                         i === activeImg ? "border-primary" : "border-transparent"
                       }`}
                     >
-                      <img
+                      <AppImage
                         src={src}
                         alt={`${property.title_zh} ${i + 1}`}
+                        width={200}
+                        height={150}
                         className="h-full w-full object-cover"
-                        loading="lazy"
                       />
                     </button>
                   ))}
@@ -534,11 +557,12 @@ function PropertyPage() {
             {floorplanUrl && (
               <TabsContent value="floorplan">
                 <div className="overflow-hidden rounded-lg border bg-muted">
-                  <img
+                  <AppImage
                     src={floorplanUrl}
                     alt={`${property.title_zh} 平面圖`}
+                    width={1200}
+                    height={900}
                     className="w-full object-contain"
-                    loading="lazy"
                   />
                 </div>
               </TabsContent>
@@ -642,19 +666,17 @@ function PropertyPage() {
                       {txns.map((t, i) => (
                         <TableRow key={i}>
                           <TableCell>
-                            {t.deal_date ? new Date(t.deal_date).toLocaleDateString("zh-HK") : "—"}
+                            {formatHkDate(t.deal_date) ?? "—"}
                           </TableCell>
                           <TableCell>{t.unit ?? "—"}</TableCell>
                           <TableCell className="text-right">
-                            {t.saleable_area ? `${t.saleable_area} 呎` : "—"}
+                            {formatArea(t.saleable_area) ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {t.price ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M` : "—"}
+                            {formatSaleDisplay(Number(t.price)) ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {t.saleable_psf
-                              ? `$${Math.round(Number(t.saleable_psf)).toLocaleString()}`
-                              : "—"}
+                            {formatHkd(Number(t.saleable_psf)) ?? "—"}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -788,13 +810,11 @@ function Spec({
 function SimilarCard({ listing }: { listing: SimilarListing }) {
   const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
   const isRent = listing.deal_type === "rent";
-  const price = isRent
-    ? listing.rent
-      ? `$${Number(listing.rent).toLocaleString()} / 月`
-      : "—"
-    : listing.price
-      ? `$${(Number(listing.price) / 1_000_000).toFixed(2)}M`
-      : "—";
+  const price = formatDealPrice(
+    isRent,
+    Number(listing.rent),
+    Number(listing.price),
+  );
   return (
     <Link
       to="/property/$listingNo"
@@ -802,11 +822,12 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
       className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">
-        <img
+        <AppImage
           src={img}
           alt={listing.title_zh}
+          width={400}
+          height={300}
           className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          loading="lazy"
         />
       </div>
       <div className="p-3">

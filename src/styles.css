@@ -48,6 +48,9 @@
   --color-brand-bright: var(--brand-bright);
   --color-coral: var(--coral);
   --color-coral-foreground: var(--coral-foreground);
+  --color-surface-warm: var(--surface-warm);
+  --color-ink-charcoal: var(--ink-charcoal);
+  --color-brand-accent-bronze: var(--brand-accent-bronze);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
@@ -88,6 +91,23 @@
   --surface: oklch(0.985 0.003 157);
   --text-primary: oklch(0.27 0 0);
   --text-secondary: oklch(0.535 0.017 157);
+
+  /* P1 additive surface + accent tokens (frontend-revamp plan §0.2 D3 -- these
+     are ADDITIVE alongside the forest-green brand, not a palette replacement).
+     DRAFT, pending client/design sign-off: the master instruction document that
+     specified "warm white, charcoal, gold/bronze" was never committed to this
+     repo, so unlike --brand-primary these hex values are not yet client-approved.
+     Every ratio below is computed (sRGB relative-luminance formula, same method
+     that reproduces this file's --brand-primary 5.32:1 exactly) -- re-verify with
+     a live contrast checker once the client confirms the actual palette.
+     #FAF6F0 warm ivory surface                                -> oklch(0.975 0.009 78.3)
+     #2A2622 warm-toned charcoal ink (13.94:1 on surface-warm,
+              15.01:1 on white)                                -> oklch(0.272 0.009 67.4)
+     #7A4A1F bronze accent (7.43:1 on white, 6.90:1 on
+              surface-warm)                                    -> oklch(0.456 0.087 59.5) */
+  --surface-warm: oklch(0.975 0.009 78.3);
+  --ink-charcoal: oklch(0.272 0.009 67.4);
+  --brand-accent-bronze: oklch(0.456 0.087 59.5);
 
   --background: var(--surface);
   --foreground: var(--text-primary);

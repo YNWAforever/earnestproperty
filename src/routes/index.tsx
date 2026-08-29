@@ -18,6 +18,7 @@ import {
   Store,
   TrendingUp,
   Video,
+  UserRound,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,8 @@ import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import { coreEstates, estateFigure, CORE_ESTATES_PREVIEW_COUNT } from "@/content/core-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
+import { formatHkd } from "@/lib/format";
+import { AppImage } from "@/components/media/AppImage";
 import { SITE_URL, SITE_LOGO_URL, canonicalLink, pageSeo } from "@/content/seo";
 import {
   fetchCmsVideos,
@@ -198,12 +201,13 @@ function HomePage() {
       {/* HERO — brand-led, search demoted to a small optional entry point */}
       <section className="relative isolate overflow-hidden">
         <div className="absolute inset-0 -z-10">
-          <img
+          <AppImage
             src={heroImage}
             alt="深井海岸線及屋苑景觀"
             className="h-full w-full object-cover"
             width={2048}
             height={1370}
+            loading="eager"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
         </div>
@@ -216,10 +220,9 @@ function HomePage() {
               <MapPin className="h-3.5 w-3.5" />
               深井 · 青山公路 · 汀九
             </span>
-            <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
-              深井 青山公路 汀九買樓租樓
-              <br />
-              <span className="text-brand-bright">晉誠地產</span> ‧ 全部真盤
+            <h1 className="mt-5 text-balance text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
+              深井 青山公路 汀九買樓租樓{" "}
+              <span className="whitespace-nowrap text-brand-bright">晉誠地產</span> ‧ 全部真盤
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
               由熟悉深井、青山公路及汀九嘅持牌代理，為你提供買樓、租樓及放盤貼身服務。
@@ -402,16 +405,18 @@ function HomePage() {
               return (
                 <div key={agent.id} className="text-center">
                   <div className="mx-auto aspect-square w-full overflow-hidden rounded-full bg-muted">
-                    {agent.avatar_url ? (
-                      <img
-                        src={agent.avatar_url}
-                        alt={`${name} 個人相片`}
-                        loading="lazy"
-                        width={160}
-                        height={160}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : null}
+                    <AppImage
+                      src={agent.avatar_url}
+                      alt={`${name} 個人相片`}
+                      width={160}
+                      height={160}
+                      className="h-full w-full object-cover"
+                      fallback={
+                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                          <UserRound className="h-9 w-9" aria-hidden="true" />
+                        </div>
+                      }
+                    />
                   </div>
                   <p className="mt-2 text-sm font-semibold">{name}</p>
                   {agent.job_title ? (
@@ -454,7 +459,7 @@ function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
             <div className="flex items-center gap-3">
-              <img
+              <AppImage
                 src={logoMark}
                 alt=""
                 width={44}
@@ -491,16 +496,18 @@ function HomePage() {
                 key={branch.id}
                 className="overflow-hidden rounded-lg border border-border bg-card"
               >
-                {branch.photo ? (
-                  <img
-                    src={branch.photo}
-                    alt={`${branch.name}舖面`}
-                    loading="lazy"
-                    width={branch.photoWidth}
-                    height={branch.photoHeight}
-                    className="h-64 w-full object-cover sm:h-72"
-                  />
-                ) : null}
+                <AppImage
+                  src={branch.photo}
+                  alt={`${branch.name}舖面`}
+                  // photoWidth/photoHeight are optional in SiteBranch (a branch may
+                  // ship without a photo at all) -- AppImage's width/height are
+                  // required intrinsic-size hints, not the rendered box (that's
+                  // fixed by className below), so these fallbacks are never seen,
+                  // only used to satisfy the type when src is also absent.
+                  width={branch.photoWidth ?? 1600}
+                  height={branch.photoHeight ?? 1200}
+                  className="h-64 w-full object-cover sm:h-72"
+                />
                 <div className="p-5">
                   <h3 className="text-lg font-semibold text-primary">
                     <Store className="mr-2 inline h-4 w-4" />
@@ -664,17 +671,19 @@ function CoreEstateGrid({
                     : { background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio }
                 }
               >
-                {estate.photo ? (
-                  <img
-                    src={estate.photo}
-                    alt={`${estate.name} 深井 放盤`}
-                    width={1600}
-                    height={900}
-                    // The first row is above the fold on desktop; the rest are not.
-                    loading={index < 4 ? "eager" : "lazy"}
-                    className="h-full w-full object-cover"
-                  />
-                ) : null}
+                <AppImage
+                  src={estate.photo}
+                  alt={`${estate.name} 深井 放盤`}
+                  width={1600}
+                  height={900}
+                  // The first row is above the fold on desktop; the rest are not.
+                  loading={index < 4 ? "eager" : "lazy"}
+                  className="h-full w-full object-cover"
+                  // No src (or a runtime error) must let the parent's per-estate
+                  // ESTATE_GRADIENTS background show through -- AppImage's opaque
+                  // default fallback would otherwise paint over it.
+                  fallback={<></>}
+                />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
                 <div className="absolute bottom-4 left-5 text-primary-foreground">
@@ -810,18 +819,15 @@ function HomeVideoCard({ video }: { video: HomeVideo }) {
 
   const media = (
     <div className="relative aspect-video overflow-hidden bg-primary/10">
-      {thumbnail ? (
-        // Decorative: the card's own title/eyebrow/CTA text already labels the
-        // link, so a repeated "<title> 影片預覽" alt would be announced twice.
-        <img
-          src={thumbnail}
-          alt=""
-          loading="lazy"
-          width={480}
-          height={360}
-          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-        />
-      ) : null}
+      {/* Decorative: the card's own title/eyebrow/CTA text already labels the
+          link, so a repeated "<title> 影片預覽" alt would be announced twice. */}
+      <AppImage
+        src={thumbnail}
+        alt=""
+        width={480}
+        height={360}
+        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+      />
       <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
       {/* The ring pulses only while hovered, so the affordance animates in
           response to the pointer instead of drawing the eye unprompted. */}
@@ -904,11 +910,9 @@ function PropertyCard({ property }: { property: PropertyItem }) {
   // cover shot with a media count is the credibility win; the gradient stays as
   // the fallback for listings the MLS import left without photos.
   const photoCount = property.images?.length ?? 0;
-  // Falls back to the gradient/Building2 placeholder if the photo host 404s or
-  // blocks hotlinking -- without this, `cover` stayed truthy forever and the
-  // fallback below could never render.
-  const [coverFailed, setCoverFailed] = useState(false);
-  const cover = coverFailed ? null : (property.images?.[0] ?? null);
+  // AppImage's own internal onError/fallback handling now covers what
+  // coverFailed used to do locally -- see AppImage.tsx.
+  const cover = property.images?.[0] ?? null;
   // `video_url` is shared with VR-tour links (matterport/kuula) elsewhere in
   // this codebase (see property.$listingNo.tsx's isVrUrl) -- a bare truthiness
   // check badged those as "影片" too, promising a video tab the listing page
@@ -927,17 +931,18 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         aria-hidden="true"
         className="relative block h-48 overflow-hidden bg-gradient-to-br from-primary/40 to-primary"
       >
-        {cover ? (
-          <img
-            src={cover}
-            alt={`${property.title_zh} 相片`}
-            loading="lazy"
-            width={640}
-            height={480}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-            onError={() => setCoverFailed(true)}
-          />
-        ) : null}
+        <AppImage
+          src={cover}
+          alt={`${property.title_zh} 相片`}
+          width={640}
+          height={480}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          // No cover (MLS-imported listings can lack photos) or a runtime error
+          // must let the parent Link's gradient-to-br placeholder and Building2
+          // icon show through -- AppImage's opaque default fallback would
+          // otherwise paint over both.
+          fallback={<></>}
+        />
         {/* Scrim strong enough to hold text contrast regardless of how bright
             the underlying photo is. */}
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 to-transparent" />
@@ -1004,7 +1009,10 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">
-            {isRent ? "/月" : psf ? ` · 實呎 $${psf.toLocaleString()}` : ""}
+            {/* `psf ?` guards the raw number, not formatHkd's return -- a negative
+                property.price (no DB CHECK stops one; see 872c338/f9eeeb2) would
+                make formatHkd(psf) return null, rendering the literal text "null". */}
+            {isRent ? "/月" : psf ? ` · 實呎 ${formatHkd(psf)}` : ""}
           </span>
         </div>
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-4 text-sm text-muted-foreground">

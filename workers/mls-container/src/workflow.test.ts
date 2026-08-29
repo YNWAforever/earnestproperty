@@ -7,8 +7,24 @@ import type { WorkflowPayload } from "./workflow";
 mock.module("cloudflare:workers", () => ({
   WorkflowEntrypoint: class {},
 }));
+// Matches container.test.ts's own FakeContainer contract (ctx/env stored on
+// `this`), not just a no-op stub. mock.module patches the shared, process-wide
+// module registry -- importing ./index below re-exports MlsRunContainer from
+// ./container, forcing container.ts's `class MlsRunContainer extends Container`
+// to bind to whichever mock is active *here* if this file's imports happen to
+// resolve first in a given bun test run. An empty class silently dropped
+// `this.ctx`, breaking container.test.ts's own tests whenever this file's
+// mock won that race (order is not guaranteed across files in one `bun test`
+// invocation, and did resolve differently in CI vs. local).
 mock.module("@cloudflare/containers", () => ({
-  Container: class {},
+  Container: class {
+    ctx: unknown;
+    env: unknown;
+    constructor(ctx: unknown, env: unknown) {
+      this.ctx = ctx;
+      this.env = env;
+    }
+  },
 }));
 
 const { runMlsWorkflow } = await import("./workflow");

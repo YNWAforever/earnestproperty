@@ -1,0 +1,279 @@
+import { describe, expect, test } from "bun:test";
+import { load } from "cheerio";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { Container } from "./Container";
+import { DataNote } from "./DataNote";
+import { EmptyState } from "./EmptyState";
+import { FreshnessStamp } from "./FreshnessStamp";
+import { Prose } from "./Prose";
+import { Section } from "./Section";
+import { SectionHeading } from "./SectionHeading";
+import { SkeletonBlock } from "./SkeletonBlock";
+import { Stat } from "./Stat";
+import { VerificationBadge } from "./VerificationBadge";
+
+function render(node: ReturnType<typeof createElement>) {
+  return load(renderToStaticMarkup(node));
+}
+
+describe("Container", () => {
+  test("renders a div with the page-width and padding classes", () => {
+    const $ = render(
+      createElement(Container, { "data-testid": "container" }, "content"),
+    );
+    const el = $('[data-testid="container"]');
+    expect(el).toHaveLength(1);
+    expect(el.hasClass("mx-auto")).toBe(true);
+    expect(el.hasClass("max-w-7xl")).toBe(true);
+    expect(el.text()).toBe("content");
+  });
+
+  test("merges a caller-supplied className instead of overwriting the base classes", () => {
+    const $ = render(
+      createElement(
+        Container,
+        { "data-testid": "container", className: "bg-card" },
+        "x",
+      ),
+    );
+    const el = $('[data-testid="container"]');
+    expect(el.hasClass("mx-auto")).toBe(true);
+    expect(el.hasClass("bg-card")).toBe(true);
+  });
+});
+
+describe("Section", () => {
+  test("defaults to the plain tone with vertical padding and no border/background", () => {
+    const $ = render(
+      createElement(Section, { "data-testid": "section" }, "content"),
+    );
+    const el = $('[data-testid="section"]');
+    expect(el.prop("tagName")).toBe("SECTION");
+    expect(el.hasClass("py-12")).toBe(true);
+    expect(el.hasClass("border-b")).toBe(false);
+  });
+
+  test("the muted tone adds the border and muted background", () => {
+    const $ = render(
+      createElement(
+        Section,
+        { "data-testid": "section", tone: "muted" },
+        "content",
+      ),
+    );
+    const el = $('[data-testid="section"]');
+    expect(el.hasClass("border-b")).toBe(true);
+    expect(el.hasClass("bg-muted/30")).toBe(true);
+  });
+
+  test("the card tone adds the card surface treatment", () => {
+    const $ = render(
+      createElement(Section, { "data-testid": "section", tone: "card" }, "x"),
+    );
+    const el = $('[data-testid="section"]');
+    expect(el.hasClass("bg-card")).toBe(true);
+    expect(el.hasClass("border-y")).toBe(true);
+  });
+});
+
+describe("SectionHeading", () => {
+  test("renders the eyebrow, title, and defaults to an h2", () => {
+    const $ = render(
+      createElement(SectionHeading, { eyebrow: "深井放盤", title: "精選筍盤" }),
+    );
+    expect($("h2").text()).toBe("精選筍盤");
+    expect($("p").first().text()).toBe("深井放盤");
+  });
+
+  test("renders as h3 when as='h3' is passed", () => {
+    const $ = render(
+      createElement(SectionHeading, { title: "相關屋苑", as: "h3" }),
+    );
+    expect($("h3")).toHaveLength(1);
+    expect($("h2")).toHaveLength(0);
+  });
+
+  test("omits the eyebrow paragraph when none is given", () => {
+    const $ = render(createElement(SectionHeading, { title: "只有標題" }));
+    expect($("p")).toHaveLength(0);
+  });
+
+  test("renders the action slot when provided", () => {
+    const $ = render(
+      createElement(SectionHeading, {
+        title: "放盤",
+        action: createElement("a", { href: "/listings" }, "查看全部"),
+      }),
+    );
+    expect($('a[href="/listings"]').text()).toBe("查看全部");
+  });
+
+  test("forwards id to the heading element, not the wrapper, so aria-labelledby can target it", () => {
+    const $ = render(
+      createElement(SectionHeading, { id: "my-heading", title: "標題" }),
+    );
+    expect($("h2").attr("id")).toBe("my-heading");
+  });
+});
+
+describe("Prose", () => {
+  test("renders children inside a div with the prose typography classes", () => {
+    const $ = render(
+      createElement(
+        Prose,
+        { "data-testid": "prose" },
+        createElement("p", null, "正文內容"),
+      ),
+    );
+    const el = $('[data-testid="prose"]');
+    expect(el).toHaveLength(1);
+    expect(el.find("p").text()).toBe("正文內容");
+  });
+});
+
+describe("Stat", () => {
+  test("renders the value and label", () => {
+    const $ = render(createElement(Stat, { value: "23", label: "位代理" }));
+    expect($("p").first().text()).toBe("23");
+    expect($("p").last().text()).toBe("位代理");
+  });
+
+  test("the value uses tabular-nums so digits don't jitter in a row of stats", () => {
+    const $ = render(createElement(Stat, { value: "1,234", label: "宗成交" }));
+    expect($("p").first().hasClass("tabular-nums")).toBe(true);
+  });
+});
+
+describe("EmptyState", () => {
+  test("renders the title and description without an icon or action", () => {
+    const $ = render(
+      createElement(EmptyState, {
+        title: "暫未有成交資料",
+        description: "頁面會保持可用",
+      }),
+    );
+    expect($("h2").text()).toBe("暫未有成交資料");
+    expect($("p").text()).toBe("頁面會保持可用");
+    expect($("svg")).toHaveLength(0);
+  });
+
+  test("renders an action when provided", () => {
+    const $ = render(
+      createElement(EmptyState, {
+        title: "冇符合條件嘅放盤",
+        action: createElement("a", { href: "/listings" }, "清除篩選"),
+      }),
+    );
+    expect($('a[href="/listings"]').text()).toBe("清除篩選");
+  });
+});
+
+describe("SkeletonBlock", () => {
+  test("the default 'lines' variant renders three pulse blocks", () => {
+    const $ = render(
+      createElement(SkeletonBlock, { "data-testid": "skeleton" }),
+    );
+    const el = $('[data-testid="skeleton"]');
+    expect(el.find(".animate-pulse")).toHaveLength(3);
+  });
+
+  test("a custom line count is respected", () => {
+    const $ = render(
+      createElement(SkeletonBlock, { "data-testid": "skeleton", lines: 5 }),
+    );
+    expect($('[data-testid="skeleton"]').find(".animate-pulse")).toHaveLength(
+      5,
+    );
+  });
+
+  test("the 'card' variant renders an image placeholder plus two text lines", () => {
+    const $ = render(
+      createElement(SkeletonBlock, {
+        "data-testid": "skeleton",
+        variant: "card",
+      }),
+    );
+    expect($('[data-testid="skeleton"]').find(".animate-pulse")).toHaveLength(
+      3,
+    );
+  });
+});
+
+describe("DataNote", () => {
+  test("renders the source as plain text when no sourceUrl is given", () => {
+    const $ = render(createElement(DataNote, { source: "教育局學校網名冊" }));
+    expect($("p").first().text()).toContain("教育局學校網名冊");
+    expect($("a")).toHaveLength(0);
+  });
+
+  test("links the source when a sourceUrl is given", () => {
+    const $ = render(
+      createElement(DataNote, {
+        source: "教育局學校網名冊",
+        sourceUrl: "https://www.edb.gov.hk",
+      }),
+    );
+    expect($('a[href="https://www.edb.gov.hk"]').text()).toBe(
+      "教育局學校網名冊",
+    );
+  });
+
+  test("renders the as-of date and caveat when given", () => {
+    const $ = render(
+      createElement(DataNote, {
+        source: "教育局",
+        asOf: "2026年8月",
+        caveat: "實際派位以教育局最新公布為準",
+      }),
+    );
+    expect($("p").first().text()).toContain("2026年8月");
+    expect($("p").last().text()).toBe("實際派位以教育局最新公布為準");
+  });
+
+  test("renders children as the primary content, above the source attribution", () => {
+    const $ = render(
+      createElement(
+        DataNote,
+        { source: "教育局", "data-testid": "note" },
+        createElement("p", { "data-testid": "claim" }, "荃灣區 62 校網"),
+      ),
+    );
+    expect($('[data-testid="claim"]').text()).toBe("荃灣區 62 校網");
+    expect($('[data-testid="note"]').text()).toContain("資料來源");
+  });
+});
+
+describe("FreshnessStamp", () => {
+  test("renders a relative freshness label for a recent timestamp", () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    const $ = render(
+      createElement(FreshnessStamp, { updatedAt: fiveMinutesAgo }),
+    );
+    expect($("span").text()).toBe("5 分鐘前更新");
+  });
+
+  test("renders nothing for a null updatedAt, per format.ts's null-hides-the-field rule", () => {
+    const html = renderToStaticMarkup(
+      createElement(FreshnessStamp, { updatedAt: null }),
+    );
+    expect(html).toBe("");
+  });
+});
+
+describe("VerificationBadge", () => {
+  test("renders '已核實' with the accent treatment when verified", () => {
+    const $ = render(createElement(VerificationBadge, { verified: true }));
+    const el = $("span").first();
+    expect(el.text()).toBe("已核實");
+    expect(el.hasClass("bg-accent")).toBe(true);
+  });
+
+  test("renders '待核實' with the muted treatment when not verified", () => {
+    const $ = render(createElement(VerificationBadge, { verified: false }));
+    const el = $("span").first();
+    expect(el.text()).toBe("待核實");
+    expect(el.hasClass("bg-muted")).toBe(true);
+  });
+});

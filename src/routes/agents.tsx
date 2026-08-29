@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
+import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { canonicalLink, SITE_URL } from "@/content/seo";
@@ -93,20 +94,18 @@ function AgentDirectoryCard({ agent }: { agent: NeonPublicAgentProfile }) {
   return (
     <article className="grid gap-5 rounded-lg border bg-card p-5 sm:grid-cols-[104px_1fr]">
       <div className="aspect-square overflow-hidden rounded-md bg-muted">
-        {agent.avatar_url ? (
-          <img
-            src={agent.avatar_url}
-            alt={`${name} 個人相片`}
-            loading="lazy"
-            width={104}
-            height={104}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-            <UserRound className="h-9 w-9" aria-hidden="true" />
-          </div>
-        )}
+        <AppImage
+          src={agent.avatar_url}
+          alt={`${name} 個人相片`}
+          width={104}
+          height={104}
+          className="h-full w-full object-cover"
+          fallback={
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <UserRound className="h-9 w-9" aria-hidden="true" />
+            </div>
+          }
+        />
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-2">

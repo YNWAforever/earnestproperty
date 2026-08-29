@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/select";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
+import { formatHkd, formatHkDate, formatSaleDisplay } from "@/lib/format";
+import { AppImage } from "@/components/media/AppImage";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 
@@ -390,24 +392,27 @@ function FiltersPanel({
 
 function ListingCard({ p }: { p: ListingRow }) {
   const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
+  const rentDisplay = formatHkd(p.rent);
+  const saleDisplay = formatSaleDisplay(p.price);
   const price =
     p.deal_type === "rent"
-      ? p.rent
-        ? `HK$${p.rent.toLocaleString()}/月`
+      ? rentDisplay
+        ? `HK${rentDisplay}/月`
         : "—"
-      : p.price
-        ? `HK$${(p.price / 1_000_000).toFixed(2)}M`
+      : saleDisplay
+        ? `HK${saleDisplay}`
         : "—";
-  const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).toLocaleDateString("zh-HK") : null;
+  const lastSeen = formatHkDate(p.last_seen_at);
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
       <Link to="/property/$listingNo" params={{ listingNo: p.listing_no }}>
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-          <img
+          <AppImage
             src={cover}
             alt={p.title_zh}
-            loading="lazy"
+            width={400}
+            height={300}
             className="h-full w-full object-cover transition group-hover:scale-105"
           />
           <span className="absolute left-2 top-2 rounded bg-background/90 px-2 py-0.5 text-[11px] font-medium">

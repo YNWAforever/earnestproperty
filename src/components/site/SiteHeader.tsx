@@ -3,6 +3,7 @@ import { ChevronDown, MessageCircle, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { AppImage } from "@/components/media/AppImage";
 import { whatsappUrl } from "@/config/site";
 import logoMark from "@/assets/logo-earnest-mark.png";
 
@@ -336,11 +337,12 @@ export function SiteHeader() {
               up (+50%), the range the brief asked for, set separately per breakpoint.
               width/height carry the largest rendered size so the box is reserved
               before CSS lands — the header grows a little but nothing shifts. */}
-          <img
+          <AppImage
             src={logoMark}
             alt=""
             width={60}
             height={60}
+            loading="eager"
             fetchPriority="high"
             className="h-14 w-14 object-contain sm:h-[60px] sm:w-[60px]"
           />
