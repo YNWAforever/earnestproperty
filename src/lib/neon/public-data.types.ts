@@ -1,12 +1,17 @@
+export type NeonListingSort = "newest" | "price_asc" | "price_desc" | "area" | "psf";
+
 export type NeonListingFiltersInput = {
   deal: "sale" | "rent" | "all";
   keyword?: string;
   minPrice?: number;
   maxPrice?: number;
+  minArea?: number;
+  maxArea?: number;
   bedrooms?: number;
   estateSlug?: string;
   districtSlug?: string;
   agentId?: string;
+  sort: NeonListingSort;
   page: number;
   pageSize: number;
 };

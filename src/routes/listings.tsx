@@ -27,14 +27,19 @@ import { itemListSchema, jsonLdScript } from "@/lib/schema";
 
 const PAGE_SIZE = 12;
 
+const SORT_OPTIONS = ["newest", "price_asc", "price_desc", "area", "psf"] as const;
+
 const searchSchema = z.object({
   deal: fallback(z.enum(["all", "sale", "rent"]), "all").default("all"),
   district: fallback(z.string().optional(), undefined),
   minPrice: fallback(z.number().int().min(0).optional(), undefined),
   maxPrice: fallback(z.number().int().min(0).optional(), undefined),
+  minArea: fallback(z.number().int().min(0).optional(), undefined),
+  maxArea: fallback(z.number().int().min(0).optional(), undefined),
   bedrooms: fallback(z.number().int().min(0).max(4).optional(), undefined),
   estate: fallback(z.string().optional(), undefined),
   keyword: fallback(z.string().optional(), undefined),
+  sort: fallback(z.enum(SORT_OPTIONS), "newest").default("newest"),
   page: fallback(z.number().int().min(1), 1).default(1),
 });
 
@@ -49,8 +54,11 @@ export const Route = createFileRoute("/listings")({
         districtSlug: deps.district === "all" ? undefined : deps.district,
         minPrice: deps.minPrice,
         maxPrice: deps.maxPrice,
+        minArea: deps.minArea,
+        maxArea: deps.maxArea,
         bedrooms: deps.bedrooms,
         estateSlug: deps.estate,
+        sort: deps.sort,
         page: deps.page,
         pageSize: PAGE_SIZE,
       }),
@@ -104,6 +112,50 @@ function describeListingSearch(
   return parts.join(" / ") || "未指定條件";
 }
 
+type SortOption = (typeof SORT_OPTIONS)[number];
+
+const SORT_LABELS: Record<SortOption, string> = {
+  newest: "最新上架",
+  price_asc: "價格由低至高",
+  price_desc: "價格由高至低",
+  area: "面積由大至小",
+  psf: "呎價由低至高",
+};
+
+function SortSelect({ sort }: { sort: SortOption }) {
+  const navigate = useNavigate({ from: "/listings" });
+
+  return (
+    <div className="flex items-center gap-2">
+      <Label className="whitespace-nowrap text-xs" htmlFor="listing-sort">
+        排序
+      </Label>
+      <Select
+        value={sort}
+        onValueChange={(value: SortOption) =>
+          navigate({
+            // Sorting keeps every other active filter as-is -- only the sort
+            // column changes, plus the page resets since "page 2" means a
+            // different set of rows once the ordering changes.
+            search: (prev: Record<string, unknown>) => ({ ...prev, sort: value, page: 1 }),
+          })
+        }
+      >
+        <SelectTrigger id="listing-sort" className="h-9 w-[168px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SORT_OPTIONS.map((option) => (
+            <SelectItem key={option} value={option}>
+              {SORT_LABELS[option]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function ListingsPage() {
   const search = Route.useSearch();
   const { rows, total, estates } = Route.useLoaderData();
@@ -145,6 +197,12 @@ function ListingsPage() {
         </aside>
 
         <section>
+          {rows.length > 0 && (
+            <div className="mb-4 flex justify-end">
+              <SortSelect sort={search.sort} />
+            </div>
+          )}
+
           {rows.length === 0 ? (
             <div className="space-y-5">
               <div className="rounded-lg border border-dashed p-8 text-center">
@@ -248,6 +306,13 @@ function FiltersPanel({
         maxPrice: !isAllDeals && maxPrice ? Number(maxPrice) : undefined,
         bedrooms: bedrooms === "any" ? undefined : Number(bedrooms),
         estate: estate === "any" ? undefined : estate,
+        // This panel doesn't manage sort/area-bound state -- pass the
+        // already-active values straight through so clicking 套用篩選 doesn't
+        // silently reset a sort the user picked via SortSelect (or an
+        // area bound arriving via a shared URL) back to its default.
+        sort: initial.sort,
+        minArea: initial.minArea,
+        maxArea: initial.maxArea,
         page: 1,
       },
     });

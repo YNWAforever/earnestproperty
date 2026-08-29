@@ -18,7 +18,11 @@ import {
   fetchNeonSimilarListings,
   searchNeonListings,
 } from "@/lib/neon/public-data";
-import type { NeonEstateOption, NeonPropertyRow } from "@/lib/neon/public-data.types";
+import type {
+  NeonEstateOption,
+  NeonListingSort,
+  NeonPropertyRow,
+} from "@/lib/neon/public-data.types";
 import { corridorRegionScope, isWithinCorridorRegion } from "@/content/castle-peak-road";
 
 const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
@@ -192,9 +196,12 @@ export type ListingFilters = {
   keyword?: string;
   minPrice?: number;
   maxPrice?: number;
+  minArea?: number;
+  maxArea?: number;
   bedrooms?: number;
   estateSlug?: string;
   districtSlug?: string;
+  sort: NeonListingSort;
   page: number;
   pageSize: number;
 };
@@ -407,6 +414,7 @@ export async function fetchCmsVideos(): Promise<CmsVideo[]> {
 export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
   const result = await searchListings({
     deal: "all",
+    sort: "newest",
     page: 1,
     pageSize: Math.max(limit * 3, limit),
   });

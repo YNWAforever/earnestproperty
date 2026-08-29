@@ -7,6 +7,7 @@ import type {
   NeonLegacyPropertyMatch,
   NeonListingFiltersInput,
   NeonListingSearchResult,
+  NeonListingSort,
   NeonPublicAgentProfile,
   NeonPropertyRow,
   NeonSimilarListingsInput,
@@ -278,6 +279,15 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
       where.push(`${priceColumn} <= ${addParam(params, input.maxPrice)}`);
   }
 
+  // Unlike price, saleable_area is meaningful regardless of deal type (sale
+  // and rent listings both carry a plain square-foot figure), so this bound
+  // applies under deal="all" too -- it is not gated the way the price bound
+  // above deliberately is.
+  if (input.minArea !== undefined)
+    where.push(`p.saleable_area >= ${addParam(params, input.minArea)}`);
+  if (input.maxArea !== undefined)
+    where.push(`p.saleable_area <= ${addParam(params, input.maxArea)}`);
+
   if (input.bedrooms !== undefined) {
     where.push(
       input.bedrooms >= 4
@@ -318,6 +328,48 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   }
 
   return where.join(" AND ");
+}
+
+// Every call site that hardcodes this exact chain (fetchCorridorRows,
+// fetchFeaturedProperties, fetchSimilarListings) is a listing set with no
+// user-facing sort control, so it stays untouched by the `sort` param below --
+// only searchListings (the general /listings search path) accepts a sort.
+const LISTING_FRESHNESS_ORDER =
+  "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC";
+
+// dedupeListings (src/lib/queries.ts) keeps the FIRST occurrence of a
+// duplicate pair and relies on callers pre-ordering rows by
+// LISTING_FRESHNESS_ORDER so the kept row is the freshest. A user-chosen sort
+// changes the primary ORDER BY column, but true duplicates (re-scrapes of the
+// same physical unit) almost always tie on price/area/psf, so the freshness
+// chain is always appended as a tiebreaker -- this keeps dedup's "kept row is
+// freshest" guarantee intact on the common tie case without trying to solve
+// the rare non-identical-duplicate edge case here.
+function listingOrderBy(sort: NeonListingSort): string {
+  switch (sort) {
+    case "price_asc":
+      return `COALESCE(p.price, p.rent) ASC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`;
+    case "price_desc":
+      return `COALESCE(p.price, p.rent) DESC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`;
+    case "area":
+      return `p.saleable_area DESC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`;
+    case "psf":
+      // PSF isn't a stored column -- it's price or rent divided by
+      // saleable_area, and dividing by a possibly-zero/null area needs the
+      // same guard src/lib/format.ts's formatPsf() already applies
+      // client-side (area > 0, not just non-null): NULLIF alone would still
+      // let a negative-or-zero area through, so this uses an explicit CASE.
+      return (
+        "CASE WHEN p.saleable_area > 0 THEN COALESCE(p.price, p.rent) / p.saleable_area END " +
+        `ASC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`
+      );
+    case "newest":
+    default:
+      // The pre-existing hardcoded order already IS "newest" -- mapping it to
+      // the freshness chain alone (rather than restating those same three
+      // columns as a separate "primary" clause) avoids duplicating them.
+      return LISTING_FRESHNESS_ORDER;
+  }
 }
 
 function cleanTerms(values: string[]) {
@@ -486,7 +538,7 @@ export async function searchListings(
     LEFT JOIN estates e ON e.id = p.estate_id
     ${publicAgentJoin}
     WHERE ${where}
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    ORDER BY ${listingOrderBy(input.sort)}
     LIMIT ${limitParam} OFFSET ${offsetParam}
     `,
     rowParams,
@@ -564,6 +616,7 @@ export async function fetchListingsForEstate(input: {
   const result = await searchListings({
     deal: "all",
     estateSlug: input.estateSlug,
+    sort: "newest",
     page: 1,
     pageSize: input.limit,
   });
@@ -577,6 +630,7 @@ export async function fetchListingsForAgent(input: {
   const result = await searchListings({
     deal: "all",
     agentId: input.agentId,
+    sort: "newest",
     page: 1,
     pageSize: input.limit,
   });

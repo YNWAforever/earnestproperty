@@ -261,6 +261,23 @@ test("the keyword type is threaded through every layer of the query chain", () =
   assert.match(read("src/lib/queries.ts"), /ListingFilters = \{[\s\S]*?keyword\?: string;/);
 });
 
+test("sort, minArea, and maxArea are threaded through every layer of the query chain", () => {
+  const types = read("src/lib/neon/public-data.types.ts");
+  assert.match(
+    types,
+    /NeonListingSort = "newest" \| "price_asc" \| "price_desc" \| "area" \| "psf";/,
+  );
+  assert.match(types, /NeonListingFiltersInput = \{[\s\S]*?sort: NeonListingSort;/);
+  assert.match(types, /NeonListingFiltersInput = \{[\s\S]*?minArea\?: number;/);
+  assert.match(types, /NeonListingFiltersInput = \{[\s\S]*?maxArea\?: number;/);
+
+  const queries = read("src/lib/queries.ts");
+  assert.match(queries, /NeonListingSort/, "queries.ts must reuse the shared sort type");
+  assert.match(queries, /ListingFilters = \{[\s\S]*?sort: NeonListingSort;/);
+  assert.match(queries, /ListingFilters = \{[\s\S]*?minArea\?: number;/);
+  assert.match(queries, /ListingFilters = \{[\s\S]*?maxArea\?: number;/);
+});
+
 test("estate options are deduped by canonical slug", () => {
   const queries = read("src/lib/queries.ts");
   assert.match(queries, /byCanonicalSlug/);
@@ -483,6 +500,78 @@ test("dedupeListings treats an empty-string canonical_property_no the same as nu
     result.map((r) => r.listing_no),
     ["D1", "D2"],
   );
+});
+
+// Task 1 (P3): sort maps to a primary ORDER BY column, always followed by the
+// pre-existing freshness tiebreaker chain -- dedupeListings (queries.ts) keeps
+// the FIRST occurrence of a duplicate pair and documents that callers must
+// pre-order rows featured DESC, last_seen_at DESC, created_at DESC so the kept
+// row is the freshest. A user-chosen sort changes the primary ORDER BY column,
+// but true duplicates (re-scrapes of the same physical unit) almost always tie
+// on that column, so the freshness chain must still run as the tiebreaker or
+// dedup's "kept row is freshest" guarantee silently breaks under a non-default
+// sort.
+// Every per-sort test below checks the primary ORDER BY column AND that this
+// exact freshness chain still follows it -- building both from one shared
+// constant keeps each assertion short and means the expected tiebreaker text
+// can't quietly drift out of sync with the real one in public-data.server.ts.
+const FRESHNESS_TIEBREAKER =
+  "p\\.featured DESC, p\\.last_seen_at DESC NULLS LAST, p\\.created_at DESC";
+
+function orderByRegex(primary) {
+  return new RegExp(`ORDER BY ${primary}, ${FRESHNESS_TIEBREAKER}`);
+}
+
+test("sort=newest uses the pre-existing default order untouched", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "newest", page: 1, pageSize: 12 });
+  assert.match(rows.text, new RegExp(`ORDER BY ${FRESHNESS_TIEBREAKER}\\s*$`, "m"));
+});
+
+test("sort=price_asc orders by price ascending, then the freshness tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "price_asc", page: 1, pageSize: 12 });
+  assert.match(rows.text, orderByRegex("COALESCE\\(p\\.price, p\\.rent\\) ASC NULLS LAST"));
+});
+
+test("sort=price_desc orders by price descending, then the freshness tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "price_desc", page: 1, pageSize: 12 });
+  assert.match(rows.text, orderByRegex("COALESCE\\(p\\.price, p\\.rent\\) DESC NULLS LAST"));
+});
+
+test("sort=area orders by saleable_area descending, then the freshness tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "area", page: 1, pageSize: 12 });
+  assert.match(rows.text, orderByRegex("p\\.saleable_area DESC NULLS LAST"));
+});
+
+test("sort=psf orders by a null/zero-guarded PSF expression, then the tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "psf", page: 1, pageSize: 12 });
+  // Must guard against saleable_area being zero or null -- a bare division
+  // (price / saleable_area) would throw a divide-by-zero in Postgres or
+  // silently sort nulls unpredictably, exactly the failure mode formatPsf()
+  // (src/lib/format.ts) already guards against client-side.
+  assert.match(rows.text, /CASE WHEN p\.saleable_area > 0 THEN/);
+  assert.match(rows.text, /COALESCE\(p\.price, p\.rent\) \/ p\.saleable_area END/);
+  assert.match(rows.text, orderByRegex("CASE WHEN[\\s\\S]*?END ASC NULLS LAST"));
+});
+
+test("minArea/maxArea bound saleable_area regardless of deal type", async () => {
+  const { rows } = await runSearch({
+    deal: "all",
+    minArea: 400,
+    maxArea: 900,
+    page: 1,
+    pageSize: 12,
+  });
+  assert.match(rows.text, /p\.saleable_area >= \$1/);
+  assert.match(rows.text, /p\.saleable_area <= \$2/);
+  assert.deepEqual(rows.params, [400, 900, 12, 0]);
+});
+
+test("minArea/maxArea apply even when deal=all, unlike price bounds", async () => {
+  const sale = await runSearch({ deal: "sale", minArea: 400, page: 1, pageSize: 12 });
+  assert.match(sale.rows.text, /p\.saleable_area >= \$2/);
+
+  const all = await runSearch({ deal: "all", minArea: 400, page: 1, pageSize: 12 });
+  assert.match(all.rows.text, /p\.saleable_area >= \$1/);
 });
 
 test("dedupeListings dedupes a mixed array of canonical and null-canonical rows independently", async () => {
