@@ -4,12 +4,15 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Container } from "./Container";
+import { DataNote } from "./DataNote";
 import { EmptyState } from "./EmptyState";
+import { FreshnessStamp } from "./FreshnessStamp";
 import { Prose } from "./Prose";
 import { Section } from "./Section";
 import { SectionHeading } from "./SectionHeading";
 import { SkeletonBlock } from "./SkeletonBlock";
 import { Stat } from "./Stat";
+import { VerificationBadge } from "./VerificationBadge";
 
 function render(node: ReturnType<typeof createElement>) {
   return load(renderToStaticMarkup(node));
@@ -195,5 +198,70 @@ describe("SkeletonBlock", () => {
     expect($('[data-testid="skeleton"]').find(".animate-pulse")).toHaveLength(
       3,
     );
+  });
+});
+
+describe("DataNote", () => {
+  test("renders the source as plain text when no sourceUrl is given", () => {
+    const $ = render(createElement(DataNote, { source: "教育局學校網名冊" }));
+    expect($("p").first().text()).toContain("教育局學校網名冊");
+    expect($("a")).toHaveLength(0);
+  });
+
+  test("links the source when a sourceUrl is given", () => {
+    const $ = render(
+      createElement(DataNote, {
+        source: "教育局學校網名冊",
+        sourceUrl: "https://www.edb.gov.hk",
+      }),
+    );
+    expect($('a[href="https://www.edb.gov.hk"]').text()).toBe(
+      "教育局學校網名冊",
+    );
+  });
+
+  test("renders the as-of date and caveat when given", () => {
+    const $ = render(
+      createElement(DataNote, {
+        source: "教育局",
+        asOf: "2026年8月",
+        caveat: "實際派位以教育局最新公布為準",
+      }),
+    );
+    expect($("p").first().text()).toContain("2026年8月");
+    expect($("p").last().text()).toBe("實際派位以教育局最新公布為準");
+  });
+});
+
+describe("FreshnessStamp", () => {
+  test("renders a relative freshness label for a recent timestamp", () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    const $ = render(
+      createElement(FreshnessStamp, { updatedAt: fiveMinutesAgo }),
+    );
+    expect($("span").text()).toBe("5 分鐘前更新");
+  });
+
+  test("renders nothing for a null updatedAt, per format.ts's null-hides-the-field rule", () => {
+    const html = renderToStaticMarkup(
+      createElement(FreshnessStamp, { updatedAt: null }),
+    );
+    expect(html).toBe("");
+  });
+});
+
+describe("VerificationBadge", () => {
+  test("renders '已核實' with the accent treatment when verified", () => {
+    const $ = render(createElement(VerificationBadge, { verified: true }));
+    const el = $("span").first();
+    expect(el.text()).toBe("已核實");
+    expect(el.hasClass("bg-accent")).toBe(true);
+  });
+
+  test("renders '待核實' with the muted treatment when not verified", () => {
+    const $ = render(createElement(VerificationBadge, { verified: false }));
+    const el = $("span").first();
+    expect(el.text()).toBe("待核實");
+    expect(el.hasClass("bg-muted")).toBe(true);
   });
 });
