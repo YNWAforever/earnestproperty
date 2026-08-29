@@ -680,6 +680,10 @@ function CoreEstateGrid({
                   // The first row is above the fold on desktop; the rest are not.
                   loading={index < 4 ? "eager" : "lazy"}
                   className="h-full w-full object-cover"
+                  // No src (or a runtime error) must let the parent's per-estate
+                  // ESTATE_GRADIENTS background show through -- AppImage's opaque
+                  // default fallback would otherwise paint over it.
+                  fallback={<></>}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
@@ -934,6 +938,11 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           width={640}
           height={480}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+          // No cover (MLS-imported listings can lack photos) or a runtime error
+          // must let the parent Link's gradient-to-br placeholder and Building2
+          // icon show through -- AppImage's opaque default fallback would
+          // otherwise paint over both.
+          fallback={<></>}
         />
         {/* Scrim strong enough to hold text contrast regardless of how bright
             the underlying photo is. */}
