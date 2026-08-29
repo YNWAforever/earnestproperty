@@ -115,15 +115,18 @@ function ContactPage() {
               key={branch.phone}
               className="overflow-hidden rounded-lg border border-border bg-card"
             >
-              {branch.photo ? (
-                <AppImage
-                  src={branch.photo}
-                  alt={`${branch.name}舖面`}
-                  width={branch.photoWidth ?? 1600}
-                  height={branch.photoHeight ?? 1200}
-                  className="h-64 w-full object-cover sm:h-72"
-                />
-              ) : null}
+              <AppImage
+                src={branch.photo}
+                alt={`${branch.name}舖面`}
+                // photoWidth/photoHeight are optional in SiteBranch (a branch may
+                // ship without a photo at all) -- AppImage's width/height are
+                // required intrinsic-size hints, not the rendered box (that's
+                // fixed by className below), so these fallbacks are never seen,
+                // only used to satisfy the type when src is also absent.
+                width={branch.photoWidth ?? 1600}
+                height={branch.photoHeight ?? 1200}
+                className="h-64 w-full object-cover sm:h-72"
+              />
               <div className="p-5">
                 <p className="text-xs uppercase tracking-wider text-muted-foreground">門市</p>
                 <h2 className="mt-1 text-lg font-semibold text-primary">{branch.name}</h2>
