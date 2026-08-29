@@ -283,6 +283,29 @@ export function getCastlePeakRoadSegment(slug: string): CorridorSegment | null {
   return castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null;
 }
 
+/**
+ * Resolves a property's own `district_slug` (or its estate's, which is more
+ * precise when present) to the corridor segment that claims it as strict
+ * inventory. This is deliberately NOT the same lookup as
+ * getCastlePeakRoadSegment(slug) above, which matches a segment's own
+ * top-level `slug` (the URL param, e.g. "sham-tseng") -- a property's
+ * district_slug can be a narrower value a segment absorbed into its
+ * districtSlugs list without becoming its own segment (e.g. "tsing-lung-tau"
+ * and "castle-peak-road" both resolve to the sham-tseng segment, not a
+ * same-named one, since neither has its own corridor page). Returns null
+ * (never a placeholder) when no segment claims the district as strict
+ * inventory -- callers should omit the section entirely on null, matching
+ * this repo's established "hide, don't show an empty label" convention.
+ */
+export function findCastlePeakRoadSegmentByDistrictSlug(
+  districtSlug: string | null | undefined,
+): CorridorSegment | null {
+  if (!districtSlug) return null;
+  return (
+    castlePeakRoadSegments.find((segment) => segment.districtSlugs.includes(districtSlug)) ?? null
+  );
+}
+
 export const castlePeakRoadSitemapPaths = [
   castlePeakRoadHub.path,
   ...castlePeakRoadSegments.map((segment) => segment.path),

@@ -18,6 +18,7 @@ import {
   LayoutGrid,
   ChevronLeft,
   ChevronRight,
+  TrainFront,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +64,7 @@ import {
   getPropertyDecision,
 } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
+import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
 import { useFavourite } from "@/lib/saved-listings";
@@ -262,6 +264,14 @@ function PropertyPage() {
     estateSlug: estate?.slug,
     districtSlug: estate?.district_slug ?? property.district_slug,
   });
+  // Nearby transport: reuses the corridor content's already-curated copy, keyed
+  // by segment rather than district_slug directly (a segment can absorb more
+  // than one district_slug -- see findCastlePeakRoadSegmentByDistrictSlug's own
+  // comment). Renders nothing (not a placeholder) when the listing's district
+  // isn't part of a corridor segment.
+  const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(
+    estate?.district_slug ?? property.district_slug,
+  );
 
   // Narrowed values rather than booleans: TypeScript cannot carry a
   // `!!property.video_url` guard through a separate const into the JSX below,
@@ -752,6 +762,33 @@ function PropertyPage() {
                       className="text-sm text-primary underline"
                     >
                       查看屋苑詳情 →
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Nearby transport -- omitted entirely (not a placeholder) when the
+                listing's district isn't part of a known corridor segment. */}
+            {transportSegment && (
+              <Card className="mt-6" data-property-transport-card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <TrainFront className="h-4 w-4" />
+                    附近交通
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-7 text-muted-foreground">
+                    {transportSegment.transport}
+                  </p>
+                  <div className="mt-4">
+                    <Link
+                      to="/castle-peak-road/$segment"
+                      params={{ segment: transportSegment.slug }}
+                      className="text-sm text-primary underline"
+                    >
+                      查看{transportSegment.nameZh}交通及生活資訊 →
                     </Link>
                   </div>
                 </CardContent>

@@ -3,6 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
+// Plain data/logic module, no JSX -- importable directly under Node's native
+// type stripping (same approach src/content/castle-peak-road.test.mjs and
+// src/lib/neon/corridor-scope.contract.test.mjs already use), so the Task 7
+// transport-matching tests below exercise the real function rather than a
+// source-scan reimplementation of its logic.
+import { findCastlePeakRoadSegmentByDistrictSlug } from "../content/castle-peak-road.ts";
+
 // Source-scan regression tests for Task 6 (gallery a11y/keyboard nav,
 // freshness stamp, withdrawn/unavailable state) on /property/$listingNo.
 // This repo has no render harness for this route (confirmed: no existing
@@ -349,4 +356,54 @@ test("active thumbnail carries aria-current, not just a border-color change", ()
   // The border-color signal stays too (visual reinforcement), it's just no
   // longer the ONLY signal.
   assert.match(galleryBody, /i === activeImg \? "border-primary" : "border-transparent"/);
+});
+
+// --- Task 7: cash-required-at-closing summary (component-level regression --
+// see PropertyDecisionActions.test.tsx for the actual arithmetic assertion --
+// this just checks the route wires the summing card in, since the sum itself
+// lives inside PropertyDecisionActions, not this route file) --------------
+
+test("the sidebar's mortgage teaser is PropertyDecisionActions, which now also renders the cash-required summary", () => {
+  // Task 7 extends the *existing* mortgage teaser card (data-property-mortgage-card
+  // in PropertyDecisionActions.tsx) rather than adding a second, independent
+  // calculateMortgage() call site on this route -- confirm no such second call
+  // site was introduced here.
+  assert.doesNotMatch(routeSource, /calculateMortgage\(/);
+  assert.match(routeSource, /<PropertyDecisionActions/);
+});
+
+// --- Task 7: nearby transport section --------------------------------------
+
+test("findCastlePeakRoadSegmentByDistrictSlug resolves a property's district_slug to its corridor segment, or null when unmatched", () => {
+  // Own top-level slug -- the simple case.
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug("ting-kau")?.slug, "ting-kau");
+  // A district_slug a segment absorbed into its own districtSlugs list without
+  // becoming a same-named segment of its own (see the sham-tseng segment's
+  // districtSlugs in castle-peak-road.ts).
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug("tsing-lung-tau")?.slug, "sham-tseng");
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug("castle-peak-road")?.slug, "sham-tseng");
+  // A district_slug with no corridor segment at all (and the null/undefined
+  // no-district case) resolves to null, not a placeholder-shaped object.
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug("mong-kok"), null);
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug(null), null);
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug(undefined), null);
+});
+
+test("the property page renders a nearby-transport card only when the district resolves to a corridor segment, and links through to that segment's page", () => {
+  assert.match(routeSource, /from "@\/content\/castle-peak-road"/);
+  assert.match(
+    routeSource,
+    /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/,
+  );
+  const cardStart = routeSource.indexOf("data-property-transport-card");
+  assert.ok(cardStart !== -1, "expected a data-property-transport-card section");
+  // The card is gated behind `{transportSegment && (` -- omitted entirely
+  // (not an empty-state placeholder) when there's no match.
+  const gateStart = routeSource.lastIndexOf("{transportSegment && (", cardStart);
+  assert.ok(gateStart !== -1 && gateStart < cardStart);
+  const cardEnd = routeSource.indexOf(")}", cardStart);
+  const cardBody = routeSource.slice(cardStart, cardEnd);
+  assert.match(cardBody, /\{transportSegment\.transport\}/);
+  assert.match(cardBody, /to="\/castle-peak-road\/\$segment"/);
+  assert.match(cardBody, /params={{ segment: transportSegment\.slug }}/);
 });
