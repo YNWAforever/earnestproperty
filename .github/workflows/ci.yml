@@ -29,9 +29,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # Pinned, not "latest" -- an unpinned bun broke this CI run when a new
+      # release changed bun:test's mock.module semantics enough to make
+      # workers/mls-container/src/container.test.ts's Container mock stop
+      # taking effect (this.ctx came back undefined in 7 tests that passed
+      # locally against 1.3.12). Bump deliberately, verified locally, not
+      # automatically.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.12
       - run: npm ci
 
       # Ratchet, not a zero-error gate. At P0, `npm run lint` reported 6185 problems
