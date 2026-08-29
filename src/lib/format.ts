@@ -16,8 +16,11 @@ export function formatManDisplay(
   const man = amount / 10000;
   const rounded = Math.round(man * 10) / 10;
   const display = Number.isInteger(rounded)
-    ? String(rounded)
-    : rounded.toFixed(1);
+    ? rounded.toLocaleString(HK_NUMBER_LOCALE)
+    : rounded.toLocaleString(HK_NUMBER_LOCALE, {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+      });
   return `${display}萬`;
 }
 

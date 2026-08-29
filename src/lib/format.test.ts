@@ -38,6 +38,12 @@ describe("formatManDisplay", () => {
     expect(formatManDisplay(1284000)).toBe("128.4萬");
   });
 
+  test("adds thousands-grouping once the 萬 value reaches 1000 or more", () => {
+    expect(formatManDisplay(25000000)).toBe("2,500萬");
+    expect(formatManDisplay(12345678)).toBe("1,234.6萬");
+    expect(formatManDisplay(100000000)).toBe("10,000萬");
+  });
+
   test("returns null for null, undefined, zero, negative, and non-finite input", () => {
     expect(formatManDisplay(null)).toBeNull();
     expect(formatManDisplay(undefined)).toBeNull();
