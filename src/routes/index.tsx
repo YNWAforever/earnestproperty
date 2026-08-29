@@ -1005,6 +1005,9 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">
+            {/* `psf ?` guards the raw number, not formatHkd's return -- a negative
+                property.price (no DB CHECK stops one; see 872c338/f9eeeb2) would
+                make formatHkd(psf) return null, rendering the literal text "null". */}
             {isRent ? "/月" : psf ? ` · 實呎 ${formatHkd(psf)}` : ""}
           </span>
         </div>
