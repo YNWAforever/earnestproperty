@@ -47,6 +47,7 @@ import {
   formatHkDate,
   formatSaleDisplay,
 } from "@/lib/format";
+import { AppImage } from "@/components/media/AppImage";
 import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
@@ -491,9 +492,11 @@ function PropertyPage() {
 
             <TabsContent value="photos">
               <div className="overflow-hidden rounded-lg border bg-muted">
-                <img
+                <AppImage
                   src={images[activeImg]}
                   alt={property.title_zh}
+                  width={1200}
+                  height={900}
                   className="aspect-[4/3] w-full object-cover"
                   loading="eager"
                 />
@@ -509,11 +512,12 @@ function PropertyPage() {
                         i === activeImg ? "border-primary" : "border-transparent"
                       }`}
                     >
-                      <img
+                      <AppImage
                         src={src}
                         alt={`${property.title_zh} ${i + 1}`}
+                        width={200}
+                        height={150}
                         className="h-full w-full object-cover"
-                        loading="lazy"
                       />
                     </button>
                   ))}
@@ -553,11 +557,12 @@ function PropertyPage() {
             {floorplanUrl && (
               <TabsContent value="floorplan">
                 <div className="overflow-hidden rounded-lg border bg-muted">
-                  <img
+                  <AppImage
                     src={floorplanUrl}
                     alt={`${property.title_zh} 平面圖`}
+                    width={1200}
+                    height={900}
                     className="w-full object-contain"
-                    loading="lazy"
                   />
                 </div>
               </TabsContent>
@@ -817,11 +822,12 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
       className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">
-        <img
+        <AppImage
           src={img}
           alt={listing.title_zh}
+          width={400}
+          height={300}
           className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          loading="lazy"
         />
       </div>
       <div className="p-3">
