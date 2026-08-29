@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
@@ -274,4 +275,192 @@ test("errorComponent explains the failure, retries via router.invalidate(), and 
 test("SkeletonBlock and Sheet primitives are imported from this repo's existing vendored components", () => {
   assert.match(source, /from "@\/components\/layout\/SkeletonBlock"/);
   assert.match(source, /from "@\/components\/ui\/sheet"/);
+});
+
+// --- Task 3: DR-7 accessibility fixes, freshness stamp, share action -----
+//
+// FilterFields is the SINGLE shared component both DesktopFiltersPanel and
+// MobileFiltersSheet render (proven above by the "both the desktop panel
+// and the mobile sheet render the shared FilterFields component" test) --
+// so every assertion below against FilterFields' body applies to both
+// surfaces without needing a separate mobile-specific copy of each check.
+function extractFilterFieldsBody() {
+  return source.slice(
+    source.indexOf("function FilterFields"),
+    source.indexOf("function DesktopFiltersPanel"),
+  );
+}
+
+test("the deal-type buttons form a labelled radiogroup, each button carrying real radio semantics", () => {
+  const fieldsBody = extractFilterFieldsBody();
+  // The radiogroup is labelled via aria-labelledby pointing at a stable id
+  // on the existing "類型" <Label>, rather than repeating the label text a
+  // second time as a literal aria-label string.
+  assert.match(fieldsBody, /id={dealTypeLabelId}/);
+  assert.match(
+    fieldsBody,
+    /role="radiogroup"\s+aria-labelledby={dealTypeLabelId}/,
+  );
+  assert.match(fieldsBody, /role="radio"/);
+  assert.match(fieldsBody, /aria-checked={deal === v}/);
+});
+
+test("aria-checked on the deal-type radios is a live expression that flips per button, not a value pinned at render time", () => {
+  // Extracts the EXACT aria-checked expression from the current source and
+  // evaluates it for every (deal, v) combination the three buttons can take
+  // -- this is what proves clicking a different button (which changes the
+  // `deal` state React re-renders FilterFields with) produces a DIFFERENT
+  // aria-checked outcome on each button, not just a snapshot that happens
+  // to be correct once on initial render.
+  const fieldsBody = extractFilterFieldsBody();
+  const match = fieldsBody.match(/aria-checked={([^}]+)}/);
+  assert.ok(
+    match,
+    "expected an aria-checked={...} expression on the deal-type radio buttons",
+  );
+  const evalChecked = (deal, v) =>
+    new Function("deal", "v", `return (${match[1]});`)(deal, v);
+
+  for (const deal of ["all", "sale", "rent"]) {
+    for (const v of ["all", "sale", "rent"]) {
+      assert.equal(
+        evalChecked(deal, v),
+        deal === v,
+        `expected aria-checked to be ${deal === v} for deal="${deal}", v="${v}"`,
+      );
+    }
+  }
+});
+
+test("each price input has a real id + deal-type-aware aria-label, not just a placeholder", () => {
+  const fieldsBody = extractFilterFieldsBody();
+  assert.match(
+    fieldsBody,
+    /id={minPriceId}[\s\S]{0,120}aria-label={`最低\$\{priceUnitLabel\} \(HKD\)`}/,
+  );
+  assert.match(
+    fieldsBody,
+    /id={maxPriceId}[\s\S]{0,120}aria-label={`最高\$\{priceUnitLabel\} \(HKD\)`}/,
+  );
+  // priceUnitLabel must actually depend on the current deal type -- proves
+  // the aria-label text isn't a static, always-identical string.
+  assert.match(
+    fieldsBody,
+    /const priceUnitLabel = isAllDeals \? "價格" : isRent \? "月租" : "售價";/,
+  );
+});
+
+test("each of the three filter selects has its SelectTrigger id wired to a real <Label htmlFor>", () => {
+  const fieldsBody = extractFilterFieldsBody();
+  for (const id of ["bedroomsId", "districtId", "estateId"]) {
+    assert.match(
+      fieldsBody,
+      new RegExp(`<Label className="mb-2 block text-xs" htmlFor={${id}}>`),
+      `expected a <Label htmlFor={${id}}> wired to its SelectTrigger`,
+    );
+    assert.match(
+      fieldsBody,
+      new RegExp(`<SelectTrigger id={${id}} className="h-11">`),
+      `expected <SelectTrigger id={${id}}> with no redundant aria-label`,
+    );
+  }
+  // The old floating-label-plus-redundant-aria-label pattern (DR-7) is gone
+  // from these three selects.
+  assert.doesNotMatch(fieldsBody, /aria-label="房數"/);
+  assert.doesNotMatch(fieldsBody, /aria-label="地區"/);
+  assert.doesNotMatch(fieldsBody, /aria-label="屋苑"/);
+});
+
+test("FreshnessStamp replaces the raw formatHkDate '最後更新' text in BOTH ListingCard and ListingCardRow", () => {
+  assert.match(source, /from "@\/components\/layout\/FreshnessStamp"/);
+  const cardBody = source.slice(
+    source.indexOf("function ListingCard("),
+    source.indexOf("// Same data as ListingCard"),
+  );
+  const rowBody = source.slice(
+    source.indexOf("function ListingCardRow("),
+    source.indexOf("function Pagination("),
+  );
+  for (const [name, body] of [
+    ["ListingCard", cardBody],
+    ["ListingCardRow", rowBody],
+  ]) {
+    assert.match(
+      body,
+      /<FreshnessStamp\s+updatedAt={p\.last_seen_at}/,
+      `expected ${name} to render <FreshnessStamp updatedAt={p.last_seen_at} />`,
+    );
+    assert.doesNotMatch(
+      body,
+      /最後更新：/,
+      `expected ${name} to no longer render the raw "最後更新：" text`,
+    );
+  }
+  // The card-data helper no longer needs to derive a formatted date string
+  // itself -- FreshnessStamp does that internally from the raw timestamp.
+  assert.doesNotMatch(source, /formatHkDate/);
+});
+
+test("both card layouts get a share button reusing lib/share.ts's shareUrl (the exact mechanism property.$listingNo.tsx already used)", () => {
+  assert.match(source, /from "@\/lib\/share"/);
+  assert.match(source, /function handleCardShare\(/);
+  assert.match(
+    source,
+    /void shareUrl\(title, `\${SITE_URL}\/property\/\${listingNo}`\);/,
+  );
+
+  const cardBody = source.slice(
+    source.indexOf("function ListingCard("),
+    source.indexOf("// Same data as ListingCard"),
+  );
+  const rowBody = source.slice(
+    source.indexOf("function ListingCardRow("),
+    source.indexOf("function Pagination("),
+  );
+  for (const [name, body] of [
+    ["ListingCard", cardBody],
+    ["ListingCardRow", rowBody],
+  ]) {
+    assert.match(
+      body,
+      /onClick={\(\) => handleCardShare\(safeTitle, p\.listing_no\)}/,
+      `expected ${name} to wire a share button to handleCardShare`,
+    );
+    // The share <button> must be a SIBLING of <Link>, not nested inside it
+    // -- a <button> inside an <a> is invalid HTML and would leave a screen
+    // reader unable to tell which element a click activates. Proven here by
+    // checking the button's onClick appears AFTER the matching </Link>.
+    const linkCloseIndex = body.indexOf("</Link>");
+    const buttonIndex = body.indexOf(
+      "onClick={() => handleCardShare(safeTitle, p.listing_no)}",
+    );
+    assert.ok(linkCloseIndex !== -1, `expected ${name} to render a <Link>`);
+    assert.ok(
+      buttonIndex > linkCloseIndex,
+      `expected ${name}'s share button to be a sibling of <Link>, not nested inside it`,
+    );
+  }
+});
+
+test("lib/share.ts exports the reusable shareUrl helper and property.$listingNo.tsx's own share button now delegates to it", () => {
+  const shareLibSource = readFileSync(
+    new URL("../lib/share.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(shareLibSource, /export async function shareUrl\(/);
+  assert.match(shareLibSource, /navigator\.share/);
+  assert.match(shareLibSource, /navigator\.clipboard\.writeText/);
+
+  const propertyPageSource = readFileSync(
+    new URL("./property.$listingNo.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(propertyPageSource, /from "@\/lib\/share"/);
+  assert.match(propertyPageSource, /await shareUrl\(safeTitle, url\);/);
+  // The inline navigator.share/clipboard implementation this was extracted
+  // from must actually be gone, not duplicated alongside the shared helper.
+  assert.doesNotMatch(
+    propertyPageSource,
+    /await navigator\.clipboard\.writeText\(url\);/,
+  );
 });

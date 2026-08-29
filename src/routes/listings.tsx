@@ -16,6 +16,7 @@ import {
   ChevronRight,
   LayoutGrid,
   List,
+  Share2,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -31,14 +32,15 @@ import {
 } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { SkeletonBlock } from "@/components/layout/SkeletonBlock";
+import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import {
   formatHkd,
-  formatHkDate,
   formatSaleDisplay,
   sanitizeListingText,
 } from "@/lib/format";
+import { shareUrl } from "@/lib/share";
 import { AppImage } from "@/components/media/AppImage";
 import {
   searchListings,
@@ -480,9 +482,17 @@ function FilterFields({
       ? "月租 (HKD)"
       : "售價 (HKD)";
   const keywordId = `${idPrefix}-listing-keyword`;
+  const dealTypeLabelId = `${idPrefix}-listing-deal-type-label`;
+  const minPriceId = `${idPrefix}-listing-min-price`;
+  const maxPriceId = `${idPrefix}-listing-max-price`;
   const bedroomsId = `${idPrefix}-listing-bedrooms`;
   const districtId = `${idPrefix}-listing-district`;
   const estateId = `${idPrefix}-listing-estate`;
+  // Deal-type-aware accessible names for the min/max price inputs -- their
+  // shared <Label> above the pair covers both visually, so each <Input>
+  // additionally gets its own aria-label (per DR-7) rather than a second
+  // visible label repeating "售價/月租 (HKD)" twice.
+  const priceUnitLabel = isAllDeals ? "價格" : isRent ? "月租" : "售價";
 
   return (
     <>
@@ -504,12 +514,20 @@ function FilterFields({
       </div>
 
       <div>
-        <Label className="mb-2 block text-xs">類型</Label>
-        <div className="grid grid-cols-3 gap-1.5">
+        <Label className="mb-2 block text-xs" id={dealTypeLabelId}>
+          類型
+        </Label>
+        <div
+          role="radiogroup"
+          aria-labelledby={dealTypeLabelId}
+          className="grid grid-cols-3 gap-1.5"
+        >
           {(["all", "sale", "rent"] as const).map((v) => (
             <button
               key={v}
               type="button"
+              role="radio"
+              aria-checked={deal === v}
               onClick={() => setDeal(v)}
               className={`min-h-11 rounded-md border px-2 py-2 text-sm font-medium transition ${
                 deal === v
@@ -527,9 +545,11 @@ function FilterFields({
         <Label className="mb-2 block text-xs">{priceLabel}</Label>
         <div className="flex items-center gap-2">
           <Input
+            id={minPriceId}
             type="number"
             min="0"
             placeholder="最低"
+            aria-label={`最低${priceUnitLabel} (HKD)`}
             value={minPrice}
             onChange={(e) => setMinPrice(e.target.value)}
             disabled={isAllDeals}
@@ -537,9 +557,11 @@ function FilterFields({
           />
           <span className="text-muted-foreground">—</span>
           <Input
+            id={maxPriceId}
             type="number"
             min="0"
             placeholder="最高"
+            aria-label={`最高${priceUnitLabel} (HKD)`}
             value={maxPrice}
             onChange={(e) => setMaxPrice(e.target.value)}
             disabled={isAllDeals}
@@ -554,9 +576,11 @@ function FilterFields({
       </div>
 
       <div>
-        <Label className="mb-2 block text-xs">房數</Label>
+        <Label className="mb-2 block text-xs" htmlFor={bedroomsId}>
+          房數
+        </Label>
         <Select value={bedrooms} onValueChange={setBedrooms}>
-          <SelectTrigger id={bedroomsId} className="h-11" aria-label="房數">
+          <SelectTrigger id={bedroomsId} className="h-11">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -571,9 +595,11 @@ function FilterFields({
       </div>
 
       <div>
-        <Label className="mb-2 block text-xs">地區</Label>
+        <Label className="mb-2 block text-xs" htmlFor={districtId}>
+          地區
+        </Label>
         <Select value={district} onValueChange={setDistrict}>
-          <SelectTrigger id={districtId} className="h-11" aria-label="地區">
+          <SelectTrigger id={districtId} className="h-11">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -587,9 +613,11 @@ function FilterFields({
       </div>
 
       <div>
-        <Label className="mb-2 block text-xs">屋苑</Label>
+        <Label className="mb-2 block text-xs" htmlFor={estateId}>
+          屋苑
+        </Label>
         <Select value={estate} onValueChange={setEstate}>
-          <SelectTrigger id={estateId} className="h-11" aria-label="屋苑">
+          <SelectTrigger id={estateId} className="h-11">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -957,15 +985,22 @@ function deriveListingCardData(p: ListingRow) {
       : saleDisplay
         ? `HK${saleDisplay}`
         : "—";
-  const lastSeen = formatHkDate(p.last_seen_at);
-  return { cover, safeTitle, price, lastSeen };
+  return { cover, safeTitle, price };
+}
+
+// Shared by both card layouts below -- reuses lib/share.ts's shareUrl(),
+// the exact navigator.share-with-clipboard-fallback mechanism
+// property.$listingNo.tsx's own share button already uses, rather than a
+// second, drifting implementation.
+function handleCardShare(title: string, listingNo: string) {
+  void shareUrl(title, `${SITE_URL}/property/${listingNo}`);
 }
 
 function ListingCard({ p }: { p: ListingRow }) {
-  const { cover, safeTitle, price, lastSeen } = deriveListingCardData(p);
+  const { cover, safeTitle, price } = deriveListingCardData(p);
 
   return (
-    <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
+    <li className="group relative overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
       <Link to="/property/$listingNo" params={{ listingNo: p.listing_no }}>
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
           <AppImage
@@ -984,10 +1019,8 @@ function ListingCard({ p }: { p: ListingRow }) {
           <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
             {safeTitle}
           </h3>
-          {p.source_site && lastSeen && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              最後更新：{lastSeen}
-            </p>
+          {p.source_site && (
+            <FreshnessStamp updatedAt={p.last_seen_at} className="mt-1 block" />
           )}
           {p.estates && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
@@ -1017,73 +1050,99 @@ function ListingCard({ p }: { p: ListingRow }) {
           </div>
         </div>
       </Link>
+      {/* Sibling of <Link>, not nested inside it -- a <button> inside an
+          <a> is invalid HTML and would confuse screen readers about which
+          element the click activates. */}
+      <button
+        type="button"
+        onClick={() => handleCardShare(safeTitle, p.listing_no)}
+        aria-label={`分享：${safeTitle}`}
+        className="absolute right-2 top-2 z-10 rounded-full bg-background/90 p-1.5 text-foreground shadow-sm transition hover:bg-background"
+      >
+        <Share2 className="h-3.5 w-3.5" />
+      </button>
     </li>
   );
 }
 
 // Same data as ListingCard, horizontal row layout for the list view toggle
 // -- deliberately not a fully independent component: it shares
-// deriveListingCardData() rather than re-deriving price/lastSeen itself.
+// deriveListingCardData() rather than re-deriving price itself.
 function ListingCardRow({ p }: { p: ListingRow }) {
-  const { cover, safeTitle, price, lastSeen } = deriveListingCardData(p);
+  const { cover, safeTitle, price } = deriveListingCardData(p);
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
-      <Link
-        to="/property/$listingNo"
-        params={{ listingNo: p.listing_no }}
-        className="flex gap-4 p-3 sm:p-4"
-      >
-        <div className="relative aspect-[4/3] w-28 flex-shrink-0 overflow-hidden rounded-md bg-muted sm:w-44">
-          <AppImage
-            src={cover}
-            alt={safeTitle}
-            width={200}
-            height={150}
-            className="h-full w-full object-cover transition group-hover:scale-105"
-          />
-          <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
-            {p.deal_type === "rent" ? "租" : "售"}
-          </span>
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col justify-center">
-          <p className="text-base font-bold text-primary sm:text-lg">{price}</p>
-          <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
-            {safeTitle}
-          </h3>
-          {p.source_site && lastSeen && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              最後更新：{lastSeen}
-            </p>
-          )}
-          {p.estates && (
-            <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="h-3 w-3" />
-              {p.estates.name_zh}
-            </p>
-          )}
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            {p.saleable_area && (
-              <span className="inline-flex items-center gap-1">
-                <Maximize2 className="h-3 w-3" />
-                {p.saleable_area} 呎
-              </span>
-            )}
-            {p.bedrooms !== null && (
-              <span className="inline-flex items-center gap-1">
-                <Bed className="h-3 w-3" />
-                {p.bedrooms}
-              </span>
-            )}
-            {p.bathrooms !== null && (
-              <span className="inline-flex items-center gap-1">
-                <Bath className="h-3 w-3" />
-                {p.bathrooms}
-              </span>
-            )}
+      <div className="flex gap-4 p-3 sm:p-4">
+        <Link
+          to="/property/$listingNo"
+          params={{ listingNo: p.listing_no }}
+          className="flex min-w-0 flex-1 gap-4"
+        >
+          <div className="relative aspect-[4/3] w-28 flex-shrink-0 overflow-hidden rounded-md bg-muted sm:w-44">
+            <AppImage
+              src={cover}
+              alt={safeTitle}
+              width={200}
+              height={150}
+              className="h-full w-full object-cover transition group-hover:scale-105"
+            />
+            <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
+              {p.deal_type === "rent" ? "租" : "售"}
+            </span>
           </div>
-        </div>
-      </Link>
+          <div className="flex min-w-0 flex-1 flex-col justify-center">
+            <p className="text-base font-bold text-primary sm:text-lg">
+              {price}
+            </p>
+            <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
+              {safeTitle}
+            </h3>
+            {p.source_site && (
+              <FreshnessStamp
+                updatedAt={p.last_seen_at}
+                className="mt-1 block"
+              />
+            )}
+            {p.estates && (
+              <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3" />
+                {p.estates.name_zh}
+              </p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {p.saleable_area && (
+                <span className="inline-flex items-center gap-1">
+                  <Maximize2 className="h-3 w-3" />
+                  {p.saleable_area} 呎
+                </span>
+              )}
+              {p.bedrooms !== null && (
+                <span className="inline-flex items-center gap-1">
+                  <Bed className="h-3 w-3" />
+                  {p.bedrooms}
+                </span>
+              )}
+              {p.bathrooms !== null && (
+                <span className="inline-flex items-center gap-1">
+                  <Bath className="h-3 w-3" />
+                  {p.bathrooms}
+                </span>
+              )}
+            </div>
+          </div>
+        </Link>
+        {/* Sibling of <Link>, self-start-aligned so it sits at the row's
+            top-right rather than stretching to its full height. */}
+        <button
+          type="button"
+          onClick={() => handleCardShare(safeTitle, p.listing_no)}
+          aria-label={`分享：${safeTitle}`}
+          className="flex h-8 w-8 flex-shrink-0 items-center justify-center self-start rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        >
+          <Share2 className="h-4 w-4" />
+        </button>
+      </div>
     </li>
   );
 }

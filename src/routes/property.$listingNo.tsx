@@ -60,6 +60,7 @@ import {
 } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { jsonLdScript } from "@/lib/schema";
+import { shareUrl } from "@/lib/share";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
@@ -245,16 +246,7 @@ function PropertyPage() {
 
   async function handleShare() {
     const url = typeof window !== "undefined" ? window.location.href : "";
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: safeTitle, url });
-      } catch {
-        /* user cancelled */
-      }
-    } else {
-      await navigator.clipboard.writeText(url);
-      toast.success("已複製連結");
-    }
+    await shareUrl(safeTitle, url);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
