@@ -220,10 +220,9 @@ function HomePage() {
               <MapPin className="h-3.5 w-3.5" />
               深井 · 青山公路 · 汀九
             </span>
-            <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
-              深井 青山公路 汀九買樓租樓
-              <br />
-              <span className="text-brand-bright">晉誠地產</span> ‧ 全部真盤
+            <h1 className="mt-5 text-balance text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
+              深井 青山公路 汀九買樓租樓{" "}
+              <span className="whitespace-nowrap text-brand-bright">晉誠地產</span> ‧ 全部真盤
             </h1>
             <p className="mt-5 text-base leading-relaxed opacity-90 sm:text-lg">
               由熟悉深井、青山公路及汀九嘅持牌代理，為你提供買樓、租樓及放盤貼身服務。

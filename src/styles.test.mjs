@@ -32,3 +32,21 @@ test("__root.tsx preloads the Google Fonts stylesheet ahead of the blocking styl
     /rel:\s*"preload",\s*\n\s*as:\s*"style",\s*\n\s*href:\s*"https:\/\/fonts\.googleapis\.com\/css2\?family=Inter/,
   );
 });
+
+test("the homepage hero headline uses text-balance and a non-breaking brand span, not a hard <br>", () => {
+  const source = read("src/routes/index.tsx");
+  // index.tsx also has an unrelated errorComponent <h1>("載入失敗") earlier in the
+  // file, so a plain (non-global) match would grab that one instead of the hero.
+  // Find every <h1>...</h1> block and select the one that actually contains the
+  // hero's brand name.
+  const headingMatches = source.match(/<h1[^>]*>[\s\S]*?<\/h1>/g) || [];
+  const heading = headingMatches.find((block) => block.includes("晉誠地產"));
+  assert.ok(heading, "expected to find the hero <h1> in index.tsx");
+  assert.match(heading, /text-balance/, "hero <h1> should use the text-balance utility");
+  assert.doesNotMatch(heading, /<br\s*\/?>/, "hero <h1> should not force a line break");
+  assert.match(
+    heading,
+    /whitespace-nowrap[^>]*>晉誠地產/,
+    "晉誠地產 should not be allowed to break mid-word",
+  );
+});
