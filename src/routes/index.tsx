@@ -43,6 +43,7 @@ import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import { coreEstates, estateFigure, CORE_ESTATES_PREVIEW_COUNT } from "@/content/core-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
+import { formatHkd } from "@/lib/format";
 import { SITE_URL, SITE_LOGO_URL, canonicalLink, pageSeo } from "@/content/seo";
 import {
   fetchCmsVideos,
@@ -1004,7 +1005,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">
-            {isRent ? "/月" : psf ? ` · 實呎 $${psf.toLocaleString()}` : ""}
+            {isRent ? "/月" : psf ? ` · 實呎 ${formatHkd(psf)}` : ""}
           </span>
         </div>
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-4 text-sm text-muted-foreground">
