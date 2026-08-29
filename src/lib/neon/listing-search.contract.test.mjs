@@ -277,3 +277,143 @@ test("the listing search index migration exists and is idempotent", () => {
   assert.match(sql, /last_seen_at DESC NULLS LAST/);
   assert.doesNotMatch(sql, /CREATE INDEX(?! IF NOT EXISTS)/);
 });
+
+// DR-3 coverage: the MLS import pipeline (src/lib/mls/match.mjs,
+// reconcile.mjs) already establishes canonical_property_no as the stable
+// per-unit identity at write time, but every listing-read path selected only
+// listing_no -- a re-scraped row under a second listing_no had no way to be
+// recognised as the same unit. listingColumns (shared by searchListings,
+// fetchListingsForEstate, fetchSimilarListings and the corridor path) must
+// select the column so dedupeListings() below has something to key on.
+test("canonical_property_no is selected alongside listing_no in the shared listing columns", async () => {
+  const { rows } = await runSearch({ deal: "all", page: 1, pageSize: 12 });
+  assert.match(rows.text, /p\.canonical_property_no/);
+});
+
+// dedupeListings is a pure array helper in src/lib/queries.ts with no
+// dependency on either of that module's two aliased imports
+// (@/lib/neon/public-data, @/content/castle-peak-road) -- unlike
+// corridor-scope.contract.test.mjs's loader (which wires a real
+// fetchCorridorInventory through its stub), these stub exports only need to
+// exist to satisfy ESM's static linking at load time; none of them are ever
+// called by dedupeListings itself.
+const QUERIES_STUB_PUBLIC_DATA_EXPORTS = [
+  "fetchNeonArticleBySlug",
+  "fetchNeonCmsVideos",
+  "fetchNeonCorridorInventory",
+  "fetchNeonDistrictTransactions",
+  "fetchNeonEstateBySlug",
+  "fetchNeonEstateOptions",
+  "fetchNeonEstateTransactions",
+  "fetchNeonEstates",
+  "fetchNeonFaqs",
+  "fetchNeonFeaturedProperties",
+  "fetchNeonListingCountsByEstate",
+  "fetchNeonListingsForAgent",
+  "fetchNeonListingsForEstate",
+  "fetchNeonPropertyByLegacyDetailId",
+  "fetchNeonPropertyByListingNo",
+  "fetchNeonPublishedArticles",
+  "fetchNeonSimilarListings",
+  "searchNeonListings",
+];
+
+async function loadQueriesForDedupeTests() {
+  const publicDataStubSource = QUERIES_STUB_PUBLIC_DATA_EXPORTS.map(
+    (name) => `export async function ${name}() {
+      throw new Error(${JSON.stringify(`${name} is not exercised by the dedupeListings tests`)});
+    }`,
+  ).join("\n");
+
+  const castlePeakRoadStubSource = `
+    export const corridorRegionScope = { outOfScopeTextAliases: [] };
+    export function isWithinCorridorRegion() { return true; }
+  `;
+
+  const queriesSource = transpile(read("src/lib/queries.ts"))
+    .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
+    .replace('from "@/content/castle-peak-road"', `from "${dataUrl(castlePeakRoadStubSource)}"`);
+
+  return import(dataUrl(queriesSource));
+}
+
+function dedupeFixture(overrides) {
+  return {
+    id: overrides.id ?? overrides.listing_no,
+    listing_no: overrides.listing_no,
+    canonical_property_no: overrides.canonical_property_no ?? null,
+  };
+}
+
+test("dedupeListings keeps only the first row when canonical_property_no matches", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "A1", canonical_property_no: "C001" }),
+    dedupeFixture({ listing_no: "A2", canonical_property_no: "C001" }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["A1"],
+  );
+});
+
+test("dedupeListings does not merge two null-canonical rows with different listing_no", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "B1", canonical_property_no: null }),
+    dedupeFixture({ listing_no: "B2", canonical_property_no: null }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["B1", "B2"],
+  );
+});
+
+test("dedupeListings falls back to listing_no and dedupes two null-canonical rows sharing it", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "C1", canonical_property_no: null }),
+    dedupeFixture({ listing_no: "C1", canonical_property_no: null }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["C1"],
+  );
+  assert.equal(result.length, 1);
+});
+
+test("dedupeListings treats an empty-string canonical_property_no the same as null, not as its own identity", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "D1", canonical_property_no: "" }),
+    dedupeFixture({ listing_no: "D2", canonical_property_no: "" }),
+  ];
+  const result = dedupeListings(rows);
+  // Two rows with an empty-string canonical number are not known to be the
+  // same physical unit any more than two null-canonical rows are -- an empty
+  // string must fall back to the listing_no key, not become a shared "" key
+  // that would wrongly collapse unrelated listings together.
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["D1", "D2"],
+  );
+});
+
+test("dedupeListings dedupes a mixed array of canonical and null-canonical rows independently", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "E1", canonical_property_no: "C900" }),
+    dedupeFixture({ listing_no: "E2", canonical_property_no: null }),
+    dedupeFixture({ listing_no: "E3", canonical_property_no: "C900" }), // dup of E1
+    dedupeFixture({ listing_no: "E2", canonical_property_no: null }), // dup of E2 (same listing_no)
+    dedupeFixture({ listing_no: "E4", canonical_property_no: null }), // distinct, null canonical
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["E1", "E2", "E4"],
+  );
+});

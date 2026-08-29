@@ -50,6 +50,7 @@ export type NeonStaffProfile = NeonPublicAgentProfile;
 export type NeonPropertyRow = {
   id: string;
   listing_no: string;
+  canonical_property_no: string | null;
   title_zh: string;
   title_en: string | null;
   deal_type: "sale" | "rent";

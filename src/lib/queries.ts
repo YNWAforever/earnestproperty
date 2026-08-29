@@ -202,6 +202,7 @@ export type ListingRow = Pick<
   NeonPropertyRow,
   | "id"
   | "listing_no"
+  | "canonical_property_no"
   | "title_zh"
   | "deal_type"
   | "price"
@@ -268,6 +269,44 @@ export function emptyCorridorInventory(): CorridorInventory {
   };
 }
 
+/**
+ * De-duplicates listing rows by canonical_property_no -- the identity the MLS
+ * import pipeline already establishes at write time (src/lib/mls/match.mjs),
+ * but which the render paths never enforced. A re-scraped row for the same
+ * physical unit under a second listing_no otherwise renders twice on the same
+ * page (DR-3).
+ *
+ * Falls back to listing_no when canonical_property_no is null OR an empty
+ * string -- the `row.canonical_property_no ? ... : ...` truthiness check
+ * handles both the same way, which is deliberate: two rows that both lack a
+ * canonical number (whether the column is NULL or was written as "") are not
+ * known to be the same property, so keying an empty string as its own shared
+ * identity would wrongly collapse unrelated listings together.
+ *
+ * Keeps the first occurrence. Every call site orders its rows by
+ * `featured DESC, last_seen_at DESC NULLS LAST, created_at DESC` before this
+ * runs (searchListings/fetchListingsForEstate and fetchSimilarListings via
+ * that same ORDER BY in public-data.server.ts; the corridor path via
+ * fetchCorridorRows' ROW_NUMBER() OVER (... ORDER BY the same three columns)
+ * per deal_type partition) -- so the kept row is always the freshest/most-
+ * featured of any duplicate pair, never an arbitrary one.
+ */
+export function dedupeListings<
+  T extends { listing_no: string; canonical_property_no?: string | null },
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const row of rows) {
+    const key = row.canonical_property_no
+      ? `canonical:${row.canonical_property_no}`
+      : `listing:${row.listing_no}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(row);
+  }
+  return result;
+}
+
 function withinCorridorScope(row: ListingRow): boolean {
   return isWithinCorridorRegion({
     districtSlug: row.district_slug,
@@ -301,8 +340,8 @@ export async function fetchCorridorInventoryForAliases(
   return {
     saleTotal: result.saleTotal,
     rentTotal: result.rentTotal,
-    saleRows: (result.saleRows as ListingRow[]).filter(withinCorridorScope),
-    rentRows: (result.rentRows as ListingRow[]).filter(withinCorridorScope),
+    saleRows: dedupeListings((result.saleRows as ListingRow[]).filter(withinCorridorScope)),
+    rentRows: dedupeListings((result.rentRows as ListingRow[]).filter(withinCorridorScope)),
   };
 }
 
@@ -318,13 +357,13 @@ export async function searchListings(f: ListingFilters): Promise<{
       data: { ...f, estateSlug },
     });
     if (!f.estateSlug || result.total > 0) {
-      return { rows: result.rows as ListingRow[], total: result.total };
+      return { rows: dedupeListings(result.rows as ListingRow[]), total: result.total };
     }
     lastResult = result;
   }
 
   return {
-    rows: (lastResult?.rows ?? []) as ListingRow[],
+    rows: dedupeListings((lastResult?.rows ?? []) as ListingRow[]),
     total: lastResult?.total ?? 0,
   };
 }
@@ -371,7 +410,7 @@ export async function fetchListingsForEstate(estateSlug: string, limit = 6): Pro
     const rows = (await fetchNeonListingsForEstate({
       data: { estateSlug: candidate, limit },
     })) as ListingRow[];
-    if (rows.length > 0) return rows;
+    if (rows.length > 0) return dedupeListings(rows);
   }
   return [];
 }
@@ -387,6 +426,7 @@ export async function fetchPropertyByLegacyDetailId(oldId: string) {
 export type SimilarListing = {
   id: string;
   listing_no: string;
+  canonical_property_no: string | null;
   title_zh: string;
   deal_type: "sale" | "rent";
   price: number | null;
@@ -402,9 +442,10 @@ export async function fetchSimilarListings(
   excludeId: string,
   limit = 4,
 ): Promise<SimilarListing[]> {
-  return (await fetchNeonSimilarListings({
+  const rows = (await fetchNeonSimilarListings({
     data: { estateId, dealType, excludeId, limit },
   })) as SimilarListing[];
+  return dedupeListings(rows);
 }
 
 export type EstateTransaction = {

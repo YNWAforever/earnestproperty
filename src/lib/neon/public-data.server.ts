@@ -48,6 +48,7 @@ const publicAgentProfileColumns = `
 const listingColumns = `
   p.id,
   p.listing_no,
+  p.canonical_property_no,
   p.title_zh,
   p.title_en,
   p.deal_type,
@@ -201,6 +202,7 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
   return {
     id: stringOrEmpty(row.id),
     listing_no: stringOrEmpty(row.listing_no),
+    canonical_property_no: stringOrNull(row.canonical_property_no),
     title_zh: stringOrEmpty(row.title_zh),
     title_en: stringOrNull(row.title_en),
     deal_type: dealType(row.deal_type),
