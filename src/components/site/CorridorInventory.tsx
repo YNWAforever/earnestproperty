@@ -4,16 +4,19 @@ import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
+import { formatHkd, formatSaleDisplay } from "@/lib/format";
 import type { CorridorInventory as CorridorInventoryData, ListingRow } from "@/lib/queries";
 
 type ListingsDeal = "all" | "sale" | "rent";
 
 function formatPrice(row: ListingRow) {
   if (row.deal_type === "rent") {
-    return row.rent ? `HK$${row.rent.toLocaleString()}/月` : "查詢租金";
+    const hkd = formatHkd(row.rent);
+    return hkd ? `HK${hkd}/月` : "查詢租金";
   }
 
-  return row.price ? `HK$${(row.price / 1_000_000).toFixed(2)}M` : "查詢售價";
+  const sale = formatSaleDisplay(row.price);
+  return sale ? `HK${sale}` : "查詢售價";
 }
 
 function ListingMiniCard({ listing }: { listing: ListingRow }) {
