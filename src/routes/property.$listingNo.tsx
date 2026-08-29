@@ -41,6 +41,7 @@ import {
   type EstateTransaction,
 } from "@/lib/queries";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
+import { formatHkd, formatHkDate, formatSaleDisplay } from "@/lib/format";
 import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
@@ -79,13 +80,15 @@ export const Route = createFileRoute("/property/$listingNo")({
     const p = (loaderData as PropertyHeadData | undefined)?.property;
     if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
     const canonical = canonicalLink(`/property/${p.listing_no}`);
+    const rentDisplay = formatHkd(Number(p.rent));
+    const saleDisplay = formatSaleDisplay(Number(p.price));
     const priceStr =
       p.deal_type === "rent"
-        ? p.rent
-          ? `月租 $${Number(p.rent).toLocaleString()}`
+        ? rentDisplay
+          ? `月租 ${rentDisplay}`
           : ""
-        : p.price
-          ? `售 $${(Number(p.price) / 1_000_000).toFixed(2)}M`
+        : saleDisplay
+          ? `售 ${saleDisplay}`
           : "";
     const title = `${p.title_zh}｜${priceStr}｜晉誠地產`;
     const desc = (p.description ?? "").slice(0, 150) || `${p.title_zh} ${priceStr}`;
