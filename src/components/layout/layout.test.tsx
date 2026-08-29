@@ -4,9 +4,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Container } from "./Container";
+import { EmptyState } from "./EmptyState";
 import { Prose } from "./Prose";
 import { Section } from "./Section";
 import { SectionHeading } from "./SectionHeading";
+import { SkeletonBlock } from "./SkeletonBlock";
+import { Stat } from "./Stat";
 
 function render(node: ReturnType<typeof createElement>) {
   return load(renderToStaticMarkup(node));
@@ -124,5 +127,73 @@ describe("Prose", () => {
     const el = $('[data-testid="prose"]');
     expect(el).toHaveLength(1);
     expect(el.find("p").text()).toBe("正文內容");
+  });
+});
+
+describe("Stat", () => {
+  test("renders the value and label", () => {
+    const $ = render(createElement(Stat, { value: "23", label: "位代理" }));
+    expect($("p").first().text()).toBe("23");
+    expect($("p").last().text()).toBe("位代理");
+  });
+
+  test("the value uses tabular-nums so digits don't jitter in a row of stats", () => {
+    const $ = render(createElement(Stat, { value: "1,234", label: "宗成交" }));
+    expect($("p").first().hasClass("tabular-nums")).toBe(true);
+  });
+});
+
+describe("EmptyState", () => {
+  test("renders the title and description without an icon or action", () => {
+    const $ = render(
+      createElement(EmptyState, {
+        title: "暫未有成交資料",
+        description: "頁面會保持可用",
+      }),
+    );
+    expect($("h2").text()).toBe("暫未有成交資料");
+    expect($("p").text()).toBe("頁面會保持可用");
+    expect($("svg")).toHaveLength(0);
+  });
+
+  test("renders an action when provided", () => {
+    const $ = render(
+      createElement(EmptyState, {
+        title: "冇符合條件嘅放盤",
+        action: createElement("a", { href: "/listings" }, "清除篩選"),
+      }),
+    );
+    expect($('a[href="/listings"]').text()).toBe("清除篩選");
+  });
+});
+
+describe("SkeletonBlock", () => {
+  test("the default 'lines' variant renders three pulse blocks", () => {
+    const $ = render(
+      createElement(SkeletonBlock, { "data-testid": "skeleton" }),
+    );
+    const el = $('[data-testid="skeleton"]');
+    expect(el.find(".animate-pulse")).toHaveLength(3);
+  });
+
+  test("a custom line count is respected", () => {
+    const $ = render(
+      createElement(SkeletonBlock, { "data-testid": "skeleton", lines: 5 }),
+    );
+    expect($('[data-testid="skeleton"]').find(".animate-pulse")).toHaveLength(
+      5,
+    );
+  });
+
+  test("the 'card' variant renders an image placeholder plus two text lines", () => {
+    const $ = render(
+      createElement(SkeletonBlock, {
+        "data-testid": "skeleton",
+        variant: "card",
+      }),
+    );
+    expect($('[data-testid="skeleton"]').find(".animate-pulse")).toHaveLength(
+      3,
+    );
   });
 });
