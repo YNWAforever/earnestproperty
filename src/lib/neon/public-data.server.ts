@@ -637,6 +637,14 @@ export async function fetchListingsForAgent(input: {
   return result.rows;
 }
 
+// Deliberately not filtered to status = 'active': the caller (the
+// property-detail route, its only caller -- see queries.ts/public-data.ts)
+// needs to distinguish a listing that was withdrawn/sold/rented from one
+// that never existed, so this fetches by listing_no regardless of status
+// and lets the caller branch on the returned status. Every other public
+// listing query in this file (searchListings, fetchSimilarListings, etc.)
+// keeps its own 'active' filter untouched -- this loosening is scoped to
+// this single-listing lookup only.
 export async function fetchPropertyByListingNo(input: {
   listingNo: string;
 }): Promise<NeonPropertyRow | null> {
@@ -646,7 +654,7 @@ export async function fetchPropertyByListingNo(input: {
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
     ${publicAgentJoin}
-    WHERE p.status = 'active' AND p.listing_no = $1
+    WHERE p.listing_no = $1
     LIMIT 1
     `,
     [input.listingNo],
