@@ -175,10 +175,19 @@ test("branch is never defaulted in either agent route", () => {
 
 test("agent avatars and profile form include required accessibility details", () => {
   for (const file of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
-    const images = [...readExisting(file).matchAll(/<img[\s\S]*?\/>/g)].map((match) => match[0]);
+    // AppImage renders a real <img> under the hood and defaults loading to "lazy"
+    // internally (see src/components/media/AppImage.tsx), so callers no longer
+    // spell out loading="lazy" in source. Match both tag names, but only require
+    // the explicit attribute on a raw <img> -- an AppImage caller would have to
+    // deliberately override the default to opt out of lazy loading.
+    const images = [...readExisting(file).matchAll(/<(?:img|AppImage)[\s\S]*?\/>/g)].map(
+      (match) => match[0],
+    );
     assert.ok(images.length > 0, `${file} should render an avatar image`);
     for (const image of images) {
-      assert.match(image, /loading="lazy"/);
+      if (image.startsWith("<img")) {
+        assert.match(image, /loading="lazy"/);
+      }
       assert.match(image, /width=\{\d+\}/);
       assert.match(image, /height=\{\d+\}/);
     }
