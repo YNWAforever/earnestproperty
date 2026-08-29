@@ -59,6 +59,7 @@ export type EstateSummary = {
 export type FeaturedProperty = {
   id: string;
   listing_no: string;
+  canonical_property_no: string | null;
   title_zh: string;
   deal_type: string;
   district_slug: string;
@@ -148,16 +149,16 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
     data: { limit: FEATURED_FETCH_LIMIT },
   })) as FeaturedProperty[];
 
-  return rows
-    .filter((row) =>
+  return dedupeListings(
+    rows.filter((row) =>
       isWithinCorridorRegion({
         districtSlug: row.district_slug,
         estateSlug: row.estates?.slug,
         estateDistrictSlug: row.estates?.district_slug,
         text: [row.title_zh, row.address, row.estates?.name_zh],
       }),
-    )
-    .slice(0, FEATURED_DISPLAY_LIMIT);
+    ),
+  ).slice(0, FEATURED_DISPLAY_LIMIT);
 }
 
 export type DistrictTransaction = {
@@ -270,18 +271,32 @@ export function emptyCorridorInventory(): CorridorInventory {
 }
 
 /**
- * De-duplicates listing rows by canonical_property_no -- the identity the MLS
- * import pipeline already establishes at write time (src/lib/mls/match.mjs),
- * but which the render paths never enforced. A re-scraped row for the same
- * physical unit under a second listing_no otherwise renders twice on the same
- * page (DR-3).
+ * De-duplicates listing rows by (canonical_property_no, deal_type) -- the
+ * identity the MLS import pipeline already establishes at write time
+ * (src/lib/mls/match.mjs's EXACT_LINK_REASON is itself keyed on
+ * property_no + deal_type, never property_no alone). A re-scraped row for
+ * the same physical unit AND deal type under a second listing_no otherwise
+ * renders twice on the same page (DR-3).
  *
- * Falls back to listing_no when canonical_property_no is null OR an empty
- * string -- the `row.canonical_property_no ? ... : ...` truthiness check
- * handles both the same way, which is deliberate: two rows that both lack a
- * canonical number (whether the column is NULL or was written as "") are not
- * known to be the same property, so keying an empty string as its own shared
- * identity would wrongly collapse unrelated listings together.
+ * The key is deal-type-aware because canonical_property_no alone is NOT a
+ * safe merge key: one physical unit can legitimately have both an active
+ * sale row and an active rent row sharing the same canonical_property_no --
+ * normalizeListingDetail emits exactly this pair for a dual-priced listing
+ * (src/lib/mls/mls-fixtures.test.mjs: "a listing with both a sale and a rent
+ * price emits two rows"), and searchListings/fetchListingsForEstate query
+ * with deal="all" (listingWhere only adds a deal_type predicate when
+ * `input.deal !== "all"`), so both rows flow through the same result set.
+ * Keying on canonical_property_no alone would silently drop one of the two,
+ * making a real active listing disappear from /listings' 全部 tab, /videos,
+ * and every /estate/$slug listings section.
+ *
+ * Falls back to `${listing_no}:${deal_type}` when canonical_property_no is
+ * null OR an empty string -- the `row.canonical_property_no ? ... : ...`
+ * truthiness check handles both the same way, which is deliberate: two rows
+ * that both lack a canonical number (whether the column is NULL or was
+ * written as "") are not known to be the same property, so keying an empty
+ * string as its own shared identity would wrongly collapse unrelated
+ * listings together.
  *
  * Keeps the first occurrence. Every call site orders its rows by
  * `featured DESC, last_seen_at DESC NULLS LAST, created_at DESC` before this
@@ -292,14 +307,18 @@ export function emptyCorridorInventory(): CorridorInventory {
  * featured of any duplicate pair, never an arbitrary one.
  */
 export function dedupeListings<
-  T extends { listing_no: string; canonical_property_no?: string | null },
+  T extends {
+    listing_no: string;
+    canonical_property_no?: string | null;
+    deal_type: string;
+  },
 >(rows: T[]): T[] {
   const seen = new Set<string>();
   const result: T[] = [];
   for (const row of rows) {
     const key = row.canonical_property_no
-      ? `canonical:${row.canonical_property_no}`
-      : `listing:${row.listing_no}`;
+      ? `canonical:${row.canonical_property_no}:${row.deal_type}`
+      : `listing:${row.listing_no}:${row.deal_type}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(row);
@@ -416,7 +435,10 @@ export async function fetchListingsForEstate(estateSlug: string, limit = 6): Pro
 }
 
 export async function fetchListingsForAgent(agentId: string, limit = 6): Promise<ListingRow[]> {
-  return (await fetchNeonListingsForAgent({ data: { agentId, limit } })) as ListingRow[];
+  const rows = (await fetchNeonListingsForAgent({
+    data: { agentId, limit },
+  })) as ListingRow[];
+  return dedupeListings(rows);
 }
 
 export async function fetchPropertyByLegacyDetailId(oldId: string) {

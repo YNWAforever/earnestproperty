@@ -290,6 +290,29 @@ test("canonical_property_no is selected alongside listing_no in the shared listi
   assert.match(rows.text, /p\.canonical_property_no/);
 });
 
+// Every function that returns rows drawn from the shared listingColumns /
+// mapListingRow pipeline must dedupe them -- fetchFeaturedProperties (the
+// homepage 精選筍盤 section) and fetchListingsForAgent (agent-profile listing
+// pages) draw from that same pipeline but were left out of the original DR-3
+// fix's four call sites, leaving them exposed to the same duplicate-render
+// bug. Source-scanned rather than executed because both wrap createServerFn
+// server functions the .mjs harness above can't easily stub.
+test("fetchFeaturedProperties and fetchListingsForAgent also dedupe their rows", () => {
+  const queries = read("src/lib/queries.ts");
+
+  const featured = queries.slice(
+    queries.indexOf("export async function fetchFeaturedProperties"),
+    queries.indexOf("export type DistrictTransaction"),
+  );
+  assert.match(featured, /dedupeListings\(/);
+
+  const forAgent = queries.slice(
+    queries.indexOf("export async function fetchListingsForAgent"),
+    queries.indexOf("export async function fetchPropertyByLegacyDetailId"),
+  );
+  assert.match(forAgent, /dedupeListings\(/);
+});
+
 // dedupeListings is a pure array helper in src/lib/queries.ts with no
 // dependency on either of that module's two aliased imports
 // (@/lib/neon/public-data, @/content/castle-peak-road) -- unlike
@@ -337,24 +360,67 @@ async function loadQueriesForDedupeTests() {
   return import(dataUrl(queriesSource));
 }
 
+// deal_type defaults to "sale" so every existing fixture in this file shares
+// it implicitly (the real DR-3 duplicate case: same physical unit AND same
+// deal type, re-scraped under a second listing_no) -- tests that need to
+// prove the sale+rent pair is preserved pass deal_type explicitly per row.
 function dedupeFixture(overrides) {
   return {
     id: overrides.id ?? overrides.listing_no,
     listing_no: overrides.listing_no,
     canonical_property_no: overrides.canonical_property_no ?? null,
+    deal_type: overrides.deal_type ?? "sale",
   };
 }
 
-test("dedupeListings keeps only the first row when canonical_property_no matches", async () => {
+test("dedupeListings keeps only the first row when canonical_property_no and deal_type both match", async () => {
   const { dedupeListings } = await loadQueriesForDedupeTests();
   const rows = [
-    dedupeFixture({ listing_no: "A1", canonical_property_no: "C001" }),
-    dedupeFixture({ listing_no: "A2", canonical_property_no: "C001" }),
+    dedupeFixture({
+      listing_no: "A1",
+      canonical_property_no: "C001",
+      deal_type: "sale",
+    }),
+    dedupeFixture({
+      listing_no: "A2",
+      canonical_property_no: "C001",
+      deal_type: "sale",
+    }),
   ];
   const result = dedupeListings(rows);
   assert.deepEqual(
     result.map((r) => r.listing_no),
     ["A1"],
+  );
+});
+
+// The critical DR-3 regression this compound key exists to prevent: a unit
+// with both an active sale row and an active rent row sharing one
+// canonical_property_no (exactly what normalizeListingDetail emits for a
+// dual-priced listing, per src/lib/mls/mls-fixtures.test.mjs) must NOT be
+// collapsed to one row by a canonical_property_no-only key. Collapsing this
+// pair silently drops a real, active listing from /listings' 全部 tab,
+// /videos, and every /estate/$slug listings section -- deal:"all" queries
+// never add a deal_type predicate (see listingWhere in
+// public-data.server.ts), so both rows flow through the same result set.
+test("dedupeListings keeps both rows of a sale+rent pair sharing one canonical_property_no", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({
+      listing_no: "F1",
+      canonical_property_no: "C500",
+      deal_type: "sale",
+    }),
+    dedupeFixture({
+      listing_no: "F2",
+      canonical_property_no: "C500",
+      deal_type: "rent",
+    }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["F1", "F2"],
   );
 });
 
