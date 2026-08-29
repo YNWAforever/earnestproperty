@@ -103,6 +103,13 @@ describe("SectionHeading", () => {
     );
     expect($('a[href="/listings"]').text()).toBe("查看全部");
   });
+
+  test("forwards id to the heading element, not the wrapper, so aria-labelledby can target it", () => {
+    const $ = render(
+      createElement(SectionHeading, { id: "my-heading", title: "標題" }),
+    );
+    expect($("h2").attr("id")).toBe("my-heading");
+  });
 });
 
 describe("Prose", () => {

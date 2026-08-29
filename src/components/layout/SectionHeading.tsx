@@ -14,7 +14,7 @@ export interface SectionHeadingProps
 
 const SectionHeading = React.forwardRef<HTMLDivElement, SectionHeadingProps>(
   (
-    { className, eyebrow, title, as: Heading = "h2", action, ...props },
+    { className, id, eyebrow, title, as: Heading = "h2", action, ...props },
     ref,
   ) => (
     <div
@@ -29,7 +29,10 @@ const SectionHeading = React.forwardRef<HTMLDivElement, SectionHeadingProps>(
         {eyebrow ? (
           <p className="text-sm font-semibold text-primary">{eyebrow}</p>
         ) : null}
-        <Heading className="mt-1 text-2xl font-bold tracking-tight text-primary sm:text-3xl">
+        <Heading
+          id={id}
+          className="mt-1 text-2xl font-bold tracking-tight text-primary sm:text-3xl"
+        >
           {title}
         </Heading>
       </div>
