@@ -391,13 +391,15 @@ function FiltersPanel({
 
 function ListingCard({ p }: { p: ListingRow }) {
   const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
+  const rentDisplay = formatHkd(p.rent);
+  const saleDisplay = formatSaleDisplay(p.price);
   const price =
     p.deal_type === "rent"
-      ? p.rent
-        ? `HK${formatHkd(p.rent)}/月`
+      ? rentDisplay
+        ? `HK${rentDisplay}/月`
         : "—"
-      : p.price
-        ? `HK${formatSaleDisplay(p.price)}`
+      : saleDisplay
+        ? `HK${saleDisplay}`
         : "—";
   const lastSeen = formatHkDate(p.last_seen_at);
 
