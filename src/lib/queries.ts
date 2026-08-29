@@ -214,6 +214,8 @@ export type ListingRow = Pick<
   | "source_site"
   | "images"
   | "video_url"
+  | "district_slug"
+  | "address"
   | "estates"
 >;
 
@@ -266,17 +268,34 @@ function emptyCorridorInventory(): CorridorInventory {
   };
 }
 
+function withinCorridorScope(row: ListingRow): boolean {
+  return isWithinCorridorRegion({
+    districtSlug: row.district_slug,
+    estateSlug: row.estates?.slug ?? null,
+    estateDistrictSlug: row.estates?.district_slug ?? null,
+    text: [row.title_zh, row.address],
+  });
+}
+
 export async function fetchCorridorInventoryForAliases(
   input: CorridorInventoryAliasInput,
 ): Promise<CorridorInventory> {
   const normalized = normalizeCorridorInventoryInput(input);
   if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
   const result = await fetchNeonCorridorInventory({ data: normalized });
+  // saleTotal/rentTotal are SQL-computed counts against the same alias set
+  // used for the rows below; they are not re-derived from the filtered rows.
+  // The strict-alias cleanup in castle-peak-road.ts already removes the
+  // primary leak vector at the SQL WHERE-clause level, so this filter is a
+  // second, defense-in-depth layer against any residual text-alias match --
+  // in the rare case it drops a row, the displayed total can be very slightly
+  // higher than the rendered row count, the same way FEATURED_FETCH_LIMIT
+  // above already over-fetches relative to what's displayed.
   return {
     saleTotal: result.saleTotal,
     rentTotal: result.rentTotal,
-    saleRows: result.saleRows as ListingRow[],
-    rentRows: result.rentRows as ListingRow[],
+    saleRows: (result.saleRows as ListingRow[]).filter(withinCorridorScope),
+    rentRows: (result.rentRows as ListingRow[]).filter(withinCorridorScope),
   };
 }
 

@@ -21,6 +21,7 @@ import { jsonLdScript } from "@/lib/schema";
 type SegmentLoaderData = {
   segment: CorridorSegment;
   inventory: CorridorInventoryData;
+  nearbyInventory: CorridorInventoryData;
 };
 
 type ListingsDeal = "all" | "sale" | "rent";
@@ -30,14 +31,22 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
     const segment = getCastlePeakRoadSegment(params.segment);
     if (!segment) throw notFound();
 
-    const inventory = await fetchCorridorInventoryForAliases({
-      districtSlugs: segment.districtSlugs,
-      estateSlugs: segment.estateSlugs,
-      textAliases: segment.textAliases,
-      limit: 6,
-    });
+    const [inventory, nearbyInventory] = await Promise.all([
+      fetchCorridorInventoryForAliases({
+        districtSlugs: segment.districtSlugs,
+        estateSlugs: segment.estateSlugs,
+        textAliases: segment.textAliases,
+        limit: 6,
+      }),
+      fetchCorridorInventoryForAliases({
+        districtSlugs: segment.nearbyDistrictSlugs,
+        estateSlugs: segment.nearbyEstateSlugs,
+        textAliases: segment.nearbyTextAliases,
+        limit: 6,
+      }),
+    ]);
 
-    return { segment, inventory };
+    return { segment, inventory, nearbyInventory };
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -205,7 +214,7 @@ function InfoCard({ icon, title, text }: { icon: ReactNode; title: string; text:
 }
 
 function CastlePeakRoadSegmentPage() {
-  const { segment, inventory } = Route.useLoaderData() as SegmentLoaderData;
+  const { segment, inventory, nearbyInventory } = Route.useLoaderData() as SegmentLoaderData;
   const allListings = [...inventory.saleRows, ...inventory.rentRows];
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -348,6 +357,19 @@ function CastlePeakRoadSegmentPage() {
           listingsHref={getSegmentListingsHref(segment)}
         />
       </section>
+
+      {(nearbyInventory.saleRows.length > 0 || nearbyInventory.rentRows.length > 0) && (
+        <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+          <CorridorInventory
+            inventory={nearbyInventory}
+            inquiryText={`你好，我想查詢${segment.nameZh}附近盤源`}
+            listingsHref={getSegmentListingsHref(segment)}
+            eyebrow="附近地段"
+            heading="附近選擇"
+            description="呢啲放盤鄰近呢個分段，但唔屬於呢個分段嘅核心範圍，可 WhatsApp 查詢實際位置。"
+          />
+        </section>
+      )}
 
       <section className="border-y bg-card">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_0.8fr] lg:px-8">

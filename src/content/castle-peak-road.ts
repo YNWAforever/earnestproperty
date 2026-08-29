@@ -44,6 +44,17 @@ export type CorridorSegment = {
   districtSlugs: string[];
   estateSlugs: string[];
   textAliases: string[];
+  /**
+   * A broader, explicitly-labelled "附近選擇" (nearby) result set — content
+   * that borders this segment but isn't claimed as its own strict inventory.
+   * Empty arrays mean the segment has no separate nearby block. Both the
+   * strict and nearby sets are still passed through isWithinCorridorRegion()
+   * inside fetchCorridorInventoryForAliases, so neither can ever surface
+   * corridorRegionScope.outOfScopeTextAliases stock.
+   */
+  nearbyDistrictSlugs: string[];
+  nearbyEstateSlugs: string[];
+  nearbyTextAliases: string[];
   faqs: CorridorFaq[];
   links: CorridorLink[];
 };
@@ -112,7 +123,17 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     // so it is recovered through the textAliases below rather than by accepting
     // tsuen-wan as a districtSlug — accepting it would drag the 荃灣, 大欖涌 and
     // 屯門 listings the client asked us to exclude into corridor inventory.
-    districtSlugs: ["ting-kau", "yau-kom-tau", "castle-peak-road"],
+    //
+    // "castle-peak-road" is the normalizer's catch-all for anything mentioning
+    // 青山公路 that didn't match a more specific district (src/lib/mls/normalize-old-site.mjs:24-29)
+    // -- a road that runs all the way to 屯門, so it cannot be Ting Kau's own
+    // strict district. It moves to the nearby set below instead of being
+    // dropped outright, so a genuinely nearby castle-peak-road-tagged listing
+    // is still visible, just honestly labelled 附近選擇 rather than claimed as
+    // Ting Kau's own stock. "yau-kom-tau" is dropped entirely, not moved: the
+    // normalizer never assigns it (confirmed dead -- 油柑頭 stock actually
+    // normalises to "tsuen-wan" and is recovered via the textAliases below).
+    districtSlugs: ["ting-kau"],
     estateSlugs: [],
     textAliases: [
       "汀九",
@@ -129,6 +150,9 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "海雲軒",
       "縉皇居",
     ],
+    nearbyDistrictSlugs: ["castle-peak-road"],
+    nearbyEstateSlugs: [],
+    nearbyTextAliases: [],
     faqs: [
       // 荃灣西 left the corridor with the client's p47 district prune, so the old
       // 「荃灣西同油柑頭」 FAQ no longer describes anything on the page. Rewritten
@@ -216,6 +240,9 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "青龍頭",
       "Tsing Lung Tau",
     ],
+    nearbyDistrictSlugs: [],
+    nearbyEstateSlugs: [],
+    nearbyTextAliases: [],
     faqs: [
       {
         question: "深井在青山公路沿線有咩優勢？",

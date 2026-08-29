@@ -145,20 +145,24 @@ export function CorridorInventory({
   inventory,
   inquiryText,
   listingsHref,
+  eyebrow = "Live Listings",
+  heading = "即時放盤",
+  description = "放盤數字來自網站已接入的公開真盤資料，實際可睇盤源可 WhatsApp 再確認。",
 }: {
   inventory: CorridorInventoryData;
   inquiryText: string;
   listingsHref: string;
+  eyebrow?: string;
+  heading?: string;
+  description?: string;
 }) {
   return (
     <section className="rounded-lg border bg-card p-5 shadow-card sm:p-6">
       <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-coral">Live Listings</p>
-          <h2 className="mt-1 text-2xl font-bold text-primary">即時放盤</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            放盤數字來自網站已接入的公開真盤資料，實際可睇盤源可 WhatsApp 再確認。
-          </p>
+          <p className="text-sm font-semibold text-coral">{eyebrow}</p>
+          <h2 className="mt-1 text-2xl font-bold text-primary">{heading}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="outline">

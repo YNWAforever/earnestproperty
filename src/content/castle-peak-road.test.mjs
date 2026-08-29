@@ -364,6 +364,28 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   // coverage.
 });
 
+test("Ting Kau's strict alias set excludes the castle-peak-road catch-all and the dead yau-kom-tau slug", () => {
+  const tingKau = castlePeakRoadSegments.find((s) => s.slug === "ting-kau");
+  assert.ok(tingKau);
+  assert.deepStrictEqual(tingKau.districtSlugs, ["ting-kau"]);
+  assert.ok(!tingKau.districtSlugs.includes("castle-peak-road"));
+  assert.ok(!tingKau.districtSlugs.includes("yau-kom-tau"));
+});
+
+test("Ting Kau's nearby set carries the castle-peak-road catch-all", () => {
+  const tingKau = castlePeakRoadSegments.find((s) => s.slug === "ting-kau");
+  assert.ok(tingKau);
+  assert.deepStrictEqual(tingKau.nearbyDistrictSlugs, ["castle-peak-road"]);
+});
+
+test("every segment declares nearby alias arrays, even when empty", () => {
+  for (const segment of castlePeakRoadSegments) {
+    assert.ok(Array.isArray(segment.nearbyDistrictSlugs));
+    assert.ok(Array.isArray(segment.nearbyEstateSlugs));
+    assert.ok(Array.isArray(segment.nearbyTextAliases));
+  }
+});
+
 test("corridor inventory uses Neon alias query with public query wrapper", () => {
   const server = read("src/lib/neon/public-data.server.ts");
   const client = read("src/lib/neon/public-data.ts");
