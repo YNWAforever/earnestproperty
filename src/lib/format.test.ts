@@ -92,9 +92,12 @@ describe("formatPsf", () => {
 describe("formatHkDate", () => {
   test("anchors to Asia/Hong_Kong regardless of the input's UTC-day boundary", () => {
     // 2026-01-01T16:30:00Z is 2026-01-02T00:30 in Hong Kong (UTC+8). A
-    // formatter without an explicit timeZone would report 1月1日 on a UTC
-    // server and 1月2日 on an HKT browser -- this is the exact DR-2 hydration
-    // mismatch. formatHkDate must report 2026/01/02 no matter where it runs.
+    // formatter without an explicit timeZone would resolve to the UTC day
+    // (Jan 1) on a UTC server and the HKT day (Jan 2) on an HKT browser --
+    // this is the exact DR-2 hydration mismatch. formatHkDate must resolve
+    // to the Hong Kong day (Jan 2) no matter where it runs. The expected
+    // string below is "02/01/2026" because this environment's ICU renders
+    // zh-HK numeric dates as DD/MM/YYYY, not because the day differs.
     const date = new Date("2026-01-01T16:30:00Z");
     expect(formatHkDate(date)).toBe("02/01/2026");
   });
