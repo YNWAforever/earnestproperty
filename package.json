@@ -26,7 +26,7 @@
     "test:media": "bun test src/components/media/AppImage.test.tsx",
     "test:styles": "node --test src/styles.test.mjs",
     "format": "prettier --write .",
-    "test:corridor": "node --test src/content/castle-peak-road.test.mjs",
+    "test:corridor": "node --test src/content/castle-peak-road.test.mjs src/lib/neon/corridor-scope.contract.test.mjs",
     "test:seo": "node --test src/content/seo-source.test.mjs src/content/canonical-links.test.mjs src/lib/schema.test.mjs && bun test src/lib/schema.test.ts",
     "test:blog": "node --test src/routes/blog.routes.test.mjs",
     "test:videos": "node --test src/lib/video-presentation.test.mjs src/lib/video-tags.test.mjs src/routes/videos.contract.test.mjs",
