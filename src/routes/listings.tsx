@@ -262,14 +262,21 @@ function buildActiveFilterChips(
       removeKeys: ["bedrooms"],
     });
   }
-  if (search.minPrice !== undefined) {
+  // Mirrors describeListingSearch()'s gate above: the server (listingWhere
+  // in public-data.server.ts) ignores price bounds entirely when no deal
+  // type is chosen (sale prices are in millions, rents in thousands -- no
+  // single bound can mean both), so a chip claiming a price filter is
+  // active here would misrepresent what's actually filtering the results,
+  // e.g. after dismissing just the "售盤"/"租盤" chip while a price bound
+  // is still in the URL.
+  if (search.deal !== "all" && search.minPrice !== undefined) {
     chips.push({
       key: "minPrice",
       label: `最低 $${search.minPrice.toLocaleString()}`,
       removeKeys: ["minPrice"],
     });
   }
-  if (search.maxPrice !== undefined) {
+  if (search.deal !== "all" && search.maxPrice !== undefined) {
     chips.push({
       key: "maxPrice",
       label: `最高 $${search.maxPrice.toLocaleString()}`,

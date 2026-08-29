@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 
 // Source-scan regression tests for /listings' UI shell (mobile filter
 // drawer, active-filter chips, grid/list toggle, loading/error states).
@@ -12,6 +13,46 @@ const source = await readFile(
   new URL("./listings.tsx", import.meta.url),
   "utf8",
 );
+
+// buildActiveFilterChips() is a plain, dependency-light function (no JSX,
+// no router/React imports needed at runtime) sandwiched between two other
+// top-level declarations that already have unique source anchors elsewhere
+// in this file. Unlike the pure-regex tests above, this extracts its real
+// source text (plus its two small dependencies) and actually executes it,
+// so a behavioral regression -- e.g. a chip rendering for a filter that no
+// longer has any effect on the results -- fails the test rather than just
+// silently matching whatever text happens to be there.
+function loadActiveFilterChipsFn() {
+  const districtBlock = source.slice(
+    source.indexOf("const DISTRICT_LABELS"),
+    source.indexOf("type ActiveFilterChip"),
+  );
+  const sortLabelsBlock = source.slice(
+    source.indexOf("const SORT_LABELS"),
+    source.indexOf("function SortSelect"),
+  );
+  const chipsBlock = source.slice(
+    source.indexOf("function buildActiveFilterChips("),
+    source.indexOf("function FilterChip("),
+  );
+  const snippet = [
+    districtBlock,
+    sortLabelsBlock,
+    chipsBlock,
+    "export { buildActiveFilterChips };\n",
+  ].join("\n");
+
+  const { outputText } = ts.transpileModule(snippet, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  });
+
+  const exportsObj = {};
+  new Function("exports", outputText)(exportsObj);
+  return exportsObj.buildActiveFilterChips;
+}
 
 test("desktop filters panel is hidden below lg and visible from lg up", () => {
   assert.match(source, /<aside className="hidden lg:block[^"]*">/);
@@ -112,6 +153,50 @@ test("active-filter chips are built from non-default search params, one chip per
   }
   assert.match(source, /activeChips\.map\(\(chip\) =>/);
   assert.match(source, /清除全部篩選/);
+});
+
+test("active-filter chips never claim a price filter is active when deal=all, mirroring describeListingSearch()'s server-parity gate", () => {
+  // listingWhere() in public-data.server.ts drops minPrice/maxPrice
+  // entirely once deal="all" (sale prices are in millions, rents in
+  // thousands -- no single bound means both), so a chip for either param
+  // under deal="all" would tell the user a filter is active that has zero
+  // effect on the actual results. describeListingSearch() already gates on
+  // this; buildActiveFilterChips() must too.
+  const buildActiveFilterChips = loadActiveFilterChipsFn();
+  const baseSearch = {
+    deal: "all",
+    district: undefined,
+    minPrice: 5_000_000,
+    maxPrice: 8_000_000,
+    minArea: undefined,
+    maxArea: undefined,
+    bedrooms: undefined,
+    estate: undefined,
+    keyword: undefined,
+    sort: "newest",
+    page: 1,
+  };
+
+  const chipsUnderAllDeals = buildActiveFilterChips(baseSearch, []);
+  assert.deepEqual(
+    chipsUnderAllDeals.map((chip) => chip.key),
+    [],
+    'no chip should render for minPrice/maxPrice while deal is "all" -- ' +
+      "the server ignores both bounds in that state",
+  );
+
+  // Sanity check the fixture and the extraction itself: the same bounds
+  // DO produce chips once a deal type narrows the price column, proving
+  // this isn't just always returning an empty array.
+  const chipsUnderSaleDeal = buildActiveFilterChips(
+    { ...baseSearch, deal: "sale" },
+    [],
+  );
+  assert.deepEqual(chipsUnderSaleDeal.map((chip) => chip.key).sort(), [
+    "deal",
+    "maxPrice",
+    "minPrice",
+  ]);
 });
 
 test("each filter chip removes only its own param via a search merge function, not a whole-object replace", () => {
