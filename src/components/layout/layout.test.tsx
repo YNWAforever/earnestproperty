@@ -4,7 +4,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Container } from "./Container";
+import { Prose } from "./Prose";
 import { Section } from "./Section";
+import { SectionHeading } from "./SectionHeading";
 
 function render(node: ReturnType<typeof createElement>) {
   return load(renderToStaticMarkup(node));
@@ -67,5 +69,53 @@ describe("Section", () => {
     const el = $('[data-testid="section"]');
     expect(el.hasClass("bg-card")).toBe(true);
     expect(el.hasClass("border-y")).toBe(true);
+  });
+});
+
+describe("SectionHeading", () => {
+  test("renders the eyebrow, title, and defaults to an h2", () => {
+    const $ = render(
+      createElement(SectionHeading, { eyebrow: "深井放盤", title: "精選筍盤" }),
+    );
+    expect($("h2").text()).toBe("精選筍盤");
+    expect($("p").first().text()).toBe("深井放盤");
+  });
+
+  test("renders as h3 when as='h3' is passed", () => {
+    const $ = render(
+      createElement(SectionHeading, { title: "相關屋苑", as: "h3" }),
+    );
+    expect($("h3")).toHaveLength(1);
+    expect($("h2")).toHaveLength(0);
+  });
+
+  test("omits the eyebrow paragraph when none is given", () => {
+    const $ = render(createElement(SectionHeading, { title: "只有標題" }));
+    expect($("p")).toHaveLength(0);
+  });
+
+  test("renders the action slot when provided", () => {
+    const $ = render(
+      createElement(SectionHeading, {
+        title: "放盤",
+        action: createElement("a", { href: "/listings" }, "查看全部"),
+      }),
+    );
+    expect($('a[href="/listings"]').text()).toBe("查看全部");
+  });
+});
+
+describe("Prose", () => {
+  test("renders children inside a div with the prose typography classes", () => {
+    const $ = render(
+      createElement(
+        Prose,
+        { "data-testid": "prose" },
+        createElement("p", null, "正文內容"),
+      ),
+    );
+    const el = $('[data-testid="prose"]');
+    expect(el).toHaveLength(1);
+    expect(el.find("p").text()).toBe("正文內容");
   });
 });
