@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BadgeCheck, MapPin, MessageCircle, Store, UserRound, Milestone } from "lucide-react";
 
+import { AppImage } from "@/components/media/AppImage";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { SITE_BRANCHES } from "@/config/site";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
@@ -125,20 +126,18 @@ function AboutPage() {
               const card = (
                 <>
                   <div className="aspect-square overflow-hidden rounded-md bg-muted">
-                    {agent.avatar_url ? (
-                      <img
-                        src={agent.avatar_url}
-                        alt={`${name} 個人相片`}
-                        loading="lazy"
-                        width={200}
-                        height={200}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-                        <UserRound className="h-8 w-8" aria-hidden="true" />
-                      </div>
-                    )}
+                    <AppImage
+                      src={agent.avatar_url}
+                      alt={`${name} 個人相片`}
+                      width={200}
+                      height={200}
+                      className="h-full w-full object-cover"
+                      fallback={
+                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                          <UserRound className="h-8 w-8" aria-hidden="true" />
+                        </div>
+                      }
+                    />
                   </div>
                   <p className="mt-2 text-sm font-medium">{name}</p>
                   {agent.branch ? (
@@ -172,16 +171,18 @@ function AboutPage() {
                 key={branch.id}
                 className="overflow-hidden rounded-lg border border-border bg-card"
               >
-                {branch.photo ? (
-                  <img
-                    src={branch.photo}
-                    alt={`${branch.name}舖面`}
-                    loading="lazy"
-                    width={branch.photoWidth}
-                    height={branch.photoHeight}
-                    className="h-40 w-full object-cover"
-                  />
-                ) : null}
+                <AppImage
+                  src={branch.photo}
+                  alt={`${branch.name}舖面`}
+                  // photoWidth/photoHeight are optional in SiteBranch (a branch may
+                  // ship without a photo at all) -- AppImage's width/height are
+                  // required intrinsic-size hints, not the rendered box (that's
+                  // fixed by className below), so these fallbacks are never seen,
+                  // only used to satisfy the type when src is also absent.
+                  width={branch.photoWidth ?? 1600}
+                  height={branch.photoHeight ?? 1200}
+                  className="h-40 w-full object-cover"
+                />
                 <p className="p-3 text-sm font-medium">{branch.name}</p>
               </div>
             ))}
