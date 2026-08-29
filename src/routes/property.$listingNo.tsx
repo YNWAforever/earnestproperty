@@ -661,7 +661,7 @@ function PropertyPage() {
                       {txns.map((t, i) => (
                         <TableRow key={i}>
                           <TableCell>
-                            {t.deal_date ? new Date(t.deal_date).toLocaleDateString("zh-HK") : "—"}
+                            {formatHkDate(t.deal_date) ?? "—"}
                           </TableCell>
                           <TableCell>{t.unit ?? "—"}</TableCell>
                           <TableCell className="text-right">
