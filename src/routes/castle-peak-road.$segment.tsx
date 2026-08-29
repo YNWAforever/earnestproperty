@@ -17,6 +17,7 @@ import {
   type CorridorInventory as CorridorInventoryData,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
+import { sanitizeListingText } from "@/lib/format";
 import { jsonLdScript } from "@/lib/schema";
 
 type SegmentLoaderData = {
@@ -258,7 +259,7 @@ function CastlePeakRoadSegmentPage() {
       "@type": "ListItem",
       position: index + 1,
       url: `${SITE_URL}/property/${listing.listing_no}`,
-      name: listing.title_zh,
+      name: sanitizeListingText(listing.title_zh) ?? listing.title_zh,
     })),
   };
 

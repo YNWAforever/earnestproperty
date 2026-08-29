@@ -5,7 +5,11 @@ import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
-import { formatHkd, formatSaleDisplay } from "@/lib/format";
+import {
+  formatHkd,
+  formatSaleDisplay,
+  sanitizeListingText,
+} from "@/lib/format";
 import type { CorridorInventory as CorridorInventoryData, ListingRow } from "@/lib/queries";
 
 type ListingsDeal = "all" | "sale" | "rent";
@@ -22,6 +26,7 @@ function formatPrice(row: ListingRow) {
 
 function ListingMiniCard({ listing }: { listing: ListingRow }) {
   const cover = listing.images?.[0];
+  const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
 
   return (
     <Link
@@ -32,7 +37,7 @@ function ListingMiniCard({ listing }: { listing: ListingRow }) {
       <div className="aspect-[4/3] bg-muted">
         <AppImage
           src={cover}
-          alt={listing.title_zh}
+          alt={safeTitle}
           width={400}
           height={300}
           className="h-full w-full object-cover"
@@ -40,7 +45,7 @@ function ListingMiniCard({ listing }: { listing: ListingRow }) {
       </div>
       <div className="p-4">
         <p className="text-base font-bold text-primary">{formatPrice(listing)}</p>
-        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{listing.title_zh}</h3>
+        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{safeTitle}</h3>
         {listing.estates?.name_zh && (
           <p className="mt-1 text-xs text-muted-foreground">{listing.estates.name_zh}</p>
         )}

@@ -46,6 +46,7 @@ import {
   formatHkd,
   formatHkDate,
   formatSaleDisplay,
+  sanitizeListingText,
 } from "@/lib/format";
 import { AppImage } from "@/components/media/AppImage";
 import {
@@ -108,8 +109,11 @@ export const Route = createFileRoute("/property/$listingNo")({
         : saleDisplay
           ? `售 ${saleDisplay}`
           : "";
-    const title = `${p.title_zh}｜${priceStr}｜晉誠地產`;
-    const desc = (p.description ?? "").slice(0, 150) || `${p.title_zh} ${priceStr}`;
+    const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
+    const title = `${safeTitle}｜${priceStr}｜晉誠地產`;
+    const safeDescription = sanitizeListingText(p.description);
+    const desc =
+      (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
     const img = p.images?.[0];
     return {
       meta: [
@@ -181,6 +185,16 @@ function PropertyPage() {
     similar: SimilarListing[];
     txns: EstateTransaction[];
   };
+  // Imported listing text can arrive malformed (raw CSV artifacts, stray
+  // quotes, exact "NaN"/"null"/"$0" tokens) -- sanitize once here and reuse
+  // the sanitized values everywhere below rather than re-sanitizing at every
+  // interpolation site. Title falls back to the raw value so a listing never
+  // shows a fully blank title; description/address can legitimately end up
+  // null and are guarded at their render sites instead.
+  const safeTitle = sanitizeListingText(property.title_zh) ?? property.title_zh;
+  const safeDescription = sanitizeListingText(property.description);
+  const safeAddress = sanitizeListingText(property.address);
+
   const images: string[] = property.images?.length
     ? property.images
     : ["https://placehold.co/1200x800/e5e7eb/64748b?text=No+Image"];
@@ -233,7 +247,7 @@ function PropertyPage() {
     const url = typeof window !== "undefined" ? window.location.href : "";
     if (navigator.share) {
       try {
-        await navigator.share({ title: property.title_zh, url });
+        await navigator.share({ title: safeTitle, url });
       } catch {
         /* user cancelled */
       }
@@ -291,8 +305,8 @@ function PropertyPage() {
     "@graph": [
       {
         "@type": "RealEstateListing",
-        name: property.title_zh,
-        description: property.description ?? undefined,
+        name: safeTitle,
+        description: safeDescription ?? undefined,
         url: `${SITE_URL}/property/${property.listing_no}`,
         image: images,
         datePosted: property.created_at,
@@ -305,10 +319,10 @@ function PropertyPage() {
       },
       {
         "@type": "Residence",
-        name: property.title_zh,
+        name: safeTitle,
         address: {
           "@type": "PostalAddress",
-          streetAddress: property.address ?? undefined,
+          streetAddress: safeAddress ?? undefined,
           addressLocality: estate?.name_zh ?? undefined,
           addressRegion: "Hong Kong",
         },
@@ -336,7 +350,7 @@ function PropertyPage() {
           {
             "@type": "ListItem",
             position: estate ? 4 : 3,
-            name: property.title_zh,
+            name: safeTitle,
             item: `${SITE_URL}/property/${property.listing_no}`,
           },
         ],
@@ -398,12 +412,12 @@ function PropertyPage() {
           ) : null}
         </div>
         <h1 id="property-title" className="mt-3 text-3xl font-bold tracking-tight">
-          {property.title_zh}
+          {safeTitle}
         </h1>
-        {property.address ? (
+        {safeAddress ? (
           <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="h-4 w-4" />
-            {property.address}
+            {safeAddress}
           </p>
         ) : null}
         <p className="mt-4 text-3xl font-bold text-primary">
@@ -494,7 +508,7 @@ function PropertyPage() {
               <div className="overflow-hidden rounded-lg border bg-muted">
                 <AppImage
                   src={images[activeImg]}
-                  alt={property.title_zh}
+                  alt={safeTitle}
                   width={1200}
                   height={900}
                   className="aspect-[4/3] w-full object-cover"
@@ -514,7 +528,7 @@ function PropertyPage() {
                     >
                       <AppImage
                         src={src}
-                        alt={`${property.title_zh} ${i + 1}`}
+                        alt={`${safeTitle} ${i + 1}`}
                         width={200}
                         height={150}
                         className="h-full w-full object-cover"
@@ -559,7 +573,7 @@ function PropertyPage() {
                 <div className="overflow-hidden rounded-lg border bg-muted">
                   <AppImage
                     src={floorplanUrl}
-                    alt={`${property.title_zh} 平面圖`}
+                    alt={`${safeTitle} 平面圖`}
                     width={1200}
                     height={900}
                     className="w-full object-contain"
@@ -589,7 +603,7 @@ function PropertyPage() {
             branchContact={branchContact}
             fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
             listingNo={property.listing_no}
-            title={property.title_zh}
+            title={safeTitle}
             dealType={property.deal_type}
             price={dealPrice}
             onInquiry={focusInquiry}
@@ -597,15 +611,15 @@ function PropertyPage() {
         }
         details={
           <>
-            {/* Description */}
-            {property.description && (
-              <section className="mt-6">
-                <h2 className="text-xl font-semibold">物業描述</h2>
-                <p className="mt-3 whitespace-pre-line text-muted-foreground">
-                  {property.description}
-                </p>
-              </section>
-            )}
+            {/* Description -- always renders a fallback so a malformed or
+                missing description never leaves a bare heading or the
+                literal word "null"/"NaN". */}
+            <section className="mt-6">
+              <h2 className="text-xl font-semibold">物業描述</h2>
+              <p className="mt-3 whitespace-pre-line text-muted-foreground">
+                {safeDescription ?? "暫無詳細描述"}
+              </p>
+            </section>
 
             {/* Features */}
             {(property.features?.length ?? 0) > 0 && (
@@ -711,7 +725,7 @@ function PropertyPage() {
               branchContact={branchContact}
               fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
               listingNo={property.listing_no}
-              title={property.title_zh}
+              title={safeTitle}
               dealType={property.deal_type}
               price={dealPrice}
               onInquiry={focusInquiry}
@@ -815,6 +829,7 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
     Number(listing.rent),
     Number(listing.price),
   );
+  const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
   return (
     <Link
       to="/property/$listingNo"
@@ -824,14 +839,14 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
       <div className="aspect-[4/3] overflow-hidden bg-muted">
         <AppImage
           src={img}
-          alt={listing.title_zh}
+          alt={safeTitle}
           width={400}
           height={300}
           className="h-full w-full object-cover transition-transform group-hover:scale-105"
         />
       </div>
       <div className="p-3">
-        <p className="line-clamp-1 text-sm font-medium">{listing.title_zh}</p>
+        <p className="line-clamp-1 text-sm font-medium">{safeTitle}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {listing.bedrooms ? `${listing.bedrooms}房 · ` : ""}
           {listing.saleable_area ? `${listing.saleable_area} 呎` : ""}

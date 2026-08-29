@@ -15,7 +15,12 @@ import {
 } from "@/components/ui/select";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
-import { formatHkd, formatHkDate, formatSaleDisplay } from "@/lib/format";
+import {
+  formatHkd,
+  formatHkDate,
+  formatSaleDisplay,
+  sanitizeListingText,
+} from "@/lib/format";
 import { AppImage } from "@/components/media/AppImage";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
@@ -110,7 +115,7 @@ function ListingsPage() {
       ? itemListSchema({
           items: rows.map((row) => ({
             url: `${SITE_URL}/property/${row.listing_no}`,
-            name: row.title_zh,
+            name: sanitizeListingText(row.title_zh) ?? row.title_zh,
           })),
         })
       : null;
@@ -392,6 +397,7 @@ function FiltersPanel({
 
 function ListingCard({ p }: { p: ListingRow }) {
   const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
+  const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
   const rentDisplay = formatHkd(p.rent);
   const saleDisplay = formatSaleDisplay(p.price);
   const price =
@@ -410,7 +416,7 @@ function ListingCard({ p }: { p: ListingRow }) {
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
           <AppImage
             src={cover}
-            alt={p.title_zh}
+            alt={safeTitle}
             width={400}
             height={300}
             className="h-full w-full object-cover transition group-hover:scale-105"
@@ -421,7 +427,9 @@ function ListingCard({ p }: { p: ListingRow }) {
         </div>
         <div className="p-4">
           <p className="text-lg font-bold text-primary">{price}</p>
-          <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{p.title_zh}</h3>
+          <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
+            {safeTitle}
+          </h3>
           {p.source_site && lastSeen && (
             <p className="mt-1 text-xs text-muted-foreground">最後更新：{lastSeen}</p>
           )}

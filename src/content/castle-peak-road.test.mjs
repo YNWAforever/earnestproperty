@@ -491,6 +491,32 @@ test("castle peak road links and media use route-aware safeguards", () => {
   assert.match(inventory, /<AppImage\b/);
 });
 
+test("CorridorInventory.tsx sanitizes listing.title_zh before it reaches alt/heading render (DR-4)", () => {
+  const inventory = read("src/components/site/CorridorInventory.tsx");
+
+  assert.match(
+    inventory,
+    /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/,
+  );
+  assert.match(
+    inventory,
+    /sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/,
+  );
+});
+
+test("castle-peak-road.$segment.tsx sanitizes listing.title_zh before it reaches ItemList JSON-LD (DR-4)", () => {
+  const segment = read("src/routes/castle-peak-road.$segment.tsx");
+
+  assert.match(
+    segment,
+    /import \{ sanitizeListingText \} from "@\/lib\/format"/,
+  );
+  assert.match(
+    segment,
+    /name: sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/,
+  );
+});
+
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
   const seo = read("src/content/seo.ts");
   const vercel = read("vercel.ts");
