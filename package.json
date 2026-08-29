@@ -3,16 +3,6 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
-  "prettier": {
-    "overrides": [
-      {
-        "files": "workers/mls-container/*.jsonc",
-        "options": {
-          "trailingComma": "none"
-        }
-      }
-    ]
-  },
   "scripts": {
     "dev": "vite dev",
     "prebuild": "node scripts/check-required-env.mjs",

@@ -64,8 +64,7 @@ function idleTimers() {
 function terminalRecord(overrides = {}) {
   const runId = "00000000-0000-4000-8000-000000000001";
   const evidencePrefix =
-    `mls-sync/production/2026-08-21/${runId}/` +
-    "scheduled-production-2026-08-21";
+    `mls-sync/production/2026-08-21/${runId}/` + "scheduled-production-2026-08-21";
   return {
     attemptId: "scheduled:production:2026-08-21",
     runId,
@@ -85,8 +84,7 @@ test("accepts R2-normalized evidence prefixes for terminal correlation", async (
   const timers = idleTimers();
   const runId = "00000000-0000-4000-8000-000000000001";
   const evidencePrefix =
-    `mls-sync/production/2026-08-21/${runId}/` +
-    "scheduled-production-2026-08-21";
+    `mls-sync/production/2026-08-21/${runId}/` + "scheduled-production-2026-08-21";
   const supervisor = createSupervisor({
     spawnChild: () => child,
     readTerminalStatus: async () =>
@@ -167,30 +165,20 @@ test("starts one exact CLI child, snapshots metadata, and replays idempotently",
 
   const first = supervisor.start(run);
   run.mode = "publish";
-  inheritedEnvironment.DATABASE_URL_UNPOOLED =
-    "postgresql://mutated.invalid/db";
+  inheritedEnvironment.DATABASE_URL_UNPOOLED = "postgresql://mutated.invalid/db";
   const firstStatus = await first;
   const replayStatus = await supervisor.start(envelope());
 
   assert.equal(spawns.length, 1);
   assert.equal(spawns[0].command, process.execPath);
   assert.deepEqual(spawns[0].args, ["scripts/mls/sync.mjs", "--mode=shadow"]);
-  assert.equal(
-    spawns[0].options.env.DATABASE_URL_UNPOOLED,
-    "postgresql://private.invalid/db",
-  );
+  assert.equal(spawns[0].options.env.DATABASE_URL_UNPOOLED, "postgresql://private.invalid/db");
   assert.equal(spawns[0].options.env.MLS_SUPERVISOR_TOKEN, undefined);
   assert.equal(spawns[0].options.env.MLS_ENVIRONMENT, "production");
   assert.equal(spawns[0].options.env.MLS_SCHEDULED_FOR, "2026-08-21");
-  assert.equal(
-    spawns[0].options.env.MLS_ATTEMPT_ID,
-    "scheduled:production:2026-08-21",
-  );
+  assert.equal(spawns[0].options.env.MLS_ATTEMPT_ID, "scheduled:production:2026-08-21");
   assert.equal(spawns[0].options.env.MLS_COMMIT_SHA, "a".repeat(40));
-  assert.equal(
-    spawns[0].options.env.MLS_ATTEMPT_STARTED_AT,
-    "2026-08-21T02:30:00.123Z",
-  );
+  assert.equal(spawns[0].options.env.MLS_ATTEMPT_STARTED_AT, "2026-08-21T02:30:00.123Z");
   assert.equal(spawns[0].options.env.MLS_TERMINAL_STATUS_FILE, TERMINAL_FILE);
   assert.deepEqual(replayStatus, firstStatus);
   assert.deepEqual(firstStatus, {
@@ -267,14 +255,12 @@ test("rejects non-exact or inconsistent envelopes before spawning", async () => 
   await assert.rejects(() => supervisor.start({ ...envelope(), extra: true }), {
     code: "invalid_run_envelope",
   });
-  await assert.rejects(
-    () => supervisor.start(envelope({ hkDate: "2026-08-22" })),
-    { code: "invalid_run_envelope" },
-  );
-  await assert.rejects(
-    () => supervisor.start(envelope({ commitSha: "A".repeat(40) })),
-    { code: "invalid_run_envelope" },
-  );
+  await assert.rejects(() => supervisor.start(envelope({ hkDate: "2026-08-22" })), {
+    code: "invalid_run_envelope",
+  });
+  await assert.rejects(() => supervisor.start(envelope({ commitSha: "A".repeat(40) })), {
+    code: "invalid_run_envelope",
+  });
   const accessor = envelope();
   Object.defineProperty(accessor, "mode", {
     enumerable: true,
@@ -292,10 +278,7 @@ test("rejects non-exact or inconsistent envelopes before spawning", async () => 
 test("refreshes heartbeat on the configured cadence", async () => {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T02:30:30.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T02:30:30.000Z")];
   const supervisor = createSupervisor({
     spawnChild: () => child,
     readTerminalStatus: async () => terminalRecord(),
@@ -309,27 +292,18 @@ test("refreshes heartbeat on the configured cadence", async () => {
   });
   await supervisor.start(envelope());
   assert.deepEqual(
-    [...timers.callbacks.keys()]
-      .map((handle) => handle.delay)
-      .sort((left, right) => left - right),
+    [...timers.callbacks.keys()].map((handle) => handle.delay).sort((left, right) => left - right),
     [30_000, 4 * 60 * 60 * 1_000],
   );
   timers.runDelay(30_000);
   assert.equal(supervisor.status().heartbeatAt, "2026-08-21T02:30:30.000Z");
-  assert.equal(
-    [...timers.callbacks.keys()].filter((handle) => handle.delay === 30_000)
-      .length,
-    1,
-  );
+  assert.equal([...timers.callbacks.keys()].filter((handle) => handle.delay === 30_000).length, 1);
 });
 
 test("times out once, waits for exit, and keeps the fixed timeout classification", async () => {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T06:30:00.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T06:30:00.000Z")];
   const supervisor = createSupervisor({
     spawnChild: () => child,
     readTerminalStatus: async () =>
@@ -367,10 +341,7 @@ test("times out once, waits for exit, and keeps the fixed timeout classification
 test("forwards each host signal at most once without making terminal state mutable", async () => {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T02:31:00.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T02:31:00.000Z")];
   const supervisor = createSupervisor({
     spawnChild: () => child,
     readTerminalStatus: async () =>
@@ -406,10 +377,7 @@ test("forwards each host signal at most once without making terminal state mutab
 test("child error wins before exit, clears timers, and never exposes raw errors", async () => {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T02:30:01.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T02:30:01.000Z")];
   const supervisor = createSupervisor({
     spawnChild: () => child,
     readTerminalStatus: async () => terminalRecord(),
@@ -424,18 +392,13 @@ test("child error wins before exit, clears timers, and never exposes raw errors"
   await supervisor.start(envelope());
   child.emit(
     "error",
-    new Error(
-      "postgresql://user:password@example.invalid/db BLOB_READ_WRITE_TOKEN=secret",
-    ),
+    new Error("postgresql://user:password@example.invalid/db BLOB_READ_WRITE_TOKEN=secret"),
   );
   const terminal = await supervisor.waitForTerminal();
   assert.equal(terminal.state, "unknown");
   assert.equal(terminal.failureCode, "child_start_failed");
   assert.equal(JSON.stringify(terminal).includes("password"), false);
-  assert.equal(
-    JSON.stringify(terminal).includes("BLOB_READ_WRITE_TOKEN"),
-    false,
-  );
+  assert.equal(JSON.stringify(terminal).includes("BLOB_READ_WRITE_TOKEN"), false);
   assert.equal(timers.callbacks.size, 0);
   child.emit("exit", 0, null);
   assert.deepEqual(supervisor.status(), terminal);
@@ -444,10 +407,7 @@ test("child error wins before exit, clears timers, and never exposes raw errors"
 test("keeps a timeout latched through child error until exit and terminal IPC", async () => {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T06:30:00.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T06:30:00.000Z")];
   let reads = 0;
   const supervisor = createSupervisor({
     spawnChild: () => child,
@@ -606,10 +566,7 @@ test("normalizes synchronous spawn throws and asynchronous spawn rejection", asy
     },
   ]) {
     const timers = idleTimers();
-    const times = [
-      new Date("2026-08-21T02:30:00.000Z"),
-      new Date("2026-08-21T02:30:01.000Z"),
-    ];
+    const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T02:30:01.000Z")];
     const supervisor = createSupervisor({
       spawnChild,
       readTerminalStatus: async () => terminalRecord(),
@@ -657,10 +614,7 @@ test("preserves child start failure when its completion clock is invalid", async
 function terminalHarness(readTerminalStatus) {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T02:31:00.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T02:31:00.000Z")];
   const supervisor = createSupervisor({
     spawnChild: () => child,
     readTerminalStatus,
@@ -694,10 +648,7 @@ function fakeTerminalFile(content, { readError = null } = {}) {
         async read(buffer, offset, length, position) {
           calls.read += 1;
           if (readError) throw readError;
-          const bytesRead = Math.min(
-            length,
-            Math.max(0, bytes.length - position),
-          );
+          const bytesRead = Math.min(length, Math.max(0, bytes.length - position));
           bytes.copy(buffer, offset, position, position + bytesRead);
           return { bytesRead, buffer };
         },
@@ -712,10 +663,7 @@ function fakeTerminalFile(content, { readError = null } = {}) {
 function boundedReaderHarness(openTerminalFile) {
   const child = new FakeChild();
   const timers = idleTimers();
-  const times = [
-    new Date("2026-08-21T02:30:00.000Z"),
-    new Date("2026-08-21T02:31:00.000Z"),
-  ];
+  const times = [new Date("2026-08-21T02:30:00.000Z"), new Date("2026-08-21T02:31:00.000Z")];
   const supervisor = createSupervisor({
     spawnChild: () => child,
     openTerminalFile,
@@ -732,10 +680,7 @@ function boundedReaderHarness(openTerminalFile) {
 
 test("the bounded terminal reader rejects an empty file and closes it", async () => {
   const file = fakeTerminalFile(Buffer.alloc(0));
-  const status = await exitAndWait(
-    boundedReaderHarness(file.openTerminalFile),
-    0,
-  );
+  const status = await exitAndWait(boundedReaderHarness(file.openTerminalFile), 0);
   assert.equal(status.state, "unknown");
   assert.equal(status.failureCode, "terminal_status_missing");
   assert.deepEqual(file.calls, { open: 1, read: 1, close: 1 });
@@ -743,10 +688,7 @@ test("the bounded terminal reader rejects an empty file and closes it", async ()
 
 test("the bounded terminal reader rejects malformed JSON and closes it", async () => {
   const file = fakeTerminalFile("{");
-  const status = await exitAndWait(
-    boundedReaderHarness(file.openTerminalFile),
-    0,
-  );
+  const status = await exitAndWait(boundedReaderHarness(file.openTerminalFile), 0);
   assert.equal(status.state, "unknown");
   assert.equal(status.failureCode, "terminal_status_missing");
   assert.equal(file.calls.open, 1);
@@ -757,10 +699,7 @@ test("the bounded terminal reader contains read errors and closes the file", asy
   const file = fakeTerminalFile("ignored", {
     readError: new Error("read failed BLOB_READ_WRITE_TOKEN=secret"),
   });
-  const status = await exitAndWait(
-    boundedReaderHarness(file.openTerminalFile),
-    0,
-  );
+  const status = await exitAndWait(boundedReaderHarness(file.openTerminalFile), 0);
   assert.equal(status.state, "unknown");
   assert.equal(status.failureCode, "terminal_status_missing");
   assert.deepEqual(file.calls, { open: 1, read: 1, close: 1 });
@@ -769,15 +708,9 @@ test("the bounded terminal reader contains read errors and closes the file", asy
 
 test("the bounded terminal reader accepts valid JSON at exactly 32 KiB", async () => {
   const serialized = Buffer.from(JSON.stringify(terminalRecord()), "utf8");
-  const exact = Buffer.concat([
-    serialized,
-    Buffer.alloc(32 * 1024 - serialized.byteLength, 0x20),
-  ]);
+  const exact = Buffer.concat([serialized, Buffer.alloc(32 * 1024 - serialized.byteLength, 0x20)]);
   const file = fakeTerminalFile(exact);
-  const status = await exitAndWait(
-    boundedReaderHarness(file.openTerminalFile),
-    0,
-  );
+  const status = await exitAndWait(boundedReaderHarness(file.openTerminalFile), 0);
   assert.equal(status.state, "succeeded");
   assert.equal(status.failureCode, null);
   assert.equal(file.calls.open, 1);
@@ -786,10 +719,7 @@ test("the bounded terminal reader accepts valid JSON at exactly 32 KiB", async (
 
 test("the bounded terminal reader rejects a file over 32 KiB", async () => {
   const file = fakeTerminalFile(Buffer.alloc(32 * 1024 + 1, 0x20));
-  const status = await exitAndWait(
-    boundedReaderHarness(file.openTerminalFile),
-    0,
-  );
+  const status = await exitAndWait(boundedReaderHarness(file.openTerminalFile), 0);
   assert.equal(status.state, "unknown");
   assert.equal(status.failureCode, "terminal_status_missing");
   assert.deepEqual(file.calls, { open: 1, read: 1, close: 1 });
@@ -871,10 +801,7 @@ test("rejects mismatched identity and non-exact terminal records without invokin
   });
   const hidden = terminalRecord();
   Object.defineProperty(hidden, "hidden", { enumerable: false, value: true });
-  const inherited = Object.assign(
-    Object.create({ inherited: true }),
-    terminalRecord(),
-  );
+  const inherited = Object.assign(Object.create({ inherited: true }), terminalRecord());
   const symbol = terminalRecord();
   symbol[Symbol("extra")] = true;
   const records = [
@@ -923,9 +850,7 @@ test("rejects non-primitive terminal statuses without coercion", async () => {
     coercibleStatus,
     accessorStatus,
   ]) {
-    const harness = terminalHarness(async () =>
-      terminalRecord({ status: statusValue }),
-    );
+    const harness = terminalHarness(async () => terminalRecord({ status: statusValue }));
     const status = await exitAndWait(harness, 0);
     assert.equal(status.state, "unknown");
     assert.equal(status.failureCode, "terminal_status_missing");
@@ -1052,13 +977,7 @@ async function responseJson(response) {
 
 test("validates the URL-safe control token before listening", () => {
   const { supervisor } = fakeSupervisor();
-  for (const token of [
-    "short",
-    "x".repeat(31),
-    "x".repeat(161),
-    `${"x".repeat(31)}!`,
-    null,
-  ]) {
+  for (const token of ["short", "x".repeat(31), "x".repeat(161), `${"x".repeat(31)}!`, null]) {
     assert.throws(
       () =>
         createSupervisorServer({
@@ -1093,9 +1012,7 @@ test("serves bounded health and allowlisted status while routing everything else
     ["/status", "POST"],
     ["/health", "POST"],
   ]) {
-    const response = await responseJson(
-      await fetch(`${origin}${path}`, { method }),
-    );
+    const response = await responseJson(await fetch(`${origin}${path}`, { method }));
     assert.deepEqual(response, { status: 404, body: { error: "not_found" } });
   }
 });
@@ -1122,9 +1039,7 @@ test("authenticates POST /run, bounds JSON, and returns only fixed client errors
   ]) {
     const headers = { "content-type": "application/json" };
     if (authorization) headers.authorization = authorization;
-    const response = await responseJson(
-      await fetch(url, { method: "POST", headers, body: "{}" }),
-    );
+    const response = await responseJson(await fetch(url, { method: "POST", headers, body: "{}" }));
     assert.deepEqual(response, {
       status: 401,
       body: { error: "unauthorized" },
@@ -1258,12 +1173,8 @@ test("installs removable signal handlers that close the server and forward once 
   const beforeInt = process.listeners("SIGINT");
   const { signals, supervisor } = fakeSupervisor();
   const { server } = await serve(supervisor);
-  const term = process
-    .listeners("SIGTERM")
-    .find((listener) => !beforeTerm.includes(listener));
-  const interrupt = process
-    .listeners("SIGINT")
-    .find((listener) => !beforeInt.includes(listener));
+  const term = process.listeners("SIGTERM").find((listener) => !beforeTerm.includes(listener));
+  const interrupt = process.listeners("SIGINT").find((listener) => !beforeInt.includes(listener));
   assert.equal(typeof term, "function");
   assert.equal(typeof interrupt, "function");
   const closed = once(server, "close");
@@ -1289,19 +1200,15 @@ test("latches a host signal before listening and closes after listen completes",
   });
   t.after(async () => {
     for (const listener of process.listeners("SIGTERM"))
-      if (!beforeTerm.includes(listener))
-        process.removeListener("SIGTERM", listener);
+      if (!beforeTerm.includes(listener)) process.removeListener("SIGTERM", listener);
     for (const listener of process.listeners("SIGINT"))
-      if (!beforeInt.includes(listener))
-        process.removeListener("SIGINT", listener);
+      if (!beforeInt.includes(listener)) process.removeListener("SIGINT", listener);
     await closeServer(server);
   });
   assert.equal(server.listening, false);
   const listening = once(server, "listening");
   const closed = once(server, "close");
-  const term = process
-    .listeners("SIGTERM")
-    .find((listener) => !beforeTerm.includes(listener));
+  const term = process.listeners("SIGTERM").find((listener) => !beforeTerm.includes(listener));
   assert.equal(typeof term, "function");
   term();
   await listening;
@@ -1323,14 +1230,8 @@ test("direct execution starts exactly one private production supervisor without 
 });
 
 test("Dockerfile is pinned, amd64, non-root, health-checked, and narrowly copied", () => {
-  const dockerfile = readFileSync(
-    new URL("../Dockerfile", import.meta.url),
-    "utf8",
-  );
-  assert.match(
-    dockerfile,
-    /^FROM --platform=linux\/amd64 node:22\.23\.2-bookworm-slim$/m,
-  );
+  const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
+  assert.match(dockerfile, /^FROM --platform=linux\/amd64 node:22\.23\.2-bookworm-slim$/m);
   assert.match(dockerfile, /^ENV NODE_ENV=production$/m);
   assert.match(dockerfile, /^WORKDIR \/app$/m);
   assert.match(dockerfile, /^COPY package\.json package-lock\.json \.\/$/m);
@@ -1362,10 +1263,7 @@ test("Dockerfile is pinned, amd64, non-root, health-checked, and narrowly copied
 });
 
 test("Dockerfile-specific ignore excludes secrets, tooling, evidence, docs, ops, and the other Worker", () => {
-  const dockerignore = readFileSync(
-    new URL("../Dockerfile.dockerignore", import.meta.url),
-    "utf8",
-  );
+  const dockerignore = readFileSync(new URL("../Dockerfile.dockerignore", import.meta.url), "utf8");
   for (const token of [
     ".git",
     ".env*",
@@ -1390,9 +1288,7 @@ test("Dockerfile-specific ignore excludes secrets, tooling, evidence, docs, ops,
       token,
     );
   }
-  assert.ok(
-    dockerignore.indexOf("!.env.example") > dockerignore.indexOf(".env*"),
-  );
+  assert.ok(dockerignore.indexOf("!.env.example") > dockerignore.indexOf(".env*"));
   assert.doesNotMatch(dockerignore, /workers\/mls-container\/container/);
 });
 
@@ -1500,11 +1396,9 @@ test("removes signal handlers when listen fails", async (t) => {
   });
   t.after(async () => {
     for (const listener of process.listeners("SIGTERM"))
-      if (!beforeTerm.includes(listener))
-        process.removeListener("SIGTERM", listener);
+      if (!beforeTerm.includes(listener)) process.removeListener("SIGTERM", listener);
     for (const listener of process.listeners("SIGINT"))
-      if (!beforeInt.includes(listener))
-        process.removeListener("SIGINT", listener);
+      if (!beforeInt.includes(listener)) process.removeListener("SIGINT", listener);
     await closeServer(occupied);
   });
   const [error] = await once(failing, "error");
@@ -1548,9 +1442,7 @@ test("contains an invalid heartbeat clock, signals the child, and waits for immu
 });
 test("pins both Wrangler container configs to the repository-root build context", () => {
   for (const name of ["wrangler.jsonc", "wrangler.scheduled.jsonc"]) {
-    const config = JSON.parse(
-      readFileSync(new URL("../" + name, import.meta.url), "utf8"),
-    );
+    const config = JSON.parse(readFileSync(new URL("../" + name, import.meta.url), "utf8"));
     assert.equal(config.containers[0].image, "./Dockerfile");
     assert.equal(config.containers[0].image_build_context, "../..");
   }

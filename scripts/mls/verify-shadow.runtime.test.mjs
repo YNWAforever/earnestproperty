@@ -69,9 +69,7 @@ test("accepts evidence finalized by the runtime reporters", async () => {
     completedAt: "2026-08-23T01:02:00.000Z",
   });
   const evidencePrefix = artifactResult.prefix;
-  const manifestWrite = objectWrites.find(
-    ({ key }) => key === `${evidencePrefix}/manifest.json`,
-  );
+  const manifestWrite = objectWrites.find(({ key }) => key === `${evidencePrefix}/manifest.json`);
   assert.ok(manifestWrite);
   const manifest = JSON.parse(manifestWrite.body);
   assert.equal(manifest.status, "shadow_healthy");

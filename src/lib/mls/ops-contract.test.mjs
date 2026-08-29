@@ -19,10 +19,7 @@ const baseConfig = await readFile(
   "utf8",
 );
 const scheduledConfig = await readFile(
-  new URL(
-    "../../../workers/mls-container/wrangler.scheduled.jsonc",
-    import.meta.url,
-  ),
+  new URL("../../../workers/mls-container/wrangler.scheduled.jsonc", import.meta.url),
   "utf8",
 );
 const cronReadme = await readFile(
@@ -100,11 +97,7 @@ test("Cloudflare runbook exposes the gated operator contract", () => {
     "publisher: cloudflare-container",
     "No provider command in this runbook is authorized by code approval",
   ]) {
-    assert.match(
-      runbook,
-      new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
-      marker,
-    );
+    assert.match(runbook, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), marker);
   }
   assert.doesNotMatch(runbook, /systemctl enable|systemctl start|place.*VPS/i);
 });

@@ -2,19 +2,11 @@ import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
 
 import type { AttemptRecord, ClaimAndStartInput, Env } from "./container";
-import {
-  buildRunEnvelope,
-  type RunEnvelope,
-  type RunMode,
-} from "./run-contract";
+import { buildRunEnvelope, type RunEnvelope, type RunMode } from "./run-contract";
 
 const SCHEDULE_CRON = "0 18 * * *";
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{40}$/;
-const TERMINAL_STATES = new Set<AttemptRecord["state"]>([
-  "succeeded",
-  "failed",
-  "unknown",
-]);
+const TERMINAL_STATES = new Set<AttemptRecord["state"]>(["succeeded", "failed", "unknown"]);
 export type WorkflowPayload = ManualRunParams | Record<string, never>;
 
 export interface ManualRunParams {
@@ -45,8 +37,7 @@ function ownValue(object: object, name: string, message: string): unknown {
 
 function requiredRuntimeString(env: Env, name: string): string {
   const value = ownValue(env, name, name + " is required");
-  if (typeof value !== "string" || value.length === 0)
-    invalid(name + " is required");
+  if (typeof value !== "string" || value.length === 0) invalid(name + " is required");
   return value;
 }
 
@@ -59,10 +50,7 @@ function requiredRuntimeShape(env: Env, name: string): string {
 function validateDatabaseUrl(value: string): void {
   try {
     const url = new URL(value);
-    if (
-      (url.protocol !== "postgres:" && url.protocol !== "postgresql:") ||
-      !url.hostname
-    )
+    if ((url.protocol !== "postgres:" && url.protocol !== "postgresql:") || !url.hostname)
       invalid("DATABASE_URL_UNPOOLED is invalid");
   } catch {
     invalid("DATABASE_URL_UNPOOLED is invalid");
@@ -72,12 +60,7 @@ function validateDatabaseUrl(value: string): void {
 function validateContactUrl(value: string): void {
   try {
     const url = new URL(value);
-    if (
-      url.protocol !== "https:" ||
-      !url.hostname ||
-      url.username ||
-      url.password
-    )
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password)
       invalid("MLS_CRAWLER_CONTACT_URL is invalid");
   } catch {
     invalid("MLS_CRAWLER_CONTACT_URL is invalid");
@@ -112,10 +95,7 @@ function hasExactKeys(object: object, keys: readonly string[]): boolean {
   );
 }
 
-function payloadObject(
-  input: unknown,
-  message: string,
-): Record<string, unknown> {
+function payloadObject(input: unknown, message: string): Record<string, unknown> {
   if (
     input === null ||
     typeof input !== "object" ||
@@ -126,11 +106,7 @@ function payloadObject(
   return input as Record<string, unknown>;
 }
 
-function requireEventString(
-  event: object,
-  name: string,
-  message: string,
-): string {
+function requireEventString(event: object, name: string, message: string): string {
   const value = ownValue(event, name, message);
   if (typeof value !== "string" || value.length === 0) invalid(message);
   return value;
@@ -138,8 +114,7 @@ function requireEventString(
 
 function runtimeEnvironment(env: Env): "preview" | "production" {
   const value = requiredRuntimeShape(env, "MLS_ENVIRONMENT");
-  if (value !== "preview" && value !== "production")
-    invalid("MLS_ENVIRONMENT is invalid");
+  if (value !== "preview" && value !== "production") invalid("MLS_ENVIRONMENT is invalid");
   return value;
 }
 
@@ -161,52 +136,33 @@ function captureManualPayload(input: unknown): ManualRunParams {
     if (!Object.prototype.hasOwnProperty.call(payload, key))
       invalid("manual workflow " + key + " is invalid");
   }
-  if (!hasExactKeys(payload, keys))
-    invalid("manual workflow payload is invalid");
+  if (!hasExactKeys(payload, keys)) invalid("manual workflow payload is invalid");
   const kind = ownValue(payload, "kind", "manual workflow kind is invalid");
   if (kind !== "manual") invalid("manual workflow kind is invalid");
   const mode = runtimeMode(
     ownValue(payload, "mode", "manual workflow mode is invalid"),
     "manual workflow mode",
   );
-  const reason = ownValue(
-    payload,
-    "reason",
-    "manual workflow reason is invalid",
-  );
+  const reason = ownValue(payload, "reason", "manual workflow reason is invalid");
   if (typeof reason !== "string") invalid("manual workflow reason is invalid");
-  const suffix = ownValue(
-    payload,
-    "suffix",
-    "manual workflow suffix is invalid",
-  );
+  const suffix = ownValue(payload, "suffix", "manual workflow suffix is invalid");
   if (typeof suffix !== "string") invalid("manual workflow suffix is invalid");
   const scheduledTime = ownValue(
     payload,
     "scheduledTime",
     "manual workflow scheduledTime is invalid",
   );
-  if (typeof scheduledTime !== "string")
-    invalid("manual workflow scheduledTime is invalid");
+  if (typeof scheduledTime !== "string") invalid("manual workflow scheduledTime is invalid");
   return { kind: "manual", mode, reason, suffix, scheduledTime };
 }
 
 function scheduledTimeFromEvent(event: object): number {
-  const schedule = ownValue(
-    event,
-    "schedule",
-    "scheduled schedule is required",
-  );
+  const schedule = ownValue(event, "schedule", "scheduled schedule is required");
   const value = payloadObject(schedule, "scheduled schedule is invalid");
-  if (!hasExactKeys(value, ["cron", "scheduledTime"]))
-    invalid("scheduled schedule is invalid");
+  if (!hasExactKeys(value, ["cron", "scheduledTime"])) invalid("scheduled schedule is invalid");
   const cron = ownValue(value, "cron", "scheduled cron is invalid");
   if (cron !== SCHEDULE_CRON) invalid("scheduled cron is invalid");
-  const scheduledTime = ownValue(
-    value,
-    "scheduledTime",
-    "scheduled time is invalid",
-  );
+  const scheduledTime = ownValue(value, "scheduledTime", "scheduled time is invalid");
   if (typeof scheduledTime !== "number" || !Number.isFinite(scheduledTime))
     invalid("scheduled time is invalid");
   return scheduledTime;
@@ -219,10 +175,7 @@ export function buildEnvelopeFromEvent(
   const eventObject = payloadObject(event, "workflow event is invalid");
   const environment = runtimeEnvironment(env);
   const commitSha = runtimeCommitSha(env);
-  const scheduleDescriptor = Object.getOwnPropertyDescriptor(
-    eventObject,
-    "schedule",
-  );
+  const scheduleDescriptor = Object.getOwnPropertyDescriptor(eventObject, "schedule");
   if (scheduleDescriptor && !("value" in scheduleDescriptor))
     invalid("workflow schedule is invalid");
   const schedule = scheduleDescriptor?.value;
@@ -232,16 +185,12 @@ export function buildEnvelopeFromEvent(
       ownValue(eventObject, "payload", "workflow payload is invalid"),
       "scheduled workflow payload is invalid",
     );
-    if (!hasExactKeys(payload, []))
-      invalid("scheduled workflow payload is invalid");
+    if (!hasExactKeys(payload, [])) invalid("scheduled workflow payload is invalid");
     return buildRunEnvelope({
       environment,
       scheduledTime: scheduledTimeFromEvent(eventObject),
       kind: "scheduled",
-      mode: runtimeMode(
-        requiredRuntimeShape(env, "MLS_SCHEDULED_MODE"),
-        "MLS_SCHEDULED_MODE",
-      ),
+      mode: runtimeMode(requiredRuntimeShape(env, "MLS_SCHEDULED_MODE"), "MLS_SCHEDULED_MODE"),
       commitSha,
     });
   }
@@ -271,29 +220,20 @@ export function assertRuntimeConfiguration(env: Env, mode: RunMode): void {
   requiredRuntimeShape(env, "CLOUDFLARE_DEPLOYMENT_ID");
 
   const publishEnabled = requiredRuntimeString(env, "MLS_PUBLISH_ENABLED");
-  const rightsConfirmed = requiredRuntimeString(
-    env,
-    "MLS_MEDIA_RIGHTS_CONFIRMED",
-  );
+  const rightsConfirmed = requiredRuntimeString(env, "MLS_MEDIA_RIGHTS_CONFIRMED");
   if (publishEnabled !== "true" && publishEnabled !== "false")
     invalid("MLS_PUBLISH_ENABLED is invalid");
   if (rightsConfirmed !== "true" && rightsConfirmed !== "false")
     invalid("MLS_MEDIA_RIGHTS_CONFIRMED is invalid");
   if (mode === "publish") {
-    if (publishEnabled !== "true")
-      invalid("MLS_PUBLISH_ENABLED is not enabled");
-    if (rightsConfirmed !== "true")
-      invalid("MLS_MEDIA_RIGHTS_CONFIRMED is not confirmed");
+    if (publishEnabled !== "true") invalid("MLS_PUBLISH_ENABLED is not enabled");
+    if (rightsConfirmed !== "true") invalid("MLS_MEDIA_RIGHTS_CONFIRMED is not confirmed");
     requiredRuntimeString(env, "BLOB_READ_WRITE_TOKEN");
   }
 }
 
 function workflowInstanceId(event: WorkflowEvent<WorkflowPayload>): string {
-  const value = requireEventString(
-    event,
-    "instanceId",
-    "workflow instance id is invalid",
-  );
+  const value = requireEventString(event, "instanceId", "workflow instance id is invalid");
   if (value.length > 160) invalid("workflow instance id is invalid");
   return value;
 }
@@ -348,8 +288,7 @@ export class MlsRunWorkflow extends WorkflowEntrypoint<Env, WorkflowPayload> {
       step,
       env: this.env,
       ports: {
-        containerFor: (attemptId) =>
-          this.env.MLS_RUN_CONTAINER.getByName(attemptId),
+        containerFor: (attemptId) => this.env.MLS_RUN_CONTAINER.getByName(attemptId),
       },
     });
   }

@@ -82,11 +82,7 @@ function requireAgentPageUrl(pageUrl, dealType) {
   }
   const rawPageUrl = pageUrl;
   const rawAuthority = rawPageUrl.match(/^https:\/\/([^/?#]*)/i)?.[1] ?? "";
-  if (
-    !rawAuthority ||
-    rawAuthority.includes("@") ||
-    rawAuthority.includes(":")
-  ) {
+  if (!rawAuthority || rawAuthority.includes("@") || rawAuthority.includes(":")) {
     throw new TypeError("Unexpected 28Hse agent source URL");
   }
   let url;
@@ -95,12 +91,7 @@ function requireAgentPageUrl(pageUrl, dealType) {
   } catch {
     throw new TypeError("Unexpected 28Hse agent source URL");
   }
-  const expectedKeys = new Set([
-    "buyRent",
-    "page",
-    "plan_id",
-    "propertyDoSearchVersion",
-  ]);
+  const expectedKeys = new Set(["buyRent", "page", "plan_id", "propertyDoSearchVersion"]);
   const keys = [...url.searchParams.keys()];
   const pageText = url.searchParams.get("page");
   if (
@@ -119,9 +110,7 @@ function requireAgentPageUrl(pageUrl, dealType) {
   ) {
     throw new TypeError("Unexpected 28Hse agent source URL");
   }
-  if (
-    url.searchParams.get("buyRent") !== (dealType === "sale" ? "buy" : "rent")
-  ) {
+  if (url.searchParams.get("buyRent") !== (dealType === "sale" ? "buy" : "rent")) {
     throw new TypeError("Agent source URL deal type does not match context");
   }
   return url;
@@ -265,8 +254,7 @@ export function detect28HseChallenge(html) {
   const $ = load(markup);
   const text = normalizeText($.root().text());
   if (!text) return true;
-  if (/cf-chl-|challenge-platform|\/cdn-cgi\/challenge-platform/i.test(markup))
-    return true;
+  if (/cf-chl-|challenge-platform|\/cdn-cgi\/challenge-platform/i.test(markup)) return true;
   const hasAgentIdentity = /C-018613/i.test(text);
   const hasPropertyLink = $("a[href*='/property-']").length > 0;
   const hasValidAgentContent = hasAgentIdentity && hasPropertyLink;
@@ -285,9 +273,7 @@ export function detect28HseChallenge(html) {
       if (
         container.is("[role='dialog'], [aria-modal='true']") ||
         /(?:^|[\s_-])(?:captcha|challenge|verification|verify|overlay|modal|gate)(?:$|[\s_-])/i.test(
-          [container.attr("id"), container.attr("class")]
-            .filter(Boolean)
-            .join(" "),
+          [container.attr("id"), container.attr("class")].filter(Boolean).join(" "),
         ) ||
         (container.is("form") &&
           /(?:^|[^a-z0-9])(?:captcha|recaptcha|hcaptcha|turnstile|challenge|verification|verify|login|sign-?in|authenticate|auth)(?:$|[^a-z0-9])/i.test(
@@ -318,17 +304,13 @@ export function parse28HseAgentIndex(html, context) {
     .toArray()
     .map((node) => normalizeText($(node).text()))
     .filter(Boolean);
-  if (companyNames.length !== 1)
-    throw new Error("Unexpected agent company template");
+  if (companyNames.length !== 1) throw new Error("Unexpected agent company template");
   const companyName = companyNames[0];
-  if (!is28HseAgentCompanyName(companyName))
-    throw new Error("Unexpected agent company identity");
+  if (!is28HseAgentCompanyName(companyName)) throw new Error("Unexpected agent company identity");
 
   const documentText = normalizeText($.root().text());
   const licences = unique(
-    [...documentText.matchAll(/C-\d{6}/gi)].map(([licence]) =>
-      licence.toUpperCase(),
-    ),
+    [...documentText.matchAll(/C-\d{6}/gi)].map(([licence]) => licence.toUpperCase()),
   );
   if (licences.length !== 1 || licences[0] !== AGENT_LICENCE)
     throw new Error("Unexpected agent licence template");
@@ -342,8 +324,7 @@ export function parse28HseAgentIndex(html, context) {
     const count = parseCount(ownText, context.dealType);
     if (Number.isFinite(count)) counts.add(count);
   });
-  if (counts.size !== 1)
-    throw new Error("Unexpected advertised count template");
+  if (counts.size !== 1) throw new Error("Unexpected advertised count template");
   const advertisedCount = [...counts][0];
 
   const linksById = new Map();
@@ -363,29 +344,21 @@ export function parse28HseAgentIndex(html, context) {
     const url = safeAbsoluteUrl(canonicalHref, pageUrl);
     const previous = linksById.get(externalId);
     if (previous && previous.url !== url) {
-      throw new Error(
-        "Unexpected agent index template: contradictory listing link",
-      );
+      throw new Error("Unexpected agent index template: contradictory listing link");
     }
     if (!previous || summaryTitle.length > previous.summaryTitle.length) {
       linksById.set(externalId, { externalId, url, summaryTitle });
     }
   });
-  const links = [...linksById.values()].sort((a, b) =>
-    a.externalId.localeCompare(b.externalId),
-  );
+  const links = [...linksById.values()].sort((a, b) => a.externalId.localeCompare(b.externalId));
   if (links.some((link) => !link.summaryTitle)) {
     throw new Error("Unexpected agent index template: missing listing title");
   }
   if (advertisedCount > 0 && links.length === 0) {
-    throw new Error(
-      "Unexpected agent index count: positive count has no listing links",
-    );
+    throw new Error("Unexpected agent index count: positive count has no listing links");
   }
   if (advertisedCount < links.length) {
-    throw new Error(
-      "Unexpected agent index count: advertised count is smaller than unique links",
-    );
+    throw new Error("Unexpected agent index count: advertised count is smaller than unique links");
   }
   return {
     companyName,

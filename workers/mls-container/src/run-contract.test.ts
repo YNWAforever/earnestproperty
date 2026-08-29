@@ -17,9 +17,7 @@ describe("Cloudflare MLS run identity", () => {
   });
 
   test("uses one deterministic scheduled identity per environment and HK date", () => {
-    expect(scheduledAttemptId("production", "2026-08-21")).toBe(
-      "scheduled:production:2026-08-21",
-    );
+    expect(scheduledAttemptId("production", "2026-08-21")).toBe("scheduled:production:2026-08-21");
   });
 
   test("requires an explicit reason and suffix for a manual attempt", () => {
@@ -52,15 +50,13 @@ describe("Cloudflare MLS run identity", () => {
       commitSha: "a".repeat(40),
     };
 
-    expect(() =>
-      buildRunEnvelope({ ...base, environment: coercible("production") }),
-    ).toThrow(/environment/i);
-    expect(() =>
-      buildRunEnvelope({ ...base, mode: coercible("shadow") }),
-    ).toThrow(/mode/i);
-    expect(() =>
-      buildRunEnvelope({ ...base, commitSha: coercible("a".repeat(40)) }),
-    ).toThrow(/commit SHA/i);
+    expect(() => buildRunEnvelope({ ...base, environment: coercible("production") })).toThrow(
+      /environment/i,
+    );
+    expect(() => buildRunEnvelope({ ...base, mode: coercible("shadow") })).toThrow(/mode/i);
+    expect(() => buildRunEnvelope({ ...base, commitSha: coercible("a".repeat(40)) })).toThrow(
+      /commit SHA/i,
+    );
     expect(() =>
       buildRunEnvelope({
         ...base,
@@ -96,9 +92,7 @@ describe("Cloudflare MLS run identity", () => {
       },
     });
 
-    expect(envelope.attemptId).toBe(
-      "scheduled:production:2026-08-21:manual:retry-0001",
-    );
+    expect(envelope.attemptId).toBe("scheduled:production:2026-08-21:manual:retry-0001");
     expect(reads).toEqual({
       environment: 1,
       mode: 1,
@@ -142,9 +136,7 @@ describe("Cloudflare MLS run identity", () => {
     });
 
     expect(envelope.manualReason).toBe("operator retry");
-    expect(envelope.attemptId).toBe(
-      "scheduled:production:2026-08-21:manual:retry-0001",
-    );
+    expect(envelope.attemptId).toBe("scheduled:production:2026-08-21:manual:retry-0001");
     expect(manualReasonReads).toBe(1);
   });
 
@@ -180,10 +172,7 @@ describe("Cloudflare MLS run identity", () => {
 
 function config(name: string): Record<string, unknown> {
   return JSON.parse(
-    readFileSync(
-      fileURLToPath(new URL(`../${name}`, import.meta.url).toString()),
-      "utf8",
-    ),
+    readFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url).toString()), "utf8"),
   );
 }
 

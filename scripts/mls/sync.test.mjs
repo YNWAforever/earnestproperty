@@ -11,8 +11,7 @@ import {
 
 function r2Environment(overrides = {}) {
   return {
-    DATABASE_URL_UNPOOLED:
-      "postgresql://user:password@db.example.test/database",
+    DATABASE_URL_UNPOOLED: "postgresql://user:password@db.example.test/database",
     MLS_CRAWLER_CONTACT_URL: "https://earnestproperty.com/contact",
     MLS_MEDIA_ALLOWED_HOSTS: "images.example.test",
     MLS_MEDIA_RIGHTS_CONFIRMED: "false",
@@ -54,11 +53,7 @@ test("reads an exact injected R2 run identity without process environment fallba
 test("rejects missing R2 credentials by variable code without revealing their value", () => {
   const suppliedSecret = "sensitive-r2-secret";
   assert.throws(
-    () =>
-      readConfiguration(
-        "shadow",
-        r2Environment({ MLS_R2_SECRET_ACCESS_KEY: "" }),
-      ),
+    () => readConfiguration("shadow", r2Environment({ MLS_R2_SECRET_ACCESS_KEY: "" })),
     (error) =>
       error instanceof MlsConfigurationError &&
       error.code === "missing_mls_r2_secret_access_key" &&
@@ -94,22 +89,16 @@ test("rejects R2 terminal IPC paths outside the attempt-local Container director
         }),
       ),
     (error) =>
-      error instanceof MlsConfigurationError &&
-      error.code === "invalid_mls_terminal_status_file",
+      error instanceof MlsConfigurationError && error.code === "invalid_mls_terminal_status_file",
   );
 });
 
 test("keeps Blob credentials out of shadow configuration and retains publish gates", () => {
-  const shadow = readConfiguration(
-    "shadow",
-    r2Environment({ BLOB_READ_WRITE_TOKEN: undefined }),
-  );
+  const shadow = readConfiguration("shadow", r2Environment({ BLOB_READ_WRITE_TOKEN: undefined }));
   assert.equal(Object.hasOwn(shadow, "blobToken"), false);
   assert.throws(
     () => readConfiguration("publish", r2Environment()),
-    (error) =>
-      error instanceof MlsConfigurationError &&
-      error.code === "publication_disabled",
+    (error) => error instanceof MlsConfigurationError && error.code === "publication_disabled",
   );
   assert.throws(
     () =>
@@ -121,8 +110,7 @@ test("keeps Blob credentials out of shadow configuration and retains publish gat
         }),
       ),
     (error) =>
-      error instanceof MlsConfigurationError &&
-      error.code === "missing_blob_read_write_token",
+      error instanceof MlsConfigurationError && error.code === "missing_blob_read_write_token",
   );
 });
 
@@ -459,8 +447,7 @@ test("main finalizes R2 evidence and persists a successful bounded supervisor re
       finalize: async (input) => {
         calls.push({ kind: "finalize", input });
         return {
-          manifestKey:
-            "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+          manifestKey: "mls-sync/production/2026-08-21/run/attempt/manifest.json",
           manifestPresent: true,
         };
       },
@@ -489,8 +476,7 @@ test("main finalizes R2 evidence and persists a successful bounded supervisor re
       throw new Error("media must not run in this fake");
     },
     logRunEvent: (event) => calls.push({ kind: "log", event }),
-    writeTerminalStatusRecord: async (input) =>
-      calls.push({ kind: "terminal", input }),
+    writeTerminalStatusRecord: async (input) => calls.push({ kind: "terminal", input }),
     now: () => new Date("2026-08-21T02:30:00.000Z"),
   });
 
@@ -528,8 +514,7 @@ test("main preserves the lock exit code while persisting a bounded non-success t
     },
     withMlsAdvisoryLock: async () => ({ kind: "lock_unavailable" }),
     logRunEvent: () => {},
-    writeTerminalStatusRecord: async ({ record }) =>
-      terminalRecords.push(record),
+    writeTerminalStatusRecord: async ({ record }) => terminalRecords.push(record),
     now: () => new Date("2026-08-21T02:30:00.000Z"),
   });
 
@@ -557,8 +542,7 @@ test("main persists a bounded terminal failure when R2 reporter construction is 
       throw new Error("R2 dependency rejected");
     },
     logRunEvent: () => {},
-    writeTerminalStatusRecord: async ({ record }) =>
-      terminalRecords.push(record),
+    writeTerminalStatusRecord: async ({ record }) => terminalRecords.push(record),
   });
 
   assert.equal(code, 30);
@@ -594,8 +578,7 @@ test("main sanitizes accessor-backed errors and still finalizes evidence plus te
       finalize: async (input) => {
         calls.push({ kind: "finalize", input });
         return {
-          manifestKey:
-            "mls-sync/production/2026-08-21/run/attempt/manifest.json",
+          manifestKey: "mls-sync/production/2026-08-21/run/attempt/manifest.json",
           manifestPresent: true,
         };
       },
@@ -612,8 +595,7 @@ test("main sanitizes accessor-backed errors and still finalizes evidence plus te
       throw error;
     },
     logRunEvent: (event) => calls.push({ kind: "log", event }),
-    writeTerminalStatusRecord: async (input) =>
-      calls.push({ kind: "terminal", input }),
+    writeTerminalStatusRecord: async (input) => calls.push({ kind: "terminal", input }),
     now: () => new Date("2026-08-21T02:30:00.000Z"),
   });
 
@@ -791,8 +773,7 @@ test("missing R2 manifest never turns a bounded primary error code into terminal
       throw error;
     },
     logRunEvent: () => {},
-    writeTerminalStatusRecord: async ({ record }) =>
-      terminalRecords.push(record),
+    writeTerminalStatusRecord: async ({ record }) => terminalRecords.push(record),
     now: () => new Date("2026-08-21T02:30:00.000Z"),
   });
 
@@ -828,8 +809,7 @@ test("maps only the authoritative uppercase publication-unknown code to bounded 
         throw error;
       },
       logRunEvent: () => {},
-      writeTerminalStatusRecord: async ({ record }) =>
-        terminalRecords.push(record),
+      writeTerminalStatusRecord: async ({ record }) => terminalRecords.push(record),
       now: () => new Date("2026-08-21T02:30:00.000Z"),
     });
     return { code, record: terminalRecords[0] };

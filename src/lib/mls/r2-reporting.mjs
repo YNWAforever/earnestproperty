@@ -8,8 +8,7 @@ const SHA_PATTERN = /^[0-9a-f]{40}$/;
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const OUTCOME_PATTERN = /^[a-z][a-z0-9_]{0,79}$/;
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MANUAL_ATTEMPT_SUFFIX_PATTERN = /^[a-z0-9][a-z0-9-]{7,63}$/;
 
 const CONTEXT_KEYS = [
@@ -106,11 +105,7 @@ function isValidDate(value) {
 }
 
 function safeSegment(value, label) {
-  if (
-    typeof value !== "string" ||
-    !SAFE_SEGMENT.test(value) ||
-    value.includes("..")
-  ) {
+  if (typeof value !== "string" || !SAFE_SEGMENT.test(value) || value.includes("..")) {
     throw new TypeError(`${label} is invalid`);
   }
   return value.replaceAll(":", "-");
@@ -131,8 +126,7 @@ function requireCanonicalUuid(value, label) {
 }
 
 function requireAttemptId({ environment, hkDate, attemptId }) {
-  if (typeof attemptId !== "string")
-    throw new TypeError("attemptId is invalid");
+  if (typeof attemptId !== "string") throw new TypeError("attemptId is invalid");
   const scheduledAttemptId = `scheduled:${environment}:${hkDate}`;
   const manualAttemptPrefix = `${scheduledAttemptId}:manual:`;
   const manualSuffix = attemptId.slice(manualAttemptPrefix.length);
@@ -158,22 +152,14 @@ function requireTimestamp(value, label) {
 }
 
 function captureContext(context) {
-  const captured = captureExactPlainRecord(
-    context,
-    CONTEXT_KEYS,
-    "R2 reporter context",
-  );
+  const captured = captureExactPlainRecord(context, CONTEXT_KEYS, "R2 reporter context");
   if (!/^(preview|production)$/.test(captured.environment)) {
     throw new TypeError("environment is invalid");
   }
   if (!isValidDate(captured.hkDate)) throw new TypeError("HK date is invalid");
   requireAttemptId(captured);
-  if (!/^(shadow|publish)$/.test(captured.mode))
-    throw new TypeError("mode is invalid");
-  if (
-    typeof captured.commitSha !== "string" ||
-    !SHA_PATTERN.test(captured.commitSha)
-  ) {
+  if (!/^(shadow|publish)$/.test(captured.mode)) throw new TypeError("mode is invalid");
+  if (typeof captured.commitSha !== "string" || !SHA_PATTERN.test(captured.commitSha)) {
     throw new TypeError("commit SHA is invalid");
   }
   safeSegment(captured.containerDeploymentId, "containerDeploymentId");
@@ -187,16 +173,9 @@ function assertArtifactObjects(value, prefix) {
     throw new TypeError("artifactObjects must contain exactly four artifacts");
   }
   const artifacts = value.map((artifact, index) => {
-    const captured = captureExactPlainRecord(
-      artifact,
-      ARTIFACT_KEYS,
-      `artifactObjects[${index}]`,
-    );
+    const captured = captureExactPlainRecord(artifact, ARTIFACT_KEYS, `artifactObjects[${index}]`);
     const spec = ARTIFACT_SPECS[index];
-    if (
-      captured.name !== spec.name ||
-      captured.contentType !== spec.contentType
-    ) {
+    if (captured.name !== spec.name || captured.contentType !== spec.contentType) {
       throw new TypeError("artifactObjects are invalid");
     }
     if (captured.key !== `${prefix}/${spec.name}`)
@@ -204,10 +183,7 @@ function assertArtifactObjects(value, prefix) {
     if (!Number.isSafeInteger(captured.byteLength) || captured.byteLength < 0) {
       throw new TypeError("artifactObjects are invalid");
     }
-    if (
-      typeof captured.sha256 !== "string" ||
-      !HASH_PATTERN.test(captured.sha256)
-    ) {
+    if (typeof captured.sha256 !== "string" || !HASH_PATTERN.test(captured.sha256)) {
       throw new TypeError("artifactObjects are invalid");
     }
     return Object.freeze(captured);
@@ -254,29 +230,21 @@ export function createR2S3ObjectStore(
     accessKeyId,
     secretAccessKey,
   })) {
-    if (typeof value !== "string" || value.length === 0)
-      throw new TypeError(`${name} is required`);
+    if (typeof value !== "string" || value.length === 0) throw new TypeError(`${name} is required`);
   }
   if (!SAFE_SEGMENT.test(accountId) || accountId.includes("..")) {
     throw new TypeError("accountId is invalid");
   }
-  if (typeof createClient !== "function")
-    throw new TypeError("createClient is invalid");
+  if (typeof createClient !== "function") throw new TypeError("createClient is invalid");
   const client = createClient({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId, secretAccessKey },
   });
-  if (!client || typeof client.send !== "function")
-    throw new TypeError("S3 client is invalid");
+  if (!client || typeof client.send !== "function") throw new TypeError("S3 client is invalid");
   return Object.freeze({
     async putIfAbsent({ key, body, contentType, metadata }) {
-      if (
-        typeof key !== "string" ||
-        !key ||
-        key.includes("..") ||
-        key.startsWith("/")
-      ) {
+      if (typeof key !== "string" || !key || key.includes("..") || key.startsWith("/")) {
         throw new TypeError("key is invalid");
       }
       if (typeof body !== "string" || typeof contentType !== "string") {
@@ -336,11 +304,7 @@ export function createR2Reporter({ objectStore, context }) {
     },
 
     async finalizeTerminal(input) {
-      const terminal = captureExactPlainRecord(
-        input,
-        TERMINAL_KEYS,
-        "terminal input",
-      );
+      const terminal = captureExactPlainRecord(input, TERMINAL_KEYS, "terminal input");
       const prefix = buildEvidencePrefix({
         ...capturedContext,
         runId: terminal.runId,
@@ -358,38 +322,21 @@ export function createR2Reporter({ objectStore, context }) {
       const completedAt = requireTimestamp(terminal.completedAt, "completedAt");
       if (Date.parse(completedAt) < Date.parse(startedAt))
         throw new TypeError("completedAt is invalid");
-      if (
-        !Number.isSafeInteger(terminal.durationMs) ||
-        terminal.durationMs < 0
-      ) {
+      if (!Number.isSafeInteger(terminal.durationMs) || terminal.durationMs < 0) {
         throw new TypeError("durationMs is invalid");
       }
-      if (
-        terminal.durationMs !==
-        Date.parse(completedAt) - Date.parse(startedAt)
-      ) {
+      if (terminal.durationMs !== Date.parse(completedAt) - Date.parse(startedAt)) {
         throw new TypeError("durationMs is invalid");
       }
       if (
         terminal.neonRunId !== null &&
-        (typeof terminal.neonRunId !== "string" ||
-          !UUID_PATTERN.test(terminal.neonRunId))
+        (typeof terminal.neonRunId !== "string" || !UUID_PATTERN.test(terminal.neonRunId))
       ) {
         throw new TypeError("neonRunId is invalid");
       }
-      const artifactObjects = assertArtifactObjects(
-        terminal.artifactObjects,
-        prefix,
-      );
-      if (
-        !sameArtifacts(
-          artifactsByRunId.get(terminal.runId) ?? [],
-          artifactObjects,
-        )
-      ) {
-        throw new TypeError(
-          "artifactObjects must be the complete successful artifact metadata",
-        );
+      const artifactObjects = assertArtifactObjects(terminal.artifactObjects, prefix);
+      if (!sameArtifacts(artifactsByRunId.get(terminal.runId) ?? [], artifactObjects)) {
+        throw new TypeError("artifactObjects must be the complete successful artifact metadata");
       }
       if (finalizedRunIds.has(terminal.runId)) {
         throw new Error("terminal manifest was already finalized for this run");

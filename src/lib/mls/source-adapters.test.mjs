@@ -813,17 +813,13 @@ test("old-site adapter also checks robots, retries safely, and reports page loop
   assert.equal(denied.robotsAllowed, false);
   assert.equal(denied.observations.length, 0);
 
-  const htmlRobots = await oldSitePolicyHarness("robots-homepage.html").collect(
-    {
-      seedUrls: [{ url: seedUrl, dealType: "sale" }],
-    },
-  );
+  const htmlRobots = await oldSitePolicyHarness("robots-homepage.html").collect({
+    seedUrls: [{ url: seedUrl, dealType: "sale" }],
+  });
 
   assert.equal(htmlRobots.robotsAllowed, false);
   assert.equal(htmlRobots.observations.length, 0);
-  assert.ok(
-    htmlRobots.failures.some(({ code }) => code === "robots_malformed"),
-  );
+  assert.ok(htmlRobots.failures.some(({ code }) => code === "robots_malformed"));
 
   const repeated = createOldSiteSourceAdapter({
     fetchImpl: withOldRobots(async (url) => {

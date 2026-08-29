@@ -351,12 +351,7 @@ function snapshotSelectorCounts(input) {
   const captured = {};
   for (const key of Object.keys(input)) {
     const descriptor = Object.getOwnPropertyDescriptor(input, key);
-    if (
-      !descriptor ||
-      !("value" in descriptor) ||
-      !Number.isFinite(descriptor.value)
-    )
-      return null;
+    if (!descriptor || !("value" in descriptor) || !Number.isFinite(descriptor.value)) return null;
     captured[key] = descriptor.value;
   }
   return Object.freeze(captured);
@@ -364,8 +359,7 @@ function snapshotSelectorCounts(input) {
 
 function snapshotDiagnostic(input) {
   try {
-    if (!input || Object.getPrototypeOf(input) !== Object.prototype)
-      return null;
+    if (!input || Object.getPrototypeOf(input) !== Object.prototype) return null;
     const captured = {};
     for (const key of DIAGNOSTIC_KEYS) {
       const descriptor = Object.getOwnPropertyDescriptor(input, key);
@@ -380,10 +374,8 @@ function snapshotDiagnostic(input) {
           captured.responseStatus > 599)) ||
       !Number.isInteger(captured.attempts) ||
       captured.attempts < 0 ||
-      (captured.templateFingerprint !== null &&
-        typeof captured.templateFingerprint !== "string") ||
-      (captured.failureCode !== null &&
-        typeof captured.failureCode !== "string")
+      (captured.templateFingerprint !== null && typeof captured.templateFingerprint !== "string") ||
+      (captured.failureCode !== null && typeof captured.failureCode !== "string")
     ) {
       return null;
     }
@@ -516,12 +508,7 @@ export async function runDualSourceSync(input) {
       await reporter.writeRunArtifacts(outcome);
       await repository.finishRun(
         runId,
-        completion(
-          "blocked",
-          evaluation,
-          diagnostic.failureCode,
-          diagnostic.failureSummary,
-        ),
+        completion("blocked", evaluation, diagnostic.failureCode, diagnostic.failureSummary),
       );
       return outcome;
     }

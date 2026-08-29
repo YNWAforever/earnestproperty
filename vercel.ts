@@ -53,36 +53,16 @@ export const config: VercelConfig = {
     // indexed, and /castle-peak-road/$segment throws notFound() on an unknown
     // slug, so without these 301s they become hard 404s. Successor zones:
     // 油柑頭 → 汀九, 青龍頭 → 深井 / 青山公路.
-    redirectEntry(
-      "/castle-peak-road/tsuen-wan-yau-kom-tau",
-      "/castle-peak-road/ting-kau",
-      true,
-    ),
-    redirectEntry(
-      "/castle-peak-road/tsuen-wan-yau-kom-tau/",
-      "/castle-peak-road/ting-kau",
-      true,
-    ),
-    redirectEntry(
-      "/castle-peak-road/tsing-lung-tau",
-      "/castle-peak-road/sham-tseng",
-      true,
-    ),
-    redirectEntry(
-      "/castle-peak-road/tsing-lung-tau/",
-      "/castle-peak-road/sham-tseng",
-      true,
-    ),
+    redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/castle-peak-road/tsuen-wan-yau-kom-tau/", "/castle-peak-road/ting-kau", true),
+    redirectEntry("/castle-peak-road/tsing-lung-tau", "/castle-peak-road/sham-tseng", true),
+    redirectEntry("/castle-peak-road/tsing-lung-tau/", "/castle-peak-road/sham-tseng", true),
     // Client narrowed scope to 深井 / 青山公路 / 汀九 only; 小欖/掃管笏/三聖
     // (incl. Gold Coast 黃金海岸) is out of scope even though the corridor
     // inventory filter (corridorRegionScope.outOfScopeTextAliases) already
     // excludes its listings from every other page. This retires the segment
     // page itself, which stayed indexable and cross-linked from Ting Kau.
-    redirectEntry(
-      "/castle-peak-road/so-kwun-wat-gold-coast",
-      "/castle-peak-road/sham-tseng",
-      true,
-    ),
+    redirectEntry("/castle-peak-road/so-kwun-wat-gold-coast", "/castle-peak-road/sham-tseng", true),
     redirectEntry(
       "/castle-peak-road/so-kwun-wat-gold-coast/",
       "/castle-peak-road/sham-tseng",
@@ -91,11 +71,7 @@ export const config: VercelConfig = {
     redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
     redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
     redirectEntry("/property-detail/:oldId.html", "/listings", true),
-    redirectEntry(
-      "/eng/property-detail/:oldId.html",
-      "/property-detail/:oldId.html",
-      true,
-    ),
+    redirectEntry("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", true),
     redirectEntry("/eng", "/", true),
     redirectEntry("/eng/", "/", true),
     redirectEntry("/profile.php", "/about", true),

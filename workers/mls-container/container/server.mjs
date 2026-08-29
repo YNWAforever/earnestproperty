@@ -43,8 +43,7 @@ const PUBLIC_STATUS_KEYS = [
 const MANUAL_SUFFIX_PATTERN = /^[a-z0-9][a-z0-9-]{7,63}$/;
 const ATTEMPT_ID_PATTERN =
   /^scheduled:(preview|production):(\d{4}-\d{2}-\d{2})(?::manual:[a-z0-9][a-z0-9-]{7,63})?$/;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EXACT_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function fixedError(code) {
@@ -89,12 +88,8 @@ function exactOwnDataRecord(value, keys) {
 }
 
 function exactTimestamp(value) {
-  const date =
-    value instanceof Date ? new Date(value.valueOf()) : new Date(value);
-  if (
-    Number.isNaN(date.valueOf()) ||
-    !EXACT_TIMESTAMP_PATTERN.test(date.toISOString())
-  ) {
+  const date = value instanceof Date ? new Date(value.valueOf()) : new Date(value);
+  if (Number.isNaN(date.valueOf()) || !EXACT_TIMESTAMP_PATTERN.test(date.toISOString())) {
     throw fixedError("invalid_supervisor_clock");
   }
   return date.toISOString();
@@ -105,9 +100,7 @@ function validDate(value) {
     return false;
   }
   const date = new Date(`${value}T00:00:00.000Z`);
-  return (
-    !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
-  );
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
 function validExactTimestamp(value) {
@@ -121,15 +114,12 @@ function validExactTimestamp(value) {
 function hongKongDate(scheduledTime) {
   const date = new Date(scheduledTime);
   if (Number.isNaN(date.valueOf())) failEnvelope();
-  return new Date(date.valueOf() + 8 * 60 * 60 * 1_000)
-    .toISOString()
-    .slice(0, 10);
+  return new Date(date.valueOf() + 8 * 60 * 60 * 1_000).toISOString().slice(0, 10);
 }
 
 function captureRunEnvelope(input) {
   const value = exactOwnDataRecord(input, RUN_ENVELOPE_KEYS);
-  if (value.environment !== "preview" && value.environment !== "production")
-    failEnvelope();
+  if (value.environment !== "preview" && value.environment !== "production") failEnvelope();
   if (!validDate(value.hkDate)) failEnvelope();
   if (value.kind !== "scheduled" && value.kind !== "manual") failEnvelope();
   if (value.mode !== "shadow" && value.mode !== "publish") failEnvelope();
@@ -139,10 +129,7 @@ function captureRunEnvelope(input) {
   ) {
     failEnvelope();
   }
-  if (
-    typeof value.commitSha !== "string" ||
-    !/^[0-9a-f]{40}$/.test(value.commitSha)
-  ) {
+  if (typeof value.commitSha !== "string" || !/^[0-9a-f]{40}$/.test(value.commitSha)) {
     failEnvelope();
   }
   const scheduledAttempt = `scheduled:${value.environment}:${value.hkDate}`;
@@ -174,11 +161,7 @@ function sameEnvelope(left, right) {
 }
 
 function snapshotEnvironment(environment) {
-  if (
-    !environment ||
-    typeof environment !== "object" ||
-    Array.isArray(environment)
-  ) {
+  if (!environment || typeof environment !== "object" || Array.isArray(environment)) {
     throw fixedError("invalid_supervisor_environment");
   }
   const captured = {};
@@ -190,10 +173,7 @@ function snapshotEnvironment(environment) {
     if (!descriptor || !("value" in descriptor)) {
       throw fixedError("invalid_supervisor_environment");
     }
-    if (
-      descriptor.value !== undefined &&
-      typeof descriptor.value !== "string"
-    ) {
+    if (descriptor.value !== undefined && typeof descriptor.value !== "string") {
       throw fixedError("invalid_supervisor_environment");
     }
     if (descriptor.value !== undefined) captured[key] = descriptor.value;
@@ -220,24 +200,17 @@ function publicStatus(state) {
 }
 
 async function readBoundedTerminalStatus(openTerminalFile, file, maxBytes) {
-  if (file !== TERMINAL_FILE || maxBytes !== 32 * 1024)
-    throw fixedError("terminal_status_missing");
+  if (file !== TERMINAL_FILE || maxBytes !== 32 * 1024) throw fixedError("terminal_status_missing");
   const handle = await openTerminalFile(file, "r");
   try {
     const buffer = Buffer.alloc(maxBytes + 1);
     let offset = 0;
     while (offset < buffer.length) {
-      const { bytesRead } = await handle.read(
-        buffer,
-        offset,
-        buffer.length - offset,
-        offset,
-      );
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, offset);
       if (bytesRead === 0) break;
       offset += bytesRead;
     }
-    if (offset === 0 || offset > maxBytes)
-      throw fixedError("terminal_status_missing");
+    if (offset === 0 || offset > maxBytes) throw fixedError("terminal_status_missing");
     return JSON.parse(buffer.subarray(0, offset).toString("utf8"));
   } finally {
     await handle.close();
@@ -255,20 +228,16 @@ function captureTerminalRecord(record, envelope, operatingSystemExitCode) {
   const ownKeys = Reflect.ownKeys(record);
   if (
     ownKeys.length !== TERMINAL_RECORD_KEYS.length ||
-    ownKeys.some(
-      (key) => typeof key !== "string" || !TERMINAL_RECORD_KEYS.includes(key),
-    )
+    ownKeys.some((key) => typeof key !== "string" || !TERMINAL_RECORD_KEYS.includes(key))
   )
     throw fixedError("terminal_status_missing");
   const captured = {};
   for (const key of TERMINAL_RECORD_KEYS) {
     const descriptor = Object.getOwnPropertyDescriptor(record, key);
-    if (!descriptor || !("value" in descriptor))
-      throw fixedError("terminal_status_missing");
+    if (!descriptor || !("value" in descriptor)) throw fixedError("terminal_status_missing");
     captured[key] = descriptor.value;
   }
-  if (captured.attemptId !== envelope.attemptId)
-    throw fixedError("terminal_status_missing");
+  if (captured.attemptId !== envelope.attemptId) throw fixedError("terminal_status_missing");
   for (const key of ["runId", "neonRunId"]) {
     if (
       captured[key] !== null &&
@@ -301,16 +270,12 @@ function captureTerminalRecord(record, envelope, operatingSystemExitCode) {
     (captured.status !== "succeeded" && captured.failureCode === null)
   )
     throw fixedError("terminal_status_missing");
-  if (typeof captured.manifestPresent !== "boolean")
-    throw fixedError("terminal_status_missing");
+  if (typeof captured.manifestPresent !== "boolean") throw fixedError("terminal_status_missing");
   if (captured.evidencePrefix !== null) {
     if (captured.runId === null) throw fixedError("terminal_status_missing");
     const normalizedAttemptId = envelope.attemptId.replaceAll(":", "-");
     const expectedPrefix = `mls-sync/${envelope.environment}/${envelope.hkDate}/${captured.runId}/${normalizedAttemptId}`;
-    if (
-      captured.evidencePrefix !== expectedPrefix ||
-      expectedPrefix.length > 512
-    )
+    if (captured.evidencePrefix !== expectedPrefix || expectedPrefix.length > 512)
       throw fixedError("terminal_status_missing");
   }
   if (captured.manifestPresent) {
@@ -322,10 +287,7 @@ function captureTerminalRecord(record, envelope, operatingSystemExitCode) {
   } else if (captured.manifestKey !== null) {
     throw fixedError("terminal_status_missing");
   }
-  if (
-    captured.status === "succeeded" &&
-    (captured.exitCode !== 0 || !captured.manifestPresent)
-  )
+  if (captured.status === "succeeded" && (captured.exitCode !== 0 || !captured.manifestPresent))
     throw fixedError("terminal_status_missing");
   return Object.freeze({ ...captured });
 }
@@ -411,9 +373,7 @@ export function createSupervisor({
     try {
       completedAt = exactTimestamp(now());
     } catch {
-      completedAt = validExactTimestamp(state.heartbeatAt)
-        ? state.heartbeatAt
-        : state.startedAt;
+      completedAt = validExactTimestamp(state.heartbeatAt) ? state.heartbeatAt : state.startedAt;
       if (patch.failureCode === null) {
         terminalPatch = {
           ...patch,
@@ -505,11 +465,7 @@ export function createSupervisor({
     let record = null;
     try {
       const untrusted = await readTerminalStatus(terminalStatusFile, 32 * 1024);
-      record = captureTerminalRecord(
-        untrusted,
-        state.envelope,
-        operatingSystemExitCode,
-      );
+      record = captureTerminalRecord(untrusted, state.envelope, operatingSystemExitCode);
     } catch {
       record = null;
     }
@@ -589,8 +545,7 @@ export function createSupervisor({
       void settleExit(code);
     });
     for (const signal of forwardedSignals) {
-      if (!deliveredSignals.has(signal) && sendChildSignal(signal))
-        deliveredSignals.add(signal);
+      if (!deliveredSignals.has(signal) && sendChildSignal(signal)) deliveredSignals.add(signal);
     }
     scheduleHeartbeat();
     scheduleTimeout();
@@ -600,8 +555,7 @@ export function createSupervisor({
   async function start(input) {
     const captured = captureRunEnvelope(input);
     if (state.envelope) {
-      if (!sameEnvelope(state.envelope, captured))
-        throw fixedError("run_conflict");
+      if (!sameEnvelope(state.envelope, captured)) throw fixedError("run_conflict");
       return publicStatus(state);
     }
     const startedAt = exactTimestamp(now());
@@ -635,8 +589,7 @@ export function createSupervisor({
   }
 
   function forwardSignal(signal) {
-    if (signal !== "SIGTERM" && signal !== "SIGINT")
-      throw fixedError("invalid_signal");
+    if (signal !== "SIGTERM" && signal !== "SIGINT") throw fixedError("invalid_signal");
     if (forwardedSignals.has(signal)) return false;
     forwardedSignals.add(signal);
     if (state.state !== "running" || terminalClaimed) return false;
@@ -663,11 +616,7 @@ function captureSupervisor(value) {
   const captured = {};
   for (const key of ["start", "status", "forwardSignal"]) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (
-      !descriptor ||
-      !("value" in descriptor) ||
-      typeof descriptor.value !== "function"
-    )
+    if (!descriptor || !("value" in descriptor) || typeof descriptor.value !== "function")
       throw fixedError("invalid_supervisor_configuration");
     captured[key] = descriptor.value.bind(value);
   }
@@ -680,8 +629,7 @@ function projectPublicStatus(value) {
   const projected = {};
   for (const key of PUBLIC_STATUS_KEYS) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (!descriptor || !("value" in descriptor))
-      throw fixedError("supervisor_unavailable");
+    if (!descriptor || !("value" in descriptor)) throw fixedError("supervisor_unavailable");
     projected[key] = descriptor.value;
   }
   const attemptMatch =
@@ -690,17 +638,10 @@ function projectPublicStatus(value) {
       : typeof projected.attemptId === "string"
         ? ATTEMPT_ID_PATTERN.exec(projected.attemptId)
         : null;
-  if (
-    projected.attemptId !== null &&
-    (!attemptMatch || !validDate(attemptMatch[2]))
-  ) {
+  if (projected.attemptId !== null && (!attemptMatch || !validDate(attemptMatch[2]))) {
     throw fixedError("supervisor_unavailable");
   }
-  if (
-    !["pending", "running", "succeeded", "failed", "unknown"].includes(
-      projected.state,
-    )
-  ) {
+  if (!["pending", "running", "succeeded", "failed", "unknown"].includes(projected.state)) {
     throw fixedError("supervisor_unavailable");
   }
   for (const key of ["startedAt", "heartbeatAt", "completedAt"]) {
@@ -710,9 +651,7 @@ function projectPublicStatus(value) {
   }
   if (
     projected.exitCode !== null &&
-    (!Number.isInteger(projected.exitCode) ||
-      projected.exitCode < 0 ||
-      projected.exitCode > 255)
+    (!Number.isInteger(projected.exitCode) || projected.exitCode < 0 || projected.exitCode > 255)
   ) {
     throw fixedError("supervisor_unavailable");
   }
@@ -817,9 +756,7 @@ function readRequestBody(request, limit) {
 function safeErrorCode(error) {
   if (!error || typeof error !== "object") return null;
   const descriptor = Object.getOwnPropertyDescriptor(error, "code");
-  return descriptor &&
-    "value" in descriptor &&
-    typeof descriptor.value === "string"
+  return descriptor && "value" in descriptor && typeof descriptor.value === "string"
     ? descriptor.value
     : null;
 }
@@ -842,8 +779,7 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
     void (async () => {
       let pathname;
       try {
-        pathname = new URL(request.url ?? "", "http://supervisor.invalid")
-          .pathname;
+        pathname = new URL(request.url ?? "", "http://supervisor.invalid").pathname;
       } catch {
         sendJson(response, 404, { error: "not_found" });
         return;
@@ -865,10 +801,7 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
         sendJson(response, 401, { error: "unauthorized" });
         return;
       }
-      const mediaType = request.headers["content-type"]
-        ?.split(";", 1)[0]
-        ?.trim()
-        .toLowerCase();
+      const mediaType = request.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase();
       if (mediaType !== "application/json") {
         request.resume();
         sendJson(response, 415, { error: "unsupported_media_type" });
@@ -877,14 +810,11 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
       const contentLength = request.headers["content-length"];
       if (
         typeof contentLength === "string" &&
-        (/^\d+$/.test(contentLength) === false ||
-          Number(contentLength) > 32 * 1024)
+        (/^\d+$/.test(contentLength) === false || Number(contentLength) > 32 * 1024)
       ) {
         request.resume();
         sendJson(response, /^\d+$/.test(contentLength) ? 413 : 400, {
-          error: /^\d+$/.test(contentLength)
-            ? "body_too_large"
-            : "invalid_body",
+          error: /^\d+$/.test(contentLength) ? "body_too_large" : "invalid_body",
         });
         return;
       }
@@ -913,8 +843,7 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
         const code = safeErrorCode(error);
         if (code === "invalid_run_envelope")
           sendJson(response, 400, { error: "invalid_run_envelope" });
-        else if (code === "run_conflict")
-          sendJson(response, 409, { error: "run_conflict" });
+        else if (code === "run_conflict") sendJson(response, 409, { error: "run_conflict" });
         else sendJson(response, 500, { error: "supervisor_unavailable" });
       }
     })().catch(() => {
@@ -953,10 +882,7 @@ export function createSupervisorServer({ supervisor, token, port, host } = {}) {
   return server;
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const supervisor = createSupervisor();
   createSupervisorServer({
     supervisor,

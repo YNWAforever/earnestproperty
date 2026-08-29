@@ -12,12 +12,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<RunState, readonly RunState[]>> = {
 };
 
 export type RunMode = "shadow" | "publish";
-export type RunState =
-  | "pending"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "unknown";
+export type RunState = "pending" | "running" | "succeeded" | "failed" | "unknown";
 
 export interface RunEnvelope {
   environment: "preview" | "production";
@@ -41,8 +36,7 @@ interface EnvelopeInput {
 }
 
 function requireDate(value: Date): Date {
-  if (!Number.isFinite(value.getTime()))
-    throw new TypeError("scheduled time is invalid");
+  if (!Number.isFinite(value.getTime())) throw new TypeError("scheduled time is invalid");
   return value;
 }
 
@@ -51,14 +45,8 @@ export function hongKongDate(scheduledTime: number | string | Date): string {
   return new Date(date.getTime() + HK_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-export function scheduledAttemptId(
-  environment: string,
-  hkDate: string,
-): string {
-  if (
-    !/^(preview|production)$/.test(environment) ||
-    !DATE_PATTERN.test(hkDate)
-  ) {
+export function scheduledAttemptId(environment: string, hkDate: string): string {
+  if (!/^(preview|production)$/.test(environment) || !DATE_PATTERN.test(hkDate)) {
     throw new TypeError("scheduled attempt identity is invalid");
   }
   return `scheduled:${environment}:${hkDate}`;
@@ -72,10 +60,7 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
   const scheduled = requireDate(new Date(value.scheduledTime));
   const hkDate = hongKongDate(scheduled);
   const environment = value.environment;
-  if (
-    typeof environment !== "string" ||
-    !/^(preview|production)$/.test(environment)
-  ) {
+  if (typeof environment !== "string" || !/^(preview|production)$/.test(environment)) {
     throw new TypeError("run environment is invalid");
   }
   const mode = value.mode;
@@ -92,18 +77,12 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
   let manualReason: string | null = null;
   if (kind === "manual") {
     const suppliedManualReason = value.manualReason;
-    manualReason =
-      typeof suppliedManualReason === "string"
-        ? suppliedManualReason.trim()
-        : "";
+    manualReason = typeof suppliedManualReason === "string" ? suppliedManualReason.trim() : "";
     if (manualReason.length < 8 || manualReason.length > 240) {
       throw new TypeError("manual reason is invalid");
     }
     const manualSuffix = value.manualSuffix;
-    if (
-      typeof manualSuffix !== "string" ||
-      !SAFE_SUFFIX_PATTERN.test(manualSuffix)
-    ) {
+    if (typeof manualSuffix !== "string" || !SAFE_SUFFIX_PATTERN.test(manualSuffix)) {
       throw new TypeError("manual suffix is invalid");
     }
     attemptId = `${attemptId}:manual:${manualSuffix}`;
@@ -120,12 +99,8 @@ export function buildRunEnvelope(input: unknown): Readonly<RunEnvelope> {
   });
 }
 
-export function transitionRunState(
-  current: RunState,
-  next: RunState,
-): RunState {
-  if (TERMINAL_STATES.has(current))
-    throw new TypeError("run state is terminal");
+export function transitionRunState(current: RunState, next: RunState): RunState {
+  if (TERMINAL_STATES.has(current)) throw new TypeError("run state is terminal");
   if (!ALLOWED_TRANSITIONS[current].includes(next)) {
     throw new TypeError(`run transition ${current} -> ${next} is invalid`);
   }

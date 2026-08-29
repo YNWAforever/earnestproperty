@@ -202,8 +202,11 @@ test("a conversation is awaiting a reply when the customer spoke last", () => {
 test("the reply window is reported as open, closing, then expired", () => {
   const inboundAt = "2026-08-19T00:00:00Z";
   const at = (iso) =>
-    conversationAttention({ lastDirection: "inbound", lastInboundAt: inboundAt, now: new Date(iso) })
-      .windowState;
+    conversationAttention({
+      lastDirection: "inbound",
+      lastInboundAt: inboundAt,
+      now: new Date(iso),
+    }).windowState;
 
   assert.equal(at("2026-08-19T01:00:00Z"), "open");
   assert.equal(at("2026-08-19T22:30:00Z"), "closing");
