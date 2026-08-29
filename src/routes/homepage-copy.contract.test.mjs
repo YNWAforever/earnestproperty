@@ -31,3 +31,79 @@ test("section headers only render an eyebrow when one is supplied", () => {
 test("the future 青山公路／汀九屋苑 block is not added by this slice", () => {
   assert.doesNotMatch(source, /青山公路及汀九屋苑/);
 });
+
+// P3 Task 8 -- the homepage used to repeat its core trust/credibility claims
+// (local expertise, licensed, real listings, fast response) across five
+// separate spots: hero subhead, WHY US tiles, agent-team-preview tagline,
+// about-preview paragraph, and Organization JSON-LD. Only the last two prose
+// repeats (agent-team-preview tagline, about-preview paragraph) were cut --
+// hero subhead, WHY US tiles, and the JSON-LD were deliberately kept. See
+// docs/ROUTE_FUNCTION_PARITY.md for the full before/after/why log.
+test("ABOUT PREVIEW no longer restates the local-expertise paragraph", () => {
+  assert.doesNotMatch(source, /我哋係一間以深井、青山公路為核心的本地地產代理/);
+  assert.doesNotMatch(
+    source,
+    /對每個屋苑座向、樓層景觀、車位、會所和近期叫價都有第一手理解/,
+  );
+  // The section still has a teaser line and its existing /about CTA -- this
+  // is a consolidation, not a deletion of the whole section.
+  assert.match(source, /ABOUT PREVIEW/);
+  assert.match(source, /<Link to="\/about">/);
+});
+
+test("AGENT TEAM PREVIEW no longer restates the local-market/instant-WhatsApp tagline", () => {
+  assert.doesNotMatch(
+    source,
+    /熟悉深井、青山公路及汀九市場，直接 WhatsApp 查詢。/,
+  );
+  // The section still has its own CTA and renders the agent cards.
+  const agentPreview = source.slice(
+    source.indexOf("{/* AGENT TEAM PREVIEW */}"),
+    source.indexOf("{/* MARKET INFO */}"),
+  );
+  assert.match(agentPreview, /查看全部代理/);
+  assert.match(agentPreview, /agents\.map/);
+});
+
+test("featured-listings PropertyCard shows a FreshnessStamp", () => {
+  assert.match(
+    source,
+    /import \{ FreshnessStamp \} from "@\/components\/layout\/FreshnessStamp";/,
+  );
+  const propertyCard = source.slice(source.indexOf("function PropertyCard("));
+  assert.match(
+    propertyCard,
+    /<FreshnessStamp updatedAt=\{property\.last_seen_at\}/,
+  );
+});
+
+test("featured-listings empty state uses the shared EmptyState component", () => {
+  assert.match(
+    source,
+    /import \{ EmptyState \} from "@\/components\/layout\/EmptyState";/,
+  );
+  const featuredSection = source.slice(
+    source.indexOf("{/* FEATURED LISTINGS"),
+    source.indexOf("{/* FEATURED VIDEOS"),
+  );
+  assert.match(featuredSection, /<EmptyState/);
+});
+
+// P3 plan acceptance criterion: CoreEstateGrid already correctly renders an
+// em-dash for missing avg PSF / listing-count data, never "0" -- this is a
+// regression guard, not new behavior (nothing above this test changes
+// CoreEstateGrid).
+test("CoreEstateGrid renders an em-dash, never 0, for missing avg PSF or listing count", () => {
+  const gridSource = source.slice(
+    source.indexOf("function CoreEstateGrid("),
+    source.indexOf("function SectionHeader("),
+  );
+  assert.match(
+    gridSource,
+    /psf === null \|\| psf === undefined \|\| !Number\.isFinite\(psf\)\s*\?\s*"—"/,
+  );
+  assert.match(
+    gridSource,
+    /listingCount === null \|\| listingCount === undefined\s*\?\s*"—"/,
+  );
+});
