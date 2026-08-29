@@ -423,6 +423,16 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   assert.match(estateReviews, /name: "robots", content: "noindex,follow"/);
 });
 
+// DR-8: the two eyebrow labels above the estate-reviews sections were left in
+// English on an otherwise zh-HK page.
+test("estate-reviews.tsx eyebrows are zh-HK, not English", () => {
+  const estateReviews = readFileSync("src/routes/estate-reviews.tsx", "utf8");
+
+  assert.doesNotMatch(estateReviews, /Review Articles|Estate Pages/);
+  assert.match(estateReviews, /屋苑文章/);
+  assert.match(estateReviews, /屋苑專頁/);
+});
+
 // Audit item 8: /privacy, /disclaimer, /terms all 404'd, and the EAA credential
 // in the footer was plain text a visitor could not verify.
 test("privacy, disclaimer and terms pages exist and are linked from the footer, and the licence is verifiable", () => {

@@ -150,7 +150,7 @@ export function CorridorInventory({
   inventory,
   inquiryText,
   listingsHref,
-  eyebrow = "Live Listings",
+  eyebrow = "放盤情報",
   heading = "即時放盤",
   description = "放盤數字來自網站已接入的公開真盤資料，實際可睇盤源可 WhatsApp 再確認。",
 }: {

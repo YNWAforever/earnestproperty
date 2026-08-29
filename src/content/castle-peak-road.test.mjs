@@ -536,6 +536,18 @@ test("CorridorInventory.tsx sanitizes listing.title_zh before it reaches alt/hea
   );
 });
 
+// Task 1 introduced the `eyebrow` prop with an English default ("Live
+// Listings") solely to keep that refactor visually inert. DR-8 is the task
+// that flips the default to zh-HK -- guard that it stays flipped and doesn't
+// just duplicate the "即時放盤" heading default.
+test("CorridorInventory.tsx eyebrow default is zh-HK, not the old English placeholder (DR-8)", () => {
+  const inventory = read("src/components/site/CorridorInventory.tsx");
+
+  assert.doesNotMatch(inventory, /Live Listings/);
+  assert.match(inventory, /eyebrow = "放盤情報"/);
+  assert.match(inventory, /heading = "即時放盤"/);
+});
+
 test("castle-peak-road.$segment.tsx sanitizes listing.title_zh before it reaches ItemList JSON-LD (DR-4)", () => {
   const segment = read("src/routes/castle-peak-road.$segment.tsx");
 

@@ -221,6 +221,24 @@ test("live-agent handoff avoids fake Woztell conversations and implicit opt-in",
   assert.match(widget, /opt_in_whatsapp:\s*handoffConsent/);
 });
 
+// DR-8: six aria-labels on the public live-agent widget were still hardcoded
+// English on an otherwise zh-HK site. Screen-reader users hitting this widget
+// on the public site should hear zh-HK, same as the rest of the page.
+test("LiveAgentWidget aria-labels are zh-HK, not English", () => {
+  const widget = read("src/components/live-agent/LiveAgentWidget.tsx");
+
+  assert.doesNotMatch(
+    widget,
+    /aria-label="(?:Earnest Property live agent|Close live agent|WhatsApp phone for handoff|Consent to WhatsApp follow-up|Live agent message|Send)"/,
+  );
+  assert.match(widget, /aria-label="晉誠地產即時客服"/);
+  assert.match(widget, /aria-label="關閉即時客服"/);
+  assert.match(widget, /aria-label="轉接 WhatsApp 電話"/);
+  assert.match(widget, /aria-label="同意 WhatsApp 跟進聯絡"/);
+  assert.match(widget, /aria-label="即時客服訊息"/);
+  assert.match(widget, /aria-label="傳送"/);
+});
+
 test("CRM AI model suggestions stay suggested until staff review", () => {
   const source = read("src/lib/ai/crm-enrichment.server.ts");
   const suggestedTagLoop =

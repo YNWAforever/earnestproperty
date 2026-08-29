@@ -152,7 +152,7 @@ export function LiveAgentWidget() {
 
   return (
     <div
-      aria-label="Earnest Property live agent"
+      aria-label="晉誠地產即時客服"
       className="fixed bottom-3 right-3 z-50 flex h-[min(520px,calc(100vh-1.5rem))] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl sm:bottom-5 sm:right-5"
       role="dialog"
     >
@@ -162,7 +162,7 @@ export function LiveAgentWidget() {
           <p className="truncate text-xs text-muted-foreground">公開物業資料查詢</p>
         </div>
         <Button
-          aria-label="Close live agent"
+          aria-label="關閉即時客服"
           onClick={() => setOpen(false)}
           size="icon"
           type="button"
@@ -213,14 +213,14 @@ export function LiveAgentWidget() {
               value={handoffPhone}
               onChange={(event) => setHandoffPhone(event.target.value)}
               placeholder="WhatsApp 電話"
-              aria-label="WhatsApp phone for handoff"
+              aria-label="轉接 WhatsApp 電話"
               autoComplete="tel"
             />
             <label className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
               <Checkbox
                 checked={handoffConsent}
                 onCheckedChange={(checked) => setHandoffConsent(checked === true)}
-                aria-label="Consent to WhatsApp follow-up"
+                aria-label="同意 WhatsApp 跟進聯絡"
               />
               <span>我同意 Earnest Property 透過 WhatsApp 聯絡我跟進今次查詢。</span>
             </label>
@@ -250,13 +250,13 @@ export function LiveAgentWidget() {
         }}
       >
         <Input
-          aria-label="Live agent message"
+          aria-label="即時客服訊息"
           autoComplete="off"
           onChange={(event) => setInput(event.target.value)}
           placeholder="輸入問題..."
           value={input}
         />
-        <Button disabled={loading || !input.trim()} size="icon" type="submit" aria-label="Send">
+        <Button disabled={loading || !input.trim()} size="icon" type="submit" aria-label="傳送">
           <Send className="h-4 w-4" />
         </Button>
       </form>
