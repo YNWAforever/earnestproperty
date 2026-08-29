@@ -37,11 +37,7 @@ function assertLegacySourceAccessGateSection(section) {
     "independent legacy origin",
     "STOP: do not trigger or retry the shadow Workflow",
   ]) {
-    assert.equal(
-      section.includes(fragment),
-      true,
-      `missing legacy gate: ${fragment}`,
-    );
+    assert.equal(section.includes(fragment), true, `missing legacy gate: ${fragment}`);
   }
 
   assert.doesNotMatch(
@@ -63,11 +59,7 @@ function assertLegacySourceAccessGateSection(section) {
     'Assert-LegacyFinalUri -Actual $seedFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath "/property/c1"',
     "Assert-LegacyFinalUri -Actual $detailFinalUri -ExpectedOrigin $legacyOrigin -ExpectedPath $detailUri.AbsolutePath",
   ]) {
-    assert.equal(
-      section.includes(fragment),
-      true,
-      `missing final-URI contract: ${fragment}`,
-    );
+    assert.equal(section.includes(fragment), true, `missing final-URI contract: ${fragment}`);
   }
 }
 
@@ -77,11 +69,7 @@ function assertManualShadowReadinessSection(section) {
     "npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.jsonc",
     "node scripts/mls/verify-shadow.mjs --preflight <path> --evidence <path> --output <path>",
   ]) {
-    assert.equal(
-      section.includes(command),
-      true,
-      `missing runbook command: ${command}`,
-    );
+    assert.equal(section.includes(command), true, `missing runbook command: ${command}`);
   }
 
   for (const requiredTerm of [
@@ -91,11 +79,7 @@ function assertManualShadowReadinessSection(section) {
     "migration",
     "rollback",
   ]) {
-    assert.equal(
-      section.includes(requiredTerm),
-      true,
-      `missing runbook term: ${requiredTerm}`,
-    );
+    assert.equal(section.includes(requiredTerm), true, `missing runbook term: ${requiredTerm}`);
   }
 
   assert.match(section, /separately approved secret-placement gate/i);
@@ -119,18 +103,12 @@ function assertManualShadowReadinessSection(section) {
   }
 
   for (const automaticActivation of [
-    new RegExp(
-      "\\bwrangler\\b(?:\\s+--)?\\s+(?:schedule|schedules|publish)\\b",
-      "i",
-    ),
+    new RegExp("\\bwrangler\\b(?:\\s+--)?\\s+(?:schedule|schedules|publish)\\b", "i"),
     new RegExp(
       "\\bwrangler\\b[\\s\\S]*?\\bdeploy\\b[\\s\\S]*?workers\\/mls-container\\/wrangler\\.scheduled\\.jsonc\\b",
       "i",
     ),
-    new RegExp(
-      "\\b(?:cron|schedule)\\s+(?:activate|enable|create|install)\\b",
-      "i",
-    ),
+    new RegExp("\\b(?:cron|schedule)\\s+(?:activate|enable|create|install)\\b", "i"),
     new RegExp(
       "\\b(?:workflows?\\s+trigger|workflow\\s+trigger)\\b[\\s\\S]*?\\bmode\\b(?:[^\\w\\s]?\\s*(?:=|:)\\s*|\\s+)[^a-zA-Z]*publish\\b",
       "i",
@@ -209,8 +187,7 @@ test("runbook verifier rejects credential and automatic activation variants", as
     "MLS_PUBLISH_ENABLED=true",
   ]) {
     assert.throws(
-      () =>
-        assertManualShadowReadinessSection(`${safeSection}\n${unsafeAddition}`),
+      () => assertManualShadowReadinessSection(`${safeSection}\n${unsafeAddition}`),
       assert.AssertionError,
       unsafeAddition,
     );
@@ -405,10 +382,7 @@ function validEvidence() {
       evidencePrefix: VALID_PREFIX,
       manifestPresent: true,
       manifestSha256: manifestSha256(manifest),
-      objectKeys: [
-        ...objects.map(({ key }) => key),
-        `${VALID_PREFIX}/manifest.json`,
-      ],
+      objectKeys: [...objects.map(({ key }) => key), `${VALID_PREFIX}/manifest.json`],
       objects,
       manifest,
     },
@@ -448,11 +422,7 @@ test("accepts an exact fail-closed shadow preflight snapshot", () => {
 test("rejects unavailable Cloudflare capability", () => {
   const snapshot = validPreflight();
   snapshot.account.capability = false;
-  assertFailure(
-    verifyShadowPreflight,
-    snapshot,
-    "cloudflare_capability_unavailable",
-  );
+  assertFailure(verifyShadowPreflight, snapshot, "cloudflare_capability_unavailable");
 });
 
 test("rejects each public worker activation surface", () => {
@@ -469,10 +439,7 @@ test("rejects each public worker activation surface", () => {
 
 test("rejects missing container, workflow, and migration registrations", () => {
   for (const [mutate, code] of [
-    [
-      (value) => (value.container.registered = false),
-      "container_not_registered",
-    ],
+    [(value) => (value.container.registered = false), "container_not_registered"],
     [(value) => (value.workflow.registered = false), "workflow_not_registered"],
     [(value) => (value.migration.applied = false), "migration_not_applied"],
   ]) {
@@ -484,15 +451,9 @@ test("rejects missing container, workflow, and migration registrations", () => {
 
 test("rejects an invalid shadow environment and unsafe flags", () => {
   for (const [mutate, code] of [
-    [
-      (value) => (value.flags.mode = "production"),
-      "shadow_environment_invalid",
-    ],
+    [(value) => (value.flags.mode = "production"), "shadow_environment_invalid"],
     [(value) => (value.flags.publishEnabled = true), "publish_flag_enabled"],
-    [
-      (value) => (value.flags.mediaRightsConfirmed = true),
-      "media_rights_flag_enabled",
-    ],
+    [(value) => (value.flags.mediaRightsConfirmed = true), "media_rights_flag_enabled"],
   ]) {
     const snapshot = validPreflight();
     mutate(snapshot);
@@ -503,9 +464,7 @@ test("rejects an invalid shadow environment and unsafe flags", () => {
 test("reports each missing required secret name without reading values", () => {
   for (const secretName of REQUIRED_SECRET_NAMES) {
     const snapshot = validPreflight();
-    snapshot.secrets.names = snapshot.secrets.names.filter(
-      (name) => name !== secretName,
-    );
+    snapshot.secrets.names = snapshot.secrets.names.filter((name) => name !== secretName);
     assertFailure(
       verifyShadowPreflight,
       snapshot,
@@ -553,10 +512,7 @@ test("base and scheduled Wrangler configs do not hardcode a stale commit", async
     "../../workers/mls-container/wrangler.jsonc",
     "../../workers/mls-container/wrangler.scheduled.jsonc",
   ]) {
-    const source = await readFile(
-      new URL(relativePath, import.meta.url),
-      "utf8",
-    );
+    const source = await readFile(new URL(relativePath, import.meta.url), "utf8");
     assert.doesNotMatch(source, /"MLS_GIT_COMMIT_SHA"\s*:/);
   }
 });
@@ -591,15 +547,9 @@ test("accepts fully correlated shadow evidence", () => {
 
 test("rejects malformed identity values, UUIDs, traversal, and free text", () => {
   for (const [mutate, code] of [
-    [
-      (value) => (value.identity.attemptId = "manual:production:2026-08-23"),
-      "attempt_id_invalid",
-    ],
+    [(value) => (value.identity.attemptId = "manual:production:2026-08-23"), "attempt_id_invalid"],
     [(value) => (value.identity.attemptId = 123), "attempt_id_invalid"],
-    [
-      (value) => (value.identity.runId = "not-a-uuid"),
-      "shadow_identity_invalid",
-    ],
+    [(value) => (value.identity.runId = "not-a-uuid"), "shadow_identity_invalid"],
     [
       (value) => (value.identity.evidencePrefix = `${VALID_PREFIX}/../secret`),
       "shadow_identity_invalid",
@@ -652,18 +602,11 @@ test("rejects run identity and evidence prefix mismatches", () => {
     ],
     [
       (value) =>
-        (value.run.evidencePrefix = value.run.evidencePrefix.replace(
-          "mls-sync/",
-          "other/",
-        )),
+        (value.run.evidencePrefix = value.run.evidencePrefix.replace("mls-sync/", "other/")),
       "evidence_prefix_mismatch",
     ],
     [
-      (value) =>
-        (value.r2.evidencePrefix = value.r2.evidencePrefix.replace(
-          "mls-sync/",
-          "other/",
-        )),
+      (value) => (value.r2.evidencePrefix = value.r2.evidencePrefix.replace("mls-sync/", "other/")),
       "evidence_prefix_mismatch",
     ],
   ]) {
@@ -747,8 +690,7 @@ test("rejects self-hashed manifest metadata that mismatches captured identity", 
 test("rejects artifact digest, metadata, and key mismatches", () => {
   for (const mutate of [
     (value) => (value.r2.manifest.artifacts[0].sha256 = "f".repeat(64)),
-    (value) =>
-      (value.r2.manifest.artifacts[1].contentType = "application/octet-stream"),
+    (value) => (value.r2.manifest.artifacts[1].contentType = "application/octet-stream"),
     (value) => (value.r2.objects[2].byteLength += 1),
     (value) => (value.r2.objects[3].key = `${VALID_PREFIX}/other.json`),
   ]) {
@@ -778,11 +720,7 @@ test("rejects Blob uploads and publication attempts above zero", () => {
 
   const publication = validEvidence();
   publication.sideEffects.publicationAttempts = 1;
-  assertFailure(
-    verifyShadowEvidence,
-    publication,
-    "publication_side_effect_detected",
-  );
+  assertFailure(verifyShadowEvidence, publication, "publication_side_effect_detected");
 });
 
 test("requires both redaction checks", () => {
@@ -801,10 +739,7 @@ test("fails closed on malformed, inherited, extra, and symbol-bearing records", 
   cases.push(malformed);
 
   const inherited = validEvidence();
-  inherited.identity = Object.assign(
-    Object.create({ note: "inherited" }),
-    inherited.identity,
-  );
+  inherited.identity = Object.assign(Object.create({ note: "inherited" }), inherited.identity);
   cases.push(inherited);
 
   const extra = validEvidence();
@@ -907,18 +842,12 @@ test("builds a frozen JSON-safe acceptance record", () => {
   assert.equal(Object.isFrozen(record.preflightChecks), true);
   assert.equal(Object.isFrozen(record.evidenceChecks), true);
   assert.equal(Object.isFrozen(record.identity), true);
-  assert.equal(
-    record.manifest.manifestSha256,
-    validEvidence().r2.manifestSha256,
-  );
+  assert.equal(record.manifest.manifestSha256, validEvidence().r2.manifestSha256);
   assert.equal(record.manifest.terminalClassification, "healthy");
   assert.equal(record.manifest.commitSha, VALID_COMMIT_SHA);
   assert.equal(record.manifest.containerDeploymentId, VALID_DEPLOYMENT_ID);
   assert.equal(record.manifest.workflowInstanceId, VALID_WORKFLOW_ID);
-  assert.deepEqual(
-    record.manifest.artifacts,
-    validEvidence().r2.manifest.artifacts,
-  );
+  assert.deepEqual(record.manifest.artifacts, validEvidence().r2.manifest.artifacts);
   assert.equal(Object.isFrozen(record.manifest), true);
   assert.equal(Object.isFrozen(record.manifest.artifacts), true);
   assert.equal(Object.isFrozen(record.manifest.artifacts[0]), true);
@@ -1090,14 +1019,7 @@ test("CLI writes a bounded accepted shadow record", async () => {
     const { dependencies } = cliDependencies();
 
     const exitCode = await main(
-      [
-        "--preflight",
-        preflightPath,
-        "--evidence",
-        evidencePath,
-        "--output",
-        outputPath,
-      ],
+      ["--preflight", preflightPath, "--evidence", evidencePath, "--output", outputPath],
       dependencies,
     );
 
@@ -1120,14 +1042,7 @@ test("CLI returns bounded evidence failures without accepting", async () => {
     const { dependencies } = cliDependencies();
 
     const exitCode = await main(
-      [
-        "--preflight",
-        preflightPath,
-        "--evidence",
-        evidencePath,
-        "--output",
-        outputPath,
-      ],
+      ["--preflight", preflightPath, "--evidence", evidencePath, "--output", outputPath],
       dependencies,
     );
 
@@ -1156,22 +1071,13 @@ test("CLI emits only bounded lowercase missing-name failure codes", async () => 
     const { dependencies } = cliDependencies();
 
     const exitCode = await main(
-      [
-        "--preflight",
-        preflightPath,
-        "--evidence",
-        evidencePath,
-        "--output",
-        outputPath,
-      ],
+      ["--preflight", preflightPath, "--evidence", evidencePath, "--output", outputPath],
       dependencies,
     );
 
     assert.equal(exitCode, 30);
     const output = JSON.parse(await readFile(outputPath, "utf8"));
-    assert.deepEqual(output.failures, [
-      "missing_secret_name_database_url_unpooled",
-    ]);
+    assert.deepEqual(output.failures, ["missing_secret_name_database_url_unpooled"]);
     assert.equal(
       output.failures.every((code) => /^[a-z][a-z0-9_-]{0,79}$/.test(code)),
       true,
@@ -1197,25 +1103,13 @@ test("CLI rejects output paths whose parent would require nested creation", asyn
   await withCliFiles(async (directory) => {
     const preflightPath = path.join(directory, "preflight.json");
     const evidencePath = path.join(directory, "evidence.json");
-    const outputPath = path.join(
-      directory,
-      "missing",
-      "nested",
-      "acceptance.json",
-    );
+    const outputPath = path.join(directory, "missing", "nested", "acceptance.json");
     await writeFile(preflightPath, JSON.stringify(validPreflight()), "utf8");
     await writeFile(evidencePath, JSON.stringify(validEvidence()), "utf8");
     const { dependencies } = cliDependencies();
 
     const exitCode = await main(
-      [
-        "--preflight",
-        preflightPath,
-        "--evidence",
-        evidencePath,
-        "--output",
-        outputPath,
-      ],
+      ["--preflight", preflightPath, "--evidence", evidencePath, "--output", outputPath],
       dependencies,
     );
 
@@ -1237,14 +1131,7 @@ test("CLI never serializes credentials from rejected evidence", async () => {
     const { dependencies, stderr, stdout } = cliDependencies();
 
     const exitCode = await main(
-      [
-        "--preflight",
-        preflightPath,
-        "--evidence",
-        evidencePath,
-        "--output",
-        outputPath,
-      ],
+      ["--preflight", preflightPath, "--evidence", evidencePath, "--output", outputPath],
       dependencies,
     );
 
@@ -1280,14 +1167,7 @@ test("CLI bounds input reads before rejecting oversized JSON", async () => {
   });
 
   const exitCode = await main(
-    [
-      "--preflight",
-      "preflight.json",
-      "--evidence",
-      "evidence.json",
-      "--output",
-      "output.json",
-    ],
+    ["--preflight", "preflight.json", "--evidence", "evidence.json", "--output", "output.json"],
     dependencies,
   );
 
@@ -1333,14 +1213,7 @@ test("CLI drains short reads through the size sentinel before parsing", async ()
   });
 
   const exitCode = await main(
-    [
-      "--preflight",
-      preflightPath,
-      "--evidence",
-      evidencePath,
-      "--output",
-      "output.json",
-    ],
+    ["--preflight", preflightPath, "--evidence", evidencePath, "--output", "output.json"],
     dependencies,
   );
 

@@ -15,9 +15,7 @@
     }
   ],
   "durable_objects": {
-    "bindings": [
-      { "name": "MLS_RUN_CONTAINER", "class_name": "MlsRunContainer" }
-    ]
+    "bindings": [{ "name": "MLS_RUN_CONTAINER", "class_name": "MlsRunContainer" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MlsRunContainer"] }],
   "workflows": [

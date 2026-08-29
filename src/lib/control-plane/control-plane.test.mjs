@@ -4,29 +4,14 @@ import test from "node:test";
 
 import { operationsCapabilitiesForRoles } from "./capabilities.ts";
 import { hasPermission } from "./permissions.ts";
-import {
-  errorResponse,
-  mapControlPlaneError,
-  successResponse,
-} from "./errors.ts";
+import { errorResponse, mapControlPlaneError, successResponse } from "./errors.ts";
 import { createOperationContext } from "./request-context.ts";
 import { sanitizeAuditMetadata } from "./audit.server.ts";
 import { aggregateHealth } from "./health.server.ts";
-import {
-  issueMigrationApproval,
-  verifyMigrationApproval,
-} from "./migration-approval.ts";
-import {
-  computeMigrationChecksum,
-  listRegisteredMigrations,
-} from "./migration-registry.server.ts";
+import { issueMigrationApproval, verifyMigrationApproval } from "./migration-approval.ts";
+import { computeMigrationChecksum, listRegisteredMigrations } from "./migration-registry.server.ts";
 import { applyMigration, planMigration } from "./migrations.server.ts";
-import {
-  canCancelJob,
-  jobFailureTransition,
-  manualRetryTransition,
-  retryDelayMs,
-} from "./jobs.ts";
+import { canCancelJob, jobFailureTransition, manualRetryTransition, retryDelayMs } from "./jobs.ts";
 import {
   createAiKnowledgeRebuildHandler,
   createWoztellCampaignDeliveryHandler,
@@ -80,10 +65,7 @@ test("structured postgres codes map to stable public errors", () => {
     message: "A required database relation is missing.",
     retryable: false,
   });
-  assert.equal(
-    mapControlPlaneError(new Error("password=secret")).code,
-    "INTERNAL_ERROR",
-  );
+  assert.equal(mapControlPlaneError(new Error("password=secret")).code, "INTERNAL_ERROR");
 });
 
 test("responses use stable success and error envelopes", async () => {
@@ -142,10 +124,7 @@ test("audit metadata applies bounded strings, arrays, and nesting", () => {
 });
 test("audit metadata redacts recipient and provider payloads and caps object width", () => {
   const wide = Object.fromEntries(
-    Array.from({ length: 60 }, (_, index) => [
-      `key${String(59 - index).padStart(2, "0")}`,
-      index,
-    ]),
+    Array.from({ length: 60 }, (_, index) => [`key${String(59 - index).padStart(2, "0")}`, index]),
   );
   const metadata = sanitizeAuditMetadata({
     jobId: "job-1",
@@ -185,10 +164,7 @@ test("audit metadata redacts recipient and provider payloads and caps object wid
   assert.equal(Object.keys(metadata.wide).length, 50);
   assert.deepEqual(
     Object.keys(metadata.wide),
-    Array.from(
-      { length: 50 },
-      (_, index) => `key${String(index).padStart(2, "0")}`,
-    ),
+    Array.from({ length: 50 }, (_, index) => `key${String(index).padStart(2, "0")}`),
   );
 });
 
@@ -201,8 +177,7 @@ test("required failed checks make health failed while optional failures degrade"
     "degraded",
   );
   assert.equal(
-    aggregateHealth([{ key: "database", required: true, status: "failed" }])
-      .status,
+    aggregateHealth([{ key: "database", required: true, status: "failed" }]).status,
     "failed",
   );
 });
@@ -218,10 +193,7 @@ test("migration approval is bound to actor, checksum, schema and expiry", async 
   const verifyDeps = { secret: "test-secret", now: () => 1_030 };
   const token = await issueMigrationApproval(input, issueDeps);
 
-  assert.equal(
-    (await verifyMigrationApproval(token, input, verifyDeps)).ok,
-    true,
-  );
+  assert.equal((await verifyMigrationApproval(token, input, verifyDeps)).ok, true);
   for (const changed of [
     { ...input, migrationId: "other" },
     { ...input, checksum: "sha256:other" },
@@ -250,9 +222,7 @@ test("migration approval is bound to actor, checksum, schema and expiry", async 
 });
 
 test("migration checksums are stable and registry declarations are enforced", async () => {
-  const statements = [
-    { statement: "SELECT $1::jsonb", params: [{ zebra: 1, alpha: [2, 3] }] },
-  ];
+  const statements = [{ statement: "SELECT $1::jsonb", params: [{ zebra: 1, alpha: [2, 3] }] }];
   const checksum = await computeMigrationChecksum(statements);
   assert.equal(
     checksum,
@@ -260,10 +230,7 @@ test("migration checksums are stable and registry declarations are enforced", as
       { statement: "SELECT $1::jsonb", params: [{ alpha: [2, 3], zebra: 1 }] },
     ]),
   );
-  assert.notEqual(
-    checksum,
-    await computeMigrationChecksum([{ statement: "SELECT 2" }]),
-  );
+  assert.notEqual(checksum, await computeMigrationChecksum([{ statement: "SELECT 2" }]));
 
   await assert.rejects(
     () =>
@@ -287,10 +254,7 @@ test("migration checksums are stable and registry declarations are enforced", as
 
 test("migration service revalidates schema and applies once through a transaction", async () => {
   const defaultRegistry = await listRegisteredMigrations();
-  assert.equal(
-    defaultRegistry[0].id,
-    "20260715120000_ops_jobs_status_updated_index",
-  );
+  assert.equal(defaultRegistry[0].id, "20260715120000_ops_jobs_status_updated_index");
 
   const statements = [{ statement: "SELECT 1" }];
   const migration = {
@@ -314,29 +278,10 @@ test("migration service revalidates schema and applies once through a transactio
     app_migrations: ["version", "applied_at"],
     staff_users: ["id"],
     staff_roles: ["staff_user_id", "role"],
-    ops_audit_logs: [
-      "id",
-      "permission",
-      "action",
-      "outcome",
-      "request_id",
-      "metadata",
-    ],
-    ops_jobs: [
-      "id",
-      "job_type",
-      "payload_version",
-      "status",
-      "idempotency_key",
-    ],
+    ops_audit_logs: ["id", "permission", "action", "outcome", "request_id", "metadata"],
+    ops_jobs: ["id", "job_type", "payload_version", "status", "idempotency_key"],
     ops_job_attempts: ["id", "job_id", "attempt_number", "outcome"],
-    ops_migration_runs: [
-      "id",
-      "migration_id",
-      "checksum",
-      "schema_fingerprint",
-      "result",
-    ],
+    ops_migration_runs: ["id", "migration_id", "checksum", "schema_fingerprint", "result"],
   };
   let applied = false;
   let schemaChanged = false;
@@ -357,8 +302,7 @@ test("migration service revalidates schema and applies once through a transactio
     if (statement === "SELECT version FROM app_migrations") {
       return applied ? [{ version: migration.id }] : [];
     }
-    if (statement.includes("SELECT migration_id FROM ops_migration_runs"))
-      return [];
+    if (statement.includes("SELECT migration_id FROM ops_migration_runs")) return [];
     if (statement.includes("INSERT INTO ops_migration_runs")) {
       failureRuns.push(params);
       return [];
@@ -407,11 +351,7 @@ test("migration service revalidates schema and applies once through a transactio
   assert.equal(transactions.length, 1);
   assert.match(transactions[0][0].statement, /pg_advisory_xact_lock/);
   assert.match(transactions[0][1].statement, /current_fingerprint/);
-  assert.ok(
-    transactions[0].some(({ statement }) =>
-      /INSERT INTO app_migrations/.test(statement),
-    ),
-  );
+  assert.ok(transactions[0].some(({ statement }) => /INSERT INTO app_migrations/.test(statement)));
   assert.match(transactions[0].at(-1).statement, /INSERT INTO ops_audit_logs/);
   assert.equal(audits.length, 0);
   await assert.rejects(
@@ -420,10 +360,7 @@ test("migration service revalidates schema and applies once through a transactio
   );
 
   applied = false;
-  const stalePlan = await planMigration(
-    { migrationId: migration.id, actor },
-    deps,
-  );
+  const stalePlan = await planMigration({ migrationId: migration.id, actor }, deps);
   schemaChanged = true;
   await assert.rejects(
     () =>
@@ -466,18 +403,9 @@ test("job workers renew leases, expose checkpoints, and stop heartbeats", () => 
   assert.doesNotMatch(runnerSource, /claimJobs\(\{ \.\.\.input, limit \}\)/);
   assert.match(jobsServer.completeJob.toString(), /lease_expires_at >= now/);
   assert.match(jobsServer.failJob.toString(), /lease_expires_at >= now/);
-  assert.doesNotMatch(
-    jobsServer.enqueueJob.toString(),
-    /status IN \('cancelled', 'failed'\)/,
-  );
-  assert.match(
-    jobsServer.retryJob.toString(),
-    /status IN \('failed', 'cancelled'\)/,
-  );
-  assert.match(
-    jobsServer.retryJob.toString(),
-    /max_attempts = attempt_count \+ 1/,
-  );
+  assert.doesNotMatch(jobsServer.enqueueJob.toString(), /status IN \('cancelled', 'failed'\)/);
+  assert.match(jobsServer.retryJob.toString(), /status IN \('failed', 'cancelled'\)/);
+  assert.match(jobsServer.retryJob.toString(), /max_attempts = attempt_count \+ 1/);
   assert.match(runnerSource, /startLeaseHeartbeat/);
   assert.match(runnerSource, /checkpoint: heartbeat\.checkpoint/);
   assert.equal(runnerSource.match(/heartbeat\.stop/g)?.length, 2);
@@ -566,11 +494,7 @@ test("job handlers are versioned and validate payloads before execution", () => 
     jobType: "test.controlplane",
     payloadVersion: 1,
     parsePayload(input) {
-      if (
-        !input ||
-        typeof input !== "object" ||
-        typeof input.value !== "number"
-      ) {
+      if (!input || typeof input !== "object" || typeof input.value !== "number") {
         throw Object.assign(new Error("Invalid payload"), {
           code: "VALIDATION_ERROR",
         });
@@ -582,20 +506,14 @@ test("job handlers are versioned and validate payloads before execution", () => 
     },
   };
   registerJobHandler(handler);
-  assert.deepEqual(
-    parseRegisteredJobPayload("test.controlplane", 1, { value: 2 }).payload,
-    {
-      value: 2,
-    },
-  );
+  assert.deepEqual(parseRegisteredJobPayload("test.controlplane", 1, { value: 2 }).payload, {
+    value: 2,
+  });
   assert.throws(
     () => parseRegisteredJobPayload("test.controlplane", 1, { value: "bad" }),
     (error) => error?.code === "VALIDATION_ERROR",
   );
-  assert.equal(
-    isRetryableJobError(retryableJobError("TIMEOUT", "Timed out")),
-    true,
-  );
+  assert.equal(isRetryableJobError(retryableJobError("TIMEOUT", "Timed out")), true);
   assert.equal(isRetryableJobError(new Error("Permanent")), false);
 });
 
@@ -646,9 +564,7 @@ test("AI knowledge handler delegates safely and marks provider timeouts retryabl
         attempt: 1,
         checkpoint: async () => {},
       }),
-    (error) =>
-      isRetryableJobError(error) &&
-      error.code === "AI_KNOWLEDGE_REBUILD_TIMEOUT",
+    (error) => isRetryableJobError(error) && error.code === "AI_KNOWLEDGE_REBUILD_TIMEOUT",
   );
 });
 
@@ -675,8 +591,7 @@ test("WozTell campaign handler maps timeout to retry and permanent rejection to 
   });
   await assert.rejects(
     () => timeout.run(payload, { jobId: "job-2", attempt: 1 }),
-    (error) =>
-      isRetryableJobError(error) && error.code === "WOZTELL_CAMPAIGN_RETRYABLE",
+    (error) => isRetryableJobError(error) && error.code === "WOZTELL_CAMPAIGN_RETRYABLE",
   );
 
   const rejected = createWoztellCampaignDeliveryHandler({
@@ -689,9 +604,7 @@ test("WozTell campaign handler maps timeout to retry and permanent rejection to 
   });
   await assert.rejects(
     () => rejected.run(payload, { jobId: "job-3", attempt: 1 }),
-    (error) =>
-      error?.code === "WOZTELL_CAMPAIGN_REJECTED" &&
-      !isRetryableJobError(error),
+    (error) => error?.code === "WOZTELL_CAMPAIGN_REJECTED" && !isRetryableJobError(error),
   );
 });
 
@@ -721,10 +634,7 @@ test("campaign delivery idempotency key is scoped to a queue run, not the campai
     campaignDeliveryIdempotencyKey(campaign, secondRun),
   );
 
-  assert.match(
-    campaignDeliveryIdempotencyKey(campaign, firstRun),
-    /^woztell\.campaign\.deliver:/,
-  );
+  assert.match(campaignDeliveryIdempotencyKey(campaign, firstRun), /^woztell\.campaign\.deliver:/);
 });
 
 // The two enqueue paths do NOT hand over the same string for the same row: the
@@ -771,17 +681,12 @@ test("the send-queue cron falls back to an immutable timestamp, not updated_at",
     cron,
     /COALESCE\(campaign\.reviewed_at, campaign\.created_at\)::text AS queue_run_at/,
   );
-  assert.doesNotMatch(
-    cron,
-    /COALESCE\(campaign\.reviewed_at, campaign\.updated_at\)/,
-  );
+  assert.doesNotMatch(cron, /COALESCE\(campaign\.reviewed_at, campaign\.updated_at\)/);
 });
 
 test("re-materializing a campaign never re-queues a possibly-delivered recipient", () => {
   const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
-  const start = source.indexOf(
-    "INSERT INTO whatsapp_campaign_recipients (campaign_id",
-  );
+  const start = source.indexOf("INSERT INTO whatsapp_campaign_recipients (campaign_id");
   const clause = source.slice(
     start,
     source.indexOf("[campaignId, uniqueEligibleContactIds]", start),
@@ -802,13 +707,8 @@ test("re-materializing a campaign never re-queues a possibly-delivered recipient
 });
 
 test("the queue flip re-asserts the same statuses canQueueAdminCampaign accepts", () => {
-  const source = readFileSync(
-    "src/lib/neon/admin-data.server.ts",
-    "utf8",
-  ).replaceAll("\r\n", "\n");
-  const start = source.indexOf(
-    "UPDATE whatsapp_campaigns c\n      SET status = 'queued'",
-  );
+  const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8").replaceAll("\r\n", "\n");
+  const start = source.indexOf("UPDATE whatsapp_campaigns c\n      SET status = 'queued'");
   const clause = source.slice(start, source.indexOf("RETURNING c.id", start));
 
   assert.notEqual(start, -1);
@@ -838,17 +738,10 @@ test("keyset cursors carry microsecond precision, not truncated ISO strings", ()
       /to_char\(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS\.US"Z"'\) AS created_at_cursor/,
       `${name} must select a microsecond-precision cursor column`,
     );
-    assert.match(
-      source,
-      /created_at_cursor/,
-      `${name} must use that column for the cursor`,
-    );
+    assert.match(source, /created_at_cursor/, `${name} must use that column for the cursor`);
   }
 
   // The cursor must not be rebuilt from the truncated display field.
-  assert.doesNotMatch(
-    audit,
-    /encodeAuditCursor\(\{ createdAt: last\.created_at,/,
-  );
+  assert.doesNotMatch(audit, /encodeAuditCursor\(\{ createdAt: last\.created_at,/);
   assert.doesNotMatch(jobs, /encodeJobCursor\(\{ createdAt: last\.createdAt,/);
 });

@@ -5,8 +5,7 @@ import { pathToFileURL } from "node:url";
 
 const ATTEMPT =
   /^scheduled:(preview|production):\d{4}-\d{2}-\d{2}(?::manual:[a-z0-9][a-z0-9-]{7,63})?$/;
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256 = /^[0-9a-f]{64}$/i;
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
 const FAILURE = /^[a-z][a-z0-9_-]{0,79}$/;
@@ -97,13 +96,7 @@ const ARTIFACT_SPECS = Object.freeze([
   }),
 ]);
 const ARTIFACT_KEYS = ["name", "byteLength", "contentType", "sha256"];
-const ARTIFACT_OBJECT_KEYS = [
-  "name",
-  "key",
-  "byteLength",
-  "contentType",
-  "sha256",
-];
+const ARTIFACT_OBJECT_KEYS = ["name", "key", "byteLength", "contentType", "sha256"];
 const MANIFEST_KEYS = [
   "schemaVersion",
   "environment",
@@ -189,9 +182,7 @@ function inspectRecord(value, expectedKeys) {
     if (!("value" in descriptor) || descriptor.enumerable !== true) return null;
   }
 
-  return Object.fromEntries(
-    expectedKeys.map((key) => [key, descriptors[key].value]),
-  );
+  return Object.fromEntries(expectedKeys.map((key) => [key, descriptors[key].value]));
 }
 
 function inspectDynamicRecord(value) {
@@ -310,16 +301,11 @@ function validStringArray(value, predicate) {
 }
 
 function validUtcTimestamp(value) {
-  if (
-    typeof value !== "string" ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
-  ) {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
     return false;
   }
   const timestamp = Date.parse(value);
-  return (
-    Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value
-  );
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
 function captureManifestArtifacts(value) {
@@ -397,8 +383,7 @@ function captureRuntimeManifest(value, identity, manifestSha256) {
     !validUtcTimestamp(manifest.completedAt) ||
     !Number.isSafeInteger(manifest.durationMs) ||
     manifest.durationMs < 0 ||
-    Date.parse(manifest.completedAt) - Date.parse(manifest.startedAt) !==
-      manifest.durationMs ||
+    Date.parse(manifest.completedAt) - Date.parse(manifest.startedAt) !== manifest.durationMs ||
     !isString(manifest.neonRunId, UUID)
   ) {
     return null;
@@ -432,16 +417,9 @@ function captureRuntimeManifest(value, identity, manifestSha256) {
 
 function captureEvidenceManifest(r2, identity) {
   if (!r2 || !identity) return null;
-  const manifest = captureRuntimeManifest(
-    r2.manifest,
-    identity,
-    r2.manifestSha256,
-  );
+  const manifest = captureRuntimeManifest(r2.manifest, identity, r2.manifestSha256);
   const objects = captureArtifactObjects(r2.objects, identity.evidencePrefix);
-  const objectKeys = validStringArray(
-    r2.objectKeys,
-    (key) => typeof key === "string",
-  );
+  const objectKeys = validStringArray(r2.objectKeys, (key) => typeof key === "string");
   if (!manifest || !objects || !objectKeys) return null;
   const expectedObjectKeys = [
     ...objects.map(({ key }) => key),
@@ -461,14 +439,8 @@ function captureEvidenceManifest(r2, identity) {
 function captureAcceptedManifest(value, identity) {
   const captured = inspectRecord(value, MANIFEST_EVIDENCE_KEYS);
   if (!captured) return null;
-  const runtimeManifest = Object.fromEntries(
-    MANIFEST_KEYS.map((key) => [key, captured[key]]),
-  );
-  return captureRuntimeManifest(
-    runtimeManifest,
-    identity,
-    captured.manifestSha256,
-  );
+  const runtimeManifest = Object.fromEntries(MANIFEST_KEYS.map((key) => [key, captured[key]]));
+  return captureRuntimeManifest(runtimeManifest, identity, captured.manifestSha256);
 }
 
 export function verifyShadowPreflight(snapshot) {
@@ -477,13 +449,7 @@ export function verifyShadowPreflight(snapshot) {
   const root = inspectRecord(snapshot, PREFLIGHT_KEYS);
 
   if (!root) {
-    addCheck(
-      checks,
-      failures,
-      "shadowEnvironment",
-      false,
-      "shadow_environment_invalid",
-    );
+    addCheck(checks, failures, "shadowEnvironment", false, "shadow_environment_invalid");
     return freezeResult({
       accepted: false,
       failures: frozenFailures(failures),
@@ -501,11 +467,7 @@ export function verifyShadowPreflight(snapshot) {
     "cloudflare_capability_unavailable",
   );
 
-  const worker = inspectRecord(root.worker, [
-    "workersDev",
-    "routes",
-    "schedules",
-  ]);
+  const worker = inspectRecord(root.worker, ["workersDev", "routes", "schedules"]);
   const routes = worker ? inspectArray(worker.routes) : null;
   const schedules = worker ? inspectArray(worker.schedules) : null;
   addCheck(
@@ -530,10 +492,7 @@ export function verifyShadowPreflight(snapshot) {
     "schedules_present",
   );
 
-  const container = inspectRecord(root.container, [
-    "registered",
-    "deploymentId",
-  ]);
+  const container = inspectRecord(root.container, ["registered", "deploymentId"]);
   addCheck(
     checks,
     failures,
@@ -542,11 +501,7 @@ export function verifyShadowPreflight(snapshot) {
     "container_not_registered",
   );
 
-  const workflow = inspectRecord(root.workflow, [
-    "registered",
-    "deploymentId",
-    "commitSha",
-  ]);
+  const workflow = inspectRecord(root.workflow, ["registered", "deploymentId", "commitSha"]);
   addCheck(
     checks,
     failures,
@@ -555,24 +510,10 @@ export function verifyShadowPreflight(snapshot) {
     "workflow_not_registered",
   );
   const deploymentIdentity =
-    container !== null &&
-    workflow !== null &&
-    container.deploymentId === workflow.deploymentId;
-  addCheck(
-    checks,
-    failures,
-    "deploymentIdentity",
-    deploymentIdentity,
-    "deployment_id_mismatch",
-  );
+    container !== null && workflow !== null && container.deploymentId === workflow.deploymentId;
+  addCheck(checks, failures, "deploymentIdentity", deploymentIdentity, "deployment_id_mismatch");
   const commitIdentity = isString(workflow?.commitSha, COMMIT_SHA);
-  addCheck(
-    checks,
-    failures,
-    "commitIdentity",
-    commitIdentity,
-    "commit_identity_invalid",
-  );
+  addCheck(checks, failures, "commitIdentity", commitIdentity, "commit_identity_invalid");
 
   const migration = inspectRecord(root.migration, ["applied", "version"]);
   addCheck(
@@ -584,11 +525,7 @@ export function verifyShadowPreflight(snapshot) {
     "migration_not_applied",
   );
 
-  const flags = inspectRecord(root.flags, [
-    "mode",
-    "publishEnabled",
-    "mediaRightsConfirmed",
-  ]);
+  const flags = inspectRecord(root.flags, ["mode", "publishEnabled", "mediaRightsConfirmed"]);
   addCheck(
     checks,
     failures,
@@ -629,20 +566,9 @@ export function verifyShadowPreflight(snapshot) {
     secretNames !== null &&
     secretSet.size === secretNames.length &&
     secretNames.every((name) => ALLOWED_RUNTIME_NAMES.includes(name));
-  addCheck(
-    checks,
-    failures,
-    "secretNamesBounded",
-    boundedSecretSet,
-    "runtime_names_invalid",
-  );
+  addCheck(checks, failures, "secretNamesBounded", boundedSecretSet, "runtime_names_invalid");
 
-  const r2 = inspectRecord(root.r2, [
-    "bucket",
-    "objectLock",
-    "retentionDays",
-    "lifecycleDays",
-  ]);
+  const r2 = inspectRecord(root.r2, ["bucket", "objectLock", "retentionDays", "lifecycleDays"]);
   addCheck(
     checks,
     failures,
@@ -657,13 +583,7 @@ export function verifyShadowPreflight(snapshot) {
     r2?.objectLock === "COMPLIANCE" && r2.retentionDays === 90,
     "r2_lock_invalid",
   );
-  addCheck(
-    checks,
-    failures,
-    "r2Lifecycle",
-    r2?.lifecycleDays === 90,
-    "r2_lifecycle_invalid",
-  );
+  addCheck(checks, failures, "r2Lifecycle", r2?.lifecycleDays === 90, "r2_lifecycle_invalid");
 
   const frozen = frozenFailures(failures);
   const identity =
@@ -736,35 +656,22 @@ export function verifyShadowEvidence(snapshot) {
     });
   }
 
-  const workflow = inspectRecord(root.workflow, [
-    "attemptId",
-    "deploymentId",
-    "state",
-  ]);
+  const workflow = inspectRecord(root.workflow, ["attemptId", "deploymentId", "state"]);
   const workflowAttempt =
-    identityValid &&
-    workflow !== null &&
-    workflow.attemptId === identity.attemptId;
+    identityValid && workflow !== null && workflow.attemptId === identity.attemptId;
   checkEntries.push(["workflowAttempt", workflowAttempt]);
   if (!workflowAttempt) failures.push("workflow_attempt_mismatch");
 
   const workflowDeployment =
-    identityValid &&
-    workflow !== null &&
-    workflow.deploymentId === identity.deploymentId;
+    identityValid && workflow !== null && workflow.deploymentId === identity.deploymentId;
   checkEntries.push(["workflowDeployment", workflowDeployment]);
   if (!workflowDeployment) failures.push("workflow_deployment_mismatch");
 
-  const workflowSuccessful =
-    workflow !== null && workflow.state === "succeeded";
+  const workflowSuccessful = workflow !== null && workflow.state === "succeeded";
   checkEntries.push(["workflowSuccessful", workflowSuccessful]);
   if (!workflowSuccessful) failures.push("workflow_not_successful");
 
-  const container = inspectRecord(root.container, [
-    "deploymentId",
-    "state",
-    "exitCode",
-  ]);
+  const container = inspectRecord(root.container, ["deploymentId", "state", "exitCode"]);
   const containerSuccessful =
     identityValid &&
     container !== null &&
@@ -809,8 +716,7 @@ export function verifyShadowEvidence(snapshot) {
     "exitCode",
     "manifestPresent",
   ]);
-  const manifestPresent =
-    r2?.manifestPresent === true && statusRoute?.manifestPresent === true;
+  const manifestPresent = r2?.manifestPresent === true && statusRoute?.manifestPresent === true;
   checkEntries.push(["manifestPresent", manifestPresent]);
   if (!manifestPresent) failures.push("manifest_missing");
 
@@ -825,17 +731,12 @@ export function verifyShadowEvidence(snapshot) {
     new Set(configuredSources).size === configuredSources.length &&
     health !== null &&
     Reflect.ownKeys(health).length === configuredSources.length &&
-    configuredSources.every(
-      (source) => Object.hasOwn(health, source) && health[source] === "full",
-    );
+    configuredSources.every((source) => Object.hasOwn(health, source) && health[source] === "full");
   checkEntries.push(["sourceHealth", sourceHealth]);
   if (!sourceHealth) failures.push("source_health_not_full");
 
   const neon = inspectRecord(root.neon, ["shadow", "healthy", "lockReleased"]);
-  const neonHealthy =
-    neon?.shadow === true &&
-    neon.healthy === true &&
-    neon.lockReleased === true;
+  const neonHealthy = neon?.shadow === true && neon.healthy === true && neon.lockReleased === true;
   checkEntries.push(["neonShadowHealthy", neonHealthy]);
   if (!neonHealthy) failures.push("neon_shadow_not_healthy");
 
@@ -853,10 +754,7 @@ export function verifyShadowEvidence(snapshot) {
   checkEntries.push(["statusRoute", statusMatches]);
   if (!statusMatches) failures.push("status_route_mismatch");
 
-  const sideEffects = inspectRecord(root.sideEffects, [
-    "blobUploads",
-    "publicationAttempts",
-  ]);
+  const sideEffects = inspectRecord(root.sideEffects, ["blobUploads", "publicationAttempts"]);
   const noBlobUploads = sideEffects?.blobUploads === 0;
   checkEntries.push(["noBlobUploads", noBlobUploads]);
   if (!noBlobUploads) failures.push("blob_side_effect_detected");
@@ -864,21 +762,15 @@ export function verifyShadowEvidence(snapshot) {
   checkEntries.push(["noPublication", noPublication]);
   if (!noPublication) failures.push("publication_side_effect_detected");
 
-  const redaction = inspectRecord(root.redaction, [
-    "secretsAbsent",
-    "credentialPatternsAbsent",
-  ]);
+  const redaction = inspectRecord(root.redaction, ["secretsAbsent", "credentialPatternsAbsent"]);
   const redactionPassed =
-    redaction?.secretsAbsent === true &&
-    redaction.credentialPatternsAbsent === true;
+    redaction?.secretsAbsent === true && redaction.credentialPatternsAbsent === true;
   checkEntries.push(["redaction", redactionPassed]);
   if (!redactionPassed) failures.push("redaction_check_failed");
 
   const frozen = frozenFailures(failures);
   const identitySnapshot = identityValid
-    ? Object.freeze(
-        Object.fromEntries(IDENTITY_KEYS.map((key) => [key, identity[key]])),
-      )
+    ? Object.freeze(Object.fromEntries(IDENTITY_KEYS.map((key) => [key, identity[key]])))
     : null;
   return freezeResult({
     accepted: frozen.length === 0,
@@ -895,18 +787,11 @@ function snapshotBooleanChecks(value, expectedKeys) {
   if (expectedKeys.some((key) => record[key] !== true)) {
     return null;
   }
-  return Object.freeze(
-    Object.fromEntries(expectedKeys.map((key) => [key, record[key]])),
-  );
+  return Object.freeze(Object.fromEntries(expectedKeys.map((key) => [key, record[key]])));
 }
 
 function acceptedPreflightResult(value) {
-  const result = inspectRecord(value, [
-    "accepted",
-    "failures",
-    "checks",
-    "identity",
-  ]);
+  const result = inspectRecord(value, ["accepted", "failures", "checks", "identity"]);
   if (!result || result.accepted !== true) return null;
   const failures = inspectArray(result.failures);
   const checks = snapshotBooleanChecks(result.checks, PREFLIGHT_CHECK_KEYS);
@@ -925,13 +810,7 @@ function acceptedPreflightResult(value) {
 }
 
 function acceptedEvidenceResult(value) {
-  const result = inspectRecord(value, [
-    "accepted",
-    "failures",
-    "checks",
-    "identity",
-    "manifest",
-  ]);
+  const result = inspectRecord(value, ["accepted", "failures", "checks", "identity", "manifest"]);
   if (!result || result.accepted !== true) return null;
   const failures = inspectArray(result.failures);
   const checks = snapshotBooleanChecks(result.checks, EVIDENCE_CHECK_KEYS);
@@ -949,8 +828,7 @@ function validCheckedAt(value) {
 
 export function buildShadowAcceptanceRecord(input) {
   const value = inspectRecord(input, ["preflight", "evidence", "checkedAt"]);
-  if (!value)
-    throw new TypeError("acceptance input must be an exact data record");
+  if (!value) throw new TypeError("acceptance input must be an exact data record");
 
   const preflight = acceptedPreflightResult(value.preflight);
   const evidence = acceptedEvidenceResult(value.evidence);
@@ -962,16 +840,13 @@ export function buildShadowAcceptanceRecord(input) {
   }
 
   if (
-    preflight.identity.deploymentId !==
-      evidence.manifest.containerDeploymentId ||
+    preflight.identity.deploymentId !== evidence.manifest.containerDeploymentId ||
     preflight.identity.commitSha !== evidence.manifest.commitSha
   ) {
     throw new TypeError("preflight and manifest provenance must match");
   }
   const identity = Object.freeze(
-    Object.fromEntries(
-      IDENTITY_KEYS.map((key) => [key, evidence.identity[key]]),
-    ),
+    Object.fromEntries(IDENTITY_KEYS.map((key) => [key, evidence.identity[key]])),
   );
   return Object.freeze({
     accepted: true,
@@ -988,14 +863,7 @@ const CLI_FAILURE = /^[a-z][a-z0-9_-]{0,79}$/;
 
 function exactCliArguments(argv) {
   if (!Array.isArray(argv) || argv.length !== 6) return null;
-  const [
-    preflightFlag,
-    preflightPath,
-    evidenceFlag,
-    evidencePath,
-    outputFlag,
-    outputPath,
-  ] = argv;
+  const [preflightFlag, preflightPath, evidenceFlag, evidencePath, outputFlag, outputPath] = argv;
   if (
     preflightFlag !== "--preflight" ||
     evidenceFlag !== "--evidence" ||
@@ -1016,17 +884,8 @@ async function readBoundedJson(filePath, openFile) {
     let totalBytes = 0;
     while (totalBytes < buffer.length) {
       const remainingBytes = buffer.length - totalBytes;
-      const { bytesRead } = await handle.read(
-        buffer,
-        totalBytes,
-        remainingBytes,
-        totalBytes,
-      );
-      if (
-        !Number.isSafeInteger(bytesRead) ||
-        bytesRead < 0 ||
-        bytesRead > remainingBytes
-      ) {
+      const { bytesRead } = await handle.read(buffer, totalBytes, remainingBytes, totalBytes);
+      if (!Number.isSafeInteger(bytesRead) || bytesRead < 0 || bytesRead > remainingBytes) {
         throw new TypeError("cli_input_invalid");
       }
       totalBytes += bytesRead;
@@ -1112,8 +971,7 @@ export async function main(argv, dependencies = {}) {
       const failures = boundedFailures(preflightResult, evidenceResult);
       record = {
         accepted: false,
-        failures:
-          failures.length > 0 ? failures : ["shadow_verification_failed"],
+        failures: failures.length > 0 ? failures : ["shadow_verification_failed"],
       };
       exitCode = 30;
     }

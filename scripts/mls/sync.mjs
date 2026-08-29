@@ -11,10 +11,7 @@ import {
   pruneArtifacts,
   validateArtifactRoot,
 } from "../../src/lib/mls/reporting.mjs";
-import {
-  createR2Reporter,
-  createR2S3ObjectStore,
-} from "../../src/lib/mls/r2-reporting.mjs";
+import { createR2Reporter, createR2S3ObjectStore } from "../../src/lib/mls/r2-reporting.mjs";
 import { createVercelBlobStore } from "../../src/lib/media/vercel-blob.mjs";
 import { prepareListingMedia } from "../../src/lib/mls/media.mjs";
 import { withMlsAdvisoryLock } from "../../src/lib/mls/neon-lock.mjs";
@@ -45,11 +42,7 @@ function parseMode(argv = []) {
 }
 
 function environmentValue(environment, name) {
-  if (
-    !environment ||
-    typeof environment !== "object" ||
-    Array.isArray(environment)
-  ) {
+  if (!environment || typeof environment !== "object" || Array.isArray(environment)) {
     throw new MlsConfigurationError("invalid_environment");
   }
   const descriptor = Object.getOwnPropertyDescriptor(environment, name);
@@ -90,12 +83,7 @@ function validateDatabaseUrl(value) {
 function validateContactUrl(value) {
   try {
     const url = new URL(value);
-    if (
-      url.protocol !== "https:" ||
-      !url.hostname ||
-      url.username ||
-      url.password
-    ) {
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
       throw new Error("invalid contact URL");
     }
   } catch {
@@ -144,9 +132,7 @@ export async function loadEnvironmentFiles({ cwd = process.cwd() } = {}) {
 function validDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return (
-    !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
-  );
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
 function safeIdentity(value, name) {
@@ -241,9 +227,7 @@ export function readConfiguration(mode, environment = process.env) {
   const mediaAllowedHosts = parseMediaHosts(
     requiredEnvironment(environment, "MLS_MEDIA_ALLOWED_HOSTS"),
   );
-  const publishEnabled = literalTrue(
-    optionalEnvironment(environment, "MLS_PUBLISH_ENABLED"),
-  );
+  const publishEnabled = literalTrue(optionalEnvironment(environment, "MLS_PUBLISH_ENABLED"));
   const mediaRightsConfirmed = literalTrue(
     optionalEnvironment(environment, "MLS_MEDIA_RIGHTS_CONFIRMED"),
   );
@@ -257,8 +241,7 @@ export function readConfiguration(mode, environment = process.env) {
   if (mode === "publish" && !blobToken) {
     throw new MlsConfigurationError("missing_blob_read_write_token");
   }
-  const evidenceBackend =
-    optionalEnvironment(environment, "MLS_EVIDENCE_BACKEND") || "filesystem";
+  const evidenceBackend = optionalEnvironment(environment, "MLS_EVIDENCE_BACKEND") || "filesystem";
   if (!/^(filesystem|r2)$/.test(evidenceBackend)) {
     throw new MlsConfigurationError("invalid_mls_evidence_backend");
   }
@@ -282,10 +265,7 @@ export function readConfiguration(mode, environment = process.env) {
           accountId: requiredEnvironment(environment, "CLOUDFLARE_ACCOUNT_ID"),
           bucket: requiredEnvironment(environment, "MLS_EVIDENCE_BUCKET"),
           accessKeyId: requiredEnvironment(environment, "MLS_R2_ACCESS_KEY_ID"),
-          secretAccessKey: requiredEnvironment(
-            environment,
-            "MLS_R2_SECRET_ACCESS_KEY",
-          ),
+          secretAccessKey: requiredEnvironment(environment, "MLS_R2_SECRET_ACCESS_KEY"),
         })
       : Object.freeze({
           artifactRoot: requiredEnvironment(environment, "MLS_ARTIFACT_DIR"),
@@ -305,29 +285,20 @@ export function readConfiguration(mode, environment = process.env) {
 }
 
 export function scheduledForHongKong(now = new Date()) {
-  if (!(now instanceof Date) || Number.isNaN(now.valueOf()))
-    throw new TypeError("now is invalid");
+  if (!(now instanceof Date) || Number.isNaN(now.valueOf())) throw new TypeError("now is invalid");
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Hong_Kong",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(now);
-  const values = Object.fromEntries(
-    parts.map(({ type, value }) => [type, value]),
-  );
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-const R2_ARTIFACT_NAMES = [
-  "report.json",
-  "listings.csv",
-  "observations.csv",
-  "diagnostics.json",
-];
+const R2_ARTIFACT_NAMES = ["report.json", "listings.csv", "observations.csv", "diagnostics.json"];
 const R2_ARTIFACT_KEYS = ["name", "key", "byteLength", "contentType", "sha256"];
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TERMINAL_RECORD_KEYS = [
   "attemptId",
   "runId",
@@ -384,9 +355,7 @@ function safeErrorCode(error, fallback) {
   if (code === "MLS_PUBLICATION_OUTCOME_UNKNOWN") {
     return "publication_outcome_unknown";
   }
-  return typeof code === "string" && /^[a-z][a-z0-9_-]{0,79}$/.test(code)
-    ? code
-    : fallback;
+  return typeof code === "string" && /^[a-z][a-z0-9_-]{0,79}$/.test(code) ? code : fallback;
 }
 
 function snapshotOutcome(value) {
@@ -402,26 +371,15 @@ function snapshotOutcome(value) {
 }
 
 function captureArtifactResult(value) {
-  const result = captureExactDataRecord(
-    value,
-    ["prefix", "objects"],
-    "artifact result",
-  );
+  const result = captureExactDataRecord(value, ["prefix", "objects"], "artifact result");
   if (typeof result.prefix !== "string" || !result.prefix) {
     throw new TypeError("artifact result is invalid");
   }
-  if (
-    !Array.isArray(result.objects) ||
-    result.objects.length !== R2_ARTIFACT_NAMES.length
-  ) {
+  if (!Array.isArray(result.objects) || result.objects.length !== R2_ARTIFACT_NAMES.length) {
     throw new TypeError("artifact result is incomplete");
   }
   const objects = result.objects.map((artifact, index) => {
-    const captured = captureExactDataRecord(
-      artifact,
-      R2_ARTIFACT_KEYS,
-      `artifact result ${index}`,
-    );
+    const captured = captureExactDataRecord(artifact, R2_ARTIFACT_KEYS, `artifact result ${index}`);
     if (captured.name !== R2_ARTIFACT_NAMES[index]) {
       throw new TypeError("artifact result is incomplete");
     }
@@ -438,8 +396,7 @@ function boundedTerminalStatus(outcome, error) {
   const outcomeKind = ownDataValue(outcome, "kind");
   const status = typeof outcomeStatus === "string" ? outcomeStatus : "error";
   const terminalClassification =
-    safeErrorCode(error, null) === "publication_outcome_unknown" ||
-    status === "unknown"
+    safeErrorCode(error, null) === "publication_outcome_unknown" || status === "unknown"
       ? "outcome-unknown"
       : outcomeKind === "lock_unavailable" || status === "lock_unavailable"
         ? "lock"
@@ -463,11 +420,7 @@ function safeTerminalAttemptId(value) {
   );
 }
 
-function safeTerminalText(
-  value,
-  label,
-  { nullable = false, manifest = false } = {},
-) {
+function safeTerminalText(value, label, { nullable = false, manifest = false } = {}) {
   if (nullable && value === null) return null;
   if (
     typeof value !== "string" ||
@@ -484,11 +437,7 @@ function safeTerminalText(
 }
 
 function captureTerminalRecord(record, evidenceBackend) {
-  const captured = captureExactDataRecord(
-    record,
-    TERMINAL_RECORD_KEYS,
-    "terminal record",
-  );
+  const captured = captureExactDataRecord(record, TERMINAL_RECORD_KEYS, "terminal record");
   if (!safeTerminalAttemptId(captured.attemptId)) {
     throw new TypeError("terminal record is invalid");
   }
@@ -500,19 +449,14 @@ function captureTerminalRecord(record, evidenceBackend) {
   }
   if (
     captured.neonRunId !== null &&
-    (typeof captured.neonRunId !== "string" ||
-      !UUID_PATTERN.test(captured.neonRunId))
+    (typeof captured.neonRunId !== "string" || !UUID_PATTERN.test(captured.neonRunId))
   ) {
     throw new TypeError("terminal record is invalid");
   }
   if (!/^(succeeded|failed|degraded|blocked|unknown)$/.test(captured.status)) {
     throw new TypeError("terminal record is invalid");
   }
-  if (
-    !Number.isInteger(captured.exitCode) ||
-    captured.exitCode < 0 ||
-    captured.exitCode > 255
-  ) {
+  if (!Number.isInteger(captured.exitCode) || captured.exitCode < 0 || captured.exitCode > 255) {
     throw new TypeError("terminal record is invalid");
   }
   if (
@@ -532,10 +476,7 @@ function captureTerminalRecord(record, evidenceBackend) {
   if (typeof captured.manifestPresent !== "boolean") {
     throw new TypeError("terminal record is invalid");
   }
-  if (
-    evidenceBackend === "r2" &&
-    (!captured.manifestPresent || !captured.manifestKey)
-  ) {
+  if (evidenceBackend === "r2" && (!captured.manifestPresent || !captured.manifestKey)) {
     return Object.freeze({
       ...captured,
       status: captured.status === "succeeded" ? "unknown" : captured.status,
@@ -611,9 +552,7 @@ export function createEvidenceReporter({ configuration, dependencies }) {
     });
   }
   if (configuration.evidenceBackend === "r2") {
-    const objectStore = dependencies.createR2S3ObjectStore(
-      configuration.evidence,
-    );
+    const objectStore = dependencies.createR2S3ObjectStore(configuration.evidence);
     const r2Reporter = dependencies.createR2Reporter({
       objectStore,
       context: {
@@ -637,9 +576,7 @@ export function createEvidenceReporter({ configuration, dependencies }) {
         if (typeof runId !== "string" || !UUID_PATTERN.test(runId)) {
           throw new TypeError("run is invalid");
         }
-        const result = captureArtifactResult(
-          await r2Reporter.writeRunArtifacts(run),
-        );
+        const result = captureArtifactResult(await r2Reporter.writeRunArtifacts(run));
         artifactRunId = runId;
         artifactResult = result;
         return result;
@@ -698,11 +635,7 @@ export function createEvidenceReporter({ configuration, dependencies }) {
           neonRunId: UUID_PATTERN.test(artifactRunId) ? artifactRunId : null,
           artifactObjects: artifactResult.objects,
         });
-        const manifest = captureExactDataRecord(
-          result,
-          ["manifestKey"],
-          "manifest result",
-        );
+        const manifest = captureExactDataRecord(result, ["manifestKey"], "manifest result");
         if (typeof manifest.manifestKey !== "string" || !manifest.manifestKey) {
           throw new TypeError("manifest result is invalid");
         }
@@ -737,8 +670,7 @@ function installSignalHandlers(controller) {
 
 function exitCodeForOutcome(outcome) {
   if (outcome?.kind === "lock_unavailable") return 75;
-  if (outcome?.status === "shadow_healthy" || outcome?.status === "healthy")
-    return 0;
+  if (outcome?.status === "shadow_healthy" || outcome?.status === "healthy") return 0;
   if (outcome?.status === "degraded") return 2;
   if (outcome?.status === "blocked") {
     return outcome.gateMode === "blocked" ? 20 : 30;
@@ -746,26 +678,18 @@ function exitCodeForOutcome(outcome) {
   return 40;
 }
 
-function terminalRecordFor({
-  configuration,
-  outcome,
-  error,
-  exitCode,
-  evidence,
-}) {
+function terminalRecordFor({ configuration, outcome, error, exitCode, evidence }) {
   const runId = outcome?.runId ?? null;
   const terminal = boundedTerminalStatus(outcome, error);
   const success =
     exitCode === 0 &&
     (terminal.terminalClassification === "healthy" ||
       terminal.terminalClassification === "degraded") &&
-    (configuration.evidenceBackend !== "r2" ||
-      evidence.manifestPresent === true);
+    (configuration.evidenceBackend !== "r2" || evidence.manifestPresent === true);
   return {
     attemptId: configuration.attemptId,
     runId: typeof runId === "string" && UUID_PATTERN.test(runId) ? runId : null,
-    neonRunId:
-      typeof runId === "string" && UUID_PATTERN.test(runId) ? runId : null,
+    neonRunId: typeof runId === "string" && UUID_PATTERN.test(runId) ? runId : null,
     status: success
       ? "succeeded"
       : terminal.terminalClassification === "degraded"
@@ -774,8 +698,7 @@ function terminalRecordFor({
             terminal.terminalClassification === "lock"
           ? "blocked"
           : terminal.terminalClassification === "outcome-unknown" ||
-              (configuration.evidenceBackend === "r2" &&
-                !evidence.manifestPresent)
+              (configuration.evidenceBackend === "r2" && !evidence.manifestPresent)
             ? "unknown"
             : "failed",
     exitCode,
@@ -787,8 +710,7 @@ function terminalRecordFor({
           ? "publication_outcome_unknown"
           : safeErrorCode(
               error,
-              configuration.evidenceBackend === "r2" &&
-                !evidence.manifestPresent
+              configuration.evidenceBackend === "r2" && !evidence.manifestPresent
                 ? "terminal_manifest_missing"
                 : "mls_run_failed",
             ),
@@ -1008,17 +930,11 @@ export async function main(argv = process.argv.slice(2), overrides = {}) {
     }
     dependencies.logRunEvent({
       level:
-        outcome?.status === "healthy" || outcome?.status === "shadow_healthy"
-          ? "info"
-          : "warn",
+        outcome?.status === "healthy" || outcome?.status === "shadow_healthy" ? "info" : "warn",
       event: "mls_run_finished",
-      code:
-        typeof outcome?.status === "string" ? outcome.status : "unknown_status",
+      code: typeof outcome?.status === "string" ? outcome.status : "unknown_status",
       runId: typeof outcome?.runId === "string" ? outcome.runId : null,
-      counts:
-        outcome?.counts && typeof outcome.counts === "object"
-          ? outcome.counts
-          : {},
+      counts: outcome?.counts && typeof outcome.counts === "object" ? outcome.counts : {},
     });
     return complete({ outcome, exitCode: exitCodeForOutcome(outcome) });
   } catch (error) {
@@ -1033,10 +949,7 @@ export async function main(argv = process.argv.slice(2), overrides = {}) {
   }
 }
 
-if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
-) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().then((code) => {
     process.exitCode = code;
   });

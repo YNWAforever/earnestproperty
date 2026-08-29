@@ -344,10 +344,7 @@ function HomePage() {
 
       {/* CORE ESTATES */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-        <SectionHeader
-          title="深井核心屋苑"
-          desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉"
-        />
+        <SectionHeader title="深井核心屋苑" desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉" />
         <CoreEstateGrid estates={estates} counts={counts} />
       </section>
 

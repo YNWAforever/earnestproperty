@@ -11,6 +11,11 @@ routeTree.gen.ts
 # would invalidate the very markup the migration tests assert against.
 scripts/old-site-migration/__fixtures__
 
+# Verbatim 28Hse pages captured as parser test fixtures. Same rationale as
+# above -- reformatting would rewrite the literal HTML the MLS parser tests
+# assert against.
+src/lib/mls/__fixtures__/28hse
+
 # Dated plan/spec/report artifacts. These are records of what was decided at a
 # point in time; prettier rewrites the code samples embedded in them, which
 # changes the record for no benefit.

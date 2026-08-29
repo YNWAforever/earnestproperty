@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import {
-  buildEvidencePrefix,
-  createR2Reporter,
-  createR2S3ObjectStore,
-} from "./r2-reporting.mjs";
+import { buildEvidencePrefix, createR2Reporter, createR2S3ObjectStore } from "./r2-reporting.mjs";
 
 const context = Object.freeze({
   environment: "production",
@@ -55,8 +51,7 @@ function memoryObjectStore({ failOnKey, rejectCollisions = false } = {}) {
     writes,
     async putIfAbsent(object) {
       writes.push(object);
-      if (object.key === failOnKey)
-        throw new Error("simulated artifact failure");
+      if (object.key === failOnKey) throw new Error("simulated artifact failure");
       if (rejectCollisions && keys.has(object.key)) {
         const error = new Error("PreconditionFailed");
         error.statusCode = 412;
@@ -81,10 +76,7 @@ test("buildEvidencePrefix permits one valid safe prefix and rejects malformed se
       }),
     /HK date/i,
   );
-  assert.throws(
-    () => buildEvidencePrefix({ ...context, runId: "../escape" }),
-    /runId/i,
-  );
+  assert.throws(() => buildEvidencePrefix({ ...context, runId: "../escape" }), /runId/i);
   assert.throws(
     () =>
       buildEvidencePrefix({
@@ -123,24 +115,17 @@ test("R2 provenance accepts only Task1 modes, attempts, and canonical UUID ident
       }),
     /attemptId/i,
   );
-  assert.throws(
-    () => buildEvidencePrefix({ ...context, runId: "run-1" }),
-    /runId/i,
-  );
+  assert.throws(() => buildEvidencePrefix({ ...context, runId: "run-1" }), /runId/i);
 
   const mutableContext = { ...context };
   const reporter = createR2Reporter({ objectStore, context: mutableContext });
   mutableContext.mode = "publish";
-  mutableContext.attemptId =
-    "scheduled:production:2026-08-21:manual:operator-1234567";
+  mutableContext.attemptId = "scheduled:production:2026-08-21:manual:operator-1234567";
   const artifacts = await reporter.writeRunArtifacts(runFixture());
   assert.match(artifacts.prefix, /\/scheduled-production-2026-08-21$/);
 
   await assert.rejects(
-    () =>
-      reporter.finalizeTerminal(
-        terminalInput(artifacts.objects, { neonRunId: "neon-run-1" }),
-      ),
+    () => reporter.finalizeTerminal(terminalInput(artifacts.objects, { neonRunId: "neon-run-1" })),
     /neonRunId/i,
   );
   assert.equal(objectStore.writes.length, 4);
@@ -152,10 +137,7 @@ test("R2 provenance accepts only Task1 modes, attempts, and canonical UUID ident
       throw new Error("attempt accessor must not run");
     },
   });
-  assert.throws(
-    () => createR2Reporter({ objectStore, context: accessorContext }),
-    /plain|data/i,
-  );
+  assert.throws(() => createR2Reporter({ objectStore, context: accessorContext }), /plain|data/i);
 });
 
 test("R2 provenance rejects non-string attempt IDs without invoking attacker-controlled methods", () => {
@@ -232,10 +214,7 @@ test("R2 S3 adapter configures one immutable conditional UTF-8 PutObject without
 });
 
 test("R2 adapter test has no global S3Client prototype mutation", async () => {
-  const source = await readFile(
-    new URL("./r2-reporting.test.mjs", import.meta.url),
-    "utf8",
-  );
+  const source = await readFile(new URL("./r2-reporting.test.mjs", import.meta.url), "utf8");
   assert.doesNotMatch(source, /S3Client\s*\.\s*prototype/);
 });
 
@@ -246,9 +225,7 @@ test("writeRunArtifacts writes exactly four immutable artifacts and no manifest"
   const result = await reporter.writeRunArtifacts(runFixture());
 
   assert.equal(objectStore.writes.length, 4);
-  assert.ok(
-    objectStore.writes.every((write) => !write.key.endsWith("manifest.json")),
-  );
+  assert.ok(objectStore.writes.every((write) => !write.key.endsWith("manifest.json")));
   assert.ok(objectStore.writes.every((write) => write.ifNoneMatch === "*"));
   assert.equal(result.objects.length, 4);
   assert.ok(Object.isFrozen(result));
@@ -264,9 +241,7 @@ test("finalizeTerminal writes one complete manifest after all artifact objects",
   const reporter = createR2Reporter({ objectStore, context });
   const artifacts = await reporter.writeRunArtifacts(runFixture());
 
-  const result = await reporter.finalizeTerminal(
-    terminalInput(artifacts.objects),
-  );
+  const result = await reporter.finalizeTerminal(terminalInput(artifacts.objects));
 
   assert.equal(objectStore.writes.length, 5);
   assert.match(objectStore.writes.at(-1).key, /manifest\.json$/);
@@ -302,9 +277,7 @@ test("artifact failure and key collision never add a manifest", async () => {
     () => failedReporter.writeRunArtifacts(runFixture()),
     /simulated artifact failure/,
   );
-  assert.ok(
-    failedStore.writes.every((write) => !write.key.endsWith("manifest.json")),
-  );
+  assert.ok(failedStore.writes.every((write) => !write.key.endsWith("manifest.json")));
 
   const collisionStore = memoryObjectStore({ rejectCollisions: true });
   const collisionReporter = createR2Reporter({
@@ -318,8 +291,7 @@ test("artifact failure and key collision never add a manifest", async () => {
     /PreconditionFailed/,
   );
   assert.equal(
-    collisionStore.writes.filter((write) => write.key.endsWith("manifest.json"))
-      .length,
+    collisionStore.writes.filter((write) => write.key.endsWith("manifest.json")).length,
     1,
   );
 });
@@ -349,9 +321,7 @@ test("finalizeTerminal preserves a null Neon run ID when it is unavailable", asy
   const reporter = createR2Reporter({ objectStore, context });
   const artifacts = await reporter.writeRunArtifacts(runFixture());
 
-  await reporter.finalizeTerminal(
-    terminalInput(artifacts.objects, { neonRunId: null }),
-  );
+  await reporter.finalizeTerminal(terminalInput(artifacts.objects, { neonRunId: null }));
 
   assert.equal(objectStore.writes.length, 5);
   assert.equal(JSON.parse(objectStore.writes.at(-1).body).neonRunId, null);
@@ -363,16 +333,11 @@ test("finalizeTerminal rejects a duration that contradicts its timestamps before
   const artifacts = await reporter.writeRunArtifacts(runFixture());
 
   await assert.rejects(
-    () =>
-      reporter.finalizeTerminal(
-        terminalInput(artifacts.objects, { durationMs: 1 }),
-      ),
+    () => reporter.finalizeTerminal(terminalInput(artifacts.objects, { durationMs: 1 })),
     /durationMs/i,
   );
   assert.equal(objectStore.writes.length, 4);
-  assert.ok(
-    objectStore.writes.every((write) => !write.key.endsWith("manifest.json")),
-  );
+  assert.ok(objectStore.writes.every((write) => !write.key.endsWith("manifest.json")));
 });
 
 test("finalizeTerminal rejects missing, malformed, accessor, and extra terminal fields before writing", async () => {
@@ -383,9 +348,7 @@ test("finalizeTerminal rejects missing, malformed, accessor, and extra terminal 
 
   await assert.rejects(
     () =>
-      reporter.finalizeTerminal(
-        terminalInput(artifacts.objects, { terminalClassification: "" }),
-      ),
+      reporter.finalizeTerminal(terminalInput(artifacts.objects, { terminalClassification: "" })),
     /terminalClassification/i,
   );
   await assert.rejects(
@@ -412,12 +375,7 @@ test("finalizeTerminal rejects missing, malformed, accessor, and extra terminal 
       throw new Error("accessor must not run");
     },
   });
-  await assert.rejects(
-    () => reporter.finalizeTerminal(accessorInput),
-    /plain|accessor/i,
-  );
+  await assert.rejects(() => reporter.finalizeTerminal(accessorInput), /plain|accessor/i);
   assert.equal(objectStore.writes.length, beforeFinalization);
-  assert.ok(
-    objectStore.writes.every((write) => !write.key.endsWith("manifest.json")),
-  );
+  assert.ok(objectStore.writes.every((write) => !write.key.endsWith("manifest.json")));
 });

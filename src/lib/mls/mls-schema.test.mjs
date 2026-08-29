@@ -29,10 +29,7 @@ test("dual-source migration creates every persistence boundary", () => {
 });
 
 test("source IDs are unique without overloading legacy_detail_id", () => {
-  assert.match(
-    sql,
-    /UNIQUE \(source, external_listing_id, deal_type\)/i,
-  );
+  assert.match(sql, /UNIQUE \(source, external_listing_id, deal_type\)/i);
   assert.doesNotMatch(sql, /DROP CONSTRAINT properties_legacy_detail_deal_type_key/i);
   assert.match(sql, /discovered_at TIMESTAMPTZ NOT NULL/i);
   assert.match(sql, /parse_warnings TEXT\[\] NOT NULL/i);
@@ -45,12 +42,6 @@ test("lifecycle state uses inactive rather than a new delisted enum", () => {
 });
 
 test("canonical property numbers remove whitespace with PostgreSQL's whitespace pattern", () => {
-  assert.match(
-    sql,
-    /regexp_replace\(trim\(legacy_property_no\), '\\s\+', '', 'g'\)/i,
-  );
-  assert.doesNotMatch(
-    sql,
-    /regexp_replace\(trim\(legacy_property_no\), '\\\\s\+', '', 'g'\)/i,
-  );
+  assert.match(sql, /regexp_replace\(trim\(legacy_property_no\), '\\s\+', '', 'g'\)/i);
+  assert.doesNotMatch(sql, /regexp_replace\(trim\(legacy_property_no\), '\\\\s\+', '', 'g'\)/i);
 });

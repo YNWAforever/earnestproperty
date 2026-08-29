@@ -15,11 +15,9 @@ mock.module("@cloudflare/containers", () => ({ Container: FakeContainer }));
 import type { AttemptRecord, SupervisorStatus } from "./container";
 import { buildRunEnvelope } from "./run-contract";
 
-const { MlsRunContainer, createAttemptCoordinator } =
-  await import("./container");
+const { MlsRunContainer, createAttemptCoordinator } = await import("./container");
 
-const DATABASE_URL =
-  "postgresql://operator:database-secret@example.invalid/mls";
+const DATABASE_URL = "postgresql://operator:database-secret@example.invalid/mls";
 const BLOB_TOKEN = "vercel_blob_rw_secret";
 const R2_SECRET = "r2_secret_access_key";
 const CONTROL_TOKEN = "control-token-00000000000000000001";
@@ -55,9 +53,7 @@ function pendingRecord(overrides: Partial<AttemptRecord> = {}): AttemptRecord {
   };
 }
 
-function succeededStatus(
-  overrides: Partial<SupervisorStatus> = {},
-): SupervisorStatus {
+function succeededStatus(overrides: Partial<SupervisorStatus> = {}): SupervisorStatus {
   const attemptId = scheduledEnvelope().attemptId;
   const evidencePrefix = `mls-sync/production/2026-08-21/${RUN_ID}/${attemptId.replaceAll(":", "-")}`;
   return {
@@ -130,10 +126,7 @@ interface WrapperHarnessOptions {
 function wrapperHarness(options: WrapperHarnessOptions = {}) {
   const values = options.values ?? new Map<string, unknown>();
   if (options.initial) {
-    values.set(
-      `attempt:${options.initial.envelope.attemptId}`,
-      structuredClone(options.initial),
-    );
+    values.set(`attempt:${options.initial.envelope.attemptId}`, structuredClone(options.initial));
   }
   const events: string[] = [];
   const starts: unknown[] = [];
@@ -172,8 +165,7 @@ function wrapperHarness(options: WrapperHarnessOptions = {}) {
     value: async (url: string, init?: RequestInit) => {
       events.push(`fetch:${new URL(url).pathname}`);
       fetches.push({ url, init: structuredClone(init) });
-      if (new URL(url).pathname === "/run")
-        return new Response(null, { status: 202 });
+      if (new URL(url).pathname === "/run") return new Response(null, { status: 202 });
       return Response.json(options.status ?? succeededStatus());
     },
   });
@@ -374,16 +366,8 @@ describe("attempt coordinator adversarial claims", () => {
         completedAt: "2026-08-20T18:00:02.000Z",
         failureCode: startCase.code,
       });
-      expect(writes.map(({ state }) => state)).toEqual([
-        "pending",
-        startCase.state,
-      ]);
-      expect(events).toEqual([
-        "put:pending",
-        "start",
-        `put:${startCase.state}`,
-        "stop",
-      ]);
+      expect(writes.map(({ state }) => state)).toEqual(["pending", startCase.state]);
+      expect(events).toEqual(["put:pending", "start", `put:${startCase.state}`, "stop"]);
       expect(JSON.stringify(writes)).not.toContain(DATABASE_URL);
     });
   }
@@ -418,9 +402,7 @@ describe("attempt coordinator adversarial claims", () => {
         workflowInstanceId: "workflow-1",
       }),
     ).toEqual(terminal);
-    expect(await coordinator.readAttempt(terminal.envelope.attemptId)).toEqual(
-      terminal,
-    );
+    expect(await coordinator.readAttempt(terminal.envelope.attemptId)).toEqual(terminal);
     expect(events).toEqual([]);
   });
 
@@ -476,17 +458,13 @@ describe("attempt coordinator adversarial claims", () => {
 describe("attempt coordinator status", () => {
   test("rejects extra, accessor-backed, and malformed supervisor fields", async () => {
     let accessorCalls = 0;
-    const accessorStatus = Object.defineProperty(
-      { ...succeededStatus() },
-      "failureCode",
-      {
-        enumerable: true,
-        get() {
-          accessorCalls += 1;
-          return null;
-        },
+    const accessorStatus = Object.defineProperty({ ...succeededStatus() }, "failureCode", {
+      enumerable: true,
+      get() {
+        accessorCalls += 1;
+        return null;
       },
-    );
+    });
     const cases = [
       { ...succeededStatus(), diagnostic: "not allowlisted" },
       accessorStatus,
@@ -504,9 +482,9 @@ describe("attempt coordinator status", () => {
           events.push("stop");
         },
       });
-      await expect(
-        coordinator.readAttempt(scheduledEnvelope().attemptId),
-      ).rejects.toThrow("supervisor status is invalid");
+      await expect(coordinator.readAttempt(scheduledEnvelope().attemptId)).rejects.toThrow(
+        "supervisor status is invalid",
+      );
       expect(events).toEqual([]);
     }
     expect(accessorCalls).toBe(0);
@@ -527,9 +505,9 @@ describe("attempt coordinator status", () => {
           throw new Error("invalid status stopped runtime");
         },
       });
-      await expect(
-        coordinator.readAttempt(scheduledEnvelope().attemptId),
-      ).rejects.toThrow("supervisor status is invalid");
+      await expect(coordinator.readAttempt(scheduledEnvelope().attemptId)).rejects.toThrow(
+        "supervisor status is invalid",
+      );
     }
   });
 
@@ -604,10 +582,7 @@ describe("attempt coordinator status", () => {
       scheduledEnvelope().attemptId,
       "workflow_poll_deadline",
     );
-    const replay = await coordinator.markUnknown(
-      scheduledEnvelope().attemptId,
-      "different_code",
-    );
+    const replay = await coordinator.markUnknown(scheduledEnvelope().attemptId, "different_code");
     expect(first).toMatchObject({
       state: "unknown",
       completedAt: "2026-08-20T18:00:02.000Z",
@@ -684,9 +659,7 @@ describe("Cloudflare Container wrapper", () => {
         "content-type": "application/json",
       },
     });
-    expect(JSON.parse(String(harness.fetches[0]?.init?.body))).toEqual(
-      envelope,
-    );
+    expect(JSON.parse(String(harness.fetches[0]?.init?.body))).toEqual(envelope);
     expect(record.containerId).toBe("container-do-1");
     const persisted = JSON.stringify([...harness.values.entries()]);
     for (const secret of [DATABASE_URL, BLOB_TOKEN, R2_SECRET, token])
@@ -711,9 +684,7 @@ describe("Cloudflare Container wrapper", () => {
     const start = harness.starts[0] as {
       startOptions: { envVars: Record<string, string> };
     };
-    expect(start.startOptions.envVars).not.toHaveProperty(
-      "BLOB_READ_WRITE_TOKEN",
-    );
+    expect(start.startOptions.envVars).not.toHaveProperty("BLOB_READ_WRITE_TOKEN");
     expect(start.startOptions.envVars).not.toHaveProperty("UNRELATED_SECRET");
     expect(unrelatedReads).toBe(0);
   });
@@ -723,9 +694,9 @@ describe("Cloudflare Container wrapper", () => {
       running: false,
       initial: pendingRecord(),
     });
-    await expect(
-      stopped.instance.readAttempt(scheduledEnvelope().attemptId),
-    ).rejects.toThrow("container is not running");
+    await expect(stopped.instance.readAttempt(scheduledEnvelope().attemptId)).rejects.toThrow(
+      "container is not running",
+    );
     expect(stopped.fetches).toEqual([]);
 
     const running = wrapperHarness({
@@ -733,13 +704,9 @@ describe("Cloudflare Container wrapper", () => {
       initial: pendingRecord(),
       status: succeededStatus(),
     });
-    const record = await running.instance.readAttempt(
-      scheduledEnvelope().attemptId,
-    );
+    const record = await running.instance.readAttempt(scheduledEnvelope().attemptId);
     expect(record.state).toBe("succeeded");
-    expect(running.fetches.map(({ url }) => url)).toEqual([
-      "http://localhost/status",
-    ]);
+    expect(running.fetches.map(({ url }) => url)).toEqual(["http://localhost/status"]);
     expect(running.events.slice(-2)).toEqual(["put:succeeded", "stop"]);
   });
 
@@ -751,9 +718,7 @@ describe("Cloudflare Container wrapper", () => {
     });
     stopped.events.length = 0;
     await stopped.instance.onStop({ exitCode: 0, reason: "runtime_signal" });
-    const stoppedRecord = stopped.values.get(
-      `attempt:${scheduledEnvelope().attemptId}`,
-    );
+    const stoppedRecord = stopped.values.get(`attempt:${scheduledEnvelope().attemptId}`);
     expect(stoppedRecord).toMatchObject({
       state: "unknown",
       failureCode: "container_stopped",
@@ -766,12 +731,8 @@ describe("Cloudflare Container wrapper", () => {
       workflowInstanceId: "workflow-1",
     });
     errored.events.length = 0;
-    await errored.instance.onError(
-      new Error(`runtime exploded ${DATABASE_URL}`),
-    );
-    const erroredRecord = errored.values.get(
-      `attempt:${scheduledEnvelope().attemptId}`,
-    );
+    await errored.instance.onError(new Error(`runtime exploded ${DATABASE_URL}`));
+    const erroredRecord = errored.values.get(`attempt:${scheduledEnvelope().attemptId}`);
     expect(erroredRecord).toMatchObject({
       state: "unknown",
       failureCode: "container_runtime_error",
@@ -789,23 +750,14 @@ describe("Cloudflare Container wrapper", () => {
       });
       const reconstructed = wrapperHarness({ values: first.values });
       reconstructed.events.length = 0;
-      if (hook === "stop")
-        await reconstructed.instance.onStop({ exitCode: 1, reason: "exit" });
-      else
-        await reconstructed.instance.onError(
-          new Error(`runtime ${DATABASE_URL}`),
-        );
-      const record = reconstructed.values.get(
-        `attempt:${scheduledEnvelope().attemptId}`,
-      );
+      if (hook === "stop") await reconstructed.instance.onStop({ exitCode: 1, reason: "exit" });
+      else await reconstructed.instance.onError(new Error(`runtime ${DATABASE_URL}`));
+      const record = reconstructed.values.get(`attempt:${scheduledEnvelope().attemptId}`);
       expect(record).toMatchObject({
         state: "unknown",
-        failureCode:
-          hook === "stop" ? "container_stopped" : "container_runtime_error",
+        failureCode: hook === "stop" ? "container_stopped" : "container_runtime_error",
       });
-      expect(JSON.stringify([...reconstructed.values.entries()])).not.toContain(
-        DATABASE_URL,
-      );
+      expect(JSON.stringify([...reconstructed.values.entries()])).not.toContain(DATABASE_URL);
       expect(reconstructed.events).toEqual(["put:unknown"]);
     }
   });
@@ -815,15 +767,12 @@ describe("Cloudflare Container wrapper", () => {
       const harness = wrapperHarness();
       const absentAttemptId = "scheduled:production:2026-08-22";
       if (operation === "read")
-        await expect(
-          harness.instance.readAttempt(absentAttemptId),
-        ).rejects.toThrow("attempt record not found");
+        await expect(harness.instance.readAttempt(absentAttemptId)).rejects.toThrow(
+          "attempt record not found",
+        );
       else
         await expect(
-          harness.instance.markUnknown(
-            absentAttemptId,
-            "workflow_poll_deadline",
-          ),
+          harness.instance.markUnknown(absentAttemptId, "workflow_poll_deadline"),
         ).rejects.toThrow("attempt record not found");
       expect(harness.values.has("active-attempt-id")).toBe(false);
       const record = await harness.instance.claimAndStart({
@@ -843,13 +792,11 @@ describe("Cloudflare Container wrapper", () => {
       exitCode: 40,
       failureCode: "configuration_failed",
     });
-    const values = new Map<string, unknown>([
-      [`attempt:${attemptId}`, structuredClone(terminal)],
-    ]);
+    const values = new Map<string, unknown>([[`attempt:${attemptId}`, structuredClone(terminal)]]);
     const recovered = wrapperHarness({ values });
-    await expect(
-      recovered.instance.readAttempt(attemptId),
-    ).resolves.toMatchObject({ state: "failed" });
+    await expect(recovered.instance.readAttempt(attemptId)).resolves.toMatchObject({
+      state: "failed",
+    });
     expect(values.get("active-attempt-id")).toBe(attemptId);
     const reconstructed = wrapperHarness({ values });
     await reconstructed.instance.onStop({ exitCode: 1, reason: "exit" });
@@ -918,9 +865,7 @@ describe("attempt coordinator in-flight terminal races", () => {
 
   test("does not overwrite a terminal written while status is in flight", async () => {
     const key = `attempt:${scheduledEnvelope().attemptId}`;
-    const values = new Map<string, unknown>([
-      [key, pendingRecord({ state: "running" })],
-    ]);
+    const values = new Map<string, unknown>([[key, pendingRecord({ state: "running" })]]);
     const writes: string[] = [];
     const coordinator = coordinatorHarness({
       get: async (requestedKey) => values.get(requestedKey),
@@ -1004,9 +949,7 @@ describe("attempt coordinator in-flight terminal races", () => {
       }),
     );
     releaseGet?.();
-    await expect(conflict).rejects.toThrow(
-      "attempt claim does not match existing record",
-    );
+    await expect(conflict).rejects.toThrow("attempt claim does not match existing record");
     await first;
     expect(starts).toBe(1);
   });

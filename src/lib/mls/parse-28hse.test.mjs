@@ -75,19 +75,10 @@ test("rejects malformed semantic identity, count, and contradictory listing link
   ];
 
   for (const html of invalidPages) {
-    assert.throws(
-      () => parse28HseAgentIndex(html, context),
-      /template|licence|company|count/i,
-    );
+    assert.throws(() => parse28HseAgentIndex(html, context), /template|licence|company|count/i);
   }
-  for (const name of [
-    "agent-sale-count-mismatch.html",
-    "agent-sale-conflicting-counts.html",
-  ]) {
-    assert.throws(
-      () => parse28HseAgentIndex(fixture(name), context),
-      /count|template/i,
-    );
+  for (const name of ["agent-sale-count-mismatch.html", "agent-sale-conflicting-counts.html"]) {
+    assert.throws(() => parse28HseAgentIndex(fixture(name), context), /count|template/i);
   }
 });
 
@@ -342,9 +333,7 @@ test("detects punctuated challenge headings with a bounded vendor suffix", () =>
     "Verify you are human.",
   ]) {
     assert.equal(
-      detect28HseChallenge(
-        "<title>" + heading + "</title><h1>" + heading + "</h1>",
-      ),
+      detect28HseChallenge("<title>" + heading + "</title><h1>" + heading + "</h1>"),
       true,
       heading,
     );
@@ -352,17 +341,11 @@ test("detects punctuated challenge headings with a bounded vendor suffix", () =>
 });
 
 test("detects canonical Cloudflare headings with terminal punctuation", () => {
-  assert.equal(
-    detect28HseChallenge(fixture("challenge-cloudflare-punctuated.html")),
-    true,
-  );
+  assert.equal(detect28HseChallenge(fixture("challenge-cloudflare-punctuated.html")), true);
 });
 
 test("detects uppercase CAPTCHA iframe and form structure", () => {
-  assert.equal(
-    detect28HseChallenge(fixture("challenge-captcha-uppercase.html")),
-    true,
-  );
+  assert.equal(detect28HseChallenge(fixture("challenge-captcha-uppercase.html")), true);
 });
 
 test("detects Cloudflare challenge shells before parsing", () => {

@@ -779,16 +779,13 @@ test("records a stable source-health diagnostic when 28Hse blocks a run", async 
     }),
     adapters: {
       oldSite: {
-        collect: async () =>
-          result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")]),
+        collect: async () => result(SOURCE_OLD_SITE, [observation(SOURCE_OLD_SITE, "old-100")]),
       },
       hse28: {
         collect: async () =>
           result(SOURCE_28HSE, [], {
             challengeDetected: true,
-            failures: [
-              { code: "challenge_detected", detail: "upstream challenge" },
-            ],
+            failures: [{ code: "challenge_detected", detail: "upstream challenge" }],
           }),
       },
     },
@@ -887,11 +884,7 @@ test("preserves descriptor-safe source diagnostics independently of adapters", a
   ]);
   assert.ok(Object.isFrozen(outcome.diagnostics));
   assert.ok(outcome.diagnostics.every(Object.isFrozen));
-  assert.ok(
-    outcome.diagnostics.every((diagnostic) =>
-      Object.isFrozen(diagnostic.selectorCounts),
-    ),
-  );
+  assert.ok(outcome.diagnostics.every((diagnostic) => Object.isFrozen(diagnostic.selectorCounts)));
 
   oldDiagnostic.selectorCounts.changed = 1;
   hseDiagnostic.failureCode = "changed";
@@ -977,10 +970,7 @@ test("preserves source diagnostics across the complete terminal outcome matrix",
     const outcome = await runDualSourceSync(item.value);
     assert.equal(outcome.status, item.status, item.name);
     assert.equal(outcome.diagnostics.length, 2, item.name);
-    assert.deepEqual(
-      item.value.artifacts.at(-1).diagnostics,
-      outcome.diagnostics,
-    );
+    assert.deepEqual(item.value.artifacts.at(-1).diagnostics, outcome.diagnostics);
   }
 
   const failureArtifacts = [];
@@ -995,10 +985,7 @@ test("preserves source diagnostics across the complete terminal outcome matrix",
       },
     }),
   });
-  await assert.rejects(
-    () => runDualSourceSync(failing),
-    /post-collection failure/,
-  );
+  await assert.rejects(() => runDualSourceSync(failing), /post-collection failure/);
   assert.equal(failureArtifacts.at(-1).status, "failed");
   assert.equal(failureArtifacts.at(-1).diagnostics.length, 2);
 });

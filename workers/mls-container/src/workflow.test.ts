@@ -15,8 +15,7 @@ const { runMlsWorkflow } = await import("./workflow");
 const { default: worker } = await import("./index");
 
 const SECRETS = {
-  DATABASE_URL_UNPOOLED:
-    "postgresql://operator:database-secret@example.invalid/mls",
+  DATABASE_URL_UNPOOLED: "postgresql://operator:database-secret@example.invalid/mls",
   BLOB_READ_WRITE_TOKEN: "blob-read-write-secret",
   MLS_R2_ACCESS_KEY_ID: "r2-access-key-secret",
   MLS_R2_SECRET_ACCESS_KEY: "r2-secret-access-secret",
@@ -89,10 +88,7 @@ function stepFake() {
   const sleeps: string[] = [];
   return {
     async do(name: string, configOrCallback: unknown, maybeCallback?: unknown) {
-      const callback =
-        typeof configOrCallback === "function"
-          ? configOrCallback
-          : maybeCallback;
+      const callback = typeof configOrCallback === "function" ? configOrCallback : maybeCallback;
       const result = await (callback as () => Promise<unknown>)();
       serialized.push(JSON.stringify(result));
       return result;
@@ -390,8 +386,7 @@ test("step outputs and fixed configuration errors never contain secret values", 
   });
   expect(result.state).toBe("succeeded");
   const serialized = step.serialized.join("\n");
-  for (const value of Object.values(SECRETS))
-    expect(serialized).not.toContain(value);
+  for (const value of Object.values(SECRETS)) expect(serialized).not.toContain(value);
   await expect(
     runMlsWorkflow({
       event: asEvent(scheduledEvent()),
@@ -411,9 +406,7 @@ test("the Worker has no public run, retry, or status route", async () => {
     fetch(request: Request): Promise<Response>;
   };
   for (const path of ["/run", "/retry", "/status", "/"]) {
-    const response = await fetcher.fetch(
-      new Request("https://worker.example.invalid" + path),
-    );
+    const response = await fetcher.fetch(new Request("https://worker.example.invalid" + path));
     expect(response.status).toBe(404);
     expect(response.headers.get("cache-control")).toBe("no-store");
   }

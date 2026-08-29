@@ -44,8 +44,7 @@ const SUPERVISOR_STATUS_KEYS = [
 const TERMINAL_STATES = new Set<RunState>(["succeeded", "failed", "unknown"]);
 const EXACT_TIMESTAMP_PATTERN =
   /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$/;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const FAILURE_CODE_PATTERN = /^[a-z][a-z0-9_-]{0,79}$/;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 const DEFINITE_START_REJECTION = "container supervisor rejected the attempt";
@@ -143,11 +142,9 @@ function exactDataRecord(
 }
 
 function exactTimestamp(input: unknown, message: string): string {
-  if (typeof input !== "string" || !EXACT_TIMESTAMP_PATTERN.test(input))
-    invalid(message);
+  if (typeof input !== "string" || !EXACT_TIMESTAMP_PATTERN.test(input)) invalid(message);
   const date = new Date(input);
-  if (Number.isNaN(date.valueOf()) || date.toISOString() !== input)
-    invalid(message);
+  if (Number.isNaN(date.valueOf()) || date.toISOString() !== input) invalid(message);
   return input;
 }
 
@@ -155,14 +152,9 @@ function optionalTimestamp(input: unknown, message: string): string | null {
   return input === null ? null : exactTimestamp(input, message);
 }
 
-function optionalString(
-  input: unknown,
-  maximum: number,
-  message: string,
-): string | null {
+function optionalString(input: unknown, maximum: number, message: string): string | null {
   if (input === null) return null;
-  if (typeof input !== "string" || input.length === 0 || input.length > maximum)
-    invalid(message);
+  if (typeof input !== "string" || input.length === 0 || input.length > maximum) invalid(message);
   return input;
 }
 
@@ -186,42 +178,30 @@ function runState(input: unknown, message: string): RunState {
 
 function exitCode(input: unknown, message: string): number | null {
   if (input === null) return null;
-  if (
-    !Number.isInteger(input) ||
-    (input as number) < 0 ||
-    (input as number) > 255
-  )
+  if (!Number.isInteger(input) || (input as number) < 0 || (input as number) > 255)
     invalid(message);
   return input as number;
 }
 
 function failureCode(input: unknown, message: string): string | null {
   if (input === null) return null;
-  if (typeof input !== "string" || !FAILURE_CODE_PATTERN.test(input))
-    invalid(message);
+  if (typeof input !== "string" || !FAILURE_CODE_PATTERN.test(input)) invalid(message);
   return input;
 }
 
 function safeIdentifier(input: unknown, message: string): string {
-  if (typeof input !== "string" || !SAFE_ID_PATTERN.test(input))
-    invalid(message);
+  if (typeof input !== "string" || !SAFE_ID_PATTERN.test(input)) invalid(message);
   return input;
 }
 
 function validDate(value: string): boolean {
   if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return (
-    !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
-  );
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
 function captureEnvelope(input: unknown): Readonly<RunEnvelope> {
-  const value = exactDataRecord(
-    input,
-    RUN_ENVELOPE_KEYS,
-    "run envelope is invalid",
-  );
+  const value = exactDataRecord(input, RUN_ENVELOPE_KEYS, "run envelope is invalid");
   const environment = value.environment;
   const hkDate = value.hkDate;
   const attemptId = value.attemptId;
@@ -230,19 +210,13 @@ function captureEnvelope(input: unknown): Readonly<RunEnvelope> {
   const scheduledTime = value.scheduledTime;
   const manualReason = value.manualReason;
   const commitSha = value.commitSha;
-  if (environment !== "preview" && environment !== "production")
-    invalid("run envelope is invalid");
-  if (typeof hkDate !== "string" || !validDate(hkDate))
-    invalid("run envelope is invalid");
-  if (kind !== "scheduled" && kind !== "manual")
-    invalid("run envelope is invalid");
-  if (mode !== "shadow" && mode !== "publish")
-    invalid("run envelope is invalid");
+  if (environment !== "preview" && environment !== "production") invalid("run envelope is invalid");
+  if (typeof hkDate !== "string" || !validDate(hkDate)) invalid("run envelope is invalid");
+  if (kind !== "scheduled" && kind !== "manual") invalid("run envelope is invalid");
+  if (mode !== "shadow" && mode !== "publish") invalid("run envelope is invalid");
   if (typeof scheduledTime !== "string") invalid("run envelope is invalid");
   exactTimestamp(scheduledTime, "run envelope is invalid");
-  const scheduledDate = new Date(
-    new Date(scheduledTime).getTime() + 8 * 60 * 60 * 1_000,
-  )
+  const scheduledDate = new Date(new Date(scheduledTime).getTime() + 8 * 60 * 60 * 1_000)
     .toISOString()
     .slice(0, 10);
   if (scheduledDate !== hkDate) invalid("run envelope is invalid");
@@ -250,8 +224,7 @@ function captureEnvelope(input: unknown): Readonly<RunEnvelope> {
     invalid("run envelope is invalid");
   const scheduledId = `scheduled:${environment}:${hkDate}`;
   if (kind === "scheduled") {
-    if (attemptId !== scheduledId || manualReason !== null)
-      invalid("run envelope is invalid");
+    if (attemptId !== scheduledId || manualReason !== null) invalid("run envelope is invalid");
   } else {
     const prefix = `${scheduledId}:manual:`;
     const suffix =
@@ -287,10 +260,7 @@ function captureInput(input: unknown): Readonly<ClaimAndStartInput> {
   );
   return Object.freeze({
     envelope: captureEnvelope(value.envelope),
-    workflowInstanceId: safeIdentifier(
-      value.workflowInstanceId,
-      "attempt claim is invalid",
-    ),
+    workflowInstanceId: safeIdentifier(value.workflowInstanceId, "attempt claim is invalid"),
   });
 }
 
@@ -302,54 +272,30 @@ function snapshotRecord(record: AttemptRecord): AttemptRecord {
 }
 
 function captureAttemptRecord(input: unknown): AttemptRecord {
-  const value = exactDataRecord(
-    input,
-    ATTEMPT_RECORD_KEYS,
-    "attempt record is invalid",
-  );
+  const value = exactDataRecord(input, ATTEMPT_RECORD_KEYS, "attempt record is invalid");
   const state = runState(value.state, "attempt record is invalid");
   const manifestPresent = value.manifestPresent;
-  if (typeof manifestPresent !== "boolean")
-    invalid("attempt record is invalid");
+  if (typeof manifestPresent !== "boolean") invalid("attempt record is invalid");
   const record: AttemptRecord = {
     envelope: captureEnvelope(value.envelope),
     state,
-    workflowInstanceId: safeIdentifier(
-      value.workflowInstanceId,
-      "attempt record is invalid",
-    ),
+    workflowInstanceId: safeIdentifier(value.workflowInstanceId, "attempt record is invalid"),
     containerDeploymentId:
       value.containerDeploymentId === null
         ? null
-        : safeIdentifier(
-            value.containerDeploymentId,
-            "attempt record is invalid",
-          ),
+        : safeIdentifier(value.containerDeploymentId, "attempt record is invalid"),
     containerId: safeIdentifier(value.containerId, "attempt record is invalid"),
     neonRunId: optionalUuid(value.neonRunId, "attempt record is invalid"),
-    evidencePrefix: optionalString(
-      value.evidencePrefix,
-      512,
-      "attempt record is invalid",
-    ),
+    evidencePrefix: optionalString(value.evidencePrefix, 512, "attempt record is invalid"),
     manifestPresent,
     startedAt: optionalTimestamp(value.startedAt, "attempt record is invalid"),
-    heartbeatAt: optionalTimestamp(
-      value.heartbeatAt,
-      "attempt record is invalid",
-    ),
-    completedAt: optionalTimestamp(
-      value.completedAt,
-      "attempt record is invalid",
-    ),
+    heartbeatAt: optionalTimestamp(value.heartbeatAt, "attempt record is invalid"),
+    completedAt: optionalTimestamp(value.completedAt, "attempt record is invalid"),
     exitCode: exitCode(value.exitCode, "attempt record is invalid"),
     failureCode: failureCode(value.failureCode, "attempt record is invalid"),
   };
   if (TERMINAL_STATES.has(state)) {
-    if (
-      record.completedAt === null ||
-      (state !== "succeeded" && record.failureCode === null)
-    )
+    if (record.completedAt === null || (state !== "succeeded" && record.failureCode === null))
       invalid("attempt record is invalid");
   } else if (
     record.completedAt !== null ||
@@ -366,38 +312,17 @@ function captureAttemptRecord(input: unknown): AttemptRecord {
   return snapshotRecord(record);
 }
 
-function captureSupervisorStatus(
-  input: unknown,
-  envelope: RunEnvelope,
-): SupervisorStatus {
-  const value = exactDataRecord(
-    input,
-    SUPERVISOR_STATUS_KEYS,
-    "supervisor status is invalid",
-  );
-  if (value.attemptId !== envelope.attemptId)
-    invalid("supervisor status is invalid");
+function captureSupervisorStatus(input: unknown, envelope: RunEnvelope): SupervisorStatus {
+  const value = exactDataRecord(input, SUPERVISOR_STATUS_KEYS, "supervisor status is invalid");
+  if (value.attemptId !== envelope.attemptId) invalid("supervisor status is invalid");
   const state = runState(value.state, "supervisor status is invalid");
   const runId = optionalUuid(value.runId, "supervisor status is invalid");
-  const neonRunId = optionalUuid(
-    value.neonRunId,
-    "supervisor status is invalid",
-  );
-  if (neonRunId !== null && neonRunId !== runId)
-    invalid("supervisor status is invalid");
-  const evidencePrefix = optionalString(
-    value.evidencePrefix,
-    512,
-    "supervisor status is invalid",
-  );
-  const manifestKey = optionalString(
-    value.manifestKey,
-    526,
-    "supervisor status is invalid",
-  );
+  const neonRunId = optionalUuid(value.neonRunId, "supervisor status is invalid");
+  if (neonRunId !== null && neonRunId !== runId) invalid("supervisor status is invalid");
+  const evidencePrefix = optionalString(value.evidencePrefix, 512, "supervisor status is invalid");
+  const manifestKey = optionalString(value.manifestKey, 526, "supervisor status is invalid");
   const manifestPresent = value.manifestPresent;
-  if (typeof manifestPresent !== "boolean")
-    invalid("supervisor status is invalid");
+  if (typeof manifestPresent !== "boolean") invalid("supervisor status is invalid");
   const normalizedAttemptId = envelope.attemptId.replaceAll(":", "-");
   const expectedPrefix =
     runId === null
@@ -406,27 +331,15 @@ function captureSupervisorStatus(
   if (evidencePrefix !== null && evidencePrefix !== expectedPrefix)
     invalid("supervisor status is invalid");
   if (manifestPresent) {
-    if (
-      evidencePrefix === null ||
-      manifestKey !== `${evidencePrefix}/manifest.json`
-    )
+    if (evidencePrefix === null || manifestKey !== `${evidencePrefix}/manifest.json`)
       invalid("supervisor status is invalid");
   } else if (manifestKey !== null) invalid("supervisor status is invalid");
   const status: SupervisorStatus = {
     attemptId: envelope.attemptId,
     state,
-    startedAt: optionalTimestamp(
-      value.startedAt,
-      "supervisor status is invalid",
-    ),
-    heartbeatAt: optionalTimestamp(
-      value.heartbeatAt,
-      "supervisor status is invalid",
-    ),
-    completedAt: optionalTimestamp(
-      value.completedAt,
-      "supervisor status is invalid",
-    ),
+    startedAt: optionalTimestamp(value.startedAt, "supervisor status is invalid"),
+    heartbeatAt: optionalTimestamp(value.heartbeatAt, "supervisor status is invalid"),
+    completedAt: optionalTimestamp(value.completedAt, "supervisor status is invalid"),
     exitCode: exitCode(value.exitCode, "supervisor status is invalid"),
     failureCode: failureCode(value.failureCode, "supervisor status is invalid"),
     runId,
@@ -436,10 +349,7 @@ function captureSupervisorStatus(
     manifestPresent,
   };
   if (TERMINAL_STATES.has(state)) {
-    if (
-      status.completedAt === null ||
-      (state !== "succeeded" && status.failureCode === null)
-    )
+    if (status.completedAt === null || (state !== "succeeded" && status.failureCode === null))
       invalid("supervisor status is invalid");
   } else if (
     status.completedAt !== null ||
@@ -460,9 +370,7 @@ function sameEnvelope(left: RunEnvelope, right: RunEnvelope): boolean {
   return RUN_ENVELOPE_KEYS.every((key) => left[key] === right[key]);
 }
 
-function captureStartEnvironment(
-  input: unknown,
-): Readonly<Record<string, string>> {
+function captureStartEnvironment(input: unknown): Readonly<Record<string, string>> {
   if (
     input === null ||
     typeof input !== "object" ||
@@ -472,14 +380,9 @@ function captureStartEnvironment(
     invalid("container start environment is invalid");
   const captured: Record<string, string> = {};
   for (const key of Reflect.ownKeys(input)) {
-    if (typeof key !== "string")
-      invalid("container start environment is invalid");
+    if (typeof key !== "string") invalid("container start environment is invalid");
     const descriptor = Object.getOwnPropertyDescriptor(input, key);
-    if (
-      !descriptor ||
-      !("value" in descriptor) ||
-      typeof descriptor.value !== "string"
-    )
+    if (!descriptor || !("value" in descriptor) || typeof descriptor.value !== "string")
       invalid("container start environment is invalid");
     captured[key] = descriptor.value;
   }
@@ -494,9 +397,7 @@ function isDefiniteStartRejection(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const descriptor = Object.getOwnPropertyDescriptor(error, "message");
   return Boolean(
-    descriptor &&
-    "value" in descriptor &&
-    descriptor.value === DEFINITE_START_REJECTION,
+    descriptor && "value" in descriptor && descriptor.value === DEFINITE_START_REJECTION,
   );
 }
 
@@ -511,10 +412,7 @@ function initialRecord(
     containerDeploymentId:
       options.containerDeploymentId === null
         ? null
-        : safeIdentifier(
-            options.containerDeploymentId,
-            "container deployment id is invalid",
-          ),
+        : safeIdentifier(options.containerDeploymentId, "container deployment id is invalid"),
     containerId: safeIdentifier(options.containerId, "container id is invalid"),
     neonRunId: null,
     evidencePrefix: null,
@@ -578,9 +476,7 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
         const token = options.createToken();
         if (typeof token !== "string" || !/^[A-Za-z0-9_-]{32,160}$/.test(token))
           invalid("container control token is invalid");
-        const envVars = captureStartEnvironment(
-          options.startEnvironment(capturedInput),
-        );
+        const envVars = captureStartEnvironment(options.startEnvironment(capturedInput));
         await options.container.start({
           envelope: capturedInput.envelope,
           token,
@@ -595,9 +491,7 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
           ...(current ?? record),
           state: definite ? "failed" : "unknown",
           completedAt: captureNow(options),
-          failureCode: definite
-            ? "container_start_failed"
-            : "container_start_outcome_unknown",
+          failureCode: definite ? "container_start_failed" : "container_start_outcome_unknown",
         });
         await options.store.put(key, terminal);
         await stopAfterPersistence(options.container);
@@ -619,25 +513,17 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
   }
 
   async function readAttempt(attemptId: string): Promise<AttemptRecord> {
-    const capturedAttemptId = safeIdentifier(
-      attemptId,
-      "attempt id is invalid",
-    );
+    const capturedAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
     const key = `attempt:${capturedAttemptId}`;
     const stored = await options.store.get(key);
     if (stored === undefined) invalid("attempt record not found");
     const existing = captureAttemptRecord(stored);
-    if (existing.envelope.attemptId !== capturedAttemptId)
-      invalid("attempt record is invalid");
+    if (existing.envelope.attemptId !== capturedAttemptId) invalid("attempt record is invalid");
     if (TERMINAL_STATES.has(existing.state)) return snapshotRecord(existing);
 
-    const status = captureSupervisorStatus(
-      await options.container.status(),
-      existing.envelope,
-    );
+    const status = captureSupervisorStatus(await options.container.status(), existing.envelope);
     const current = await readMatchingRecord(key, existing);
-    if (current !== undefined && TERMINAL_STATES.has(current.state))
-      return snapshotRecord(current);
+    if (current !== undefined && TERMINAL_STATES.has(current.state)) return snapshotRecord(current);
     const latest = current ?? existing;
     if (latest.state === "running" && status.state === "pending")
       invalid("supervisor status is invalid");
@@ -654,8 +540,7 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
       failureCode: status.failureCode,
     });
     await options.store.put(key, updated);
-    if (TERMINAL_STATES.has(updated.state))
-      await stopAfterPersistence(options.container);
+    if (TERMINAL_STATES.has(updated.state)) await stopAfterPersistence(options.container);
     return updated;
   }
 
@@ -664,18 +549,14 @@ export function createAttemptCoordinator(options: AttemptCoordinatorOptions) {
     code: string,
     stopContainer = true,
   ): Promise<AttemptRecord> {
-    const capturedAttemptId = safeIdentifier(
-      attemptId,
-      "attempt id is invalid",
-    );
+    const capturedAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
     const capturedCode = failureCode(code, "failure code is invalid");
     if (capturedCode === null) invalid("failure code is invalid");
     const key = `attempt:${capturedAttemptId}`;
     const stored = await options.store.get(key);
     if (stored === undefined) invalid("attempt record not found");
     const existing = captureAttemptRecord(stored);
-    if (existing.envelope.attemptId !== capturedAttemptId)
-      invalid("attempt record is invalid");
+    if (existing.envelope.attemptId !== capturedAttemptId) invalid("attempt record is invalid");
     if (TERMINAL_STATES.has(existing.state)) return snapshotRecord(existing);
     const updated = snapshotRecord({
       ...existing,
@@ -741,31 +622,17 @@ export class MlsRunContainer extends Container<Env> {
   private coordinator?: ReturnType<typeof createAttemptCoordinator>;
   private activeAttemptId: string | null = null;
 
-  private async rememberActiveAttempt(
-    attemptId: string,
-    allowNew: boolean,
-  ): Promise<void> {
-    const capturedAttemptId = safeIdentifier(
-      attemptId,
-      "attempt id is invalid",
-    );
-    if (
-      this.activeAttemptId !== null &&
-      this.activeAttemptId !== capturedAttemptId
-    )
+  private async rememberActiveAttempt(attemptId: string, allowNew: boolean): Promise<void> {
+    const capturedAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
+    if (this.activeAttemptId !== null && this.activeAttemptId !== capturedAttemptId)
       invalid("active attempt does not match existing pointer");
     const stored = await this.ctx.storage.get(ACTIVE_ATTEMPT_KEY);
     if (stored !== undefined) {
-      const storedAttemptId = safeIdentifier(
-        stored,
-        "active attempt pointer is invalid",
-      );
+      const storedAttemptId = safeIdentifier(stored, "active attempt pointer is invalid");
       if (storedAttemptId !== capturedAttemptId)
         invalid("active attempt does not match existing pointer");
     } else if (!allowNew) {
-      const storedAttempt = await this.ctx.storage.get(
-        `attempt:${capturedAttemptId}`,
-      );
+      const storedAttempt = await this.ctx.storage.get(`attempt:${capturedAttemptId}`);
       if (storedAttempt === undefined) invalid("attempt record not found");
       const capturedStoredAttempt = captureAttemptRecord(storedAttempt);
       if (capturedStoredAttempt.envelope.attemptId !== capturedAttemptId)
@@ -781,18 +648,12 @@ export class MlsRunContainer extends Container<Env> {
     if (this.activeAttemptId !== null) return this.activeAttemptId;
     const stored = await this.ctx.storage.get(ACTIVE_ATTEMPT_KEY);
     if (stored === undefined) return null;
-    const capturedAttemptId = safeIdentifier(
-      stored,
-      "active attempt pointer is invalid",
-    );
+    const capturedAttemptId = safeIdentifier(stored, "active attempt pointer is invalid");
     this.activeAttemptId = capturedAttemptId;
     return capturedAttemptId;
   }
 
-  private environmentValue(
-    name: keyof Env,
-    required = true,
-  ): string | undefined {
+  private environmentValue(name: keyof Env, required = true): string | undefined {
     const descriptor = Object.getOwnPropertyDescriptor(this.env, name);
     if (!descriptor || !("value" in descriptor)) {
       if (required) invalid("container environment is invalid");
@@ -857,20 +718,14 @@ export class MlsRunContainer extends Container<Env> {
             },
             body: JSON.stringify(envelope),
           });
-          if (response.status !== 202)
-            throw new Error("container supervisor rejected the attempt");
+          if (response.status !== 202) throw new Error("container supervisor rejected the attempt");
         },
         status: async () => {
-          if (this.ctx.container?.running !== true)
-            throw new Error("container is not running");
-          const response = await this.containerFetch(
-            "http://localhost/status",
-            {
-              method: "GET",
-            },
-          );
-          if (response.status !== 200)
-            throw new Error("container status is unavailable");
+          if (this.ctx.container?.running !== true) throw new Error("container is not running");
+          const response = await this.containerFetch("http://localhost/status", {
+            method: "GET",
+          });
+          if (response.status !== 200) throw new Error("container status is unavailable");
           const body: unknown = await response.json();
           return body;
         },
@@ -892,19 +747,13 @@ export class MlsRunContainer extends Container<Env> {
   }
 
   async readAttempt(attemptId: string): Promise<AttemptRecord> {
-    const capturedAttemptId = safeIdentifier(
-      attemptId,
-      "attempt id is invalid",
-    );
+    const capturedAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
     await this.rememberActiveAttempt(capturedAttemptId, false);
     return this.getCoordinator().readAttempt(capturedAttemptId);
   }
 
   async markUnknown(attemptId: string, code: string): Promise<AttemptRecord> {
-    const capturedAttemptId = safeIdentifier(
-      attemptId,
-      "attempt id is invalid",
-    );
+    const capturedAttemptId = safeIdentifier(attemptId, "attempt id is invalid");
     await this.rememberActiveAttempt(capturedAttemptId, false);
     return this.getCoordinator().markUnknown(capturedAttemptId, code);
   }
@@ -912,20 +761,12 @@ export class MlsRunContainer extends Container<Env> {
   override async onStop(_params: StopParams): Promise<void> {
     const attemptId = await this.resolveActiveAttempt();
     if (attemptId === null) return;
-    await this.getCoordinator().markUnknown(
-      attemptId,
-      "container_stopped",
-      false,
-    );
+    await this.getCoordinator().markUnknown(attemptId, "container_stopped", false);
   }
 
   override async onError(_error: unknown): Promise<void> {
     const attemptId = await this.resolveActiveAttempt();
     if (attemptId === null) return;
-    await this.getCoordinator().markUnknown(
-      attemptId,
-      "container_runtime_error",
-      false,
-    );
+    await this.getCoordinator().markUnknown(attemptId, "container_runtime_error", false);
   }
 }
