@@ -287,7 +287,14 @@ test("the whitelist is enforced at the consumer, not inside the listing API", ()
   const queries = read("src/lib/queries.ts");
   const server = read("src/lib/neon/public-data.server.ts");
 
-  assert.match(queries, /import \{ isWithinCorridorRegion \} from "@\/content\/castle-peak-road"/);
+  // queries.ts also imports corridorRegionScope now, to pass
+  // outOfScopeTextAliases through to the SQL-level exclusion in
+  // public-data.server.ts's corridorWhere() -- still imported from this
+  // content module, not re-implemented at the consumer.
+  assert.match(
+    queries,
+    /import \{[^}]*\bisWithinCorridorRegion\b[^}]*\} from "@\/content\/castle-peak-road"/,
+  );
 
   const featured = queries.slice(
     queries.indexOf("export async function fetchFeaturedProperties"),

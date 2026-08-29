@@ -95,6 +95,15 @@ export type NeonCorridorInventoryInput = {
   districtSlugs: string[];
   estateSlugs: string[];
   textAliases: string[];
+  /**
+   * Place names that must exclude a row even if it matches one of the
+   * inclusion predicates above -- e.g. a `district_slug: "castle-peak-road"`
+   * row whose title/address names a place outside the corridor. Applied as a
+   * SQL-level `AND NOT (...)` so both the COUNT totals and the fetched rows
+   * agree. See `corridorRegionScope.outOfScopeTextAliases` in
+   * src/content/castle-peak-road.ts, the single source of truth for this list.
+   */
+  outOfScopeTextAliases: string[];
   limit: number;
 };
 

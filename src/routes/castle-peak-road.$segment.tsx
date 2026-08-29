@@ -12,6 +12,7 @@ import {
 import { SITE_URL } from "@/content/seo";
 import { whatsappUrl } from "@/config/site";
 import {
+  emptyCorridorInventory,
   fetchCorridorInventoryForAliases,
   type CorridorInventory as CorridorInventoryData,
 } from "@/lib/queries";
@@ -38,12 +39,17 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
         textAliases: segment.textAliases,
         limit: 6,
       }),
+      // The nearby block is bonus content, already guarded by a `length > 0`
+      // check where it renders -- isolate its failure so a problem fetching
+      // "附近選擇" doesn't take down the primary strict inventory, breadcrumbs,
+      // intro and FAQs with it. Same pattern as fetchCmsVideos().catch(() => [])
+      // in src/routes/index.tsx.
       fetchCorridorInventoryForAliases({
         districtSlugs: segment.nearbyDistrictSlugs,
         estateSlugs: segment.nearbyEstateSlugs,
         textAliases: segment.nearbyTextAliases,
         limit: 6,
-      }),
+      }).catch(() => emptyCorridorInventory()),
     ]);
 
     return { segment, inventory, nearbyInventory };

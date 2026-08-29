@@ -19,7 +19,7 @@ import {
   searchNeonListings,
 } from "@/lib/neon/public-data";
 import type { NeonEstateOption, NeonPropertyRow } from "@/lib/neon/public-data.types";
-import { isWithinCorridorRegion } from "@/content/castle-peak-road";
+import { corridorRegionScope, isWithinCorridorRegion } from "@/content/castle-peak-road";
 
 const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
   bellagio: "belvedere-garden",
@@ -259,7 +259,7 @@ function hasCorridorAliases(input: Required<CorridorInventoryAliasInput>) {
   );
 }
 
-function emptyCorridorInventory(): CorridorInventory {
+export function emptyCorridorInventory(): CorridorInventory {
   return {
     saleTotal: 0,
     rentTotal: 0,
@@ -282,15 +282,22 @@ export async function fetchCorridorInventoryForAliases(
 ): Promise<CorridorInventory> {
   const normalized = normalizeCorridorInventoryInput(input);
   if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
-  const result = await fetchNeonCorridorInventory({ data: normalized });
-  // saleTotal/rentTotal are SQL-computed counts against the same alias set
-  // used for the rows below; they are not re-derived from the filtered rows.
-  // The strict-alias cleanup in castle-peak-road.ts already removes the
-  // primary leak vector at the SQL WHERE-clause level, so this filter is a
-  // second, defense-in-depth layer against any residual text-alias match --
-  // in the rare case it drops a row, the displayed total can be very slightly
-  // higher than the rendered row count, the same way FEATURED_FETCH_LIMIT
-  // above already over-fetches relative to what's displayed.
+  const result = await fetchNeonCorridorInventory({
+    data: {
+      ...normalized,
+      // Fixed constant, not something callers choose per-segment -- every
+      // corridor/nearby query excludes the same out-of-corridor place names.
+      outOfScopeTextAliases: corridorRegionScope.outOfScopeTextAliases,
+    },
+  });
+  // corridorWhere() (public-data.server.ts) now applies
+  // corridorRegionScope.outOfScopeTextAliases as a SQL-level AND NOT EXISTS
+  // exclusion, so saleTotal/rentTotal and the rows below are already computed
+  // against the same filtered set -- the totals cannot outrun the rows the
+  // way a purely client-side filter would let them. This app-layer filter
+  // stays on as defense-in-depth (e.g. against a future regression in
+  // corridorWhere()); with the SQL-level exclusion in place it should now
+  // rarely if ever remove anything.
   return {
     saleTotal: result.saleTotal,
     rentTotal: result.rentTotal,

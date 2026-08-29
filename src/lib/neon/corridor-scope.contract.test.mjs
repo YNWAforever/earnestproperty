@@ -101,8 +101,9 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
  * module, inlined the same way relative imports are inlined above (it has no
  * imports of its own, so no further rewriting is needed inside it).
  */
-async function loadQueriesForFixtureCorridorRows(fixtureRows) {
-  const query = async (text) => {
+async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
+  const query = async (text, params) => {
+    queryLog?.push({ text, params });
     if (/GROUP BY p\.deal_type/.test(text)) {
       const totals = new Map();
       for (const row of fixtureRows) {
@@ -212,6 +213,49 @@ test("a genuine Ting Kau row is included in the strict result set", async () => 
 
   const returnedIds = [...result.saleRows, ...result.rentRows].map((row) => row.listing_no);
   assert.ok(returnedIds.includes(genuineTingKauFixture.listing_no));
+});
+
+test("fetchCorridorInventoryForAliases sends corridorRegionScope.outOfScopeTextAliases as a SQL-level exclusion on every corridor query, not just an app-layer filter after the fact", async () => {
+  // Regression coverage for the code-review finding that the SQL COUNT (saleTotal/
+  // rentTotal) and the LIMIT-ranked rows disagreed because the out-of-scope exclusion
+  // only ran client-side, after both queries had already run. corridorWhere()
+  // (public-data.server.ts) now ANDs a NOT EXISTS(...) exclusion, built from
+  // outOfScopeTextAliases, into the WHERE clause used by BOTH the COUNT query and the
+  // ranked-rows query -- this asserts that clause and its bound parameter actually
+  // reach every SQL call this fixture's query stub observes, rather than re-deriving
+  // the exclusion result in JS (which corridor-scope's other tests already cover via
+  // the app-layer filter).
+  const tingKau = getCastlePeakRoadSegment("ting-kau");
+  assert.ok(tingKau);
+
+  const queryLog = [];
+  const { fetchCorridorInventoryForAliases } = await loadQueriesForFixtureCorridorRows(
+    allFixtures,
+    queryLog,
+  );
+  await fetchCorridorInventoryForAliases({
+    districtSlugs: ["ting-kau"],
+    estateSlugs: [],
+    textAliases: tingKau.textAliases,
+  });
+
+  // Both the COUNT query and the ranked-rows query call corridorWhere(), so both
+  // entries in the log must carry the exclusion.
+  assert.ok(queryLog.length >= 2, "expected both the COUNT query and the rows query to run");
+  for (const { text, params } of queryLog) {
+    assert.match(
+      text,
+      /AND NOT EXISTS/,
+      "corridorWhere() must AND NOT the out-of-scope alias set into every corridor query",
+    );
+    const outOfScopeParam = params.find(
+      (param) => Array.isArray(param) && param.includes("屯門"),
+    );
+    assert.ok(
+      outOfScopeParam,
+      "corridorRegionScope.outOfScopeTextAliases must be bound as a query parameter",
+    );
+  }
 });
 
 test("Ting Kau's nearby alias set returns castle-peak-road rows that don't match any outOfScopeTextAliases term", async () => {

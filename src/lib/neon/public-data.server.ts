@@ -338,6 +338,7 @@ function normalizeCorridorInventoryInput(
     districtSlugs: cleanTerms(input.districtSlugs),
     estateSlugs: cleanTerms(input.estateSlugs),
     textAliases: cleanTerms(input.textAliases).map(escapeLikeTerm),
+    outOfScopeTextAliases: cleanTerms(input.outOfScopeTextAliases).map(escapeLikeTerm),
     limit: clampCorridorLimit(input.limit),
   };
 }
@@ -387,7 +388,35 @@ function corridorWhere(input: NeonCorridorInventoryInput, params: unknown[]) {
     `);
   }
 
-  return parts.length > 0 ? `p.status = 'active' AND (${parts.join(" OR ")})` : "FALSE";
+  if (parts.length === 0) return "FALSE";
+
+  let where = `p.status = 'active' AND (${parts.join(" OR ")})`;
+
+  if (input.outOfScopeTextAliases.length > 0) {
+    // Exclude a row matching one of the inclusion predicates above if it also
+    // names a place outside the corridor (e.g. a district_slug:
+    // "castle-peak-road" row whose title/address says 屯門). Applied here at
+    // the SQL level -- not just filtered client-side afterward -- so both the
+    // COUNT totals and the fetched/ranked rows agree on the same excluded set.
+    where += `
+      AND NOT EXISTS (
+        SELECT 1
+        FROM unnest(${addParam(params, input.outOfScopeTextAliases)}::text[]) AS term(value)
+        WHERE lower(
+          concat_ws(' ',
+            p.title_zh,
+            p.title_en,
+            p.address,
+            p.district_slug,
+            e.name_zh,
+            e.slug
+          )
+        ) LIKE '%' || lower(term.value) || '%' ESCAPE '\\'
+      )
+    `;
+  }
+
+  return where;
 }
 
 async function fetchCorridorRows(

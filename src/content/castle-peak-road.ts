@@ -48,9 +48,14 @@ export type CorridorSegment = {
    * A broader, explicitly-labelled "附近選擇" (nearby) result set — content
    * that borders this segment but isn't claimed as its own strict inventory.
    * Empty arrays mean the segment has no separate nearby block. Both the
-   * strict and nearby sets are still passed through isWithinCorridorRegion()
-   * inside fetchCorridorInventoryForAliases, so neither can ever surface
-   * corridorRegionScope.outOfScopeTextAliases stock.
+   * strict and nearby sets are filtered by corridorRegionScope.outOfScopeTextAliases
+   * -- at the SQL level in corridorWhere() (public-data.server.ts) and again,
+   * defense-in-depth, by isWithinCorridorRegion() inside
+   * fetchCorridorInventoryForAliases. This guards against every known
+   * out-of-scope place name currently in outOfScopeTextAliases; it's a text
+   * match, so a listing whose title/address doesn't mention one of those
+   * names but is still geographically out of scope (e.g. mistagged by the MLS
+   * importer) isn't caught by this check.
    */
   nearbyDistrictSlugs: string[];
   nearbyEstateSlugs: string[];
