@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
-import { formatArea, formatHkd, formatManDisplay, formatPsf } from "./format";
+import {
+  formatArea,
+  formatFreshness,
+  formatHkd,
+  formatHkDate,
+  formatHkDateTime,
+  formatManDisplay,
+  formatPsf,
+} from "./format";
 
 describe("formatHkd", () => {
   test("formats a whole-dollar amount with thousands separators and a $ prefix", () => {
@@ -78,5 +86,76 @@ describe("formatPsf", () => {
   test("returns null when area is negative or non-finite", () => {
     expect(formatPsf(5000000, -500)).toBeNull();
     expect(formatPsf(5000000, Number.NaN)).toBeNull();
+  });
+});
+
+describe("formatHkDate", () => {
+  test("anchors to Asia/Hong_Kong regardless of the input's UTC-day boundary", () => {
+    // 2026-01-01T16:30:00Z is 2026-01-02T00:30 in Hong Kong (UTC+8). A
+    // formatter without an explicit timeZone would report 1月1日 on a UTC
+    // server and 1月2日 on an HKT browser -- this is the exact DR-2 hydration
+    // mismatch. formatHkDate must report 2026/01/02 no matter where it runs.
+    const date = new Date("2026-01-01T16:30:00Z");
+    expect(formatHkDate(date)).toBe("02/01/2026");
+  });
+
+  test("accepts an ISO date string", () => {
+    expect(formatHkDate("2026-03-15T00:00:00Z")).toBe("15/03/2026");
+  });
+
+  test("returns null for null, undefined, and an unparseable string", () => {
+    expect(formatHkDate(null)).toBeNull();
+    expect(formatHkDate(undefined)).toBeNull();
+    expect(formatHkDate("not a date")).toBeNull();
+  });
+});
+
+describe("formatHkDateTime", () => {
+  test("formats date and time (24h) anchored to Asia/Hong_Kong", () => {
+    const date = new Date("2026-01-01T16:30:00Z");
+    expect(formatHkDateTime(date)).toBe("02/01/2026 00:30");
+  });
+
+  test("returns null for null, undefined, and an unparseable string", () => {
+    expect(formatHkDateTime(null)).toBeNull();
+    expect(formatHkDateTime(undefined)).toBeNull();
+    expect(formatHkDateTime("not a date")).toBeNull();
+  });
+});
+
+describe("formatFreshness", () => {
+  const now = new Date("2026-06-15T12:00:00Z");
+
+  test("reports 'just updated' under one minute ago", () => {
+    const thirtySecondsAgo = new Date(now.getTime() - 30_000);
+    expect(formatFreshness(thirtySecondsAgo, now)).toBe("剛剛更新");
+  });
+
+  test("reports minutes ago under one hour", () => {
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60_000);
+    expect(formatFreshness(fifteenMinutesAgo, now)).toBe("15 分鐘前更新");
+  });
+
+  test("reports hours ago under one day", () => {
+    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60_000);
+    expect(formatFreshness(threeHoursAgo, now)).toBe("3 小時前更新");
+  });
+
+  test("reports days ago under 30 days", () => {
+    const fiveDaysAgo = new Date(now.getTime() - 5 * 24 * 60 * 60_000);
+    expect(formatFreshness(fiveDaysAgo, now)).toBe("5 日前更新");
+  });
+
+  test("falls back to a full date at 30 days or older", () => {
+    const fortyDaysAgo = new Date(now.getTime() - 40 * 24 * 60 * 60_000);
+    expect(formatFreshness(fortyDaysAgo, now)).toBe(
+      `${formatHkDate(fortyDaysAgo)} 更新`,
+    );
+  });
+
+  test("returns null for null, undefined, and an unparseable string", () => {
+    expect(formatFreshness(null, now)).toBeNull();
+    expect(formatFreshness(undefined, now)).toBeNull();
+    expect(formatFreshness("not a date", now)).toBeNull();
   });
 });

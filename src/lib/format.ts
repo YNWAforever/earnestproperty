@@ -35,3 +35,59 @@ export function formatPsf(
   const psf = price / area;
   return `$${Math.round(psf).toLocaleString(HK_NUMBER_LOCALE)} 呎`;
 }
+
+const HK_TIME_ZONE = "Asia/Hong_Kong";
+const HK_DATE_LOCALE = "zh-HK";
+
+function toValidDate(
+  input: string | number | Date | null | undefined,
+): Date | null {
+  if (input === null || input === undefined) return null;
+  const date = input instanceof Date ? input : new Date(input);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatHkDate(
+  input: string | number | Date | null | undefined,
+): string | null {
+  const date = toValidDate(input);
+  if (!date) return null;
+  return new Intl.DateTimeFormat(HK_DATE_LOCALE, {
+    timeZone: HK_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export function formatHkDateTime(
+  input: string | number | Date | null | undefined,
+): string | null {
+  const date = toValidDate(input);
+  if (!date) return null;
+  return new Intl.DateTimeFormat(HK_DATE_LOCALE, {
+    timeZone: HK_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+export function formatFreshness(
+  input: string | number | Date | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  const date = toValidDate(input);
+  if (!date) return null;
+  const diffMinutes = Math.floor((now.getTime() - date.getTime()) / 60_000);
+  if (diffMinutes < 1) return "剛剛更新";
+  if (diffMinutes < 60) return `${diffMinutes} 分鐘前更新`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} 小時前更新`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays} 日前更新`;
+  return `${formatHkDate(date)} 更新`;
+}
