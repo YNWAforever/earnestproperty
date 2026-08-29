@@ -9,6 +9,7 @@ import {
   Maximize,
   Calendar,
   Building2,
+  Heart,
   Share2,
   Image as ImageIcon,
   Video,
@@ -61,6 +62,7 @@ import {
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
+import { useFavourite } from "@/lib/saved-listings";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
@@ -202,6 +204,9 @@ function PropertyPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
+  const { favourited, toggle: toggleFavourited } = useFavourite(
+    property.listing_no,
+  );
 
   const isRent = property.deal_type === "rent";
   const priceLabel = formatDealPrice(
@@ -387,6 +392,17 @@ function PropertyPage() {
           <span>編號 {property.listing_no}</span>
         </nav>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFavourited}
+            aria-pressed={favourited}
+          >
+            <Heart
+              className={`mr-1.5 h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`}
+            />
+            {favourited ? "已加入心水" : "加入心水"}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2 className="mr-1.5 h-3.5 w-3.5" />
             分享

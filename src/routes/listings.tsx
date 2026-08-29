@@ -7,9 +7,13 @@ import {
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import {
   Bed,
   Bath,
+  Bookmark,
+  BookmarkPlus,
+  Heart,
   Maximize2,
   MapPin,
   ChevronLeft,
@@ -18,6 +22,7 @@ import {
   List,
   Share2,
   SlidersHorizontal,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +36,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { SkeletonBlock } from "@/components/layout/SkeletonBlock";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
@@ -41,6 +51,13 @@ import {
   sanitizeListingText,
 } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
+import {
+  deleteSavedSearch,
+  getSavedSearches,
+  saveSearch,
+  useFavourite,
+  type SavedSearch,
+} from "@/lib/saved-listings";
 import { AppImage } from "@/components/media/AppImage";
 import {
   searchListings,
@@ -777,6 +794,145 @@ function ViewModeToggle({
   );
 }
 
+/**
+ * "儲存呢個搜尋" (save the current search) plus a popover listing previously
+ * saved searches with re-apply/delete actions. `hasActiveFilters` is the
+ * SAME `activeChips.length > 0` check ListingsPage already computes via
+ * buildActiveFilterChips() for the filter-chip row -- not a second,
+ * possibly-drifting definition of "is a filter active."
+ */
+// Deliberately not one of lib/format.ts's HK-date helpers: Task 3's
+// listings.contract.test.mjs source-scans this whole file for the raw name
+// of the (now-removed) date helper ListingCard used to call, and that scan
+// isn't an exact-match/anchored check -- any helper sharing its name as a
+// prefix would also match. A tiny local formatter for the saved-search
+// timestamp sidesteps that collision entirely.
+function formatSavedAt(iso: string): string {
+  return new Intl.DateTimeFormat("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+}
+
+function SavedSearchesPanel({
+  search,
+  label,
+  hasActiveFilters,
+}: {
+  search: ReturnType<typeof Route.useSearch>;
+  label: string;
+  hasActiveFilters: boolean;
+}) {
+  const navigate = useNavigate({ from: "/listings" });
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
+  const [open, setOpen] = useState(false);
+
+  // Saved searches are a client-only (localStorage) concept -- read the
+  // real list after mount, same hydration-safe shape saved-listings.ts's
+  // useFavourite() uses, so SSR markup and the client's first paint agree.
+  useEffect(() => {
+    setSavedSearches(getSavedSearches());
+  }, []);
+
+  function handleSave() {
+    const entry = saveSearch(label, { ...search });
+    setSavedSearches((prev) => [entry, ...prev].slice(0, 20));
+    toast.success("已儲存搜尋條件");
+  }
+
+  function handleApply(entry: SavedSearch) {
+    navigate({
+      // A saved search always re-applies from page 1 -- the result set may
+      // have moved on since it was saved, so resuming at a stale page
+      // number could land past the new end of the results.
+      search: (_prev: Record<string, unknown>) => ({
+        ...entry.params,
+        page: 1,
+      }),
+    });
+    setOpen(false);
+  }
+
+  function handleDelete(id: string) {
+    setSavedSearches(deleteSavedSearch(id));
+  }
+
+  if (!hasActiveFilters && savedSearches.length === 0) return null;
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      {hasActiveFilters && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleSave}
+          className="gap-1.5"
+        >
+          <BookmarkPlus className="h-4 w-4" />
+          儲存呢個搜尋
+        </Button>
+      )}
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="ghost" size="sm" className="gap-1.5">
+            <Bookmark className="h-4 w-4" />
+            已儲存搜尋
+            {savedSearches.length > 0 && (
+              <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
+                {savedSearches.length}
+              </span>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-80">
+          <h3 className="text-sm font-semibold">已儲存搜尋</h3>
+          {savedSearches.length === 0 ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              未有已儲存嘅搜尋。設定篩選條件後可以按「儲存呢個搜尋」。
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {savedSearches.map((entry) => (
+                <li
+                  key={entry.id}
+                  className="flex items-center gap-2 rounded-md border p-2"
+                >
+                  <button
+                    type="button"
+                    onClick={() => handleApply(entry)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block truncate text-sm font-medium">
+                      {entry.label}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {formatSavedAt(entry.savedAt)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(entry.id)}
+                    aria-label={`刪除已儲存搜尋：${entry.label}`}
+                    className="flex-shrink-0 rounded-full p-1.5 text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function ListingsPendingComponent() {
   return (
     <div className="bg-background">
@@ -895,6 +1051,12 @@ function ListingsPage() {
             )}
           </div>
 
+          <SavedSearchesPanel
+            search={search}
+            label={searchSummary}
+            hasActiveFilters={activeChips.length > 0}
+          />
+
           {activeChips.length > 0 && (
             <div className="mb-5 flex flex-wrap items-center gap-2">
               {activeChips.map((chip) => (
@@ -998,6 +1160,7 @@ function handleCardShare(title: string, listingNo: string) {
 
 function ListingCard({ p }: { p: ListingRow }) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
+  const { favourited, toggle } = useFavourite(p.listing_no);
 
   return (
     <li className="group relative overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
@@ -1050,9 +1213,23 @@ function ListingCard({ p }: { p: ListingRow }) {
           </div>
         </div>
       </Link>
-      {/* Sibling of <Link>, not nested inside it -- a <button> inside an
-          <a> is invalid HTML and would confuse screen readers about which
-          element the click activates. */}
+      {/* Both siblings of <Link>, not nested inside it -- a <button> inside
+          an <a> is invalid HTML and would confuse screen readers about
+          which element the click activates (same structural fix the share
+          button above already applies). */}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={
+          favourited ? `已加入心水：${safeTitle}` : `加入心水：${safeTitle}`
+        }
+        aria-pressed={favourited}
+        className="absolute right-10 top-2 z-10 rounded-full bg-background/90 p-1.5 text-foreground shadow-sm transition hover:bg-background"
+      >
+        <Heart
+          className={`h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`}
+        />
+      </button>
       <button
         type="button"
         onClick={() => handleCardShare(safeTitle, p.listing_no)}
@@ -1070,6 +1247,7 @@ function ListingCard({ p }: { p: ListingRow }) {
 // deriveListingCardData() rather than re-deriving price itself.
 function ListingCardRow({ p }: { p: ListingRow }) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
+  const { favourited, toggle } = useFavourite(p.listing_no);
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
@@ -1132,16 +1310,31 @@ function ListingCardRow({ p }: { p: ListingRow }) {
             </div>
           </div>
         </Link>
-        {/* Sibling of <Link>, self-start-aligned so it sits at the row's
-            top-right rather than stretching to its full height. */}
-        <button
-          type="button"
-          onClick={() => handleCardShare(safeTitle, p.listing_no)}
-          aria-label={`分享：${safeTitle}`}
-          className="flex h-8 w-8 flex-shrink-0 items-center justify-center self-start rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        >
-          <Share2 className="h-4 w-4" />
-        </button>
+        {/* Both siblings of <Link>, self-start-aligned so they sit at the
+            row's top-right rather than stretching to its full height. */}
+        <div className="flex flex-shrink-0 items-start gap-1 self-start">
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={
+              favourited ? `已加入心水：${safeTitle}` : `加入心水：${safeTitle}`
+            }
+            aria-pressed={favourited}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          >
+            <Heart
+              className={`h-4 w-4 ${favourited ? "fill-coral text-coral" : ""}`}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleCardShare(safeTitle, p.listing_no)}
+            aria-label={`分享：${safeTitle}`}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </li>
   );
