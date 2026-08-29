@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
+import { formatHkd, formatHkDate, formatSaleDisplay } from "@/lib/format";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 
@@ -393,12 +394,12 @@ function ListingCard({ p }: { p: ListingRow }) {
   const price =
     p.deal_type === "rent"
       ? p.rent
-        ? `HK$${p.rent.toLocaleString()}/月`
+        ? `HK${formatHkd(p.rent)}/月`
         : "—"
       : p.price
-        ? `HK$${(p.price / 1_000_000).toFixed(2)}M`
+        ? `HK${formatSaleDisplay(p.price)}`
         : "—";
-  const lastSeen = p.last_seen_at ? new Date(p.last_seen_at).toLocaleDateString("zh-HK") : null;
+  const lastSeen = formatHkDate(p.last_seen_at);
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
