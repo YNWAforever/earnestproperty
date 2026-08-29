@@ -75,6 +75,11 @@ import {
   resolveWhatsappStatus,
 } from "./command-center";
 import { persistWebsiteInquiry } from "./website-inquiry.js";
+import {
+  persistListingAlert,
+  LISTING_ALERT_CONSENT_TEXT,
+  LISTING_ALERT_CONSENT_VERSION,
+} from "./listing-alerts.js";
 import { woztellEnabled } from "../woztell/woztell.server";
 
 /**
@@ -3235,6 +3240,35 @@ export async function updateInquiryStatus(id: string, status: string, actor: Sta
 
 export async function queueCampaign(id: string, actor: StaffAccess) {
   return queueAdminCampaign(id, actor);
+}
+
+// Public, unauthenticated write path -- backs /listings' zero-results
+// notify-me form. Deliberately does NOT write into
+// crm_contacts/crm_leads/inquiries the way createWebsiteInquiry above does:
+// see neon/migrations/20260830120000_listing_alerts.sql for why this stays
+// its own table with its own consent columns.
+export async function createListingAlert(input: {
+  name: string;
+  phone: string;
+  email?: string | null;
+  filters?: Record<string, unknown>;
+  utm?: Record<string, string>;
+}) {
+  const email = input.email ? input.email : null;
+  return persistListingAlert(queryRows, {
+    name: input.name,
+    phone: input.phone,
+    email,
+    filters: input.filters ?? {},
+    // Always the server's own constants, never a caller-supplied value --
+    // otherwise an unauthenticated caller could write arbitrary text into
+    // consent_text/consent_version and the column would no longer reliably
+    // answer "what did this person actually agree to."
+    consentText: LISTING_ALERT_CONSENT_TEXT,
+    consentVersion: LISTING_ALERT_CONSENT_VERSION,
+    consentedAt: new Date().toISOString(),
+    utm: input.utm ?? {},
+  });
 }
 
 export async function writeAudit(

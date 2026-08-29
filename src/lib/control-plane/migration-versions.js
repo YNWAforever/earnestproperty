@@ -48,6 +48,12 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260816120000_staff_identity_actions.sql",
   "20260817120000_dual_source_listing_sync.sql",
   "20260817130000_youtube_channel_sync.sql",
+  // Pre-existing gap, unrelated to listing_alerts below: this migration was
+  // already on disk and already applied in production, but was never added
+  // here, so the drift check would have reported "0 pending" for it
+  // forever. Fixed while already in this exact file for the same reason.
+  "20260822120000_whatsapp_audience_segment_link.sql",
+  "20260830120000_listing_alerts.sql",
 ]);
 
 /**

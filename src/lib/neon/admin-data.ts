@@ -658,6 +658,82 @@ export const createWebsiteInquiry = createServerFn({ method: "POST" })
     return adminData.createWebsiteInquiry(data);
   });
 
+// /listings' zero-results notify-me form. The filter payload is the
+// validated /listings search-params object, spread as-is by the caller --
+// bounded below so an unauthenticated caller can't attach an arbitrarily
+// large JSON blob to a row.
+const listingAlertFiltersSchema = z
+  .record(z.string(), z.unknown())
+  .refine((value) => JSON.stringify(value).length <= 2000, {
+    message: "Filter payload too large",
+  });
+
+const listingAlertUtmSchema = z
+  .record(z.string(), z.string().max(200))
+  .refine((value) => Object.keys(value).length <= 10, {
+    message: "Too many UTM parameters",
+  });
+
+const listingAlertSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    // Mirrors websiteInquirySchema's phone constraint above -- same regex,
+    // same bounds, so both public forms reject the same malformed input.
+    phone: z
+      .string()
+      .trim()
+      .min(8)
+      .max(30)
+      .regex(/^[\d+\-\s()]+$/),
+    email: z.string().trim().max(254).email().optional().or(z.literal("")),
+    filters: listingAlertFiltersSchema.default({}),
+    // Never preselected client-side (see listings.tsx) and never optional
+    // here: a submission with consent !== true fails validation rather than
+    // silently persisting with no evidence consent was ever given.
+    consent: z.literal(true),
+    utm: listingAlertUtmSchema.default({}),
+  })
+  // Public, untrusted path: strip anything else, including a caller-supplied
+  // consent_text/consent_version -- those are always the server's own
+  // constants (see admin-data.server.ts's createListingAlert).
+  .strip();
+
+export type ListingAlertInput = z.infer<typeof listingAlertSchema>;
+
+// Same profile as WEBSITE_INQUIRY_RATE_LIMIT_PER_IP above: an unauthenticated
+// public path that inserts exactly one row per submission. Reuses those
+// exact numbers rather than inventing new ones with no traffic data to tune
+// against.
+const LISTING_ALERT_RATE_LIMIT_PER_IP = 5;
+const LISTING_ALERT_RATE_LIMIT_PER_IP_PHONE = 3;
+const LISTING_ALERT_RATE_WINDOW_SECONDS = 60;
+
+export const createListingAlert = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => listingAlertSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { clientIpFromRequest, enforceRateLimit } = await import("@/lib/ratelimit.server");
+    const request = getRequest();
+    const clientIp = clientIpFromRequest(request);
+
+    await enforceRateLimit({
+      key: `listing-alert:ip:${clientIp}`,
+      limit: LISTING_ALERT_RATE_LIMIT_PER_IP,
+      windowSeconds: LISTING_ALERT_RATE_WINDOW_SECONDS,
+    });
+
+    const phoneDigits = data.phone.replace(/\D/g, "");
+    if (phoneDigits) {
+      await enforceRateLimit({
+        key: `listing-alert:ip-phone:${clientIp}:${phoneDigits}`,
+        limit: LISTING_ALERT_RATE_LIMIT_PER_IP_PHONE,
+        windowSeconds: LISTING_ALERT_RATE_WINDOW_SECONDS,
+      });
+    }
+
+    const adminData = await import("./admin-data.server");
+    return adminData.createListingAlert(data);
+  });
+
 const updateAdminInquiryStatusServer = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string; status: string }) => data)
   .handler(async ({ data }) => {

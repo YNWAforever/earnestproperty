@@ -464,3 +464,62 @@ test("lib/share.ts exports the reusable shareUrl helper and property.$listingNo.
     /await navigator\.clipboard\.writeText\(url\);/,
   );
 });
+
+test("the zero-results notify-me form's consent checkbox is never preselected", () => {
+  const formStart = source.indexOf("function ListingAlertForm(");
+  assert.notEqual(formStart, -1, "ListingAlertForm must exist");
+  const formEnd = source.indexOf("\nfunction ListingsPendingComponent", formStart);
+  const formSource = source.slice(formStart, formEnd);
+
+  // The literal default value, not just "a checkbox exists somewhere" --
+  // useState(false), never useState(true) and never seeded from a prop.
+  assert.match(formSource, /const \[consent, setConsent\] = useState\(false\);/);
+  assert.doesNotMatch(formSource, /useState\(true\)/);
+
+  assert.match(formSource, /<Checkbox\b/);
+  assert.match(formSource, /checked=\{consent\}/);
+  assert.match(formSource, /id="alert-consent"/);
+  // The consent copy is real, specific text -- imported from the same
+  // module the server persists it from, not a locally-duplicated string.
+  assert.match(
+    formSource,
+    /\{LISTING_ALERT_CONSENT_TEXT\}/,
+  );
+  assert.doesNotMatch(formSource, /我同意接收/);
+
+  // Submission is gated on the checkbox, both via the disabled submit
+  // button and a defensive check inside the submit handler itself.
+  assert.match(formSource, /disabled=\{submitting \|\| !consent\}/);
+  assert.match(formSource, /if \(!consent\) \{/);
+});
+
+test("the notify-me form submits the CURRENT validated search filters, and is wired to the real server fn (not a stub)", () => {
+  assert.match(
+    source,
+    /import \{ createListingAlert \} from "@\/lib\/neon\/admin-data";/,
+  );
+  assert.match(
+    source,
+    /import \{ LISTING_ALERT_CONSENT_TEXT \} from "@\/lib\/neon\/listing-alerts\.js";/,
+  );
+
+  const formStart = source.indexOf("function ListingAlertForm(");
+  const formEnd = source.indexOf("\nfunction ListingsPendingComponent", formStart);
+  const formSource = source.slice(formStart, formEnd);
+
+  assert.match(formSource, /await createListingAlert\(\{/);
+  assert.match(formSource, /filters: \{ \.\.\.search \}/);
+  assert.match(formSource, /consent,/);
+});
+
+test("ListingAlertForm renders inside the zero-results branch, alongside the existing SearchFallbackCTA", () => {
+  const zeroResultsStart = source.indexOf("rows.length === 0 ? (");
+  assert.notEqual(zeroResultsStart, -1);
+  const zeroResultsBlock = source.slice(
+    zeroResultsStart,
+    source.indexOf(") : viewMode === \"grid\"", zeroResultsStart),
+  );
+
+  assert.match(zeroResultsBlock, /<SearchFallbackCTA/);
+  assert.match(zeroResultsBlock, /<ListingAlertForm search=\{search\} \/>/);
+});
