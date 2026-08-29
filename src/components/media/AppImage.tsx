@@ -38,6 +38,10 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
   ) => {
     const [failed, setFailed] = React.useState(false);
 
+    React.useEffect(() => {
+      setFailed(false);
+    }, [src]);
+
     if (!src || failed) {
       return <>{fallback ?? DEFAULT_FALLBACK}</>;
     }
