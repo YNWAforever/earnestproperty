@@ -14,12 +14,6 @@ export interface AppImageProps extends Omit<
   fallback?: React.ReactNode;
 }
 
-const DEFAULT_FALLBACK = (
-  <div className="flex h-full w-full items-center justify-center bg-muted text-sm text-muted-foreground">
-    晉誠地產
-  </div>
-);
-
 const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
   (
     {
@@ -43,7 +37,18 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
     }, [src]);
 
     if (!src || failed) {
-      return <>{fallback ?? DEFAULT_FALLBACK}</>;
+      return (
+        fallback ?? (
+          <div
+            className={cn(
+              "flex items-center justify-center bg-muted text-sm text-muted-foreground",
+              className,
+            )}
+          >
+            晉誠地產
+          </div>
+        )
+      );
     }
 
     return (

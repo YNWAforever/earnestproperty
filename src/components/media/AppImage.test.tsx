@@ -56,10 +56,19 @@ describe("AppImage", () => {
 
   test("renders the default branded fallback and no img tag when src is null", () => {
     const $ = render(
-      createElement(AppImage, { src: null, alt: "a", width: 1, height: 1 }),
+      createElement(AppImage, {
+        src: null,
+        alt: "a",
+        width: 1,
+        height: 1,
+        className: "h-64 w-full",
+      }),
     );
     expect($("img")).toHaveLength(0);
     expect($.text()).toBe("晉誠地產");
+    const fallback = $("div").first();
+    expect(fallback.hasClass("h-64")).toBe(true);
+    expect(fallback.hasClass("w-full")).toBe(true);
   });
 
   test("renders the default branded fallback and no img tag when src is undefined", () => {
@@ -69,10 +78,29 @@ describe("AppImage", () => {
         alt: "a",
         width: 1,
         height: 1,
+        className: "h-64 w-full",
       }),
     );
     expect($("img")).toHaveLength(0);
     expect($.text()).toBe("晉誠地產");
+    const fallback = $("div").first();
+    expect(fallback.hasClass("h-64")).toBe(true);
+    expect(fallback.hasClass("w-full")).toBe(true);
+  });
+
+  test("the default fallback receives the caller's className, matching what the img would have gotten", () => {
+    const $ = render(
+      createElement(AppImage, {
+        src: null,
+        alt: "a",
+        width: 1,
+        height: 1,
+        className: "h-64 w-full",
+      }),
+    );
+    const fallback = $("div").first();
+    expect(fallback.hasClass("h-64")).toBe(true);
+    expect(fallback.hasClass("w-full")).toBe(true);
   });
 
   test("renders a caller-supplied fallback instead of the default when src is missing", () => {
