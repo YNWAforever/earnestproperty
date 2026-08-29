@@ -41,7 +41,12 @@ import {
   type EstateTransaction,
 } from "@/lib/queries";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
-import { formatHkd, formatHkDate, formatSaleDisplay } from "@/lib/format";
+import {
+  formatArea,
+  formatHkd,
+  formatHkDate,
+  formatSaleDisplay,
+} from "@/lib/format";
 import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
@@ -61,6 +66,18 @@ type PropertyHeadData = {
     "listing_no" | "title_zh" | "deal_type" | "rent" | "price" | "description" | "images"
   >;
 };
+
+function formatDealPrice(
+  isRent: boolean,
+  rent: number | null,
+  price: number | null,
+): string {
+  if (isRent) {
+    const rentDisplay = formatHkd(rent);
+    return rentDisplay ? `${rentDisplay} / 月` : "—";
+  }
+  return formatSaleDisplay(price) ?? "—";
+}
 
 export const Route = createFileRoute("/property/$listingNo")({
   loader: async ({ params }) => {
@@ -171,15 +188,11 @@ function PropertyPage() {
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
 
   const isRent = property.deal_type === "rent";
-  const rentDisplay = formatHkd(Number(property.rent));
-  const saleDisplay = formatSaleDisplay(Number(property.price));
-  const priceLabel = isRent
-    ? rentDisplay
-      ? `${rentDisplay} / 月`
-      : "—"
-    : saleDisplay
-      ? saleDisplay
-      : "—";
+  const priceLabel = formatDealPrice(
+    isRent,
+    Number(property.rent),
+    Number(property.price),
+  );
   const psf =
     property.price && property.saleable_area
       ? Math.round(Number(property.price) / property.saleable_area)
@@ -330,9 +343,7 @@ function PropertyPage() {
     ],
   };
 
-  const updatedAt = property.updated_at
-    ? new Date(property.updated_at).toLocaleDateString("zh-HK")
-    : null;
+  const updatedAt = formatHkDate(property.updated_at);
 
   const mapSrc =
     estate?.lat && estate?.lng
@@ -396,6 +407,11 @@ function PropertyPage() {
         ) : null}
         <p className="mt-4 text-3xl font-bold text-primary">
           {priceLabel}
+          {/* psf/grossPsf guard the raw value, not formatHkd's return -- a negative
+              property.price (no DB CHECK stops one; see 872c338/f9eeeb2) makes
+              formatHkd return null, which React drops silently as a bare JSX child,
+              leaving a dangling "實呎 "/"建呎 " label with no number (not literal
+              "null" text, unlike index.tsx's PropertyCard, commit bd9f1bf). */}
           {psf && !isRent ? (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               實呎 {formatHkd(psf)}
@@ -429,9 +445,7 @@ function PropertyPage() {
           <Spec label="座向" value={property.orientation ?? "—"} />
           <Spec
             label="管理費"
-            value={
-              property.management_fee ? `$${Number(property.management_fee).toLocaleString()}` : "—"
-            }
+            value={formatHkd(property.management_fee) ?? "—"}
           />
           <Spec
             icon={<Calendar className="h-4 w-4" />}
@@ -651,15 +665,13 @@ function PropertyPage() {
                           </TableCell>
                           <TableCell>{t.unit ?? "—"}</TableCell>
                           <TableCell className="text-right">
-                            {t.saleable_area ? `${t.saleable_area} 呎` : "—"}
+                            {formatArea(t.saleable_area) ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {t.price ? `$${(Number(t.price) / 1_000_000).toFixed(2)}M` : "—"}
+                            {formatSaleDisplay(Number(t.price)) ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {t.saleable_psf
-                              ? `$${Math.round(Number(t.saleable_psf)).toLocaleString()}`
-                              : "—"}
+                            {formatHkd(Number(t.saleable_psf)) ?? "—"}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -793,13 +805,11 @@ function Spec({
 function SimilarCard({ listing }: { listing: SimilarListing }) {
   const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
   const isRent = listing.deal_type === "rent";
-  const price = isRent
-    ? listing.rent
-      ? `$${Number(listing.rent).toLocaleString()} / 月`
-      : "—"
-    : listing.price
-      ? `$${(Number(listing.price) / 1_000_000).toFixed(2)}M`
-      : "—";
+  const price = formatDealPrice(
+    isRent,
+    Number(listing.rent),
+    Number(listing.price),
+  );
   return (
     <Link
       to="/property/$listingNo"
