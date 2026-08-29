@@ -15,8 +15,11 @@ test("Neon Auth TanStack Router integration is wired", () => {
   assert.ok(dependencies["@neondatabase/auth-ui"], "@neondatabase/auth-ui must be installed");
   assert.ok(existsSync(".neon"), ".neon context file must exist");
 
-  const env = read(".env");
-  assert.match(env, /^VITE_NEON_AUTH_URL=/m);
+  // .env itself is gitignored (untracked since ad60b7d) and won't exist in a
+  // fresh checkout (CI included) -- .env.example is the tracked source of
+  // truth for which vars this integration expects.
+  const envExample = read(".env.example");
+  assert.match(envExample, /^VITE_NEON_AUTH_URL=/m);
 
   const styles = read("src/styles.css");
   assert.match(styles, /@import ['"]@neondatabase\/neon-js\/ui\/tailwind['"]/);
