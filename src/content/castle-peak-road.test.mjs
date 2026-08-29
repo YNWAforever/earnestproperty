@@ -371,6 +371,38 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   // coverage.
 });
 
+test("castle-peak-road.ts never names a specific school in schoolNet copy (DR-5)", () => {
+  // Distinguishes a generic net-code sentence ("62 校網。實際派位..." or
+  // "中學屬荃灣中學校網。" as used in district.sham-tseng.tsx's DataNote)
+  // from a named school ("深井天主教小學"): a run of 2-8 Han characters
+  // directly abutting 小學/中學, that is NOT itself immediately followed by
+  // 校 (which would make it "...中學校網" -- the net-code word, not a
+  // school name). A plain check for "does the string contain 小學 or 中學"
+  // would false-positive on "中學屬荃灣中學校網。", which names no school.
+  const NAMED_SCHOOL_PATTERN = /[\u4e00-\u9fff]{2,8}(?:小學|中學)(?!\s*校)/;
+
+  // Self-check against representative strings before trusting the regex on
+  // the real registry, per the plan's instruction to verify it actually
+  // distinguishes a generic net-code sentence from a named school, rather
+  // than just checking for the presence of 小學/中學.
+  assert.doesNotMatch(
+    "62 校網。實際派位及校網資料以教育局最新公布為準。",
+    NAMED_SCHOOL_PATTERN,
+  );
+  assert.doesNotMatch("中學屬荃灣中學校網。", NAMED_SCHOOL_PATTERN);
+  assert.match("深井天主教小學", NAMED_SCHOOL_PATTERN);
+  assert.match("海壩街官立小學", NAMED_SCHOOL_PATTERN);
+
+  for (const segment of castlePeakRoadSegments) {
+    if (!segment.schoolNet) continue;
+    assert.doesNotMatch(
+      segment.schoolNet,
+      NAMED_SCHOOL_PATTERN,
+      `${segment.slug}'s schoolNet must stay a generic net-code sentence, not a named school`,
+    );
+  }
+});
+
 test("Ting Kau's strict alias set excludes the castle-peak-road catch-all and the dead yau-kom-tau slug", () => {
   const tingKau = castlePeakRoadSegments.find((s) => s.slug === "ting-kau");
   assert.ok(tingKau);

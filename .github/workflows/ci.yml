@@ -105,6 +105,11 @@ jobs:
       - run: npm run test:media
       - run: npm run test:styles
 
+      # Added during P2 (data trust): src/routes/district.sham-tseng.test.mjs
+      # didn't exist at P1 baseline -- it guards DR-5 (no unsourced school
+      # list on the 深井 district page).
+      - run: npm run test:district
+
       # Pre-existing failure: expects src/routes/api.youtube-sync.tsx; the actual
       # route file has a different extension/name. See baseline report.
       - run: npm run test:blog

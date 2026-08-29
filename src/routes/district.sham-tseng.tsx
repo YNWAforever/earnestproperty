@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/accordion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { DataNote } from "@/components/layout/DataNote";
 import {
   fetchEstates,
   fetchFaqs,
@@ -27,6 +28,7 @@ import {
 import { renderableFaqs } from "@/lib/faq";
 import { SITE_URL, pageSeo } from "@/content/seo";
 import { jsonLdScript } from "@/lib/schema";
+import { shamTsengSchoolNet } from "@/content/school-nets";
 
 type LoaderData = {
   estates: EstateSummary[];
@@ -93,14 +95,6 @@ const TRANSIT = [
   { to: "尖沙咀", mode: "巴士 234X", minutes: 30 },
   { to: "機場", mode: "巴士 E32 / 青馬大橋", minutes: 22 },
   { to: "港珠澳大橋口岸", mode: "巴士 B6", minutes: 25 },
-];
-
-const SCHOOLS = [
-  { name: "深井天主教小學", type: "資助" },
-  { name: "陳瑞祺（喇沙）小學（深井）", type: "資助" },
-  { name: "海壩街官立小學", type: "官立" },
-  { name: "聖公會主愛小學（梨木樹）", type: "資助" },
-  { name: "寶安商會温浩根小學", type: "資助" },
 ];
 
 function aggregateByMonth(rows: DistrictTransaction[]) {
@@ -245,22 +239,30 @@ function ShamTsengPage() {
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-muted-foreground">
-              深井屬荃灣 62 校網，包括以下熱門小學：
+              深井屬荃灣 {shamTsengSchoolNet.netCode} 校網。
             </p>
-            <ul className="space-y-2">
-              {SCHOOLS.map((s) => (
-                <li
-                  key={s.name}
-                  className="flex items-center justify-between rounded-md border px-3 py-2"
-                >
-                  <span>{s.name}</span>
-                  <Badge variant="outline">{s.type}</Badge>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 text-xs text-muted-foreground">
-              中學屬荃灣中學校網。實際派位以教育局公告為準。
-            </p>
+            {shamTsengSchoolNet.primarySchools.length > 0 ? (
+              <ul className="space-y-2">
+                {shamTsengSchoolNet.primarySchools.map((s) => (
+                  <li
+                    key={s.name}
+                    className="flex items-center justify-between rounded-md border px-3 py-2"
+                  >
+                    <span>{s.name}</span>
+                    <Badge variant="outline">{s.type}</Badge>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <DataNote
+              className="mt-4"
+              source={shamTsengSchoolNet.source}
+              sourceUrl={shamTsengSchoolNet.sourceUrl ?? undefined}
+              asOf={shamTsengSchoolNet.verifiedOn ?? undefined}
+              caveat="實際派位及校網資料以教育局最新公布為準，並因應個別地址及入學年度而有所不同。"
+            >
+              中學屬荃灣中學校網。
+            </DataNote>
           </CardContent>
         </Card>
       </section>
