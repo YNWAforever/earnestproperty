@@ -8,6 +8,7 @@ import {
   formatHkDateTime,
   formatManDisplay,
   formatPsf,
+  formatSaleDisplay,
   sanitizeListingText,
 } from "./format";
 
@@ -211,5 +212,23 @@ describe("sanitizeListingText", () => {
     expect(sanitizeListingText("三房兩廳，向南，望花園")).toBe(
       "三房兩廳，向南，望花園",
     );
+  });
+});
+
+describe("formatSaleDisplay", () => {
+  test("formats a sale price in millions with two decimal places and an M suffix", () => {
+    expect(formatSaleDisplay(12800000)).toBe("$12.80M");
+  });
+
+  test("rounds to two decimal places", () => {
+    expect(formatSaleDisplay(5678900)).toBe("$5.68M");
+  });
+
+  test("returns null for null, undefined, zero, negative, and non-finite input", () => {
+    expect(formatSaleDisplay(null)).toBeNull();
+    expect(formatSaleDisplay(undefined)).toBeNull();
+    expect(formatSaleDisplay(0)).toBeNull();
+    expect(formatSaleDisplay(-1_000_000)).toBeNull();
+    expect(formatSaleDisplay(Number.NaN)).toBeNull();
   });
 });

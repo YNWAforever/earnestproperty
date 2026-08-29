@@ -21,6 +21,13 @@ export function formatManDisplay(
   return `${display}萬`;
 }
 
+export function formatSaleDisplay(
+  price: number | null | undefined,
+): string | null {
+  if (!isFiniteNumber(price) || price <= 0) return null;
+  return `$${(price / 1_000_000).toFixed(2)}M`;
+}
+
 export function formatArea(sqft: number | null | undefined): string | null {
   if (!isFiniteNumber(sqft) || sqft <= 0) return null;
   return `${Math.round(sqft).toLocaleString(HK_NUMBER_LOCALE)} 呎`;
