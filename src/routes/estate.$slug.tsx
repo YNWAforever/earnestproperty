@@ -6,6 +6,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
+import { AppImage } from "@/components/media/AppImage";
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
@@ -341,13 +342,13 @@ function EstateListingCard({ listing }: { listing: ListingRow }) {
       className="overflow-hidden rounded-lg border bg-card transition hover:shadow-card"
     >
       <div className="aspect-[4/3] bg-muted">
-        {listing.images?.[0] && (
-          <img
-            src={listing.images[0]}
-            alt={listing.title_zh}
-            className="h-full w-full object-cover"
-          />
-        )}
+        <AppImage
+          src={listing.images?.[0]}
+          alt={listing.title_zh}
+          width={400}
+          height={300}
+          className="h-full w-full object-cover"
+        />
       </div>
       <div className="p-4">
         <p className="text-lg font-bold text-primary">{price}</p>

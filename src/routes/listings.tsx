@@ -16,6 +16,7 @@ import {
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { formatHkd, formatHkDate, formatSaleDisplay } from "@/lib/format";
+import { AppImage } from "@/components/media/AppImage";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 
@@ -407,10 +408,11 @@ function ListingCard({ p }: { p: ListingRow }) {
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
       <Link to="/property/$listingNo" params={{ listingNo: p.listing_no }}>
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
-          <img
+          <AppImage
             src={cover}
             alt={p.title_zh}
-            loading="lazy"
+            width={400}
+            height={300}
             className="h-full w-full object-cover transition group-hover:scale-105"
           />
           <span className="absolute left-2 top-2 rounded bg-background/90 px-2 py-0.5 text-[11px] font-medium">

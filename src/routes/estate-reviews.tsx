@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen, Building2, MessageCircle } from "lucide-react";
 
+import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
@@ -121,11 +122,14 @@ function ArticleCard({ article }: { article: ArticleSummary }) {
       className="overflow-hidden rounded-lg border bg-card shadow-card transition hover:-translate-y-0.5 hover:shadow-elegant"
     >
       <div className="flex aspect-video items-center justify-center bg-primary/10 text-primary">
-        {article.cover_image ? (
-          <img src={article.cover_image} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <BookOpen className="h-8 w-8" />
-        )}
+        <AppImage
+          src={article.cover_image}
+          alt=""
+          width={640}
+          height={360}
+          className="h-full w-full object-cover"
+          fallback={<BookOpen className="h-8 w-8" />}
+        />
       </div>
       <div className="p-5">
         <p className="text-xs font-semibold text-coral">{article.category ?? "屋苑開箱"}</p>

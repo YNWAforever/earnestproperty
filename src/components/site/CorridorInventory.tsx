@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 
+import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { formatHkd, formatSaleDisplay } from "@/lib/format";
@@ -29,19 +30,13 @@ function ListingMiniCard({ listing }: { listing: ListingRow }) {
       className="group overflow-hidden rounded-lg border bg-card transition hover:border-primary hover:shadow-card"
     >
       <div className="aspect-[4/3] bg-muted">
-        {cover ? (
-          <img
-            src={cover}
-            alt={listing.title_zh}
-            loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            晉誠地產
-          </div>
-        )}
+        <AppImage
+          src={cover}
+          alt={listing.title_zh}
+          width={400}
+          height={300}
+          className="h-full w-full object-cover"
+        />
       </div>
       <div className="p-4">
         <p className="text-base font-bold text-primary">{formatPrice(listing)}</p>
