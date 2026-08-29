@@ -4,7 +4,12 @@ import { MessageCircle, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
-import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
+import {
+  formatArea,
+  formatHkd,
+  formatHkDate,
+  formatManDisplay,
+} from "@/lib/format";
 import { fetchRecentTransactions, type RecentTransaction } from "@/lib/queries";
 
 const DISTRICT_LABELS: Record<string, string> = {
