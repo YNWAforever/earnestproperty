@@ -1,15 +1,9 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import type { DataAttributes } from "./types";
 
-// The `data-${string}` index signature lets callers (tests, analytics hooks)
-// pass arbitrary `data-*` attributes through `React.createElement` -- JSX
-// already allows this on intrinsic elements, but `React.HTMLAttributes`
-// alone doesn't, so plain `createElement({ "data-testid": ... })` calls fail
-// tsc's excess-property check without it.
-type ContainerProps = React.HTMLAttributes<HTMLDivElement> & {
-  [key: `data-${string}`]: string | number | boolean | undefined;
-};
+type ContainerProps = React.HTMLAttributes<HTMLDivElement> & DataAttributes;
 
 const Container = React.forwardRef<HTMLDivElement, ContainerProps>(
   ({ className, ...props }, ref) => (
