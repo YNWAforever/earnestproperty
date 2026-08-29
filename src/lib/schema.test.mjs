@@ -43,13 +43,19 @@ test("every named structured-data gap is wired into its route", () => {
   // the old `uploadDate={video.created_at}` spelling would fail on a refactor
   // that kept the wiring perfectly intact.
   assert.match(videos, /uploadDate[:=]\s*\{?\s*video\.created_at/);
-  // Paging and the search filter must never shrink the structured data: the
-  // cards render twelve at a time, but crawlers have to see every video, so the
-  // schema block takes the unfiltered lists.
-  assert.match(
+  // DR-6: structured data for content the page doesn't render is misleading to
+  // crawlers and inflates payload for no benefit, so the schema block takes the
+  // same paged/filtered lists as the visible card grids -- not the raw,
+  // unbounded loader data.
+  assert.doesNotMatch(
     videos,
     /<AllVideoSchemas[\s\S]*?cmsVideos=\{cmsVideos\}[\s\S]*?listingVideos=\{listingVideos\}/,
-    "AllVideoSchemas must receive the full lists, not the paged or filtered slice",
+    "AllVideoSchemas must not receive the raw, unbounded loader lists",
+  );
+  assert.match(
+    videos,
+    /<AllVideoSchemas[\s\S]*?cmsVideos=\{visibleCmsVideos\}[\s\S]*?listingVideos=\{matchingListingVideos\}/,
+    "AllVideoSchemas must receive the rendered/filtered subset",
   );
 });
 
