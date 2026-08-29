@@ -8,6 +8,7 @@ import {
   formatHkDateTime,
   formatManDisplay,
   formatPsf,
+  sanitizeListingText,
 } from "./format";
 
 describe("formatHkd", () => {
@@ -160,5 +161,55 @@ describe("formatFreshness", () => {
     expect(formatFreshness(null, now)).toBeNull();
     expect(formatFreshness(undefined, now)).toBeNull();
     expect(formatFreshness("not a date", now)).toBeNull();
+  });
+});
+
+describe("sanitizeListingText", () => {
+  test("strips control characters", () => {
+    // The character between 正常 and 文字 is a literal NUL (U+0000) control
+    // character, written as an explicit escape so the test is unambiguous --
+    // not a printable space. A correct control-char strip removes it
+    // entirely (no space is introduced), joining the two words directly.
+    expect(sanitizeListingText("正常\u0000文字")).toBe("正常文字");
+  });
+
+  test("collapses runs of whitespace and trims", () => {
+    expect(sanitizeListingText("  海景   單位   \n\n望向大海  ")).toBe(
+      "海景 單位 望向大海",
+    );
+  });
+
+  test("strips wrapping quotes left over from a CSV export", () => {
+    expect(sanitizeListingText('"高層開揚"')).toBe("高層開揚");
+  });
+
+  test("collapses repeated CSV delimiters left over from empty cells", () => {
+    expect(sanitizeListingText("三房兩廳,,,,連車位")).toBe("三房兩廳,連車位");
+  });
+
+  test("suppresses exact malformed-import tokens to null", () => {
+    expect(sanitizeListingText("NaN")).toBeNull();
+    expect(sanitizeListingText("null")).toBeNull();
+    expect(sanitizeListingText("undefined")).toBeNull();
+    expect(sanitizeListingText("$0")).toBeNull();
+    expect(sanitizeListingText("- 房")).toBeNull();
+    expect(sanitizeListingText("-房")).toBeNull();
+  });
+
+  test("does not suppress legitimate text that merely contains a suppressed token as a substring", () => {
+    expect(sanitizeListingText("業主誠意放盤，樓價$0手續費")).not.toBeNull();
+  });
+
+  test("returns null for empty, whitespace-only, null, and undefined input", () => {
+    expect(sanitizeListingText("")).toBeNull();
+    expect(sanitizeListingText("   ")).toBeNull();
+    expect(sanitizeListingText(null)).toBeNull();
+    expect(sanitizeListingText(undefined)).toBeNull();
+  });
+
+  test("passes through well-formed text unchanged", () => {
+    expect(sanitizeListingText("三房兩廳，向南，望花園")).toBe(
+      "三房兩廳，向南，望花園",
+    );
   });
 });

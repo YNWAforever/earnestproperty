@@ -91,3 +91,28 @@ export function formatFreshness(
   if (diffDays < 30) return `${diffDays} 日前更新`;
   return `${formatHkDate(date)} 更新`;
 }
+
+// C0 controls except tab/LF/CR (handled by the whitespace-collapse step
+// below), plus DEL and the C1 control range. Matching control characters is
+// this regex's entire purpose, so disable the no-control-regex lint rule.
+const CONTROL_CHAR_PATTERN =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g;
+const WRAPPING_QUOTES_PATTERN = /^"+|"+$/g;
+const REPEATED_DELIMITER_PATTERN = /,{2,}/g;
+const EXACT_MALFORMED_TOKEN_PATTERN = /^(NaN|null|undefined|-\s*房|\$0)$/;
+
+export function sanitizeListingText(
+  input: string | null | undefined,
+): string | null {
+  if (input === null || input === undefined) return null;
+
+  let text = input.replace(CONTROL_CHAR_PATTERN, "");
+  text = text.replace(WRAPPING_QUOTES_PATTERN, "");
+  text = text.replace(REPEATED_DELIMITER_PATTERN, ",");
+  text = text.replace(/\s+/g, " ").trim();
+
+  if (text === "" || EXACT_MALFORMED_TOKEN_PATTERN.test(text)) return null;
+
+  return text;
+}
