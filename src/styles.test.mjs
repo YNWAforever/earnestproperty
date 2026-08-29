@@ -24,3 +24,11 @@ test("styles.css still keeps --coral as a working alias (not retired in P1 -- se
   const source = read("src/styles.css");
   assert.match(source, /--coral:\s*var\(--brand-primary\);/);
 });
+
+test("__root.tsx preloads the Google Fonts stylesheet ahead of the blocking stylesheet link", () => {
+  const source = read("src/routes/__root.tsx");
+  assert.match(
+    source,
+    /rel:\s*"preload",\s*\n\s*as:\s*"style",\s*\n\s*href:\s*"https:\/\/fonts\.googleapis\.com\/css2\?family=Inter/,
+  );
+});
