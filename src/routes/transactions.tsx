@@ -4,6 +4,7 @@ import { MessageCircle, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
+import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
 import { fetchRecentTransactions, type RecentTransaction } from "@/lib/queries";
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -120,7 +121,7 @@ function TransactionRow({ transaction }: { transaction: RecentTransaction }) {
       </td>
       <td className="px-4 py-3">{transaction.unit ?? "-"}</td>
       <td className="px-4 py-3">{formatPrice(transaction.price)}</td>
-      <td className="px-4 py-3">{formatArea(transaction.saleable_area)}</td>
+      <td className="px-4 py-3">{formatAreaCell(transaction.saleable_area)}</td>
       <td className="px-4 py-3">{formatPsf(transaction.saleable_psf)}</td>
     </tr>
   );
@@ -137,17 +138,22 @@ function transactionKey(transaction: RecentTransaction) {
 }
 
 function formatDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat("zh-HK").format(new Date(value)) : "-";
+  return formatHkDate(value) ?? "-";
 }
 
 function formatPrice(value: number | null) {
-  return value ? `HK$${(value / 10000).toLocaleString()}萬` : "-";
+  const man = formatManDisplay(value);
+  return man ? `HK$${man}` : "-";
 }
 
-function formatArea(value: number | null) {
-  return value ? `${value.toLocaleString()} 呎` : "-";
+function formatAreaCell(value: number | null) {
+  return formatArea(value) ?? "-";
 }
 
 function formatPsf(value: number | null) {
-  return value ? `HK$${value.toLocaleString()}` : "-";
+  // This local formatPsf takes an already-computed per-square-foot number (from
+  // transaction.saleable_psf), not a (price, area) pair -- it maps onto
+  // format.ts's formatHkd, not format.ts's formatPsf (which divides two inputs).
+  const hkd = formatHkd(value);
+  return hkd ? `HK${hkd}` : "-";
 }
