@@ -50,7 +50,7 @@ export type BlogArticleMeta = {
   links: readonly { href: string; label: string }[];
 };
 
-const EDITORIAL_AUTHOR = "晉誠地產編輯團隊";
+export const EDITORIAL_AUTHOR = "晉誠地產編輯團隊";
 
 const shamTsengSegment = castlePeakRoadSegments.find((segment) => segment.slug === "sham-tseng");
 if (!shamTsengSegment) {
