@@ -1,11 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock } from "lucide-react";
 
-import { blogArticles, canonicalLink, pageSeo } from "@/content/seo";
+import { blogArticles } from "@/content/blog-articles";
+import { canonicalLink, pageSeo } from "@/content/seo";
 import { fetchPublishedArticles, type ArticleSummary } from "@/lib/queries";
 
 type BlogCard = ArticleSummary & {
-  content?: readonly string[];
+  author?: string;
 };
 
 const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
@@ -16,7 +17,7 @@ const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
   category: article.category,
   reading_minutes: article.readingMinutes,
   published_at: "2026-06-22T00:00:00.000Z",
-  content: article.content,
+  author: article.author,
 }));
 
 const primaryArticleTitle = "深井買樓全攻略 2026";

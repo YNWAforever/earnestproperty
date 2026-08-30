@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Clock } from "lucide-react";
 
-import { SITE_NAME, SITE_URL, blogArticles, canonicalLink } from "@/content/seo";
+import { blogArticles } from "@/content/blog-articles";
+import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
 import { fetchArticleBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
 
@@ -25,7 +26,7 @@ function fallbackArticle(slug: string): ArticleDetail | null {
     slug: article.slug,
     title: article.title,
     excerpt: article.excerpt,
-    content: article.content,
+    content: article.sections.flatMap((section) => [section.heading, ...section.paragraphs]),
     cover_image: null,
     category: article.category,
     reading_minutes: article.readingMinutes,
