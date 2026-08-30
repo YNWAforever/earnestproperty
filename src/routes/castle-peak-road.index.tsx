@@ -14,6 +14,7 @@ import {
 import {
   castlePeakRoadHub,
   castlePeakRoadSegments,
+  isWithinCorridorRegion,
   type CorridorSegment,
 } from "@/content/castle-peak-road";
 import { SITE_URL } from "@/content/seo";
@@ -44,13 +45,39 @@ export const Route = createFileRoute("/castle-peak-road/")({
           }),
           // Reuses district.sham-tseng.tsx's own PSF-trend data source
           // (fetchDistrictTransactions), fanned out across this segment's own
-          // districtSlugs (the same list its inventory query already scopes
-          // to) rather than a new query -- see corridor-hub.ts's
+          // districtSlugs rather than a new query -- see corridor-hub.ts's
           // computePriceSnapshot for why this reduces to a single latest-month
           // figure instead of a full per-segment chart.
+          //
+          // districtSlugs is NOT itself a safe scope, so it alone cannot be
+          // what makes this query safe: for the sham-tseng segment it
+          // includes "castle-peak-road", the MLS normalizer's catch-all for
+          // anything mentioning 青山公路 that runs all the way to 屯門 (see
+          // castle-peak-road.ts's own comment on that slug). Unlike
+          // fetchCorridorInventoryForAliases above, whose rows are filtered
+          // through isWithinCorridorRegion (queries.ts's withinCorridorScope)
+          // as DR-1's fix, fetchDistrictTransactions applies no region guard
+          // of its own -- its SQL is a bare `WHERE e.district_slug = $1`. The
+          // single existing caller (district.sham-tseng.tsx) never hit this
+          // because it only ever passes the precise "sham-tseng" slug, never
+          // the catch-all. So each per-slug batch here is filtered through
+          // the same isWithinCorridorRegion guard before flattening below --
+          // this is what actually keeps a transaction recorded against a
+          // catch-all-tagged, out-of-scope estate (e.g. 黃金海岸 Gold Coast,
+          // one of Task 2's unpublished estates) from silently entering this
+          // price snapshot.
           Promise.all(
-            segment.districtSlugs.map((districtSlug): Promise<DistrictTransaction[]> =>
-              fetchDistrictTransactions(districtSlug, 12),
+            segment.districtSlugs.map(
+              async (districtSlug): Promise<DistrictTransaction[]> => {
+                const rows = await fetchDistrictTransactions(districtSlug, 12);
+                return rows.filter((row) =>
+                  isWithinCorridorRegion({
+                    districtSlug,
+                    estateSlug: row.estates?.slug,
+                    text: [row.estates?.name_zh],
+                  }),
+                );
+              },
             ),
           ),
         ]);

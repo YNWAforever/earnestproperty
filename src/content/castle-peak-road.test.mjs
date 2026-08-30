@@ -804,3 +804,108 @@ test("castle-peak-road.index.tsx wires all six Task 6 sections, each using real 
   assert.match(hub, /buyerFitHighlights\(segment\.buyerFit\)/);
   assert.match(hub, /castlePeakRoadSegments\.map\(\(segment\) => \{/);
 });
+
+// Regression: the price-snapshot fetch fans fetchDistrictTransactions out over
+// a segment's full districtSlugs list, and for sham-tseng that list includes
+// "castle-peak-road" -- the MLS normalizer's catch-all for anything mentioning
+// 青山公路 that runs all the way to 屯門 (see this file's own comment on that
+// slug, and corridorRegionScope.outOfScopeTextAliases below). Unlike
+// fetchCorridorInventoryForAliases, fetchDistrictTransactions' own SQL applies
+// no region guard (bare `WHERE e.district_slug = $1`), so a transaction
+// recorded against a catch-all-tagged, actually-out-of-scope estate (e.g.
+// 黃金海岸 Gold Coast, one of Task 2's unpublished estates) could otherwise
+// silently reach this price snapshot. The fix filters each per-slug batch
+// through isWithinCorridorRegion before flattening, mirroring queries.ts's
+// withinCorridorScope (DR-1's fix for the inventory path).
+test("castle-peak-road.index.tsx's price-snapshot fetch is wired to filter through isWithinCorridorRegion (regression for the castle-peak-road catch-all leak)", () => {
+  const hub = read("src/routes/castle-peak-road.index.tsx");
+
+  // Wiring check: .tsx cannot be imported or rendered under `node --test`, so
+  // this proves the guard is actually applied in the loader, not just that
+  // the guard function itself behaves correctly (proven behaviourally below).
+  assert.match(
+    hub,
+    /import \{[\s\S]*?\bisWithinCorridorRegion\b[\s\S]*?\} from "@\/content\/castle-peak-road"/,
+  );
+  const priceSnapshotFetch = hub.slice(
+    hub.indexOf("segment.districtSlugs.map(\n"),
+    hub.indexOf("]);", hub.indexOf("segment.districtSlugs.map(\n")),
+  );
+  assert.match(
+    priceSnapshotFetch,
+    /fetchDistrictTransactions\(districtSlug, 12\)/,
+  );
+  assert.match(priceSnapshotFetch, /rows\.filter\(/);
+  assert.match(priceSnapshotFetch, /isWithinCorridorRegion\(\{/);
+  assert.match(priceSnapshotFetch, /districtSlug,/);
+
+  // Behavioural check: the exact fixture -- a "castle-peak-road"-tagged
+  // transaction for an out-of-scope estate -- fed through isWithinCorridorRegion
+  // the same way the loader does, must be rejected.
+  const goldCoastRow = {
+    deal_date: "2026-08-15",
+    saleable_psf: 30000,
+    estates: { name_zh: "黃金海岸 Gold Coast", slug: "gold-coast" },
+  };
+  assert.equal(
+    isWithinCorridorRegion({
+      districtSlug: "castle-peak-road",
+      estateSlug: goldCoastRow.estates.slug,
+      text: [goldCoastRow.estates.name_zh],
+    }),
+    false,
+    "a castle-peak-road-tagged Gold Coast row must fail the region guard",
+  );
+
+  // End-to-end simulation of the sham-tseng segment's price-snapshot fetch:
+  // one legitimate sham-tseng transaction plus the out-of-scope
+  // castle-peak-road-tagged Gold Coast row above, run through the exact same
+  // per-slug-batch filter-then-flatten the loader performs.
+  const shamTseng = getCastlePeakRoadSegment("sham-tseng");
+  assert.deepEqual(shamTseng.districtSlugs, [
+    "sham-tseng",
+    "tsing-lung-tau",
+    "castle-peak-road",
+  ]);
+
+  const rowsByDistrictSlug = {
+    "sham-tseng": [
+      {
+        deal_date: "2026-08-01",
+        saleable_psf: 12000,
+        estates: { name_zh: "碧堤半島", slug: "bellagio" },
+      },
+    ],
+    "tsing-lung-tau": [],
+    "castle-peak-road": [goldCoastRow],
+  };
+
+  const filteredTransactions = shamTseng.districtSlugs
+    .map((districtSlug) =>
+      rowsByDistrictSlug[districtSlug].filter((row) =>
+        isWithinCorridorRegion({
+          districtSlug,
+          estateSlug: row.estates?.slug,
+          text: [row.estates?.name_zh],
+        }),
+      ),
+    )
+    .flat();
+
+  const snapshot = computePriceSnapshot(filteredTransactions);
+  assert.deepEqual(snapshot, {
+    latestPsf: 12000,
+    latestMonth: "26/08",
+    transactionCount: 1,
+  });
+
+  // Self-check: without the filter (the pre-fix behaviour), the same fixture
+  // set would have let the out-of-scope row skew the snapshot -- proving this
+  // test actually exercises the guard rather than passing vacuously.
+  const unfilteredTransactions = shamTseng.districtSlugs
+    .map((districtSlug) => rowsByDistrictSlug[districtSlug])
+    .flat();
+  const unfilteredSnapshot = computePriceSnapshot(unfilteredTransactions);
+  assert.equal(unfilteredSnapshot.transactionCount, 2);
+  assert.notDeepEqual(unfilteredSnapshot, snapshot);
+});
