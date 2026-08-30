@@ -9,8 +9,8 @@ test("every supported CMS dialog embeds the shared Copilot and preserves save ha
   for (const type of ["estate", "article", "faq", "video"]) {
     assert.match(source, new RegExp(`resourceType="${type}"`));
   }
-  assert.match(source, /onSubmit=\{handleSaveEstate\}/);
-  assert.match(source, /onSubmit=\{handleSaveArticle\}/);
+  assert.match(source, /onSubmit=\{handleSaveEstateDraft\}/);
+  assert.match(source, /onSubmit=\{handleSaveArticleDraft\}/);
   assert.match(source, /onSubmit=\{handleSaveFaq\}/);
   assert.match(source, /onSubmit=\{handleSaveCmsVideo\}/);
 });
