@@ -155,3 +155,44 @@ test("blog article template mounts the live comparison table when compareEstateS
     "comparison rows should be fetched live, never hand-typed",
   );
 });
+
+// P5e1 Task 5: /blog gained category filter chips, a search box, and richer
+// card metadata (author, published date, cover image).
+test("blog list renders a category filter for every named category plus an 全部 option", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /CATEGORY_FILTERS = \["全部", \.\.\.BLOG_CATEGORIES\]/,
+    "category filter should cover 全部 plus every BLOG_CATEGORIES entry, not a hand-picked subset",
+  );
+  assert.match(source, /aria-pressed=\{selectedCategory === category\}/);
+});
+
+test("blog list renders a client-side search box over the loaded articles", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(source, /type="search"/, "search input should exist");
+  assert.match(
+    source,
+    /matchesSearch\(searchQuery, \[article\.title, article\.excerpt, article\.category\]\)/,
+    "search should filter by title/excerpt/category, no new DB query",
+  );
+});
+
+test("blog list cards show author (defaulting to the editorial byline) and published date", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /\{article\.author \?\? EDITORIAL_AUTHOR\}/,
+    "DB-sourced articles with no author column should default to the org byline, not a per-article guess",
+  );
+  assert.match(source, /formatHkDate\(article\.published_at\)/);
+});
+
+test("blog list cards render a cover image only when one exists", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /\{article\.cover_image && \(\s*<AppImage/,
+    "cover image should be conditionally rendered, not a fallback box on every card",
+  );
+});

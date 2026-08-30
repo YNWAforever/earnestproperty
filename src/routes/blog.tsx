@@ -1,8 +1,17 @@
+import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock } from "lucide-react";
 
-import { blogArticles } from "@/content/blog-articles";
+import { AppImage } from "@/components/media/AppImage";
+import { Input } from "@/components/ui/input";
+import {
+  BLOG_CATEGORIES,
+  blogArticles,
+  EDITORIAL_AUTHOR,
+  type BlogCategory,
+} from "@/content/blog-articles";
 import { canonicalLink, pageSeo } from "@/content/seo";
+import { formatHkDate } from "@/lib/format";
 import { fetchPublishedArticles, type ArticleSummary } from "@/lib/queries";
 
 type BlogCard = ArticleSummary & {
@@ -21,6 +30,19 @@ const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
 }));
 
 const primaryArticleTitle = "深井買樓全攻略 2026";
+
+const CATEGORY_FILTERS = ["全部", ...BLOG_CATEGORIES] as const;
+type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
+
+/** Same shape as admin.cms.tsx's own private matchesSearch helper -- kept as
+ * a local copy since that one isn't exported, but the logic is identical:
+ * case-insensitive substring match across whichever fields the caller cares
+ * about, "" always matches. */
+function matchesSearch(query: string, fields: Array<string | null | undefined>) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  return fields.some((field) => (field ?? "").toLowerCase().includes(needle));
+}
 
 export const Route = createFileRoute("/blog")({
   loader: async () => {
@@ -41,6 +63,18 @@ export const Route = createFileRoute("/blog")({
 
 function BlogPage() {
   const { articles } = Route.useLoaderData() as { articles: BlogCard[] };
+  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("全部");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredArticles = useMemo(
+    () =>
+      articles.filter(
+        (article) =>
+          (selectedCategory === "全部" || article.category === selectedCategory) &&
+          matchesSearch(searchQuery, [article.title, article.excerpt, article.category]),
+      ),
+    [articles, selectedCategory, searchQuery],
+  );
 
   return (
     <main className="bg-background">
@@ -55,35 +89,82 @@ function BlogPage() {
         </div>
       </section>
 
+      <section className="mx-auto max-w-5xl px-4 pt-8 sm:px-6 lg:px-8">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="按分類篩選文章">
+          {CATEGORY_FILTERS.map((category) => (
+            <button
+              key={category}
+              type="button"
+              aria-pressed={selectedCategory === category}
+              onClick={() => setSelectedCategory(category)}
+              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                selectedCategory === category
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-input bg-background text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="搜尋文章標題或內容..."
+          aria-label="搜尋文章"
+          className="mt-4 max-w-sm"
+        />
+      </section>
+
       <section className="mx-auto grid max-w-5xl gap-5 px-4 py-10 sm:px-6 lg:px-8">
-        {articles.map((article) => (
-          <Link
-            key={article.slug}
-            to="/blog/$slug"
-            params={{ slug: article.slug }}
-            className="group rounded-lg border bg-card p-6 transition hover:-translate-y-0.5 hover:shadow-card"
-          >
-            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {article.category && (
-                <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
-                  {article.category}
-                </span>
+        {filteredArticles.length === 0 && (
+          <p className="text-sm text-muted-foreground">未有符合條件的文章，請調整分類或搜尋字詞。</p>
+        )}
+        {filteredArticles.map((article) => {
+          const publishedDate = formatHkDate(article.published_at);
+          return (
+            <Link
+              key={article.slug}
+              to="/blog/$slug"
+              params={{ slug: article.slug }}
+              className="group rounded-lg border bg-card p-6 transition hover:-translate-y-0.5 hover:shadow-card"
+            >
+              {article.cover_image && (
+                <AppImage
+                  src={article.cover_image}
+                  alt={article.title}
+                  width={800}
+                  height={320}
+                  className="mb-4 h-40 w-full rounded-md object-cover"
+                />
               )}
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3.5 w-3.5" />
-                {article.reading_minutes ?? 5} 分鐘閱讀
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                {article.category && (
+                  <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
+                    {article.category}
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {article.reading_minutes ?? 5} 分鐘閱讀
+                </span>
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight group-hover:text-primary">
+                {article.title}
+              </h2>
+              <p className="mt-3 text-sm leading-7 text-muted-foreground">{article.excerpt}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                <span>{article.author ?? EDITORIAL_AUTHOR}</span>
+                {publishedDate && <span>{publishedDate}</span>}
+              </div>
+              <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                閱讀文章
+                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
               </span>
-            </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight group-hover:text-primary">
-              {article.title}
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-muted-foreground">{article.excerpt}</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-              閱讀文章
-              <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-            </span>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </section>
     </main>
   );
