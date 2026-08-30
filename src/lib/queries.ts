@@ -228,6 +228,7 @@ export type ListingFilters = {
   bedrooms?: number;
   estateSlug?: string;
   districtSlug?: string;
+  agentId?: string;
   sort: NeonListingSort;
   page: number;
   pageSize: number;

@@ -45,7 +45,11 @@ const publicAgentProfileColumns = `
   ARRAY(SELECT jsonb_array_elements_text(COALESCE(to_jsonb(s)->'specialties', '[]'::jsonb)))
     AS agent_specialties,
   ARRAY(SELECT jsonb_array_elements_text(COALESCE(to_jsonb(s)->'served_estate_slugs', '[]'::jsonb)))
-    AS agent_served_estate_slugs
+    AS agent_served_estate_slugs,
+  ARRAY(
+    SELECT jsonb_array_elements_text(to_jsonb(s)->'languages')
+    WHERE jsonb_typeof(to_jsonb(s)->'languages') = 'array'
+  ) AS agent_languages
 `;
 
 const listingColumns = `
@@ -182,6 +186,7 @@ function mapPublicAgentProfile(row: DbRow): NeonPublicAgentProfile | null {
     bio: stringOrNull(row.agent_bio),
     specialties: textArrayOrNull(row.agent_specialties) ?? [],
     served_estate_slugs: textArrayOrNull(row.agent_served_estate_slugs) ?? [],
+    languages: textArrayOrNull(row.agent_languages) ?? [],
   };
 }
 

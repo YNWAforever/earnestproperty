@@ -1,17 +1,136 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Building2, MessageCircle, Phone, UserRound } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { zodValidator, fallback } from "@tanstack/zod-adapter";
+import { z } from "zod";
+import { Building2, MessageCircle, Phone, Search, UserRound, X } from "lucide-react";
 
 import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { canonicalLink, SITE_URL } from "@/content/seo";
+import { estateRegistry } from "@/content/estate-registry";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 
+// Mirrors /listings' DISTRICT_LABELS (src/routes/listings.tsx) -- same four
+// districts, same display strings. Kept as its own small copy rather than an
+// import: it's four entries, and pulling it from listings.tsx would make an
+// unrelated route reach into this one's internals for four string literals.
+const AGENT_DISTRICT_LABELS: Record<string, string> = {
+  "sham-tseng": "深井",
+  "ting-kau": "汀九",
+  "tsuen-wan": "荃灣",
+  "castle-peak-road": "青山公路",
+};
+
+function agentDistrictLabel(slug: string) {
+  return AGENT_DISTRICT_LABELS[slug] ?? slug;
+}
+
+/**
+ * Derives the districts an agent can be said to serve from
+ * `served_estate_slugs`, via estate-registry's real `districtSlug` (never
+ * `getEstateEntry()`, which throws on an unknown slug -- an admin-entered
+ * served_estate_slugs value has no guarantee of matching the curated
+ * registry, and one bad slug must not crash the whole directory). An estate
+ * slug with no registry entry, or a registry entry with no districtSlug yet,
+ * simply contributes nothing -- consistent with this whole plan's "don't
+ * fabricate, only surface what's genuinely known" discipline.
+ */
+function agentDistrictSlugs(agent: NeonPublicAgentProfile): string[] {
+  const slugs = new Set<string>();
+  for (const estateSlug of agent.served_estate_slugs) {
+    const entry = estateRegistry.find((candidate) => candidate.slug === estateSlug);
+    if (entry?.districtSlug) slugs.add(entry.districtSlug);
+  }
+  return [...slugs];
+}
+
+function uniqueSorted(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b, "zh-HK"));
+}
+
+type AgentDirectorySearch = {
+  q?: string;
+  branch?: string;
+  district?: string;
+  speciality?: string;
+  language?: string;
+};
+
+const agentsSearchSchema = z.object({
+  q: fallback(z.string().optional(), undefined),
+  branch: fallback(z.string().optional(), undefined),
+  district: fallback(z.string().optional(), undefined),
+  speciality: fallback(z.string().optional(), undefined),
+  language: fallback(z.string().optional(), undefined),
+});
+
+function matchesAgentFilters(
+  agent: NeonPublicAgentProfile,
+  filters: AgentDirectorySearch,
+): boolean {
+  const query = filters.q?.trim().toLowerCase();
+  if (query) {
+    const haystack = [agent.name_zh, agent.name_en, agent.bio]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!haystack.includes(query)) return false;
+  }
+  if (filters.branch && agent.branch !== filters.branch) return false;
+  if (filters.district && !agentDistrictSlugs(agent).includes(filters.district)) return false;
+  if (filters.speciality && !agent.specialties.includes(filters.speciality)) return false;
+  if (filters.language && !agent.languages.includes(filters.language)) return false;
+  return true;
+}
+
+type AgentGroup = { branch: string | null; agents: NeonPublicAgentProfile[] };
+
+/**
+ * Groups by the agent's real `branch` string, never a guessed/defaulted one
+ * -- an agent with no branch lands in its own `branch: null` group (rendered
+ * last, under a generic heading) rather than being folded into an existing
+ * named branch or dropped. See "branch is never defaulted in either agent
+ * route" in agents.contract.test.mjs for why that distinction matters here.
+ */
+function groupAgentsByBranch(agents: NeonPublicAgentProfile[]): AgentGroup[] {
+  const named = new Map<string, NeonPublicAgentProfile[]>();
+  const unassigned: NeonPublicAgentProfile[] = [];
+  for (const agent of agents) {
+    if (agent.branch) {
+      const list = named.get(agent.branch) ?? [];
+      list.push(agent);
+      named.set(agent.branch, list);
+    } else {
+      unassigned.push(agent);
+    }
+  }
+  const groups: AgentGroup[] = [...named.entries()]
+    .map(([branch, members]) => ({ branch, agents: members }))
+    .sort((a, b) => (a.branch ?? "").localeCompare(b.branch ?? "", "zh-HK"));
+  if (unassigned.length > 0) groups.push({ branch: null, agents: unassigned });
+  return groups;
+}
+
 export const Route = createFileRoute("/agents")({
+  validateSearch: zodValidator(agentsSearchSchema),
+  // No loaderDeps on `search` -- the roster is small enough (see
+  // "client-side filter over already-loaded agents is fine given the small
+  // roster size" in this plan) that filtering is a pure client-side
+  // derivation over the one already-loaded list, not a new fetch per filter
+  // change. The loader itself stays exactly as it was.
   loader: async () => (await fetchNeonPublicAgentProfiles()) as NeonPublicAgentProfile[],
   head: () => ({
     meta: [
@@ -30,6 +149,11 @@ export const Route = createFileRoute("/agents")({
 
 function AgentsPage() {
   const agents = Route.useLoaderData();
+  const search = Route.useSearch();
+  // itemListSchema stays derived from the FULL roster, not the current
+  // filter selection -- same reasoning as /listings' bare canonical link:
+  // the page's structured data should describe its canonical content, not
+  // fork per filter combination someone happens to have applied.
   const listedAgents = agents.filter((agent) => agent.public_slug);
   const listSchema =
     listedAgents.length > 0
@@ -40,6 +164,12 @@ function AgentsPage() {
           })),
         })
       : null;
+
+  const filteredAgents = agents.filter((agent) => matchesAgentFilters(agent, search));
+  const groups = groupAgentsByBranch(filteredAgents);
+  const hasActiveFilters = Boolean(
+    search.q || search.branch || search.district || search.speciality || search.language,
+  );
 
   return (
     <main className="bg-background">
@@ -55,14 +185,231 @@ function AgentsPage() {
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         {agents.length === 0 ? <DirectoryEmptyState /> : null}
         {agents.length > 0 ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            {agents.map((agent) => (
-              <AgentDirectoryCard key={agent.id} agent={agent} />
-            ))}
-          </div>
+          <>
+            <AgentDirectoryFilters agents={agents} search={search} />
+            {filteredAgents.length === 0 ? (
+              <NoMatchingAgents hasActiveFilters={hasActiveFilters} />
+            ) : (
+              <div className="space-y-10">
+                {groups.map((group) => (
+                  <AgentGroupSection key={group.branch ?? "__unassigned__"} group={group} />
+                ))}
+              </div>
+            )}
+          </>
         ) : null}
       </section>
     </main>
+  );
+}
+
+function AgentGroupSection({ group }: { group: AgentGroup }) {
+  return (
+    <div>
+      <h2 className="mb-4 flex items-baseline gap-2 border-b pb-2 text-lg font-semibold">
+        {group.branch ?? "分行未指定"}
+        <span className="text-sm font-normal text-muted-foreground">（{group.agents.length}）</span>
+      </h2>
+      <div className="grid gap-4 md:grid-cols-2">
+        {group.agents.map((agent) => (
+          <AgentDirectoryCard key={agent.id} agent={agent} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NoMatchingAgents({ hasActiveFilters }: { hasActiveFilters: boolean }) {
+  const navigate = useNavigate({ from: "/agents" });
+  return (
+    <div className="border-y py-12 text-center">
+      <h2 className="text-xl font-semibold">沒有符合條件的代理</h2>
+      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+        請調整搜尋或篩選條件，或直接聯絡晉誠地產為你配對合適同事。
+      </p>
+      {hasActiveFilters ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-5"
+          onClick={() => navigate({ search: {} })}
+        >
+          清除篩選
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Name search plus branch/district/speciality/language selects, all driven
+ * straight off the validated URL search params via useNavigate -- no
+ * component-local state anywhere in this route (agents.contract.test.mjs
+ * source-scans this whole file for that). Every control is instant-apply:
+ * this page filters an already-loaded, small roster client-side, so there is
+ * no server round trip to batch behind a separate 套用 step the way
+ * /listings' filter panel needs.
+ */
+function AgentDirectoryFilters({
+  agents,
+  search,
+}: {
+  agents: NeonPublicAgentProfile[];
+  search: AgentDirectorySearch;
+}) {
+  const navigate = useNavigate({ from: "/agents" });
+  const branchOptions = uniqueSorted(
+    agents.map((a) => a.branch).filter((branch): branch is string => Boolean(branch)),
+  );
+  const districtOptions = uniqueSorted(agents.flatMap(agentDistrictSlugs));
+  const specialityOptions = uniqueSorted(agents.flatMap((a) => a.specialties));
+  const languageOptions = uniqueSorted(agents.flatMap((a) => a.languages));
+
+  function setParam(key: keyof AgentDirectorySearch, value: string | undefined) {
+    navigate({
+      search: (prev: Record<string, unknown>) => {
+        const next = { ...prev };
+        if (value === undefined) delete next[key];
+        else next[key] = value;
+        return next;
+      },
+      replace: true,
+    });
+  }
+
+  return (
+    <div className="mb-6 grid gap-3 rounded-lg border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="sm:col-span-2 lg:col-span-2">
+        <Label className="mb-1.5 block text-xs" htmlFor="agent-search">
+          搜尋代理姓名
+        </Label>
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            id="agent-search"
+            type="search"
+            placeholder="輸入代理姓名"
+            value={search.q ?? ""}
+            onChange={(e) => setParam("q", e.target.value.trim() || undefined)}
+            className="h-11 pl-9"
+          />
+        </div>
+      </div>
+
+      {branchOptions.length > 0 ? (
+        <div>
+          <Label className="mb-1.5 block text-xs" htmlFor="agent-branch">
+            分行
+          </Label>
+          <Select
+            value={search.branch ?? "all"}
+            onValueChange={(value) => setParam("branch", value === "all" ? undefined : value)}
+          >
+            <SelectTrigger id="agent-branch" className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有分行</SelectItem>
+              {branchOptions.map((branch) => (
+                <SelectItem key={branch} value={branch}>
+                  {branch}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {districtOptions.length > 0 ? (
+        <div>
+          <Label className="mb-1.5 block text-xs" htmlFor="agent-district">
+            熟悉地區
+          </Label>
+          <Select
+            value={search.district ?? "all"}
+            onValueChange={(value) => setParam("district", value === "all" ? undefined : value)}
+          >
+            <SelectTrigger id="agent-district" className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有地區</SelectItem>
+              {districtOptions.map((slug) => (
+                <SelectItem key={slug} value={slug}>
+                  {agentDistrictLabel(slug)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {specialityOptions.length > 0 ? (
+        <div>
+          <Label className="mb-1.5 block text-xs" htmlFor="agent-speciality">
+            專長
+          </Label>
+          <Select
+            value={search.speciality ?? "all"}
+            onValueChange={(value) => setParam("speciality", value === "all" ? undefined : value)}
+          >
+            <SelectTrigger id="agent-speciality" className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有專長</SelectItem>
+              {specialityOptions.map((speciality) => (
+                <SelectItem key={speciality} value={speciality}>
+                  {speciality}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {languageOptions.length > 0 ? (
+        <div>
+          <Label className="mb-1.5 block text-xs" htmlFor="agent-language">
+            語言
+          </Label>
+          <Select
+            value={search.language ?? "all"}
+            onValueChange={(value) => setParam("language", value === "all" ? undefined : value)}
+          >
+            <SelectTrigger id="agent-language" className="h-11">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">所有語言</SelectItem>
+              {languageOptions.map((language) => (
+                <SelectItem key={language} value={language}>
+                  {language}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+
+      {search.q || search.branch || search.district || search.speciality || search.language ? (
+        <div className="flex items-end sm:col-span-2 lg:col-span-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => navigate({ search: {} })}
+          >
+            <X className="h-3.5 w-3.5" />
+            清除全部篩選
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -120,6 +467,7 @@ function AgentDirectoryCard({ agent }: { agent: NeonPublicAgentProfile }) {
         <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
           {agent.job_title ? <span>{agent.job_title}</span> : null}
           {agent.licence_no ? <span>牌照：{agent.licence_no}</span> : null}
+          {agent.languages.length > 0 ? <span>語言：{agent.languages.join("、")}</span> : null}
         </div>
         {agent.bio ? (
           <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{agent.bio}</p>

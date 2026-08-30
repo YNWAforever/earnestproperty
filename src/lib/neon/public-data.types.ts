@@ -48,6 +48,7 @@ export type NeonPublicAgentProfile = {
   bio: string | null;
   specialties: string[];
   served_estate_slugs: string[];
+  languages: string[];
 };
 
 export type NeonStaffProfile = NeonPublicAgentProfile;

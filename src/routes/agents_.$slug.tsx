@@ -99,6 +99,9 @@ function AgentProfilePage() {
                 {profile.job_title ? <span>{profile.job_title}</span> : null}
                 {branch ? <span>{branch}</span> : null}
                 {profile.licence_no ? <span>牌照：{profile.licence_no}</span> : null}
+                {profile.languages.length > 0 ? (
+                  <span>語言：{profile.languages.join("、")}</span>
+                ) : null}
               </div>
               {profile.bio ? (
                 <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">{profile.bio}</p>
@@ -179,7 +182,12 @@ function AgentProfilePage() {
               </p>
             </div>
             <Button asChild>
-              <Link to="/listings">
+              {/* agent threads to /listings' Zod search schema, which passes
+                  it as agentId into the ALREADY-WORKING p.agent_id filter
+                  (listingWhere in public-data.server.ts) -- this used to
+                  link to a bare, unscoped /listings despite the button's
+                  own label promising this agent's listings specifically. */}
+              <Link to="/listings" search={{ deal: "all", page: 1, agent: profile.id }}>
                 <Building2 className="mr-2 h-4 w-4" />
                 查看代理放盤
               </Link>
