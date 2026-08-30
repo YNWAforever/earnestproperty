@@ -50,9 +50,14 @@ export function EstateMarketSnapshot({
   listings: ListingRow[];
   transactions: EstateTransaction[];
 }) {
-  const saleCount = listings.filter((listing) => listing.deal_type === "sale").length;
-  const rentCount = listings.filter((listing) => listing.deal_type === "rent").length;
-  const totalUnitsLabel = totalUnits === null ? "待查" : totalUnits.toLocaleString();
+  const saleCount = listings.filter(
+    (listing) => listing.deal_type === "sale",
+  ).length;
+  const rentCount = listings.filter(
+    (listing) => listing.deal_type === "rent",
+  ).length;
+  const totalUnitsLabel =
+    totalUnits === null ? "待查" : totalUnits.toLocaleString();
   const phasesLabel = phases === null ? "待查" : phases;
   const psfTrend = buildPsfTrend(transactions);
 
@@ -60,10 +65,16 @@ export function EstateMarketSnapshot({
     <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <Stat label="平均實呎" value={avgPsf ? `$${avgPsf.toLocaleString()}` : "查詢"} />
+          <Stat
+            label="平均實呎"
+            value={avgPsf ? `$${avgPsf.toLocaleString()}` : "查詢"}
+          />
           <Stat label="最新顯示售盤" value={`${saleCount} 個`} />
           <Stat label="最新顯示租盤" value={`${rentCount} 個`} />
-          <Stat label="單位 / 期數" value={`${totalUnitsLabel} / ${phasesLabel} 期`} />
+          <Stat
+            label="單位 / 期數"
+            value={`${totalUnitsLabel} / ${phasesLabel} 期`}
+          />
         </div>
         <div className="min-w-0 rounded-lg border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
@@ -153,14 +164,21 @@ export function EstateMarketSnapshot({
                 </thead>
                 <tbody>
                   {transactions.slice(0, 5).map((tx, index) => (
-                    <tr key={`${tx.deal_date}-${tx.unit}-${index}`} className="border-t">
+                    <tr
+                      key={`${tx.deal_date}-${tx.unit}-${index}`}
+                      className="border-t"
+                    >
                       <td className="px-3 py-2">{tx.deal_date ?? "-"}</td>
                       <td className="px-3 py-2">{tx.unit ?? "-"}</td>
                       <td className="px-3 py-2">
-                        {tx.saleable_psf ? `$${tx.saleable_psf.toLocaleString()}` : "-"}
+                        {tx.saleable_psf
+                          ? `$${tx.saleable_psf.toLocaleString()}`
+                          : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {tx.price ? `$${(tx.price / 1_000_000).toFixed(2)}M` : "-"}
+                        {tx.price
+                          ? `$${(tx.price / 1_000_000).toFixed(2)}M`
+                          : "-"}
                       </td>
                     </tr>
                   ))}

@@ -1,7 +1,14 @@
 import type { AiTagSafetyLevel } from "./ai-types";
 import { estateRegistry } from "../../content/estate-registry.ts";
 
-const factualPrefixes = ["budget_", "estate_", "intent_", "source_", "lang_", "district_"];
+const factualPrefixes = [
+  "budget_",
+  "estate_",
+  "intent_",
+  "source_",
+  "lang_",
+  "district_",
+];
 /**
  * Derived from estate-registry.ts (DR-10) instead of a second hand-maintained
  * tag list. Only the five estates with a real detail page (`hasPage: true`)
@@ -17,16 +24,28 @@ const knownEstateInterestTags = new Set(
     .flatMap((entry) => {
       const hyphenated = `${entry.slug}_interest`;
       const underscored = `${entry.slug.replace(/-/g, "_")}_interest`;
-      return hyphenated === underscored ? [hyphenated] : [hyphenated, underscored];
+      return hyphenated === underscored
+        ? [hyphenated]
+        : [hyphenated, underscored];
     }),
 );
-const sensitiveTags = new Set(["hot_lead", "ready_to_buy", "urgent_30_days", "needs_valuation"]);
-const judgmentalTags = new Set(["low_quality", "price_shopper", "unresponsive"]);
+const sensitiveTags = new Set([
+  "hot_lead",
+  "ready_to_buy",
+  "urgent_30_days",
+  "needs_valuation",
+]);
+const judgmentalTags = new Set([
+  "low_quality",
+  "price_shopper",
+  "unresponsive",
+]);
 
 export function classifyAiTagSafety(tag: string): AiTagSafetyLevel {
   if (judgmentalTags.has(tag)) return "judgmental";
   if (sensitiveTags.has(tag)) return "sensitive";
-  if (factualPrefixes.some((prefix) => tag.startsWith(prefix))) return "factual";
+  if (factualPrefixes.some((prefix) => tag.startsWith(prefix)))
+    return "factual";
   if (knownEstateInterestTags.has(tag)) return "factual";
   return "sensitive";
 }
@@ -47,7 +66,8 @@ export function suggestFactualTags(input: {
   if (input.intent) tags.add(`intent_${slug(input.intent)}`);
   if (input.source) tags.add(`source_${slug(input.source)}`);
   if (input.language) tags.add(`lang_${slug(input.language)}`);
-  for (const estate of input.preferred_estates ?? []) tags.add(`estate_${slug(estate)}`);
+  for (const estate of input.preferred_estates ?? [])
+    tags.add(`estate_${slug(estate)}`);
 
   const budget = budgetBand(input.budget_min ?? null, input.budget_max ?? null);
   if (budget) tags.add(budget);
@@ -70,8 +90,16 @@ export function scoreLeadProfile(input: {
   if ((input.preferred_estates ?? []).length > 0) score += 15;
   if (input.opt_in_whatsapp) score += 15;
   if (input.timeline === "30_days") score += 20;
-  if (typeof input.last_activity_days === "number" && input.last_activity_days <= 7) score += 10;
-  if (typeof input.last_activity_days === "number" && input.last_activity_days > 60) score -= 10;
+  if (
+    typeof input.last_activity_days === "number" &&
+    input.last_activity_days <= 7
+  )
+    score += 10;
+  if (
+    typeof input.last_activity_days === "number" &&
+    input.last_activity_days > 60
+  )
+    score -= 10;
   return Math.max(0, Math.min(100, score));
 }
 

@@ -98,7 +98,9 @@ export const Route = createFileRoute("/estate/$slug")({
             `${loaderData?.estate.name_zh ?? ""} ${loaderData?.estate.total_units ?? ""} 個單位，平均實呎 $${loaderData?.estate.avg_saleable_psf ?? ""}。即時放盤、成交、FAQ。`,
         },
       ],
-      links: loaderData?.estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
+      links: loaderData?.estate.slug
+        ? [canonicalLink(`/estate/${loaderData.estate.slug}`)]
+        : [],
     };
   },
   errorComponent: ({ error }) => (
@@ -148,7 +150,10 @@ function EstatePage() {
   type VisibleFaq = { question: string; answer: string };
   const visibleFaqs: VisibleFaq[] = renderableFaqs([
     ...(content?.faqs ?? []),
-    ...faqs.filter((faq) => !(content?.faqs ?? []).some((item) => item.question === faq.question)),
+    ...faqs.filter(
+      (faq) =>
+        !(content?.faqs ?? []).some((item) => item.question === faq.question),
+    ),
   ]);
   const ctaContext = {
     estateName: seo?.nameZh ?? estate.name_zh,
@@ -159,7 +164,9 @@ function EstatePage() {
     seo?.nameEn ?? estate.name_en ?? "",
     estate.developer ?? "",
     estate.year_completed ? `${estate.year_completed} 年落成` : "",
-    estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "單位數待查",
+    estate.total_units
+      ? `共 ${estate.total_units.toLocaleString()} 個單位`
+      : "單位數待查",
   ].filter(Boolean);
   // Task 4 (P4 plan): transport + school-net sections reuse already-curated
   // content instead of inventing new facts. transportSegment is null (not a
@@ -179,7 +186,12 @@ function EstatePage() {
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
-      { "@type": "ListItem", position: 2, name: "屋苑", item: `${SITE_URL}/district/sham-tseng` },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "屋苑",
+        item: `${SITE_URL}/district/sham-tseng`,
+      },
       {
         "@type": "ListItem",
         position: 3,
@@ -212,9 +224,13 @@ function EstatePage() {
       <section className="bg-gradient-to-br from-primary to-primary/70 py-16 text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-sm opacity-80">深井屋苑獨立 SEO 頁</p>
-          <h1 className="mt-2 text-4xl font-bold sm:text-5xl">{seo?.nameZh ?? estate.name_zh}</h1>
+          <h1 className="mt-2 text-4xl font-bold sm:text-5xl">
+            {seo?.nameZh ?? estate.name_zh}
+          </h1>
           <p className="mt-5 max-w-3xl text-base leading-relaxed opacity-90">
-            {content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
+            {content?.heroPositioning ??
+              seo?.fit ??
+              "即時查看放盤、成交和屋苑資料。"}
           </p>
           <div className="mt-6 max-w-3xl">
             <IntentWhatsAppCTA context={ctaContext} />
@@ -270,13 +286,21 @@ function EstatePage() {
                 .map((paragraph) => (
                   <p key={paragraph}>{paragraph}</p>
                 ))}
-              {content?.transportLifestyle && <p>{content.transportLifestyle}</p>}
+              {content?.transportLifestyle && (
+                <p>{content.transportLifestyle}</p>
+              )}
             </div>
           </div>
           <div className="rounded-lg border bg-card p-5">
-            <h3 className="text-lg font-bold text-primary">適合邊類買家 / 租客？</h3>
+            <h3 className="text-lg font-bold text-primary">
+              適合邊類買家 / 租客？
+            </h3>
             <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
-              {(content?.buyerFit ?? [seo?.fit ?? "適合想比較深井核心屋苑的買家。"]).map((item) => (
+              {(
+                content?.buyerFit ?? [
+                  seo?.fit ?? "適合想比較深井核心屋苑的買家。",
+                ]
+              ).map((item) => (
                 <li key={item} className="flex gap-2">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                   <span>{item}</span>
@@ -453,7 +477,9 @@ function EstatePage() {
                 rel="noopener noreferrer"
                 className="flex min-h-28 flex-col justify-between rounded-md border bg-background p-4 text-sm transition hover:border-primary hover:shadow-card"
               >
-                <span className="font-semibold text-primary">{content.saleCta}</span>
+                <span className="font-semibold text-primary">
+                  {content.saleCta}
+                </span>
                 <ArrowRight className="mt-3 h-4 w-4 text-coral" />
               </a>
               <a
@@ -462,7 +488,9 @@ function EstatePage() {
                 rel="noopener noreferrer"
                 className="flex min-h-28 flex-col justify-between rounded-md border bg-background p-4 text-sm transition hover:border-primary hover:shadow-card"
               >
-                <span className="font-semibold text-primary">{content.rentCta}</span>
+                <span className="font-semibold text-primary">
+                  {content.rentCta}
+                </span>
                 <ArrowRight className="mt-3 h-4 w-4 text-coral" />
               </a>
               <a
@@ -471,7 +499,9 @@ function EstatePage() {
                 rel="noopener noreferrer"
                 className="flex min-h-28 flex-col justify-between rounded-md border bg-background p-4 text-sm transition hover:border-primary hover:shadow-card"
               >
-                <span className="font-semibold text-primary">{content.valuationCta}</span>
+                <span className="font-semibold text-primary">
+                  {content.valuationCta}
+                </span>
                 <ArrowRight className="mt-3 h-4 w-4 text-coral" />
               </a>
             </div>
@@ -529,7 +559,9 @@ function EstateListingCard({ listing }: { listing: ListingRow }) {
       </div>
       <div className="p-4">
         <p className="text-lg font-bold text-primary">{price}</p>
-        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{listing.title_zh}</h3>
+        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
+          {listing.title_zh}
+        </h3>
         <p className="mt-2 text-xs text-muted-foreground">
           {listing.saleable_area ? `${listing.saleable_area} 呎 · ` : ""}
           {listing.bedrooms ?? "-"} 房

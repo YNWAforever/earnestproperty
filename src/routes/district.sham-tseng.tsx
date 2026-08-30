@@ -42,7 +42,8 @@ export const Route = createFileRoute("/district/sham-tseng")({
       { title: "深井 Sham Tseng 物業｜屋苑、交通、校網 62、12 個月成交" },
       {
         name: "description",
-        content: "深井屋苑一覽、交通時間、小學校網 62、近 12 個月實呎成交走勢及最常見問題。",
+        content:
+          "深井屋苑一覽、交通時間、小學校網 62、近 12 個月實呎成交走勢及最常見問題。",
       },
       { property: "og:title", content: "深井 Sham Tseng 地區專頁" },
       {
@@ -116,12 +117,18 @@ function aggregateByMonth(rows: DistrictTransaction[]) {
 }
 
 function ShamTsengPage() {
-  const { estates, faqs: faqRows, transactions } = Route.useLoaderData() as LoaderData;
+  const {
+    estates,
+    faqs: faqRows,
+    transactions,
+  } = Route.useLoaderData() as LoaderData;
   const faqs = renderableFaqs(faqRows);
   const chartData = aggregateByMonth(transactions);
   const latestPsf = chartData.length ? chartData[chartData.length - 1].psf : 0;
   const firstPsf = chartData.length ? chartData[0].psf : 0;
-  const yoyDelta = firstPsf ? Math.round(((latestPsf - firstPsf) / firstPsf) * 1000) / 10 : 0;
+  const yoyDelta = firstPsf
+    ? Math.round(((latestPsf - firstPsf) / firstPsf) * 1000) / 10
+    : 0;
   const totalUnits = estates.reduce((sum, e) => sum + (e.total_units ?? 0), 0);
 
   return (
@@ -131,18 +138,27 @@ function ShamTsengPage() {
         <Badge variant="secondary" className="mb-3">
           地區專頁
         </Badge>
-        <h1 className="text-4xl font-bold tracking-tight md:text-5xl">深井 Sham Tseng</h1>
+        <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
+          深井 Sham Tseng
+        </h1>
         <p className="mt-3 max-w-2xl text-muted-foreground">
-          毗鄰青馬大橋、坐擁無敵海景的傳統西半山豪宅區。共 {estates.length} 個主要屋苑、約{" "}
-          {totalUnits.toLocaleString()} 個單位，校網 62。
+          毗鄰青馬大橋、坐擁無敵海景的傳統西半山豪宅區。共 {estates.length}{" "}
+          個主要屋苑、約 {totalUnits.toLocaleString()} 個單位，校網 62。
         </p>
         <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="主要屋苑" value={`${estates.length} 個`} />
           <Stat label="總單位" value={totalUnits.toLocaleString()} />
-          <Stat label="最新平均實呎" value={latestPsf ? `$${latestPsf.toLocaleString()}` : "—"} />
+          <Stat
+            label="最新平均實呎"
+            value={latestPsf ? `$${latestPsf.toLocaleString()}` : "—"}
+          />
           <Stat
             label="12 個月走勢"
-            value={chartData.length >= 2 ? `${yoyDelta > 0 ? "+" : ""}${yoyDelta}%` : "—"}
+            value={
+              chartData.length >= 2
+                ? `${yoyDelta > 0 ? "+" : ""}${yoyDelta}%`
+                : "—"
+            }
             tone={yoyDelta >= 0 ? "up" : "down"}
           />
         </div>
@@ -179,13 +195,25 @@ function ShamTsengPage() {
         <Card className="mt-4">
           <CardContent className="pt-6">
             {chartData.length === 0 ? (
-              <p className="py-12 text-center text-muted-foreground">暫無成交數據</p>
+              <p className="py-12 text-center text-muted-foreground">
+                暫無成交數據
+              </p>
             ) : (
               <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                    <XAxis dataKey="month" stroke="var(--muted-foreground)" fontSize={12} />
+                  <LineChart
+                    data={chartData}
+                    margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="var(--border)"
+                    />
+                    <XAxis
+                      dataKey="month"
+                      stroke="var(--muted-foreground)"
+                      fontSize={12}
+                    />
                     <YAxis
                       stroke="var(--muted-foreground)"
                       fontSize={12}
@@ -198,7 +226,10 @@ function ShamTsengPage() {
                         border: "1px solid var(--border)",
                         borderRadius: 8,
                       }}
-                      formatter={(v: number) => [`$${v.toLocaleString()} / 呎`, "平均實呎"]}
+                      formatter={(v: number) => [
+                        `$${v.toLocaleString()} / 呎`,
+                        "平均實呎",
+                      ]}
                     />
                     <Line
                       type="monotone"
@@ -225,13 +256,17 @@ function ShamTsengPage() {
           <CardContent>
             <ul className="divide-y">
               {TRANSIT.map((t) => (
-                <li key={t.to} className="flex items-center justify-between py-3">
+                <li
+                  key={t.to}
+                  className="flex items-center justify-between py-3"
+                >
                   <div>
                     <p className="font-medium">前往 {t.to}</p>
                     <p className="text-sm text-muted-foreground">{t.mode}</p>
                   </div>
                   <span className="text-lg font-semibold text-primary">
-                    {t.minutes} <span className="text-xs text-muted-foreground">分鐘</span>
+                    {t.minutes}{" "}
+                    <span className="text-xs text-muted-foreground">分鐘</span>
                   </span>
                 </li>
               ))}
@@ -289,7 +324,9 @@ function ShamTsengPage() {
               params={{ slug: e.slug }}
               className="group rounded-lg border bg-card p-4 transition-colors hover:border-primary"
             >
-              <h3 className="font-semibold group-hover:text-primary">{e.name_zh}</h3>
+              <h3 className="font-semibold group-hover:text-primary">
+                {e.name_zh}
+              </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {e.total_units?.toLocaleString() ?? "—"} 個單位 · 平均實呎 $
                 {e.avg_saleable_psf?.toLocaleString() ?? "—"}
@@ -330,8 +367,12 @@ function ShamTsengPage() {
           <Accordion type="single" collapsible className="mt-4">
             {faqs.map((f, i) => (
               <AccordionItem key={i} value={`q-${i}`}>
-                <AccordionTrigger className="text-left">{f.question}</AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">{f.answer}</AccordionContent>
+                <AccordionTrigger className="text-left">
+                  {f.question}
+                </AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  {f.answer}
+                </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
@@ -359,13 +400,25 @@ function ShamTsengPage() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "up" | "down";
+}) {
   return (
     <div className="rounded-lg border bg-card p-4">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={`mt-1 text-xl font-semibold ${
-          tone === "up" ? "text-emerald-600" : tone === "down" ? "text-red-600" : ""
+          tone === "up"
+            ? "text-emerald-600"
+            : tone === "down"
+              ? "text-red-600"
+              : ""
         }`}
       >
         {value}

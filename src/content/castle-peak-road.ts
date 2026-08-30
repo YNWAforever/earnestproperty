@@ -115,7 +115,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     ],
     zoneSummary: ["主打面積比較大，低密度海景、洋房及屋地"],
     buyerFit: "適合重視海景、低密度、私隱、泊車和安靜生活的家庭與換樓客。",
-    transport: "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
+    transport:
+      "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
     housingProfile: "低密度別墅、洋房、海景住宅和少量分層單位，流通量較低。",
     featuredEstates: [
@@ -200,7 +201,10 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     ],
     links: [
       { href: "/castle-peak-road/sham-tseng", label: "比較深井 / 青山公路" },
-      { href: "/listings?deal=all&district=ting-kau&page=1", label: "搜尋汀九放盤" },
+      {
+        href: "/listings?deal=all&district=ting-kau&page=1",
+        label: "搜尋汀九放盤",
+      },
     ],
   },
   {
@@ -230,7 +234,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     transport:
       "小巴接駁荃灣站，巴士往九龍、港島、機場及青衣方向成熟；青龍頭段主要靠青山公路巴士、小巴和自駕，往荃灣、屯門和機場均有路線。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
-    housingProfile: "大型海景屋苑、成熟分層住宅、山海景單位和部分低密度臨海單位。",
+    housingProfile:
+      "大型海景屋苑、成熟分層住宅、山海景單位和部分低密度臨海單位。",
     featuredEstates: [
       "Bellagio 碧堤半島",
       "Sea Crest Villa 浪翠園",
@@ -262,26 +267,33 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     faqs: [
       {
         question: "深井在青山公路沿線有咩優勢？",
-        answer: "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
+        answer:
+          "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
       },
       {
         question: "深井同汀九有咩分別？",
-        answer: "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
+        answer:
+          "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
       },
       {
         question: "青龍頭適合上車客嗎？",
-        answer: "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
+        answer:
+          "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
       },
       {
         question: "青龍頭交通會否太遠？",
-        answer: "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
+        answer:
+          "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
       },
     ],
     links: [
       { href: "/district/sham-tseng", label: "深井完整地區專頁" },
       { href: "/estate/bellagio", label: "碧堤半島 Bellagio" },
       { href: "/estate/hong-kong-garden", label: "豪景花園 Hong Kong Garden" },
-      { href: "/listings?deal=all&district=sham-tseng&page=1", label: "搜尋深井放盤" },
+      {
+        href: "/listings?deal=all&district=sham-tseng&page=1",
+        label: "搜尋深井放盤",
+      },
     ],
   },
   // so-kwun-wat-gold-coast (小欖/掃管笏/三聖, including Gold Coast 黃金海岸) removed:
@@ -291,7 +303,9 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
 ];
 
 export function getCastlePeakRoadSegment(slug: string): CorridorSegment | null {
-  return castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null;
+  return (
+    castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null
+  );
 }
 
 /**
@@ -313,7 +327,9 @@ export function findCastlePeakRoadSegmentByDistrictSlug(
 ): CorridorSegment | null {
   if (!districtSlug) return null;
   return (
-    castlePeakRoadSegments.find((segment) => segment.districtSlugs.includes(districtSlug)) ?? null
+    castlePeakRoadSegments.find((segment) =>
+      segment.districtSlugs.includes(districtSlug),
+    ) ?? null
   );
 }
 
@@ -334,7 +350,13 @@ export const castlePeakRoadSitemapPaths = [
 export const corridorRegionScope = {
   /** The region names as the client wrote them — single source of truth for docs and tests. */
   labels: ["深井", "青山公路", "汀九", "青龍頭", "油柑頭"],
-  districtSlugs: ["sham-tseng", "castle-peak-road", "ting-kau", "tsing-lung-tau", "yau-kom-tau"],
+  districtSlugs: [
+    "sham-tseng",
+    "castle-peak-road",
+    "ting-kau",
+    "tsing-lung-tau",
+    "yau-kom-tau",
+  ],
   /**
    * Place- and estate-name whitelist. 青山公路 and "Castle Peak Road" are
    * deliberately excluded: the road runs all the way to 屯門, so matching on it
@@ -403,7 +425,8 @@ export function isWithinCorridorRegion(input: {
 }): boolean {
   // Already attached to a corridor estate: the strongest signal there is, and
   // not something the place-name gate should be allowed to override.
-  if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug)) return true;
+  if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug))
+    return true;
 
   const haystack = (input.text ?? [])
     .filter((value): value is string => Boolean(value))
@@ -415,7 +438,10 @@ export function isWithinCorridorRegion(input: {
   );
   if (isOutOfScope) return false;
 
-  if (input.districtSlug && corridorRegionScope.districtSlugs.includes(input.districtSlug)) {
+  if (
+    input.districtSlug &&
+    corridorRegionScope.districtSlugs.includes(input.districtSlug)
+  ) {
     return true;
   }
   if (
@@ -425,5 +451,7 @@ export function isWithinCorridorRegion(input: {
     return true;
   }
 
-  return corridorRegionScope.textAliases.some((alias) => haystack.includes(alias.toUpperCase()));
+  return corridorRegionScope.textAliases.some((alias) =>
+    haystack.includes(alias.toUpperCase()),
+  );
 }

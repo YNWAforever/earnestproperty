@@ -1,5 +1,12 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { ArrowRight, HelpCircle, Home, MapPin, TrendingUp, Waves } from "lucide-react";
+import {
+  ArrowRight,
+  HelpCircle,
+  Home,
+  MapPin,
+  TrendingUp,
+  Waves,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DataNote } from "@/components/layout/DataNote";
@@ -92,8 +99,12 @@ export const Route = createFileRoute("/castle-peak-road/")({
     );
 
     return {
-      inventories: Object.fromEntries(rows.map((row) => [row.slug, row.inventory])),
-      priceSnapshots: Object.fromEntries(rows.map((row) => [row.slug, row.priceSnapshot])),
+      inventories: Object.fromEntries(
+        rows.map((row) => [row.slug, row.inventory]),
+      ),
+      priceSnapshots: Object.fromEntries(
+        rows.map((row) => [row.slug, row.priceSnapshot]),
+      ),
     };
   },
   head: () => ({
@@ -124,7 +135,9 @@ function SegmentCard({
       params={{ segment: segment.slug }}
       className="group rounded-lg border bg-card p-5 shadow-card transition hover:border-primary hover:shadow-elegant"
     >
-      <p className="text-xs font-semibold uppercase text-coral">{segment.eyebrow}</p>
+      <p className="text-xs font-semibold uppercase text-coral">
+        {segment.eyebrow}
+      </p>
       <h2 className="mt-2 text-xl font-bold text-primary">{segment.nameZh}</h2>
       <p className="mt-1 text-sm text-muted-foreground">{segment.nameEn}</p>
       <div className="mt-4 space-y-2 text-sm leading-7 text-muted-foreground">
@@ -135,11 +148,14 @@ function SegmentCard({
       <div className="mt-5 border-t pt-4 text-sm">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-primary">
-            售 {summary.saleTotal.toLocaleString()} ・ 租 {summary.rentTotal.toLocaleString()}
+            售 {summary.saleTotal.toLocaleString()} ・ 租{" "}
+            {summary.rentTotal.toLocaleString()}
           </span>
           <ArrowRight className="h-4 w-4 text-primary transition group-hover:translate-x-1" />
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{summary.scopeLabel}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {summary.scopeLabel}
+        </p>
       </div>
     </Link>
   );
@@ -151,8 +167,12 @@ function CastlePeakRoadRouteError({ error }: { error: Error }) {
   return (
     <div className="bg-background px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl rounded-lg border bg-card p-6 text-center shadow-card">
-        <p className="text-sm font-semibold text-coral">青山公路 Castle Peak Road</p>
-        <h1 className="mt-2 text-2xl font-bold text-primary">載入青山公路總覽時遇到問題</h1>
+        <p className="text-sm font-semibold text-coral">
+          青山公路 Castle Peak Road
+        </p>
+        <h1 className="mt-2 text-2xl font-bold text-primary">
+          載入青山公路總覽時遇到問題
+        </h1>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           晉誠地產的即時放盤資料暫時未能載入。你可以重新整理資料，或稍後再回來查看青山公路沿線真盤。
         </p>
@@ -239,7 +259,9 @@ function AreaComparisonSection() {
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} className="border-t align-top">
-                <td className="px-3 py-2 font-medium text-muted-foreground">{row.label}</td>
+                <td className="px-3 py-2 font-medium text-muted-foreground">
+                  {row.label}
+                </td>
                 {castlePeakRoadSegments.map((segment) => (
                   <td key={segment.slug} className="px-3 py-2 leading-6">
                     {row.values[segment.slug]}
@@ -301,7 +323,9 @@ function EstateDirectorySection() {
                           <span className="font-medium text-muted-foreground">
                             {estate.nameZh}
                           </span>
-                          <span className="text-xs text-muted-foreground">更多資料稍後提供</span>
+                          <span className="text-xs text-muted-foreground">
+                            更多資料稍後提供
+                          </span>
                         </>
                       )}
                     </li>
@@ -412,7 +436,8 @@ function DecisionGuideSection() {
 }
 
 function CastlePeakRoadHubPage() {
-  const { inventories, priceSnapshots } = Route.useLoaderData() as HubLoaderData;
+  const { inventories, priceSnapshots } =
+    Route.useLoaderData() as HubLoaderData;
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -472,7 +497,9 @@ function CastlePeakRoadHubPage() {
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="flex items-center gap-2">
           <Waves className="h-6 w-6 text-primary" />
-          <h2 className="text-2xl font-bold text-primary">由東至西比較青山公路</h2>
+          <h2 className="text-2xl font-bold text-primary">
+            由東至西比較青山公路
+          </h2>
         </div>
         <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {castlePeakRoadSegments.map((segment) => (
@@ -493,12 +520,16 @@ function CastlePeakRoadHubPage() {
       {faqs.length > 0 && (
         <section className="border-y bg-card">
           <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold text-primary">青山公路買樓 FAQ</h2>
+            <h2 className="text-2xl font-bold text-primary">
+              青山公路買樓 FAQ
+            </h2>
             <div className="mt-6 divide-y rounded-lg border bg-background">
               {faqs.map((faq) => (
                 <article key={faq.question} className="p-5">
                   <h3 className="font-semibold text-primary">{faq.question}</h3>
-                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
+                  <p className="mt-2 text-sm leading-7 text-muted-foreground">
+                    {faq.answer}
+                  </p>
                 </article>
               ))}
             </div>

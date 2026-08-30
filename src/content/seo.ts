@@ -85,7 +85,8 @@ export const pageSeo = {
   privacy: {
     path: "/privacy",
     title: "私隱政策｜晉誠地產 Earnest Property",
-    description: "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
+    description:
+      "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
   },
   disclaimer: {
     path: "/disclaimer",
@@ -107,7 +108,9 @@ export const pageSeo = {
 function estateSeoIdentity(slug: string) {
   const entry = getEstateEntry(slug);
   if (!entry.nameEn) {
-    throw new Error(`seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`);
+    throw new Error(
+      `seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`,
+    );
   }
   return {
     slug: entry.slug,
@@ -196,11 +199,12 @@ export const estateSeo = {
  * (confirmed by a repo-wide grep) but kept exported for parity with the
  * pre-refactor API.
  */
-export const estateAliases: Record<string, keyof typeof estateSeo> = Object.fromEntries(
-  (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
-    getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
-  ),
-);
+export const estateAliases: Record<string, keyof typeof estateSeo> =
+  Object.fromEntries(
+    (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
+      getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
+    ),
+  );
 
 export const blogArticles = [
   {

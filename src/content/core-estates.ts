@@ -12,7 +12,10 @@
  * this file only adds the homepage-card-specific fields (units/avgPsf/
  * listingCount, always null here and merged from the live DB at render time).
  */
-import { type EstateHomepageDistrict, getEstateEntry } from "./estate-registry.ts";
+import {
+  type EstateHomepageDistrict,
+  getEstateEntry,
+} from "./estate-registry.ts";
 
 export type CoreEstateDistrict = EstateHomepageDistrict;
 
@@ -80,6 +83,7 @@ export const CORE_ESTATES_PREVIEW_COUNT = 8;
  * for anything the DB had not filled in.
  */
 export function estateFigure(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "—";
   return value.toLocaleString();
 }
