@@ -91,7 +91,12 @@ test("saveAdminTransaction requires an estate_id", async () => {
 test("changing a factual field on an already-verified transaction resets it to pending and clears verified_at", async () => {
   const { service, queries } = verifiedFixture();
   await service.saveAdminTransaction(
-    { ...validInput, id: "44444444-4444-4444-8444-444444444444", price: 6_500_000, saleable_psf: 10_534 },
+    {
+      ...validInput,
+      id: "44444444-4444-4444-8444-444444444444",
+      price: 6_500_000,
+      saleable_psf: 10_534,
+    },
     actor,
   );
   const insertQuery = queries.find((q) => q.statement.includes("INSERT INTO transactions"));
@@ -131,7 +136,12 @@ test("saveAdminTransaction writes transaction.create for a new row, transaction.
 
   const { service: correctService, audits: correctAudits } = verifiedFixture();
   await correctService.saveAdminTransaction(
-    { ...validInput, id: "44444444-4444-4444-8444-444444444444", price: 6_500_000, saleable_psf: 10_534 },
+    {
+      ...validInput,
+      id: "44444444-4444-4444-8444-444444444444",
+      price: 6_500_000,
+      saleable_psf: 10_534,
+    },
     actor,
   );
   assert.equal(correctAudits[0][1], "transaction.correct");

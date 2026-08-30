@@ -181,7 +181,9 @@ export function createAdminTransactionsService(dependencies: Dependencies = {}) 
       const current = await queryRows("SELECT * FROM transactions WHERE id = $1", [input.id]);
       const existing = current[0];
       if (existing?.verification_state === "verified") {
-        resetToPending = FACTUAL_FIELDS.some((field) => factualFieldChanged(existing, input, field));
+        resetToPending = FACTUAL_FIELDS.some((field) =>
+          factualFieldChanged(existing, input, field),
+        );
       }
     }
 
