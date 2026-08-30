@@ -1,0 +1,15 @@
+-- P6a adds a read-only "viewer" staff role (see permissions.ts's rolePermissions
+-- and StaffRole in auth.server.ts). staff_role is a real Postgres ENUM
+-- (20260623090000_neon_admin_crm_whatsapp.sql), so the TypeScript-level role
+-- addition is not enough on its own -- assigning "viewer" to a real staff
+-- member without this migration would throw a raw "invalid input value for
+-- enum staff_role" error, the exact failure class this project hit in
+-- production from 20260830140000_transaction_provenance.sql shipping ahead
+-- of its own migration. This migration must be applied (npm run neon:migrate)
+-- before any staff member is actually assigned the viewer role.
+--
+-- ALTER TYPE ... ADD VALUE cannot run inside an explicit transaction block
+-- alongside a statement that uses the new value, but this file's own
+-- apply-migrations.mjs runner executes each statement independently, so this
+-- is safe as written.
+ALTER TYPE staff_role ADD VALUE IF NOT EXISTS 'viewer';

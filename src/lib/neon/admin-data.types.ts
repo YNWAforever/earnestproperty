@@ -511,7 +511,7 @@ export type CommandCenterData = {
   woztell_enabled: boolean;
 };
 
-export type StaffAccessRole = "admin" | "manager" | "agent";
+export type StaffAccessRole = "admin" | "manager" | "agent" | "viewer";
 
 /** One key per entry in STAFF_OWNERSHIP_COLUMNS, keyed by table name. */
 export type StaffOwnedCounts = {
