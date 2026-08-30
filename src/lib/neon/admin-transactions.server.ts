@@ -116,7 +116,7 @@ export function createAdminTransactionsService(dependencies: Dependencies = {}) 
     const hasMore = rows.length > limit;
     return {
       rows: rows.slice(0, limit).map(mapTransactionRow),
-      nextCursor: hasMore ? (stringOrEmpty(rows[limit - 1]?.id) || null) : null,
+      nextCursor: hasMore ? stringOrEmpty(rows[limit - 1]?.id) || null : null,
     };
   }
 
@@ -176,7 +176,11 @@ export function createAdminTransactionsService(dependencies: Dependencies = {}) 
     const id = stringOrEmpty(rows[0]?.id);
     await writeAudit(
       actor.staffId,
-      !input.id ? "transaction.create" : resetToPending ? "transaction.correct" : "transaction.update",
+      !input.id
+        ? "transaction.create"
+        : resetToPending
+          ? "transaction.correct"
+          : "transaction.update",
       "transaction",
       id,
     );

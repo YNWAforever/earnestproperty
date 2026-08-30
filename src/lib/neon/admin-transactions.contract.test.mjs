@@ -65,8 +65,8 @@ test("saveAdminTransaction rejects a future deal_date", async () => {
 test("saveAdminTransaction rejects non-positive price or area", async () => {
   const { service } = fixture();
   await assert.rejects(() => service.saveAdminTransaction({ ...validInput, price: 0 }, actor));
-  await assert.rejects(
-    () => service.saveAdminTransaction({ ...validInput, saleable_area: -1 }, actor),
+  await assert.rejects(() =>
+    service.saveAdminTransaction({ ...validInput, saleable_area: -1 }, actor),
   );
 });
 
@@ -84,7 +84,10 @@ test("editing an already-verified transaction resets it to pending and clears ve
       return [{ id: "44444444-4444-4444-8444-444444444444" }];
     },
   });
-  await service.saveAdminTransaction({ ...validInput, id: "44444444-4444-4444-8444-444444444444" }, actor);
+  await service.saveAdminTransaction(
+    { ...validInput, id: "44444444-4444-4444-8444-444444444444" },
+    actor,
+  );
   const insertQuery = queries.find((q) => q.statement.includes("INSERT INTO transactions"));
   assert.match(insertQuery.statement, /'pending'/);
   assert.match(insertQuery.statement, /verified_at = NULL/);
@@ -113,7 +116,8 @@ test("saveAdminTransaction writes transaction.create for a new row, transaction.
 test("publishAdminTransaction refuses to publish an unverified transaction", async () => {
   const { service } = fixture({
     queryRows: async (statement) => {
-      if (statement.includes("SELECT verification_state")) return [{ verification_state: "pending" }];
+      if (statement.includes("SELECT verification_state"))
+        return [{ verification_state: "pending" }];
       return [];
     },
   });
@@ -124,7 +128,8 @@ test("publishAdminTransaction refuses to publish an unverified transaction", asy
 test("publishAdminTransaction publishes a verified transaction", async () => {
   const { service } = fixture({
     queryRows: async (statement) => {
-      if (statement.includes("SELECT verification_state")) return [{ verification_state: "verified" }];
+      if (statement.includes("SELECT verification_state"))
+        return [{ verification_state: "verified" }];
       return [];
     },
   });
@@ -135,7 +140,9 @@ test("publishAdminTransaction publishes a verified transaction", async () => {
 test("verifyAdminTransaction sets verification_state and writes an audit event", async () => {
   const { service, queries, audits } = fixture();
   await service.verifyAdminTransaction("id", actor);
-  const updateQuery = queries.find((q) => q.statement.includes("UPDATE transactions SET verification_state"));
+  const updateQuery = queries.find((q) =>
+    q.statement.includes("UPDATE transactions SET verification_state"),
+  );
   assert.match(updateQuery.statement, /'verified'/);
   assert.equal(audits[0][1], "transaction.verify");
 });
