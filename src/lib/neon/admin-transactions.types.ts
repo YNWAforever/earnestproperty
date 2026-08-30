@@ -14,6 +14,11 @@ export type AdminTransactionInput = {
   source: string | null;
   source_url: string | null;
   agent_id: string | null;
+  /** Content Copilot's generated FB/IG zh-HK copy. Optional so bulk import
+   * (AdminTransactionImportRow = AdminTransactionInput) never needs to set
+   * them -- a freshly imported row has no social copy yet. */
+  social_copy_fb?: string | null;
+  social_copy_ig?: string | null;
 };
 
 export type AdminTransactionRow = AdminTransactionInput & {

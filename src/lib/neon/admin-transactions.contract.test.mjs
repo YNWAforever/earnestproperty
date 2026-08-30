@@ -5,25 +5,6 @@ import { createAdminTransactionsService } from "./admin-transactions.server.ts";
 
 const actor = { staffId: "11111111-1111-4111-8111-111111111111", roles: ["admin"] };
 
-function fixture(overrides = {}) {
-  const queries = [];
-  const audits = [];
-  const service = createAdminTransactionsService({
-    queryRows: async (statement, params = []) => {
-      queries.push({ statement, params });
-      if (overrides.queryRows) return overrides.queryRows(statement, params);
-      if (statement.includes("SELECT verification_state")) {
-        return [{ verification_state: "unverified" }];
-      }
-      return [{ id: "22222222-2222-4222-8222-222222222222" }];
-    },
-    writeAudit: async (...args) => {
-      audits.push(args);
-    },
-  });
-  return { service, queries, audits };
-}
-
 const validInput = {
   estate_id: "33333333-3333-4333-8333-333333333333",
   unit: null,
@@ -38,6 +19,38 @@ const validInput = {
   source_url: null,
   agent_id: null,
 };
+
+function fixture(overrides = {}) {
+  const queries = [];
+  const audits = [];
+  const service = createAdminTransactionsService({
+    queryRows: async (statement, params = []) => {
+      queries.push({ statement, params });
+      if (overrides.queryRows) return overrides.queryRows(statement, params);
+      if (statement.includes("SELECT * FROM transactions WHERE id")) {
+        return [{ ...validInput, verification_state: "unverified" }];
+      }
+      return [{ id: "22222222-2222-4222-8222-222222222222" }];
+    },
+    writeAudit: async (...args) => {
+      audits.push(args);
+    },
+  });
+  return { service, queries, audits };
+}
+
+/** A fixture whose id lookup reports the row as already verified, with the
+ * given factual field(s) overridden -- used to test the demotion rule. */
+function verifiedFixture(storedOverrides = {}) {
+  return fixture({
+    queryRows: async (statement) => {
+      if (statement.includes("SELECT * FROM transactions WHERE id")) {
+        return [{ ...validInput, verification_state: "verified", ...storedOverrides }];
+      }
+      return [{ id: "44444444-4444-4444-8444-444444444444" }];
+    },
+  });
+}
 
 test("saveAdminTransaction rejects a PSF more than 5% off price/area", async () => {
   const { service } = fixture();
@@ -75,17 +88,10 @@ test("saveAdminTransaction requires an estate_id", async () => {
   await assert.rejects(() => service.saveAdminTransaction({ ...validInput, estate_id: "" }, actor));
 });
 
-test("editing an already-verified transaction resets it to pending and clears verified_at", async () => {
-  const { service, queries } = fixture({
-    queryRows: async (statement) => {
-      if (statement.includes("SELECT verification_state")) {
-        return [{ verification_state: "verified" }];
-      }
-      return [{ id: "44444444-4444-4444-8444-444444444444" }];
-    },
-  });
+test("changing a factual field on an already-verified transaction resets it to pending and clears verified_at", async () => {
+  const { service, queries } = verifiedFixture();
   await service.saveAdminTransaction(
-    { ...validInput, id: "44444444-4444-4444-8444-444444444444" },
+    { ...validInput, id: "44444444-4444-4444-8444-444444444444", price: 6_500_000, saleable_psf: 10_534 },
     actor,
   );
   const insertQuery = queries.find((q) => q.statement.includes("INSERT INTO transactions"));
@@ -93,21 +99,39 @@ test("editing an already-verified transaction resets it to pending and clears ve
   assert.match(insertQuery.statement, /verified_at = NULL/);
 });
 
+test("saving only social copy on an already-verified transaction does NOT demote it to pending", async () => {
+  const { service, queries } = verifiedFixture();
+  await service.saveAdminTransaction(
+    {
+      ...validInput,
+      id: "44444444-4444-4444-8444-444444444444",
+      social_copy_fb: "新增嘅 FB 文案",
+      social_copy_ig: null,
+    },
+    actor,
+  );
+  const insertQuery = queries.find((q) => q.statement.includes("INSERT INTO transactions"));
+  assert.doesNotMatch(insertQuery.statement, /'pending'/);
+});
+
+test("re-saving an already-verified transaction with identical facts does NOT demote it", async () => {
+  const { service, queries } = verifiedFixture();
+  await service.saveAdminTransaction(
+    { ...validInput, id: "44444444-4444-4444-8444-444444444444" },
+    actor,
+  );
+  const insertQuery = queries.find((q) => q.statement.includes("INSERT INTO transactions"));
+  assert.doesNotMatch(insertQuery.statement, /'pending'/);
+});
+
 test("saveAdminTransaction writes transaction.create for a new row, transaction.correct when demoting from verified", async () => {
   const { service, audits } = fixture();
   await service.saveAdminTransaction(validInput, actor);
   assert.equal(audits[0][1], "transaction.create");
 
-  const { service: correctService, audits: correctAudits } = fixture({
-    queryRows: async (statement) => {
-      if (statement.includes("SELECT verification_state")) {
-        return [{ verification_state: "verified" }];
-      }
-      return [{ id: "44444444-4444-4444-8444-444444444444" }];
-    },
-  });
+  const { service: correctService, audits: correctAudits } = verifiedFixture();
   await correctService.saveAdminTransaction(
-    { ...validInput, id: "44444444-4444-4444-8444-444444444444" },
+    { ...validInput, id: "44444444-4444-4444-8444-444444444444", price: 6_500_000, saleable_psf: 10_534 },
     actor,
   );
   assert.equal(correctAudits[0][1], "transaction.correct");

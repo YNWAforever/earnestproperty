@@ -55,6 +55,48 @@ function validateTransactionInput(input: AdminTransactionInput) {
   if (dealDate.getTime() > Date.now()) throw new Error("成交日期不能是未來日期");
 }
 
+// Only a change to one of these triggers the pending-demotion in
+// saveAdminTransaction -- agent_id (an assignment, not a fact about the
+// deal) and the two social-copy fields never do, so touching up FB/IG
+// copy on an already-verified, published transaction doesn't silently
+// pull it off the public site.
+const FACTUAL_FIELDS = [
+  "estate_id",
+  "unit",
+  "deal_type",
+  "price",
+  "saleable_area",
+  "saleable_psf",
+  "deal_date",
+  "block",
+  "floor_band",
+  "source",
+  "source_url",
+] as const;
+
+const NUMERIC_FACTUAL_FIELDS = new Set(["price", "saleable_area", "saleable_psf"]);
+
+function factualFieldChanged(
+  existing: Record<string, unknown>,
+  input: AdminTransactionInput,
+  field: (typeof FACTUAL_FIELDS)[number],
+): boolean {
+  const after = input[field];
+  if (field === "deal_date") {
+    return dateOrNull(existing.deal_date)?.slice(0, 10) !== after;
+  }
+  const before = existing[field];
+  if (before == null && after == null) return false;
+  // Postgres numeric columns commonly round-trip as strings through the
+  // driver (see mapTransactionRow's own numberOrNull() coercion just below)
+  // -- comparing those directly against the input's JS numbers would treat
+  // "6000000" !== 6000000 as a change on every single save.
+  if (NUMERIC_FACTUAL_FIELDS.has(field)) {
+    return Number(before) !== Number(after);
+  }
+  return before !== after;
+}
+
 function mapTransactionRow(row: Record<string, unknown>): AdminTransactionRow {
   return {
     id: stringOrEmpty(row.id),
@@ -71,6 +113,8 @@ function mapTransactionRow(row: Record<string, unknown>): AdminTransactionRow {
     source: stringOrNull(row.source),
     source_url: stringOrNull(row.source_url),
     agent_id: stringOrNull(row.agent_id),
+    social_copy_fb: stringOrNull(row.social_copy_fb),
+    social_copy_ig: stringOrNull(row.social_copy_ig),
     verification_state:
       row.verification_state === "verified" || row.verification_state === "pending"
         ? row.verification_state
@@ -134,27 +178,29 @@ export function createAdminTransactionsService(dependencies: Dependencies = {}) 
 
     let resetToPending = false;
     if (input.id) {
-      const current = await queryRows("SELECT verification_state FROM transactions WHERE id = $1", [
-        input.id,
-      ]);
-      resetToPending = current[0]?.verification_state === "verified";
+      const current = await queryRows("SELECT * FROM transactions WHERE id = $1", [input.id]);
+      const existing = current[0];
+      if (existing?.verification_state === "verified") {
+        resetToPending = FACTUAL_FIELDS.some((field) => factualFieldChanged(existing, input, field));
+      }
     }
 
     const rows = await queryRows(
       `INSERT INTO transactions
          (id, estate_id, unit, deal_type, price, saleable_area, saleable_psf, deal_date,
-          block, floor_band, source, source_url, agent_id
+          block, floor_band, source, source_url, agent_id, social_copy_fb, social_copy_ig
           ${resetToPending ? ", verification_state, verified_at" : ""})
        VALUES
          (COALESCE($1, gen_random_uuid()), $2, $3, $4::deal_type, $5, $6, $7, $8::date,
-          $9, $10, $11, $12, $13
+          $9, $10, $11, $12, $13, $14, $15
           ${resetToPending ? ", 'pending', NULL" : ""})
        ON CONFLICT (id) DO UPDATE SET
          estate_id = EXCLUDED.estate_id, unit = EXCLUDED.unit, deal_type = EXCLUDED.deal_type,
          price = EXCLUDED.price, saleable_area = EXCLUDED.saleable_area,
          saleable_psf = EXCLUDED.saleable_psf, deal_date = EXCLUDED.deal_date,
          block = EXCLUDED.block, floor_band = EXCLUDED.floor_band,
-         source = EXCLUDED.source, source_url = EXCLUDED.source_url, agent_id = EXCLUDED.agent_id
+         source = EXCLUDED.source, source_url = EXCLUDED.source_url, agent_id = EXCLUDED.agent_id,
+         social_copy_fb = EXCLUDED.social_copy_fb, social_copy_ig = EXCLUDED.social_copy_ig
          ${resetToPending ? ", verification_state = 'pending', verified_at = NULL" : ""}
        RETURNING id`,
       [
@@ -171,6 +217,8 @@ export function createAdminTransactionsService(dependencies: Dependencies = {}) 
         input.source,
         input.source_url,
         input.agent_id,
+        input.social_copy_fb ?? null,
+        input.social_copy_ig ?? null,
       ],
     );
     const id = stringOrEmpty(rows[0]?.id);
