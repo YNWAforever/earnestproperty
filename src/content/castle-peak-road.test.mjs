@@ -21,6 +21,18 @@ import {
   isWithinCorridorRegion,
 } from "./castle-peak-road.ts";
 import { renderableFaqs } from "../lib/faq.ts";
+import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
+// P4 Task 6's hub-page sections: pure logic lives in corridor-hub.ts (no
+// JSX), matching estate-registry.ts/castle-peak-road.ts's own established
+// split, so it can be imported and actually executed here instead of only
+// being proven by a source-text scan of the .tsx route.
+import {
+  buildAreaComparisonRows,
+  buyerFitHighlights,
+  computePriceSnapshot,
+  estateDirectoryForSegment,
+  summarizeSegmentInventory,
+} from "../components/site/corridor-hub.ts";
 
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -606,4 +618,189 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(sitemap, /castlePeakRoadSitemapPaths/);
   assert.match(sitemap, /function escapeXml/);
   assert.match(sitemap, /escapeXml\(\`\$\{SITE_URL\}\$\{path\}\`\)/);
+});
+
+// --- P4 Task 6: castle-peak-road.index.tsx hub rebuild ---
+// (docs/superpowers/plans/2026-08-30-frontend-revamp-p4-areas-estates.md)
+
+test("estateDirectoryForSegment only lists estates the registry actually claims as this segment's corridorSegment", () => {
+  for (const segment of castlePeakRoadSegments) {
+    const directory = estateDirectoryForSegment(segment);
+
+    // Every listed estate's own registry entry really does name this
+    // segment -- the directory must never invent corridor membership that
+    // isn't in the registry.
+    for (const listed of directory) {
+      const entry = getEstateEntry(listed.slug);
+      assert.equal(entry.corridorSegment, segment.slug);
+      assert.equal(listed.nameZh, entry.nameZh);
+      assert.equal(listed.hasPage, entry.hasPage);
+    }
+
+    // And nothing the registry claims for this segment is missing from the
+    // directory -- a two-way check, not just "no false positives".
+    const expectedSlugs = estateRegistry
+      .filter((entry) => entry.corridorSegment === segment.slug)
+      .map((entry) => entry.slug)
+      .sort();
+    assert.deepEqual(
+      directory.map((entry) => entry.slug).sort(),
+      expectedSlugs,
+    );
+  }
+
+  // Pin today's real, current state (not a bug to "fix"): no estate has a
+  // real, published corridorSegment of "ting-kau" yet -- every estate that
+  // could claim it ships published=false from Task 2 -- so ting-kau's
+  // directory is genuinely empty right now, and the route must render that
+  // gracefully rather than omit the section outright or fabricate an entry.
+  assert.deepEqual(estateDirectoryForSegment(getCastlePeakRoadSegment("ting-kau")), []);
+
+  // sham-tseng carries all 5 hasPage:true estates, every one linkable.
+  const shamTsengDirectory = estateDirectoryForSegment(getCastlePeakRoadSegment("sham-tseng"));
+  assert.equal(shamTsengDirectory.length, 5);
+  assert.ok(shamTsengDirectory.every((entry) => entry.hasPage === true));
+});
+
+test("summarizeSegmentInventory reports an explicit sale/rent breakdown and a scope label naming the segment", () => {
+  for (const segment of castlePeakRoadSegments) {
+    const summary = summarizeSegmentInventory(segment, { saleTotal: 4, rentTotal: 7 });
+    assert.equal(summary.saleTotal, 4);
+    assert.equal(summary.rentTotal, 7);
+    assert.equal(summary.total, 11);
+    assert.ok(
+      summary.scopeLabel.includes(segment.nameZh),
+      `scope label must name ${segment.nameZh}, got "${summary.scopeLabel}"`,
+    );
+    assert.match(summary.scopeLabel, /只計算.*範圍即時放盤/);
+  }
+
+  // Missing inventory (loader race/error) must default to zero, not throw or
+  // render "undefined".
+  const fallback = summarizeSegmentInventory(castlePeakRoadSegments[0], undefined);
+  assert.deepEqual(
+    { saleTotal: fallback.saleTotal, rentTotal: fallback.rentTotal, total: fallback.total },
+    { saleTotal: 0, rentTotal: 0, total: 0 },
+  );
+});
+
+test("buildAreaComparisonRows reuses each segment's own curated copy verbatim, not new copy", () => {
+  const rows = buildAreaComparisonRows(castlePeakRoadSegments);
+  const byKey = Object.fromEntries(rows.map((row) => [row.key, row]));
+
+  for (const segment of castlePeakRoadSegments) {
+    assert.equal(byKey.housingProfile.values[segment.slug], segment.housingProfile);
+    assert.equal(byKey.buyerFit.values[segment.slug], segment.buyerFit);
+    assert.equal(byKey.transport.values[segment.slug], segment.transport);
+    assert.equal(byKey.schoolNet.values[segment.slug], segment.schoolNet ?? "—");
+  }
+
+  // A segment missing schoolNet (CorridorSegment.schoolNet is optional) must
+  // fall back to an explicit "—", never an empty cell or a fabricated net
+  // code -- exercised with a fixture since both live segments currently
+  // carry schoolNet.
+  const fixtureRows = buildAreaComparisonRows([
+    { ...castlePeakRoadSegments[0], schoolNet: undefined },
+  ]);
+  const fixtureSchoolNet = fixtureRows.find((row) => row.key === "schoolNet");
+  assert.equal(fixtureSchoolNet.values[castlePeakRoadSegments[0].slug], "—");
+});
+
+test("buyerFitHighlights: every returned phrase is a literal substring of the segment's own buyerFit copy", () => {
+  for (const segment of castlePeakRoadSegments) {
+    const highlights = buyerFitHighlights(segment.buyerFit);
+    assert.ok(highlights.length > 0, `${segment.slug} should yield at least one highlight`);
+    for (const highlight of highlights) {
+      assert.ok(
+        segment.buyerFit.includes(highlight),
+        `"${highlight}" must be a literal substring of ${segment.slug}'s buyerFit ("${segment.buyerFit}")`,
+      );
+    }
+  }
+
+  // Pin the exact extraction against the live copy, so a future edit to
+  // either segment's buyerFit sentence structure (e.g. dropping the leading
+  // "適合" or the trailing audience clause) is caught here rather than
+  // silently degrading the decision guide.
+  assert.deepEqual(buyerFitHighlights(getCastlePeakRoadSegment("ting-kau").buyerFit), [
+    "重視海景",
+    "低密度",
+    "私隱",
+    "泊車",
+    "安靜生活",
+  ]);
+  assert.deepEqual(buyerFitHighlights(getCastlePeakRoadSegment("sham-tseng").buyerFit), [
+    "想要海景",
+    "屋苑管理",
+    "會所",
+    "較多盤源",
+    "成熟生活配套",
+  ]);
+});
+
+test("computePriceSnapshot reduces real transaction rows to the latest month's average PSF, and is honest about no data", () => {
+  assert.equal(computePriceSnapshot([]), null);
+  assert.equal(
+    computePriceSnapshot([{ deal_date: null, saleable_psf: 12000 }]),
+    null,
+    "a row missing a deal_date must not be counted",
+  );
+  assert.equal(
+    computePriceSnapshot([{ deal_date: "2026-01-15", saleable_psf: null }]),
+    null,
+    "a row missing saleable_psf must not be counted",
+  );
+
+  const snapshot = computePriceSnapshot([
+    { deal_date: "2026-01-15", saleable_psf: 10000 },
+    { deal_date: "2026-01-20", saleable_psf: 12000 },
+    { deal_date: "2026-02-01", saleable_psf: 11000 },
+  ]);
+  assert.deepEqual(snapshot, { latestPsf: 11000, latestMonth: "26/02", transactionCount: 3 });
+});
+
+test("castle-peak-road.index.tsx wires all six Task 6 sections, each using real data, never a fabricated figure", () => {
+  const hub = read("src/routes/castle-peak-road.index.tsx");
+
+  // 1. Corridor schematic: an ordered, labelled sequence, not a pin map.
+  assert.match(hub, /function CorridorSchematic/);
+  assert.doesNotMatch(hub, /\.lat\b|\.lng\b|latitude|longitude/i);
+
+  // 2. Area-comparison table, built from the shared pure module.
+  assert.match(hub, /function AreaComparisonSection/);
+  assert.match(hub, /buildAreaComparisonRows\(castlePeakRoadSegments\)/);
+
+  // 3. Estate directory: gated hasPage link, honest empty state, never a
+  // link built directly off a raw slug string.
+  assert.match(hub, /function EstateDirectorySection/);
+  assert.match(hub, /estateDirectoryForSegment\(segment\)/);
+  assert.match(hub, /estate\.hasPage/);
+  assert.match(hub, /更多資料稍後提供/);
+
+  // 4. Scoped, labelled sale/rent inventory breakdown replaces the old
+  // single combined count.
+  assert.match(hub, /summarizeSegmentInventory\(segment, inventory\)/);
+  assert.match(hub, /售 \{summary\.saleTotal\.toLocaleString\(\)\}/);
+  assert.match(hub, /租 \{summary\.rentTotal\.toLocaleString\(\)\}/);
+  assert.doesNotMatch(hub, /function segmentTotal/);
+
+  // 5. Price snapshot: built (not skipped), sourced from real transaction
+  // data via fetchDistrictTransactions, and cited with a DataNote -- never a
+  // bare number with no source.
+  assert.match(hub, /fetchDistrictTransactions/);
+  assert.match(hub, /computePriceSnapshot/);
+  assert.match(hub, /function PriceSnapshotSection/);
+  assert.match(hub, /import \{ DataNote \} from "@\/components\/layout\/DataNote"/);
+  assert.match(hub, /<DataNote/);
+  assert.match(hub, /source=\{`本行成交記錄/);
+  // Omits the whole section when no segment has real data, rather than
+  // rendering a fabricated figure.
+  assert.match(hub, /if \(entries\.length === 0\) return null;/);
+
+  // 6. Decision guide draws only from buyerFitHighlights, i.e. buyerFit
+  // copy, and references both segments (via the shared segments array, not
+  // a hardcoded single slug).
+  assert.match(hub, /function DecisionGuideSection/);
+  assert.match(hub, /buyerFitHighlights\(segment\.buyerFit\)/);
+  assert.match(hub, /castlePeakRoadSegments\.map\(\(segment\) => \{/);
 });
