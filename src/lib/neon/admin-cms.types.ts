@@ -32,7 +32,19 @@ export type CmsPublishInput = {
 };
 export type CmsRestoreInput = { revisionId: string };
 export type CmsArchiveInput = { resourceType: CmsResourceType; resourceId: string };
-export type CmsEditorResult = { row: CmsHubRow | null; revisions: CmsRevisionSummary[] };
+/** Every field this repo's CMS payloads actually store -- string/number/
+ * boolean/string-array/null, never a nested object or function. Narrower
+ * than `unknown` because TanStack Start's serialization check on a
+ * createServerFn return type rejects `Record<string, unknown>`. */
+export type CmsPayloadValue = string | number | boolean | string[] | null;
+
+export type CmsEditorResult = {
+  row: CmsHubRow | null;
+  revisions: CmsRevisionSummary[];
+  /** The latest revision's raw payload -- needed to populate a comprehensive
+   * editor form (CmsHubRow only carries a title/slug display projection). */
+  payload: Record<string, CmsPayloadValue> | null;
+};
 export type CmsRevisionSummary = {
   id: string;
   versionNumber: number;
