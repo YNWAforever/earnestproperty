@@ -5,14 +5,23 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { saveAdminAgentProfile } from "@/lib/neon/admin-data";
-import type { AdminAgentProfileInput } from "@/lib/neon/admin-data.types";
+import type { AdminAgentProfileInput, AdminBranchOption } from "@/lib/neon/admin-data.types";
 import { agentProfileSchema, buildAgentProfilePayload } from "./agent-profile-form-utils";
 
 type AgentProfile = Partial<AdminAgentProfileInput> & { id?: string };
+
+const UNLINKED_BRANCH = "none";
 
 function createInitialForm(profile?: AgentProfile) {
   return {
@@ -26,6 +35,7 @@ function createInitialForm(profile?: AgentProfile) {
     licence_no: profile?.licence_no ?? "",
     avatar_url: profile?.avatar_url ?? "",
     branch: profile?.branch ?? "",
+    branch_id: profile?.branch_id ?? "",
     bio: profile?.bio ?? "",
     specialties: (profile?.specialties ?? []).join("\n"),
     served_estate_slugs: (profile?.served_estate_slugs ?? []).join("\n"),
@@ -40,10 +50,15 @@ type FormState = ReturnType<typeof createInitialForm>;
 export function AgentProfileForm({
   profile,
   canManageIdentity,
+  branches = [],
   onSaved,
 }: {
   profile?: AgentProfile;
   canManageIdentity: boolean;
+  /** Options for the 分行 dropdown, sourced from the real `branches` table
+   * (fetchAdminBranches()) -- defaults to [] so the dropdown just offers
+   * "未連結" if the caller hasn't fetched them (e.g. the fetch failed). */
+  branches?: AdminBranchOption[];
   onSaved: (id: string) => void;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -174,6 +189,24 @@ export function AgentProfileForm({
             onChange={(event) => set("branch", event.target.value)}
             maxLength={120}
           />
+        </Field>
+        <Field label="連結分行資料" htmlFor="branch_id" error={fieldErrors.branch_id}>
+          <Select
+            value={form.branch_id || UNLINKED_BRANCH}
+            onValueChange={(value) => set("branch_id", value === UNLINKED_BRANCH ? "" : value)}
+          >
+            <SelectTrigger id="branch_id" {...fieldProps("branch_id")}>
+              <SelectValue placeholder="未連結" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={UNLINKED_BRANCH}>未連結</SelectItem>
+              {branches.map((branch) => (
+                <SelectItem key={branch.id} value={branch.id}>
+                  {branch.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
         <Field label="牌照號碼" htmlFor="licence_no" error={fieldErrors.licence_no}>
           <Input

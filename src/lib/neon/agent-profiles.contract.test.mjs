@@ -225,3 +225,154 @@ test("the unique-constraint migration is idempotent", () => {
   assert.doesNotMatch(sql, /WHEN unique_violation/);
   assert.doesNotMatch(sql, /WHEN others/);
 });
+
+test("agent languages migration is additive, nullable, and never dropped", () => {
+  const migration = "neon/migrations/20260830150000_agent_languages.sql";
+  assert.ok(existsSync(join(root, migration)), "agent languages migration must exist");
+
+  const sql = read(migration);
+  assert.match(sql, /ALTER TABLE staff_users/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS languages TEXT\[\]/);
+  // Deliberately no NOT NULL / DEFAULT, unlike specialties/served_estate_slugs
+  // -- a language is either recorded by a human or it isn't, and this plan's
+  // ground truth explicitly calls the DB-level column nullable.
+  assert.doesNotMatch(sql, /languages TEXT\[\]\s+NOT NULL/);
+  assert.doesNotMatch(sql, /DROP COLUMN/);
+});
+
+test("languages thread all the way through the public agent-profile type layer", () => {
+  const types = read("src/lib/neon/public-data.types.ts");
+  const server = read("src/lib/neon/public-data.server.ts");
+
+  assert.match(
+    types,
+    /export type NeonPublicAgentProfile = \{[\s\S]*?languages: string\[\];[\s\S]*?\};/,
+  );
+
+  const projection = server.match(/const publicAgentProfileColumns = `[\s\S]*?`;/)?.[0] ?? "";
+  assert.match(projection, /AS agent_languages/);
+  // Guarded the same way public_slug/job_title/etc. are (to_jsonb, never a
+  // raw `s.languages` reference) -- see the "public SQL must remain valid
+  // before the agent-profile migration adds these columns" test above for
+  // why a bare column reference in this projection would be a parse-time
+  // regression on an unmigrated database. jsonb_typeof guards the extra
+  // wrinkle a NULLABLE array column has that specialties/served_estate_slugs
+  // (NOT NULL DEFAULT '{}') never needed to: a real column holding SQL NULL
+  // serializes as JSON `null` via to_jsonb, which jsonb_array_elements_text
+  // errors on if passed directly (it is a scalar, not an array).
+  assert.doesNotMatch(projection, /\bs\.languages\b/);
+  assert.match(projection, /jsonb_typeof\(to_jsonb\(s\)->'languages'\)\s*=\s*'array'/);
+
+  const mapper = server.match(/function mapPublicAgentProfile\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(mapper, /languages:\s*textArrayOrNull\(row\.agent_languages\)\s*\?\?\s*\[\]/);
+});
+
+test("branches entity migration is additive, nullable, and never backfilled", () => {
+  const migration = "neon/migrations/20260830160000_branches_entity.sql";
+  assert.ok(existsSync(join(root, migration)), "branches entity migration must exist");
+
+  const sql = read(migration);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS branches/);
+  assert.match(sql, /ALTER TABLE staff_users/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches\(id\)/);
+  // The exact discipline this migration exists to protect -- see
+  // CHANGELOG.md:79-87 and this migration's own header comment: every
+  // existing agent starts unlinked, never guessed.
+  assert.doesNotMatch(sql, /branch_id UUID NOT NULL/);
+  assert.doesNotMatch(sql, /UPDATE staff_users SET branch_id/i);
+  assert.doesNotMatch(sql, /DROP COLUMN\s+branch\b/);
+});
+
+test("branch_id threads through the public agent-profile type layer, guarded the same way as other new columns", () => {
+  const types = read("src/lib/neon/public-data.types.ts");
+  const server = read("src/lib/neon/public-data.server.ts");
+
+  assert.match(
+    types,
+    /export type NeonPublicAgentProfile = \{[\s\S]*?branch_id: string \| null;[\s\S]*?\};/,
+  );
+  assert.match(types, /export type NeonBranchRecord = \{/);
+
+  const projection = server.match(/const publicAgentProfileColumns = `[\s\S]*?`;/)?.[0] ?? "";
+  assert.match(projection, /to_jsonb\(s\)->>'branch_id'\s+AS agent_branch_id/);
+  // Never a bare column reference -- branch_id is new in this exact deploy,
+  // so this projection (shared by every property/listing/agent-profile
+  // query) must stay parseable against a database that hasn't migrated yet.
+  assert.doesNotMatch(projection, /\bs\.branch_id\b/);
+
+  const mapper = server.match(/function mapPublicAgentProfile\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(mapper, /branch_id:\s*stringOrNull\(row\.agent_branch_id\)/);
+});
+
+test("listBranches degrades to [] when the branches table hasn't been migrated yet, and rethrows anything else", async () => {
+  let databaseError;
+  const server = await importPublicDataServerWithInjectedQuery(async () => {
+    throw databaseError;
+  });
+
+  databaseError = Object.assign(new Error('relation "branches" does not exist'), {
+    code: "42P01",
+  });
+  assert.deepEqual(await server.listBranches(), []);
+
+  databaseError = Object.assign(new Error('relation "staff_users" does not exist'), {
+    code: "42P01",
+  });
+  await assert.rejects(server.listBranches(), (error) => error === databaseError);
+});
+
+test("listBranches maps every branches column, and never silently substitutes another row", async () => {
+  const server = await importPublicDataServerWithInjectedQuery(async () => [
+    {
+      id: "branch-uuid-1",
+      slug: "lido",
+      name: "麗都分行",
+      address: "深井麗都花園地下5A舖",
+      phone: "26882988",
+      whatsapp: null,
+      photo: "/branches/lido.jpg",
+    },
+  ]);
+  const branches = await server.listBranches();
+  assert.deepEqual(branches, [
+    {
+      id: "branch-uuid-1",
+      slug: "lido",
+      name: "麗都分行",
+      address: "深井麗都花園地下5A舖",
+      phone: "26882988",
+      whatsapp: null,
+      photo: "/branches/lido.jpg",
+    },
+  ]);
+});
+
+test("listPublicAgentProfiles maps a real languages array and defaults a missing one to []", async () => {
+  const baseRow = {
+    agent_id: "agent-1",
+    agent_public_slug: "agent-one",
+    agent_name_zh: "陳大文",
+    agent_name_en: null,
+    agent_job_title: null,
+    agent_phone: null,
+    agent_whatsapp: null,
+    agent_licence_no: null,
+    agent_avatar_url: null,
+    agent_branch: null,
+    agent_bio: null,
+    agent_specialties: [],
+    agent_served_estate_slugs: [],
+  };
+
+  const withLanguages = await importPublicDataServerWithInjectedQuery(async () => [
+    { ...baseRow, agent_languages: ["粵語", "英語"] },
+  ]);
+  const [profileWithLanguages] = await withLanguages.listPublicAgentProfiles();
+  assert.deepEqual(profileWithLanguages.languages, ["粵語", "英語"]);
+
+  const withoutLanguages = await importPublicDataServerWithInjectedQuery(async () => [
+    { ...baseRow, agent_languages: null },
+  ]);
+  const [profileWithoutLanguages] = await withoutLanguages.listPublicAgentProfiles();
+  assert.deepEqual(profileWithoutLanguages.languages, []);
+});

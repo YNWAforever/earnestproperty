@@ -12,6 +12,7 @@ import {
   transactionRows,
 } from "./db.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
+import { isMissingBranchesTableError } from "./branches-schema";
 import type { StaffAccess } from "./auth.server";
 import {
   decideAgentProfileMutation,
@@ -23,6 +24,7 @@ import type {
   AdminAgentProfileInput,
   AdminAgentProfileMutationInput,
   AdminAgentProfileRow,
+  AdminBranchOption,
   AdminLeadAiProfile,
   AdminArticleInput,
   AdminCmsVideoInput,
@@ -80,6 +82,11 @@ import {
   LISTING_ALERT_CONSENT_TEXT,
   LISTING_ALERT_CONSENT_VERSION,
 } from "./listing-alerts.js";
+import {
+  persistValuationLead,
+  VALUATION_CONSENT_TEXT,
+  VALUATION_CONSENT_VERSION,
+} from "./valuation-leads.js";
 import { woztellEnabled } from "../woztell/woztell.server";
 
 /**
@@ -711,6 +718,7 @@ function mapAdminAgentProfile(row: Record<string, unknown>): AdminAgentProfileRo
     licence_no: stringOrNull(row.licence_no),
     avatar_url: stringOrNull(row.avatar_url),
     branch: stringOrNull(row.branch),
+    branch_id: stringOrNull(row.branch_id),
     bio: stringOrNull(row.bio),
     specialties: Array.isArray(row.specialties) ? row.specialties.map(String) : [],
     served_estate_slugs: Array.isArray(row.served_estate_slugs)
@@ -1185,6 +1193,7 @@ export async function fetchAdminAgentProfiles(): Promise<AdminAgentProfileRow[]>
       s.licence_no,
       s.avatar_url,
       s.branch,
+      s.branch_id,
       s.bio,
       s.specialties,
       s.served_estate_slugs,
@@ -1215,6 +1224,7 @@ export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProf
       s.licence_no,
       s.avatar_url,
       s.branch,
+      s.branch_id,
       s.bio,
       s.specialties,
       s.served_estate_slugs,
@@ -1231,6 +1241,27 @@ export async function fetchAdminAgentProfile(id: string): Promise<AdminAgentProf
     [id],
   );
   return rows[0] ? mapAdminAgentProfile(rows[0]) : null;
+}
+
+/**
+ * Options for the agent-profile form's 分行 dropdown (AgentProfileForm.tsx).
+ * Degrades to [] rather than erroring if `branches` hasn't been migrated yet
+ * (see 20260830160000_branches_entity.sql) -- the dropdown just offers only
+ * "未連結" and the free-text `branch` field still works, exactly as before
+ * this table existed.
+ */
+export async function fetchAdminBranches(): Promise<AdminBranchOption[]> {
+  try {
+    const rows = await queryRows("SELECT id, slug, name FROM branches ORDER BY name ASC");
+    return rows.map((row) => ({
+      id: stringOrEmpty(row.id),
+      slug: stringOrEmpty(row.slug),
+      name: stringOrEmpty(row.name),
+    }));
+  } catch (error) {
+    if (isMissingBranchesTableError(error)) return [];
+    throw error;
+  }
 }
 
 export async function saveAdminAgentProfile(
@@ -1273,6 +1304,9 @@ export async function saveAdminAgentProfile(
   const servedEstateSlugs = Array.isArray(input.served_estate_slugs)
     ? input.served_estate_slugs
     : [];
+  // Empty string (the form's "未連結" option) means the same as null here --
+  // nullableTrim already treats "" as null for every other optional column.
+  const branchId = nullableTrim(input.branch_id ?? null);
   const identityAndProfileParams = [
     nullableTrim(identity.auth_user_id),
     nullableTrim(identity.email),
@@ -1291,16 +1325,18 @@ export async function saveAdminAgentProfile(
     identity.active,
     specialties,
     servedEstateSlugs,
+    branchId,
   ];
   // Appended after identity.active rather than inserted mid-array so the
   // existing .slice(2, 14) below (name_zh..display_order, excluding the
   // identity-only auth_user_id/email/active fields) keeps working unchanged;
-  // both new fields are profile-level like job_title/bio, so they belong in
-  // publicProfileParams too.
+  // both new fields (and branch_id) are profile-level like job_title/bio, so
+  // they belong in publicProfileParams too.
   const publicProfileParams = [
     ...identityAndProfileParams.slice(2, 14),
     specialties,
     servedEstateSlugs,
+    branchId,
   ];
 
   try {
@@ -1327,8 +1363,9 @@ export async function saveAdminAgentProfile(
             active = $15,
             specialties = $16::text[],
             served_estate_slugs = $17::text[],
+            branch_id = $18,
             updated_at = now()
-          WHERE id = $18
+          WHERE id = $19
           RETURNING id
           `,
             [...identityAndProfileParams, input.id],
@@ -1338,11 +1375,11 @@ export async function saveAdminAgentProfile(
           INSERT INTO staff_users (
             auth_user_id, email, name_zh, name_en, job_title, phone, whatsapp, licence_no,
             avatar_url, branch, bio, public_slug, show_on_website, display_order, active,
-            specialties, served_estate_slugs
+            specialties, served_estate_slugs, branch_id
           )
           VALUES (
             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
-            $16::text[], $17::text[]
+            $16::text[], $17::text[], $18
           )
           RETURNING id
           `,
@@ -1367,8 +1404,9 @@ export async function saveAdminAgentProfile(
               display_order = $12,
               specialties = $13::text[],
               served_estate_slugs = $14::text[],
+              branch_id = $15,
               updated_at = now()
-            WHERE target.id = $15
+            WHERE target.id = $16
               AND NOT EXISTS (
                 SELECT 1
                 FROM staff_roles privileged_role
@@ -1384,9 +1422,9 @@ export async function saveAdminAgentProfile(
             INSERT INTO staff_users (
               name_zh, name_en, job_title, phone, whatsapp, licence_no,
               avatar_url, branch, bio, public_slug, show_on_website, display_order,
-              specialties, served_estate_slugs
+              specialties, served_estate_slugs, branch_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::text[], $14::text[])
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::text[], $14::text[], $15)
             RETURNING id
             `,
             publicProfileParams,
@@ -3266,6 +3304,35 @@ export async function createListingAlert(input: {
     // answer "what did this person actually agree to."
     consentText: LISTING_ALERT_CONSENT_TEXT,
     consentVersion: LISTING_ALERT_CONSENT_VERSION,
+    consentedAt: new Date().toISOString(),
+    utm: input.utm ?? {},
+  });
+}
+
+export async function createValuationLead(input: {
+  name: string;
+  phone: string;
+  email?: string | null;
+  propertyAddress: string;
+  estateId?: string | null;
+  notes?: string | null;
+  utm?: Record<string, string>;
+}) {
+  const email = input.email ? input.email : null;
+  const notes = input.notes ? input.notes : null;
+  return persistValuationLead(queryRows, {
+    name: input.name,
+    phone: input.phone,
+    email,
+    propertyAddress: input.propertyAddress,
+    estateId: input.estateId ?? null,
+    notes,
+    // Always the server's own constants, never a caller-supplied value --
+    // otherwise an unauthenticated caller could write arbitrary text into
+    // consent_text/consent_version and the column would no longer reliably
+    // answer "what did this person actually agree to."
+    consentText: VALUATION_CONSENT_TEXT,
+    consentVersion: VALUATION_CONSENT_VERSION,
     consentedAt: new Date().toISOString(),
     utm: input.utm ?? {},
   });

@@ -293,15 +293,9 @@ test("estate options are deduped by canonical slug", () => {
 test("listings.tsx sanitizes title_zh before it reaches JSON-LD and card render (DR-4)", () => {
   const route = read("src/routes/listings.tsx");
 
-  assert.match(
-    route,
-    /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/,
-  );
+  assert.match(route, /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/);
   // JSON-LD item name.
-  assert.match(
-    route,
-    /name: sanitizeListingText\(row\.title_zh\) \?\? row\.title_zh/,
-  );
+  assert.match(route, /name: sanitizeListingText\(row\.title_zh\) \?\? row\.title_zh/);
   // Card alt/heading -- a small local helper so the raw fallback (never a
   // blank title) is computed once per card.
   assert.match(route, /sanitizeListingText\(p\.title_zh\) \?\? p\.title_zh/);
@@ -377,6 +371,7 @@ const QUERIES_STUB_PUBLIC_DATA_EXPORTS = [
   "fetchNeonPropertyByLegacyDetailId",
   "fetchNeonPropertyByListingNo",
   "fetchNeonPublishedArticles",
+  "fetchNeonRecentTransactions",
   "fetchNeonSimilarListings",
   "searchNeonListings",
 ];

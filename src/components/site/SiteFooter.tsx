@@ -157,7 +157,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <Link to="/transactions" className="opacity-80 hover:opacity-100">
-                  成交快訊
+                  晉誠地產最新成交
                 </Link>
               </li>
               <li>

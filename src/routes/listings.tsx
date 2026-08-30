@@ -1,9 +1,4 @@
-import {
-  createFileRoute,
-  Link,
-  useNavigate,
-  useRouter,
-} from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { useState, useEffect } from "react";
@@ -37,20 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SkeletonBlock } from "@/components/layout/SkeletonBlock";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
-import {
-  formatHkd,
-  formatSaleDisplay,
-  sanitizeListingText,
-} from "@/lib/format";
+import { formatHkd, formatSaleDisplay, sanitizeListingText } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
 import {
   deleteSavedSearch,
@@ -60,24 +47,14 @@ import {
   type SavedSearch,
 } from "@/lib/saved-listings";
 import { AppImage } from "@/components/media/AppImage";
-import {
-  searchListings,
-  fetchEstateOptions,
-  type ListingRow,
-} from "@/lib/queries";
+import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 import { createListingAlert } from "@/lib/neon/admin-data";
 import { LISTING_ALERT_CONSENT_TEXT } from "@/lib/neon/listing-alerts.js";
 
 const PAGE_SIZE = 12;
 
-const SORT_OPTIONS = [
-  "newest",
-  "price_asc",
-  "price_desc",
-  "area",
-  "psf",
-] as const;
+const SORT_OPTIONS = ["newest", "price_asc", "price_desc", "area", "psf"] as const;
 
 const searchSchema = z.object({
   deal: fallback(z.enum(["all", "sale", "rent"]), "all").default("all"),
@@ -89,6 +66,14 @@ const searchSchema = z.object({
   bedrooms: fallback(z.number().int().min(0).max(4).optional(), undefined),
   estate: fallback(z.string().optional(), undefined),
   keyword: fallback(z.string().optional(), undefined),
+  // Threads to the ALREADY-WORKING agentId filter at the query layer
+  // (listingWhere in public-data.server.ts already adds `p.agent_id = ...`
+  // when NeonListingFiltersInput.agentId is set -- see
+  // listing-search.contract.test.mjs's "agentId scopes results to one
+  // agent's listings" test). This param is what agents_.$slug.tsx's
+  // "查看代理放盤" button now links to, instead of a bare, unscoped
+  // /listings.
+  agent: fallback(z.string().optional(), undefined),
   sort: fallback(z.enum(SORT_OPTIONS), "newest").default("newest"),
   page: fallback(z.number().int().min(1), 1).default(1),
 });
@@ -108,6 +93,7 @@ export const Route = createFileRoute("/listings")({
         maxArea: deps.maxArea,
         bedrooms: deps.bedrooms,
         estateSlug: deps.estate,
+        agentId: deps.agent,
         sort: deps.sort,
         page: deps.page,
         pageSize: PAGE_SIZE,
@@ -121,8 +107,7 @@ export const Route = createFileRoute("/listings")({
       { title: "搜尋放盤｜深井買樓租樓 — 晉誠地產" },
       {
         name: "description",
-        content:
-          "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢全部真盤。",
+        content: "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢全部真盤。",
       },
       { property: "og:title", content: "搜尋放盤｜晉誠地產" },
       {
@@ -143,14 +128,8 @@ function describeListingSearch(
   estates: Array<{ slug: string; name_zh: string }>,
 ) {
   const parts = [
-    search.deal === "sale"
-      ? "售盤"
-      : search.deal === "rent"
-        ? "租盤"
-        : "全部租售",
-    search.estate
-      ? estates.find((estate) => estate.slug === search.estate)?.name_zh
-      : undefined,
+    search.deal === "sale" ? "售盤" : search.deal === "rent" ? "租盤" : "全部租售",
+    search.estate ? estates.find((estate) => estate.slug === search.estate)?.name_zh : undefined,
     search.district,
     // Price bounds are only ever sent to the server when a deal type is
     // chosen (see listingWhere in public-data.server.ts -- deal="all" mixes
@@ -264,8 +243,7 @@ function buildActiveFilterChips(
     });
   }
   if (search.estate) {
-    const name =
-      estates.find((e) => e.slug === search.estate)?.name_zh ?? search.estate;
+    const name = estates.find((e) => e.slug === search.estate)?.name_zh ?? search.estate;
     chips.push({
       key: "estate",
       label: `屋苑：${name}`,
@@ -326,6 +304,17 @@ function buildActiveFilterChips(
       removeKeys: ["keyword"],
     });
   }
+  // Set only via a deep link from an agent's profile page (agents_.$slug.tsx's
+  // "查看代理放盤" button) -- no filter control sets this directly, but it
+  // still needs a chip so a visitor who landed here scoped to one agent can
+  // see that scoping and clear it, same as every other active param.
+  if (search.agent) {
+    chips.push({
+      key: "agent",
+      label: "指定代理放盤",
+      removeKeys: ["agent"],
+    });
+  }
   if (search.sort !== "newest") {
     chips.push({
       key: "sort",
@@ -337,13 +326,7 @@ function buildActiveFilterChips(
   return chips;
 }
 
-function FilterChip({
-  label,
-  removeKeys,
-}: {
-  label: string;
-  removeKeys: string[];
-}) {
+function FilterChip({ label, removeKeys }: { label: string; removeKeys: string[] }) {
   return (
     <Link
       to="/listings"
@@ -389,9 +372,7 @@ function useListingFiltersState(initial: ReturnType<typeof Route.useSearch>) {
     setDistrict(initial.district ?? "all");
     setMinPrice(initial.minPrice?.toString() ?? "");
     setMaxPrice(initial.maxPrice?.toString() ?? "");
-    setBedrooms(
-      initial.bedrooms !== undefined ? initial.bedrooms.toString() : "any",
-    );
+    setBedrooms(initial.bedrooms !== undefined ? initial.bedrooms.toString() : "any");
     setEstate(initial.estate ?? "any");
   }, [
     initial.deal,
@@ -419,13 +400,19 @@ function useListingFiltersState(initial: ReturnType<typeof Route.useSearch>) {
         maxPrice: !isAllDeals && maxPrice ? Number(maxPrice) : undefined,
         bedrooms: bedrooms === "any" ? undefined : Number(bedrooms),
         estate: estate === "any" ? undefined : estate,
-        // This panel doesn't manage sort/area-bound state -- pass the
+        // This panel doesn't manage sort/area-bound/agent state -- pass the
         // already-active values straight through so clicking 套用/套用篩選
         // doesn't silently reset a sort the user picked via SortSelect (or
-        // an area bound arriving via a shared URL) back to its default.
+        // an area bound or agent scope arriving via a shared URL) back to
+        // its default. Losing `agent` here specifically would mean a user
+        // who landed on /listings?agent=<id> from an agent's profile page,
+        // then touched any OTHER filter and clicked 套用篩選, would silently
+        // fall back to browsing every agent's listings instead of staying
+        // scoped to the one they came from.
         sort: initial.sort,
         minArea: initial.minArea,
         maxArea: initial.maxArea,
+        agent: initial.agent,
         page: 1,
       },
     });
@@ -496,11 +483,7 @@ function FilterFields({
   } = filters;
 
   const isRent = deal === "rent";
-  const priceLabel = isAllDeals
-    ? "價格 (先揀售或租)"
-    : isRent
-      ? "月租 (HKD)"
-      : "售價 (HKD)";
+  const priceLabel = isAllDeals ? "價格 (先揀售或租)" : isRent ? "月租 (HKD)" : "售價 (HKD)";
   const keywordId = `${idPrefix}-listing-keyword`;
   const dealTypeLabelId = `${idPrefix}-listing-deal-type-label`;
   const minPriceId = `${idPrefix}-listing-min-price`;
@@ -670,12 +653,7 @@ function DesktopFiltersPanel({
           <Button onClick={filters.apply} className="w-full">
             套用篩選
           </Button>
-          <Button
-            onClick={filters.reset}
-            variant="ghost"
-            size="sm"
-            className="w-full"
-          >
+          <Button onClick={filters.reset} variant="ghost" size="sm" className="w-full">
             清除全部
           </Button>
         </div>
@@ -698,12 +676,7 @@ function MobileFiltersSheet({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="relative gap-1.5 lg:hidden"
-        >
+        <Button type="button" variant="outline" size="sm" className="relative gap-1.5 lg:hidden">
           <SlidersHorizontal className="h-4 w-4" />
           篩選
           {activeCount > 0 && (
@@ -713,18 +686,11 @@ function MobileFiltersSheet({
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent
-        side="right"
-        className="flex w-80 max-w-[calc(100vw-2rem)] flex-col"
-      >
+      <SheetContent side="right" className="flex w-80 max-w-[calc(100vw-2rem)] flex-col">
         <div className="flex h-full flex-col">
           <h2 className="mt-2 text-sm font-semibold">篩選條件</h2>
           <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-1">
-            <FilterFields
-              estates={estates}
-              filters={filters}
-              idPrefix="mobile"
-            />
+            <FilterFields estates={estates} filters={filters} idPrefix="mobile" />
           </div>
           <div className="mt-6 flex flex-col gap-2 border-t pt-4">
             <Button
@@ -870,13 +836,7 @@ function SavedSearchesPanel({
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       {hasActiveFilters && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleSave}
-          className="gap-1.5"
-        >
+        <Button type="button" variant="outline" size="sm" onClick={handleSave} className="gap-1.5">
           <BookmarkPlus className="h-4 w-4" />
           儲存呢個搜尋
         </Button>
@@ -902,18 +862,13 @@ function SavedSearchesPanel({
           ) : (
             <ul className="mt-3 space-y-2">
               {savedSearches.map((entry) => (
-                <li
-                  key={entry.id}
-                  className="flex items-center gap-2 rounded-md border p-2"
-                >
+                <li key={entry.id} className="flex items-center gap-2 rounded-md border p-2">
                   <button
                     type="button"
                     onClick={() => handleApply(entry)}
                     className="min-w-0 flex-1 text-left"
                   >
-                    <span className="block truncate text-sm font-medium">
-                      {entry.label}
-                    </span>
+                    <span className="block truncate text-sm font-medium">{entry.label}</span>
                     <span className="block text-xs text-muted-foreground">
                       {formatSavedAt(entry.savedAt)}
                     </span>
@@ -972,11 +927,7 @@ function collectUtmParams(): Record<string, string> {
  * preselected by any prop or effect -- this is a repo-wide, plan-mandated
  * invariant, not a per-form style choice.
  */
-function ListingAlertForm({
-  search,
-}: {
-  search: ReturnType<typeof Route.useSearch>;
-}) {
+function ListingAlertForm({ search }: { search: ReturnType<typeof Route.useSearch> }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -1024,13 +975,8 @@ function ListingAlertForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-lg border bg-card p-6"
-    >
-      <h2 className="text-base font-semibold text-primary">
-        未有符合嘅放盤？等新盤通知你
-      </h2>
+    <form onSubmit={handleSubmit} className="rounded-lg border bg-card p-6">
+      <h2 className="text-base font-semibold text-primary">未有符合嘅放盤？等新盤通知你</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         留低聯絡方法，有符合呢個搜尋條件嘅新放盤，我們會盡快通知你。
       </p>
@@ -1083,11 +1029,7 @@ function ListingAlertForm({
           {LISTING_ALERT_CONSENT_TEXT}
         </Label>
       </div>
-      <Button
-        type="submit"
-        className="mt-4 w-full sm:w-auto"
-        disabled={submitting || !consent}
-      >
+      <Button type="submit" className="mt-4 w-full sm:w-auto" disabled={submitting || !consent}>
         {submitting ? "提交中…" : "設定通知"}
       </Button>
     </form>
@@ -1129,9 +1071,7 @@ function ListingsErrorComponent({ error }: { error: Error }) {
     <div className="bg-background px-4 py-20 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl rounded-lg border bg-card p-6 text-center shadow-card">
         <p className="text-sm font-semibold text-coral">搜尋放盤</p>
-        <h1 className="mt-2 text-2xl font-bold text-primary">
-          載入放盤資料時遇到問題
-        </h1>
+        <h1 className="mt-2 text-2xl font-bold text-primary">載入放盤資料時遇到問題</h1>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           即時放盤資料暫時未能載入。可以重新載入，或返回搜尋首頁調整篩選條件再試一次。
         </p>
@@ -1183,9 +1123,7 @@ function ListingsPage() {
       ) : null}
       <div className="border-b bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            搜尋放盤
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">搜尋放盤</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             共 {total.toLocaleString()} 個放盤符合篩選條件
           </p>
@@ -1221,11 +1159,7 @@ function ListingsPage() {
           {activeChips.length > 0 && (
             <div className="mb-5 flex flex-wrap items-center gap-2">
               {activeChips.map((chip) => (
-                <FilterChip
-                  key={chip.key}
-                  label={chip.label}
-                  removeKeys={chip.removeKeys}
-                />
+                <FilterChip key={chip.key} label={chip.label} removeKeys={chip.removeKeys} />
               ))}
               <Link
                 to="/listings"
@@ -1285,9 +1219,7 @@ function ListingsPage() {
             </div>
           )}
 
-          {totalPages > 1 && (
-            <Pagination current={search.page} total={totalPages} />
-          )}
+          {totalPages > 1 && <Pagination current={search.page} total={totalPages} />}
         </section>
       </div>
     </div>
@@ -1295,9 +1227,7 @@ function ListingsPage() {
 }
 
 function deriveListingCardData(p: ListingRow) {
-  const cover =
-    p.images?.[0] ??
-    "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
+  const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
   const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
   const rentDisplay = formatHkd(p.rent);
   const saleDisplay = formatSaleDisplay(p.price);
@@ -1341,12 +1271,8 @@ function ListingCard({ p }: { p: ListingRow }) {
         </div>
         <div className="p-4">
           <p className="text-lg font-bold text-primary">{price}</p>
-          <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
-            {safeTitle}
-          </h3>
-          {p.source_site && (
-            <FreshnessStamp updatedAt={p.last_seen_at} className="mt-1 block" />
-          )}
+          <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{safeTitle}</h3>
+          {p.source_site && <FreshnessStamp updatedAt={p.last_seen_at} className="mt-1 block" />}
           {p.estates && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
@@ -1382,15 +1308,11 @@ function ListingCard({ p }: { p: ListingRow }) {
       <button
         type="button"
         onClick={toggle}
-        aria-label={
-          favourited ? `已加入心水：${safeTitle}` : `加入心水：${safeTitle}`
-        }
+        aria-label={favourited ? `已加入心水：${safeTitle}` : `加入心水：${safeTitle}`}
         aria-pressed={favourited}
         className="absolute right-10 top-2 z-10 rounded-full bg-background/90 p-1.5 text-foreground shadow-sm transition hover:bg-background"
       >
-        <Heart
-          className={`h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`}
-        />
+        <Heart className={`h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`} />
       </button>
       <button
         type="button"
@@ -1432,18 +1354,9 @@ function ListingCardRow({ p }: { p: ListingRow }) {
             </span>
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-center">
-            <p className="text-base font-bold text-primary sm:text-lg">
-              {price}
-            </p>
-            <h3 className="mt-1 line-clamp-1 text-sm font-semibold">
-              {safeTitle}
-            </h3>
-            {p.source_site && (
-              <FreshnessStamp
-                updatedAt={p.last_seen_at}
-                className="mt-1 block"
-              />
-            )}
+            <p className="text-base font-bold text-primary sm:text-lg">{price}</p>
+            <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{safeTitle}</h3>
+            {p.source_site && <FreshnessStamp updatedAt={p.last_seen_at} className="mt-1 block" />}
             {p.estates && (
               <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                 <MapPin className="h-3 w-3" />
@@ -1478,15 +1391,11 @@ function ListingCardRow({ p }: { p: ListingRow }) {
           <button
             type="button"
             onClick={toggle}
-            aria-label={
-              favourited ? `已加入心水：${safeTitle}` : `加入心水：${safeTitle}`
-            }
+            aria-label={favourited ? `已加入心水：${safeTitle}` : `加入心水：${safeTitle}`}
             aria-pressed={favourited}
             className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >
-            <Heart
-              className={`h-4 w-4 ${favourited ? "fill-coral text-coral" : ""}`}
-            />
+            <Heart className={`h-4 w-4 ${favourited ? "fill-coral text-coral" : ""}`} />
           </button>
           <button
             type="button"
@@ -1520,11 +1429,7 @@ function Pagination({ current, total }: { current: number; total: number }) {
           </PageLink>
         ),
       )}
-      <PageLink
-        page={current + 1}
-        disabled={current === total}
-        aria-label="下一頁"
-      >
+      <PageLink page={current + 1} disabled={current === total} aria-label="下一頁">
         <ChevronRight className="h-4 w-4" />
       </PageLink>
     </nav>

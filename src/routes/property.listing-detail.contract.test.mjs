@@ -20,10 +20,7 @@ import { findCastlePeakRoadSegmentByDistrictSlug } from "../content/castle-peak-
 // the gallery's wrap-around stepper) are extracted and actually executed
 // via ts.transpileModule so a behavioral regression fails the test rather
 // than just a string no longer matching.
-const routeSource = await readFile(
-  new URL("./property.$listingNo.tsx", import.meta.url),
-  "utf8",
-);
+const routeSource = await readFile(new URL("./property.$listingNo.tsx", import.meta.url), "utf8");
 const serverSource = await readFile(
   new URL("../lib/neon/public-data.server.ts", import.meta.url),
   "utf8",
@@ -71,7 +68,10 @@ test("REGRESSION: every other public listing query keeps its own status = 'activ
   // active-only results elsewhere in the app (search results, similar
   // listings, counts, legacy-id redirect, featured).
   assert.match(serverSource, /const where = \["p\.status = 'active'"\];/); // listingWhere (searchListings)
-  assert.match(serverSource, /let where = `p\.status = 'active' AND \(\$\{parts\.join\(" OR "\)\}\)`;/); // corridorWhere
+  assert.match(
+    serverSource,
+    /let where = `p\.status = 'active' AND \(\$\{parts\.join\(" OR "\)\}\)`;/,
+  ); // corridorWhere
   assert.match(
     extractServerFn("fetchFeaturedProperties", "export async function fetchListingsForEstate"),
     /WHERE p\.status = 'active'/,
@@ -93,14 +93,12 @@ test("REGRESSION: every other public listing query keeps its own status = 'activ
 // --- Loader: active/sold/rented resolve; offline/inactive/draft 404 ------
 
 function buildLoader() {
-  const unavailableMatch = routeSource.match(
-    /const UNAVAILABLE_STATUSES = new Set\(\[[^\]]*\]\);/,
-  );
+  const unavailableMatch = routeSource.match(/const UNAVAILABLE_STATUSES = new Set\(\[[^\]]*\]\);/);
   assert.ok(unavailableMatch, "expected UNAVAILABLE_STATUSES definition");
   const startNeedle = "loader: async ({ params }) => {";
   const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
   assert.ok(bodyStart > startNeedle.length - 1, "expected the route loader");
-  const returnMarker = "return { property, similar, txns };";
+  const returnMarker = "return { property, similar, txns, branches };";
   const returnIdx = routeSource.indexOf(returnMarker, bodyStart);
   assert.ok(returnIdx !== -1, "expected the loader's final return statement");
   const body = routeSource.slice(bodyStart, returnIdx + returnMarker.length);
@@ -108,7 +106,7 @@ function buildLoader() {
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, fetchSimilarListings, fetchEstateTransactions } = deps;
+  const { fetchPropertyByListingNo, notFound, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches } = deps;
   ${body}
 }
 exports.loader = loader;
@@ -116,11 +114,12 @@ exports.loader = loader;
   return transpileAndRun(snippet).loader;
 }
 
-test("loader: active/sold/rented resolve normally and still fetch similar listings + transactions", async () => {
+test("loader: active/sold/rented resolve normally and still fetch similar listings + transactions + branches", async () => {
   const loader = buildLoader();
   for (const status of ["active", "sold", "rented"]) {
     const similarCalls = [];
     const txnsCalls = [];
+    const branchesCalls = [];
     const property = { status, estate_id: "estate-1", deal_type: "sale", id: "prop-1" };
     const deps = {
       fetchPropertyByListingNo: async () => property,
@@ -133,6 +132,20 @@ test("loader: active/sold/rented resolve normally and still fetch similar listin
         txnsCalls.push(args);
         return [];
       },
+      fetchNeonBranches: async () => {
+        branchesCalls.push([]);
+        return [
+          {
+            id: "b1",
+            slug: "lido",
+            name: "麗都分行",
+            address: null,
+            phone: null,
+            whatsapp: null,
+            photo: null,
+          },
+        ];
+      },
     };
     const result = await loader({ listingNo: "X1" }, deps);
     assert.equal(result.property, property, `expected status="${status}" to resolve, not 404`);
@@ -141,8 +154,44 @@ test("loader: active/sold/rented resolve normally and still fetch similar listin
       1,
       `expected fetchSimilarListings to still run for status="${status}" (estate_id/deal_type are known even for a non-active property)`,
     );
-    assert.equal(txnsCalls.length, 1, `expected fetchEstateTransactions to still run for status="${status}"`);
+    assert.equal(
+      txnsCalls.length,
+      1,
+      `expected fetchEstateTransactions to still run for status="${status}"`,
+    );
+    assert.equal(
+      branchesCalls.length,
+      1,
+      `expected fetchNeonBranches to still run for status="${status}"`,
+    );
+    assert.deepEqual(result.branches, [
+      {
+        id: "b1",
+        slug: "lido",
+        name: "麗都分行",
+        address: null,
+        phone: null,
+        whatsapp: null,
+        photo: null,
+      },
+    ]);
   }
+});
+
+test("loader: a failed branches fetch degrades to an empty list rather than failing the whole property page", async () => {
+  const loader = buildLoader();
+  const property = { status: "active", estate_id: "estate-1", deal_type: "sale", id: "prop-1" };
+  const deps = {
+    fetchPropertyByListingNo: async () => property,
+    notFound: () => new Error("unexpected notFound()"),
+    fetchSimilarListings: async () => [],
+    fetchEstateTransactions: async () => [],
+    fetchNeonBranches: async () => {
+      throw new Error("Neon blip");
+    },
+  };
+  const result = await loader({ listingNo: "X1" }, deps);
+  assert.deepEqual(result.branches, []);
 });
 
 test("loader: offline/inactive/draft (and a missing listing_no) throw notFound before fetching similar/transactions", async () => {
@@ -159,6 +208,9 @@ test("loader: offline/inactive/draft (and a missing listing_no) throw notFound b
       },
       fetchEstateTransactions: async () => {
         throw new Error(`fetchEstateTransactions must not run for status="${status}"`);
+      },
+      fetchNeonBranches: async () => {
+        throw new Error(`fetchNeonBranches must not run for status="${status}"`);
       },
     };
     let caught;
@@ -180,6 +232,9 @@ test("loader: offline/inactive/draft (and a missing listing_no) throw notFound b
     fetchEstateTransactions: async () => {
       throw new Error("fetchEstateTransactions must not run when the property is null");
     },
+    fetchNeonBranches: async () => {
+      throw new Error("fetchNeonBranches must not run when the property is null");
+    },
   };
   let caught;
   try {
@@ -193,9 +248,7 @@ test("loader: offline/inactive/draft (and a missing listing_no) throw notFound b
 // --- head(): noindex only for sold/rented --------------------------------
 
 function buildHead() {
-  const unavailableMatch = routeSource.match(
-    /const UNAVAILABLE_STATUSES = new Set\(\[[^\]]*\]\);/,
-  );
+  const unavailableMatch = routeSource.match(/const UNAVAILABLE_STATUSES = new Set\(\[[^\]]*\]\);/);
   assert.ok(unavailableMatch);
   const startNeedle = "head: ({ loaderData }) => {";
   const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
@@ -268,17 +321,11 @@ test("PropertyUnavailableNotice links to /listings filtered by the listing's own
   assert.ok(start !== -1);
   const body = routeSource.slice(start, start + 1200);
   assert.match(body, /to="\/listings"/);
-  assert.match(
-    body,
-    /search={{ deal: dealType, estate: estateSlug \?\? undefined, page: 1 }}/,
-  );
+  assert.match(body, /search={{ deal: dealType, estate: estateSlug \?\? undefined, page: 1 }}/);
 });
 
 test("a destructive badge marks the unavailable state next to the deal-type badge", () => {
-  assert.match(
-    routeSource,
-    /const isUnavailable = UNAVAILABLE_STATUSES\.has\(property\.status\);/,
-  );
+  assert.match(routeSource, /const isUnavailable = UNAVAILABLE_STATUSES\.has\(property\.status\);/);
   assert.match(
     routeSource,
     /isUnavailable \? <Badge variant="destructive">\{unavailableLabel\}<\/Badge> : null/,
@@ -329,12 +376,7 @@ test("stepImage wraps in both directions across the FULL image count (not capped
   );
   assert.ok(match, "expected stepImage's wrap-around updater expression");
   const evalStep = (i, delta, imagesLength) =>
-    new Function(
-      "i",
-      "delta",
-      "images",
-      `return ${match[1]};`,
-    )(i, delta, { length: imagesLength });
+    new Function("i", "delta", "images", `return ${match[1]};`)(i, delta, { length: imagesLength });
 
   // 7 images (> the old cap of 5): stepping backward from the first image
   // wraps to the last, and forward from the last wraps to the first.
@@ -349,10 +391,7 @@ test("active thumbnail carries aria-current, not just a border-color change", ()
   const galleryStart = routeSource.indexOf('<TabsContent value="photos"');
   const galleryEnd = routeSource.indexOf("</TabsContent>", galleryStart);
   const galleryBody = routeSource.slice(galleryStart, galleryEnd);
-  assert.match(
-    galleryBody,
-    /aria-current={i === activeImg \? "true" : undefined}/,
-  );
+  assert.match(galleryBody, /aria-current={i === activeImg \? "true" : undefined}/);
   // The border-color signal stays too (visual reinforcement), it's just no
   // longer the ONLY signal.
   assert.match(galleryBody, /i === activeImg \? "border-primary" : "border-transparent"/);
@@ -391,10 +430,7 @@ test("findCastlePeakRoadSegmentByDistrictSlug resolves a property's district_slu
 
 test("the property page renders a nearby-transport card only when the district resolves to a corridor segment, and links through to that segment's page", () => {
   assert.match(routeSource, /from "@\/content\/castle-peak-road"/);
-  assert.match(
-    routeSource,
-    /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/,
-  );
+  assert.match(routeSource, /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/);
   const cardStart = routeSource.indexOf("data-property-transport-card");
   assert.ok(cardStart !== -1, "expected a data-property-transport-card section");
   // The card is gated behind `{transportSegment && (` -- omitted entirely

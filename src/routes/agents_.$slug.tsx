@@ -5,9 +5,9 @@ import { AppImage } from "@/components/media/AppImage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
-import { fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
-import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
-import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
+import { fetchNeonBranches, fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
+import type { NeonBranchRecord, NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { agentBranchName, agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { fetchListingsForAgent, type ListingRow } from "@/lib/queries";
 import { agentPersonSchema, jsonLdScript } from "@/lib/schema";
@@ -16,8 +16,14 @@ export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
     const profile = await fetchNeonPublicAgentProfileBySlug({ data: { slug: params.slug } });
     if (!profile) throw notFound();
-    const listings = await fetchListingsForAgent(profile.id, 6).catch(() => []);
-    return { profile: profile as NeonPublicAgentProfile, listings };
+    const [listings, branches] = await Promise.all([
+      fetchListingsForAgent(profile.id, 6).catch(() => []),
+      // Non-essential: a Neon blip here shouldn't 404/error the whole
+      // profile -- it degrades to the free-text `branch` fallback, exactly
+      // like today, rather than failing the page.
+      fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
+    ]);
+    return { profile: profile as NeonPublicAgentProfile, listings, branches };
   },
   head: ({ loaderData }) => {
     const profile = loaderData?.profile;
@@ -39,12 +45,14 @@ export const Route = createFileRoute("/agents_/$slug")({
 });
 
 function AgentProfilePage() {
-  const { profile, listings } = Route.useLoaderData();
+  const { profile, listings, branches } = Route.useLoaderData();
   const name = profile.name_zh || profile.name_en || "晉誠地產代理";
   // See agents.tsx: defaulting to the first configured branch printed 麗都分行 on
   // agents based elsewhere. A missing branch renders nothing rather than a wrong one.
-  const branch = profile.branch;
-  const contact = resolveAgentContact(profile);
+  // agentBranchName prefers a branch_id match against `branches` over the
+  // free-text `branch` string, and null if neither resolves.
+  const branch = agentBranchName(profile, branches);
+  const contact = resolveAgentContact(profile, branches);
   const note = agentContactNote(contact);
   const phoneHref = toTelHref(contact.phone);
   const whatsappHref = toWhatsAppHref(contact.whatsapp);
@@ -99,6 +107,9 @@ function AgentProfilePage() {
                 {profile.job_title ? <span>{profile.job_title}</span> : null}
                 {branch ? <span>{branch}</span> : null}
                 {profile.licence_no ? <span>牌照：{profile.licence_no}</span> : null}
+                {profile.languages.length > 0 ? (
+                  <span>語言：{profile.languages.join("、")}</span>
+                ) : null}
               </div>
               {profile.bio ? (
                 <p className="mt-5 max-w-2xl leading-7 text-muted-foreground">{profile.bio}</p>
@@ -179,7 +190,12 @@ function AgentProfilePage() {
               </p>
             </div>
             <Button asChild>
-              <Link to="/listings">
+              {/* agent threads to /listings' Zod search schema, which passes
+                  it as agentId into the ALREADY-WORKING p.agent_id filter
+                  (listingWhere in public-data.server.ts) -- this used to
+                  link to a bare, unscoped /listings despite the button's
+                  own label promising this agent's listings specifically. */}
+              <Link to="/listings" search={{ deal: "all", page: 1, agent: profile.id }}>
                 <Building2 className="mr-2 h-4 w-4" />
                 查看代理放盤
               </Link>

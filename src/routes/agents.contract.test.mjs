@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import ts from "typescript";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -14,6 +15,96 @@ function generatedRouteBlock(routeTree, routeName) {
   const block = routeTree.match(new RegExp(`const ${routeName} = [\\s\\S]*?\\n\\} as any\\)`))?.[0];
   assert.ok(block, `${routeName} should be registered in the generated route tree`);
   return block;
+}
+
+/**
+ * Extracts /agents' pure filter/grouping functions (matchesAgentFilters,
+ * groupAgentsByBranch, agentDistrictSlugs) straight from agents.tsx's real
+ * source and actually executes them against fixture agents -- matching
+ * listings.contract.test.mjs's loadActiveFilterChipsFn() precedent (extract
+ * + execute real source rather than re-implementing the logic in the test).
+ *
+ * estateRegistry is replaced with a small literal fixture rather than the
+ * real content module: these functions only ever call
+ * `estateRegistry.find(...)`, so a same-shaped stand-in resolves identically
+ * at runtime once spliced into the same scope, without this test needing to
+ * inline @/content/estate-registry's real (and much larger) import graph.
+ */
+function loadAgentFilterHelpers() {
+  const agentsSource = readFileSync(join(root, "src/routes/agents.tsx"), "utf8");
+  const districtBlock = agentsSource.slice(
+    agentsSource.indexOf("const AGENT_DISTRICT_LABELS"),
+    agentsSource.indexOf("type AgentDirectorySearch"),
+  );
+  const matchesBlock = agentsSource.slice(
+    agentsSource.indexOf("function matchesAgentFilters"),
+    agentsSource.indexOf("type AgentGroup ="),
+  );
+  const groupBlock = agentsSource.slice(
+    agentsSource.indexOf("type AgentGroup ="),
+    agentsSource.indexOf("export const Route ="),
+  );
+
+  const fixtureRegistry = `
+    const estateRegistry = [
+      { slug: "bellagio", districtSlug: "sham-tseng" },
+      { slug: "hong-kong-garden", districtSlug: "sham-tseng" },
+      { slug: "no-district-yet", districtSlug: null },
+    ];
+  `;
+
+  // agentBranchName is imported from @/lib/agent-directory in the real file,
+  // outside this extraction's range -- stubbed here the same way
+  // estateRegistry is above, with the exact same branch_id-preferred,
+  // free-text-fallback, null-if-neither behaviour as the real implementation
+  // (see agent-directory.ts), so matchesAgentFilters/groupAgentsByBranch
+  // exercise real branch_id resolution once spliced into this scope.
+  const fixtureAgentBranchName = `
+    function agentBranchName(agent, branches) {
+      if (agent.branch_id) {
+        const linked = branches.find((candidate) => candidate.id === agent.branch_id);
+        if (linked) return linked.name;
+      }
+      return agent.branch ?? null;
+    }
+  `;
+
+  const snippet = [
+    fixtureRegistry,
+    fixtureAgentBranchName,
+    districtBlock,
+    matchesBlock,
+    groupBlock,
+    "export { agentDistrictSlugs, matchesAgentFilters, groupAgentsByBranch };",
+  ].join("\n");
+
+  const { outputText } = ts.transpileModule(snippet, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  });
+  const exportsObj = {};
+  new Function("exports", outputText)(exportsObj);
+  return exportsObj;
+}
+
+function fixtureAgent(overrides = {}) {
+  return {
+    id: "agent-id",
+    public_slug: "agent-slug",
+    name_zh: "陳大文",
+    name_en: "Chan Tai Man",
+    job_title: null,
+    phone: null,
+    whatsapp: null,
+    licence_no: null,
+    avatar_url: null,
+    branch: null,
+    branch_id: null,
+    bio: null,
+    specialties: [],
+    served_estate_slugs: [],
+    languages: [],
+    ...overrides,
+  };
 }
 
 test("agent detail is a root-owned non-nested route that can render independently", () => {
@@ -222,6 +313,7 @@ test("agent avatars and profile form include required accessibility details", ()
     "licence_no",
     "avatar_url",
     "branch",
+    "branch_id",
     "bio",
     "specialties",
     "served_estate_slugs",
@@ -258,4 +350,159 @@ test("the agents page uses the client's approved team description", () => {
     /持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。/,
   );
   assert.doesNotMatch(source, /荃灣西/);
+});
+
+test("/agents has no component-local state -- filters are driven entirely by URL search params", () => {
+  const source = readExisting("src/routes/agents.tsx");
+  assert.doesNotMatch(source, /\buseEffect\b|\buseState\b/);
+  assert.match(source, /validateSearch:\s*zodValidator\(agentsSearchSchema\)/);
+  assert.match(source, /Route\.useSearch\(\)/);
+});
+
+test("matchesAgentFilters filters by name/branch/district/speciality/language independently", () => {
+  const { matchesAgentFilters } = loadAgentFilterHelpers();
+
+  const agent = fixtureAgent({
+    name_zh: "陳大文",
+    name_en: "Chan Tai Man",
+    branch: "麗都分行",
+    served_estate_slugs: ["bellagio"],
+    specialties: ["豪宅"],
+    languages: ["粵語", "英語"],
+  });
+
+  assert.equal(matchesAgentFilters(agent, {}), true, "no filters matches everyone");
+  assert.equal(matchesAgentFilters(agent, { q: "大文" }), true, "zh name substring matches");
+  assert.equal(matchesAgentFilters(agent, { q: "Tai" }), true, "en name substring matches");
+  assert.equal(matchesAgentFilters(agent, { q: "陳小明" }), false, "non-matching name excludes");
+  assert.equal(matchesAgentFilters(agent, { branch: "麗都分行" }), true);
+  assert.equal(matchesAgentFilters(agent, { branch: "海韻分行" }), false);
+  assert.equal(
+    matchesAgentFilters(agent, { district: "sham-tseng" }),
+    true,
+    "district derives from served_estate_slugs via the estate registry",
+  );
+  assert.equal(matchesAgentFilters(agent, { district: "ting-kau" }), false);
+  assert.equal(matchesAgentFilters(agent, { speciality: "豪宅" }), true);
+  assert.equal(matchesAgentFilters(agent, { speciality: "村屋" }), false);
+  assert.equal(matchesAgentFilters(agent, { language: "英語" }), true);
+  assert.equal(matchesAgentFilters(agent, { language: "普通話" }), false);
+
+  // Every provided filter must match simultaneously (AND semantics).
+  assert.equal(matchesAgentFilters(agent, { branch: "麗都分行", language: "普通話" }), false);
+});
+
+test("matchesAgentFilters never lets a branch-less agent match a branch filter, and never crashes on an unknown estate slug", () => {
+  const { matchesAgentFilters } = loadAgentFilterHelpers();
+
+  const noBranch = fixtureAgent({ branch: null });
+  assert.equal(matchesAgentFilters(noBranch, { branch: "麗都分行" }), false);
+
+  const unknownEstate = fixtureAgent({ served_estate_slugs: ["not-a-real-estate"] });
+  assert.doesNotThrow(() => matchesAgentFilters(unknownEstate, { district: "sham-tseng" }));
+  assert.equal(matchesAgentFilters(unknownEstate, { district: "sham-tseng" }), false);
+});
+
+test("groupAgentsByBranch never folds a branch-less agent into a named branch, and never labels its group with a guessed branch name", () => {
+  const { groupAgentsByBranch } = loadAgentFilterHelpers();
+
+  const agents = [
+    fixtureAgent({ id: "a1", branch: "海韻分行" }),
+    fixtureAgent({ id: "a2", branch: "麗都分行" }),
+    fixtureAgent({ id: "a3", branch: null }),
+    fixtureAgent({ id: "a4", branch: "麗都分行" }),
+  ];
+
+  const groups = groupAgentsByBranch(agents);
+
+  const unassignedGroup = groups.find((g) => g.branch === null);
+  assert.ok(unassignedGroup, "branch-less agents get their own null-branch group");
+  assert.deepEqual(
+    unassignedGroup.agents.map((a) => a.id),
+    ["a3"],
+  );
+  // Never any named branch's members absorb the branch-less agent, and the
+  // null group is never itself relabelled with a real branch's name.
+  for (const group of groups) {
+    if (group.branch !== null) {
+      assert.ok(!group.agents.some((a) => a.id === "a3"));
+    }
+  }
+
+  const lidoGroup = groups.find((g) => g.branch === "麗都分行");
+  assert.deepEqual(
+    lidoGroup.agents.map((a) => a.id),
+    ["a2", "a4"],
+  );
+});
+
+test("matchesAgentFilters and groupAgentsByBranch prefer a branch_id match over the free-text branch, and never guess when neither resolves", () => {
+  const { matchesAgentFilters, groupAgentsByBranch } = loadAgentFilterHelpers();
+  const branches = [{ id: "branch-uuid-1", slug: "rhine", name: "海韻分行" }];
+
+  // branch_id resolves to 海韻分行 even though the stale free-text column
+  // still says 麗都分行 -- the linked DB row must win, not the old string.
+  const linked = fixtureAgent({ id: "linked", branch: "麗都分行", branch_id: "branch-uuid-1" });
+  assert.equal(matchesAgentFilters(linked, { branch: "海韻分行" }, branches), true);
+  assert.equal(matchesAgentFilters(linked, { branch: "麗都分行" }, branches), false);
+
+  // branch_id set but pointing at nothing in the fetched list (e.g. a
+  // branches fetch that failed and returned []) falls back to the free-text
+  // string -- never a crash, never branches[0].
+  const danglingId = fixtureAgent({ id: "dangling", branch: "麗都分行", branch_id: "not-in-list" });
+  assert.equal(matchesAgentFilters(danglingId, { branch: "麗都分行" }, branches), true);
+
+  // Neither branch_id nor branch set: never falls back to branches[0] or any
+  // guessed name -- this is the regression case for CHANGELOG.md:79-87.
+  const neither = fixtureAgent({ id: "neither", branch: null, branch_id: null });
+  assert.equal(matchesAgentFilters(neither, { branch: "海韻分行" }, branches), false);
+  assert.equal(matchesAgentFilters(neither, {}, branches), true, "no filter still matches");
+
+  const groups = groupAgentsByBranch([linked, neither], branches);
+  const rhineGroup = groups.find((g) => g.branch === "海韻分行");
+  assert.ok(rhineGroup, "branch_id-linked agent groups under the real branch name");
+  assert.deepEqual(
+    rhineGroup.agents.map((a) => a.id),
+    ["linked"],
+  );
+  const unassignedGroup = groups.find((g) => g.branch === null);
+  assert.deepEqual(
+    unassignedGroup.agents.map((a) => a.id),
+    ["neither"],
+    "an agent with neither branch_id nor branch renders in no named group, never a guessed one",
+  );
+});
+
+test("agents_.$slug.tsx's 查看代理放盤 button links to /listings scoped to this agent's real id", () => {
+  const detail = readExisting("src/routes/agents_.$slug.tsx");
+  assert.match(
+    detail,
+    /<Link to="\/listings" search={{ deal: "all", page: 1, agent: profile\.id }}>/,
+  );
+});
+
+test("/listings' Zod search schema exposes the agent param the profile CTA now links to", () => {
+  const listings = read("src/routes/listings.tsx");
+  const schemaBody = listings.slice(
+    listings.indexOf("const searchSchema = z.object({"),
+    listings.indexOf("});", listings.indexOf("const searchSchema = z.object({")),
+  );
+  assert.match(schemaBody, /agent:\s*fallback\(z\.string\(\)\.optional\(\), undefined\)/);
+
+  // Threaded into the loader as agentId -- the field NeonListingFiltersInput
+  // and listingWhere() (public-data.server.ts) already read to scope
+  // results via `p.agent_id = ...` (proven directly against the query layer
+  // by listing-search.contract.test.mjs's "agentId scopes results to one
+  // agent's listings" test).
+  assert.match(listings, /agentId:\s*deps\.agent,/);
+
+  // FilterFields' apply() must forward the already-active agent scope
+  // through unchanged -- otherwise touching any OTHER filter while viewing
+  // an agent-scoped /listings page would silently drop back to browsing
+  // every agent's listings.
+  const applyBody = listings.slice(
+    listings.indexOf("function apply()"),
+    listings.indexOf("function reset()"),
+  );
+  assert.match(applyBody, /agent:\s*initial\.agent,/);
 });

@@ -4,8 +4,9 @@ import { BadgeCheck, MapPin, MessageCircle, Store, UserRound, Milestone } from "
 import { AppImage } from "@/components/media/AppImage";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { SITE_BRANCHES } from "@/config/site";
-import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
-import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { fetchNeonBranches, fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
+import type { NeonBranchRecord, NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { agentBranchName } from "@/lib/agent-directory";
 
 const SERVICES = [
   "買賣放盤",
@@ -31,6 +32,10 @@ export const Route = createFileRoute("/about")({
     // Non-essential preview section -- a Neon blip shouldn't fail the whole
     // page, so this degrades to an empty team section rather than erroring.
     team: await fetchNeonPublicAgentProfiles().catch(() => [] as NeonPublicAgentProfile[]),
+    // Same non-essential treatment: a failed branches fetch just falls back
+    // to each agent's free-text `branch` (see agentBranchName below), not an
+    // error.
+    branches: await fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
   }),
   head: () => ({
     meta: [
@@ -43,7 +48,7 @@ export const Route = createFileRoute("/about")({
 });
 
 function AboutPage() {
-  const { team } = Route.useLoaderData();
+  const { team, branches } = Route.useLoaderData();
   const teamPreview = team.filter((agent) => agent.avatar_url).slice(0, 8);
 
   return (
@@ -123,6 +128,11 @@ function AboutPage() {
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
             {teamPreview.map((agent) => {
               const name = agent.name_zh || agent.name_en || "晉誠地產代理";
+              // agentBranchName prefers a branch_id match against `branches`
+              // (the real, admin-editable table) over the free-text `branch`
+              // string, and null if neither resolves -- never a guessed
+              // default (see agents.tsx for the documented history of that bug).
+              const branchName = agentBranchName(agent, branches);
               const card = (
                 <>
                   <div className="aspect-square overflow-hidden rounded-md bg-muted">
@@ -140,8 +150,8 @@ function AboutPage() {
                     />
                   </div>
                   <p className="mt-2 text-sm font-medium">{name}</p>
-                  {agent.branch ? (
-                    <p className="text-xs text-muted-foreground">{agent.branch}</p>
+                  {branchName ? (
+                    <p className="text-xs text-muted-foreground">{branchName}</p>
                   ) : null}
                 </>
               );

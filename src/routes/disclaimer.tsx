@@ -24,6 +24,9 @@ function DisclaimerPage() {
         <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">法律 Legal</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">免責聲明</h1>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {"生效日期：[待補]　・　最後更新日期：[待補]"}
+          </p>
         </div>
       </section>
 

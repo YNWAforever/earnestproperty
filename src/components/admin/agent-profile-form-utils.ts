@@ -37,6 +37,9 @@ export const agentProfileSchema = z
         "請輸入有效相片網址，或以 / 開頭的路徑",
       ),
     branch: optionalText(120),
+    // "" means "未連結" (no real branches row linked yet) -- the same
+    // empty-string-or-uuid shape auth_user_id already uses above.
+    branch_id: z.string().trim().uuid("請選擇有效分行").or(z.literal("")),
     bio: optionalText(2000),
     specialties: optionalText(2000),
     served_estate_slugs: optionalText(2000),
@@ -81,6 +84,7 @@ export type AgentProfilePayloadData = {
   licence_no: string;
   avatar_url: string;
   branch: string;
+  branch_id: string;
   bio: string;
   public_slug: string;
   // Newline/comma-separated free text in form state, same convention as
@@ -123,6 +127,7 @@ export function buildAgentProfilePayload({
     licence_no: data.licence_no || null,
     avatar_url: data.avatar_url || null,
     branch: data.branch || null,
+    branch_id: data.branch_id || null,
     bio: data.bio || null,
     public_slug: data.public_slug || null,
     specialties: splitList(data.specialties),

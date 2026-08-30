@@ -26,6 +26,9 @@ function PrivacyPage() {
         <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">法律 Legal</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">私隱政策</h1>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {"生效日期：[待補]　・　最後更新日期：[待補]"}
+          </p>
           <p className="mt-4 text-sm text-muted-foreground">
             {`本政策說明晉誠地產（牌照號 ${SITE_CONTACT.licenceNo}）如何收集、使用及保護你的個人資料，符合香港《個人資料（私隱）條例》(PDPO) 的要求。`}
           </p>

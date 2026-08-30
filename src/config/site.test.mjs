@@ -214,7 +214,7 @@ test("homepage and navigation include Ting Kau content entry points", () => {
     "汀九",
     "YouTube影片",
     "屋苑開箱",
-    "成交快訊",
+    "晉誠地產最新成交",
     "深井 青山公路 汀九買樓租樓",
     "準備搵深井 青山公路筍盤",
     "深井 青山公路 汀九我哋比你更熟",
@@ -311,7 +311,7 @@ test("header exposes approved mega menu structure and controls", () => {
     "代理團隊",
     "聯絡門市",
     "YouTube影片",
-    "成交快訊",
+    "晉誠地產最新成交",
     "屋苑開箱",
     "市場分析",
     "關於晉誠",
@@ -418,7 +418,10 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   );
 
   assert.match(transactions, /head:\s*\(\{\s*loaderData\s*\}\)\s*=>/);
-  assert.match(transactions, /loaderData\.length === 0/);
+  // Task 2 (P5) changed loaderData from a bare transactions array to
+  // { transactions, estates } (the loader now also loads estate filter
+  // options) -- the noindex gate moved with it onto the same nested field.
+  assert.match(transactions, /loaderData\.transactions\.length === 0/);
   assert.match(transactions, /name: "robots", content: "noindex,follow"/);
 
   assert.match(estateReviews, /head:\s*\(\{\s*loaderData\s*\}\)\s*=>/);

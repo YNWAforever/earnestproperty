@@ -59,6 +59,16 @@ export async function fetchAdminAgentProfiles() {
   );
 }
 
+const fetchAdminBranchesServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminBranches();
+});
+
+export async function fetchAdminBranches() {
+  return callStaffServerFn(async () => fetchAdminBranchesServer(await withStaffAuthHeaders({})));
+}
+
 const fetchAdminAgentProfileServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
@@ -732,6 +742,81 @@ export const createListingAlert = createServerFn({ method: "POST" })
 
     const adminData = await import("./admin-data.server");
     return adminData.createListingAlert(data);
+  });
+
+// OwnerValuationPanel's structured form, offered ALONGSIDE its existing
+// WhatsApp deep-link (not replacing it). Filters through to a dedicated
+// `valuation_leads` table (see valuation-leads.js), not crm_contacts/
+// inquiries -- same reasoning as listingAlertSchema above.
+const valuationLeadUtmSchema = z
+  .record(z.string(), z.string().max(200))
+  .refine((value) => Object.keys(value).length <= 10, {
+    message: "Too many UTM parameters",
+  });
+
+const valuationLeadSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    // Mirrors websiteInquirySchema/listingAlertSchema's phone constraint --
+    // same regex, same bounds, so every public form on this site rejects the
+    // same malformed input.
+    phone: z
+      .string()
+      .trim()
+      .min(8)
+      .max(30)
+      .regex(/^[\d+\-\s()]+$/),
+    email: z.string().trim().max(254).email().optional().or(z.literal("")),
+    propertyAddress: z.string().trim().min(1).max(300),
+    // Only ever set when OwnerValuationPanel is rendered on a known estate
+    // page (estate.$slug.tsx passes its own already-loaded estate.id) --
+    // never guessed from propertyAddress's free text.
+    estateId: z.string().trim().uuid().optional(),
+    notes: z.string().trim().max(1000).optional().or(z.literal("")),
+    // Never preselected client-side (see OwnerValuationPanel.tsx) and never
+    // optional here: a submission with consent !== true fails validation
+    // rather than silently persisting with no evidence consent was ever
+    // given.
+    consent: z.literal(true),
+    utm: valuationLeadUtmSchema.default({}),
+  })
+  // Public, untrusted path: strip anything else, including a caller-supplied
+  // consentText/consentVersion/consentedAt -- those are always the server's
+  // own values (see admin-data.server.ts's createValuationLead).
+  .strip();
+
+export type ValuationLeadInput = z.infer<typeof valuationLeadSchema>;
+
+// Same profile as LISTING_ALERT_RATE_LIMIT_PER_IP above: an unauthenticated
+// public path that inserts exactly one row per submission.
+const VALUATION_LEAD_RATE_LIMIT_PER_IP = 5;
+const VALUATION_LEAD_RATE_LIMIT_PER_IP_PHONE = 3;
+const VALUATION_LEAD_RATE_WINDOW_SECONDS = 60;
+
+export const createValuationLead = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => valuationLeadSchema.parse(data))
+  .handler(async ({ data }) => {
+    const { clientIpFromRequest, enforceRateLimit } = await import("@/lib/ratelimit.server");
+    const request = getRequest();
+    const clientIp = clientIpFromRequest(request);
+
+    await enforceRateLimit({
+      key: `valuation-lead:ip:${clientIp}`,
+      limit: VALUATION_LEAD_RATE_LIMIT_PER_IP,
+      windowSeconds: VALUATION_LEAD_RATE_WINDOW_SECONDS,
+    });
+
+    const phoneDigits = data.phone.replace(/\D/g, "");
+    if (phoneDigits) {
+      await enforceRateLimit({
+        key: `valuation-lead:ip-phone:${clientIp}:${phoneDigits}`,
+        limit: VALUATION_LEAD_RATE_LIMIT_PER_IP_PHONE,
+        windowSeconds: VALUATION_LEAD_RATE_WINDOW_SECONDS,
+      });
+    }
+
+    const adminData = await import("./admin-data.server");
+    return adminData.createValuationLead(data);
   });
 
 const updateAdminInquiryStatusServer = createServerFn({ method: "POST" })

@@ -34,6 +34,19 @@ export type NeonEstateSnapshot = {
   lng: number | null;
 };
 
+/** A row from the `branches` table (20260830160000_branches_entity.sql) --
+ * the real, admin-editable entity that `staff_users.branch_id` links to,
+ * seeded from (but no longer read out of) SITE_BRANCHES. */
+export type NeonBranchRecord = {
+  id: string;
+  slug: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  photo: string | null;
+};
+
 export type NeonPublicAgentProfile = {
   id: string;
   public_slug: string | null;
@@ -44,10 +57,21 @@ export type NeonPublicAgentProfile = {
   whatsapp: string | null;
   licence_no: string | null;
   avatar_url: string | null;
+  /** Free-text branch label -- the legacy field, kept as the fallback when
+   * `branch_id` is unset or doesn't resolve. Never defaulted; null means
+   * "not recorded", not "assume the first branch". */
   branch: string | null;
+  /** FK into `branches.id`. Nullable and starts NULL for every existing row
+   * -- see 20260830160000_branches_entity.sql's header comment for why this
+   * is never backfilled/guessed. Resolve it against a fetched
+   * NeonBranchRecord[] (see listBranches()/fetchNeonBranches()), preferring
+   * it over `branch` when it resolves -- see agentBranchName() in
+   * src/lib/agent-directory.ts, the single place this preference is coded. */
+  branch_id: string | null;
   bio: string | null;
   specialties: string[];
   served_estate_slugs: string[];
+  languages: string[];
 };
 
 export type NeonStaffProfile = NeonPublicAgentProfile;
@@ -127,4 +151,40 @@ export type NeonLegacyPropertyMatch = {
 export type NeonEstateOption = {
   slug: string;
   name_zh: string;
+};
+
+export type NeonTransactionDealType = "sale" | "rent";
+
+export type NeonRecentTransactionsInput = {
+  estateSlug?: string;
+  districtSlug?: string;
+  /** "all" (the default) applies no deal_type predicate. */
+  dealType?: NeonTransactionDealType | "all";
+  /** "YYYY-MM" -- bounds deal_date to that calendar month. */
+  month?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  limit: number;
+};
+
+export type NeonTransactionEstateSnapshot = {
+  name_zh: string;
+  slug: string;
+  district_slug: string;
+};
+
+export type NeonTransactionRow = {
+  id: string;
+  deal_date: string | null;
+  deal_type: NeonTransactionDealType;
+  price: number | null;
+  saleable_area: number | null;
+  saleable_psf: number | null;
+  unit: string | null;
+  block: string | null;
+  floor_band: string | null;
+  source: string | null;
+  source_url: string | null;
+  verified_at: string | null;
+  estates: NeonTransactionEstateSnapshot | null;
 };
