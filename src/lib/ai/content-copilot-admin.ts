@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
 import { contentCopilotRequestSchema, type ContentCopilotRequest } from "./content-copilot.ts";
+import { requireStaffPermission } from "../control-plane/permissions.ts";
 import { unwrapServerFnResponse } from "../neon/server-fn-response.ts";
 
 const decisionSchema = z.object({
@@ -17,7 +18,7 @@ const contentCopilotServer = () => import("./content-copilot.server");
 const generateServer = createServerFn({ method: "POST" })
   .inputValidator((data: ContentCopilotRequest) => contentCopilotRequestSchema.parse(data))
   .handler(async ({ data }) => {
-    const actor = await requireStaffAccess(getRequest(), ["admin", "manager", "agent"]);
+    const actor = await requireStaffPermission(getRequest(), "ai.draft.generate");
     const service = (await contentCopilotServer()).createContentCopilotService();
     return service.generateContentProposal(data, actor);
   });
@@ -25,7 +26,7 @@ const generateServer = createServerFn({ method: "POST" })
 const decideServer = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => decisionSchema.parse(data))
   .handler(async ({ data }) => {
-    const actor = await requireStaffAccess(getRequest(), ["admin", "manager", "agent"]);
+    const actor = await requireStaffPermission(getRequest(), "ai.draft.generate");
     const service = (await contentCopilotServer()).createContentCopilotService();
     return service.decideContentProposal(data, actor);
   });
@@ -38,11 +39,6 @@ export async function decideAdminContentProposal(options: {
   data: z.infer<typeof decisionSchema>;
 }) {
   return callStaffServerFn(async () => decideServer(await withStaffAuthHeaders(options)));
-}
-
-async function requireStaffAccess(request: Request, roles: Array<"admin" | "manager" | "agent">) {
-  const auth = await import("../neon/auth.server");
-  return auth.requireStaffAccess(request, roles);
 }
 
 async function callStaffServerFn<T>(call: () => Promise<T>) {
