@@ -77,12 +77,24 @@ test("every route with children in the generated tree renders an Outlet", () => 
     const filePath = importFileByRouteImportName.get(parentImportName);
     assert.ok(filePath, `route tree should import a source file for ${parentRouteName}`);
 
-    const sourcePath = `src/routes/${filePath.replace("./routes/", "")}.tsx`;
-    const source = read(sourcePath);
+    const baseSourcePath = `src/routes/${filePath.replace("./routes/", "")}`;
+    const tsxPath = `${baseSourcePath}.tsx`;
+    const tsPath = `${baseSourcePath}.ts`;
+
+    // A `.ts`-only route (server handlers, see CLAUDE.md's `api.*.ts` convention
+    // -- e.g. api.youtube-sync.full.ts nesting under api.youtube-sync.ts) renders
+    // no JSX at all: it nests by path prefix, not by a parent component mounting
+    // an <Outlet/>. The Outlet requirement below only makes sense for a `.tsx`
+    // page component, so a source file that exists only as `.ts` is exempt.
+    if (!existsSync(join(root, tsxPath)) && existsSync(join(root, tsPath))) {
+      continue;
+    }
+
+    const source = read(tsxPath);
     assert.match(
       source,
       /<Outlet\s*\/>/,
-      `${sourcePath} has nested children in routeTree.gen.ts and must render <Outlet/> ` +
+      `${tsxPath} has nested children in routeTree.gen.ts and must render <Outlet/> ` +
         `(if it should instead be a standalone page, its children should opt out of nesting ` +
         `with the '_' suffix, as blog_.$slug.tsx and agents_.$slug.tsx do)`,
     );
