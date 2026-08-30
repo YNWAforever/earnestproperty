@@ -146,6 +146,11 @@ function ShamTsengPage() {
             tone={yoyDelta >= 0 ? "up" : "down"}
           />
         </div>
+        <DataNote
+          className="mt-4"
+          source="本行屋苑資料庫及成交記錄"
+          caveat="「主要屋苑」及「總單位」按目前資料庫屋苑記錄計算；「最新平均實呎」及「12 個月走勢」按近 12 個月成交記錄計算，數字隨資料更新而變動，並非固定核實日期的靜態數字。"
+        />
       </header>
 
       <section className="mt-10 rounded-lg border bg-muted/30 p-6">
@@ -166,9 +171,10 @@ function ShamTsengPage() {
       <section className="mt-12">
         <h2 className="text-2xl font-semibold">12 個月實呎成交走勢</h2>
         {transactions.length > 0 ? (
-          <p className="mt-1 text-sm text-muted-foreground">
-            資料來源：本行成交記錄（{transactions.length} 宗買賣）
-          </p>
+          <DataNote
+            className="mt-1"
+            source={`本行成交記錄（${transactions.length} 宗買賣）`}
+          />
         ) : null}
         <Card className="mt-4">
           <CardContent className="pt-6">
@@ -230,6 +236,11 @@ function ShamTsengPage() {
                 </li>
               ))}
             </ul>
+            <DataNote
+              className="mt-4"
+              source="本行按一般路況及公共交通時刻表推算"
+              caveat="交通時間為一般估算，實際車程視乎路況、班次及上落車地點而定，僅供參考。"
+            />
           </CardContent>
         </Card>
 
