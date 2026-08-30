@@ -21,6 +21,15 @@
  * tests (corridor-scope.contract.test.mjs, castle-peak-road.test.mjs) load
  * consumer files under Node's native TS stripping without a bundler, and rely
  * on this module being trivially inlinable.
+ *
+ * P4 Task 2 (docs/superpowers/plans/2026-08-30-frontend-revamp-p4-areas-estates.md)
+ * added 17 more entries below for the client's estate expansion, backed by
+ * real (but `published = false`, fact-less) rows from
+ * neon/migrations/20260830130000_estate_expansion.sql. Five of those 17
+ * (海雲軒/帝華軒/海韻台/縉皇居/龍騰閣) already existed here as inert,
+ * DB-less entries from Task 1 -- that migration gives them a real DB row for
+ * the first time, so their existing entries below are updated in place
+ * rather than duplicated.
  */
 
 export type CorridorSegmentSlug = "ting-kau" | "sham-tseng";
@@ -165,12 +174,19 @@ export const estateRegistry: EstateRegistryEntry[] = [
     nameZh: "海雲軒",
     nameEn: null,
     aliases: ["海雲軒"],
-    districtSlug: null,
-    // Not counted in castle-peak-road.ts's sham-tseng segment's estateSlugs:
-    // that field is real, DB-joinable inventory, and this estate has no DB
-    // row yet. It already appears in the ting-kau segment's featuredEstates/
-    // textAliases (free-text display + matching, not identity data) -- see
-    // castle-peak-road.ts for why those stay their own curated arrays.
+    // P4 Task 2: real DB row now exists (estate_expansion.sql), district_slug
+    // = "ting-kau" -- grounded in this estate already appearing in
+    // castle-peak-road.ts's ting-kau segment's featuredEstates/textAliases,
+    // not a new guess.
+    districtSlug: "ting-kau",
+    // Still null despite the real district_id: corridorSegment means real,
+    // DB-joinable STRICT inventory for a published, verified estate, and this
+    // row is `published = false` with no facts yet (per D2/the master plan's
+    // publish gate). Not counted in castle-peak-road.ts's ting-kau segment's
+    // estateSlugs for the same reason. It already appears in that segment's
+    // featuredEstates/textAliases (free-text display + matching, not
+    // identity data) -- see castle-peak-road.ts for why those stay their own
+    // curated arrays.
     corridorSegment: null,
     hasPage: false,
     photo: null,
@@ -181,6 +197,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
     nameZh: "帝華軒",
     nameEn: null,
     aliases: ["帝華軒"],
+    // P4 Task 2: real DB row now exists (estate_expansion.sql), but
+    // district_slug is NULL there too -- still no reference anywhere in this
+    // repo for this estate's district, and the master plan explicitly
+    // forbids guessing one.
     districtSlug: null,
     corridorSegment: null,
     hasPage: false,
@@ -193,6 +213,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     nameZh: "海韻台",
     nameEn: null,
     aliases: ["海韻台"],
+    // P4 Task 2: real DB row now exists (estate_expansion.sql), but
+    // district_slug is NULL there too -- see tai-wah-hin's comment above.
     districtSlug: null,
     corridorSegment: null,
     hasPage: false,
@@ -206,7 +228,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
     nameZh: "縉皇居",
     nameEn: null,
     aliases: ["縉皇居"],
-    districtSlug: null,
+    // P4 Task 2: real DB row now exists (estate_expansion.sql), district_slug
+    // = "ting-kau" -- see hoi-wan-hin's comment above; the same grounding
+    // applies to 縉皇居.
+    districtSlug: "ting-kau",
     corridorSegment: null,
     hasPage: false,
     photo: null,
@@ -218,11 +243,161 @@ export const estateRegistry: EstateRegistryEntry[] = [
     nameZh: "龍騰閣",
     nameEn: null,
     aliases: ["龍騰閣"],
+    // P4 Task 2: real DB row now exists (estate_expansion.sql), but
+    // district_slug is NULL there too -- see tai-wah-hin's comment above.
     districtSlug: null,
     corridorSegment: null,
     hasPage: false,
     photo: null,
     // TODO(client): district unknown -- no reference anywhere in the repo.
+    homepageDistrict: null,
+  },
+
+  // P4 Task 2: the 12 青山公路 estates from the client's 17-estate expansion.
+  // None have a homepage card (core-estates.ts's CLIENT_ORDER_SLUGS is
+  // unchanged by this task, still exactly the original 10 slugs) -- unlike
+  // the five entries above, `homepageDistrict: null` here means "no homepage
+  // card exists yet", not "district unknown" (their real district_slug IS
+  // known: "castle-peak-road", see each row's comment). Per D2, this group
+  // stays out of corridorRegionScope / corridorSegment even once published,
+  // so corridorSegment is a deliberate `null`, not a placeholder to fix
+  // later.
+  {
+    slug: "mun-ming-shan",
+    nameZh: "滿名山",
+    nameEn: null,
+    aliases: ["滿名山"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "wong-gam-hoi-ngon",
+    nameZh: "黃金海岸",
+    nameEn: null,
+    aliases: ["黃金海岸"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "oi-kam-hoi-ngon",
+    nameZh: "愛琴海岸",
+    nameEn: null,
+    aliases: ["愛琴海岸"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "tai-yu",
+    nameZh: "帝御",
+    nameEn: null,
+    aliases: ["帝御"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "wong-gam-hoi-waan",
+    nameZh: "黃金海灣",
+    nameEn: null,
+    aliases: ["黃金海灣"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "sing-tai",
+    nameZh: "星堤",
+    nameEn: null,
+    aliases: ["星堤"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "seong-yuen",
+    nameZh: "上源",
+    nameEn: null,
+    aliases: ["上源"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "the-carmel",
+    // The master plan gives only one name, already Latin-script -- no
+    // separate Chinese name to pair it with. nameZh holds the only value
+    // known (satisfies the non-null type); nameEn stays null rather than
+    // duplicating the same string, which would look like a genuine zh/en
+    // translation pair when none was ever supplied. Matches the DB row.
+    nameZh: "The Carmel",
+    nameEn: null,
+    aliases: ["The Carmel"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "oma-oma",
+    // Same reasoning as "The Carmel" above.
+    nameZh: "Oma Oma",
+    nameEn: null,
+    aliases: ["Oma Oma"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "lin-shan",
+    nameZh: "漣山",
+    nameEn: null,
+    aliases: ["漣山"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "long-tou-waan",
+    nameZh: "浪濤灣",
+    nameEn: null,
+    aliases: ["浪濤灣"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
+    homepageDistrict: null,
+  },
+  {
+    slug: "tai-tou-waan",
+    nameZh: "帝濤灣",
+    nameEn: null,
+    aliases: ["帝濤灣"],
+    districtSlug: "castle-peak-road",
+    corridorSegment: null,
+    hasPage: false,
+    photo: null,
     homepageDistrict: null,
   },
 ];

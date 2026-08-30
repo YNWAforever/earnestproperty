@@ -54,6 +54,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   // forever. Fixed while already in this exact file for the same reason.
   "20260822120000_whatsapp_audience_segment_link.sql",
   "20260830120000_listing_alerts.sql",
+  "20260830130000_estate_expansion.sql",
 ]);
 
 /**
