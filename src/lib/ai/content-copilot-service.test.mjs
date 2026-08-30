@@ -118,6 +118,61 @@ test("context loader uses explicit projections, public knowledge limit, and no C
   assert.match(calls[0][0], /show_on_website/);
 });
 
+const transactionRequest = {
+  resourceType: "transaction",
+  resourceId: "33333333-3333-4333-8333-333333333333",
+  action: "social",
+  selectedFields: ["social_copy_fb", "social_copy_ig"],
+  tone: "cantonese_conversational",
+  targetLanguage: "zh-HK",
+  researchMode: "internal",
+};
+
+test("context loader fetches a transaction joined to its estate for the social action", async () => {
+  const calls = [];
+  const loader = createContentCopilotContextLoader({
+    queryRows: async (sql, params) => {
+      calls.push([sql, params]);
+      return [
+        {
+          id: transactionRequest.resourceId,
+          social_copy_fb: null,
+          social_copy_ig: null,
+          deal_type: "sale",
+          price: 6_000_000,
+          saleable_area: 617,
+          saleable_psf: 9724,
+          deal_date: "2026-07-22",
+          unit: null,
+          block: "第03座",
+          floor_band: "低層",
+          created_at: "2026-07-22T00:00:00.000Z",
+          estate_name_zh: "麗都花園",
+        },
+      ];
+    },
+    searchPublicKnowledge: async () => [],
+  });
+  const context = await loader.load(transactionRequest, managerActor);
+  assert.equal(context.resource.id, transactionRequest.resourceId);
+  assert.equal(context.resource.estate_name_zh, "麗都花園");
+  assert.equal(context.resource.price, 6_000_000);
+  assert.equal(context.resource.social_copy_fb, null);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][0], /JOIN estates e ON e\.id = t\.estate_id/);
+});
+
+test("an agent cannot use Content Copilot on a transaction (privileged-only, same as estate/article)", async () => {
+  const loader = createContentCopilotContextLoader({
+    queryRows: async () => [{ id: transactionRequest.resourceId }],
+    searchPublicKnowledge: async () => [],
+  });
+  await assert.rejects(
+    loader.load(transactionRequest, agentActor),
+    (error) => error instanceof Response && error.status === 403,
+  );
+});
+
 test("generation reloads authoritative record and excludes CRM data from prompts", async () => {
   const calls = [];
   const service = createContentCopilotService({

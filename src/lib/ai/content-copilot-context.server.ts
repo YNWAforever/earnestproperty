@@ -114,6 +114,20 @@ async function fetchResource(
       ),
     );
   }
+  if (request.resourceType === "transaction") {
+    return first(
+      queryRows(
+        `SELECT t.id, t.social_copy_fb, t.social_copy_ig, t.deal_type, t.price,
+        t.saleable_area, t.saleable_psf, t.deal_date, t.unit, t.block,
+        t.floor_band, t.created_at, e.name_zh AS estate_name_zh
+       FROM transactions t
+       JOIN estates e ON e.id = t.estate_id
+       WHERE t.id = $1
+       LIMIT 1`,
+        [request.resourceId],
+      ),
+    );
+  }
   const ownership = privileged
     ? "p.id = $1"
     : "p.id = $1 AND p.agent_id = $2 AND p.status = 'active'";
@@ -176,6 +190,22 @@ function mapResource(type: ContentCopilotResourceType, row: Row) {
     Object.assign(
       resource,
       pick(row, ["video_url", "sort_order", "published", "created_at", "updated_at"]),
+    );
+  } else if (type === "transaction") {
+    Object.assign(
+      resource,
+      pick(row, [
+        "deal_type",
+        "price",
+        "saleable_area",
+        "saleable_psf",
+        "deal_date",
+        "unit",
+        "block",
+        "floor_band",
+        "estate_name_zh",
+        "created_at",
+      ]),
     );
   } else {
     Object.assign(
