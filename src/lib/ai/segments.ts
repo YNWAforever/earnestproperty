@@ -1,12 +1,33 @@
 import type { CrmSegmentEligibility, CrmSegmentFilters } from "./ai-types";
+import { estateRegistry } from "../../content/estate-registry.ts";
 
-const estateAliases: Array<[RegExp, string]> = [
-  [/碧堤|bellagio/i, "bellagio"],
-  [/浪翠|sea\s*crest/i, "sea-crest-villa"],
-  [/豪景|hong\s*kong\s*garden/i, "hong-kong-garden"],
-  [/海韻|rhine/i, "rhine-garden"],
-  [/麗都|lido/i, "lido-garden"],
-];
+/**
+ * Turns one alias string into a regex alternative, collapsing internal
+ * whitespace runs to `\s*` so a multi-word English alias still matches text
+ * with different/no spacing (e.g. "Sea Crest" also matches "SeaCrest") --
+ * reproducing what the old hand-written patterns did for their English
+ * fragments (e.g. `/sea\s*crest/i`).
+ */
+function toRegexAlternative(alias: string): string {
+  return alias
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s*");
+}
+
+/**
+ * Derived from estate-registry.ts's `aliases` field (DR-10) instead of a
+ * second hand-maintained regex list. Only the five estates with a real
+ * detail page (`hasPage: true`) are matchable here, matching the original
+ * hand-written list's coverage. Each entry's aliases are a superset of what
+ * the old hardcoded pattern matched on (e.g. bellagio's old pattern was
+ * `/碧堤|bellagio/i`; its registry aliases include "碧堤半島" and "碧堤"), so
+ * every prompt that used to match still matches.
+ */
+const estateAliases: Array<[RegExp, string]> = estateRegistry
+  .filter((entry) => entry.hasPage)
+  .map((entry) => [new RegExp(entry.aliases.map(toRegexAlternative).join("|"), "i"), entry.slug]);
 
 export function parseSegmentPromptToFilters(prompt: string): CrmSegmentFilters {
   const text = prompt.toLowerCase();

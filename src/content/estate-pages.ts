@@ -1,3 +1,5 @@
+import { getEstateEntry } from "./estate-registry.ts";
+
 export type EstateContentLink = {
   href: string;
   label: string;
@@ -40,11 +42,22 @@ export const earnestPublicTrust = {
   ],
 } as const;
 
+/**
+ * Identity fields (slug, nameZh, nameEn) come from estate-registry.ts (DR-10)
+ * instead of being retyped here -- this object keeps only its own detail-page
+ * prose (overview/buyerFit/pros/watchouts/FAQs/etc).
+ */
+function estatePageIdentity(slug: string) {
+  const entry = getEstateEntry(slug);
+  if (!entry.nameEn) {
+    throw new Error(`estate-pages.ts: estatePageContent requires a nameEn, but "${slug}" has none`);
+  }
+  return { slug: entry.slug, nameZh: entry.nameZh, nameEn: entry.nameEn };
+}
+
 export const estatePageContent = {
   bellagio: {
-    slug: "bellagio",
-    nameZh: "碧堤半島",
-    nameEn: "Bellagio",
+    ...estatePageIdentity("bellagio"),
     heroPositioning: "深井地標海景屋苑，適合重視會所、海景和屋苑規模的家庭。",
     overview: [
       "碧堤半島位於深井青山公路深井段，屋苑規模大、臨海感強，是深井最具代表性的換樓屋苑之一。",
@@ -80,9 +93,7 @@ export const estatePageContent = {
     ],
   },
   "sea-crest-villa": {
-    slug: "sea-crest-villa",
-    nameZh: "浪翠園",
-    nameEn: "Sea Crest Villa",
+    ...estatePageIdentity("sea-crest-villa"),
     heroPositioning: "深井成熟海景屋苑，入場門檻較務實，適合上車和換樓客比較。",
     overview: [
       "浪翠園分期發展，屋苑規模大，單位選擇由上車面積至家庭三房都有。",
@@ -119,9 +130,7 @@ export const estatePageContent = {
     ],
   },
   "hong-kong-garden": {
-    slug: "hong-kong-garden",
-    nameZh: "豪景花園",
-    nameEn: "Hong Kong Garden",
+    ...estatePageIdentity("hong-kong-garden"),
     heroPositioning: "青龍頭大型屋苑，主打空間、山海環境和較務實入場價。",
     overview: [
       "豪景花園位於青龍頭，屋苑規模大，常被買家用來比較深井核心屋苑以外的空間型選擇。",
@@ -158,9 +167,7 @@ export const estatePageContent = {
     ],
   },
   "rhine-garden": {
-    slug: "rhine-garden",
-    nameZh: "海韻花園",
-    nameEn: "Rhine Garden",
+    ...estatePageIdentity("rhine-garden"),
     heroPositioning: "深井臨海屋苑，適合鍾意海景和較寧靜生活節奏的買家。",
     overview: [
       "海韻花園位處深井臨海地段，景觀和寧靜感是主要吸引點。",
@@ -195,9 +202,7 @@ export const estatePageContent = {
     ],
   },
   "lido-garden": {
-    slug: "lido-garden",
-    nameZh: "麗都花園",
-    nameEn: "Lido Garden",
+    ...estatePageIdentity("lido-garden"),
     heroPositioning: "深井成熟臨海屋苑，也是晉誠地產地舖所在生活圈。",
     overview: [
       "麗都花園位於深井青山公路深井段，屋苑成熟，鄰近深井餐飲和日常配套。",

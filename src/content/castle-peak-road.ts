@@ -1,3 +1,5 @@
+import { estateSlugsForCorridorSegment } from "./estate-registry.ts";
+
 export type CorridorFaq = {
   question: string;
   answer: string;
@@ -139,7 +141,13 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     // normalizer never assigns it (confirmed dead -- 油柑頭 stock actually
     // normalises to "tsuen-wan" and is recovered via the textAliases below).
     districtSlugs: ["ting-kau"],
-    estateSlugs: [],
+    // Derived from estate-registry.ts (DR-10): no registry entry has
+    // corridorSegment "ting-kau" today because no estate in this zone has a
+    // real `estates` table row yet (海雲軒 / 縉皇居 already appear below in
+    // featuredEstates/textAliases as free text -- a different, looser kind of
+    // matching than this field, see estate-registry.ts's own comment on why
+    // they stay out of it).
+    estateSlugs: estateSlugsForCorridorSegment("ting-kau"),
     textAliases: [
       "汀九",
       "Ting Kau",
@@ -232,7 +240,10 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "青龍頭海景住宅",
     ],
     districtSlugs: ["sham-tseng", "tsing-lung-tau", "castle-peak-road"],
-    estateSlugs: ["bellagio", "sea-crest-villa", "lido-garden", "rhine-garden", "hong-kong-garden"],
+    // Derived from estate-registry.ts (DR-10) rather than hardcoded -- the
+    // five estates with a real `estates` table row all carry
+    // corridorSegment: "sham-tseng".
+    estateSlugs: estateSlugsForCorridorSegment("sham-tseng"),
     textAliases: [
       "深井",
       "Sham Tseng",

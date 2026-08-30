@@ -1,17 +1,25 @@
 import type { AiTagSafetyLevel } from "./ai-types";
+import { estateRegistry } from "../../content/estate-registry.ts";
 
 const factualPrefixes = ["budget_", "estate_", "intent_", "source_", "lang_", "district_"];
-const knownEstateInterestTags = new Set([
-  "bellagio_interest",
-  "sea-crest-villa_interest",
-  "sea_crest_villa_interest",
-  "hong-kong-garden_interest",
-  "hong_kong_garden_interest",
-  "rhine-garden_interest",
-  "rhine_garden_interest",
-  "lido-garden_interest",
-  "lido_garden_interest",
-]);
+/**
+ * Derived from estate-registry.ts (DR-10) instead of a second hand-maintained
+ * tag list. Only the five estates with a real detail page (`hasPage: true`)
+ * get an interest tag -- an estate without a DB row can't genuinely be the
+ * subject of lead interest tracking yet. Both the hyphenated slug and its
+ * underscored form are included, matching the two spellings the original
+ * hand-written set carried (a slug with no hyphen, like "bellagio", only
+ * needs the one form).
+ */
+const knownEstateInterestTags = new Set(
+  estateRegistry
+    .filter((entry) => entry.hasPage)
+    .flatMap((entry) => {
+      const hyphenated = `${entry.slug}_interest`;
+      const underscored = `${entry.slug.replace(/-/g, "_")}_interest`;
+      return hyphenated === underscored ? [hyphenated] : [hyphenated, underscored];
+    }),
+);
 const sensitiveTags = new Set(["hot_lead", "ready_to_buy", "urgent_30_days", "needs_valuation"]);
 const judgmentalTags = new Set(["low_quality", "price_shopper", "unresponsive"]);
 

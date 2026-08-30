@@ -393,9 +393,16 @@ async function loadQueriesForDedupeTests() {
     export function isWithinCorridorRegion() { return true; }
   `;
 
+  // DR-10 gave queries.ts a third aliased import, "@/content/estate-registry",
+  // for deriving ESTATE_DB_SLUG_FALLBACKS. dedupeListings (the only export this
+  // loader is used for, per the comment above) doesn't touch it, so an empty
+  // registry is a safe stub -- same rationale as the castle-peak-road stub above.
+  const estateRegistryStubSource = `export const estateRegistry = [];`;
+
   const queriesSource = transpile(read("src/lib/queries.ts"))
     .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
-    .replace('from "@/content/castle-peak-road"', `from "${dataUrl(castlePeakRoadStubSource)}"`);
+    .replace('from "@/content/castle-peak-road"', `from "${dataUrl(castlePeakRoadStubSource)}"`)
+    .replace('from "@/content/estate-registry"', `from "${dataUrl(estateRegistryStubSource)}"`);
 
   return import(dataUrl(queriesSource));
 }

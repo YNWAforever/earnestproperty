@@ -93,13 +93,16 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
 ];
 
 /**
- * Loads the real src/lib/queries.ts with its two aliased imports redirected:
+ * Loads the real src/lib/queries.ts with its three aliased imports redirected:
  * "@/lib/neon/public-data" -> a shim whose fetchNeonCorridorInventory calls the
  * already-loaded, getSql-stubbed public-data.server.ts's real fetchCorridorInventory
  * (the same handoff createServerFn's own handler does, minus the RPC machinery,
- * which this test has no need to exercise); "@/content/castle-peak-road" -> the real
- * module, inlined the same way relative imports are inlined above (it has no
- * imports of its own, so no further rewriting is needed inside it).
+ * which this test has no need to exercise); "@/content/castle-peak-road" and
+ * "@/content/estate-registry" -> the real modules. DR-10 gave castle-peak-road.ts
+ * its own relative import of estate-registry.ts, so that one also needs
+ * redirecting to the same real, data:-URL-loaded registry module before
+ * castle-peak-road.ts itself is loaded (a data: URL module has no filesystem
+ * location, so its relative import can't resolve on its own).
  */
 async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
   const query = async (text, params) => {
@@ -133,11 +136,18 @@ async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
     ).join("\n")}
   `;
 
-  const castlePeakRoadUrl = dataUrl(transpile(read("src/content/castle-peak-road.ts")));
+  const estateRegistryUrl = dataUrl(transpile(read("src/content/estate-registry.ts")));
+  const castlePeakRoadUrl = dataUrl(
+    transpile(read("src/content/castle-peak-road.ts")).replace(
+      'from "./estate-registry.ts"',
+      `from "${estateRegistryUrl}"`,
+    ),
+  );
 
   const queriesSource = transpile(read("src/lib/queries.ts"))
     .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
-    .replace('from "@/content/castle-peak-road"', `from "${castlePeakRoadUrl}"`);
+    .replace('from "@/content/castle-peak-road"', `from "${castlePeakRoadUrl}"`)
+    .replace('from "@/content/estate-registry"', `from "${estateRegistryUrl}"`);
 
   return import(dataUrl(queriesSource));
 }

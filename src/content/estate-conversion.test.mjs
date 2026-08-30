@@ -26,11 +26,19 @@ function findMatchingBrace(source, start) {
   return -1;
 }
 
+// Locates an estate's content block by its object key (e.g. `bellagio: {` or
+// `"sea-crest-villa": {`) rather than a literal `slug: "..."` field. DR-10
+// moved slug/nameZh/nameEn to be sourced from estate-registry.ts via a spread
+// (`...estatePageIdentity(slug)`), so `slug: "..."` no longer appears as
+// literal source text here -- the object key itself is still literal source
+// text either way, so it stays a reliable anchor for this source-text-based
+// test.
 function estateBlock(source, slug) {
-  const slugIndex = source.indexOf(`slug: "${slug}"`);
-  assert.notEqual(slugIndex, -1);
+  const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(slug) ? slug : JSON.stringify(slug);
+  const keyIndex = source.indexOf(`${key}: {`);
+  assert.notEqual(keyIndex, -1, `${slug} block not found`);
 
-  const blockStart = source.lastIndexOf("{", slugIndex);
+  const blockStart = source.indexOf("{", keyIndex);
   assert.notEqual(blockStart, -1);
 
   const blockEnd = findMatchingBrace(source, blockStart);

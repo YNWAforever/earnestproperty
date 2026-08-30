@@ -24,11 +24,18 @@ import type {
   NeonPropertyRow,
 } from "@/lib/neon/public-data.types";
 import { corridorRegionScope, isWithinCorridorRegion } from "@/content/castle-peak-road";
+import { estateRegistry } from "@/content/estate-registry";
 
-const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
-  bellagio: "belvedere-garden",
-  "rhine-garden": "sea-pearl-garden",
-};
+/**
+ * Derived from estate-registry.ts's `legacySlug` field (DR-10) instead of a
+ * second hand-maintained mapping -- keeps the same canonical -> legacy slug
+ * direction the rest of this file's slug-resolution logic already assumes.
+ */
+const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = Object.fromEntries(
+  estateRegistry
+    .filter((entry): entry is typeof entry & { legacySlug: string } => Boolean(entry.legacySlug))
+    .map((entry) => [entry.slug, entry.legacySlug]),
+);
 
 function canonicalEstateSlug(dbSlug: string) {
   for (const [canonical, legacy] of Object.entries(ESTATE_DB_SLUG_FALLBACKS)) {
