@@ -141,7 +141,10 @@ test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source",
       !file.includes(".server.") &&
       !file.includes(".test.") &&
       !file.startsWith("src/routes/api.") &&
-      file !== "src/lib/mls/neon-db.mjs",
+      // Both are only ever imported from scripts/mls/*.mjs (run via `node
+      // scripts/...`, never bundled for the browser) plus their own test file.
+      file !== "src/lib/mls/neon-db.mjs" &&
+      file !== "src/lib/mls/neon-lock.mjs",
   );
 
   for (const file of browserSafeFiles) {
