@@ -200,7 +200,7 @@ export async function fetchStaffAccessSummary(
   return summary;
 }
 
-const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent"];
+const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent", "viewer"];
 
 /**
  * True when a driver error is the division-by-zero that updateStaffRoles and

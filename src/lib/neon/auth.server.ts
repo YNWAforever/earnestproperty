@@ -3,7 +3,7 @@ import "@tanstack/react-start/server-only";
 import { queryRows, stringOrEmpty, stringOrNull } from "./db.server";
 import { shouldBootstrapFirstAdmin } from "./staff-security-policy";
 
-export type StaffRole = "admin" | "manager" | "agent";
+export type StaffRole = "admin" | "manager" | "agent" | "viewer";
 
 export type StaffAccess = {
   staffId: string;

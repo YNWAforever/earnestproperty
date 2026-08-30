@@ -18,7 +18,7 @@ import type {
 } from "./admin-team.types.ts";
 
 const staffIdSchema = z.string().uuid();
-const staffRoleSchema = z.enum(["admin", "manager", "agent"]);
+const staffRoleSchema = z.enum(["admin", "manager", "agent", "viewer"]);
 const teamStateSchema = z.enum(["active", "suspended", "invited", "attention"]);
 
 export const listAdminTeamSchema = z
@@ -38,7 +38,8 @@ export const inviteStaffMemberSchema = z
   .object({
     email: z.string().trim().email().max(320),
     name: z.string().trim().max(200).nullable().optional(),
-    roles: z.array(staffRoleSchema).min(1).max(3),
+    // max(4): one array slot per StaffRole value, now that viewer exists.
+    roles: z.array(staffRoleSchema).min(1).max(4),
   })
   .strict() as z.ZodType<InviteStaffMemberInput>;
 export const resendStaffInvitationSchema = z
@@ -48,7 +49,7 @@ export const sendStaffPasswordResetSchema = z
   .object({ staffId: staffIdSchema })
   .strict() as z.ZodType<SendStaffPasswordResetInput>;
 export const changeStaffRolesSchema = z
-  .object({ staffId: staffIdSchema, roles: z.array(staffRoleSchema).min(1).max(3) })
+  .object({ staffId: staffIdSchema, roles: z.array(staffRoleSchema).min(1).max(4) })
   .strict() as z.ZodType<ChangeStaffRolesInput>;
 export const changeStaffActiveSchema = z
   .object({

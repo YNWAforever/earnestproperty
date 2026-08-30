@@ -14,6 +14,7 @@ import {
 import { AdminTeamDialogs, type PendingTeamDialog } from "@/components/admin/team/AdminTeamDialogs";
 import { AdminTeamFilters, type TeamFilters } from "@/components/admin/team/AdminTeamFilters";
 import { AdminTeamMemberCard } from "@/components/admin/team/AdminTeamMemberCard";
+import { teamRoleLabel } from "@/components/admin/team/AdminTeamStatusBadge";
 import { AdminTeamTable } from "@/components/admin/team/AdminTeamTable";
 import {
   createLatestRequestGuard,
@@ -66,7 +67,7 @@ const emptyTeam: AdminTeamList = {
 function parseTeamSearch(search: Record<string, unknown>): TeamSearch {
   const result: TeamSearch = {};
   if (typeof search.q === "string" && search.q.trim()) result.q = search.q.trim();
-  if (["admin", "manager", "agent"].includes(String(search.role)))
+  if (["admin", "manager", "agent", "viewer"].includes(String(search.role)))
     result.role = search.role as StaffRole;
   if (["active", "suspended", "invited", "attention"].includes(String(search.state)))
     result.state = search.state as TeamSearch["state"];
@@ -467,13 +468,13 @@ function AdminTeam() {
                 <fieldset>
                   <legend className="text-sm font-medium">角色</legend>
                   <div className="mt-2 flex flex-wrap gap-3">
-                    {(["admin", "manager", "agent"] as StaffRole[]).map((role) => (
+                    {(["admin", "manager", "agent", "viewer"] as StaffRole[]).map((role) => (
                       <Label className="flex items-center gap-2" key={role}>
                         <Checkbox
                           checked={inviteRoles.includes(role)}
                           onCheckedChange={() => toggleInviteRole(role)}
                         />
-                        {role === "admin" ? "管理員" : role === "manager" ? "主管" : "經紀"}
+                        {teamRoleLabel(role)}
                       </Label>
                     ))}
                   </div>

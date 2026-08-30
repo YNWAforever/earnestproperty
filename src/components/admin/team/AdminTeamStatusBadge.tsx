@@ -45,7 +45,14 @@ const invitation = {
   },
 } as const;
 
-const roleLabels = { admin: "管理員", manager: "主管", agent: "經紀" } as const;
+const roleLabels = {
+  admin: "管理員",
+  manager: "主管",
+  agent: "經紀",
+  // Read-only reviewer role. Deliberately not "唯讀" -- that string already
+  // means "this panel is read-only for you" elsewhere in AdminTeamDetailPanel.
+  viewer: "檢視者",
+} as const;
 
 export function teamRoleLabel(role: keyof typeof roleLabels) {
   return roleLabels[role];
