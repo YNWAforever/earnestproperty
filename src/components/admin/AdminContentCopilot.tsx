@@ -60,6 +60,7 @@ const actionOptions: Array<{ value: ContentCopilotAction; label: string }> = [
   { value: "translate", label: "翻譯" },
   { value: "seo_optimize", label: "SEO 優化" },
   { value: "fact_check", label: "核對事實" },
+  { value: "social", label: "社交媒體文案" },
 ];
 
 const toneOptions: Array<{ value: ContentCopilotTone; label: string }> = [

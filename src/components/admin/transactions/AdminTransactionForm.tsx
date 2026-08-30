@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { toast } from "sonner";
 
+import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,14 +15,17 @@ import {
 } from "@/components/ui/select";
 import { fetchAdminAgents, fetchAdminEstateOptions } from "@/lib/neon/admin-data";
 import { saveAdminTransaction } from "@/lib/neon/admin-transactions";
-import type { AdminTransactionInput } from "@/lib/neon/admin-transactions.types";
+import type {
+  AdminTransactionInput,
+  AdminTransactionRow,
+} from "@/lib/neon/admin-transactions.types";
 
 type EstateOption = { id: string; name_zh: string; district_slug: string };
 type AgentOption = { id: string; name: string };
 
 const NO_AGENT = "none";
 
-function createInitialForm(transaction?: Partial<AdminTransactionInput>) {
+function createInitialForm(transaction?: Partial<AdminTransactionRow>) {
   return {
     id: transaction?.id,
     estate_id: transaction?.estate_id ?? "",
@@ -36,6 +40,8 @@ function createInitialForm(transaction?: Partial<AdminTransactionInput>) {
     source: transaction?.source ?? "",
     source_url: transaction?.source_url ?? "",
     agent_id: transaction?.agent_id ?? "",
+    social_copy_fb: transaction?.social_copy_fb ?? null,
+    social_copy_ig: transaction?.social_copy_ig ?? null,
   };
 }
 
@@ -45,7 +51,7 @@ export function AdminTransactionForm({
   transaction,
   onSaved,
 }: {
-  transaction?: Partial<AdminTransactionInput>;
+  transaction?: Partial<AdminTransactionRow>;
   onSaved: (id: string) => void;
 }) {
   const [form, setForm] = useState<FormState>(() => createInitialForm(transaction));
@@ -108,6 +114,8 @@ export function AdminTransactionForm({
         source: form.source.trim() || null,
         source_url: form.source_url.trim() || null,
         agent_id: form.agent_id || null,
+        social_copy_fb: form.social_copy_fb,
+        social_copy_ig: form.social_copy_ig,
       };
       const result = await saveAdminTransaction({ data: payload });
       toast.success(form.id ? "成交記錄已更新" : "成交記錄已新增");
@@ -242,6 +250,22 @@ export function AdminTransactionForm({
           </Field>
         </div>
       </section>
+      {form.id ? (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold text-muted-foreground">社交媒體文案</h2>
+          <AdminContentCopilot
+            resourceType="transaction"
+            resourceId={form.id}
+            fingerprintValues={{
+              social_copy_fb: form.social_copy_fb,
+              social_copy_ig: form.social_copy_ig,
+              created_at: transaction?.created_at ?? null,
+            }}
+            values={{ social_copy_fb: form.social_copy_fb, social_copy_ig: form.social_copy_ig }}
+            onApply={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          />
+        </section>
+      ) : null}
       <div className="flex justify-end gap-2 border-t pt-4">
         <Button type="submit" disabled={submitting}>
           {submitting ? "儲存中…" : form.id ? "儲存變更" : "建立成交記錄"}

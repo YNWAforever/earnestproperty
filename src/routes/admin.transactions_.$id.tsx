@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminTransactionForm } from "@/components/admin/transactions/AdminTransactionForm";
+import { TransactionSocialPreview } from "@/components/admin/transactions/TransactionSocialPreview";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,12 +188,16 @@ function EditAdminTransaction() {
                 </div>
               </CardContent>
             </Card>
-            <AdminTransactionForm
-              transaction={transaction}
-              onSaved={() => {
-                toast.info("編輯後成交記錄需重新核實，才可繼續公開顯示。");
-                void refresh();
-              }}
+            <AdminTransactionForm transaction={transaction} onSaved={() => void refresh()} />
+            <TransactionSocialPreview
+              estateName={transaction.estate_name_zh}
+              dealType={transaction.deal_type}
+              price={transaction.price}
+              saleableArea={transaction.saleable_area}
+              saleablePsf={transaction.saleable_psf}
+              dealDate={transaction.deal_date}
+              copyFb={transaction.social_copy_fb ?? null}
+              copyIg={transaction.social_copy_ig ?? null}
             />
           </div>
         ) : null}
