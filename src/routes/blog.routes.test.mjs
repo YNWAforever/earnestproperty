@@ -133,7 +133,11 @@ test("blog article template renders an author byline unconditionally and a revie
 
 test("blog article template renders an answer-summary callout before the ToC", () => {
   const source = read("src/routes/blog_.$slug.tsx");
-  assert.match(source, /article\.answerSummary &&/, "answer summary should be conditionally rendered");
+  assert.match(
+    source,
+    /article\.answerSummary &&/,
+    "answer summary should be conditionally rendered",
+  );
   assert.match(source, /重點摘要/, "answer summary should be visually labelled as a summary");
 });
 

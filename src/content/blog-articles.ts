@@ -72,7 +72,8 @@ export const blogArticles: readonly BlogArticleMeta[] = [
     readingMinutes: 8,
     author: EDITORIAL_AUTHOR,
     reviewer: null,
-    sourcesNote: "屋苑基本資料實時來自本網站屋苑資料庫，與 /estate 頁面同步；交通及校網資料來自本網站深井/青山公路地區頁。",
+    sourcesNote:
+      "屋苑基本資料實時來自本網站屋苑資料庫，與 /estate 頁面同步；交通及校網資料來自本網站深井/青山公路地區頁。",
     answerSummary:
       "深井五大屋苑（碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園）都在同一 62 校網及交通網絡內，實際呎價、單位數同落成年份請參考下方實時比較表；校網派位以教育局最新公布為準。",
     sections: [
@@ -100,7 +101,13 @@ export const blogArticles: readonly BlogArticleMeta[] = [
         ],
       },
     ],
-    compareEstateSlugs: ["bellagio", "hong-kong-garden", "sea-crest-villa", "lido-garden", "rhine-garden"],
+    compareEstateSlugs: [
+      "bellagio",
+      "hong-kong-garden",
+      "sea-crest-villa",
+      "lido-garden",
+      "rhine-garden",
+    ],
     links: [
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/bellagio", label: "碧堤半島放盤" },
@@ -110,7 +117,8 @@ export const blogArticles: readonly BlogArticleMeta[] = [
   {
     slug: "bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
     title: `${estateDisplayName("bellagio")} vs ${estateDisplayName("sea-crest-villa")} vs ${estateDisplayName("hong-kong-garden")}：深井三大屋苑點揀好？`,
-    excerpt: "碧堤半島、浪翠園、豪景花園三大深井屋苑點揀？實時比較呎價、單位數、落成年份同發展商，再睇邊種買家最啱邊個屋苑。",
+    excerpt:
+      "碧堤半島、浪翠園、豪景花園三大深井屋苑點揀？實時比較呎價、單位數、落成年份同發展商，再睇邊種買家最啱邊個屋苑。",
     category: "屋苑比較",
     readingMinutes: 6,
     author: EDITORIAL_AUTHOR,
@@ -137,8 +145,14 @@ export const blogArticles: readonly BlogArticleMeta[] = [
     compareEstateSlugs: ["bellagio", "sea-crest-villa", "hong-kong-garden"],
     links: [
       { href: "/estate/bellagio", label: `${estateDisplayName("bellagio")} Bellagio` },
-      { href: "/estate/sea-crest-villa", label: `${estateDisplayName("sea-crest-villa")} Sea Crest Villa` },
-      { href: "/estate/hong-kong-garden", label: `${estateDisplayName("hong-kong-garden")} Hong Kong Garden` },
+      {
+        href: "/estate/sea-crest-villa",
+        label: `${estateDisplayName("sea-crest-villa")} Sea Crest Villa`,
+      },
+      {
+        href: "/estate/hong-kong-garden",
+        label: `${estateDisplayName("hong-kong-garden")} Hong Kong Garden`,
+      },
       { href: "/blog/sham-tseng-buying-guide-2026", label: "深井買樓全攻略 2026" },
     ],
   },

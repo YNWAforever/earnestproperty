@@ -6,11 +6,7 @@ import {
   BlogEstateComparisonTable,
   type EstateComparisonRow,
 } from "@/components/site/BlogEstateComparisonTable";
-import {
-  blogArticles,
-  EDITORIAL_AUTHOR,
-  type BlogArticleSection,
-} from "@/content/blog-articles";
+import { blogArticles, EDITORIAL_AUTHOR, type BlogArticleSection } from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
 import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
@@ -97,8 +93,7 @@ export const Route = createFileRoute("/blog_/$slug")({
           slug: registryArticle.slug,
           title: dbArticle?.title || registryArticle.title,
           excerpt: dbArticle?.excerpt ?? registryArticle.excerpt,
-          sections:
-            sectionsFromDbContent(dbArticle?.content ?? null) ?? registryArticle.sections,
+          sections: sectionsFromDbContent(dbArticle?.content ?? null) ?? registryArticle.sections,
           cover_image: dbArticle?.cover_image ?? null,
           category: dbArticle?.category ?? registryArticle.category,
           reading_minutes: dbArticle?.reading_minutes ?? registryArticle.readingMinutes,
@@ -228,6 +223,9 @@ function BlogArticlePage() {
           <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
             <span>作者：{article.author}</span>
             {article.reviewer && <span>審閱：{article.reviewer}</span>}
+            <Link to="/blog/editorial-standards" className="text-primary underline">
+              編採標準
+            </Link>
           </div>
           {article.sourcesNote && <DataNote source={article.sourcesNote} className="mt-3" />}
         </header>

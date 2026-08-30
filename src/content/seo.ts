@@ -70,6 +70,11 @@ export const pageSeo = {
     description:
       "深井買樓租樓攻略、屋苑比較、校網交通、成交走勢分析。由深井 hyperlocal 專家撰寫，助你睇通深井樓市。",
   },
+  blogEditorialStandards: {
+    path: "/blog/editorial-standards",
+    title: "編採及事實查核標準｜晉誠地產 Blog",
+    description: "晉誠地產 Blog 文章的資料來源、審閱制度及事實查核標準說明。",
+  },
   about: {
     path: "/about",
     title: "關於晉誠地產 Earnest Property｜深井、青山公路物業專家",
@@ -85,8 +90,7 @@ export const pageSeo = {
   privacy: {
     path: "/privacy",
     title: "私隱政策｜晉誠地產 Earnest Property",
-    description:
-      "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
+    description: "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
   },
   disclaimer: {
     path: "/disclaimer",
@@ -108,9 +112,7 @@ export const pageSeo = {
 function estateSeoIdentity(slug: string) {
   const entry = getEstateEntry(slug);
   if (!entry.nameEn) {
-    throw new Error(
-      `seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`,
-    );
+    throw new Error(`seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`);
   }
   return {
     slug: entry.slug,
@@ -199,10 +201,8 @@ export const estateSeo = {
  * (confirmed by a repo-wide grep) but kept exported for parity with the
  * pre-refactor API.
  */
-export const estateAliases: Record<string, keyof typeof estateSeo> =
-  Object.fromEntries(
-    (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
-      getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
-    ),
-  );
-
+export const estateAliases: Record<string, keyof typeof estateSeo> = Object.fromEntries(
+  (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
+    getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
+  ),
+);

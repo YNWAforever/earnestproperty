@@ -18,7 +18,10 @@ test("every article has at least one section (ToC needs real structure)", () => 
     assert.ok(article.sections.length > 0, `${article.slug} has no sections`);
     for (const section of article.sections) {
       assert.ok(section.heading.trim().length > 0, `${article.slug} has an empty section heading`);
-      assert.ok(section.paragraphs.length > 0, `${article.slug}'s "${section.heading}" has no paragraphs`);
+      assert.ok(
+        section.paragraphs.length > 0,
+        `${article.slug}'s "${section.heading}" has no paragraphs`,
+      );
     }
   }
 });

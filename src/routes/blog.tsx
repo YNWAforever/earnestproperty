@@ -119,7 +119,9 @@ function BlogPage() {
 
       <section className="mx-auto grid max-w-5xl gap-5 px-4 py-10 sm:px-6 lg:px-8">
         {filteredArticles.length === 0 && (
-          <p className="text-sm text-muted-foreground">未有符合條件的文章，請調整分類或搜尋字詞。</p>
+          <p className="text-sm text-muted-foreground">
+            未有符合條件的文章，請調整分類或搜尋字詞。
+          </p>
         )}
         {filteredArticles.map((article) => {
           const publishedDate = formatHkDate(article.published_at);
@@ -165,6 +167,16 @@ function BlogPage() {
             </Link>
           );
         })}
+      </section>
+
+      <section className="mx-auto max-w-5xl px-4 pb-10 sm:px-6 lg:px-8">
+        <p className="text-xs text-muted-foreground">
+          文章資料來源及審閱制度請參閱
+          <Link to="/blog/editorial-standards" className="ml-1 text-primary underline">
+            編採及事實查核標準
+          </Link>
+          。
+        </p>
       </section>
     </main>
   );

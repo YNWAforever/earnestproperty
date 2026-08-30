@@ -33,6 +33,7 @@ import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wa
 import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 import { Route as CastlePeakRoadSegmentRouteImport } from './routes/castle-peak-road.$segment'
+import { Route as BlogEditorialStandardsRouteImport } from './routes/blog_.editorial-standards'
 import { Route as BlogSlugRouteImport } from './routes/blog_.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
@@ -195,6 +196,11 @@ const CastlePeakRoadSegmentRoute = CastlePeakRoadSegmentRouteImport.update({
   id: '/$segment',
   path: '/$segment',
   getParentRoute: () => CastlePeakRoadRoute,
+} as any)
+const BlogEditorialStandardsRoute = BlogEditorialStandardsRouteImport.update({
+  id: '/blog_/editorial-standards',
+  path: '/blog/editorial-standards',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
   id: '/blog_/$slug',
@@ -452,6 +458,7 @@ export interface FileRoutesByFullPath {
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog/editorial-standards': typeof BlogEditorialStandardsRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -518,6 +525,7 @@ export interface FileRoutesByTo {
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog/editorial-standards': typeof BlogEditorialStandardsRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -587,6 +595,7 @@ export interface FileRoutesById {
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog_/$slug': typeof BlogSlugRoute
+  '/blog_/editorial-standards': typeof BlogEditorialStandardsRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -657,6 +666,7 @@ export interface FileRouteTypes {
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/blog/editorial-standards'
     | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -723,6 +733,7 @@ export interface FileRouteTypes {
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/blog/editorial-standards'
     | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -791,6 +802,7 @@ export interface FileRouteTypes {
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog_/$slug'
+    | '/blog_/editorial-standards'
     | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -851,6 +863,7 @@ export interface RootRouteChildren {
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
   BlogSlugRoute: typeof BlogSlugRoute
+  BlogEditorialStandardsRoute: typeof BlogEditorialStandardsRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
   DistrictTingKauRoute: typeof DistrictTingKauRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
@@ -1043,6 +1056,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/castle-peak-road/$segment'
       preLoaderRoute: typeof CastlePeakRoadSegmentRouteImport
       parentRoute: typeof CastlePeakRoadRoute
+    }
+    '/blog_/editorial-standards': {
+      id: '/blog_/editorial-standards'
+      path: '/blog/editorial-standards'
+      fullPath: '/blog/editorial-standards'
+      preLoaderRoute: typeof BlogEditorialStandardsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/blog_/$slug': {
       id: '/blog_/$slug'
@@ -1464,6 +1484,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
   BlogSlugRoute: BlogSlugRoute,
+  BlogEditorialStandardsRoute: BlogEditorialStandardsRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
   DistrictTingKauRoute: DistrictTingKauRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
