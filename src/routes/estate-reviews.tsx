@@ -61,7 +61,7 @@ function EstateReviewsPage() {
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-coral">Review Articles</p>
+            <p className="text-sm font-semibold text-coral">屋苑文章</p>
             <h2 className="mt-2 text-2xl font-bold text-primary">最新屋苑文章</h2>
           </div>
           <Button asChild variant="outline">
@@ -92,7 +92,7 @@ function EstateReviewsPage() {
 
       <section className="border-y bg-card">
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-coral">Estate Pages</p>
+          <p className="text-sm font-semibold text-coral">屋苑專頁</p>
           <h2 className="mt-2 text-2xl font-bold text-primary">屋苑入口</h2>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {estates.map((estate) => (

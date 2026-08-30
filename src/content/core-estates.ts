@@ -7,9 +7,17 @@
  * DB values are merged in by slug — rather than inventing rows in the estates
  * table for estates we know nothing about.
  *
- * Order is the client's and is not alphabetical.
+ * Order is the client's and is not alphabetical. Identity (slug, name, photo,
+ * district grouping, hasPage) is sourced from estate-registry.ts (DR-10) —
+ * this file only adds the homepage-card-specific fields (units/avgPsf/
+ * listingCount, always null here and merged from the live DB at render time).
  */
-export type CoreEstateDistrict = "深井" | "青山公路" | "汀九";
+import {
+  type EstateHomepageDistrict,
+  getEstateEntry,
+} from "./estate-registry.ts";
+
+export type CoreEstateDistrict = EstateHomepageDistrict;
 
 export type CoreEstate = {
   slug: string;
@@ -29,127 +37,42 @@ export type CoreEstate = {
   hasPage: boolean;
 };
 
-export const coreEstates: CoreEstate[] = [
-  // The five with detail pages. units / avgPsf / listingCount stay null here and
-  // are filled from the live DB at render time; hardcoding them would let the
-  // card drift from the estate page.
-  {
-    slug: "bellagio",
-    name: "碧堤半島",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: "/estates/bellagio.jpg",
-    district: "深井",
-    hasPage: true,
-  },
-  {
-    slug: "hong-kong-garden",
-    name: "豪景花園",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    // TODO(client): 豪景花園 photo not supplied — the other four arrived in 屋苑相/.
-    photo: null,
-    district: "青山公路",
-    hasPage: true,
-  },
-  {
-    slug: "sea-crest-villa",
-    name: "浪翠園",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: "/estates/sea-crest-villa.jpg",
-    district: "深井",
-    hasPage: true,
-  },
-  {
-    slug: "lido-garden",
-    name: "麗都花園",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: "/estates/lido-garden.jpg",
-    district: "深井",
-    hasPage: true,
-  },
-  {
-    slug: "rhine-garden",
-    name: "海韻花園",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: "/estates/rhine-garden.jpg",
-    district: "深井",
-    hasPage: true,
-  },
+/**
+ * The client's approved homepage order (docx p13/p15): the five estates with
+ * a detail page first, then the five added estates. Kept as an explicit slug
+ * list — rather than e.g. `estateRegistry.filter(...)` — so this order stays
+ * this file's own decision and doesn't silently follow a reordering of the
+ * registry array, which is free to be in any order.
+ */
+const CLIENT_ORDER_SLUGS = [
+  "bellagio",
+  "hong-kong-garden",
+  "sea-crest-villa",
+  "lido-garden",
+  "rhine-garden",
+  "hoi-wan-hin",
+  "tai-wah-hin",
+  "hoi-wan-toi",
+  "chun-wong-kui",
+  "lung-tang-kok",
+] as const;
 
-  // The five the client added (docx p13/p15). No figures, no photos and no detail
-  // pages were supplied, so every value below is null and the cards do not link —
-  // linking would ship five thin pages, which is the SEO problem this repo just
-  // spent a PR fixing.
-  //
-  // TODO(client): confirm the romanised slugs before any of these gets a URL.
-  // They are React keys only today, so nothing is committed to yet.
-  {
-    slug: "hoi-wan-hin",
-    name: "海雲軒",
+// units / avgPsf / listingCount stay null here and are filled from the live
+// DB at render time; hardcoding them would let the card drift from the
+// estate page. slug/name/photo/district/hasPage come from estate-registry.ts.
+export const coreEstates: CoreEstate[] = CLIENT_ORDER_SLUGS.map((slug) => {
+  const entry = getEstateEntry(slug);
+  return {
+    slug: entry.slug,
+    name: entry.nameZh,
     units: null,
     avgPsf: null,
     listingCount: null,
-    photo: null,
-    // Not 深井: castle-peak-road.ts already lists 海雲軒 among 油柑頭 / 汀九's
-    // featured estates, and its listings normalise to the tsuen-wan district.
-    district: "汀九",
-    hasPage: false,
-  },
-  {
-    slug: "tai-wah-hin",
-    name: "帝華軒",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: null,
-    // TODO(client): district unknown — no reference anywhere in the repo.
-    district: null,
-    hasPage: false,
-  },
-  {
-    slug: "hoi-wan-toi",
-    name: "海韻台",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: null,
-    // TODO(client): district unknown. Do not assume it follows 海韻花園 just
-    // because the names share 海韻.
-    district: null,
-    hasPage: false,
-  },
-  {
-    slug: "chun-wong-kui",
-    name: "縉皇居",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: null,
-    // As with 海雲軒, the corridor registry already places 縉皇居 in 油柑頭 / 汀九.
-    district: "汀九",
-    hasPage: false,
-  },
-  {
-    slug: "lung-tang-kok",
-    name: "龍騰閣",
-    units: null,
-    avgPsf: null,
-    listingCount: null,
-    photo: null,
-    // TODO(client): district unknown — no reference anywhere in the repo.
-    district: null,
-    hasPage: false,
-  },
-];
+    photo: entry.photo,
+    district: entry.homepageDistrict,
+    hasPage: entry.hasPage,
+  };
+});
 
 /** Cards shown before the 查看更多屋苑 expander. */
 export const CORE_ESTATES_PREVIEW_COUNT = 8;
@@ -160,6 +83,7 @@ export const CORE_ESTATES_PREVIEW_COUNT = 8;
  * for anything the DB had not filled in.
  */
 export function estateFigure(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  if (value === null || value === undefined || !Number.isFinite(value))
+    return "—";
   return value.toLocaleString();
 }

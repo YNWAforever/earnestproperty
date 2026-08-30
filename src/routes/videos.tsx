@@ -24,9 +24,9 @@ import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-
 
 // The channel sync imports the full back catalogue, so this page went from 1
 // video to 96 in a single run. Rendering every card at once produced a 60,710px
-// page whose load event fired at 20.3s. Cards are paged in batches; the
-// VideoObject schema below is still emitted for all of them, so paging affects
-// what a human scrolls through, not what a crawler indexes.
+// page whose load event fired at 20.3s. Cards are paged in batches, and (DR-6)
+// the VideoObject schema below is capped to that same rendered/filtered
+// subset, so paging affects what a crawler indexes too.
 const VIDEOS_PER_PAGE = 12;
 
 // Values are English and decoupled from the Chinese labels (最新 / 最舊 / 精選) so
@@ -166,10 +166,15 @@ function VideosPage() {
 
   return (
     <div className="bg-background">
-      {/* Emitted for every video regardless of paging or the active filter: this
-          is what video rich results read, and it must not shrink to whatever the
-          visitor happens to have scrolled to. */}
-      <AllVideoSchemas cmsVideos={cmsVideos} listingVideos={listingVideos} />
+      {/* Capped to what's actually visible: visibleCmsVideos (paged) and
+          matchingListingVideos (already ≤12 from the loader, filtered by the
+          active search/category). DR-6 -- structured data for content the
+          page doesn't render is misleading to crawlers and inflates payload
+          for no benefit. */}
+      <AllVideoSchemas
+        cmsVideos={visibleCmsVideos}
+        listingVideos={matchingListingVideos}
+      />
 
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">

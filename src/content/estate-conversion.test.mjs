@@ -1,9 +1,59 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import ts from "typescript";
+
+// Plain data modules with no imports of their own (see each file's header
+// comment), so -- like castle-peak-road.test.mjs already does for the same
+// module -- they can be imported directly under Node's native TS stripping,
+// letting the P4 Task 4 tests below prove real behavior instead of grepping.
+import { findCastlePeakRoadSegmentByDistrictSlug } from "./castle-peak-road.ts";
+import { shamTsengSchoolNet } from "./school-nets.ts";
 
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+}
+
+// Extracts and actually executes estate.$slug.tsx's head() function (mirrors
+// the extraction pattern already established in
+// src/routes/property.listing-detail.contract.test.mjs) so Task 3's
+// seo_title/seo_description override chain (DR-10) is proven by real
+// execution, not just a string match against the source text.
+function transpileAndRun(snippet) {
+  const { outputText } = ts.transpileModule(snippet, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  });
+  const exportsObj = {};
+  new Function("exports", outputText)(exportsObj);
+  return exportsObj;
+}
+
+function buildEstateHead(routeSource) {
+  const startNeedle = "head: ({ loaderData }) => {";
+  const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
+  assert.ok(bodyStart > startNeedle.length - 1, "expected the route head()");
+  const endMarker = "\n  },\n  errorComponent:";
+  const bodyEnd = routeSource.indexOf(endMarker, bodyStart);
+  assert.ok(bodyEnd !== -1, "expected head() to close before errorComponent");
+  const body = routeSource.slice(bodyStart, bodyEnd);
+
+  const snippet = `
+const estateSeo = {
+  "with-seo": { title: "registry title", description: "registry description" },
+  "no-seo": {},
+};
+function canonicalLink(path) {
+  return { rel: "canonical", href: "https://example.test" + path };
+}
+function head({ loaderData }) {
+  ${body}
+}
+exports.head = head;
+`;
+  return transpileAndRun(snippet).head;
 }
 
 function findMatchingBrace(source, start) {
@@ -26,11 +76,19 @@ function findMatchingBrace(source, start) {
   return -1;
 }
 
+// Locates an estate's content block by its object key (e.g. `bellagio: {` or
+// `"sea-crest-villa": {`) rather than a literal `slug: "..."` field. DR-10
+// moved slug/nameZh/nameEn to be sourced from estate-registry.ts via a spread
+// (`...estatePageIdentity(slug)`), so `slug: "..."` no longer appears as
+// literal source text here -- the object key itself is still literal source
+// text either way, so it stays a reliable anchor for this source-text-based
+// test.
 function estateBlock(source, slug) {
-  const slugIndex = source.indexOf(`slug: "${slug}"`);
-  assert.notEqual(slugIndex, -1);
+  const key = /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(slug) ? slug : JSON.stringify(slug);
+  const keyIndex = source.indexOf(`${key}: {`);
+  assert.notEqual(keyIndex, -1, `${slug} block not found`);
 
-  const blockStart = source.lastIndexOf("{", slugIndex);
+  const blockStart = source.indexOf("{", keyIndex);
   assert.notEqual(blockStart, -1);
 
   const blockEnd = findMatchingBrace(source, blockStart);
@@ -203,6 +261,65 @@ test("estate route renders conversion seo sections", () => {
   assert.match(route, /要留意/);
 });
 
+test("EstateRecord includes seo_title/seo_description (DR-10) so the head() override below is type-safe", () => {
+  const queries = read("src/lib/queries.ts");
+  const typeStart = queries.indexOf("export type EstateRecord = {");
+  assert.notEqual(typeStart, -1, "expected EstateRecord type in queries.ts");
+  const typeEnd = queries.indexOf("};", typeStart);
+  const typeBody = queries.slice(typeStart, typeEnd);
+  assert.match(typeBody, /seo_title: string \| null;/);
+  assert.match(typeBody, /seo_description: string \| null;/);
+});
+
+test("estate head() prefers estate.seo_title/seo_description over the estateSeo registry entry, which stays the fallback (DR-10)", () => {
+  const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
+
+  const overridden = head({
+    loaderData: {
+      estate: {
+        slug: "with-seo",
+        name_zh: "測試屋苑",
+        seo_title: "override title",
+        seo_description: "override description",
+        total_units: 100,
+        avg_saleable_psf: 12000,
+      },
+    },
+  });
+  assert.equal(overridden.meta[0].title, "override title");
+  assert.equal(overridden.meta[1].content, "override description");
+
+  const fallsBackToRegistry = head({
+    loaderData: {
+      estate: {
+        slug: "with-seo",
+        name_zh: "測試屋苑",
+        seo_title: null,
+        seo_description: null,
+        total_units: 100,
+        avg_saleable_psf: 12000,
+      },
+    },
+  });
+  assert.equal(fallsBackToRegistry.meta[0].title, "registry title");
+  assert.equal(fallsBackToRegistry.meta[1].content, "registry description");
+
+  const fallsBackToDefault = head({
+    loaderData: {
+      estate: {
+        slug: "no-seo",
+        name_zh: "測試屋苑",
+        seo_title: null,
+        seo_description: null,
+        total_units: 88,
+        avg_saleable_psf: 9000,
+      },
+    },
+  });
+  assert.equal(fallsBackToDefault.meta[0].title, "測試屋苑｜晉誠地產屋苑專頁");
+  assert.match(fallsBackToDefault.meta[1].content, /測試屋苑 88 個單位，平均實呎 \$9000/);
+});
+
 test("public search and homepage expose lead capture paths", () => {
   const listings = read("src/routes/listings.tsx");
   const home = read("src/routes/index.tsx");
@@ -272,11 +389,203 @@ test("homepage shows featured property videos after featured listings", () => {
   assert.match(home, /to="\/videos"/);
 
   // The video band must come after 精選筍盤, which is the whole point of where
-  // the client asked for it. Compared on the rendered section eyebrows rather
+  // the client asked for it. Compared on the rendered section titles rather
   // than bare text, so a comment mentioning either name cannot skew the order.
-  const featuredAt = home.indexOf('eyebrow="精選筍盤"');
-  const videosAt = home.indexOf('eyebrow="精選樓盤影片"');
-  assert.ok(featuredAt > -1, "featured listings section should carry its eyebrow");
-  assert.ok(videosAt > -1, "video section should carry its eyebrow");
+  // These two SectionHeader calls intentionally carry no `eyebrow` -- an
+  // eyebrow identical to the title duplicated the label visually, and was
+  // removed in ecaef90 ("fix: remove duplicate homepage section labels").
+  const featuredAt = home.indexOf('title="精選筍盤"');
+  const videosAt = home.indexOf('title="精選樓盤影片"');
+  assert.ok(featuredAt > -1, "featured listings section should carry its title");
+  assert.ok(videosAt > -1, "video section should carry its title");
   assert.ok(featuredAt < videosAt, "精選樓盤影片 must render after 精選筍盤");
+});
+
+// --- P4 Task 4: verified-facts DataNote, transport, school-net, PSF trend ---
+
+test("findCastlePeakRoadSegmentByDistrictSlug resolves the real district of every hasPage estate and degrades to null outside a known segment (P4 Task 4)", () => {
+  // All five of today's real /estate/$slug estates carry
+  // district_slug === "sham-tseng" (estate-registry.ts) -- the estate
+  // template's new transport section must actually match for them, not just
+  // compile against the function's type signature.
+  const shamTsengMatch = findCastlePeakRoadSegmentByDistrictSlug("sham-tseng");
+  assert.notEqual(shamTsengMatch, null);
+  assert.equal(typeof shamTsengMatch.transport, "string");
+  assert.ok(shamTsengMatch.transport.length > 0);
+
+  // Task 2's three unknown-district estates (帝華軒/海韻台/龍騰閣) have
+  // district_slug === null in both the DB row and EstateRecord's type. The
+  // route isn't reachable for them yet (hasPage: false), but the lookup
+  // itself must still degrade to null rather than throw if that ever changes.
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug(null), null);
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug(undefined), null);
+
+  // A district outside every known corridor segment resolves to null too --
+  // "hide, don't placeholder" rather than a false match.
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug("mong-kok"), null);
+});
+
+test("shamTsengSchoolNet stays the estate template's only school-net source, imported not re-derived (P4 Task 4)", () => {
+  assert.equal(shamTsengSchoolNet.netCode, "62");
+  assert.equal(Array.isArray(shamTsengSchoolNet.primarySchools), true);
+});
+
+test("estate route wires the verified-facts DataNote, transport, and school-net sections (P4 Task 4)", () => {
+  const route = read("src/routes/estate.$slug.tsx");
+
+  assert.match(
+    route,
+    /import \{ DataNote \} from "@\/components\/layout\/DataNote";/,
+  );
+  assert.match(
+    route,
+    /import \{ findCastlePeakRoadSegmentByDistrictSlug \} from "@\/content\/castle-peak-road";/,
+  );
+  assert.match(
+    route,
+    /import \{ shamTsengSchoolNet \} from "@\/content\/school-nets";/,
+  );
+
+  // Verified-facts block: sourced from estate.verified_at (Task 2's column,
+  // null for every estate today), with an honest caveat rather than a
+  // fabricated date when it's null -- and the DataNote component is actually
+  // used, not just a plain paragraph.
+  assert.match(route, /estate\.verified_at/);
+  assert.match(route, /<DataNote/);
+  assert.match(route, /尚待人手覆核並標註核實日期/);
+
+  // Transport + school-net are each gated on the real derived value (not a
+  // hardcoded true), so both the "renders" and "omitted" branches are
+  // reachable in the actual output -- the "renders" branch is proven for
+  // real above via findCastlePeakRoadSegmentByDistrictSlug/shamTsengSchoolNet
+  // directly; this proves the route's rendering is actually conditioned on
+  // that same result rather than always showing (or always hiding) the
+  // section.
+  assert.match(
+    route,
+    /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/,
+  );
+  assert.match(
+    route,
+    /const showSchoolNet = estate\.district_slug === "sham-tseng";/,
+  );
+  assert.match(route, /\{transportSegment && \(/);
+  assert.match(route, /\{showSchoolNet && \(/);
+});
+
+test("EstateMarketSnapshot renders a PSF-trend line chart fed by the real transactions prop, hidden below two data points (P4 Task 4)", () => {
+  const snapshot = read("src/components/site/EstateMarketSnapshot.tsx");
+
+  assert.match(snapshot, /from "recharts";/);
+  assert.match(snapshot, /LineChart/);
+  assert.match(snapshot, /ResponsiveContainer/);
+
+  // Built from the transactions param already passed into the component and
+  // already used for the 5-row table -- not a new query, not a fixture.
+  assert.match(
+    snapshot,
+    /function buildPsfTrend\(transactions: EstateTransaction\[\]\): PsfTrendPoint\[\]/,
+  );
+  assert.match(snapshot, /const psfTrend = buildPsfTrend\(transactions\);/);
+  assert.doesNotMatch(snapshot, /fetchEstateTransactions\(/);
+
+  // A single point (or zero) can't draw a trend -- must be hidden, not shown
+  // broken, matching this repo's established "hide, don't placeholder" rule.
+  assert.match(snapshot, /psfTrend\.length >= 2/);
+});
+
+// --- P4 Task 5: nearby-estate comparison table ---
+//
+// buildComparisonColumns/buildComparisonRowDefs/estateTextFigure's actual
+// 2/1/0-comparable and em-dash-formatting behaviour is proven by real
+// execution in src/components/site/estate-comparison.test.mjs (that module
+// has no JSX, so it can be imported directly under Node's native TS
+// stripping, same as estate-registry.ts/castle-peak-road.ts already are
+// elsewhere in this file). The tests here only prove the *wiring* --
+// that estate.$slug.tsx's loader/render and EstateComparisonTable.tsx
+// actually use that logic, via source-scan (this route can't be rendered
+// without a bundler/render harness, matching every other route test in
+// this file).
+
+test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 Task 5)", () => {
+  const route = read("src/routes/estate.$slug.tsx");
+
+  assert.match(
+    route,
+    /import \{\s*EstateComparisonTable,\s*type EstateComparisonRow,\s*\} from "@\/components\/site\/EstateComparisonTable";/,
+  );
+  assert.match(
+    route,
+    /import \{ findComparableEstates \} from "@\/content\/estate-registry";/,
+  );
+
+  // Up to 2 comparables, computed from the registry alone (before any DB
+  // fetch), so the "which estates are comparable" decision stays
+  // deterministic and independent of what facts happen to be in the DB.
+  assert.match(
+    route,
+    /const comparableEntries = findComparableEstates\(estate\.slug, 2\);/,
+  );
+
+  // A `null` DB record for a comparable (no row, or an unpublished row)
+  // still keeps its registry name/hasPage and simply renders every fact as
+  // "—" -- it is not dropped from the "up to 2" slots or backfilled with a
+  // third candidate.
+  assert.match(route, /const record = comparableRecords\[index\];/);
+  assert.match(route, /nameZh: entry\.nameZh,/);
+  assert.match(route, /hasPage: entry\.hasPage,/);
+
+  // The current estate's own column uses the same avgPsf conversion
+  // EstateMarketSnapshot already gets below it, so a non-numeric/zero DB
+  // value can't silently read as a real $0 psf in either component.
+  assert.match(
+    route,
+    /avgPsf: Number\(estate\.avg_saleable_psf \?\? 0\) \|\| null,/,
+  );
+
+  assert.match(route, /<EstateComparisonTable/);
+  assert.match(route, /current=\{currentComparisonRow\}/);
+  assert.match(route, /comparables=\{comparableEstates\}/);
+});
+
+test("EstateComparisonTable renders nothing for zero comparables and never links to a page that 404s (P4 Task 5)", () => {
+  const component = read("src/components/site/EstateComparisonTable.tsx");
+
+  assert.match(
+    component,
+    /import \{\s*buildComparisonColumns,\s*buildComparisonRowDefs,\s*type EstateComparisonRow,\s*\} from "\.\/estate-comparison";/,
+  );
+
+  // The "0 comparable -> section absent entirely" behaviour is gated on the
+  // real, shared buildComparisonColumns result (proven by direct execution
+  // in estate-comparison.test.mjs), not a hardcoded `true`/`false` here.
+  assert.match(
+    component,
+    /const columns = buildComparisonColumns\(current, comparables\);/,
+  );
+  assert.match(component, /if \(!columns\) return null;/);
+
+  // Every row's cell comes from the same shared row definitions -- no
+  // second, divergent formatting implementation inside the component.
+  assert.match(component, /const rows = buildComparisonRowDefs\(\);/);
+  assert.match(component, /row\.formatCell\(estate\)/);
+
+  // A comparable only links to its detail page when hasPage is true -- the
+  // current estate (index 0) never gets a link to itself, and no other
+  // column links unconditionally.
+  assert.match(component, /index > 0 && estate\.hasPage/);
+  assert.match(component, /to="\/estate\/\$slug"/);
+});
+
+test("estate-comparison.ts is a plain .ts module with no JSX, importable directly under Node's native TS stripping (P4 Task 5)", () => {
+  const source = read("src/components/site/estate-comparison.ts");
+  // No React import and no JSX-only syntax -- same "plain data/logic module"
+  // discipline estate-registry.ts documents for itself, which is exactly
+  // what lets estate-comparison.test.mjs import and execute this file
+  // directly instead of only source-scanning it.
+  assert.doesNotMatch(source, /from "react"/i);
+  assert.doesNotMatch(source, /React\./);
+  assert.match(source, /export function buildComparisonColumns/);
+  assert.match(source, /export function buildComparisonRowDefs/);
+  assert.match(source, /export function estateTextFigure/);
 });

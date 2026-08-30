@@ -171,3 +171,31 @@ test("property route keeps the full decision and discovery feature set", () => {
   assert.match(route, /暫時未能載入樓盤資料，請稍後再試。/);
   assert.doesNotMatch(route, /\{error\.message\}/);
 });
+
+test("property.$listingNo.tsx sanitizes title/description/address before rendering (DR-4)", () => {
+  const route = readFileSync(
+    new URL("../../routes/property.$listingNo.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    route,
+    /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/,
+  );
+  // At least one call site per field family, not an exhaustive count -- the
+  // goal is catching a future raw-interpolation regression, not pinning the
+  // exact number of call sites (title/description/address each have several).
+  assert.match(route, /sanitizeListingText\(property\.title_zh\)/);
+  assert.match(route, /sanitizeListingText\(property\.description\)/);
+  assert.match(route, /sanitizeListingText\(property\.address\)/);
+  assert.match(route, /sanitizeListingText\(listing\.title_zh\)/);
+  // A blank title is worse than an unsanitized one -- title always falls back
+  // to the raw value, never to an empty string.
+  assert.match(
+    route,
+    /sanitizeListingText\(property\.title_zh\) \?\? property\.title_zh/,
+  );
+  // A missing/malformed description must show a real fallback, not a blank
+  // paragraph or the literal word "null".
+  assert.match(route, /safeDescription \?\? "暫無詳細描述"/);
+});

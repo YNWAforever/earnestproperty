@@ -18,13 +18,29 @@ import {
   fetchNeonSimilarListings,
   searchNeonListings,
 } from "@/lib/neon/public-data";
-import type { NeonEstateOption, NeonPropertyRow } from "@/lib/neon/public-data.types";
-import { isWithinCorridorRegion } from "@/content/castle-peak-road";
+import type {
+  NeonEstateOption,
+  NeonListingSort,
+  NeonPropertyRow,
+} from "@/lib/neon/public-data.types";
+import {
+  corridorRegionScope,
+  isWithinCorridorRegion,
+} from "@/content/castle-peak-road";
+import { estateRegistry } from "@/content/estate-registry";
 
-const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = {
-  bellagio: "belvedere-garden",
-  "rhine-garden": "sea-pearl-garden",
-};
+/**
+ * Derived from estate-registry.ts's `legacySlug` field (DR-10) instead of a
+ * second hand-maintained mapping -- keeps the same canonical -> legacy slug
+ * direction the rest of this file's slug-resolution logic already assumes.
+ */
+const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = Object.fromEntries(
+  estateRegistry
+    .filter((entry): entry is typeof entry & { legacySlug: string } =>
+      Boolean(entry.legacySlug),
+    )
+    .map((entry) => [entry.slug, entry.legacySlug]),
+);
 
 function canonicalEstateSlug(dbSlug: string) {
   for (const [canonical, legacy] of Object.entries(ESTATE_DB_SLUG_FALLBACKS)) {
@@ -36,11 +52,16 @@ function canonicalEstateSlug(dbSlug: string) {
 function estateSlugCandidates(slug: string) {
   const canonical = canonicalEstateSlug(slug);
   return Array.from(
-    new Set([slug, canonical, ESTATE_DB_SLUG_FALLBACKS[canonical]].filter(Boolean)),
+    new Set(
+      [slug, canonical, ESTATE_DB_SLUG_FALLBACKS[canonical]].filter(Boolean),
+    ),
   );
 }
 
-function withCanonicalSlug<T extends { slug?: string }>(estate: T, requestedSlug?: string): T {
+function withCanonicalSlug<T extends { slug?: string }>(
+  estate: T,
+  requestedSlug?: string,
+): T {
   return {
     ...estate,
     slug: requestedSlug ?? canonicalEstateSlug(estate.slug ?? ""),
@@ -59,6 +80,7 @@ export type EstateSummary = {
 export type FeaturedProperty = {
   id: string;
   listing_no: string;
+  canonical_property_no: string | null;
   title_zh: string;
   deal_type: string;
   district_slug: string;
@@ -73,6 +95,11 @@ export type FeaturedProperty = {
   // Already selected by `listingColumns`; surfaced here so the homepage's
   // featured cards can badge which listings have a walkthrough video.
   video_url: string | null;
+  // Already selected by `listingColumns`; surfaced here so the homepage's
+  // featured cards can show a freshness stamp the same way listings.tsx's
+  // ListingCard does.
+  last_seen_at: string | null;
+  source_site: string | null;
   estates: { name_zh: string; slug: string; district_slug: string } | null;
 };
 
@@ -82,7 +109,9 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
   return fetchEstatesByDistrict("sham-tseng");
 }
 
-export async function fetchEstatesByDistrict(districtSlug: string): Promise<EstateSummary[]> {
+export async function fetchEstatesByDistrict(
+  districtSlug: string,
+): Promise<EstateSummary[]> {
   const rows = await fetchNeonEstates({ data: { districtSlug } });
   return (rows as EstateSummary[])
     .map((estate) => withCanonicalSlug(estate))
@@ -112,13 +141,28 @@ export type EstateRecord = {
   avg_saleable_psf: number | string | null;
   hero_image: string | null;
   facilities: string[] | null;
+  // DR-10: previously written by the admin CMS estate form but never read on
+  // the public site. `fetchEstateBySlug`'s SQL is `SELECT *`, so both columns
+  // already arrive on every row -- this only widens the type to expose them.
+  seo_title: string | null;
+  seo_description: string | null;
+  // P4 Task 2's migration added this column; every row (including the 5 with
+  // real detail pages) is NULL until an estate is manually verified. `SELECT
+  // *` already returns it -- widening the type here is what lets Task 4's
+  // verified-facts DataNote read it type-safely.
+  verified_at: string | null;
 };
 
-export async function fetchEstateBySlug(slug: string): Promise<EstateRecord | null> {
+export async function fetchEstateBySlug(
+  slug: string,
+): Promise<EstateRecord | null> {
   for (const candidate of estateSlugCandidates(slug)) {
     const estate = await fetchNeonEstateBySlug({ data: { slug: candidate } });
     if (estate) {
-      return withCanonicalSlug(estate as EstateRecord, canonicalEstateSlug(slug));
+      return withCanonicalSlug(
+        estate as EstateRecord,
+        canonicalEstateSlug(slug),
+      );
     }
   }
   return null;
@@ -148,16 +192,16 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
     data: { limit: FEATURED_FETCH_LIMIT },
   })) as FeaturedProperty[];
 
-  return rows
-    .filter((row) =>
+  return dedupeListings(
+    rows.filter((row) =>
       isWithinCorridorRegion({
         districtSlug: row.district_slug,
         estateSlug: row.estates?.slug,
         estateDistrictSlug: row.estates?.district_slug,
         text: [row.title_zh, row.address, row.estates?.name_zh],
       }),
-    )
-    .slice(0, FEATURED_DISPLAY_LIMIT);
+    ),
+  ).slice(0, FEATURED_DISPLAY_LIMIT);
 }
 
 export type DistrictTransaction = {
@@ -179,7 +223,9 @@ export async function fetchDistrictTransactions(
 }
 
 export async function fetchPropertyByListingNo(listingNo: string) {
-  return (await fetchNeonPropertyByListingNo({ data: { listingNo } })) as NeonPropertyRow | null;
+  return (await fetchNeonPropertyByListingNo({
+    data: { listingNo },
+  })) as NeonPropertyRow | null;
 }
 
 export async function fetchListingCountsByEstate() {
@@ -191,9 +237,12 @@ export type ListingFilters = {
   keyword?: string;
   minPrice?: number;
   maxPrice?: number;
+  minArea?: number;
+  maxArea?: number;
   bedrooms?: number;
   estateSlug?: string;
   districtSlug?: string;
+  sort: NeonListingSort;
   page: number;
   pageSize: number;
 };
@@ -202,6 +251,7 @@ export type ListingRow = Pick<
   NeonPropertyRow,
   | "id"
   | "listing_no"
+  | "canonical_property_no"
   | "title_zh"
   | "deal_type"
   | "price"
@@ -214,6 +264,8 @@ export type ListingRow = Pick<
   | "source_site"
   | "images"
   | "video_url"
+  | "district_slug"
+  | "address"
   | "estates"
 >;
 
@@ -232,7 +284,9 @@ export type CorridorInventory = {
 };
 
 function cleanCorridorTerms(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  return Array.from(
+    new Set(values.map((value) => value.trim()).filter(Boolean)),
+  );
 }
 
 function clampCorridorLimit(value: number | undefined) {
@@ -245,7 +299,9 @@ function normalizeCorridorInventoryInput(
 ): Required<CorridorInventoryAliasInput> {
   return {
     districtSlugs: cleanCorridorTerms(input.districtSlugs),
-    estateSlugs: cleanCorridorTerms(input.estateSlugs).flatMap(estateSlugCandidates),
+    estateSlugs: cleanCorridorTerms(input.estateSlugs).flatMap(
+      estateSlugCandidates,
+    ),
     textAliases: cleanCorridorTerms(input.textAliases),
     limit: clampCorridorLimit(input.limit),
   };
@@ -253,11 +309,13 @@ function normalizeCorridorInventoryInput(
 
 function hasCorridorAliases(input: Required<CorridorInventoryAliasInput>) {
   return (
-    input.districtSlugs.length > 0 || input.estateSlugs.length > 0 || input.textAliases.length > 0
+    input.districtSlugs.length > 0 ||
+    input.estateSlugs.length > 0 ||
+    input.textAliases.length > 0
   );
 }
 
-function emptyCorridorInventory(): CorridorInventory {
+export function emptyCorridorInventory(): CorridorInventory {
   return {
     saleTotal: 0,
     rentTotal: 0,
@@ -266,17 +324,101 @@ function emptyCorridorInventory(): CorridorInventory {
   };
 }
 
+/**
+ * De-duplicates listing rows by (canonical_property_no, deal_type) -- the
+ * identity the MLS import pipeline already establishes at write time
+ * (src/lib/mls/match.mjs's EXACT_LINK_REASON is itself keyed on
+ * property_no + deal_type, never property_no alone). A re-scraped row for
+ * the same physical unit AND deal type under a second listing_no otherwise
+ * renders twice on the same page (DR-3).
+ *
+ * The key is deal-type-aware because canonical_property_no alone is NOT a
+ * safe merge key: one physical unit can legitimately have both an active
+ * sale row and an active rent row sharing the same canonical_property_no --
+ * normalizeListingDetail emits exactly this pair for a dual-priced listing
+ * (src/lib/mls/mls-fixtures.test.mjs: "a listing with both a sale and a rent
+ * price emits two rows"), and searchListings/fetchListingsForEstate query
+ * with deal="all" (listingWhere only adds a deal_type predicate when
+ * `input.deal !== "all"`), so both rows flow through the same result set.
+ * Keying on canonical_property_no alone would silently drop one of the two,
+ * making a real active listing disappear from /listings' 全部 tab, /videos,
+ * and every /estate/$slug listings section.
+ *
+ * Falls back to `${listing_no}:${deal_type}` when canonical_property_no is
+ * null OR an empty string -- the `row.canonical_property_no ? ... : ...`
+ * truthiness check handles both the same way, which is deliberate: two rows
+ * that both lack a canonical number (whether the column is NULL or was
+ * written as "") are not known to be the same property, so keying an empty
+ * string as its own shared identity would wrongly collapse unrelated
+ * listings together.
+ *
+ * Keeps the first occurrence. Every call site orders its rows by
+ * `featured DESC, last_seen_at DESC NULLS LAST, created_at DESC` before this
+ * runs (searchListings/fetchListingsForEstate and fetchSimilarListings via
+ * that same ORDER BY in public-data.server.ts; the corridor path via
+ * fetchCorridorRows' ROW_NUMBER() OVER (... ORDER BY the same three columns)
+ * per deal_type partition) -- so the kept row is always the freshest/most-
+ * featured of any duplicate pair, never an arbitrary one.
+ */
+export function dedupeListings<
+  T extends {
+    listing_no: string;
+    canonical_property_no?: string | null;
+    deal_type: string;
+  },
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const row of rows) {
+    const key = row.canonical_property_no
+      ? `canonical:${row.canonical_property_no}:${row.deal_type}`
+      : `listing:${row.listing_no}:${row.deal_type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(row);
+  }
+  return result;
+}
+
+function withinCorridorScope(row: ListingRow): boolean {
+  return isWithinCorridorRegion({
+    districtSlug: row.district_slug,
+    estateSlug: row.estates?.slug ?? null,
+    estateDistrictSlug: row.estates?.district_slug ?? null,
+    text: [row.title_zh, row.address],
+  });
+}
+
 export async function fetchCorridorInventoryForAliases(
   input: CorridorInventoryAliasInput,
 ): Promise<CorridorInventory> {
   const normalized = normalizeCorridorInventoryInput(input);
   if (!hasCorridorAliases(normalized)) return emptyCorridorInventory();
-  const result = await fetchNeonCorridorInventory({ data: normalized });
+  const result = await fetchNeonCorridorInventory({
+    data: {
+      ...normalized,
+      // Fixed constant, not something callers choose per-segment -- every
+      // corridor/nearby query excludes the same out-of-corridor place names.
+      outOfScopeTextAliases: corridorRegionScope.outOfScopeTextAliases,
+    },
+  });
+  // corridorWhere() (public-data.server.ts) now applies
+  // corridorRegionScope.outOfScopeTextAliases as a SQL-level AND NOT EXISTS
+  // exclusion, so saleTotal/rentTotal and the rows below are already computed
+  // against the same filtered set -- the totals cannot outrun the rows the
+  // way a purely client-side filter would let them. This app-layer filter
+  // stays on as defense-in-depth (e.g. against a future regression in
+  // corridorWhere()); with the SQL-level exclusion in place it should now
+  // rarely if ever remove anything.
   return {
     saleTotal: result.saleTotal,
     rentTotal: result.rentTotal,
-    saleRows: result.saleRows as ListingRow[],
-    rentRows: result.rentRows as ListingRow[],
+    saleRows: dedupeListings(
+      (result.saleRows as ListingRow[]).filter(withinCorridorScope),
+    ),
+    rentRows: dedupeListings(
+      (result.rentRows as ListingRow[]).filter(withinCorridorScope),
+    ),
   };
 }
 
@@ -284,7 +426,9 @@ export async function searchListings(f: ListingFilters): Promise<{
   rows: ListingRow[];
   total: number;
 }> {
-  const candidates = f.estateSlug ? estateSlugCandidates(f.estateSlug) : [undefined];
+  const candidates = f.estateSlug
+    ? estateSlugCandidates(f.estateSlug)
+    : [undefined];
   let lastResult: Awaited<ReturnType<typeof searchNeonListings>> | null = null;
 
   for (const estateSlug of candidates) {
@@ -292,13 +436,16 @@ export async function searchListings(f: ListingFilters): Promise<{
       data: { ...f, estateSlug },
     });
     if (!f.estateSlug || result.total > 0) {
-      return { rows: result.rows as ListingRow[], total: result.total };
+      return {
+        rows: dedupeListings(result.rows as ListingRow[]),
+        total: result.total,
+      };
     }
     lastResult = result;
   }
 
   return {
-    rows: (lastResult?.rows ?? []) as ListingRow[],
+    rows: dedupeListings((lastResult?.rows ?? []) as ListingRow[]),
     total: lastResult?.total ?? 0,
   };
 }
@@ -323,6 +470,7 @@ export async function fetchCmsVideos(): Promise<CmsVideo[]> {
 export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
   const result = await searchListings({
     deal: "all",
+    sort: "newest",
     page: 1,
     pageSize: Math.max(limit * 3, limit),
   });
@@ -336,22 +484,34 @@ export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
 }
 
 export async function fetchVideosPageData() {
-  const [cmsVideos, listingVideos] = await Promise.all([fetchCmsVideos(), fetchVideoListings(12)]);
+  const [cmsVideos, listingVideos] = await Promise.all([
+    fetchCmsVideos(),
+    fetchVideoListings(12),
+  ]);
   return { cmsVideos, listingVideos };
 }
 
-export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
+export async function fetchListingsForEstate(
+  estateSlug: string,
+  limit = 6,
+): Promise<ListingRow[]> {
   for (const candidate of estateSlugCandidates(estateSlug)) {
     const rows = (await fetchNeonListingsForEstate({
       data: { estateSlug: candidate, limit },
     })) as ListingRow[];
-    if (rows.length > 0) return rows;
+    if (rows.length > 0) return dedupeListings(rows);
   }
   return [];
 }
 
-export async function fetchListingsForAgent(agentId: string, limit = 6): Promise<ListingRow[]> {
-  return (await fetchNeonListingsForAgent({ data: { agentId, limit } })) as ListingRow[];
+export async function fetchListingsForAgent(
+  agentId: string,
+  limit = 6,
+): Promise<ListingRow[]> {
+  const rows = (await fetchNeonListingsForAgent({
+    data: { agentId, limit },
+  })) as ListingRow[];
+  return dedupeListings(rows);
 }
 
 export async function fetchPropertyByLegacyDetailId(oldId: string) {
@@ -361,6 +521,7 @@ export async function fetchPropertyByLegacyDetailId(oldId: string) {
 export type SimilarListing = {
   id: string;
   listing_no: string;
+  canonical_property_no: string | null;
   title_zh: string;
   deal_type: "sale" | "rent";
   price: number | null;
@@ -376,9 +537,10 @@ export async function fetchSimilarListings(
   excludeId: string,
   limit = 4,
 ): Promise<SimilarListing[]> {
-  return (await fetchNeonSimilarListings({
+  const rows = (await fetchNeonSimilarListings({
     data: { estateId, dealType, excludeId, limit },
   })) as SimilarListing[];
+  return dedupeListings(rows);
 }
 
 export type EstateTransaction = {
@@ -393,7 +555,9 @@ export async function fetchEstateTransactions(
   estateId: string,
   limit = 8,
 ): Promise<EstateTransaction[]> {
-  return (await fetchNeonEstateTransactions({ data: { estateId, limit } })) as EstateTransaction[];
+  return (await fetchNeonEstateTransactions({
+    data: { estateId, limit },
+  })) as EstateTransaction[];
 }
 
 export async function fetchEstateOptions() {
@@ -407,7 +571,10 @@ export async function fetchEstateOptions() {
   // dropdown options with the same value and the same React key. Prefer the
   // already-canonical row so the surviving option is the one the rest of the
   // app resolves against.
-  const byCanonicalSlug = new Map<string, ReturnType<typeof withCanonicalSlug<NeonEstateOption>>>();
+  const byCanonicalSlug = new Map<
+    string,
+    ReturnType<typeof withCanonicalSlug<NeonEstateOption>>
+  >();
   for (const estate of estates as NeonEstateOption[]) {
     const option = withCanonicalSlug(estate);
     const isAlreadyCanonical = estate.slug === option.slug;
@@ -447,12 +614,17 @@ export type RecentTransaction = DistrictTransaction & {
   districtSlug: string;
 };
 
-export async function fetchRecentTransactions(limit = 20): Promise<RecentTransaction[]> {
+export async function fetchRecentTransactions(
+  limit = 20,
+): Promise<RecentTransaction[]> {
   const districtSlugs = ["sham-tseng", "ting-kau", "tsuen-wan"];
   const rows = await Promise.all(
     districtSlugs.map(async (districtSlug) => {
       const transactions = await fetchDistrictTransactions(districtSlug, 12);
-      return transactions.map((transaction) => ({ ...transaction, districtSlug }));
+      return transactions.map((transaction) => ({
+        ...transaction,
+        districtSlug,
+      }));
     }),
   );
 

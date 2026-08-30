@@ -231,7 +231,13 @@ test("the listings route forwards the keyword it already validates", () => {
     route,
     /searchListings\(\{[\s\S]*?keyword: deps\.keyword\?\.trim\(\) \|\| undefined/,
   );
-  assert.match(route, /id="listing-keyword"/);
+  // Task 2 split the panel into a shared FilterFields component rendered
+  // once for the desktop sidebar and once inside the mobile sheet -- both
+  // copies are mounted simultaneously (desktop is `hidden lg:block`, not
+  // unmounted), so the id is prefixed per-surface to stay unique rather
+  // than the old bare "listing-keyword" literal.
+  assert.match(route, /const keywordId = `\$\{idPrefix\}-listing-keyword`;/);
+  assert.match(route, /id={keywordId}/);
   assert.match(route, /const \[keyword, setKeyword\] = useState\(initial\.keyword \?\? ""\)/);
   assert.match(route, /keyword: keyword\.trim\(\) \|\| undefined/);
   assert.doesNotMatch(
@@ -261,10 +267,44 @@ test("the keyword type is threaded through every layer of the query chain", () =
   assert.match(read("src/lib/queries.ts"), /ListingFilters = \{[\s\S]*?keyword\?: string;/);
 });
 
+test("sort, minArea, and maxArea are threaded through every layer of the query chain", () => {
+  const types = read("src/lib/neon/public-data.types.ts");
+  assert.match(
+    types,
+    /NeonListingSort = "newest" \| "price_asc" \| "price_desc" \| "area" \| "psf";/,
+  );
+  assert.match(types, /NeonListingFiltersInput = \{[\s\S]*?sort: NeonListingSort;/);
+  assert.match(types, /NeonListingFiltersInput = \{[\s\S]*?minArea\?: number;/);
+  assert.match(types, /NeonListingFiltersInput = \{[\s\S]*?maxArea\?: number;/);
+
+  const queries = read("src/lib/queries.ts");
+  assert.match(queries, /NeonListingSort/, "queries.ts must reuse the shared sort type");
+  assert.match(queries, /ListingFilters = \{[\s\S]*?sort: NeonListingSort;/);
+  assert.match(queries, /ListingFilters = \{[\s\S]*?minArea\?: number;/);
+  assert.match(queries, /ListingFilters = \{[\s\S]*?maxArea\?: number;/);
+});
+
 test("estate options are deduped by canonical slug", () => {
   const queries = read("src/lib/queries.ts");
   assert.match(queries, /byCanonicalSlug/);
   assert.match(queries, /isAlreadyCanonical/);
+});
+
+test("listings.tsx sanitizes title_zh before it reaches JSON-LD and card render (DR-4)", () => {
+  const route = read("src/routes/listings.tsx");
+
+  assert.match(
+    route,
+    /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/,
+  );
+  // JSON-LD item name.
+  assert.match(
+    route,
+    /name: sanitizeListingText\(row\.title_zh\) \?\? row\.title_zh/,
+  );
+  // Card alt/heading -- a small local helper so the raw fallback (never a
+  // blank title) is computed once per card.
+  assert.match(route, /sanitizeListingText\(p\.title_zh\) \?\? p\.title_zh/);
 });
 
 test("the listing search index migration exists and is idempotent", () => {
@@ -276,4 +316,289 @@ test("the listing search index migration exists and is idempotent", () => {
   assert.match(sql, /WHERE status = 'active'/);
   assert.match(sql, /last_seen_at DESC NULLS LAST/);
   assert.doesNotMatch(sql, /CREATE INDEX(?! IF NOT EXISTS)/);
+});
+
+// DR-3 coverage: the MLS import pipeline (src/lib/mls/match.mjs,
+// reconcile.mjs) already establishes canonical_property_no as the stable
+// per-unit identity at write time, but every listing-read path selected only
+// listing_no -- a re-scraped row under a second listing_no had no way to be
+// recognised as the same unit. listingColumns (shared by searchListings,
+// fetchListingsForEstate, fetchSimilarListings and the corridor path) must
+// select the column so dedupeListings() below has something to key on.
+test("canonical_property_no is selected alongside listing_no in the shared listing columns", async () => {
+  const { rows } = await runSearch({ deal: "all", page: 1, pageSize: 12 });
+  assert.match(rows.text, /p\.canonical_property_no/);
+});
+
+// Every function that returns rows drawn from the shared listingColumns /
+// mapListingRow pipeline must dedupe them -- fetchFeaturedProperties (the
+// homepage 精選筍盤 section) and fetchListingsForAgent (agent-profile listing
+// pages) draw from that same pipeline but were left out of the original DR-3
+// fix's four call sites, leaving them exposed to the same duplicate-render
+// bug. Source-scanned rather than executed because both wrap createServerFn
+// server functions the .mjs harness above can't easily stub.
+test("fetchFeaturedProperties and fetchListingsForAgent also dedupe their rows", () => {
+  const queries = read("src/lib/queries.ts");
+
+  const featured = queries.slice(
+    queries.indexOf("export async function fetchFeaturedProperties"),
+    queries.indexOf("export type DistrictTransaction"),
+  );
+  assert.match(featured, /dedupeListings\(/);
+
+  const forAgent = queries.slice(
+    queries.indexOf("export async function fetchListingsForAgent"),
+    queries.indexOf("export async function fetchPropertyByLegacyDetailId"),
+  );
+  assert.match(forAgent, /dedupeListings\(/);
+});
+
+// dedupeListings is a pure array helper in src/lib/queries.ts with no
+// dependency on either of that module's two aliased imports
+// (@/lib/neon/public-data, @/content/castle-peak-road) -- unlike
+// corridor-scope.contract.test.mjs's loader (which wires a real
+// fetchCorridorInventory through its stub), these stub exports only need to
+// exist to satisfy ESM's static linking at load time; none of them are ever
+// called by dedupeListings itself.
+const QUERIES_STUB_PUBLIC_DATA_EXPORTS = [
+  "fetchNeonArticleBySlug",
+  "fetchNeonCmsVideos",
+  "fetchNeonCorridorInventory",
+  "fetchNeonDistrictTransactions",
+  "fetchNeonEstateBySlug",
+  "fetchNeonEstateOptions",
+  "fetchNeonEstateTransactions",
+  "fetchNeonEstates",
+  "fetchNeonFaqs",
+  "fetchNeonFeaturedProperties",
+  "fetchNeonListingCountsByEstate",
+  "fetchNeonListingsForAgent",
+  "fetchNeonListingsForEstate",
+  "fetchNeonPropertyByLegacyDetailId",
+  "fetchNeonPropertyByListingNo",
+  "fetchNeonPublishedArticles",
+  "fetchNeonSimilarListings",
+  "searchNeonListings",
+];
+
+async function loadQueriesForDedupeTests() {
+  const publicDataStubSource = QUERIES_STUB_PUBLIC_DATA_EXPORTS.map(
+    (name) => `export async function ${name}() {
+      throw new Error(${JSON.stringify(`${name} is not exercised by the dedupeListings tests`)});
+    }`,
+  ).join("\n");
+
+  const castlePeakRoadStubSource = `
+    export const corridorRegionScope = { outOfScopeTextAliases: [] };
+    export function isWithinCorridorRegion() { return true; }
+  `;
+
+  // DR-10 gave queries.ts a third aliased import, "@/content/estate-registry",
+  // for deriving ESTATE_DB_SLUG_FALLBACKS. dedupeListings (the only export this
+  // loader is used for, per the comment above) doesn't touch it, so an empty
+  // registry is a safe stub -- same rationale as the castle-peak-road stub above.
+  const estateRegistryStubSource = `export const estateRegistry = [];`;
+
+  const queriesSource = transpile(read("src/lib/queries.ts"))
+    .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
+    .replace('from "@/content/castle-peak-road"', `from "${dataUrl(castlePeakRoadStubSource)}"`)
+    .replace('from "@/content/estate-registry"', `from "${dataUrl(estateRegistryStubSource)}"`);
+
+  return import(dataUrl(queriesSource));
+}
+
+// deal_type defaults to "sale" so every existing fixture in this file shares
+// it implicitly (the real DR-3 duplicate case: same physical unit AND same
+// deal type, re-scraped under a second listing_no) -- tests that need to
+// prove the sale+rent pair is preserved pass deal_type explicitly per row.
+function dedupeFixture(overrides) {
+  return {
+    id: overrides.id ?? overrides.listing_no,
+    listing_no: overrides.listing_no,
+    canonical_property_no: overrides.canonical_property_no ?? null,
+    deal_type: overrides.deal_type ?? "sale",
+  };
+}
+
+test("dedupeListings keeps only the first row when canonical_property_no and deal_type both match", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({
+      listing_no: "A1",
+      canonical_property_no: "C001",
+      deal_type: "sale",
+    }),
+    dedupeFixture({
+      listing_no: "A2",
+      canonical_property_no: "C001",
+      deal_type: "sale",
+    }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["A1"],
+  );
+});
+
+// The critical DR-3 regression this compound key exists to prevent: a unit
+// with both an active sale row and an active rent row sharing one
+// canonical_property_no (exactly what normalizeListingDetail emits for a
+// dual-priced listing, per src/lib/mls/mls-fixtures.test.mjs) must NOT be
+// collapsed to one row by a canonical_property_no-only key. Collapsing this
+// pair silently drops a real, active listing from /listings' 全部 tab,
+// /videos, and every /estate/$slug listings section -- deal:"all" queries
+// never add a deal_type predicate (see listingWhere in
+// public-data.server.ts), so both rows flow through the same result set.
+test("dedupeListings keeps both rows of a sale+rent pair sharing one canonical_property_no", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({
+      listing_no: "F1",
+      canonical_property_no: "C500",
+      deal_type: "sale",
+    }),
+    dedupeFixture({
+      listing_no: "F2",
+      canonical_property_no: "C500",
+      deal_type: "rent",
+    }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["F1", "F2"],
+  );
+});
+
+test("dedupeListings does not merge two null-canonical rows with different listing_no", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "B1", canonical_property_no: null }),
+    dedupeFixture({ listing_no: "B2", canonical_property_no: null }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["B1", "B2"],
+  );
+});
+
+test("dedupeListings falls back to listing_no and dedupes two null-canonical rows sharing it", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "C1", canonical_property_no: null }),
+    dedupeFixture({ listing_no: "C1", canonical_property_no: null }),
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["C1"],
+  );
+  assert.equal(result.length, 1);
+});
+
+test("dedupeListings treats an empty-string canonical_property_no the same as null, not as its own identity", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "D1", canonical_property_no: "" }),
+    dedupeFixture({ listing_no: "D2", canonical_property_no: "" }),
+  ];
+  const result = dedupeListings(rows);
+  // Two rows with an empty-string canonical number are not known to be the
+  // same physical unit any more than two null-canonical rows are -- an empty
+  // string must fall back to the listing_no key, not become a shared "" key
+  // that would wrongly collapse unrelated listings together.
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["D1", "D2"],
+  );
+});
+
+// Task 1 (P3): sort maps to a primary ORDER BY column, always followed by the
+// pre-existing freshness tiebreaker chain -- dedupeListings (queries.ts) keeps
+// the FIRST occurrence of a duplicate pair and documents that callers must
+// pre-order rows featured DESC, last_seen_at DESC, created_at DESC so the kept
+// row is the freshest. A user-chosen sort changes the primary ORDER BY column,
+// but true duplicates (re-scrapes of the same physical unit) almost always tie
+// on that column, so the freshness chain must still run as the tiebreaker or
+// dedup's "kept row is freshest" guarantee silently breaks under a non-default
+// sort.
+// Every per-sort test below checks the primary ORDER BY column AND that this
+// exact freshness chain still follows it -- building both from one shared
+// constant keeps each assertion short and means the expected tiebreaker text
+// can't quietly drift out of sync with the real one in public-data.server.ts.
+const FRESHNESS_TIEBREAKER =
+  "p\\.featured DESC, p\\.last_seen_at DESC NULLS LAST, p\\.created_at DESC";
+
+function orderByRegex(primary) {
+  return new RegExp(`ORDER BY ${primary}, ${FRESHNESS_TIEBREAKER}`);
+}
+
+test("sort=newest uses the pre-existing default order untouched", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "newest", page: 1, pageSize: 12 });
+  assert.match(rows.text, new RegExp(`ORDER BY ${FRESHNESS_TIEBREAKER}\\s*$`, "m"));
+});
+
+test("sort=price_asc orders by price ascending, then the freshness tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "price_asc", page: 1, pageSize: 12 });
+  assert.match(rows.text, orderByRegex("COALESCE\\(p\\.price, p\\.rent\\) ASC NULLS LAST"));
+});
+
+test("sort=price_desc orders by price descending, then the freshness tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "price_desc", page: 1, pageSize: 12 });
+  assert.match(rows.text, orderByRegex("COALESCE\\(p\\.price, p\\.rent\\) DESC NULLS LAST"));
+});
+
+test("sort=area orders by saleable_area descending, then the freshness tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "area", page: 1, pageSize: 12 });
+  assert.match(rows.text, orderByRegex("p\\.saleable_area DESC NULLS LAST"));
+});
+
+test("sort=psf orders by a null/zero-guarded PSF expression, then the tiebreaker", async () => {
+  const { rows } = await runSearch({ deal: "all", sort: "psf", page: 1, pageSize: 12 });
+  // Must guard against saleable_area being zero or null -- a bare division
+  // (price / saleable_area) would throw a divide-by-zero in Postgres or
+  // silently sort nulls unpredictably, exactly the failure mode formatPsf()
+  // (src/lib/format.ts) already guards against client-side.
+  assert.match(rows.text, /CASE WHEN p\.saleable_area > 0 THEN/);
+  assert.match(rows.text, /COALESCE\(p\.price, p\.rent\) \/ p\.saleable_area END/);
+  assert.match(rows.text, orderByRegex("CASE WHEN[\\s\\S]*?END ASC NULLS LAST"));
+});
+
+test("minArea/maxArea bound saleable_area regardless of deal type", async () => {
+  const { rows } = await runSearch({
+    deal: "all",
+    minArea: 400,
+    maxArea: 900,
+    page: 1,
+    pageSize: 12,
+  });
+  assert.match(rows.text, /p\.saleable_area >= \$1/);
+  assert.match(rows.text, /p\.saleable_area <= \$2/);
+  assert.deepEqual(rows.params, [400, 900, 12, 0]);
+});
+
+test("minArea/maxArea apply even when deal=all, unlike price bounds", async () => {
+  const sale = await runSearch({ deal: "sale", minArea: 400, page: 1, pageSize: 12 });
+  assert.match(sale.rows.text, /p\.saleable_area >= \$2/);
+
+  const all = await runSearch({ deal: "all", minArea: 400, page: 1, pageSize: 12 });
+  assert.match(all.rows.text, /p\.saleable_area >= \$1/);
+});
+
+test("dedupeListings dedupes a mixed array of canonical and null-canonical rows independently", async () => {
+  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const rows = [
+    dedupeFixture({ listing_no: "E1", canonical_property_no: "C900" }),
+    dedupeFixture({ listing_no: "E2", canonical_property_no: null }),
+    dedupeFixture({ listing_no: "E3", canonical_property_no: "C900" }), // dup of E1
+    dedupeFixture({ listing_no: "E2", canonical_property_no: null }), // dup of E2 (same listing_no)
+    dedupeFixture({ listing_no: "E4", canonical_property_no: null }), // distinct, null canonical
+  ];
+  const result = dedupeListings(rows);
+  assert.deepEqual(
+    result.map((r) => r.listing_no),
+    ["E1", "E2", "E4"],
+  );
 });

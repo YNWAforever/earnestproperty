@@ -38,6 +38,8 @@ import {
 } from "@/components/ui/accordion";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
+import { EmptyState } from "@/components/layout/EmptyState";
+import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
 import logoMark from "@/assets/logo-earnest-mark.png";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
@@ -306,7 +308,24 @@ function HomePage() {
           </div>
 
           {featured.length === 0 ? (
-            <p className="mt-8 text-center text-muted-foreground">暫時未有精選放盤，請稍後再試。</p>
+            <EmptyState
+              className="mt-8"
+              icon={Building2}
+              title="暫時未有精選放盤"
+              description="請稍後再試，或直接 WhatsApp 我哋查詢最新盤源。"
+              action={
+                <a
+                  href={whatsappUrl("你好，想查詢深井、青山公路最新放盤")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline">
+                    <MessageCircle className="h-4 w-4" />
+                    WhatsApp 查詢
+                  </Button>
+                </a>
+              }
+            />
           ) : (
             <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {featured.map((p: FeaturedProperty) => (
@@ -382,10 +401,13 @@ function HomePage() {
       <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+            {/* No `desc` -- the tagline this used to carry ("熟悉深井、青山
+                公路及汀九市場，直接 WhatsApp 查詢。") restated the hero/WHY US
+                claims; the agent cards below demonstrate "real, licensed
+                people" better than a repeated sentence would. */}
             <SectionHeader
               eyebrow="專業代理"
               title="認識晉誠代理團隊"
-              desc="熟悉深井、青山公路及汀九市場，直接 WhatsApp 查詢。"
               className="text-left"
             />
             <Button asChild variant="outline">
@@ -465,13 +487,12 @@ function HomePage() {
               />
               <p className="text-sm font-semibold text-primary">關於晉誠地產</p>
             </div>
+            {/* One-line teaser only -- the full trust pitch already lives in
+                the hero subhead and the WHY US tiles above; /about carries
+                the fuller version below the fold for anyone who wants it. */}
             <h2 className="mt-3 text-2xl font-bold sm:text-3xl">
-              深井、青山公路物業專家，全部真盤、即時回覆、持牌可靠
+              想知多啲晉誠點解咁熟深井、青山公路？
             </h2>
-            <p className="mt-4 max-w-2xl text-muted-foreground">
-              我哋係一間以深井、青山公路為核心的本地地產代理，日常接觸同管理區內真實買賣、租務和業主委託。
-              對每個屋苑座向、樓層景觀、車位、會所和近期叫價都有第一手理解。
-            </p>
           </div>
           <Button asChild variant="outline" className="w-fit">
             <Link to="/about">
@@ -888,6 +909,12 @@ type PropertyItem = {
   features: string[] | null;
   images?: string[] | null;
   video_url?: string | null;
+  // Already selected by `listingColumns` / carried on `FeaturedProperty` --
+  // surfaced here so the featured card can show a freshness stamp the same
+  // way listings.tsx's ListingCard does (gated on source_site: only imported
+  // listings get a meaningfully maintained last_seen_at).
+  last_seen_at?: string | null;
+  source_site?: string | null;
   estates?: { name_zh: string; slug: string } | null;
 };
 
@@ -1003,6 +1030,9 @@ function PropertyCard({ property }: { property: PropertyItem }) {
             {property.title_zh}
           </Link>
         </h3>
+        {property.source_site && (
+          <FreshnessStamp updatedAt={property.last_seen_at} className="mt-1 block" />
+        )}
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">

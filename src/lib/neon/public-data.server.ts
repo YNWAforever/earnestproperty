@@ -7,6 +7,7 @@ import type {
   NeonLegacyPropertyMatch,
   NeonListingFiltersInput,
   NeonListingSearchResult,
+  NeonListingSort,
   NeonPublicAgentProfile,
   NeonPropertyRow,
   NeonSimilarListingsInput,
@@ -48,6 +49,7 @@ const publicAgentProfileColumns = `
 const listingColumns = `
   p.id,
   p.listing_no,
+  p.canonical_property_no,
   p.title_zh,
   p.title_en,
   p.deal_type,
@@ -201,6 +203,7 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
   return {
     id: stringOrEmpty(row.id),
     listing_no: stringOrEmpty(row.listing_no),
+    canonical_property_no: stringOrNull(row.canonical_property_no),
     title_zh: stringOrEmpty(row.title_zh),
     title_en: stringOrNull(row.title_en),
     deal_type: dealType(row.deal_type),
@@ -276,6 +279,15 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
       where.push(`${priceColumn} <= ${addParam(params, input.maxPrice)}`);
   }
 
+  // Unlike price, saleable_area is meaningful regardless of deal type (sale
+  // and rent listings both carry a plain square-foot figure), so this bound
+  // applies under deal="all" too -- it is not gated the way the price bound
+  // above deliberately is.
+  if (input.minArea !== undefined)
+    where.push(`p.saleable_area >= ${addParam(params, input.minArea)}`);
+  if (input.maxArea !== undefined)
+    where.push(`p.saleable_area <= ${addParam(params, input.maxArea)}`);
+
   if (input.bedrooms !== undefined) {
     where.push(
       input.bedrooms >= 4
@@ -318,6 +330,48 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   return where.join(" AND ");
 }
 
+// Every call site that hardcodes this exact chain (fetchCorridorRows,
+// fetchFeaturedProperties, fetchSimilarListings) is a listing set with no
+// user-facing sort control, so it stays untouched by the `sort` param below --
+// only searchListings (the general /listings search path) accepts a sort.
+const LISTING_FRESHNESS_ORDER =
+  "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC";
+
+// dedupeListings (src/lib/queries.ts) keeps the FIRST occurrence of a
+// duplicate pair and relies on callers pre-ordering rows by
+// LISTING_FRESHNESS_ORDER so the kept row is the freshest. A user-chosen sort
+// changes the primary ORDER BY column, but true duplicates (re-scrapes of the
+// same physical unit) almost always tie on price/area/psf, so the freshness
+// chain is always appended as a tiebreaker -- this keeps dedup's "kept row is
+// freshest" guarantee intact on the common tie case without trying to solve
+// the rare non-identical-duplicate edge case here.
+function listingOrderBy(sort: NeonListingSort): string {
+  switch (sort) {
+    case "price_asc":
+      return `COALESCE(p.price, p.rent) ASC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`;
+    case "price_desc":
+      return `COALESCE(p.price, p.rent) DESC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`;
+    case "area":
+      return `p.saleable_area DESC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`;
+    case "psf":
+      // PSF isn't a stored column -- it's price or rent divided by
+      // saleable_area, and dividing by a possibly-zero/null area needs the
+      // same guard src/lib/format.ts's formatPsf() already applies
+      // client-side (area > 0, not just non-null): NULLIF alone would still
+      // let a negative-or-zero area through, so this uses an explicit CASE.
+      return (
+        "CASE WHEN p.saleable_area > 0 THEN COALESCE(p.price, p.rent) / p.saleable_area END " +
+        `ASC NULLS LAST, ${LISTING_FRESHNESS_ORDER}`
+      );
+    case "newest":
+    default:
+      // The pre-existing hardcoded order already IS "newest" -- mapping it to
+      // the freshness chain alone (rather than restating those same three
+      // columns as a separate "primary" clause) avoids duplicating them.
+      return LISTING_FRESHNESS_ORDER;
+  }
+}
+
 function cleanTerms(values: string[]) {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
@@ -338,6 +392,7 @@ function normalizeCorridorInventoryInput(
     districtSlugs: cleanTerms(input.districtSlugs),
     estateSlugs: cleanTerms(input.estateSlugs),
     textAliases: cleanTerms(input.textAliases).map(escapeLikeTerm),
+    outOfScopeTextAliases: cleanTerms(input.outOfScopeTextAliases).map(escapeLikeTerm),
     limit: clampCorridorLimit(input.limit),
   };
 }
@@ -387,7 +442,35 @@ function corridorWhere(input: NeonCorridorInventoryInput, params: unknown[]) {
     `);
   }
 
-  return parts.length > 0 ? `p.status = 'active' AND (${parts.join(" OR ")})` : "FALSE";
+  if (parts.length === 0) return "FALSE";
+
+  let where = `p.status = 'active' AND (${parts.join(" OR ")})`;
+
+  if (input.outOfScopeTextAliases.length > 0) {
+    // Exclude a row matching one of the inclusion predicates above if it also
+    // names a place outside the corridor (e.g. a district_slug:
+    // "castle-peak-road" row whose title/address says 屯門). Applied here at
+    // the SQL level -- not just filtered client-side afterward -- so both the
+    // COUNT totals and the fetched/ranked rows agree on the same excluded set.
+    where += `
+      AND NOT EXISTS (
+        SELECT 1
+        FROM unnest(${addParam(params, input.outOfScopeTextAliases)}::text[]) AS term(value)
+        WHERE lower(
+          concat_ws(' ',
+            p.title_zh,
+            p.title_en,
+            p.address,
+            p.district_slug,
+            e.name_zh,
+            e.slug
+          )
+        ) LIKE '%' || lower(term.value) || '%' ESCAPE '\\'
+      )
+    `;
+  }
+
+  return where;
 }
 
 async function fetchCorridorRows(
@@ -455,7 +538,7 @@ export async function searchListings(
     LEFT JOIN estates e ON e.id = p.estate_id
     ${publicAgentJoin}
     WHERE ${where}
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    ORDER BY ${listingOrderBy(input.sort)}
     LIMIT ${limitParam} OFFSET ${offsetParam}
     `,
     rowParams,
@@ -533,6 +616,7 @@ export async function fetchListingsForEstate(input: {
   const result = await searchListings({
     deal: "all",
     estateSlug: input.estateSlug,
+    sort: "newest",
     page: 1,
     pageSize: input.limit,
   });
@@ -546,12 +630,21 @@ export async function fetchListingsForAgent(input: {
   const result = await searchListings({
     deal: "all",
     agentId: input.agentId,
+    sort: "newest",
     page: 1,
     pageSize: input.limit,
   });
   return result.rows;
 }
 
+// Deliberately not filtered to status = 'active': the caller (the
+// property-detail route, its only caller -- see queries.ts/public-data.ts)
+// needs to distinguish a listing that was withdrawn/sold/rented from one
+// that never existed, so this fetches by listing_no regardless of status
+// and lets the caller branch on the returned status. Every other public
+// listing query in this file (searchListings, fetchSimilarListings, etc.)
+// keeps its own 'active' filter untouched -- this loosening is scoped to
+// this single-listing lookup only.
 export async function fetchPropertyByListingNo(input: {
   listingNo: string;
 }): Promise<NeonPropertyRow | null> {
@@ -561,7 +654,7 @@ export async function fetchPropertyByListingNo(input: {
     FROM properties p
     LEFT JOIN estates e ON e.id = p.estate_id
     ${publicAgentJoin}
-    WHERE p.status = 'active' AND p.listing_no = $1
+    WHERE p.listing_no = $1
     LIMIT 1
     `,
     [input.listingNo],

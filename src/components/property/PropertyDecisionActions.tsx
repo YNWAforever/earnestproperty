@@ -250,6 +250,19 @@ export function PropertyDecisionActions({
                       <p className="font-medium">{formatMoney(mortgage.deposit)}</p>
                     </div>
                   </div>
+                  {/* Purely additive: sums calculateMortgage's already-computed
+                      deposit + stampDuty fields -- no agency fee or legal fee
+                      estimate invented, since no verified source for those exists
+                      in this codebase. */}
+                  <div
+                    className="mt-3 flex items-center justify-between border-t pt-3 text-sm"
+                    data-property-cash-required
+                  >
+                    <span className="text-muted-foreground">預計上會現金需求（首期＋印花稅）</span>
+                    <span className="font-semibold">
+                      {formatMoney(mortgage.deposit + mortgage.stampDuty)}
+                    </span>
+                  </div>
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">

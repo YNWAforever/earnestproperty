@@ -1,12 +1,17 @@
+export type NeonListingSort = "newest" | "price_asc" | "price_desc" | "area" | "psf";
+
 export type NeonListingFiltersInput = {
   deal: "sale" | "rent" | "all";
   keyword?: string;
   minPrice?: number;
   maxPrice?: number;
+  minArea?: number;
+  maxArea?: number;
   bedrooms?: number;
   estateSlug?: string;
   districtSlug?: string;
   agentId?: string;
+  sort: NeonListingSort;
   page: number;
   pageSize: number;
 };
@@ -50,6 +55,7 @@ export type NeonStaffProfile = NeonPublicAgentProfile;
 export type NeonPropertyRow = {
   id: string;
   listing_no: string;
+  canonical_property_no: string | null;
   title_zh: string;
   title_en: string | null;
   deal_type: "sale" | "rent";
@@ -95,6 +101,15 @@ export type NeonCorridorInventoryInput = {
   districtSlugs: string[];
   estateSlugs: string[];
   textAliases: string[];
+  /**
+   * Place names that must exclude a row even if it matches one of the
+   * inclusion predicates above -- e.g. a `district_slug: "castle-peak-road"`
+   * row whose title/address names a place outside the corridor. Applied as a
+   * SQL-level `AND NOT (...)` so both the COUNT totals and the fetched rows
+   * agree. See `corridorRegionScope.outOfScopeTextAliases` in
+   * src/content/castle-peak-road.ts, the single source of truth for this list.
+   */
+  outOfScopeTextAliases: string[];
   limit: number;
 };
 

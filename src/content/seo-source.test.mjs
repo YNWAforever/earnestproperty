@@ -113,7 +113,11 @@ test("listings page supports district and imported listing freshness", () => {
   const queries = read("src/lib/queries.ts");
 
   assert.match(listings, /district/);
-  assert.match(listings, /最後更新/);
+  // Was a raw "最後更新" text match; P3 Task 3 replaced the inline date with
+  // <FreshnessStamp>, which renders a relative label (e.g. "X 日前更新")
+  // instead of the literal string -- assert the component is wired in
+  // rather than pinning to now-stale exact copy.
+  assert.match(listings, /FreshnessStamp/);
   assert.match(queries, /districtSlug/);
   assert.match(queries, /last_seen_at/);
 });

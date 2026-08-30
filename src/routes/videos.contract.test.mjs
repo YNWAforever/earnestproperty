@@ -22,3 +22,16 @@ test("estate and q are optional free text", () => {
   assert.match(source, /estate:\s*fallback\(/);
   assert.match(source, /q:\s*fallback\(/);
 });
+
+// DR-6: VideoObject JSON-LD used to be emitted for every video in the raw
+// loader data, regardless of paging or the active search/category filter --
+// structured data for content the page doesn't render is misleading to
+// crawlers. It must be capped to the rendered/filtered subsets instead.
+test("AllVideoSchemas receives the rendered subset, not the full loader data", () => {
+  assert.doesNotMatch(
+    source,
+    /<AllVideoSchemas\s+cmsVideos=\{cmsVideos\}\s+listingVideos=\{listingVideos\}/,
+  );
+  assert.match(source, /<AllVideoSchemas\s+cmsVideos=\{visibleCmsVideos\}/);
+  assert.match(source, /listingVideos=\{matchingListingVideos\}/);
+});

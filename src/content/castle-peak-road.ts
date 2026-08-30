@@ -1,3 +1,5 @@
+import { estateSlugsForCorridorSegment } from "./estate-registry.ts";
+
 export type CorridorFaq = {
   question: string;
   answer: string;
@@ -44,6 +46,22 @@ export type CorridorSegment = {
   districtSlugs: string[];
   estateSlugs: string[];
   textAliases: string[];
+  /**
+   * A broader, explicitly-labelled "附近選擇" (nearby) result set — content
+   * that borders this segment but isn't claimed as its own strict inventory.
+   * Empty arrays mean the segment has no separate nearby block. Both the
+   * strict and nearby sets are filtered by corridorRegionScope.outOfScopeTextAliases
+   * -- at the SQL level in corridorWhere() (public-data.server.ts) and again,
+   * defense-in-depth, by isWithinCorridorRegion() inside
+   * fetchCorridorInventoryForAliases. This guards against every known
+   * out-of-scope place name currently in outOfScopeTextAliases; it's a text
+   * match, so a listing whose title/address doesn't mention one of those
+   * names but is still geographically out of scope (e.g. mistagged by the MLS
+   * importer) isn't caught by this check.
+   */
+  nearbyDistrictSlugs: string[];
+  nearbyEstateSlugs: string[];
+  nearbyTextAliases: string[];
   faqs: CorridorFaq[];
   links: CorridorLink[];
 };
@@ -97,7 +115,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     ],
     zoneSummary: ["主打面積比較大，低密度海景、洋房及屋地"],
     buyerFit: "適合重視海景、低密度、私隱、泊車和安靜生活的家庭與換樓客。",
-    transport: "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
+    transport:
+      "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
     housingProfile: "低密度別墅、洋房、海景住宅和少量分層單位，流通量較低。",
     featuredEstates: [
@@ -112,8 +131,24 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     // so it is recovered through the textAliases below rather than by accepting
     // tsuen-wan as a districtSlug — accepting it would drag the 荃灣, 大欖涌 and
     // 屯門 listings the client asked us to exclude into corridor inventory.
-    districtSlugs: ["ting-kau", "yau-kom-tau", "castle-peak-road"],
-    estateSlugs: [],
+    //
+    // "castle-peak-road" is the normalizer's catch-all for anything mentioning
+    // 青山公路 that didn't match a more specific district (src/lib/mls/normalize-old-site.mjs:24-29)
+    // -- a road that runs all the way to 屯門, so it cannot be Ting Kau's own
+    // strict district. It moves to the nearby set below instead of being
+    // dropped outright, so a genuinely nearby castle-peak-road-tagged listing
+    // is still visible, just honestly labelled 附近選擇 rather than claimed as
+    // Ting Kau's own stock. "yau-kom-tau" is dropped entirely, not moved: the
+    // normalizer never assigns it (confirmed dead -- 油柑頭 stock actually
+    // normalises to "tsuen-wan" and is recovered via the textAliases below).
+    districtSlugs: ["ting-kau"],
+    // Derived from estate-registry.ts (DR-10): no registry entry has
+    // corridorSegment "ting-kau" today because no estate in this zone has a
+    // real `estates` table row yet (海雲軒 / 縉皇居 already appear below in
+    // featuredEstates/textAliases as free text -- a different, looser kind of
+    // matching than this field, see estate-registry.ts's own comment on why
+    // they stay out of it).
+    estateSlugs: estateSlugsForCorridorSegment("ting-kau"),
     textAliases: [
       "汀九",
       "Ting Kau",
@@ -129,6 +164,9 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "海雲軒",
       "縉皇居",
     ],
+    nearbyDistrictSlugs: ["castle-peak-road"],
+    nearbyEstateSlugs: [],
+    nearbyTextAliases: [],
     faqs: [
       // 荃灣西 left the corridor with the client's p47 district prune, so the old
       // 「荃灣西同油柑頭」 FAQ no longer describes anything on the page. Rewritten
@@ -163,7 +201,10 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     ],
     links: [
       { href: "/castle-peak-road/sham-tseng", label: "比較深井 / 青山公路" },
-      { href: "/listings?deal=all&district=ting-kau&page=1", label: "搜尋汀九放盤" },
+      {
+        href: "/listings?deal=all&district=ting-kau&page=1",
+        label: "搜尋汀九放盤",
+      },
     ],
   },
   {
@@ -193,7 +234,8 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     transport:
       "小巴接駁荃灣站，巴士往九龍、港島、機場及青衣方向成熟；青龍頭段主要靠青山公路巴士、小巴和自駕，往荃灣、屯門和機場均有路線。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
-    housingProfile: "大型海景屋苑、成熟分層住宅、山海景單位和部分低密度臨海單位。",
+    housingProfile:
+      "大型海景屋苑、成熟分層住宅、山海景單位和部分低密度臨海單位。",
     featuredEstates: [
       "Bellagio 碧堤半島",
       "Sea Crest Villa 浪翠園",
@@ -203,7 +245,10 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "青龍頭海景住宅",
     ],
     districtSlugs: ["sham-tseng", "tsing-lung-tau", "castle-peak-road"],
-    estateSlugs: ["bellagio", "sea-crest-villa", "lido-garden", "rhine-garden", "hong-kong-garden"],
+    // Derived from estate-registry.ts (DR-10) rather than hardcoded -- the
+    // five estates with a real `estates` table row all carry
+    // corridorSegment: "sham-tseng".
+    estateSlugs: estateSlugsForCorridorSegment("sham-tseng"),
     textAliases: [
       "深井",
       "Sham Tseng",
@@ -216,29 +261,39 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "青龍頭",
       "Tsing Lung Tau",
     ],
+    nearbyDistrictSlugs: [],
+    nearbyEstateSlugs: [],
+    nearbyTextAliases: [],
     faqs: [
       {
         question: "深井在青山公路沿線有咩優勢？",
-        answer: "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
+        answer:
+          "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
       },
       {
         question: "深井同汀九有咩分別？",
-        answer: "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
+        answer:
+          "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
       },
       {
         question: "青龍頭適合上車客嗎？",
-        answer: "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
+        answer:
+          "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
       },
       {
         question: "青龍頭交通會否太遠？",
-        answer: "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
+        answer:
+          "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
       },
     ],
     links: [
       { href: "/district/sham-tseng", label: "深井完整地區專頁" },
       { href: "/estate/bellagio", label: "碧堤半島 Bellagio" },
       { href: "/estate/hong-kong-garden", label: "豪景花園 Hong Kong Garden" },
-      { href: "/listings?deal=all&district=sham-tseng&page=1", label: "搜尋深井放盤" },
+      {
+        href: "/listings?deal=all&district=sham-tseng&page=1",
+        label: "搜尋深井放盤",
+      },
     ],
   },
   // so-kwun-wat-gold-coast (小欖/掃管笏/三聖, including Gold Coast 黃金海岸) removed:
@@ -248,7 +303,34 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
 ];
 
 export function getCastlePeakRoadSegment(slug: string): CorridorSegment | null {
-  return castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null;
+  return (
+    castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null
+  );
+}
+
+/**
+ * Resolves a property's own `district_slug` (or its estate's, which is more
+ * precise when present) to the corridor segment that claims it as strict
+ * inventory. This is deliberately NOT the same lookup as
+ * getCastlePeakRoadSegment(slug) above, which matches a segment's own
+ * top-level `slug` (the URL param, e.g. "sham-tseng") -- a property's
+ * district_slug can be a narrower value a segment absorbed into its
+ * districtSlugs list without becoming its own segment (e.g. "tsing-lung-tau"
+ * and "castle-peak-road" both resolve to the sham-tseng segment, not a
+ * same-named one, since neither has its own corridor page). Returns null
+ * (never a placeholder) when no segment claims the district as strict
+ * inventory -- callers should omit the section entirely on null, matching
+ * this repo's established "hide, don't show an empty label" convention.
+ */
+export function findCastlePeakRoadSegmentByDistrictSlug(
+  districtSlug: string | null | undefined,
+): CorridorSegment | null {
+  if (!districtSlug) return null;
+  return (
+    castlePeakRoadSegments.find((segment) =>
+      segment.districtSlugs.includes(districtSlug),
+    ) ?? null
+  );
 }
 
 export const castlePeakRoadSitemapPaths = [
@@ -268,7 +350,13 @@ export const castlePeakRoadSitemapPaths = [
 export const corridorRegionScope = {
   /** The region names as the client wrote them — single source of truth for docs and tests. */
   labels: ["深井", "青山公路", "汀九", "青龍頭", "油柑頭"],
-  districtSlugs: ["sham-tseng", "castle-peak-road", "ting-kau", "tsing-lung-tau", "yau-kom-tau"],
+  districtSlugs: [
+    "sham-tseng",
+    "castle-peak-road",
+    "ting-kau",
+    "tsing-lung-tau",
+    "yau-kom-tau",
+  ],
   /**
    * Place- and estate-name whitelist. 青山公路 and "Castle Peak Road" are
    * deliberately excluded: the road runs all the way to 屯門, so matching on it
@@ -337,7 +425,8 @@ export function isWithinCorridorRegion(input: {
 }): boolean {
   // Already attached to a corridor estate: the strongest signal there is, and
   // not something the place-name gate should be allowed to override.
-  if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug)) return true;
+  if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug))
+    return true;
 
   const haystack = (input.text ?? [])
     .filter((value): value is string => Boolean(value))
@@ -349,7 +438,10 @@ export function isWithinCorridorRegion(input: {
   );
   if (isOutOfScope) return false;
 
-  if (input.districtSlug && corridorRegionScope.districtSlugs.includes(input.districtSlug)) {
+  if (
+    input.districtSlug &&
+    corridorRegionScope.districtSlugs.includes(input.districtSlug)
+  ) {
     return true;
   }
   if (
@@ -359,5 +451,7 @@ export function isWithinCorridorRegion(input: {
     return true;
   }
 
-  return corridorRegionScope.textAliases.some((alias) => haystack.includes(alias.toUpperCase()));
+  return corridorRegionScope.textAliases.some((alias) =>
+    haystack.includes(alias.toUpperCase()),
+  );
 }

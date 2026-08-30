@@ -232,9 +232,12 @@ test("homepage and navigation include Ting Kau content entry points", () => {
 test("homepage puts 精選筍盤 above 深井核心屋苑", () => {
   const source = readFileSync("src/routes/index.tsx", "utf8");
 
-  const featured = source.indexOf('eyebrow="精選筍盤"');
-  const estates = source.indexOf('eyebrow="深井核心屋苑"');
-  const whyUs = source.indexOf('eyebrow="為何選晉誠"');
+  // These three SectionHeader calls intentionally carry no `eyebrow` -- an
+  // eyebrow identical to the title duplicated the label visually, and was
+  // removed in ecaef90 ("fix: remove duplicate homepage section labels").
+  const featured = source.indexOf('title="精選筍盤"');
+  const estates = source.indexOf('title="深井核心屋苑"');
+  const whyUs = source.indexOf('title="為何選晉誠"');
 
   assert.notEqual(featured, -1, "homepage should still have a 精選筍盤 section");
   assert.notEqual(estates, -1, "homepage should still have a 深井核心屋苑 section");
@@ -423,6 +426,16 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   assert.match(estateReviews, /name: "robots", content: "noindex,follow"/);
 });
 
+// DR-8: the two eyebrow labels above the estate-reviews sections were left in
+// English on an otherwise zh-HK page.
+test("estate-reviews.tsx eyebrows are zh-HK, not English", () => {
+  const estateReviews = readFileSync("src/routes/estate-reviews.tsx", "utf8");
+
+  assert.doesNotMatch(estateReviews, /Review Articles|Estate Pages/);
+  assert.match(estateReviews, /屋苑文章/);
+  assert.match(estateReviews, /屋苑專頁/);
+});
+
 // Audit item 8: /privacy, /disclaimer, /terms all 404'd, and the EAA credential
 // in the footer was plain text a visitor could not verify.
 test("privacy, disclaimer and terms pages exist and are linked from the footer, and the licence is verifiable", () => {
@@ -550,9 +563,12 @@ test("videos page orders CMS videos above listing videos", () => {
   assert.notEqual(fetchListingIndex, -1);
   assert.ok(fetchCmsIndex < fetchListingIndex);
 
+  // Variable names renamed by the Aug 20 paged/filtered-grid refactor
+  // (0a5ce14): cmsVideos -> sortedCmsVideos, listingVideos ->
+  // matchingListingVideos. Same CMS-before-listing render order.
   const routeSource = readFileSync("src/routes/videos.tsx", "utf8");
-  const cmsSectionIndex = routeSource.indexOf("{cmsVideos.length > 0 &&");
-  const listingSectionIndex = routeSource.indexOf("{listingVideos.length > 0 &&");
+  const cmsSectionIndex = routeSource.indexOf("{sortedCmsVideos.length > 0 &&");
+  const listingSectionIndex = routeSource.indexOf("{matchingListingVideos.length > 0 &&");
   assert.notEqual(cmsSectionIndex, -1);
   assert.notEqual(listingSectionIndex, -1);
   assert.ok(cmsSectionIndex < listingSectionIndex);

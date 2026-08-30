@@ -1,3 +1,5 @@
+import { getEstateEntry } from "./estate-registry.ts";
+
 export const SITE_URL = "https://earnestproperty.vercel.app";
 export const SITE_NAME = "晉誠地產 Earnest Property";
 export const SITE_OG_IMAGE = `${SITE_URL}/og-cover.jpg`;
@@ -83,7 +85,8 @@ export const pageSeo = {
   privacy: {
     path: "/privacy",
     title: "私隱政策｜晉誠地產 Earnest Property",
-    description: "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
+    description:
+      "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
   },
   disclaimer: {
     path: "/disclaimer",
@@ -97,12 +100,29 @@ export const pageSeo = {
   },
 } satisfies Record<string, PageSeo>;
 
+/**
+ * Identity fields (slug, oldSlugs, nameZh, nameEn) come from estate-registry.ts
+ * (DR-10) instead of being retyped here -- this object keeps only its own SEO
+ * copy (title/description/intro/fit) and market facts.
+ */
+function estateSeoIdentity(slug: string) {
+  const entry = getEstateEntry(slug);
+  if (!entry.nameEn) {
+    throw new Error(
+      `seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`,
+    );
+  }
+  return {
+    slug: entry.slug,
+    oldSlugs: entry.legacySlug ? [entry.legacySlug] : [],
+    nameZh: entry.nameZh,
+    nameEn: entry.nameEn,
+  };
+}
+
 export const estateSeo = {
   bellagio: {
-    slug: "bellagio",
-    oldSlugs: ["belvedere-garden"],
-    nameZh: "碧堤半島",
-    nameEn: "Bellagio",
+    ...estateSeoIdentity("bellagio"),
     developer: "會德豐 / 九龍倉",
     yearLabel: "2003–2006",
     phases: 3,
@@ -116,10 +136,7 @@ export const estateSeo = {
     fit: "追求海景同會所配套嘅家庭、換樓客、外籍 / 回流人士；亦有不少投資者睇中其租務需求穩定。",
   },
   "sea-crest-villa": {
-    slug: "sea-crest-villa",
-    oldSlugs: [],
-    nameZh: "浪翠園",
-    nameEn: "Sea Crest Villa",
+    ...estateSeoIdentity("sea-crest-villa"),
     developer: "新鴻基",
     yearLabel: "1992–1997",
     phases: 5,
@@ -133,10 +150,7 @@ export const estateSeo = {
     fit: "首次置業上車客、預算務實嘅換樓家庭、想要海景但唔想付碧堤溢價嘅買家。",
   },
   "hong-kong-garden": {
-    slug: "hong-kong-garden",
-    oldSlugs: [],
-    nameZh: "豪景花園",
-    nameEn: "Hong Kong Garden",
+    ...estateSeoIdentity("hong-kong-garden"),
     developer: "華懋集團",
     yearLabel: "1986–1991",
     phases: 3,
@@ -150,10 +164,7 @@ export const estateSeo = {
     fit: "注重空間同預算嘅家庭、想用上車價買三房嘅買家、長線收租投資者。",
   },
   "rhine-garden": {
-    slug: "rhine-garden",
-    oldSlugs: ["sea-pearl-garden"],
-    nameZh: "海韻花園",
-    nameEn: "Rhine Garden",
+    ...estateSeoIdentity("rhine-garden"),
     developer: "",
     yearLabel: "1992",
     phases: 0,
@@ -167,10 +178,7 @@ export const estateSeo = {
     fit: "鍾意低密度、近海、想要靚海景嘅自住客同退休人士。",
   },
   "lido-garden": {
-    slug: "lido-garden",
-    oldSlugs: [],
-    nameZh: "麗都花園",
-    nameEn: "Lido Garden",
+    ...estateSeoIdentity("lido-garden"),
     developer: "",
     yearLabel: "1988",
     phases: 0,
@@ -185,19 +193,18 @@ export const estateSeo = {
   },
 } as const;
 
-export const estateAliases: Record<string, keyof typeof estateSeo> = {
-  碧堤半島: "bellagio",
-  BELLAGIO: "bellagio",
-  浪翠園: "sea-crest-villa",
-  "SEA CREST VILLA": "sea-crest-villa",
-  豪景花園: "hong-kong-garden",
-  "HONG KONG GARDEN": "hong-kong-garden",
-  海韻花園: "rhine-garden",
-  "RHINE GARDEN": "rhine-garden",
-  麗都花園: "lido-garden",
-  "LIDO GDN": "lido-garden",
-  "LIDO GARDEN": "lido-garden",
-};
+/**
+ * Derived from estate-registry.ts's `aliases` field (DR-10) rather than a
+ * second hand-maintained alias list. Unused elsewhere in this codebase today
+ * (confirmed by a repo-wide grep) but kept exported for parity with the
+ * pre-refactor API.
+ */
+export const estateAliases: Record<string, keyof typeof estateSeo> =
+  Object.fromEntries(
+    (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
+      getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
+    ),
+  );
 
 export const blogArticles = [
   {

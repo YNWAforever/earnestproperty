@@ -21,6 +21,18 @@ import {
   isWithinCorridorRegion,
 } from "./castle-peak-road.ts";
 import { renderableFaqs } from "../lib/faq.ts";
+import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
+// P4 Task 6's hub-page sections: pure logic lives in corridor-hub.ts (no
+// JSX), matching estate-registry.ts/castle-peak-road.ts's own established
+// split, so it can be imported and actually executed here instead of only
+// being proven by a source-text scan of the .tsx route.
+import {
+  buildAreaComparisonRows,
+  buyerFitHighlights,
+  computePriceSnapshot,
+  estateDirectoryForSegment,
+  summarizeSegmentInventory,
+} from "../components/site/corridor-hub.ts";
 
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -287,7 +299,14 @@ test("the whitelist is enforced at the consumer, not inside the listing API", ()
   const queries = read("src/lib/queries.ts");
   const server = read("src/lib/neon/public-data.server.ts");
 
-  assert.match(queries, /import \{ isWithinCorridorRegion \} from "@\/content\/castle-peak-road"/);
+  // queries.ts also imports corridorRegionScope now, to pass
+  // outOfScopeTextAliases through to the SQL-level exclusion in
+  // public-data.server.ts's corridorWhere() -- still imported from this
+  // content module, not re-implemented at the consumer.
+  assert.match(
+    queries,
+    /import \{[^}]*\bisWithinCorridorRegion\b[^}]*\} from "@\/content\/castle-peak-road"/,
+  );
 
   const featured = queries.slice(
     queries.indexOf("export async function fetchFeaturedProperties"),
@@ -362,6 +381,60 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   // so-kwun-wat-gold-coast (小欖/掃管笏/三聖) is retired -- see the
   // "retired zone URLs 301" test for its redirect/sitemap/getCastlePeakRoadSegment
   // coverage.
+});
+
+test("castle-peak-road.ts never names a specific school in schoolNet copy (DR-5)", () => {
+  // Distinguishes a generic net-code sentence ("62 校網。實際派位..." or
+  // "中學屬荃灣中學校網。" as used in district.sham-tseng.tsx's DataNote)
+  // from a named school ("深井天主教小學"): a run of 2-8 Han characters
+  // directly abutting 小學/中學, that is NOT itself immediately followed by
+  // 校 (which would make it "...中學校網" -- the net-code word, not a
+  // school name). A plain check for "does the string contain 小學 or 中學"
+  // would false-positive on "中學屬荃灣中學校網。", which names no school.
+  const NAMED_SCHOOL_PATTERN = /[\u4e00-\u9fff]{2,8}(?:小學|中學)(?!\s*校)/;
+
+  // Self-check against representative strings before trusting the regex on
+  // the real registry, per the plan's instruction to verify it actually
+  // distinguishes a generic net-code sentence from a named school, rather
+  // than just checking for the presence of 小學/中學.
+  assert.doesNotMatch(
+    "62 校網。實際派位及校網資料以教育局最新公布為準。",
+    NAMED_SCHOOL_PATTERN,
+  );
+  assert.doesNotMatch("中學屬荃灣中學校網。", NAMED_SCHOOL_PATTERN);
+  assert.match("深井天主教小學", NAMED_SCHOOL_PATTERN);
+  assert.match("海壩街官立小學", NAMED_SCHOOL_PATTERN);
+
+  for (const segment of castlePeakRoadSegments) {
+    if (!segment.schoolNet) continue;
+    assert.doesNotMatch(
+      segment.schoolNet,
+      NAMED_SCHOOL_PATTERN,
+      `${segment.slug}'s schoolNet must stay a generic net-code sentence, not a named school`,
+    );
+  }
+});
+
+test("Ting Kau's strict alias set excludes the castle-peak-road catch-all and the dead yau-kom-tau slug", () => {
+  const tingKau = castlePeakRoadSegments.find((s) => s.slug === "ting-kau");
+  assert.ok(tingKau);
+  assert.deepStrictEqual(tingKau.districtSlugs, ["ting-kau"]);
+  assert.ok(!tingKau.districtSlugs.includes("castle-peak-road"));
+  assert.ok(!tingKau.districtSlugs.includes("yau-kom-tau"));
+});
+
+test("Ting Kau's nearby set carries the castle-peak-road catch-all", () => {
+  const tingKau = castlePeakRoadSegments.find((s) => s.slug === "ting-kau");
+  assert.ok(tingKau);
+  assert.deepStrictEqual(tingKau.nearbyDistrictSlugs, ["castle-peak-road"]);
+});
+
+test("every segment declares nearby alias arrays, even when empty", () => {
+  for (const segment of castlePeakRoadSegments) {
+    assert.ok(Array.isArray(segment.nearbyDistrictSlugs));
+    assert.ok(Array.isArray(segment.nearbyEstateSlugs));
+    assert.ok(Array.isArray(segment.nearbyTextAliases));
+  }
 });
 
 test("corridor inventory uses Neon alias query with public query wrapper", () => {
@@ -462,6 +535,44 @@ test("castle peak road links and media use route-aware safeguards", () => {
   assert.match(inventory, /<AppImage\b/);
 });
 
+test("CorridorInventory.tsx sanitizes listing.title_zh before it reaches alt/heading render (DR-4)", () => {
+  const inventory = read("src/components/site/CorridorInventory.tsx");
+
+  assert.match(
+    inventory,
+    /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/,
+  );
+  assert.match(
+    inventory,
+    /sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/,
+  );
+});
+
+// Task 1 introduced the `eyebrow` prop with an English default ("Live
+// Listings") solely to keep that refactor visually inert. DR-8 is the task
+// that flips the default to zh-HK -- guard that it stays flipped and doesn't
+// just duplicate the "即時放盤" heading default.
+test("CorridorInventory.tsx eyebrow default is zh-HK, not the old English placeholder (DR-8)", () => {
+  const inventory = read("src/components/site/CorridorInventory.tsx");
+
+  assert.doesNotMatch(inventory, /Live Listings/);
+  assert.match(inventory, /eyebrow = "放盤情報"/);
+  assert.match(inventory, /heading = "即時放盤"/);
+});
+
+test("castle-peak-road.$segment.tsx sanitizes listing.title_zh before it reaches ItemList JSON-LD (DR-4)", () => {
+  const segment = read("src/routes/castle-peak-road.$segment.tsx");
+
+  assert.match(
+    segment,
+    /import \{ sanitizeListingText \} from "@\/lib\/format"/,
+  );
+  assert.match(
+    segment,
+    /name: sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/,
+  );
+});
+
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
   const seo = read("src/content/seo.ts");
   const vercel = read("vercel.ts");
@@ -507,4 +618,296 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(sitemap, /castlePeakRoadSitemapPaths/);
   assert.match(sitemap, /function escapeXml/);
   assert.match(sitemap, /escapeXml\(\`\$\{SITE_URL\}\$\{path\}\`\)/);
+});
+
+// --- P4 Task 6: castle-peak-road.index.tsx hub rebuild ---
+// (docs/superpowers/plans/2026-08-30-frontend-revamp-p4-areas-estates.md)
+
+test("estateDirectoryForSegment only lists estates the registry actually claims as this segment's corridorSegment", () => {
+  for (const segment of castlePeakRoadSegments) {
+    const directory = estateDirectoryForSegment(segment);
+
+    // Every listed estate's own registry entry really does name this
+    // segment -- the directory must never invent corridor membership that
+    // isn't in the registry.
+    for (const listed of directory) {
+      const entry = getEstateEntry(listed.slug);
+      assert.equal(entry.corridorSegment, segment.slug);
+      assert.equal(listed.nameZh, entry.nameZh);
+      assert.equal(listed.hasPage, entry.hasPage);
+    }
+
+    // And nothing the registry claims for this segment is missing from the
+    // directory -- a two-way check, not just "no false positives".
+    const expectedSlugs = estateRegistry
+      .filter((entry) => entry.corridorSegment === segment.slug)
+      .map((entry) => entry.slug)
+      .sort();
+    assert.deepEqual(
+      directory.map((entry) => entry.slug).sort(),
+      expectedSlugs,
+    );
+  }
+
+  // Pin today's real, current state (not a bug to "fix"): no estate has a
+  // real, published corridorSegment of "ting-kau" yet -- every estate that
+  // could claim it ships published=false from Task 2 -- so ting-kau's
+  // directory is genuinely empty right now, and the route must render that
+  // gracefully rather than omit the section outright or fabricate an entry.
+  assert.deepEqual(estateDirectoryForSegment(getCastlePeakRoadSegment("ting-kau")), []);
+
+  // sham-tseng carries all 5 hasPage:true estates, every one linkable.
+  const shamTsengDirectory = estateDirectoryForSegment(getCastlePeakRoadSegment("sham-tseng"));
+  assert.equal(shamTsengDirectory.length, 5);
+  assert.ok(shamTsengDirectory.every((entry) => entry.hasPage === true));
+});
+
+test("summarizeSegmentInventory reports an explicit sale/rent breakdown and a scope label naming the segment", () => {
+  for (const segment of castlePeakRoadSegments) {
+    const summary = summarizeSegmentInventory(segment, { saleTotal: 4, rentTotal: 7 });
+    assert.equal(summary.saleTotal, 4);
+    assert.equal(summary.rentTotal, 7);
+    assert.equal(summary.total, 11);
+    assert.ok(
+      summary.scopeLabel.includes(segment.nameZh),
+      `scope label must name ${segment.nameZh}, got "${summary.scopeLabel}"`,
+    );
+    assert.match(summary.scopeLabel, /只計算.*範圍即時放盤/);
+  }
+
+  // Missing inventory (loader race/error) must default to zero, not throw or
+  // render "undefined".
+  const fallback = summarizeSegmentInventory(castlePeakRoadSegments[0], undefined);
+  assert.deepEqual(
+    { saleTotal: fallback.saleTotal, rentTotal: fallback.rentTotal, total: fallback.total },
+    { saleTotal: 0, rentTotal: 0, total: 0 },
+  );
+});
+
+test("buildAreaComparisonRows reuses each segment's own curated copy verbatim, not new copy", () => {
+  const rows = buildAreaComparisonRows(castlePeakRoadSegments);
+  const byKey = Object.fromEntries(rows.map((row) => [row.key, row]));
+
+  for (const segment of castlePeakRoadSegments) {
+    assert.equal(byKey.housingProfile.values[segment.slug], segment.housingProfile);
+    assert.equal(byKey.buyerFit.values[segment.slug], segment.buyerFit);
+    assert.equal(byKey.transport.values[segment.slug], segment.transport);
+    assert.equal(byKey.schoolNet.values[segment.slug], segment.schoolNet ?? "—");
+  }
+
+  // A segment missing schoolNet (CorridorSegment.schoolNet is optional) must
+  // fall back to an explicit "—", never an empty cell or a fabricated net
+  // code -- exercised with a fixture since both live segments currently
+  // carry schoolNet.
+  const fixtureRows = buildAreaComparisonRows([
+    { ...castlePeakRoadSegments[0], schoolNet: undefined },
+  ]);
+  const fixtureSchoolNet = fixtureRows.find((row) => row.key === "schoolNet");
+  assert.equal(fixtureSchoolNet.values[castlePeakRoadSegments[0].slug], "—");
+});
+
+test("buyerFitHighlights: every returned phrase is a literal substring of the segment's own buyerFit copy", () => {
+  for (const segment of castlePeakRoadSegments) {
+    const highlights = buyerFitHighlights(segment.buyerFit);
+    assert.ok(highlights.length > 0, `${segment.slug} should yield at least one highlight`);
+    for (const highlight of highlights) {
+      assert.ok(
+        segment.buyerFit.includes(highlight),
+        `"${highlight}" must be a literal substring of ${segment.slug}'s buyerFit ("${segment.buyerFit}")`,
+      );
+    }
+  }
+
+  // Pin the exact extraction against the live copy, so a future edit to
+  // either segment's buyerFit sentence structure (e.g. dropping the leading
+  // "適合" or the trailing audience clause) is caught here rather than
+  // silently degrading the decision guide.
+  assert.deepEqual(buyerFitHighlights(getCastlePeakRoadSegment("ting-kau").buyerFit), [
+    "重視海景",
+    "低密度",
+    "私隱",
+    "泊車",
+    "安靜生活",
+  ]);
+  assert.deepEqual(buyerFitHighlights(getCastlePeakRoadSegment("sham-tseng").buyerFit), [
+    "想要海景",
+    "屋苑管理",
+    "會所",
+    "較多盤源",
+    "成熟生活配套",
+  ]);
+});
+
+test("computePriceSnapshot reduces real transaction rows to the latest month's average PSF, and is honest about no data", () => {
+  assert.equal(computePriceSnapshot([]), null);
+  assert.equal(
+    computePriceSnapshot([{ deal_date: null, saleable_psf: 12000 }]),
+    null,
+    "a row missing a deal_date must not be counted",
+  );
+  assert.equal(
+    computePriceSnapshot([{ deal_date: "2026-01-15", saleable_psf: null }]),
+    null,
+    "a row missing saleable_psf must not be counted",
+  );
+
+  const snapshot = computePriceSnapshot([
+    { deal_date: "2026-01-15", saleable_psf: 10000 },
+    { deal_date: "2026-01-20", saleable_psf: 12000 },
+    { deal_date: "2026-02-01", saleable_psf: 11000 },
+  ]);
+  assert.deepEqual(snapshot, { latestPsf: 11000, latestMonth: "26/02", transactionCount: 3 });
+});
+
+test("castle-peak-road.index.tsx wires all six Task 6 sections, each using real data, never a fabricated figure", () => {
+  const hub = read("src/routes/castle-peak-road.index.tsx");
+
+  // 1. Corridor schematic: an ordered, labelled sequence, not a pin map.
+  assert.match(hub, /function CorridorSchematic/);
+  assert.doesNotMatch(hub, /\.lat\b|\.lng\b|latitude|longitude/i);
+
+  // 2. Area-comparison table, built from the shared pure module.
+  assert.match(hub, /function AreaComparisonSection/);
+  assert.match(hub, /buildAreaComparisonRows\(castlePeakRoadSegments\)/);
+
+  // 3. Estate directory: gated hasPage link, honest empty state, never a
+  // link built directly off a raw slug string.
+  assert.match(hub, /function EstateDirectorySection/);
+  assert.match(hub, /estateDirectoryForSegment\(segment\)/);
+  assert.match(hub, /estate\.hasPage/);
+  assert.match(hub, /更多資料稍後提供/);
+
+  // 4. Scoped, labelled sale/rent inventory breakdown replaces the old
+  // single combined count.
+  assert.match(hub, /summarizeSegmentInventory\(segment, inventory\)/);
+  assert.match(hub, /售 \{summary\.saleTotal\.toLocaleString\(\)\}/);
+  // Prettier wraps the JSX text node onto its own line with a `{" "}`
+  // space-escape here, unlike the 售 figure just above -- tolerate either.
+  assert.match(hub, /租(?: |\{" "\}\s*)\{summary\.rentTotal\.toLocaleString\(\)\}/);
+  assert.doesNotMatch(hub, /function segmentTotal/);
+
+  // 5. Price snapshot: built (not skipped), sourced from real transaction
+  // data via fetchDistrictTransactions, and cited with a DataNote -- never a
+  // bare number with no source.
+  assert.match(hub, /fetchDistrictTransactions/);
+  assert.match(hub, /computePriceSnapshot/);
+  assert.match(hub, /function PriceSnapshotSection/);
+  assert.match(hub, /import \{ DataNote \} from "@\/components\/layout\/DataNote"/);
+  assert.match(hub, /<DataNote/);
+  assert.match(hub, /source=\{`本行成交記錄/);
+  // Omits the whole section when no segment has real data, rather than
+  // rendering a fabricated figure.
+  assert.match(hub, /if \(entries\.length === 0\) return null;/);
+
+  // 6. Decision guide draws only from buyerFitHighlights, i.e. buyerFit
+  // copy, and references both segments (via the shared segments array, not
+  // a hardcoded single slug).
+  assert.match(hub, /function DecisionGuideSection/);
+  assert.match(hub, /buyerFitHighlights\(segment\.buyerFit\)/);
+  assert.match(hub, /castlePeakRoadSegments\.map\(\(segment\) => \{/);
+});
+
+// Regression: the price-snapshot fetch fans fetchDistrictTransactions out over
+// a segment's full districtSlugs list, and for sham-tseng that list includes
+// "castle-peak-road" -- the MLS normalizer's catch-all for anything mentioning
+// 青山公路 that runs all the way to 屯門 (see this file's own comment on that
+// slug, and corridorRegionScope.outOfScopeTextAliases below). Unlike
+// fetchCorridorInventoryForAliases, fetchDistrictTransactions' own SQL applies
+// no region guard (bare `WHERE e.district_slug = $1`), so a transaction
+// recorded against a catch-all-tagged, actually-out-of-scope estate (e.g.
+// 黃金海岸 Gold Coast, one of Task 2's unpublished estates) could otherwise
+// silently reach this price snapshot. The fix filters each per-slug batch
+// through isWithinCorridorRegion before flattening, mirroring queries.ts's
+// withinCorridorScope (DR-1's fix for the inventory path).
+test("castle-peak-road.index.tsx's price-snapshot fetch is wired to filter through isWithinCorridorRegion (regression for the castle-peak-road catch-all leak)", () => {
+  const hub = read("src/routes/castle-peak-road.index.tsx");
+
+  // Wiring check: .tsx cannot be imported or rendered under `node --test`, so
+  // this proves the guard is actually applied in the loader, not just that
+  // the guard function itself behaves correctly (proven behaviourally below).
+  assert.match(
+    hub,
+    /import \{[\s\S]*?\bisWithinCorridorRegion\b[\s\S]*?\} from "@\/content\/castle-peak-road"/,
+  );
+  const priceSnapshotFetch = hub.slice(
+    hub.indexOf("segment.districtSlugs.map(\n"),
+    hub.indexOf("]);", hub.indexOf("segment.districtSlugs.map(\n")),
+  );
+  assert.match(
+    priceSnapshotFetch,
+    /fetchDistrictTransactions\(districtSlug, 12\)/,
+  );
+  assert.match(priceSnapshotFetch, /rows\.filter\(/);
+  assert.match(priceSnapshotFetch, /isWithinCorridorRegion\(\{/);
+  assert.match(priceSnapshotFetch, /districtSlug,/);
+
+  // Behavioural check: the exact fixture -- a "castle-peak-road"-tagged
+  // transaction for an out-of-scope estate -- fed through isWithinCorridorRegion
+  // the same way the loader does, must be rejected.
+  const goldCoastRow = {
+    deal_date: "2026-08-15",
+    saleable_psf: 30000,
+    estates: { name_zh: "黃金海岸 Gold Coast", slug: "gold-coast" },
+  };
+  assert.equal(
+    isWithinCorridorRegion({
+      districtSlug: "castle-peak-road",
+      estateSlug: goldCoastRow.estates.slug,
+      text: [goldCoastRow.estates.name_zh],
+    }),
+    false,
+    "a castle-peak-road-tagged Gold Coast row must fail the region guard",
+  );
+
+  // End-to-end simulation of the sham-tseng segment's price-snapshot fetch:
+  // one legitimate sham-tseng transaction plus the out-of-scope
+  // castle-peak-road-tagged Gold Coast row above, run through the exact same
+  // per-slug-batch filter-then-flatten the loader performs.
+  const shamTseng = getCastlePeakRoadSegment("sham-tseng");
+  assert.deepEqual(shamTseng.districtSlugs, [
+    "sham-tseng",
+    "tsing-lung-tau",
+    "castle-peak-road",
+  ]);
+
+  const rowsByDistrictSlug = {
+    "sham-tseng": [
+      {
+        deal_date: "2026-08-01",
+        saleable_psf: 12000,
+        estates: { name_zh: "碧堤半島", slug: "bellagio" },
+      },
+    ],
+    "tsing-lung-tau": [],
+    "castle-peak-road": [goldCoastRow],
+  };
+
+  const filteredTransactions = shamTseng.districtSlugs
+    .map((districtSlug) =>
+      rowsByDistrictSlug[districtSlug].filter((row) =>
+        isWithinCorridorRegion({
+          districtSlug,
+          estateSlug: row.estates?.slug,
+          text: [row.estates?.name_zh],
+        }),
+      ),
+    )
+    .flat();
+
+  const snapshot = computePriceSnapshot(filteredTransactions);
+  assert.deepEqual(snapshot, {
+    latestPsf: 12000,
+    latestMonth: "26/08",
+    transactionCount: 1,
+  });
+
+  // Self-check: without the filter (the pre-fix behaviour), the same fixture
+  // set would have let the out-of-scope row skew the snapshot -- proving this
+  // test actually exercises the guard rather than passing vacuously.
+  const unfilteredTransactions = shamTseng.districtSlugs
+    .map((districtSlug) => rowsByDistrictSlug[districtSlug])
+    .flat();
+  const unfilteredSnapshot = computePriceSnapshot(unfilteredTransactions);
+  assert.equal(unfilteredSnapshot.transactionCount, 2);
+  assert.notDeepEqual(unfilteredSnapshot, snapshot);
 });

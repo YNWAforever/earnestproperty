@@ -9,12 +9,16 @@ import {
   Maximize,
   Calendar,
   Building2,
+  Heart,
   Share2,
   Image as ImageIcon,
   Video,
   Box,
   Map as MapIcon,
   LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
+  TrainFront,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,8 +50,10 @@ import {
   formatHkd,
   formatHkDate,
   formatSaleDisplay,
+  sanitizeListingText,
 } from "@/lib/format";
 import { AppImage } from "@/components/media/AppImage";
+import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
@@ -58,15 +64,27 @@ import {
   getPropertyDecision,
 } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
+import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { jsonLdScript } from "@/lib/schema";
+import { shareUrl } from "@/lib/share";
+import { useFavourite } from "@/lib/saved-listings";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
   property?: Pick<
     PropertyDetail,
-    "listing_no" | "title_zh" | "deal_type" | "rent" | "price" | "description" | "images"
+    "listing_no" | "title_zh" | "deal_type" | "rent" | "price" | "description" | "images" | "status"
   >;
 };
+
+// `active` renders normally. `sold`/`rented` is a distinct "still real, no
+// longer available" state -- basic info stays visible but the enquiry
+// form/CTAs are replaced (see PropertyUnavailableNotice below) and the page
+// is noindex'd. Every other status (offline/inactive/draft -- "never really
+// public" or "pulled") keeps today's exact behavior: the loader throws
+// notFound() and the generic notFoundComponent renders, same as a listing_no
+// that doesn't exist at all.
+const UNAVAILABLE_STATUSES = new Set(["sold", "rented"]);
 
 function formatDealPrice(
   isRent: boolean,
@@ -83,7 +101,12 @@ function formatDealPrice(
 export const Route = createFileRoute("/property/$listingNo")({
   loader: async ({ params }) => {
     const property = await fetchPropertyByListingNo(params.listingNo);
-    if (!property) throw notFound();
+    // offline/inactive/draft never was, or no longer is, genuinely public --
+    // treat identically to a listing_no that doesn't exist. sold/rented falls
+    // through to the normal branch below and gets its own real state.
+    if (!property || (!UNAVAILABLE_STATUSES.has(property.status) && property.status !== "active")) {
+      throw notFound();
+    }
     const [similar, txns] = await Promise.all([
       property.estate_id
         ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4)
@@ -108,8 +131,11 @@ export const Route = createFileRoute("/property/$listingNo")({
         : saleDisplay
           ? `售 ${saleDisplay}`
           : "";
-    const title = `${p.title_zh}｜${priceStr}｜晉誠地產`;
-    const desc = (p.description ?? "").slice(0, 150) || `${p.title_zh} ${priceStr}`;
+    const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
+    const title = `${safeTitle}｜${priceStr}｜晉誠地產`;
+    const safeDescription = sanitizeListingText(p.description);
+    const desc =
+      (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
     const img = p.images?.[0];
     return {
       meta: [
@@ -119,6 +145,14 @@ export const Route = createFileRoute("/property/$listingNo")({
         { property: "og:description", content: desc },
         ...(img ? [{ property: "og:image", content: img }] : []),
         ...(img ? [{ name: "twitter:image", content: img }] : []),
+        // A sold/rented listing is a permanently-gone page kept live for
+        // trust/continuity, not something worth ranking -- an indexed page
+        // that will never transact again is exactly the thin/stale content
+        // DR-9 flags elsewhere. offline/inactive/draft never render this
+        // head fn at all (loader 404s first), so no branch needed for those.
+        ...(UNAVAILABLE_STATUSES.has(p.status)
+          ? [{ name: "robots", content: "noindex,follow" }]
+          : []),
       ],
       links: [canonical],
     };
@@ -181,12 +215,25 @@ function PropertyPage() {
     similar: SimilarListing[];
     txns: EstateTransaction[];
   };
+  // Imported listing text can arrive malformed (raw CSV artifacts, stray
+  // quotes, exact "NaN"/"null"/"$0" tokens) -- sanitize once here and reuse
+  // the sanitized values everywhere below rather than re-sanitizing at every
+  // interpolation site. Title falls back to the raw value so a listing never
+  // shows a fully blank title; description/address can legitimately end up
+  // null and are guarded at their render sites instead.
+  const safeTitle = sanitizeListingText(property.title_zh) ?? property.title_zh;
+  const safeDescription = sanitizeListingText(property.description);
+  const safeAddress = sanitizeListingText(property.address);
+
   const images: string[] = property.images?.length
     ? property.images
     : ["https://placehold.co/1200x800/e5e7eb/64748b?text=No+Image"];
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
+  const { favourited, toggle: toggleFavourited } = useFavourite(
+    property.listing_no,
+  );
 
   const isRent = property.deal_type === "rent";
   const priceLabel = formatDealPrice(
@@ -217,6 +264,14 @@ function PropertyPage() {
     estateSlug: estate?.slug,
     districtSlug: estate?.district_slug ?? property.district_slug,
   });
+  // Nearby transport: reuses the corridor content's already-curated copy, keyed
+  // by segment rather than district_slug directly (a segment can absorb more
+  // than one district_slug -- see findCastlePeakRoadSegmentByDistrictSlug's own
+  // comment). Renders nothing (not a placeholder) when the listing's district
+  // isn't part of a corridor segment.
+  const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(
+    estate?.district_slug ?? property.district_slug,
+  );
 
   // Narrowed values rather than booleans: TypeScript cannot carry a
   // `!!property.video_url` guard through a separate const into the JSX below,
@@ -231,15 +286,24 @@ function PropertyPage() {
 
   async function handleShare() {
     const url = typeof window !== "undefined" ? window.location.href : "";
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: property.title_zh, url });
-      } catch {
-        /* user cancelled */
-      }
-    } else {
-      await navigator.clipboard.writeText(url);
-      toast.success("已複製連結");
+    await shareUrl(safeTitle, url);
+  }
+
+  // Cycles through ALL images (not just the visible thumbnails), wrapping at
+  // both ends -- both the arrow buttons and Left/Right keys funnel through
+  // this so the main viewer and the thumbnail strip stay in sync.
+  function stepImage(delta: number) {
+    setActiveImg((i) => (i + delta + images.length) % images.length);
+  }
+
+  function handleGalleryKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (images.length <= 1) return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepImage(-1);
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      stepImage(1);
     }
   }
 
@@ -291,8 +355,8 @@ function PropertyPage() {
     "@graph": [
       {
         "@type": "RealEstateListing",
-        name: property.title_zh,
-        description: property.description ?? undefined,
+        name: safeTitle,
+        description: safeDescription ?? undefined,
         url: `${SITE_URL}/property/${property.listing_no}`,
         image: images,
         datePosted: property.created_at,
@@ -305,10 +369,10 @@ function PropertyPage() {
       },
       {
         "@type": "Residence",
-        name: property.title_zh,
+        name: safeTitle,
         address: {
           "@type": "PostalAddress",
-          streetAddress: property.address ?? undefined,
+          streetAddress: safeAddress ?? undefined,
           addressLocality: estate?.name_zh ?? undefined,
           addressRegion: "Hong Kong",
         },
@@ -336,7 +400,7 @@ function PropertyPage() {
           {
             "@type": "ListItem",
             position: estate ? 4 : 3,
-            name: property.title_zh,
+            name: safeTitle,
             item: `${SITE_URL}/property/${property.listing_no}`,
           },
         ],
@@ -344,7 +408,8 @@ function PropertyPage() {
     ],
   };
 
-  const updatedAt = formatHkDate(property.updated_at);
+  const isUnavailable = UNAVAILABLE_STATUSES.has(property.status);
+  const unavailableLabel = property.status === "rented" ? "已租出" : "已售出";
 
   const mapSrc =
     estate?.lat && estate?.lng
@@ -381,6 +446,17 @@ function PropertyPage() {
           <span>編號 {property.listing_no}</span>
         </nav>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleFavourited}
+            aria-pressed={favourited}
+          >
+            <Heart
+              className={`mr-1.5 h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`}
+            />
+            {favourited ? "已加入心水" : "加入心水"}
+          </Button>
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2 className="mr-1.5 h-3.5 w-3.5" />
             分享
@@ -392,18 +468,17 @@ function PropertyPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={isRent ? "secondary" : "default"}>{isRent ? "租盤" : "售盤"}</Badge>
           {property.featured ? <Badge variant="outline">精選</Badge> : null}
+          {isUnavailable ? <Badge variant="destructive">{unavailableLabel}</Badge> : null}
           <span className="text-xs text-muted-foreground">編號 {property.listing_no}</span>
-          {updatedAt ? (
-            <span className="text-xs text-muted-foreground">最後更新：{updatedAt}</span>
-          ) : null}
+          <FreshnessStamp updatedAt={property.updated_at} />
         </div>
         <h1 id="property-title" className="mt-3 text-3xl font-bold tracking-tight">
-          {property.title_zh}
+          {safeTitle}
         </h1>
-        {property.address ? (
+        {safeAddress ? (
           <p className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
             <MapPin className="h-4 w-4" />
-            {property.address}
+            {safeAddress}
           </p>
         ) : null}
         <p className="mt-4 text-3xl font-bold text-primary">
@@ -490,31 +565,69 @@ function PropertyPage() {
               )}
             </TabsList>
 
-            <TabsContent value="photos">
-              <div className="overflow-hidden rounded-lg border bg-muted">
+            <TabsContent value="photos" onKeyDown={handleGalleryKeyDown}>
+              <div
+                className="relative overflow-hidden rounded-lg border bg-muted"
+                tabIndex={images.length > 1 ? 0 : undefined}
+                role={images.length > 1 ? "group" : undefined}
+                aria-label={
+                  images.length > 1
+                    ? `${safeTitle} 相片 ${activeImg + 1} / ${images.length}，可用左右方向鍵切換`
+                    : undefined
+                }
+              >
                 <AppImage
                   src={images[activeImg]}
-                  alt={property.title_zh}
+                  alt={safeTitle}
                   width={1200}
                   height={900}
                   className="aspect-[4/3] w-full object-cover"
                   loading="eager"
                 />
+                {images.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => stepImage(-1)}
+                      aria-label="上一張相片"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-background/80 p-1.5 text-foreground shadow hover:bg-background"
+                    >
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => stepImage(1)}
+                      aria-label="下一張相片"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-background/80 p-1.5 text-foreground shadow hover:bg-background"
+                    >
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                    <span className="absolute bottom-2 right-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-foreground">
+                      {activeImg + 1} / {images.length}
+                    </span>
+                  </>
+                )}
               </div>
               {images.length > 1 && (
-                <div className="mt-3 grid grid-cols-5 gap-2">
-                  {images.slice(0, 5).map((src, i) => (
+                // Every image gets a thumbnail here (no slice/cap) -- with
+                // more than 5 photos this scrolls horizontally instead of
+                // silently dropping the rest, which used to leave them
+                // unreachable entirely.
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                  {images.map((src, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setActiveImg(i)}
-                      className={`aspect-[4/3] overflow-hidden rounded-md border-2 ${
+                      aria-current={i === activeImg ? "true" : undefined}
+                      aria-label={`檢視第 ${i + 1} 張相片`}
+                      className={`aspect-[4/3] w-20 flex-shrink-0 overflow-hidden rounded-md border-2 ${
                         i === activeImg ? "border-primary" : "border-transparent"
                       }`}
                     >
                       <AppImage
                         src={src}
-                        alt={`${property.title_zh} ${i + 1}`}
+                        alt={`${safeTitle} ${i + 1}`}
                         width={200}
                         height={150}
                         className="h-full w-full object-cover"
@@ -559,7 +672,7 @@ function PropertyPage() {
                 <div className="overflow-hidden rounded-lg border bg-muted">
                   <AppImage
                     src={floorplanUrl}
-                    alt={`${property.title_zh} 平面圖`}
+                    alt={`${safeTitle} 平面圖`}
                     width={1200}
                     height={900}
                     className="w-full object-contain"
@@ -584,28 +697,36 @@ function PropertyPage() {
           </Tabs>
         }
         mobileContact={
-          <PropertyMobileContactSummary
-            agent={agent}
-            branchContact={branchContact}
-            fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
-            listingNo={property.listing_no}
-            title={property.title_zh}
-            dealType={property.deal_type}
-            price={dealPrice}
-            onInquiry={focusInquiry}
-          />
+          isUnavailable ? (
+            <PropertyUnavailableNotice
+              label={unavailableLabel}
+              dealType={property.deal_type}
+              estateSlug={estate?.slug}
+            />
+          ) : (
+            <PropertyMobileContactSummary
+              agent={agent}
+              branchContact={branchContact}
+              fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
+              listingNo={property.listing_no}
+              title={safeTitle}
+              dealType={property.deal_type}
+              price={dealPrice}
+              onInquiry={focusInquiry}
+            />
+          )
         }
         details={
           <>
-            {/* Description */}
-            {property.description && (
-              <section className="mt-6">
-                <h2 className="text-xl font-semibold">物業描述</h2>
-                <p className="mt-3 whitespace-pre-line text-muted-foreground">
-                  {property.description}
-                </p>
-              </section>
-            )}
+            {/* Description -- always renders a fallback so a malformed or
+                missing description never leaves a bare heading or the
+                literal word "null"/"NaN". */}
+            <section className="mt-6">
+              <h2 className="text-xl font-semibold">物業描述</h2>
+              <p className="mt-3 whitespace-pre-line text-muted-foreground">
+                {safeDescription ?? "暫無詳細描述"}
+              </p>
+            </section>
 
             {/* Features */}
             {(property.features?.length ?? 0) > 0 && (
@@ -641,6 +762,33 @@ function PropertyPage() {
                       className="text-sm text-primary underline"
                     >
                       查看屋苑詳情 →
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Nearby transport -- omitted entirely (not a placeholder) when the
+                listing's district isn't part of a known corridor segment. */}
+            {transportSegment && (
+              <Card className="mt-6" data-property-transport-card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <TrainFront className="h-4 w-4" />
+                    附近交通
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-7 text-muted-foreground">
+                    {transportSegment.transport}
+                  </p>
+                  <div className="mt-4">
+                    <Link
+                      to="/castle-peak-road/$segment"
+                      params={{ segment: transportSegment.slug }}
+                      className="text-sm text-primary underline"
+                    >
+                      查看{transportSegment.nameZh}交通及生活資訊 →
                     </Link>
                   </div>
                 </CardContent>
@@ -705,77 +853,85 @@ function PropertyPage() {
           </>
         }
         sidebar={
-          <>
-            <PropertyDecisionActions
-              agent={agent}
-              branchContact={branchContact}
-              fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
-              listingNo={property.listing_no}
-              title={property.title_zh}
+          isUnavailable ? (
+            <PropertyUnavailableNotice
+              label={unavailableLabel}
               dealType={property.deal_type}
-              price={dealPrice}
-              onInquiry={focusInquiry}
+              estateSlug={estate?.slug}
             />
+          ) : (
+            <>
+              <PropertyDecisionActions
+                agent={agent}
+                branchContact={branchContact}
+                fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
+                listingNo={property.listing_no}
+                title={safeTitle}
+                dealType={property.deal_type}
+                price={dealPrice}
+                onInquiry={focusInquiry}
+              />
 
-            <Card className="mt-4">
-              <CardHeader>
-                <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-3">
-                  <div>
-                    <Label htmlFor="name">姓名 *</Label>
-                    <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
-                  </div>
-                  <div>
-                    <Label htmlFor="phone">電話 *</Label>
-                    <Input
-                      id="phone"
-                      name="phone"
-                      required
-                      type="tel"
-                      maxLength={30}
-                      placeholder="9123 4567"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">電郵</Label>
-                    <Input id="email" name="email" type="email" maxLength={255} />
-                  </div>
-                  <div>
-                    <Label htmlFor="message">訊息</Label>
-                    <Textarea
-                      id="message"
-                      name="message"
-                      maxLength={1000}
-                      rows={3}
-                      placeholder={`想查詢編號 ${property.listing_no}`}
-                    />
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <Checkbox
-                      id="consentWhatsapp"
-                      checked={consentWhatsapp}
-                      onCheckedChange={(checked) => setConsentWhatsapp(checked === true)}
-                      className="mt-0.5"
-                    />
-                    <Label
-                      htmlFor="consentWhatsapp"
-                      className="text-xs font-normal leading-snug text-muted-foreground"
-                    >
-                      我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
-                    </Label>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={submitting}>
-                    {submitting ? "提交中…" : "提交查詢"}
-                  </Button>
-                  <p className="text-xs text-muted-foreground">
-                    按提交即表示同意我們透過上述聯絡方式回覆查詢。
-                  </p>
-                </form>
-              </CardContent>
-            </Card>
-          </>
+              <Card className="mt-4">
+                <CardHeader>
+                  <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={handleSubmit} className="space-y-3">
+                    <div>
+                      <Label htmlFor="name">姓名 *</Label>
+                      <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
+                    </div>
+                    <div>
+                      <Label htmlFor="phone">電話 *</Label>
+                      <Input
+                        id="phone"
+                        name="phone"
+                        required
+                        type="tel"
+                        maxLength={30}
+                        placeholder="9123 4567"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="email">電郵</Label>
+                      <Input id="email" name="email" type="email" maxLength={255} />
+                    </div>
+                    <div>
+                      <Label htmlFor="message">訊息</Label>
+                      <Textarea
+                        id="message"
+                        name="message"
+                        maxLength={1000}
+                        rows={3}
+                        placeholder={`想查詢編號 ${property.listing_no}`}
+                      />
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="consentWhatsapp"
+                        checked={consentWhatsapp}
+                        onCheckedChange={(checked) => setConsentWhatsapp(checked === true)}
+                        className="mt-0.5"
+                      />
+                      <Label
+                        htmlFor="consentWhatsapp"
+                        className="text-xs font-normal leading-snug text-muted-foreground"
+                      >
+                        我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
+                      </Label>
+                    </div>
+                    <Button type="submit" className="w-full" disabled={submitting}>
+                      {submitting ? "提交中…" : "提交查詢"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      按提交即表示同意我們透過上述聯絡方式回覆查詢。
+                    </p>
+                  </form>
+                </CardContent>
+              </Card>
+            </>
+          )
         }
       />
 
@@ -784,6 +940,46 @@ function PropertyPage() {
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
       />
     </div>
+  );
+}
+
+// Renders in place of the enquiry form/contact CTAs (both the desktop
+// sidebar and the mobile summary slot) once a listing is sold/rented -- the
+// listing's own photo/title/address stay visible elsewhere on the page
+// (builds trust vs. a blank 404), but there is nothing left to enquire
+// about, so this points the visitor at similar still-active listings
+// instead. The "同類放盤" section further down the page (fetchSimilarListings,
+// still called for non-active properties since estate_id/deal_type are
+// known regardless of status) covers the same listings inline; this is the
+// above-the-fold call to action.
+function PropertyUnavailableNotice({
+  label,
+  dealType,
+  estateSlug,
+}: {
+  label: string;
+  dealType: "sale" | "rent";
+  estateSlug?: string | null;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{label}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          呢個盤源已經{label}，暫時未能透過此頁查詢或預約睇樓，歡迎瀏覽同類放盤。
+        </p>
+        <Button asChild className="w-full">
+          <Link
+            to="/listings"
+            search={{ deal: dealType, estate: estateSlug ?? undefined, page: 1 }}
+          >
+            瀏覽同類放盤
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -815,6 +1011,7 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
     Number(listing.rent),
     Number(listing.price),
   );
+  const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
   return (
     <Link
       to="/property/$listingNo"
@@ -824,14 +1021,14 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
       <div className="aspect-[4/3] overflow-hidden bg-muted">
         <AppImage
           src={img}
-          alt={listing.title_zh}
+          alt={safeTitle}
           width={400}
           height={300}
           className="h-full w-full object-cover transition-transform group-hover:scale-105"
         />
       </div>
       <div className="p-3">
-        <p className="line-clamp-1 text-sm font-medium">{listing.title_zh}</p>
+        <p className="line-clamp-1 text-sm font-medium">{safeTitle}</p>
         <p className="mt-1 text-xs text-muted-foreground">
           {listing.bedrooms ? `${listing.bedrooms}房 · ` : ""}
           {listing.saleable_area ? `${listing.saleable_area} 呎` : ""}

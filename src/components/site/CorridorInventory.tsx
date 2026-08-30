@@ -5,7 +5,11 @@ import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
-import { formatHkd, formatSaleDisplay } from "@/lib/format";
+import {
+  formatHkd,
+  formatSaleDisplay,
+  sanitizeListingText,
+} from "@/lib/format";
 import type { CorridorInventory as CorridorInventoryData, ListingRow } from "@/lib/queries";
 
 type ListingsDeal = "all" | "sale" | "rent";
@@ -22,6 +26,7 @@ function formatPrice(row: ListingRow) {
 
 function ListingMiniCard({ listing }: { listing: ListingRow }) {
   const cover = listing.images?.[0];
+  const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
 
   return (
     <Link
@@ -32,7 +37,7 @@ function ListingMiniCard({ listing }: { listing: ListingRow }) {
       <div className="aspect-[4/3] bg-muted">
         <AppImage
           src={cover}
-          alt={listing.title_zh}
+          alt={safeTitle}
           width={400}
           height={300}
           className="h-full w-full object-cover"
@@ -40,7 +45,7 @@ function ListingMiniCard({ listing }: { listing: ListingRow }) {
       </div>
       <div className="p-4">
         <p className="text-base font-bold text-primary">{formatPrice(listing)}</p>
-        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{listing.title_zh}</h3>
+        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{safeTitle}</h3>
         {listing.estates?.name_zh && (
           <p className="mt-1 text-xs text-muted-foreground">{listing.estates.name_zh}</p>
         )}
@@ -145,20 +150,24 @@ export function CorridorInventory({
   inventory,
   inquiryText,
   listingsHref,
+  eyebrow = "放盤情報",
+  heading = "即時放盤",
+  description = "放盤數字來自網站已接入的公開真盤資料，實際可睇盤源可 WhatsApp 再確認。",
 }: {
   inventory: CorridorInventoryData;
   inquiryText: string;
   listingsHref: string;
+  eyebrow?: string;
+  heading?: string;
+  description?: string;
 }) {
   return (
     <section className="rounded-lg border bg-card p-5 shadow-card sm:p-6">
       <div className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-coral">Live Listings</p>
-          <h2 className="mt-1 text-2xl font-bold text-primary">即時放盤</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            放盤數字來自網站已接入的公開真盤資料，實際可睇盤源可 WhatsApp 再確認。
-          </p>
+          <p className="text-sm font-semibold text-coral">{eyebrow}</p>
+          <h2 className="mt-1 text-2xl font-bold text-primary">{heading}</h2>
+          <p className="mt-2 text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="outline">
