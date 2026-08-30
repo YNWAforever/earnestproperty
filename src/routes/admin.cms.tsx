@@ -2,8 +2,10 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  Archive,
   Brain,
   FileText,
+  History,
   Pencil,
   Plus,
   RefreshCw,
@@ -55,6 +57,14 @@ import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
 import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
+  archiveAdminCmsResource,
+  fetchAdminCmsEditor,
+  publishAdminCmsRevision,
+  restoreAdminCmsRevision,
+  saveAdminCmsDraft,
+} from "@/lib/neon/admin-cms";
+import type { CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
+import {
   checkAdminFaqConflicts,
   deleteAdminFaq,
   fetchAdminCms,
@@ -62,9 +72,7 @@ import {
   fetchAdminCmsVideos,
   fetchAdminMediaAssets,
   rebuildAdminAiKnowledge,
-  saveAdminArticle,
   saveAdminCmsVideo,
-  saveAdminEstate,
   saveAdminFaq,
   updateAdminMediaAsset,
 } from "@/lib/neon/admin-data";
@@ -206,6 +214,12 @@ function AdminCms() {
   const [faqImportConflicts, setFaqImportConflicts] = useState<Set<string> | null>(null);
   const [faqImportChecking, setFaqImportChecking] = useState(false);
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
+  const [estateRevisions, setEstateRevisions] = useState<CmsRevisionSummary[] | null>(null);
+  const [articleRevisions, setArticleRevisions] = useState<CmsRevisionSummary[] | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [archiving, setArchiving] = useState<{ type: "estate" | "article"; id: string } | null>(
+    null,
+  );
   const [deletingFaq, setDeletingFaq] = useState<AdminFaqCmsRow | null>(null);
   const [faqDeleting, setFaqDeleting] = useState(false);
   const [faqDeleteError, setFaqDeleteError] = useState<string | null>(null);
@@ -367,7 +381,22 @@ function AdminCms() {
     }
   }
 
-  async function handleSaveEstate(event: FormEvent<HTMLFormElement>) {
+  async function loadEstateRevisions(resourceId: string | undefined) {
+    if (!resourceId) {
+      setEstateRevisions(null);
+      return;
+    }
+    try {
+      const { revisions } = await fetchAdminCmsEditor({
+        data: { resourceType: "estate", resourceId },
+      });
+      setEstateRevisions(revisions);
+    } catch {
+      setEstateRevisions(null);
+    }
+  }
+
+  async function handleSaveEstateDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingEstate) return;
     if (
@@ -381,9 +410,21 @@ function AdminCms() {
 
     setSaving(true);
     try {
-      assertNoServerError(await saveAdminEstate({ data: editingEstate }));
-      setEditingEstate(null);
-      await refreshAfterWrite(editingEstate.id ? "屋苑 SEO 已更新" : "屋苑 SEO 已新增");
+      const result = await callCms(() =>
+        saveAdminCmsDraft({
+          data: {
+            resourceType: "estate",
+            resourceId: editingEstate.id,
+            payload: { ...editingEstate },
+            basePublishedVersion: estateRevisions?.find(
+              (revision) => revision.state === "published",
+            )?.versionNumber,
+          },
+        }),
+      );
+      setEditingEstate({ ...editingEstate, id: result.resourceId });
+      await loadEstateRevisions(result.resourceId);
+      toast.success("草稿已儲存");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -391,7 +432,84 @@ function AdminCms() {
     }
   }
 
-  async function handleSaveArticle(event: FormEvent<HTMLFormElement>) {
+  async function handlePublishEstate() {
+    if (!editingEstate) return;
+    setPublishing(true);
+    try {
+      const draft = await callCms(() =>
+        saveAdminCmsDraft({
+          data: {
+            resourceType: "estate",
+            resourceId: editingEstate.id,
+            payload: { ...editingEstate },
+            basePublishedVersion: estateRevisions?.find(
+              (revision) => revision.state === "published",
+            )?.versionNumber,
+          },
+        }),
+      );
+      await callCms(() =>
+        publishAdminCmsRevision({
+          data: {
+            resourceType: "estate",
+            resourceId: draft.resourceId,
+            revisionId: draft.revisionId,
+          },
+        }),
+      );
+      setEditingEstate(null);
+      await Promise.all([refreshAfterWrite("屋苑已發布"), loadEstateRevisions(draft.resourceId)]);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function handleRestoreEstateRevision(revisionId: string) {
+    setSaving(true);
+    try {
+      const result = await callCms(() => restoreAdminCmsRevision({ data: { revisionId } }));
+      await loadEstateRevisions(result.resourceId);
+      toast.success("已還原為新草稿，請檢查內容後發布");
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleArchiveEstate(estateId: string) {
+    setSaving(true);
+    try {
+      await callCms(() =>
+        archiveAdminCmsResource({ data: { resourceType: "estate", resourceId: estateId } }),
+      );
+      setArchiving(null);
+      await refreshAfterWrite("屋苑已封存");
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function loadArticleRevisions(resourceId: string | undefined) {
+    if (!resourceId) {
+      setArticleRevisions(null);
+      return;
+    }
+    try {
+      const { revisions } = await fetchAdminCmsEditor({
+        data: { resourceType: "article", resourceId },
+      });
+      setArticleRevisions(revisions);
+    } catch {
+      setArticleRevisions(null);
+    }
+  }
+
+  async function handleSaveArticleDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editingArticle) return;
     if (!editingArticle.slug.trim() || !editingArticle.title.trim()) {
@@ -401,9 +519,83 @@ function AdminCms() {
 
     setSaving(true);
     try {
-      assertNoServerError(await saveAdminArticle({ data: editingArticle }));
+      const result = await callCms(() =>
+        saveAdminCmsDraft({
+          data: {
+            resourceType: "article",
+            resourceId: editingArticle.id,
+            payload: { ...editingArticle },
+            basePublishedVersion: articleRevisions?.find(
+              (revision) => revision.state === "published",
+            )?.versionNumber,
+          },
+        }),
+      );
+      setEditingArticle({ ...editingArticle, id: result.resourceId });
+      await loadArticleRevisions(result.resourceId);
+      toast.success("草稿已儲存");
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handlePublishArticle() {
+    if (!editingArticle) return;
+    setPublishing(true);
+    try {
+      const draft = await callCms(() =>
+        saveAdminCmsDraft({
+          data: {
+            resourceType: "article",
+            resourceId: editingArticle.id,
+            payload: { ...editingArticle },
+            basePublishedVersion: articleRevisions?.find(
+              (revision) => revision.state === "published",
+            )?.versionNumber,
+          },
+        }),
+      );
+      await callCms(() =>
+        publishAdminCmsRevision({
+          data: {
+            resourceType: "article",
+            resourceId: draft.resourceId,
+            revisionId: draft.revisionId,
+          },
+        }),
+      );
       setEditingArticle(null);
-      await refreshAfterWrite(editingArticle.id ? "文章編輯已儲存" : "文章已新增");
+      await Promise.all([refreshAfterWrite("文章已發布"), loadArticleRevisions(draft.resourceId)]);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function handleRestoreArticleRevision(revisionId: string) {
+    setSaving(true);
+    try {
+      const result = await callCms(() => restoreAdminCmsRevision({ data: { revisionId } }));
+      await loadArticleRevisions(result.resourceId);
+      toast.success("已還原為新草稿，請檢查內容後發布");
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleArchiveArticle(articleId: string) {
+    setSaving(true);
+    try {
+      await callCms(() =>
+        archiveAdminCmsResource({ data: { resourceType: "article", resourceId: articleId } }),
+      );
+      setArchiving(null);
+      await refreshAfterWrite("文章已封存");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -796,7 +988,12 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, estates: value }))
                       }
                     />
-                    <Button onClick={() => setEditingEstate({ ...emptyEstate })}>
+                    <Button
+                      onClick={() => {
+                        setEditingEstate({ ...emptyEstate });
+                        setEstateRevisions(null);
+                      }}
+                    >
                       <Plus className="h-4 w-4" />
                       新增屋苑
                     </Button>
@@ -840,10 +1037,21 @@ function AdminCms() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setEditingEstate(estateToInput(estate))}
+                                onClick={() => {
+                                  setEditingEstate(estateToInput(estate));
+                                  void loadEstateRevisions(estate.id);
+                                }}
                               >
                                 <Pencil className="h-4 w-4" />
                                 編輯
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setArchiving({ type: "estate", id: estate.id })}
+                              >
+                                <Archive className="h-4 w-4" />
+                                封存
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -863,7 +1071,12 @@ function AdminCms() {
                           title="未有屋苑"
                           description="新增第一個屋苑後即可管理 SEO 及頁面內容。"
                           action={
-                            <Button onClick={() => setEditingEstate({ ...emptyEstate })}>
+                            <Button
+                              onClick={() => {
+                                setEditingEstate({ ...emptyEstate });
+                                setEstateRevisions(null);
+                              }}
+                            >
                               <Plus className="h-4 w-4" />
                               新增屋苑
                             </Button>
@@ -893,7 +1106,12 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, articles: value }))
                       }
                     />
-                    <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
+                    <Button
+                      onClick={() => {
+                        setEditingArticle({ ...emptyArticle });
+                        setArticleRevisions(null);
+                      }}
+                    >
                       <Plus className="h-4 w-4" />
                       新增文章
                     </Button>
@@ -937,10 +1155,21 @@ function AdminCms() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setEditingArticle(articleToInput(article))}
+                                onClick={() => {
+                                  setEditingArticle(articleToInput(article));
+                                  void loadArticleRevisions(article.id);
+                                }}
                               >
                                 <Pencil className="h-4 w-4" />
                                 編輯
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setArchiving({ type: "article", id: article.id })}
+                              >
+                                <Archive className="h-4 w-4" />
+                                封存
                               </Button>
                             </TableCell>
                           </TableRow>
@@ -962,7 +1191,12 @@ function AdminCms() {
                           title="未有文章"
                           description="新增文章後即可管理內容及發布狀態。"
                           action={
-                            <Button onClick={() => setEditingArticle({ ...emptyArticle })}>
+                            <Button
+                              onClick={() => {
+                                setEditingArticle({ ...emptyArticle });
+                                setArticleRevisions(null);
+                              }}
+                            >
                               <Plus className="h-4 w-4" />
                               新增文章
                             </Button>
@@ -1360,9 +1594,13 @@ function AdminCms() {
               data?.estates.find((item) => item.id === editingEstate?.id) ?? null,
             )}
             saving={saving}
+            publishing={publishing}
+            revisions={estateRevisions}
             onChange={setEditingEstate}
             onClose={() => setEditingEstate(null)}
-            onSubmit={handleSaveEstate}
+            onSubmit={handleSaveEstateDraft}
+            onPublish={handlePublishEstate}
+            onRestoreRevision={handleRestoreEstateRevision}
           />
           <ArticleDialog
             article={editingArticle}
@@ -1371,9 +1609,13 @@ function AdminCms() {
               data?.articles.find((item) => item.id === editingArticle?.id) ?? null,
             )}
             saving={saving}
+            publishing={publishing}
+            revisions={articleRevisions}
             onChange={setEditingArticle}
             onClose={() => setEditingArticle(null)}
-            onSubmit={handleSaveArticle}
+            onSubmit={handleSaveArticleDraft}
+            onPublish={handlePublishArticle}
+            onRestoreRevision={handleRestoreArticleRevision}
           />
           <CmsVideoDialog
             video={editingCmsVideo}
@@ -1396,6 +1638,26 @@ function AdminCms() {
             onChange={setEditingFaq}
             onClose={() => setEditingFaq(null)}
             onSubmit={handleSaveFaq}
+          />
+          <AdminConfirmDialog
+            open={archiving !== null}
+            title="封存"
+            description={
+              archiving
+                ? `確定要封存此${archiving.type === "estate" ? "屋苑" : "文章"}？封存後會從公開網站下架，但可在版本紀錄中還原。`
+                : ""
+            }
+            confirmLabel="封存"
+            confirmVariant="destructive"
+            isPending={saving}
+            onOpenChange={(open) => {
+              if (!open) setArchiving(null);
+            }}
+            onConfirm={() => {
+              if (!archiving) return;
+              if (archiving.type === "estate") void handleArchiveEstate(archiving.id);
+              else void handleArchiveArticle(archiving.id);
+            }}
           />
           <AdminConfirmDialog
             open={deletingFaq !== null}
@@ -1576,17 +1838,25 @@ function CmsVideoDialog({
 function EstateDialog({
   estate,
   saving,
+  publishing,
+  revisions,
   fingerprintValues,
   onChange,
   onClose,
   onSubmit,
+  onPublish,
+  onRestoreRevision,
 }: {
   estate: AdminEstateInput | null;
   saving: boolean;
+  publishing: boolean;
+  revisions: CmsRevisionSummary[] | null;
   fingerprintValues: Record<string, unknown>;
   onChange: (estate: AdminEstateInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPublish: () => void;
+  onRestoreRevision: (revisionId: string) => void;
 }) {
   const { requestClose, dialog } = useDirtyCloseGuard({
     isDirty: useEditingDirty(estate),
@@ -1687,7 +1957,12 @@ function EstateDialog({
                   onChange={(value) => onChange({ ...estate, seo_description: nullIfBlank(value) })}
                   rows={3}
                 />
-                <EditorFooter saving={saving} onClose={requestClose} />
+                <CmsPublishFooter
+                  saving={saving}
+                  publishing={publishing}
+                  onClose={requestClose}
+                  onPublish={onPublish}
+                />
               </form>
               <AdminContentCopilot
                 resourceType="estate"
@@ -1702,6 +1977,11 @@ function EstateDialog({
                 }}
                 onApply={(patch) => onChange({ ...estate, ...patch })}
               />
+              <CmsRevisionHistory
+                resourceId={estate.id}
+                revisions={revisions}
+                onRestoreRevision={onRestoreRevision}
+              />
             </div>
           ) : null}
         </DialogContent>
@@ -1714,17 +1994,25 @@ function EstateDialog({
 function ArticleDialog({
   article,
   saving,
+  publishing,
+  revisions,
   fingerprintValues,
   onChange,
   onClose,
   onSubmit,
+  onPublish,
+  onRestoreRevision,
 }: {
   article: AdminArticleInput | null;
   saving: boolean;
+  publishing: boolean;
+  revisions: CmsRevisionSummary[] | null;
   fingerprintValues: Record<string, unknown>;
   onChange: (article: AdminArticleInput | null) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onPublish: () => void;
+  onRestoreRevision: (revisionId: string) => void;
 }) {
   const { requestClose, dialog } = useDirtyCloseGuard({
     isDirty: useEditingDirty(article),
@@ -1737,7 +2025,9 @@ function ArticleDialog({
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle>{article?.id ? "文章編輯" : "新增文章"}</DialogTitle>
-            <DialogDescription>內容、發布狀態及 SEO 欄位會一併儲存。</DialogDescription>
+            <DialogDescription>
+              儲存草稿不會影響公開頁面，按「發布」才會將內容公開。
+            </DialogDescription>
           </DialogHeader>
           {article ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
@@ -1770,31 +2060,7 @@ function ArticleDialog({
                     value={article.cover_image ?? ""}
                     onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
                   />
-                  {/* Was free text holding a raw ISO string like
-                      2026-08-05T09:12:33.000Z, which staff had to hand-edit with
-                      no picker and no format hint; anything else came back as a
-                      raw Postgres timestamp syntax error in a toast. */}
-                  <TextField
-                    label="發布時間"
-                    type="datetime-local"
-                    value={toDateTimeLocal(article.published_at)}
-                    onChange={(value) =>
-                      onChange({ ...article, published_at: fromDateTimeLocal(value) })
-                    }
-                  />
                 </div>
-                <Field label="發布">
-                  <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
-                    <Switch
-                      checked={article.published}
-                      onCheckedChange={(checked) => onChange({ ...article, published: checked })}
-                      aria-label="切換文章發布狀態"
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {article.published ? "已發布" : "草稿"}
-                    </span>
-                  </div>
-                </Field>
                 <TextAreaField
                   label="摘要"
                   value={article.excerpt ?? ""}
@@ -1820,7 +2086,12 @@ function ArticleDialog({
                   }
                   rows={3}
                 />
-                <EditorFooter saving={saving} onClose={requestClose} />
+                <CmsPublishFooter
+                  saving={saving}
+                  publishing={publishing}
+                  onClose={requestClose}
+                  onPublish={onPublish}
+                />
               </form>
               <AdminContentCopilot
                 resourceType="article"
@@ -1834,6 +2105,11 @@ function ArticleDialog({
                   seo_description: article.seo_description,
                 }}
                 onApply={(patch) => onChange({ ...article, ...patch })}
+              />
+              <CmsRevisionHistory
+                resourceId={article.id}
+                revisions={revisions}
+                onRestoreRevision={onRestoreRevision}
               />
             </div>
           ) : null}
@@ -2049,6 +2325,96 @@ function EditorFooter({ saving, onClose }: { saving: boolean; onClose: () => voi
   );
 }
 
+/**
+ * Footer for the two CMS-revision-engine-backed dialogs (estate, article).
+ * "儲存草稿" never touches the live table; "發布" saves a draft and
+ * immediately publishes it. Both buttons stay visible regardless of the
+ * acting staff member's role -- the server enforces the real publish/restore
+ * permission boundary (admin/manager only) and callCms() surfaces a clear
+ * zh-HK message on a 403, rather than this file re-deriving role state
+ * client-side.
+ */
+function CmsPublishFooter({
+  saving,
+  publishing,
+  onClose,
+  onPublish,
+}: {
+  saving: boolean;
+  publishing: boolean;
+  onClose: () => void;
+  onPublish: () => void;
+}) {
+  const disabled = saving || publishing;
+  return (
+    <DialogFooter>
+      <Button type="button" variant="ghost" onClick={onClose} disabled={disabled}>
+        取消
+      </Button>
+      <Button type="submit" variant="outline" disabled={disabled}>
+        <Save className="h-4 w-4" />
+        {saving ? "儲存中…" : "儲存草稿"}
+      </Button>
+      <Button type="button" onClick={onPublish} disabled={disabled}>
+        <Upload className="h-4 w-4" />
+        {publishing ? "發布中…" : "發布"}
+      </Button>
+    </DialogFooter>
+  );
+}
+
+const CMS_REVISION_STATE_LABELS: Record<CmsRevisionSummary["state"], string> = {
+  draft: "草稿",
+  published: "已發布",
+  superseded: "已被取代",
+  archived: "已封存",
+};
+
+/** Read-only version history for the two revision-engine-backed dialogs. */
+function CmsRevisionHistory({
+  resourceId,
+  revisions,
+  onRestoreRevision,
+}: {
+  resourceId: string | undefined;
+  revisions: CmsRevisionSummary[] | null;
+  onRestoreRevision: (revisionId: string) => void;
+}) {
+  if (!resourceId || !revisions) return null;
+  return (
+    <div className="rounded-md border p-4 lg:col-span-2">
+      <h4 className="text-sm font-semibold">版本紀錄</h4>
+      {revisions.length ? (
+        <ul className="mt-2 space-y-2">
+          {revisions.map((revision) => (
+            <li key={revision.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="flex items-center gap-2">
+                <Badge variant={revision.state === "published" ? "default" : "outline"}>
+                  {CMS_REVISION_STATE_LABELS[revision.state]}
+                </Badge>
+                <span className="text-muted-foreground">
+                  v{revision.versionNumber} · {formatDateTime(revision.createdAt)}
+                </span>
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onRestoreRevision(revision.id)}
+              >
+                <History className="h-4 w-4" />
+                還原
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">暫無版本紀錄</p>
+      )}
+    </div>
+  );
+}
+
 function KnowledgeMetric({
   label,
   value,
@@ -2183,24 +2549,6 @@ function TextField({
       />
     </Field>
   );
-}
-
-/** `datetime-local` wants `YYYY-MM-DDTHH:mm` in local time; the column holds an
- * ISO timestamp. Round-tripping through these keeps the stored value an ISO
- * string while giving staff a real picker. */
-function toDateTimeLocal(value: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function fromDateTimeLocal(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const date = new Date(trimmed);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function NumberField({
@@ -2454,4 +2802,52 @@ function errorText(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return "操作失敗，請稍後再試";
+}
+
+const CMS_ERROR_MESSAGES: Record<string, string> = {
+  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新，請重新載入頁面後再試一次。",
+  CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
+  CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
+  CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
+  CMS_MEDIA_IN_USE: "此媒體仍被其他內容使用，未能封存。",
+};
+
+function cmsErrorMessage(code: string): string {
+  return CMS_ERROR_MESSAGES[code] ?? "操作失敗，請重試。";
+}
+
+/**
+ * Normalizes every failure shape the CMS revision engine can produce -- a
+ * thrown ServerFnResponseError (401/403 from requireStaffAccess), a thrown
+ * plain Error (CMS_REVISION_NOT_FOUND / CMS_REVISION_MISMATCH), and a typed
+ * { ok: false, code } result (CMS_REVISION_CONFLICT / CMS_RESOURCE_NOT_FOUND /
+ * CMS_MEDIA_IN_USE) -- into a single thrown Error with a zh-HK message, so
+ * every call site can use the same catch-and-toast shape as the rest of
+ * this file. saveAdminCmsDraft/restoreAdminCmsRevision never return an `ok`
+ * field at all (they throw on failure) -- the `"ok" in result` check below
+ * is what lets this one helper wrap both shapes.
+ */
+async function callCms<T>(call: () => Promise<T>): Promise<T> {
+  let result: T;
+  try {
+    result = await call();
+  } catch (err) {
+    const status =
+      err && typeof err === "object" && "status" in err
+        ? Number((err as { status?: unknown }).status)
+        : 0;
+    if (status === 401) throw new Error("登入已過期，請重新登入後再試。");
+    if (status === 403) throw new Error("你的角色沒有此操作的權限，請聯絡管理員或主管。");
+    throw new Error(cmsErrorMessage(errorText(err)));
+  }
+  if (
+    result &&
+    typeof result === "object" &&
+    "ok" in result &&
+    (result as { ok: unknown }).ok === false
+  ) {
+    const code = "code" in result ? String((result as { code?: unknown }).code) : "";
+    throw new Error(cmsErrorMessage(code));
+  }
+  return result;
 }
