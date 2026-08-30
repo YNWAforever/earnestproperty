@@ -43,6 +43,7 @@
     "test:youtube-sync": "bun test src/lib/youtube-sync/youtube-reconciliation.test.ts src/lib/youtube-sync/youtube-client.test.ts src/lib/youtube-sync/youtube-repository.test.ts src/lib/youtube-sync/youtube-sync.test.ts src/lib/youtube-sync/youtube-http.test.ts && node --test src/lib/youtube-sync/youtube-sync-schema.test.mjs src/routes/api.youtube-sync.test.mjs",
     "test:youtube-sync:db": "bun test --no-env-file src/lib/youtube-sync/youtube-sync.integration.test.mjs",
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
+    "test:legal": "node --test src/routes/legal-pages.contract.test.mjs",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",
     "migration:import": "node scripts/old-site-migration/import.mjs",
