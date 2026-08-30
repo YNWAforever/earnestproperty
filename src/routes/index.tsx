@@ -405,11 +405,7 @@ function HomePage() {
                 公路及汀九市場，直接 WhatsApp 查詢。") restated the hero/WHY US
                 claims; the agent cards below demonstrate "real, licensed
                 people" better than a repeated sentence would. */}
-            <SectionHeader
-              eyebrow="專業代理"
-              title="認識晉誠代理團隊"
-              className="text-left"
-            />
+            <SectionHeader eyebrow="專業代理" title="認識晉誠代理團隊" className="text-left" />
             <Button asChild variant="outline">
               <Link to="/agents">
                 查看全部代理
@@ -460,7 +456,7 @@ function HomePage() {
           />
           <Feature
             icon={<TrendingUp className="h-5 w-5" />}
-            title="成交快訊"
+            title="晉誠地產最新成交"
             desc="追蹤近期成交及區內價格走勢。"
             href="/transactions"
           />

@@ -124,7 +124,7 @@ const megaMenus: MegaMenuGroup[] = [
       },
       {
         to: "/transactions",
-        label: "成交快訊",
+        label: "晉誠地產最新成交",
         description: "追蹤近期成交及區內價格走勢。",
       },
     ],

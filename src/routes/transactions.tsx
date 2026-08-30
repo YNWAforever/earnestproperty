@@ -4,12 +4,7 @@ import { MessageCircle, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
-import {
-  formatArea,
-  formatHkd,
-  formatHkDate,
-  formatManDisplay,
-} from "@/lib/format";
+import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
 import { fetchRecentTransactions, type RecentTransaction } from "@/lib/queries";
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -22,11 +17,11 @@ export const Route = createFileRoute("/transactions")({
   loader: async () => fetchRecentTransactions(24),
   head: ({ loaderData }) => ({
     meta: [
-      { title: "成交快訊｜深井 青山公路 汀九近期成交｜晉誠地產" },
+      { title: "晉誠地產最新成交｜深井 青山公路 汀九近期成交" },
       {
         name: "description",
         content:
-          "深井、青山公路、汀九成交快訊，查看近期屋苑成交價、實用面積及呎價，配合晉誠地產前線市場資訊。",
+          "晉誠地產最新成交：深井、青山公路、汀九近期屋苑成交價、實用面積及呎價，配合前線市場資訊。",
       },
       // The page renders a graceful empty state rather than 404ing when there is
       // no transaction data yet, but an indexed empty page is a soft-404 risk.
@@ -49,7 +44,7 @@ function TransactionsPage() {
     <div className="bg-background">
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-coral">成交快訊</p>
+          <p className="text-sm font-semibold text-coral">晉誠地產最新成交</p>
           <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-5xl">
             深井 青山公路 汀九近期成交
           </h1>
