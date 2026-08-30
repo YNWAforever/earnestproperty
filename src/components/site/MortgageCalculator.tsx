@@ -1,6 +1,16 @@
 import { useMemo, useState } from "react";
-import { Building2, Calculator, ExternalLink, Info, ShieldCheck, WalletCards } from "lucide-react";
+import {
+  Building2,
+  Calculator,
+  ChevronDown,
+  ExternalLink,
+  Info,
+  ShieldCheck,
+  WalletCards,
+} from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -39,13 +49,13 @@ type CalculatorState = {
 const OPTIONAL_INPUT_KEYS = new Set<MortgageInputKey>(["monthlyIncome", "monthlyDebtExpenses"]);
 
 const INPUT_LABELS: Record<MortgageInputKey, string> = {
-  price: "Property price",
-  ltv: "Loan-to-value ratio",
-  years: "Mortgage term",
-  annualInterestRate: "Annual interest rate",
-  stressRate: "Stress-test rate increase",
-  monthlyIncome: "Monthly income",
-  monthlyDebtExpenses: "Existing monthly debt expenses",
+  price: "樓價",
+  ltv: "按揭成數",
+  years: "按揭年期",
+  annualInterestRate: "年利率",
+  stressRate: "壓力測試加息幅度",
+  monthlyIncome: "每月入息",
+  monthlyDebtExpenses: "現有每月債務支出",
 };
 
 const moneyFormatter = new Intl.NumberFormat("en-HK", {
@@ -64,7 +74,7 @@ function formatMoney(value: number): string {
 
 function formatPercent(value: number | null, incomeWasSupplied: boolean): string {
   if (value !== null) return `${percentFormatter.format(value)}%`;
-  return incomeWasSupplied ? "Unavailable for this income" : "Add income to calculate";
+  return incomeWasSupplied ? "此入息無法計算" : "輸入入息以計算";
 }
 
 function getSliderValue(value: number[] | undefined, fallback: number): number {
@@ -130,7 +140,7 @@ function DraftInput({
       />
       {isInvalid ? (
         <p id={messageId} className="mt-1 text-xs font-medium text-destructive">
-          Enter a valid number, then press Enter or leave the field.
+          請輸入有效數字，然後按 Enter 或移至其他欄位。
         </p>
       ) : null}
     </div>
@@ -225,6 +235,9 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
     const inputs = mortgageInputsFromSearch(initialSearch);
     return { inputs, drafts: draftsFromInputs(inputs), editingField: null };
   });
+  // Collapsed by default -- the annual schedule is a detail most visitors
+  // won't need immediately; a toggle keeps the page shorter without hiding it.
+  const [showAmortization, setShowAmortization] = useState(false);
   const result = useMemo(
     () => (state.editingField === null ? calculateMortgage(state.inputs) : null),
     [state.editingField, state.inputs],
@@ -275,12 +288,11 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
       <header className="max-w-3xl">
         <div className="flex items-center gap-2 text-sm font-semibold text-coral">
           <Calculator className="h-4 w-4" aria-hidden="true" />
-          PROPERTY FINANCE
+          物業融資
         </div>
         <h1 className="mt-3 text-3xl font-bold text-primary sm:text-4xl">香港按揭計算機</h1>
         <p className="mt-3 text-base leading-7 text-muted-foreground">
-          Adjust the purchase price, financing and affordability figures to understand your monthly
-          commitment before you make an offer.
+          調整樓價、按揭及供款能力數字，出價前先了解每月供款壓力。
         </p>
       </header>
 
@@ -295,16 +307,16 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </div>
             <div>
               <h2 id="mortgage-inputs" className="text-lg font-semibold text-foreground">
-                Purchase and loan
+                樓價與按揭
               </h2>
-              <p className="text-sm text-muted-foreground">Use your expected loan terms.</p>
+              <p className="text-sm text-muted-foreground">輸入您預期的按揭條款。</p>
             </div>
           </div>
 
           <div className="mt-7 space-y-7">
             <Field
               id="property-price"
-              label="Property price"
+              label="樓價"
               committedValue={state.inputs.price}
               draft={state.drafts.price}
               min={MORTGAGE_INPUT_LIMITS.price.min}
@@ -320,7 +332,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </Field>
             <Field
               id="ltv"
-              label="Loan-to-value ratio"
+              label="按揭成數"
               committedValue={state.inputs.ltv}
               draft={state.drafts.ltv}
               min={MORTGAGE_INPUT_LIMITS.ltv.min}
@@ -336,7 +348,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </Field>
             <Field
               id="mortgage-term"
-              label="Mortgage term"
+              label="按揭年期"
               committedValue={state.inputs.years}
               draft={state.drafts.years}
               min={MORTGAGE_INPUT_LIMITS.years.min}
@@ -348,11 +360,11 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               onCommitDraft={() => commitDraft("years")}
               onSliderCommit={(value) => commitSlider("years", value)}
             >
-              {state.inputs.years} years
+              {state.inputs.years} 年
             </Field>
             <Field
               id="interest-rate"
-              label="Annual interest rate"
+              label="年利率"
               committedValue={state.inputs.annualInterestRate}
               draft={state.drafts.annualInterestRate}
               min={MORTGAGE_INPUT_LIMITS.annualInterestRate.min}
@@ -368,7 +380,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </Field>
             <Field
               id="stress-rate"
-              label="Stress-test rate increase"
+              label="壓力測試加息幅度"
               committedValue={state.inputs.stressRate}
               draft={state.drafts.stressRate}
               min={MORTGAGE_INPUT_LIMITS.stressRate.min}
@@ -387,20 +399,20 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
           <div className="mt-8 border-t border-border pt-6">
             <div className="flex items-center gap-2">
               <WalletCards className="h-5 w-5 text-coral" aria-hidden="true" />
-              <h2 className="font-semibold text-foreground">Affordability</h2>
+              <h2 className="font-semibold text-foreground">供款能力</h2>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Optional figures for debt servicing ratios.
+              此為選填資料，用作計算債務供款比率。
             </p>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="monthly-income">Monthly income</Label>
+                <Label htmlFor="monthly-income">每月入息</Label>
                 <DraftInput
                   id="monthly-income"
-                  label="Monthly income"
+                  label="每月入息"
                   inputMode="numeric"
                   draft={state.drafts.monthlyIncome}
-                  placeholder="Optional"
+                  placeholder="選填"
                   isInvalid={state.editingField === "monthlyIncome" && activeDraftIsInvalid}
                   onStartEditing={() => startEditing("monthlyIncome")}
                   onDraftChange={(value) => updateDraft("monthlyIncome", value)}
@@ -408,13 +420,13 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="monthly-debt">Existing monthly debt expenses</Label>
+                <Label htmlFor="monthly-debt">現有每月債務支出</Label>
                 <DraftInput
                   id="monthly-debt"
-                  label="Existing monthly debt expenses"
+                  label="現有每月債務支出"
                   inputMode="numeric"
                   draft={state.drafts.monthlyDebtExpenses}
-                  placeholder="Optional"
+                  placeholder="選填"
                   isInvalid={state.editingField === "monthlyDebtExpenses" && activeDraftIsInvalid}
                   onStartEditing={() => startEditing("monthlyDebtExpenses")}
                   onDraftChange={(value) => updateDraft("monthlyDebtExpenses", value)}
@@ -435,11 +447,9 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </div>
             <div>
               <h2 id="mortgage-results" className="text-lg font-semibold text-foreground">
-                Your estimate
+                您的預算
               </h2>
-              <p className="text-sm text-muted-foreground">
-                Indicative monthly cost and cash required.
-              </p>
+              <p className="text-sm text-muted-foreground">預算每月供款及所需現金。</p>
             </div>
           </div>
 
@@ -449,37 +459,37 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                 role="status"
                 className="rounded-md border border-border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground"
               >
-                <p className="font-semibold text-foreground">Results unavailable while editing</p>
+                <p className="font-semibold text-foreground">編輯中，暫無法顯示結果</p>
                 <p className="mt-1">
                   {activeDraftIsInvalid
-                    ? `Enter a valid ${INPUT_LABELS[state.editingField!].toLowerCase()} to continue.`
-                    : `Finish editing ${INPUT_LABELS[state.editingField!].toLowerCase()} to update your estimate.`}
+                    ? `請輸入有效的「${INPUT_LABELS[state.editingField!]}」以繼續。`
+                    : `請完成編輯「${INPUT_LABELS[state.editingField!]}」以更新預算結果。`}
                 </p>
               </div>
             ) : (
               <>
+                <ResultRow label="每月供款" value={formatMoney(result.monthlyPayment)} emphasized />
                 <ResultRow
-                  label="Monthly repayment"
-                  value={formatMoney(result.monthlyPayment)}
-                  emphasized
-                />
-                <ResultRow
-                  label="Stressed monthly repayment"
+                  label="壓力測試後每月供款"
                   value={formatMoney(result.stressedMonthlyPayment)}
                 />
-                <ResultRow label="Loan amount" value={formatMoney(result.loanAmount)} />
-                <ResultRow label="Deposit" value={formatMoney(result.deposit)} />
-                <ResultRow label="Residential stamp duty" value={formatMoney(result.stampDuty)} />
+                <ResultRow label="貸款金額" value={formatMoney(result.loanAmount)} />
+                <ResultRow label="首期" value={formatMoney(result.deposit)} />
+                <ResultRow label="住宅印花稅" value={formatMoney(result.stampDuty)} />
+                {/* Purely additive: sums calculateMortgage's already-computed
+                    deposit + stampDuty fields -- same computation and wording
+                    as PropertyDecisionActions.tsx's mortgage teaser card. */}
                 <ResultRow
-                  label="Total interest over term"
-                  value={formatMoney(result.totalInterest)}
+                  label="預計上會現金需求（首期＋印花稅）"
+                  value={formatMoney(result.deposit + result.stampDuty)}
                 />
+                <ResultRow label="全期總利息" value={formatMoney(result.totalInterest)} />
                 <ResultRow
-                  label="Debt servicing ratio"
+                  label="債務供款比率"
                   value={formatPercent(result.dsr, result.inputs.monthlyIncome !== undefined)}
                 />
                 <ResultRow
-                  label="Stressed debt servicing ratio"
+                  label="壓力測試後債務供款比率"
                   value={formatPercent(
                     result.stressedDsr,
                     result.inputs.monthlyIncome !== undefined,
@@ -493,8 +503,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             <div className="flex gap-2">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-coral" aria-hidden="true" />
               <p>
-                This is an illustration, not a lending approval. Rates, eligibility, valuation and
-                bank stress tests can change your actual offer.
+                此為參考估算，並非貸款批核。實際利率、資格審查、物業估價及銀行壓力測試結果，
+                均可能影響最終批核條件。
               </p>
             </div>
           </div>
@@ -508,57 +518,69 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="amortization-heading" className="text-xl font-semibold text-foreground">
-              Annual amortization
+              年度還款明細
             </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              How the projected balance changes over the selected term.
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">顯示所選年期內貸款餘額的預算變化。</p>
           </div>
           <span className="text-sm font-medium text-muted-foreground">
-            Total repayment:{" "}
-            {result === null ? "Unavailable while editing" : formatMoney(result.totalRepayment)}
+            總還款額： {result === null ? "編輯中無法顯示" : formatMoney(result.totalRepayment)}
           </span>
         </div>
-        <div className="mt-5 rounded-lg border border-border bg-card px-3 py-1 sm:px-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Year</TableHead>
-                <TableHead className="text-right">Opening balance</TableHead>
-                <TableHead className="text-right">Principal paid</TableHead>
-                <TableHead className="text-right">Interest paid</TableHead>
-                <TableHead className="text-right">Closing balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {result === null ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                    Finish editing to view the updated amortization schedule.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                result.amortization.map((row) => (
-                  <TableRow key={row.year}>
-                    <TableCell className="font-medium">{row.year}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(row.openingBalance)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(row.principalPaid)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(row.interestPaid)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoney(row.closingBalance)}
-                    </TableCell>
+        <Collapsible open={showAmortization} onOpenChange={setShowAmortization} className="mt-4">
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="outline" size="sm">
+              {showAmortization ? "隱藏年度還款明細" : "顯示年度還款明細"}
+              <ChevronDown
+                className={`ml-1 h-4 w-4 transition-transform duration-200 ${
+                  showAmortization ? "rotate-180" : ""
+                }`}
+                aria-hidden="true"
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-4 rounded-lg border border-border bg-card px-3 py-1 sm:px-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>年度</TableHead>
+                    <TableHead className="text-right">年初結欠</TableHead>
+                    <TableHead className="text-right">已還本金</TableHead>
+                    <TableHead className="text-right">已付利息</TableHead>
+                    <TableHead className="text-right">年末結欠</TableHead>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                </TableHeader>
+                <TableBody>
+                  {result === null ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                        請完成編輯以查看最新的還款明細。
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    result.amortization.map((row) => (
+                      <TableRow key={row.year}>
+                        <TableCell className="font-medium">{row.year}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatMoney(row.openingBalance)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatMoney(row.principalPaid)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatMoney(row.interestPaid)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {formatMoney(row.closingBalance)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </section>
 
       <section
@@ -569,40 +591,38 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-5 w-5 text-primary" aria-hidden="true" />
             <h2 id="mortgage-notes" className="font-semibold text-foreground">
-              Important notes
+              重要事項
             </h2>
           </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Residential stamp duty follows the Hong Kong scale effective 26 February 2026. Check the
-            current position with the{" "}
+            住宅印花稅按香港稅階計算，於 2026 年 2 月 26 日生效。如需核實最新稅階，請參閱{" "}
             <a
               className="font-medium text-primary underline underline-offset-4"
               href="https://www.ird.gov.hk/chi/faq/avd.htm"
               target="_blank"
               rel="noreferrer"
             >
-              Inland Revenue Department
+              稅務局
             </a>
-            .
+            。
           </p>
         </div>
         <div>
           <div className="flex items-center gap-2">
             <ExternalLink className="h-5 w-5 text-primary" aria-hidden="true" />
-            <h2 className="font-semibold text-foreground">Mortgage insurance</h2>
+            <h2 className="font-semibold text-foreground">按揭保險</h2>
           </div>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            Mortgage insurance premiums are not estimated. Review the eligibility and current
-            programme details directly with the{" "}
+            本計算機並未估算按揭保險保費，如需了解申請資格及最新計劃詳情，請直接查閱{" "}
             <a
               className="font-medium text-primary underline underline-offset-4"
               href="https://www.hkmc.com.hk/eng/our_business/mortgage_insurance_programme.html"
               target="_blank"
               rel="noreferrer"
             >
-              HKMC Mortgage Insurance Programme
+              按揭證券公司按揭保險計劃
             </a>
-            .
+            。
           </p>
         </div>
       </section>
