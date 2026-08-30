@@ -13,6 +13,8 @@ export const controlPlanePermissions = [
   "system.migrations.plan",
   "system.migrations.apply",
   "audit.read",
+  "transaction.verify",
+  "transaction.publish",
 ] as const;
 
 export type ControlPlanePermission = (typeof controlPlanePermissions)[number];
@@ -29,6 +31,8 @@ const rolePermissions: Record<StaffRole, ReadonlySet<ControlPlanePermission>> = 
     "system.jobs.retry",
     "system.jobs.cancel",
     "audit.read",
+    "transaction.verify",
+    "transaction.publish",
   ]),
   admin: new Set(controlPlanePermissions),
 };
