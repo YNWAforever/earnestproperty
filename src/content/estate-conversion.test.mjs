@@ -490,3 +490,99 @@ test("EstateMarketSnapshot renders a PSF-trend line chart fed by the real transa
   // broken, matching this repo's established "hide, don't placeholder" rule.
   assert.match(snapshot, /psfTrend\.length >= 2/);
 });
+
+// --- P4 Task 5: nearby-estate comparison table ---
+//
+// buildComparisonColumns/buildComparisonRowDefs/estateTextFigure's actual
+// 2/1/0-comparable and em-dash-formatting behaviour is proven by real
+// execution in src/components/site/estate-comparison.test.mjs (that module
+// has no JSX, so it can be imported directly under Node's native TS
+// stripping, same as estate-registry.ts/castle-peak-road.ts already are
+// elsewhere in this file). The tests here only prove the *wiring* --
+// that estate.$slug.tsx's loader/render and EstateComparisonTable.tsx
+// actually use that logic, via source-scan (this route can't be rendered
+// without a bundler/render harness, matching every other route test in
+// this file).
+
+test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 Task 5)", () => {
+  const route = read("src/routes/estate.$slug.tsx");
+
+  assert.match(
+    route,
+    /import \{\s*EstateComparisonTable,\s*type EstateComparisonRow,\s*\} from "@\/components\/site\/EstateComparisonTable";/,
+  );
+  assert.match(
+    route,
+    /import \{ findComparableEstates \} from "@\/content\/estate-registry";/,
+  );
+
+  // Up to 2 comparables, computed from the registry alone (before any DB
+  // fetch), so the "which estates are comparable" decision stays
+  // deterministic and independent of what facts happen to be in the DB.
+  assert.match(
+    route,
+    /const comparableEntries = findComparableEstates\(estate\.slug, 2\);/,
+  );
+
+  // A `null` DB record for a comparable (no row, or an unpublished row)
+  // still keeps its registry name/hasPage and simply renders every fact as
+  // "—" -- it is not dropped from the "up to 2" slots or backfilled with a
+  // third candidate.
+  assert.match(route, /const record = comparableRecords\[index\];/);
+  assert.match(route, /nameZh: entry\.nameZh,/);
+  assert.match(route, /hasPage: entry\.hasPage,/);
+
+  // The current estate's own column uses the same avgPsf conversion
+  // EstateMarketSnapshot already gets below it, so a non-numeric/zero DB
+  // value can't silently read as a real $0 psf in either component.
+  assert.match(
+    route,
+    /avgPsf: Number\(estate\.avg_saleable_psf \?\? 0\) \|\| null,/,
+  );
+
+  assert.match(route, /<EstateComparisonTable/);
+  assert.match(route, /current=\{currentComparisonRow\}/);
+  assert.match(route, /comparables=\{comparableEstates\}/);
+});
+
+test("EstateComparisonTable renders nothing for zero comparables and never links to a page that 404s (P4 Task 5)", () => {
+  const component = read("src/components/site/EstateComparisonTable.tsx");
+
+  assert.match(
+    component,
+    /import \{\s*buildComparisonColumns,\s*buildComparisonRowDefs,\s*type EstateComparisonRow,\s*\} from "\.\/estate-comparison";/,
+  );
+
+  // The "0 comparable -> section absent entirely" behaviour is gated on the
+  // real, shared buildComparisonColumns result (proven by direct execution
+  // in estate-comparison.test.mjs), not a hardcoded `true`/`false` here.
+  assert.match(
+    component,
+    /const columns = buildComparisonColumns\(current, comparables\);/,
+  );
+  assert.match(component, /if \(!columns\) return null;/);
+
+  // Every row's cell comes from the same shared row definitions -- no
+  // second, divergent formatting implementation inside the component.
+  assert.match(component, /const rows = buildComparisonRowDefs\(\);/);
+  assert.match(component, /row\.formatCell\(estate\)/);
+
+  // A comparable only links to its detail page when hasPage is true -- the
+  // current estate (index 0) never gets a link to itself, and no other
+  // column links unconditionally.
+  assert.match(component, /index > 0 && estate\.hasPage/);
+  assert.match(component, /to="\/estate\/\$slug"/);
+});
+
+test("estate-comparison.ts is a plain .ts module with no JSX, importable directly under Node's native TS stripping (P4 Task 5)", () => {
+  const source = read("src/components/site/estate-comparison.ts");
+  // No React import and no JSX-only syntax -- same "plain data/logic module"
+  // discipline estate-registry.ts documents for itself, which is exactly
+  // what lets estate-comparison.test.mjs import and execute this file
+  // directly instead of only source-scanning it.
+  assert.doesNotMatch(source, /from "react"/i);
+  assert.doesNotMatch(source, /React\./);
+  assert.match(source, /export function buildComparisonColumns/);
+  assert.match(source, /export function buildComparisonRowDefs/);
+  assert.match(source, /export function estateTextFigure/);
+});

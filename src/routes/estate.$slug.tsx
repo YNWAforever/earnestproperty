@@ -8,6 +8,10 @@ import {
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { DataNote } from "@/components/layout/DataNote";
+import {
+  EstateComparisonTable,
+  type EstateComparisonRow,
+} from "@/components/site/EstateComparisonTable";
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
@@ -15,6 +19,7 @@ import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
+import { findComparableEstates } from "@/content/estate-registry";
 import { getEstatePageContent } from "@/content/estate-pages";
 import { shamTsengSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
@@ -37,12 +42,42 @@ export const Route = createFileRoute("/estate/$slug")({
   loader: async ({ params }) => {
     const estate = await fetchEstateBySlug(params.slug);
     if (!estate) throw notFound();
-    const [faqs, latestListings, transactions] = await Promise.all([
-      fetchFaqs(`estate:${params.slug}`),
-      fetchListingsForEstate(params.slug, 6),
-      fetchEstateTransactions(estate.id, 8),
-    ]);
-    return { estate, faqs, latestListings, transactions };
+    // Task 5 (P4 plan): up to 2 registry entries sharing this estate's real
+    // districtSlug/corridorSegment -- registry-only, deterministic, and safe
+    // to compute even for the 3 unknown-district estates (returns []
+    // instead of crashing; see findComparableEstates's own doc comment).
+    const comparableEntries = findComparableEstates(estate.slug, 2);
+    const [faqs, latestListings, transactions, comparableRecords] =
+      await Promise.all([
+        fetchFaqs(`estate:${params.slug}`),
+        fetchListingsForEstate(params.slug, 6),
+        fetchEstateTransactions(estate.id, 8),
+        Promise.all(
+          comparableEntries.map((entry) => fetchEstateBySlug(entry.slug)),
+        ),
+      ]);
+    // A comparable's real facts (avg PSF / units / year / developer) live in
+    // the DB, not the registry -- combine each entry with its fetched record
+    // here so the route/component only ever deal with one flat shape. A
+    // `null` record (e.g. an unpublished or fact-less comparable) still
+    // keeps its registry name and simply renders every fact as "—" via
+    // EstateComparisonTable's estateFigure-based formatting -- it is not
+    // dropped from the "up to 2" slots or backfilled with a third candidate.
+    const comparableEstates: EstateComparisonRow[] = comparableEntries.map(
+      (entry, index) => {
+        const record = comparableRecords[index];
+        return {
+          slug: entry.slug,
+          nameZh: entry.nameZh,
+          hasPage: entry.hasPage,
+          avgPsf: record ? Number(record.avg_saleable_psf ?? 0) || null : null,
+          totalUnits: record?.total_units ?? null,
+          yearCompleted: record?.year_completed ?? null,
+          developer: record?.developer ?? null,
+        };
+      },
+    );
+    return { estate, faqs, latestListings, transactions, comparableEstates };
   },
   head: ({ loaderData }) => {
     const slug = loaderData?.estate.slug as keyof typeof estateSeo | undefined;
@@ -87,14 +122,29 @@ export const Route = createFileRoute("/estate/$slug")({
 });
 
 function EstatePage() {
-  const { estate, faqs, latestListings, transactions } = Route.useLoaderData() as {
-    estate: EstateDetail;
-    faqs: FaqItem[];
-    latestListings: ListingRow[];
-    transactions: EstateTransaction[];
-  };
+  const { estate, faqs, latestListings, transactions, comparableEstates } =
+    Route.useLoaderData() as {
+      estate: EstateDetail;
+      faqs: FaqItem[];
+      latestListings: ListingRow[];
+      transactions: EstateTransaction[];
+      comparableEstates: EstateComparisonRow[];
+    };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
+  // Task 5 (P4 plan): the current estate's own comparison-table column.
+  // avgPsf mirrors the exact conversion EstateMarketSnapshot already gets
+  // below (`Number(x ?? 0) || null`), so a non-numeric/zero DB value can't
+  // silently read as a real $0 psf.
+  const currentComparisonRow: EstateComparisonRow = {
+    slug: estate.slug,
+    nameZh: seo?.nameZh ?? estate.name_zh,
+    hasPage: true,
+    avgPsf: Number(estate.avg_saleable_psf ?? 0) || null,
+    totalUnits: estate.total_units ?? null,
+    yearCompleted: estate.year_completed ?? null,
+    developer: estate.developer ?? null,
+  };
   type VisibleFaq = { question: string; answer: string };
   const visibleFaqs: VisibleFaq[] = renderableFaqs([
     ...(content?.faqs ?? []),
@@ -333,6 +383,17 @@ function EstatePage() {
           </div>
         </section>
       )}
+
+      {/* Task 5 (P4 plan): nearby-estate comparison. EstateComparisonTable
+          itself renders nothing when comparableEstates is empty -- placed
+          after the transport/school-net context and before the listings
+          grid, so a reader who's just learned where this estate sits sees
+          how it stacks up against its neighbours before moving on to actual
+          inventory. */}
+      <EstateComparisonTable
+        current={currentComparisonRow}
+        comparables={comparableEstates}
+      />
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">

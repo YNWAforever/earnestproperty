@@ -6,6 +6,7 @@ import {
   estateRegistry,
   estateSlugsForCorridorSegment,
   estatesWithPage,
+  findComparableEstates,
   getEstateEntry,
 } from "./estate-registry.ts";
 import { coreEstates } from "./core-estates.ts";
@@ -316,4 +317,75 @@ test("estate_expansion migration: every one of the 17 inserted rows sets publish
   // acceptance criterion).
   const insertedSlugs = rowLines.map((line) => line.match(/^\('([a-z0-9-]+)'/)?.[1]);
   assert.deepEqual(insertedSlugs.slice().sort(), P4_EXPANSION_SLUGS.slice().sort());
+});
+
+// --- P4 Task 5: findComparableEstates (nearby-estate comparison table) ---
+
+test("findComparableEstates never returns the estate itself, and is deterministic across repeated calls", () => {
+  const first = findComparableEstates("bellagio", 2);
+  const second = findComparableEstates("bellagio", 2);
+  assert.deepEqual(
+    first.map((entry) => entry.slug),
+    second.map((entry) => entry.slug),
+    "the same input must yield the same output every time -- required for a stable table/test, not random",
+  );
+  for (const entry of first) {
+    assert.notEqual(
+      entry.slug,
+      "bellagio",
+      "an estate must never compare against itself",
+    );
+  }
+});
+
+test("findComparableEstates matches on districtSlug/corridorSegment and respects the limit", () => {
+  // bellagio shares districtSlug "sham-tseng" and corridorSegment
+  // "sham-tseng" with the other 4 hasPage:true estates -- registry array
+  // order (not sorted, not random) is hong-kong-garden, sea-crest-villa,
+  // lido-garden, rhine-garden, so limit=2 takes the first two of those.
+  assert.deepEqual(
+    findComparableEstates("bellagio", 2).map((entry) => entry.slug),
+    ["hong-kong-garden", "sea-crest-villa"],
+  );
+  assert.deepEqual(
+    findComparableEstates("bellagio", 1).map((entry) => entry.slug),
+    ["hong-kong-garden"],
+  );
+  assert.deepEqual(findComparableEstates("bellagio", 0), []);
+});
+
+test("findComparableEstates returns [] rather than throwing for an unknown slug", () => {
+  assert.deepEqual(findComparableEstates("not-a-real-slug", 2), []);
+});
+
+test("findComparableEstates returns [] for an entry whose districtSlug and corridorSegment are both null, without crashing (P4 Task 2's 3 unknown-district estates)", () => {
+  const entry = getEstateEntry("tai-wah-hin");
+  assert.equal(entry.districtSlug, null);
+  assert.equal(entry.corridorSegment, null);
+  assert.deepEqual(findComparableEstates("tai-wah-hin", 2), []);
+});
+
+test("findComparableEstates matches purely on districtSlug when corridorSegment is null for the whole group (P4 Task 2's 12 青山公路 estates)", () => {
+  // All 12 castle-peak-road estates share districtSlug "castle-peak-road"
+  // and corridorSegment null (deliberately, per D2 -- see each entry's own
+  // comment) -- this proves the sparse, corridorSegment-less majority of
+  // the registry still produces a sensible, non-crashing match via the
+  // districtSlug half of the OR.
+  const result = findComparableEstates("mun-ming-shan", 2);
+  assert.equal(result.length, 2);
+  for (const entry of result) {
+    assert.equal(entry.districtSlug, "castle-peak-road");
+    assert.notEqual(entry.slug, "mun-ming-shan");
+  }
+});
+
+test("findComparableEstates matches purely on districtSlug for a group of exactly 2 (ting-kau)", () => {
+  // hoi-wan-hin and chun-wong-kui are the only two "ting-kau"-district
+  // entries and both carry corridorSegment: null -- exactly one real
+  // comparable exists, so the result is length 1, not padded to 2.
+  const result = findComparableEstates("hoi-wan-hin", 2);
+  assert.deepEqual(
+    result.map((entry) => entry.slug),
+    ["chun-wong-kui"],
+  );
 });

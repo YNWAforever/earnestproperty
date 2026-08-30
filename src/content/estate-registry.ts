@@ -433,3 +433,46 @@ export function estateSlugsForCorridorSegment(
     .filter((entry) => entry.corridorSegment === segment)
     .map((entry) => entry.slug);
 }
+
+/**
+ * P4 Task 5: up to `limit` other registry entries "near" `slug` -- sharing
+ * its real `districtSlug` (the `estates` table's DB join key) or its
+ * `corridorSegment` (strict, DB-joinable corridor inventory), whichever
+ * matches. Always excludes `slug` itself -- an estate never compares against
+ * itself. Order is the registry array's own order (stable, not random), so
+ * the same input always yields the same output -- required for a
+ * deterministic comparison table, not a cosmetic nicety.
+ *
+ * Most of the registry is sparse right now (17 of its 22 entries carry
+ * `corridorSegment: null`, and 3 of those also carry `districtSlug: null` --
+ * see each entry's own comment). An unknown slug, or an entry whose both
+ * fields are `null`, simply matches nothing and returns `[]`; this never
+ * throws, unlike `getEstateEntry`, because a UI comparison section degrading
+ * to "nothing to show" is the correct behaviour here, not a bug to surface
+ * loudly.
+ */
+export function findComparableEstates(
+  slug: string,
+  limit: number,
+): EstateRegistryEntry[] {
+  const current = estateRegistry.find((entry) => entry.slug === slug);
+  if (!current) return [];
+
+  return estateRegistry
+    .filter((entry) => entry.slug !== slug)
+    .filter((entry) => isComparableEntry(current, entry))
+    .slice(0, limit);
+}
+
+function isComparableEntry(
+  current: EstateRegistryEntry,
+  entry: EstateRegistryEntry,
+): boolean {
+  const sameDistrict =
+    current.districtSlug !== null &&
+    entry.districtSlug === current.districtSlug;
+  const sameCorridor =
+    current.corridorSegment !== null &&
+    entry.corridorSegment === current.corridorSegment;
+  return sameDistrict || sameCorridor;
+}
