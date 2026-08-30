@@ -1,12 +1,14 @@
-# P0 of the frontend revamp (docs/superpowers/plans/2026-08-28-frontend-revamp.md): the
-# first CI gate this repo has had beyond migration-drift.yml. Runs on every PR and push
-# to main so a regression is caught before merge instead of found in production.
+# Added in P0 of the frontend revamp (docs/superpowers/plans/2026-08-28-frontend-revamp.md):
+# the first CI gate this repo has had beyond migration-drift.yml. Runs on every PR and
+# push to main so a regression is caught before merge instead of found in production.
 #
-# Two steps below are ratchets, not zero-defect gates, and seven test steps are marked
-# continue-on-error: all of that is pre-existing breakage recorded at P0 baseline
-# (docs/superpowers/reports/2026-08-28-revamp-baseline.md), not something this phase
-# fixes as a side effect. Each is commented with why. Raise a ratchet baseline, or drop
-# a continue-on-error, only when a PR's own description explains and justifies it.
+# Lint and typecheck below are ratchets against a recorded baseline, not zero-defect
+# gates -- see the comment on the lint step for why. The seven pre-existing test
+# failures recorded at P0 baseline (docs/superpowers/reports/2026-08-28-revamp-baseline.md)
+# that used to run continue-on-error here were all fixed by 2026-08-30 (PRs #81, #82,
+# #83, and one folded into P4's own merge prep) -- every test:* script below now runs
+# as a real gate. Add continue-on-error back only for a new, genuinely pre-existing
+# failure a PR's own description explains and justifies, not as a default.
 name: CI
 
 on:
@@ -40,76 +42,28 @@ jobs:
           bun-version: 1.3.12
       - run: npm ci
 
-      # Ratchet, not a zero-error gate. At P0, `npm run lint` reported 6185 problems
-      # across 350 files, 6182 of them "prettier/prettier" formatting drift. Root
-      # cause found later (see fix/prettier-config-resolution, not yet merged into
-      # this branch's history): package.json's top-level "prettier" key shadows
-      # .prettierrc entirely rather than merging with it, so Prettier silently
-      # resolves to its default printWidth: 80 instead of this repo's documented
-      # 100-col convention -- both for the bare CLI and eslint-plugin-prettier's
-      # internal resolution. (The prior comment here attributed this to a pinned-
-      # vs-resolved prettier version mismatch; that was a wrong hypothesis from
-      # before the real cause was found -- correcting it now rather than repeating
-      # it.) Reformatting every drifted file is a mechanical, out-of-scope diff for
-      # a phase whose own rule is "ships no behaviour change" -- this fails only if
-      # a PR adds MORE problems than the recorded baseline, real rule violations
-      # included.
-      #
-      # Raised to 6186 at the end of P1 (design-system foundation): the new
-      # src/components/layout/Section.tsx carries one unavoidable
-      # react-refresh/only-export-components warning (it exports sectionVariants
-      # alongside the component, same as ui/badge.tsx's badgeVariants -- but
-      # ui/**/* has an eslint.config.js override silencing exactly this pattern,
-      # and extending that override to layout/**/* is blocked by this repo's
-      # config-protection Claude Code hook, which refuses any edit to an existing
-      # eslint.config.js regardless of intent). Once a human lifts that hook and
-      # the override is extended, drop this back to 6185.
-      #
-      # Raised to 6209 at the end of P2 (data trust): the 4 real rule violations
-      # (3 no-explicit-any, 1 react-refresh/only-export-components) are unchanged
-      # from the P1 baseline -- the +23 is entirely new prettier/prettier noise
-      # from P2's own new/edited lines being correctly formatted at 100 cols (per
-      # CLAUDE.md) but linted under this branch's still-broken 80-col-resolving
-      # config, since fix/prettier-config-resolution hasn't merged into this stack
-      # yet. This baseline should drop sharply -- likely back toward P1's own
-      # 6186, or lower -- once that fix lands and this branch rebases onto it;
-      # don't treat 6209 as a new steady-state to defend.
-      #
-      # Raised to 6231 during P3 Task 5 (listing_alerts migration + notify-me
-      # form): confirmed via `npx eslint . --format json` before/after this
-      # task's own diff that the same 4 real rule violations are still the
-      # only non-prettier problems -- the +22 (6210 measured on P3 tasks 1-4
-      # alone, already 1 over the recorded 6209, plus +21 from this task) is
-      # again entirely prettier/prettier noise from this task's own new files
-      # (listing-alerts.js/.test.mjs) and new lines in already-100-col-correct
-      # files (admin-data.ts, listings.tsx, listings.contract.test.mjs), same
-      # root cause as P2's entry above. Still not a new steady-state to defend.
-      #
-      # Raised to 6263 at the end of P3 (search and property detail): the same
-      # 4 real rule violations are still the only non-prettier problems
-      # (confirmed via `npx eslint . --format json`, verified stat-isolated
-      # per-task by every task's own review this phase, e.g. by checking out
-      # each pre-commit file version and re-linting). The +32 is prettier/
-      # prettier noise from Tasks 6-8's new/edited lines (property.$listingNo.tsx's
-      # gallery/status rework, listings.tsx's mortgage/transport/homepage
-      # additions) under this branch's still-unmerged prettier-config fix
-      # (fix/prettier-config-resolution, PR #76). Same as every prior entry:
-      # not a new steady-state to defend -- this whole ratchet collapses back
-      # toward its real, much lower value once that fix merges and this stack
-      # rebases onto it.
-      #
-      # Raised to 6321 at the end of P4 (areas, corridor, estate expansion):
-      # the same 4 real rule violations are still the only non-prettier
-      # problems (confirmed via `npx eslint . --format json`, verified
-      # per-task throughout this phase by isolating each commit's own diff
-      # against its parent). The +58 is prettier/prettier noise from Tasks
-      # 1-8's new files (estate-registry.ts, estate-comparison.ts,
-      # corridor-hub.ts, and their tests) and new lines in existing files,
-      # same root cause and same "not a new steady-state" caveat as every
-      # prior entry above.
+      # Ratchet, not a zero-error gate. At P0, `npm run lint` reported 6185 problems,
+      # 6182 of them "prettier/prettier" formatting drift caused by package.json's
+      # top-level "prettier" key shadowing .prettierrc entirely (Prettier stops at
+      # the first config source it finds, so it silently resolved its default
+      # printWidth: 80 instead of this repo's documented 100-col convention, for
+      # both the bare CLI and eslint-plugin-prettier's internal resolution). This
+      # ratchet climbed to 6321 across P0-P4 of the frontend revamp
+      # (docs/superpowers/plans/2026-08-28-frontend-revamp.md) as each phase's own
+      # correctly-100-col code kept getting linted under the wrong resolved width --
+      # never new real violations, confirmed at every phase boundary by isolating
+      # each commit's own diff. Root cause fixed in PR #76
+      # (fix/prettier-config-resolution, merged 2026-08-29); the whole stack was
+      # reformatted under the corrected config before P4's final merge (PR #80,
+      # commit c26ffdc). **Reset to the real, current baseline: 381 problems (377
+      # prettier/prettier -- pre-existing drift in files this revamp never touched
+      # -- plus the same 4 real violations, 3 no-explicit-any + 1
+      # react-refresh/only-export-components, unchanged since P0).** Raise this
+      # again only when a PR's own description explains and justifies it, the same
+      # discipline every phase above followed.
       - name: Lint (ratchet against recorded baseline)
         env:
-          ESLINT_BASELINE: 6321
+          ESLINT_BASELINE: 381
         run: |
           set +e
           npx eslint . --format json > eslint-report.json
@@ -161,57 +115,24 @@ jobs:
       # list on the 深井 district page).
       - run: npm run test:district
 
-      # Pre-existing failure: expects src/routes/api.youtube-sync.tsx; the actual
-      # route file has a different extension/name. See baseline report.
       - run: npm run test:blog
-        continue-on-error: true
-
       - run: npm run test:videos
       - run: npm run test:homepage
       - run: npm run test:mls
       - run: npm run test:listing-search
       - run: npm run test:cron
 
-      # Pre-existing failure: src/config/site.test.mjs "videos page orders CMS videos
-      # above listing videos" assertion. See baseline report.
       - run: npm run test:contact
-        continue-on-error: true
-
-      # Pre-existing failure: estate-conversion.test.mjs "featured listings section
-      # should carry its eyebrow" assertion. See baseline report.
       - run: npm run test:estate-conversion
-        continue-on-error: true
-
       - run: npm run test:neon-auth
       - run: npm run test:command-center
       - run: npm run test:woztell
       - run: npm run test:operations
 
-      # Pre-existing failure: MIGRATION_VERSIONS manifest is missing
-      # 20260822120000_whatsapp_audience_segment_link.sql. Real drift -- fix by
-      # updating the manifest, not by loosening this check. See baseline report.
       - run: npm run test:control-plane
-        continue-on-error: true
-
-      # Pre-existing failure: admin-team.contract.test.mjs fixture dates
-      # (invitationExpiresAt 2026-08-17) are now in the past, so the computed
-      # invitation state legitimately differs from the hardcoded expectation.
-      # See baseline report.
       - run: npm run test:team
-        continue-on-error: true
-
-      # Pre-existing failure: shares src/config/site.test.mjs with test:contact
-      # above (same video-ordering assertion). See baseline report.
       - run: npm run test:property-experience
-        continue-on-error: true
-
-      # Pre-existing failure: ai-contract.test.mjs's secret-scan regex flags an
-      # error-message string in neon-lock.mjs that names an env var ("...is
-      # required") rather than leaking its value -- a false positive. See baseline
-      # report.
       - run: npm run test:content-copilot
-        continue-on-error: true
-
       - run: npm run test:cms
       - run: npm run test:youtube-sync
       - run: npm run test:migration
