@@ -129,6 +129,11 @@ export type EstateRecord = {
   avg_saleable_psf: number | string | null;
   hero_image: string | null;
   facilities: string[] | null;
+  // DR-10: previously written by the admin CMS estate form but never read on
+  // the public site. `fetchEstateBySlug`'s SQL is `SELECT *`, so both columns
+  // already arrive on every row -- this only widens the type to expose them.
+  seo_title: string | null;
+  seo_description: string | null;
 };
 
 export async function fetchEstateBySlug(slug: string): Promise<EstateRecord | null> {

@@ -45,10 +45,16 @@ export const Route = createFileRoute("/estate/$slug")({
     const seo = slug ? estateSeo[slug] : undefined;
     return {
       meta: [
-        { title: seo?.title ?? `${loaderData?.estate.name_zh ?? "屋苑"}｜晉誠地產屋苑專頁` },
+        {
+          title:
+            loaderData?.estate.seo_title ??
+            seo?.title ??
+            `${loaderData?.estate.name_zh ?? "屋苑"}｜晉誠地產屋苑專頁`,
+        },
         {
           name: "description",
           content:
+            loaderData?.estate.seo_description ??
             seo?.description ??
             `${loaderData?.estate.name_zh ?? ""} ${loaderData?.estate.total_units ?? ""} 個單位，平均實呎 $${loaderData?.estate.avg_saleable_psf ?? ""}。即時放盤、成交、FAQ。`,
         },

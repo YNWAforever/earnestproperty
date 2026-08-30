@@ -1,9 +1,52 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import ts from "typescript";
 
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+}
+
+// Extracts and actually executes estate.$slug.tsx's head() function (mirrors
+// the extraction pattern already established in
+// src/routes/property.listing-detail.contract.test.mjs) so Task 3's
+// seo_title/seo_description override chain (DR-10) is proven by real
+// execution, not just a string match against the source text.
+function transpileAndRun(snippet) {
+  const { outputText } = ts.transpileModule(snippet, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+    },
+  });
+  const exportsObj = {};
+  new Function("exports", outputText)(exportsObj);
+  return exportsObj;
+}
+
+function buildEstateHead(routeSource) {
+  const startNeedle = "head: ({ loaderData }) => {";
+  const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
+  assert.ok(bodyStart > startNeedle.length - 1, "expected the route head()");
+  const endMarker = "\n  },\n  errorComponent:";
+  const bodyEnd = routeSource.indexOf(endMarker, bodyStart);
+  assert.ok(bodyEnd !== -1, "expected head() to close before errorComponent");
+  const body = routeSource.slice(bodyStart, bodyEnd);
+
+  const snippet = `
+const estateSeo = {
+  "with-seo": { title: "registry title", description: "registry description" },
+  "no-seo": {},
+};
+function canonicalLink(path) {
+  return { rel: "canonical", href: "https://example.test" + path };
+}
+function head({ loaderData }) {
+  ${body}
+}
+exports.head = head;
+`;
+  return transpileAndRun(snippet).head;
 }
 
 function findMatchingBrace(source, start) {
@@ -209,6 +252,65 @@ test("estate route renders conversion seo sections", () => {
   assert.match(route, /TrustProofPanel/);
   assert.match(route, /優點/);
   assert.match(route, /要留意/);
+});
+
+test("EstateRecord includes seo_title/seo_description (DR-10) so the head() override below is type-safe", () => {
+  const queries = read("src/lib/queries.ts");
+  const typeStart = queries.indexOf("export type EstateRecord = {");
+  assert.notEqual(typeStart, -1, "expected EstateRecord type in queries.ts");
+  const typeEnd = queries.indexOf("};", typeStart);
+  const typeBody = queries.slice(typeStart, typeEnd);
+  assert.match(typeBody, /seo_title: string \| null;/);
+  assert.match(typeBody, /seo_description: string \| null;/);
+});
+
+test("estate head() prefers estate.seo_title/seo_description over the estateSeo registry entry, which stays the fallback (DR-10)", () => {
+  const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
+
+  const overridden = head({
+    loaderData: {
+      estate: {
+        slug: "with-seo",
+        name_zh: "測試屋苑",
+        seo_title: "override title",
+        seo_description: "override description",
+        total_units: 100,
+        avg_saleable_psf: 12000,
+      },
+    },
+  });
+  assert.equal(overridden.meta[0].title, "override title");
+  assert.equal(overridden.meta[1].content, "override description");
+
+  const fallsBackToRegistry = head({
+    loaderData: {
+      estate: {
+        slug: "with-seo",
+        name_zh: "測試屋苑",
+        seo_title: null,
+        seo_description: null,
+        total_units: 100,
+        avg_saleable_psf: 12000,
+      },
+    },
+  });
+  assert.equal(fallsBackToRegistry.meta[0].title, "registry title");
+  assert.equal(fallsBackToRegistry.meta[1].content, "registry description");
+
+  const fallsBackToDefault = head({
+    loaderData: {
+      estate: {
+        slug: "no-seo",
+        name_zh: "測試屋苑",
+        seo_title: null,
+        seo_description: null,
+        total_units: 88,
+        avg_saleable_psf: 9000,
+      },
+    },
+  });
+  assert.equal(fallsBackToDefault.meta[0].title, "測試屋苑｜晉誠地產屋苑專頁");
+  assert.match(fallsBackToDefault.meta[1].content, /測試屋苑 88 個單位，平均實呎 \$9000/);
 });
 
 test("public search and homepage expose lead capture paths", () => {
