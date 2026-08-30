@@ -54,9 +54,13 @@ for (const routePath of LEGAL_ROUTES) {
     // The date fields must stay a placeholder (e.g. "[待補]") until legal
     // sign-off supplies a real date -- this guards against someone "helpfully"
     // filling in today's date as if it were an authoritative effective date.
+    // Whitespace-tolerant around the separators: this repo's own
+    // src/content/policy-rates.ts (same phase) writes an effective date as
+    // "2026 年 2 月 26 日" -- a naive \d{4}年\d{1,2}月 pattern would miss that
+    // exact, already-established convention if someone reused it here.
     assert.doesNotMatch(
       source,
-      /(生效日期|最後更新日期)[^\n]{0,20}\d{4}[-/年]\d{1,2}[-/月]\d{1,2}/,
+      /(生效日期|最後更新日期)[^\n]{0,20}\d{4}\s*[-/年]\s*\d{1,2}\s*[-/月]\s*\d{1,2}/,
       `${routePath}'s date fields must stay placeholders, not a fabricated real date`,
     );
   });
