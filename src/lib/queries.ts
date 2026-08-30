@@ -15,6 +15,7 @@ import {
   fetchNeonPropertyByLegacyDetailId,
   fetchNeonPropertyByListingNo,
   fetchNeonPublishedArticles,
+  fetchNeonRecentTransactions,
   fetchNeonSimilarListings,
   searchNeonListings,
 } from "@/lib/neon/public-data";
@@ -22,11 +23,10 @@ import type {
   NeonEstateOption,
   NeonListingSort,
   NeonPropertyRow,
+  NeonTransactionDealType,
+  NeonTransactionRow,
 } from "@/lib/neon/public-data.types";
-import {
-  corridorRegionScope,
-  isWithinCorridorRegion,
-} from "@/content/castle-peak-road";
+import { corridorRegionScope, isWithinCorridorRegion } from "@/content/castle-peak-road";
 import { estateRegistry } from "@/content/estate-registry";
 
 /**
@@ -36,9 +36,7 @@ import { estateRegistry } from "@/content/estate-registry";
  */
 const ESTATE_DB_SLUG_FALLBACKS: Record<string, string> = Object.fromEntries(
   estateRegistry
-    .filter((entry): entry is typeof entry & { legacySlug: string } =>
-      Boolean(entry.legacySlug),
-    )
+    .filter((entry): entry is typeof entry & { legacySlug: string } => Boolean(entry.legacySlug))
     .map((entry) => [entry.slug, entry.legacySlug]),
 );
 
@@ -52,16 +50,11 @@ function canonicalEstateSlug(dbSlug: string) {
 function estateSlugCandidates(slug: string) {
   const canonical = canonicalEstateSlug(slug);
   return Array.from(
-    new Set(
-      [slug, canonical, ESTATE_DB_SLUG_FALLBACKS[canonical]].filter(Boolean),
-    ),
+    new Set([slug, canonical, ESTATE_DB_SLUG_FALLBACKS[canonical]].filter(Boolean)),
   );
 }
 
-function withCanonicalSlug<T extends { slug?: string }>(
-  estate: T,
-  requestedSlug?: string,
-): T {
+function withCanonicalSlug<T extends { slug?: string }>(estate: T, requestedSlug?: string): T {
   return {
     ...estate,
     slug: requestedSlug ?? canonicalEstateSlug(estate.slug ?? ""),
@@ -109,9 +102,7 @@ export async function fetchEstates(): Promise<EstateSummary[]> {
   return fetchEstatesByDistrict("sham-tseng");
 }
 
-export async function fetchEstatesByDistrict(
-  districtSlug: string,
-): Promise<EstateSummary[]> {
+export async function fetchEstatesByDistrict(districtSlug: string): Promise<EstateSummary[]> {
   const rows = await fetchNeonEstates({ data: { districtSlug } });
   return (rows as EstateSummary[])
     .map((estate) => withCanonicalSlug(estate))
@@ -153,16 +144,11 @@ export type EstateRecord = {
   verified_at: string | null;
 };
 
-export async function fetchEstateBySlug(
-  slug: string,
-): Promise<EstateRecord | null> {
+export async function fetchEstateBySlug(slug: string): Promise<EstateRecord | null> {
   for (const candidate of estateSlugCandidates(slug)) {
     const estate = await fetchNeonEstateBySlug({ data: { slug: candidate } });
     if (estate) {
-      return withCanonicalSlug(
-        estate as EstateRecord,
-        canonicalEstateSlug(slug),
-      );
+      return withCanonicalSlug(estate as EstateRecord, canonicalEstateSlug(slug));
     }
   }
   return null;
@@ -284,9 +270,7 @@ export type CorridorInventory = {
 };
 
 function cleanCorridorTerms(values: string[]) {
-  return Array.from(
-    new Set(values.map((value) => value.trim()).filter(Boolean)),
-  );
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
 function clampCorridorLimit(value: number | undefined) {
@@ -299,9 +283,7 @@ function normalizeCorridorInventoryInput(
 ): Required<CorridorInventoryAliasInput> {
   return {
     districtSlugs: cleanCorridorTerms(input.districtSlugs),
-    estateSlugs: cleanCorridorTerms(input.estateSlugs).flatMap(
-      estateSlugCandidates,
-    ),
+    estateSlugs: cleanCorridorTerms(input.estateSlugs).flatMap(estateSlugCandidates),
     textAliases: cleanCorridorTerms(input.textAliases),
     limit: clampCorridorLimit(input.limit),
   };
@@ -309,9 +291,7 @@ function normalizeCorridorInventoryInput(
 
 function hasCorridorAliases(input: Required<CorridorInventoryAliasInput>) {
   return (
-    input.districtSlugs.length > 0 ||
-    input.estateSlugs.length > 0 ||
-    input.textAliases.length > 0
+    input.districtSlugs.length > 0 || input.estateSlugs.length > 0 || input.textAliases.length > 0
   );
 }
 
@@ -413,12 +393,8 @@ export async function fetchCorridorInventoryForAliases(
   return {
     saleTotal: result.saleTotal,
     rentTotal: result.rentTotal,
-    saleRows: dedupeListings(
-      (result.saleRows as ListingRow[]).filter(withinCorridorScope),
-    ),
-    rentRows: dedupeListings(
-      (result.rentRows as ListingRow[]).filter(withinCorridorScope),
-    ),
+    saleRows: dedupeListings((result.saleRows as ListingRow[]).filter(withinCorridorScope)),
+    rentRows: dedupeListings((result.rentRows as ListingRow[]).filter(withinCorridorScope)),
   };
 }
 
@@ -426,9 +402,7 @@ export async function searchListings(f: ListingFilters): Promise<{
   rows: ListingRow[];
   total: number;
 }> {
-  const candidates = f.estateSlug
-    ? estateSlugCandidates(f.estateSlug)
-    : [undefined];
+  const candidates = f.estateSlug ? estateSlugCandidates(f.estateSlug) : [undefined];
   let lastResult: Awaited<ReturnType<typeof searchNeonListings>> | null = null;
 
   for (const estateSlug of candidates) {
@@ -484,17 +458,11 @@ export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
 }
 
 export async function fetchVideosPageData() {
-  const [cmsVideos, listingVideos] = await Promise.all([
-    fetchCmsVideos(),
-    fetchVideoListings(12),
-  ]);
+  const [cmsVideos, listingVideos] = await Promise.all([fetchCmsVideos(), fetchVideoListings(12)]);
   return { cmsVideos, listingVideos };
 }
 
-export async function fetchListingsForEstate(
-  estateSlug: string,
-  limit = 6,
-): Promise<ListingRow[]> {
+export async function fetchListingsForEstate(estateSlug: string, limit = 6): Promise<ListingRow[]> {
   for (const candidate of estateSlugCandidates(estateSlug)) {
     const rows = (await fetchNeonListingsForEstate({
       data: { estateSlug: candidate, limit },
@@ -504,10 +472,7 @@ export async function fetchListingsForEstate(
   return [];
 }
 
-export async function fetchListingsForAgent(
-  agentId: string,
-  limit = 6,
-): Promise<ListingRow[]> {
+export async function fetchListingsForAgent(agentId: string, limit = 6): Promise<ListingRow[]> {
   const rows = (await fetchNeonListingsForAgent({
     data: { agentId, limit },
   })) as ListingRow[];
@@ -571,10 +536,7 @@ export async function fetchEstateOptions() {
   // dropdown options with the same value and the same React key. Prefer the
   // already-canonical row so the surviving option is the one the rest of the
   // app resolves against.
-  const byCanonicalSlug = new Map<
-    string,
-    ReturnType<typeof withCanonicalSlug<NeonEstateOption>>
-  >();
+  const byCanonicalSlug = new Map<string, ReturnType<typeof withCanonicalSlug<NeonEstateOption>>>();
   for (const estate of estates as NeonEstateOption[]) {
     const option = withCanonicalSlug(estate);
     const isAlreadyCanonical = estate.slug === option.slug;
@@ -610,30 +572,43 @@ export async function fetchArticleBySlug(slug: string) {
   return fetchNeonArticleBySlug({ data: { slug } });
 }
 
-export type RecentTransaction = DistrictTransaction & {
-  districtSlug: string;
+export type RecentTransaction = NeonTransactionRow;
+
+export type RecentTransactionFilters = {
+  estateSlug?: string;
+  districtSlug?: string;
+  /** "all" (the default) applies no deal_type predicate. */
+  dealType?: NeonTransactionDealType | "all";
+  /** "YYYY-MM" -- bounds deal_date to that calendar month. */
+  month?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  limit?: number;
 };
 
+/**
+ * Backs /transactions. Unlike fetchDistrictTransactions/
+ * fetchEstateTransactions above (which stay scoped to their own existing
+ * callers), this queries every district in one round trip via a dedicated
+ * server query (fetchRecentTransactions in public-data.server.ts) that
+ * accepts real filters and already applies the published/verification_state
+ * gate -- see that function's own comment. Replaces the previous
+ * implementation, which looped over three hardcoded district slugs and
+ * merged/sorted/sliced the results client-side with no filter support.
+ */
 export async function fetchRecentTransactions(
-  limit = 20,
+  filters: RecentTransactionFilters = {},
 ): Promise<RecentTransaction[]> {
-  const districtSlugs = ["sham-tseng", "ting-kau", "tsuen-wan"];
-  const rows = await Promise.all(
-    districtSlugs.map(async (districtSlug) => {
-      const transactions = await fetchDistrictTransactions(districtSlug, 12);
-      return transactions.map((transaction) => ({
-        ...transaction,
-        districtSlug,
-      }));
-    }),
-  );
-
-  return rows
-    .flat()
-    .sort((a, b) => {
-      const left = a.deal_date ? new Date(a.deal_date).getTime() : 0;
-      const right = b.deal_date ? new Date(b.deal_date).getTime() : 0;
-      return right - left;
-    })
-    .slice(0, limit);
+  const rows = await fetchNeonRecentTransactions({
+    data: {
+      estateSlug: filters.estateSlug,
+      districtSlug: filters.districtSlug,
+      dealType: filters.dealType,
+      month: filters.month,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+      limit: filters.limit ?? 24,
+    },
+  });
+  return rows as RecentTransaction[];
 }

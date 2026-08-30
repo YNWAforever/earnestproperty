@@ -128,3 +128,39 @@ export type NeonEstateOption = {
   slug: string;
   name_zh: string;
 };
+
+export type NeonTransactionDealType = "sale" | "rent";
+
+export type NeonRecentTransactionsInput = {
+  estateSlug?: string;
+  districtSlug?: string;
+  /** "all" (the default) applies no deal_type predicate. */
+  dealType?: NeonTransactionDealType | "all";
+  /** "YYYY-MM" -- bounds deal_date to that calendar month. */
+  month?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  limit: number;
+};
+
+export type NeonTransactionEstateSnapshot = {
+  name_zh: string;
+  slug: string;
+  district_slug: string;
+};
+
+export type NeonTransactionRow = {
+  id: string;
+  deal_date: string | null;
+  deal_type: NeonTransactionDealType;
+  price: number | null;
+  saleable_area: number | null;
+  saleable_psf: number | null;
+  unit: string | null;
+  block: string | null;
+  floor_band: string | null;
+  source: string | null;
+  source_url: string | null;
+  verified_at: string | null;
+  estates: NeonTransactionEstateSnapshot | null;
+};

@@ -10,7 +10,9 @@ import type {
   NeonListingSort,
   NeonPublicAgentProfile,
   NeonPropertyRow,
+  NeonRecentTransactionsInput,
   NeonSimilarListingsInput,
+  NeonTransactionRow,
 } from "./public-data.types";
 import { getSql } from "./db.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
@@ -849,6 +851,11 @@ export async function fetchDistrictTransactions(input: {
     INNER JOIN estates e ON e.id = t.estate_id
     WHERE e.district_slug = $1
       AND t.deal_type = 'sale'
+      -- Only published, human-verified rows render publicly -- see
+      -- 20260830140000_transaction_provenance.sql's own comment for why
+      -- every existing row starts excluded by this pair.
+      AND t.published = true
+      AND t.verification_state = 'verified'
       AND t.deal_date >= (CURRENT_DATE - ($2::int * INTERVAL '1 month'))::date
     ORDER BY t.deal_date ASC
     `,
@@ -872,7 +879,11 @@ export async function fetchEstateTransactions(input: { estateId: string; limit: 
     `
     SELECT deal_date, unit, saleable_area, saleable_psf, price
     FROM transactions
-    WHERE estate_id = $1 AND deal_type = 'sale'
+    WHERE estate_id = $1
+      AND deal_type = 'sale'
+      -- Same published/verified gate as fetchDistrictTransactions above.
+      AND published = true
+      AND verification_state = 'verified'
     ORDER BY deal_date DESC NULLS LAST
     LIMIT $2
     `,
@@ -885,6 +896,102 @@ export async function fetchEstateTransactions(input: { estateId: string; limit: 
     saleable_psf: numberOrNull(row.saleable_psf),
     price: numberOrNull(row.price),
   }));
+}
+
+// "YYYY-MM" only -- anything else is silently ignored rather than passed
+// through to the date cast below, matching this file's other defense-in-
+// depth guards (e.g. clampCorridorLimit) against a hand-edited URL.
+const TRANSACTION_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function transactionsWhere(input: NeonRecentTransactionsInput, params: unknown[]) {
+  // /transactions (the only caller of this query) shows only published,
+  // human-verified rows -- see 20260830140000_transaction_provenance.sql's
+  // own comment for why every existing row starts excluded by this pair.
+  const where = ["t.published = true", "t.verification_state = 'verified'"];
+
+  if (input.districtSlug) where.push(`e.district_slug = ${addParam(params, input.districtSlug)}`);
+  if (input.estateSlug) where.push(`e.slug = ${addParam(params, input.estateSlug)}`);
+  if (input.dealType && input.dealType !== "all") {
+    where.push(`t.deal_type = ${addParam(params, input.dealType)}::deal_type`);
+  }
+  if (input.month && TRANSACTION_MONTH_PATTERN.test(input.month)) {
+    const monthStart = `${input.month}-01`;
+    where.push(`t.deal_date >= ${addParam(params, monthStart)}::date`);
+    where.push(`t.deal_date < (${addParam(params, monthStart)}::date + INTERVAL '1 month')`);
+  }
+  if (input.minPrice !== undefined) where.push(`t.price >= ${addParam(params, input.minPrice)}`);
+  if (input.maxPrice !== undefined) where.push(`t.price <= ${addParam(params, input.maxPrice)}`);
+
+  return where.join(" AND ");
+}
+
+function mapTransactionRow(row: DbRow): NeonTransactionRow {
+  const estateSlug = stringOrNull(row.estate_slug);
+  return {
+    id: stringOrEmpty(row.id),
+    deal_date: dateOrNull(row.deal_date),
+    deal_type: dealType(row.deal_type),
+    price: numberOrNull(row.price),
+    saleable_area: numberOrNull(row.saleable_area),
+    saleable_psf: numberOrNull(row.saleable_psf),
+    unit: stringOrNull(row.unit),
+    block: stringOrNull(row.block),
+    floor_band: stringOrNull(row.floor_band),
+    source: stringOrNull(row.source),
+    source_url: stringOrNull(row.source_url),
+    verified_at: dateOrNull(row.verified_at),
+    estates: estateSlug
+      ? {
+          name_zh: stringOrEmpty(row.estate_name_zh),
+          slug: estateSlug,
+          district_slug: stringOrEmpty(row.estate_district_slug),
+        }
+      : null,
+  };
+}
+
+/**
+ * Replaces the old queries.ts approach of looping over three hardcoded
+ * district slugs and merging client-side -- this queries every district in
+ * one round trip and accepts real filters (district/estate/deal type/month/
+ * price range), matching /listings' searchListings() shape. `id` is
+ * selected so /transactions can render a shareable `?tx=<id>` reference per
+ * row (no dedicated single-transaction route/SEO surface exists, so this is
+ * a highlight-within-the-list, not a distinct page).
+ */
+export async function fetchRecentTransactions(
+  input: NeonRecentTransactionsInput,
+): Promise<NeonTransactionRow[]> {
+  const params: unknown[] = [];
+  const where = transactionsWhere(input, params);
+  const limitParam = addParam(params, Math.min(Math.max(1, input.limit), 100));
+  const rows = await sql().query(
+    `
+    SELECT
+      t.id,
+      t.deal_date,
+      t.deal_type,
+      t.price,
+      t.saleable_area,
+      t.saleable_psf,
+      t.unit,
+      t.block,
+      t.floor_band,
+      t.source,
+      t.source_url,
+      t.verified_at,
+      e.name_zh AS estate_name_zh,
+      e.slug AS estate_slug,
+      e.district_slug AS estate_district_slug
+    FROM transactions t
+    INNER JOIN estates e ON e.id = t.estate_id
+    WHERE ${where}
+    ORDER BY t.deal_date DESC NULLS LAST, t.created_at DESC
+    LIMIT ${limitParam}
+    `,
+    params,
+  );
+  return rows.map(mapTransactionRow);
 }
 
 export async function fetchPublishedArticles() {

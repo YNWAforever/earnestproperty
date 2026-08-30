@@ -81,7 +81,7 @@ export const Route = createFileRoute("/sitemap.xml")({
         // same empty case (see their head()), so this self-heals the moment
         // data lands with no further deploy needed.
         const [transactions, estateReviewArticles] = await Promise.all([
-          fetchRecentTransactions(1).catch(() => []),
+          fetchRecentTransactions({ limit: 1 }).catch(() => []),
           fetchPublishedArticlesByCategory("屋苑開箱").catch(() => []),
         ]);
         const conditionalPaths = [

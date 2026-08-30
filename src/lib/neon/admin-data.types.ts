@@ -507,6 +507,7 @@ export type StaffOwnedCounts = {
   inquiries: number;
   whatsapp_conversations: number;
   live_agent_sessions: number;
+  transactions: number;
 };
 
 export type StaffAccessSummary = {

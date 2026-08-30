@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import type {
   NeonCorridorInventoryInput,
   NeonListingFiltersInput,
+  NeonRecentTransactionsInput,
   NeonSimilarListingsInput,
 } from "./public-data.types";
 
@@ -124,6 +125,13 @@ export const fetchNeonEstateTransactions = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
     return neonData.fetchEstateTransactions(data);
+  });
+
+export const fetchNeonRecentTransactions = createServerFn({ method: "GET" })
+  .inputValidator((data: NeonRecentTransactionsInput) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchRecentTransactions(data);
   });
 
 export const fetchNeonPublishedArticles = createServerFn({ method: "GET" }).handler(async () => {

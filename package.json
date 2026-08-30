@@ -18,6 +18,7 @@
     "format": "prettier --write .",
     "test:corridor": "node --test src/content/castle-peak-road.test.mjs src/lib/neon/corridor-scope.contract.test.mjs",
     "test:district": "node --test src/routes/district.sham-tseng.test.mjs",
+    "test:transactions": "node --test src/lib/neon/transaction-search.contract.test.mjs src/routes/transactions.contract.test.mjs",
     "test:seo": "node --test src/content/seo-source.test.mjs src/content/canonical-links.test.mjs src/lib/schema.test.mjs src/lib/faq-surfaces.test.mjs src/routes/sitemap.contract.test.mjs && bun test src/lib/schema.test.ts",
     "test:blog": "node --test src/routes/blog.routes.test.mjs",
     "test:videos": "node --test src/lib/video-presentation.test.mjs src/lib/video-tags.test.mjs src/routes/videos.contract.test.mjs",

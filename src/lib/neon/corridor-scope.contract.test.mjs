@@ -88,6 +88,7 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
   "fetchNeonPropertyByLegacyDetailId",
   "fetchNeonPropertyByListingNo",
   "fetchNeonPublishedArticles",
+  "fetchNeonRecentTransactions",
   "fetchNeonSimilarListings",
   "searchNeonListings",
 ];
@@ -258,9 +259,7 @@ test("fetchCorridorInventoryForAliases sends corridorRegionScope.outOfScopeTextA
       /AND NOT EXISTS/,
       "corridorWhere() must AND NOT the out-of-scope alias set into every corridor query",
     );
-    const outOfScopeParam = params.find(
-      (param) => Array.isArray(param) && param.includes("屯門"),
-    );
+    const outOfScopeParam = params.find((param) => Array.isArray(param) && param.includes("屯門"));
     assert.ok(
       outOfScopeParam,
       "corridorRegionScope.outOfScopeTextAliases must be bound as a query parameter",

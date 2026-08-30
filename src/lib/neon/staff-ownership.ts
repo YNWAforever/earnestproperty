@@ -34,6 +34,12 @@ export const STAFF_OWNERSHIP_COLUMNS = [
   // because an ownership-shaped column absent from the handover is a gap
   // waiting for the first person to wire it.
   { table: "live_agent_sessions", column: "assigned_agent_id" },
+  // P5 Task 2 (transaction provenance/verification): the agent currently
+  // responsible for a transaction record, same "current assignment" meaning
+  // as properties.agent_id above -- not who verified it (that fact lives in
+  // verification_state/verified_at, which never move). Reassigned by the
+  // same staff-handover flow properties.agent_id already goes through.
+  { table: "transactions", column: "agent_id" },
 ] as const satisfies readonly StaffOwnershipColumn[];
 
 /**

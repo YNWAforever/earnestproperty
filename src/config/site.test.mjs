@@ -418,7 +418,10 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   );
 
   assert.match(transactions, /head:\s*\(\{\s*loaderData\s*\}\)\s*=>/);
-  assert.match(transactions, /loaderData\.length === 0/);
+  // Task 2 (P5) changed loaderData from a bare transactions array to
+  // { transactions, estates } (the loader now also loads estate filter
+  // options) -- the noindex gate moved with it onto the same nested field.
+  assert.match(transactions, /loaderData\.transactions\.length === 0/);
   assert.match(transactions, /name: "robots", content: "noindex,follow"/);
 
   assert.match(estateReviews, /head:\s*\(\{\s*loaderData\s*\}\)\s*=>/);
