@@ -82,6 +82,11 @@ import {
   LISTING_ALERT_CONSENT_TEXT,
   LISTING_ALERT_CONSENT_VERSION,
 } from "./listing-alerts.js";
+import {
+  persistValuationLead,
+  VALUATION_CONSENT_TEXT,
+  VALUATION_CONSENT_VERSION,
+} from "./valuation-leads.js";
 import { woztellEnabled } from "../woztell/woztell.server";
 
 /**
@@ -3299,6 +3304,35 @@ export async function createListingAlert(input: {
     // answer "what did this person actually agree to."
     consentText: LISTING_ALERT_CONSENT_TEXT,
     consentVersion: LISTING_ALERT_CONSENT_VERSION,
+    consentedAt: new Date().toISOString(),
+    utm: input.utm ?? {},
+  });
+}
+
+export async function createValuationLead(input: {
+  name: string;
+  phone: string;
+  email?: string | null;
+  propertyAddress: string;
+  estateId?: string | null;
+  notes?: string | null;
+  utm?: Record<string, string>;
+}) {
+  const email = input.email ? input.email : null;
+  const notes = input.notes ? input.notes : null;
+  return persistValuationLead(queryRows, {
+    name: input.name,
+    phone: input.phone,
+    email,
+    propertyAddress: input.propertyAddress,
+    estateId: input.estateId ?? null,
+    notes,
+    // Always the server's own constants, never a caller-supplied value --
+    // otherwise an unauthenticated caller could write arbitrary text into
+    // consent_text/consent_version and the column would no longer reliably
+    // answer "what did this person actually agree to."
+    consentText: VALUATION_CONSENT_TEXT,
+    consentVersion: VALUATION_CONSENT_VERSION,
     consentedAt: new Date().toISOString(),
     utm: input.utm ?? {},
   });

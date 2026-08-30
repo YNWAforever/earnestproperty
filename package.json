@@ -28,6 +28,7 @@
     "test:listing-search": "node --test src/lib/neon/listing-search.contract.test.mjs src/routes/listings.contract.test.mjs src/lib/neon/listing-alerts.test.mjs && bun test src/lib/saved-listings.test.ts",
     "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
     "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs src/routes/contact.test.mjs && bun test src/lib/contact-inquiry-form.test.ts",
+    "test:valuation": "node --test src/lib/neon/valuation-leads.test.mjs",
     "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs src/content/estate-registry.test.mjs src/components/site/estate-comparison.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs src/config/neon-only.test.mjs",
     "test:command-center": "node --test src/lib/neon/command-center.test.mjs src/lib/neon/admin-data.contract.test.mjs src/routes/admin.routes.test.mjs",
