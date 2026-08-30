@@ -163,3 +163,34 @@ test("mortgage calculator collapses the annual amortization table behind a toggl
     /<Collapsible open=\{showAmortization\} onOpenChange=\{setShowAmortization\}/,
   );
 });
+
+test("mortgage calculator lets users save scenarios and compare them side by side", () => {
+  const component = read("src/components/site/MortgageCalculator.tsx");
+
+  // Wired through the shared, unit-tested mortgage.ts helpers -- not a
+  // second, component-local reimplementation of save/remove/cap logic.
+  assert.match(component, /saveMortgageScenario/);
+  assert.match(component, /removeMortgageScenario/);
+  assert.match(component, /MAX_MORTGAGE_SCENARIOS/);
+  assert.match(component, /儲存此方案作比較/);
+  assert.match(component, /方案比較/);
+
+  // Each saved scenario's results are computed independently via
+  // calculateMortgage on that scenario's own snapshotted inputs, not
+  // shared with the live in-progress calculation.
+  assert.match(
+    component,
+    /scenarios\.map\(\(scenario\) => \(\{ scenario, result: calculateMortgage\(scenario\.inputs\) \}\)\)/,
+  );
+
+  // Same cash-required label and computation as the main results panel
+  // (and PropertyDecisionActions' mortgage teaser card) -- a scenario
+  // card must not invent differently-worded or differently-computed
+  // terminology for the same figure.
+  assert.match(component, /預計上會現金需求（首期＋印花稅）/);
+  assert.match(component, /scenarioResult\.deposit \+ scenarioResult\.stampDuty/);
+
+  // A per-scenario remove control exists and is independently addressable.
+  assert.match(component, /移除方案/);
+  assert.match(component, /onClick=\{\(\) => handleRemoveScenario\(scenario\.id\)\}/);
+});

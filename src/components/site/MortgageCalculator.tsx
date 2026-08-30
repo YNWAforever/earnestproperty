@@ -5,7 +5,9 @@ import {
   ChevronDown,
   ExternalLink,
   Info,
+  Layers,
   ShieldCheck,
+  Trash2,
   WalletCards,
 } from "lucide-react";
 
@@ -23,13 +25,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  MAX_MORTGAGE_SCENARIOS,
   MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
   commitMortgageDraft,
   mortgageInputsFromSearch,
   normalizeMortgageInputs,
   parseMortgageDraft,
+  removeMortgageScenario,
+  saveMortgageScenario,
   type MortgageInputs,
+  type MortgageScenario,
   type MortgageSearch,
 } from "@/lib/mortgage";
 
@@ -238,10 +244,19 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
   // Collapsed by default -- the annual schedule is a detail most visitors
   // won't need immediately; a toggle keeps the page shorter without hiding it.
   const [showAmortization, setShowAmortization] = useState(false);
+  // Saved snapshots for side-by-side comparison. Client-side component
+  // state only -- no localStorage, no server round-trip: this is a
+  // "compare while you're on the page" tool, not a saved-search feature.
+  const [scenarios, setScenarios] = useState<MortgageScenario[]>([]);
   const result = useMemo(
     () => (state.editingField === null ? calculateMortgage(state.inputs) : null),
     [state.editingField, state.inputs],
   );
+  const scenarioSummaries = useMemo(
+    () => scenarios.map((scenario) => ({ scenario, result: calculateMortgage(scenario.inputs) })),
+    [scenarios],
+  );
+  const canSaveScenario = result !== null && scenarios.length < MAX_MORTGAGE_SCENARIOS;
   const activeDraftParse =
     state.editingField === null ? null : parseMortgageDraft(state.drafts[state.editingField]);
   const activeDraftIsInvalid =
@@ -281,6 +296,14 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
         editingField: null,
       };
     });
+  };
+
+  const handleSaveScenario = () => {
+    setScenarios((current) => saveMortgageScenario(current, state.inputs));
+  };
+
+  const handleRemoveScenario = (id: string) => {
+    setScenarios((current) => removeMortgageScenario(current, id));
   };
 
   return (
@@ -495,6 +518,23 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                     result.inputs.monthlyIncome !== undefined,
                   )}
                 />
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveScenario}
+                    disabled={!canSaveScenario}
+                  >
+                    <Layers className="mr-1 h-4 w-4" aria-hidden="true" />
+                    儲存此方案作比較
+                  </Button>
+                </div>
+                {scenarios.length >= MAX_MORTGAGE_SCENARIOS ? (
+                  <p className="mt-1 text-right text-xs text-muted-foreground">
+                    已達 {MAX_MORTGAGE_SCENARIOS} 個方案上限，請先在下方移除一個方案再儲存新方案。
+                  </p>
+                ) : null}
               </>
             )}
           </div>
@@ -510,6 +550,79 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
           </div>
         </section>
       </div>
+
+      {scenarios.length > 0 ? (
+        <section
+          aria-labelledby="scenario-comparison-heading"
+          className="mt-8 border-t border-border pt-8"
+        >
+          <h2 id="scenario-comparison-heading" className="text-xl font-semibold text-foreground">
+            方案比較
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            並排比較已儲存的樓價與按揭組合，最多 {MAX_MORTGAGE_SCENARIOS} 個。
+          </p>
+          <div
+            className={`mt-4 grid gap-4 ${
+              scenarioSummaries.length >= 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2"
+            }`}
+          >
+            {scenarioSummaries.map(({ scenario, result: scenarioResult }, index) => (
+              <div
+                key={scenario.id}
+                className="rounded-lg border border-border bg-card p-4 shadow-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-foreground">方案 {index + 1}</span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`移除方案 ${index + 1}`}
+                    onClick={() => handleRemoveScenario(scenario.id)}
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">樓價</dt>
+                    <dd className="font-medium tabular-nums">
+                      {formatMoney(scenario.inputs.price)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">按揭成數</dt>
+                    <dd className="font-medium tabular-nums">{scenario.inputs.ltv}%</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">按揭年期</dt>
+                    <dd className="font-medium tabular-nums">{scenario.inputs.years} 年</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">年利率</dt>
+                    <dd className="font-medium tabular-nums">
+                      {scenario.inputs.annualInterestRate.toFixed(2)}%
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border pt-2">
+                    <dt className="text-muted-foreground">每月供款</dt>
+                    <dd className="font-semibold tabular-nums text-primary">
+                      {formatMoney(scenarioResult.monthlyPayment)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">預計上會現金需求（首期＋印花稅）</dt>
+                    <dd className="font-semibold tabular-nums">
+                      {formatMoney(scenarioResult.deposit + scenarioResult.stampDuty)}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section
         aria-labelledby="amortization-heading"

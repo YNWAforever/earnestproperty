@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, test } from "bun:test";
+
+import { RESIDENTIAL_STAMP_DUTY_SCHEDULE } from "@/content/policy-rates";
 
 import {
   DEFAULT_MORTGAGE_INPUTS,
+  MAX_MORTGAGE_SCENARIOS,
   MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
   calculateResidentialStampDuty,
@@ -10,6 +16,9 @@ import {
   normalizeMortgageInputs,
   parseMortgageDraft,
   parseMortgageSearch,
+  removeMortgageScenario,
+  saveMortgageScenario,
+  type MortgageScenario,
 } from "./mortgage";
 
 function expectOnlyFiniteNumbersOrNull(value: unknown): void {
@@ -299,5 +308,165 @@ describe("parseMortgageSearch", () => {
       const displayedInputs = mortgageInputsFromSearch(search);
       expect(calculateMortgage(displayedInputs).inputs).toEqual(displayedInputs);
     }
+  });
+});
+
+describe("policy-rates.ts extraction", () => {
+  const mortgageComponentSource = readFileSync(
+    join(process.cwd(), "src/components/site/MortgageCalculator.tsx"),
+    "utf8",
+  );
+
+  test("does not fabricate a sourceUrl disconnected from the citation already shown to users", () => {
+    const { sourceUrl } = RESIDENTIAL_STAMP_DUTY_SCHEDULE;
+    if (sourceUrl === null) return;
+
+    // The component's own "重要事項" note is where this citation was first
+    // added (when the component was translated to zh-HK) -- the extracted
+    // content file must reuse that exact URL, not carry a different,
+    // invented one.
+    expect(mortgageComponentSource).toContain(sourceUrl);
+  });
+
+  test("effective date matches what the UI already asserts to users", () => {
+    const normalizedNote = mortgageComponentSource.replace(/\s+/g, "");
+    const normalizedEffectiveDate = RESIDENTIAL_STAMP_DUTY_SCHEDULE.effectiveDate.replace(
+      /\s+/g,
+      "",
+    );
+
+    expect(normalizedNote).toContain(normalizedEffectiveDate);
+  });
+
+  test("brackets are ordered ascending and cover every price with no gaps", () => {
+    const { brackets } = RESIDENTIAL_STAMP_DUTY_SCHEDULE;
+
+    expect(brackets.length).toBeGreaterThan(0);
+    expect(brackets.at(-1)?.upTo).toBe(Number.POSITIVE_INFINITY);
+
+    for (let index = 1; index < brackets.length; index += 1) {
+      expect(brackets[index].upTo).toBeGreaterThan(brackets[index - 1].upTo);
+    }
+  });
+
+  test.each([
+    1, 100, 4_000_000, 4_000_001, 4_935_480, 10_080_001, 100_000_000, 109_574_471, 500_000_000,
+  ])(
+    "calculateResidentialStampDuty at $%i reads from the schedule, not a re-embedded copy",
+    (price) => {
+      // Re-derive the duty directly from the exported bracket data using
+      // the same rules calculateResidentialStampDuty documents, and
+      // confirm the two agree -- a guard against the function and the
+      // content file drifting apart after this extraction.
+      const bracket = RESIDENTIAL_STAMP_DUTY_SCHEDULE.brackets.find(
+        (candidate) => price <= candidate.upTo,
+      );
+      if (bracket === undefined) throw new Error("no bracket covers this price");
+
+      const expected =
+        bracket.kind === "fixed"
+          ? bracket.amount
+          : bracket.kind === "flatRate"
+            ? Math.ceil(price * bracket.rate)
+            : Math.ceil(bracket.base + (price - bracket.from) * bracket.rate);
+
+      expect(calculateResidentialStampDuty(price)).toBe(expected);
+    },
+  );
+});
+
+describe("mortgage scenario comparison", () => {
+  test("saveMortgageScenario snapshots inputs at that moment, not a live reference", () => {
+    const original = normalizeMortgageInputs(DEFAULT_MORTGAGE_INPUTS);
+    const scenarios = saveMortgageScenario([], original);
+
+    expect(scenarios).toHaveLength(1);
+    expect(scenarios[0]!.inputs).toEqual(original);
+    // A distinct object, not the same reference the caller keeps holding.
+    expect(scenarios[0]!.inputs).not.toBe(original);
+
+    // The user keeps editing after saving: normalizeMortgageInputs/
+    // commitMortgageDraft always produce a brand-new object rather than
+    // mutating the previous one, so the saved snapshot must not move.
+    const edited = normalizeMortgageInputs({ ...original, price: original.price + 1_000_000 });
+    expect(scenarios[0]!.inputs.price).toBe(original.price);
+    expect(scenarios[0]!.inputs.price).not.toBe(edited.price);
+  });
+
+  test("each saved scenario gets a unique id", () => {
+    const first = saveMortgageScenario([], normalizeMortgageInputs({ price: 5_000_000 }));
+    const both = saveMortgageScenario(first, normalizeMortgageInputs({ price: 6_000_000 }));
+
+    expect(both[0]!.id).not.toBe(both[1]!.id);
+  });
+
+  test(`caps at MAX_MORTGAGE_SCENARIOS (${MAX_MORTGAGE_SCENARIOS}), silently ignoring further saves`, () => {
+    let scenarios: MortgageScenario[] = [];
+    for (let index = 0; index < MAX_MORTGAGE_SCENARIOS + 2; index += 1) {
+      scenarios = saveMortgageScenario(
+        scenarios,
+        normalizeMortgageInputs({ price: 1_000_000 * (index + 1) }),
+      );
+    }
+
+    expect(scenarios).toHaveLength(MAX_MORTGAGE_SCENARIOS);
+  });
+
+  test("computes correct, independent results for 2+ saved scenarios", () => {
+    const inputsA = normalizeMortgageInputs({
+      price: 6_000_000,
+      ltv: 60,
+      years: 25,
+      annualInterestRate: 3,
+      stressRate: 2,
+    });
+    const inputsB = normalizeMortgageInputs({
+      price: 10_000_000,
+      ltv: 70,
+      years: 30,
+      annualInterestRate: 3.5,
+      stressRate: 2,
+    });
+
+    const scenarios = saveMortgageScenario(saveMortgageScenario([], inputsA), inputsB);
+    expect(scenarios).toHaveLength(2);
+
+    const [resultA, resultB] = scenarios.map((scenario) => calculateMortgage(scenario.inputs));
+    const directA = calculateMortgage(inputsA);
+    const directB = calculateMortgage(inputsB);
+
+    expect(resultA!.monthlyPayment).toBeCloseTo(directA.monthlyPayment, 6);
+    expect(resultA!.deposit + resultA!.stampDuty).toBeCloseTo(
+      directA.deposit + directA.stampDuty,
+      6,
+    );
+    expect(resultB!.monthlyPayment).toBeCloseTo(directB.monthlyPayment, 6);
+    expect(resultB!.deposit + resultB!.stampDuty).toBeCloseTo(
+      directB.deposit + directB.stampDuty,
+      6,
+    );
+    // Genuinely independent figures, not two views onto the same value.
+    expect(resultA!.monthlyPayment).not.toBeCloseTo(resultB!.monthlyPayment, 0);
+  });
+
+  test("removeMortgageScenario removes exactly the targeted scenario, leaving others intact", () => {
+    let scenarios = saveMortgageScenario([], normalizeMortgageInputs({ price: 5_000_000 }));
+    scenarios = saveMortgageScenario(scenarios, normalizeMortgageInputs({ price: 8_000_000 }));
+    scenarios = saveMortgageScenario(scenarios, normalizeMortgageInputs({ price: 12_000_000 }));
+    expect(scenarios).toHaveLength(3);
+
+    const targetId = scenarios[1]!.id;
+    const remaining = removeMortgageScenario(scenarios, targetId);
+
+    expect(remaining).toHaveLength(2);
+    expect(remaining.some((scenario) => scenario.id === targetId)).toBeFalse();
+    expect(remaining.map((scenario) => scenario.inputs.price)).toEqual([5_000_000, 12_000_000]);
+  });
+
+  test("removing an unknown id is a no-op", () => {
+    const scenarios = saveMortgageScenario([], normalizeMortgageInputs({ price: 5_000_000 }));
+    const result = removeMortgageScenario(scenarios, "does-not-exist");
+
+    expect(result).toEqual(scenarios);
   });
 });

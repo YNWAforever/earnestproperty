@@ -1,3 +1,5 @@
+import { RESIDENTIAL_STAMP_DUTY_SCHEDULE } from "@/content/policy-rates";
+
 export type MortgageInputs = {
   price: number;
   ltv: number;
@@ -215,19 +217,23 @@ function annualAmortization(
 
 export function calculateResidentialStampDuty(price: number): number {
   if (!Number.isFinite(price) || price <= 0) return 0;
-  if (price <= 4_000_000) return 100;
-  if (price <= 4_323_780) return Math.ceil(100 + (price - 4_000_000) * 0.2);
-  if (price <= 4_500_000) return Math.ceil(price * 0.015);
-  if (price <= 4_935_480) return Math.ceil(67_500 + (price - 4_500_000) * 0.1);
-  if (price <= 6_000_000) return Math.ceil(price * 0.0225);
-  if (price <= 6_642_860) return Math.ceil(135_000 + (price - 6_000_000) * 0.1);
-  if (price <= 9_000_000) return Math.ceil(price * 0.03);
-  if (price <= 10_080_000) return Math.ceil(270_000 + (price - 9_000_000) * 0.1);
-  if (price <= 20_000_000) return Math.ceil(price * 0.0375);
-  if (price <= 21_739_120) return Math.ceil(750_000 + (price - 20_000_000) * 0.1);
-  if (price <= 100_000_000) return Math.ceil(price * 0.0425);
-  if (price <= 109_574_470) return Math.ceil(4_250_000 + (price - 100_000_000) * 0.3);
-  return Math.ceil(price * 0.065);
+
+  for (const bracket of RESIDENTIAL_STAMP_DUTY_SCHEDULE.brackets) {
+    if (price > bracket.upTo) continue;
+
+    switch (bracket.kind) {
+      case "fixed":
+        return bracket.amount;
+      case "flatRate":
+        return Math.ceil(price * bracket.rate);
+      case "marginal":
+        return Math.ceil(bracket.base + (price - bracket.from) * bracket.rate);
+    }
+  }
+
+  // Unreachable: the schedule's final bracket has upTo = +Infinity, so
+  // every finite, positive price matches a bracket above this point.
+  return 0;
 }
 
 export function calculateMortgage(input: Partial<MortgageInputs> = {}): MortgageResult {
@@ -290,4 +296,51 @@ export function parseMortgageSearch(search: Record<string, unknown>): MortgageSe
       ? {}
       : { expenses: normalized.monthlyDebtExpenses }),
   };
+}
+
+// --- Scenario comparison -------------------------------------------------
+//
+// Lets a visitor save a handful of input combinations while they keep
+// adjusting the calculator, then see them side by side. Client-side only:
+// no server persistence and no localStorage -- this is a "compare while
+// you're on the page" tool, not a saved-search feature, so scenarios are
+// just an array the component keeps in state and this module never reads
+// or writes storage of any kind.
+
+export type MortgageScenario = {
+  id: string;
+  inputs: MortgageInputs;
+};
+
+export const MAX_MORTGAGE_SCENARIOS = 3;
+
+function generateScenarioId(): string {
+  // Mirrors saved-listings.ts's generateId: prefer crypto.randomUUID, but
+  // don't hard-depend on it being present in every runtime this module
+  // might load in (e.g. an older test environment).
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `scenario-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * Appends a snapshot of `inputs` -- a fresh object copied at the moment of
+ * saving, not a reference the caller could go on mutating. Silently caps
+ * at MAX_MORTGAGE_SCENARIOS: a full comparison set is "nothing more to
+ * add", not an error to surface.
+ */
+export function saveMortgageScenario(
+  scenarios: MortgageScenario[],
+  inputs: MortgageInputs,
+): MortgageScenario[] {
+  if (scenarios.length >= MAX_MORTGAGE_SCENARIOS) return scenarios;
+  return [...scenarios, { id: generateScenarioId(), inputs: { ...inputs } }];
+}
+
+export function removeMortgageScenario(
+  scenarios: MortgageScenario[],
+  id: string,
+): MortgageScenario[] {
+  return scenarios.filter((scenario) => scenario.id !== id);
 }
