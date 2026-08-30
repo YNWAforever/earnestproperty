@@ -6,6 +6,7 @@ export const CONTENT_COPILOT_RESOURCE_FIELDS = {
   faq: ["question", "answer"],
   video: ["title", "description"],
   listing: ["title_zh", "title_en", "description", "features", "seo_title", "seo_description"],
+  transaction: ["social_copy_fb", "social_copy_ig"],
 } as const;
 
 export type ContentCopilotResourceType = keyof typeof CONTENT_COPILOT_RESOURCE_FIELDS;
@@ -15,7 +16,8 @@ export type ContentCopilotAction =
   | "shorten"
   | "translate"
   | "seo_optimize"
-  | "fact_check";
+  | "fact_check"
+  | "social";
 export type ContentCopilotTone =
   | "professional_property"
   | "concise_portal"
@@ -96,7 +98,7 @@ const patchSchema = z.object({
   claimType: z.enum(["subjective", "factual_internal", "factual_web"]),
 });
 
-const resourceTypeSchema = z.enum(["estate", "article", "faq", "video", "listing"]);
+const resourceTypeSchema = z.enum(["estate", "article", "faq", "video", "listing", "transaction"]);
 const actionSchema = z.enum([
   "generate",
   "improve",
@@ -104,6 +106,7 @@ const actionSchema = z.enum([
   "translate",
   "seo_optimize",
   "fact_check",
+  "social",
 ]);
 const evidenceBaseSchema = z.object({
   id: z.string().min(1).max(80),
