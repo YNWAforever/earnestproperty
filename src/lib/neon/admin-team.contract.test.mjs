@@ -16,6 +16,12 @@ const actor = {
 
 const staffId = "22222222-2222-4222-8222-222222222222";
 
+// invitationState() (admin-team.server.ts) compares this against a live
+// Date.now(), with no injectable clock -- a fixed calendar date here goes
+// stale and silently flips "sent" to "expired" once real time passes it.
+// Computed relative to test-run time so it never does.
+const FUTURE_INVITATION_EXPIRY = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
 function fixture() {
   const queries = [];
   const model = createAdminTeamReadModel({
@@ -35,7 +41,7 @@ function fixture() {
             latest_action: "invite",
             latest_action_state: "succeeded",
             latest_retry_after: null,
-            latest_provider_expires_at: "2026-08-17T00:00:00.000Z",
+            latest_provider_expires_at: FUTURE_INVITATION_EXPIRY,
             active_count: 7,
             invited_count: 2,
             suspended_count: 1,
@@ -125,7 +131,7 @@ test("listAdminTeam projects safe filtered members, counts, and a keyset cursor"
     accessState: "active",
     invitationState: "sent",
     invitationRetryAfter: null,
-    invitationExpiresAt: "2026-08-17T00:00:00.000Z",
+    invitationExpiresAt: FUTURE_INVITATION_EXPIRY,
     createdAt: "2026-08-16T00:00:00.123Z",
     updatedAt: "2026-08-16T01:00:00.456Z",
     needsAttention: false,
