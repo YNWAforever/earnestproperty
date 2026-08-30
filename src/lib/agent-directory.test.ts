@@ -1,6 +1,23 @@
 import { describe, expect, test } from "bun:test";
 
-import { agentContactNote, resolveAgentContact } from "./agent-directory";
+import {
+  agentBranchName,
+  agentContactNote,
+  resolveAgentContact,
+  resolveAgentHomeBranch,
+} from "./agent-directory";
+
+const FIXTURE_BRANCHES = [
+  {
+    id: "branch-uuid-1",
+    slug: "rhine",
+    name: "海韻分行",
+    address: "深井海韻花園地下G3舖",
+    phone: "26886996",
+    whatsapp: null,
+    photo: "/branches/rhine.jpg",
+  },
+];
 
 function contactInput(overrides: Partial<Parameters<typeof resolveAgentContact>[0]> = {}) {
   return { branch: "海韻分行", phone: null, whatsapp: null, ...overrides };
@@ -91,5 +108,50 @@ describe("agentContactNote", () => {
     expect(
       agentContactNote(resolveAgentContact(contactInput({ branch: null, whatsapp: "91234567" }))),
     ).toBe("WhatsApp 為代理直綫，電話查詢請使用一般查詢。");
+  });
+});
+
+describe("resolveAgentHomeBranch / agentBranchName -- branch_id preferred over free text", () => {
+  test("a resolved branch_id wins over a stale/different free-text branch string", () => {
+    const profile = { branch: "麗都分行", branch_id: "branch-uuid-1" };
+    expect(resolveAgentHomeBranch(profile, FIXTURE_BRANCHES)?.name).toBe("海韻分行");
+    expect(agentBranchName(profile, FIXTURE_BRANCHES)).toBe("海韻分行");
+  });
+
+  test("branch_id resolves the real contact phone number too, not just the display name", () => {
+    const contact = resolveAgentContact(
+      { branch: "麗都分行", branch_id: "branch-uuid-1", phone: null, whatsapp: null },
+      FIXTURE_BRANCHES,
+    );
+    expect(contact.homeBranch?.name).toBe("海韻分行");
+    expect(contact.phone).toBe("26886996");
+  });
+
+  test("a branch_id that resolves to nothing in the fetched list falls back to the free-text branch, never branches[0]", () => {
+    const profile = { branch: "麗都分行", branch_id: "not-in-the-list" };
+    expect(resolveAgentHomeBranch(profile, FIXTURE_BRANCHES)?.name).toBe("麗都分行");
+    expect(agentBranchName(profile, FIXTURE_BRANCHES)).toBe("麗都分行");
+  });
+
+  test("an empty branches list (fetch failed/not yet loaded) falls back to the free-text branch", () => {
+    const profile = { branch: "麗都分行", branch_id: "branch-uuid-1" };
+    expect(agentBranchName(profile, [])).toBe("麗都分行");
+    expect(agentBranchName(profile)).toBe("麗都分行");
+  });
+
+  // The regression case that matters most: neither branch_id nor branch set
+  // must render/resolve to nothing -- never SITE_BRANCHES[0], never
+  // branches[0], never a guessed default. See CHANGELOG.md:79-87.
+  test("neither branch_id nor branch set resolves to null everywhere, never a guessed default", () => {
+    const profile = { branch: null, branch_id: null };
+    expect(resolveAgentHomeBranch(profile, FIXTURE_BRANCHES)).toBeNull();
+    expect(agentBranchName(profile, FIXTURE_BRANCHES)).toBeNull();
+
+    const contact = resolveAgentContact(
+      { ...profile, phone: null, whatsapp: null },
+      FIXTURE_BRANCHES,
+    );
+    expect(contact.homeBranch).toBeNull();
+    expect(agentContactNote(contact)).toBe("代理未有提供直接聯絡方式，請使用一般查詢。");
   });
 });

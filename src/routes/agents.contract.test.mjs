@@ -53,8 +53,25 @@ function loadAgentFilterHelpers() {
     ];
   `;
 
+  // agentBranchName is imported from @/lib/agent-directory in the real file,
+  // outside this extraction's range -- stubbed here the same way
+  // estateRegistry is above, with the exact same branch_id-preferred,
+  // free-text-fallback, null-if-neither behaviour as the real implementation
+  // (see agent-directory.ts), so matchesAgentFilters/groupAgentsByBranch
+  // exercise real branch_id resolution once spliced into this scope.
+  const fixtureAgentBranchName = `
+    function agentBranchName(agent, branches) {
+      if (agent.branch_id) {
+        const linked = branches.find((candidate) => candidate.id === agent.branch_id);
+        if (linked) return linked.name;
+      }
+      return agent.branch ?? null;
+    }
+  `;
+
   const snippet = [
     fixtureRegistry,
+    fixtureAgentBranchName,
     districtBlock,
     matchesBlock,
     groupBlock,
@@ -81,6 +98,7 @@ function fixtureAgent(overrides = {}) {
     licence_no: null,
     avatar_url: null,
     branch: null,
+    branch_id: null,
     bio: null,
     specialties: [],
     served_estate_slugs: [],
@@ -295,6 +313,7 @@ test("agent avatars and profile form include required accessibility details", ()
     "licence_no",
     "avatar_url",
     "branch",
+    "branch_id",
     "bio",
     "specialties",
     "served_estate_slugs",
@@ -414,6 +433,43 @@ test("groupAgentsByBranch never folds a branch-less agent into a named branch, a
   assert.deepEqual(
     lidoGroup.agents.map((a) => a.id),
     ["a2", "a4"],
+  );
+});
+
+test("matchesAgentFilters and groupAgentsByBranch prefer a branch_id match over the free-text branch, and never guess when neither resolves", () => {
+  const { matchesAgentFilters, groupAgentsByBranch } = loadAgentFilterHelpers();
+  const branches = [{ id: "branch-uuid-1", slug: "rhine", name: "海韻分行" }];
+
+  // branch_id resolves to 海韻分行 even though the stale free-text column
+  // still says 麗都分行 -- the linked DB row must win, not the old string.
+  const linked = fixtureAgent({ id: "linked", branch: "麗都分行", branch_id: "branch-uuid-1" });
+  assert.equal(matchesAgentFilters(linked, { branch: "海韻分行" }, branches), true);
+  assert.equal(matchesAgentFilters(linked, { branch: "麗都分行" }, branches), false);
+
+  // branch_id set but pointing at nothing in the fetched list (e.g. a
+  // branches fetch that failed and returned []) falls back to the free-text
+  // string -- never a crash, never branches[0].
+  const danglingId = fixtureAgent({ id: "dangling", branch: "麗都分行", branch_id: "not-in-list" });
+  assert.equal(matchesAgentFilters(danglingId, { branch: "麗都分行" }, branches), true);
+
+  // Neither branch_id nor branch set: never falls back to branches[0] or any
+  // guessed name -- this is the regression case for CHANGELOG.md:79-87.
+  const neither = fixtureAgent({ id: "neither", branch: null, branch_id: null });
+  assert.equal(matchesAgentFilters(neither, { branch: "海韻分行" }, branches), false);
+  assert.equal(matchesAgentFilters(neither, {}, branches), true, "no filter still matches");
+
+  const groups = groupAgentsByBranch([linked, neither], branches);
+  const rhineGroup = groups.find((g) => g.branch === "海韻分行");
+  assert.ok(rhineGroup, "branch_id-linked agent groups under the real branch name");
+  assert.deepEqual(
+    rhineGroup.agents.map((a) => a.id),
+    ["linked"],
+  );
+  const unassignedGroup = groups.find((g) => g.branch === null);
+  assert.deepEqual(
+    unassignedGroup.agents.map((a) => a.id),
+    ["neither"],
+    "an agent with neither branch_id nor branch renders in no named group, never a guessed one",
   );
 });
 

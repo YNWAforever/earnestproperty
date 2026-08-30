@@ -8,8 +8,12 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { fetchAdminAgentEditorContext, fetchAdminAgentProfile } from "@/lib/neon/admin-data";
-import type { AdminAgentProfileRow } from "@/lib/neon/admin-data.types";
+import {
+  fetchAdminAgentEditorContext,
+  fetchAdminAgentProfile,
+  fetchAdminBranches,
+} from "@/lib/neon/admin-data";
+import type { AdminAgentProfileRow, AdminBranchOption } from "@/lib/neon/admin-data.types";
 
 export const Route = createFileRoute("/admin/agents_/$id")({
   loader: () => fetchAdminAgentEditorContext(),
@@ -26,6 +30,19 @@ function EditAdminAgent() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<AdminAgentProfileRow | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [branches, setBranches] = useState<AdminBranchOption[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdminBranches()
+      .then((data) => {
+        if (!cancelled) setBranches(data as AdminBranchOption[]);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (loading) return;
@@ -75,6 +92,7 @@ function EditAdminAgent() {
           <AgentProfileForm
             profile={profile}
             canManageIdentity={editorContext.canManageIdentity}
+            branches={branches}
             onSaved={() => navigate({ to: "/admin/agents" })}
           />
         ) : null}

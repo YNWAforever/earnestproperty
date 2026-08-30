@@ -30,6 +30,7 @@ const profileData = {
   licence_no: "E-123456",
   avatar_url: "https://example.com/agent.jpg",
   branch: "麗都分行",
+  branch_id: "",
   bio: "專責深井物業。",
   specialties: ["上車盤", "租務"],
   served_estate_slugs: ["bellagio"],
@@ -103,6 +104,69 @@ describe("AgentProfileForm identity capability", () => {
       active: false,
     });
   });
+});
+
+describe("AgentProfileForm branch_id dropdown", () => {
+  const branches = [
+    { id: "branch-uuid-1", slug: "lido", name: "麗都分行" },
+    { id: "branch-uuid-2", slug: "rhine", name: "海韻分行" },
+  ];
+
+  // Radix's Select portals its listbox and only mounts SelectItem children
+  // once opened, so renderToStaticMarkup's output (used for every other
+  // assertion in this file) can't show the branches prop reaching the DOM.
+  // Source-scan instead, matching this file's own established pattern (see
+  // "profile form delegates all role and account lifecycle operations to
+  // Team" below) for asserting structure renderToStaticMarkup can't surface.
+  test("renders the 分行 dropdown wired to the branches prop with a 未連結 option", () => {
+    expect(profileFormSource).toContain('id="branch_id"');
+    expect(profileFormSource).toContain("value={UNLINKED_BRANCH}");
+    expect(profileFormSource).toContain("未連結");
+    expect(profileFormSource).toContain("branches.map((branch) => (");
+    expect(profileFormSource).toContain("<SelectItem key={branch.id} value={branch.id}>");
+  });
+
+  test("component still renders without crashing when branches is supplied or omitted", () => {
+    // The behavioural regression this guards: a rendering crash when
+    // `branches` is passed (wrong prop shape) or omitted (relying on the
+    // default) would break the whole form, not just the dropdown.
+    expect(() =>
+      renderToStaticMarkup(
+        createElement(AgentProfileForm, {
+          profile: { id: "agent-1", ...profileData },
+          canManageIdentity: true,
+          branches,
+          onSaved: () => undefined,
+        }),
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      renderToStaticMarkup(
+        createElement(AgentProfileForm, {
+          profile: { id: "agent-1", ...profileData },
+          canManageIdentity: true,
+          onSaved: () => undefined,
+        }),
+      ),
+    ).not.toThrow();
+  });
+});
+
+test("buildAgentProfilePayload maps branch_id, treating the 未連結 empty string as null", () => {
+  const linkedPayload = buildAgentProfilePayload({
+    profileId: "agent-1",
+    data: { ...formData, branch_id: "branch-uuid-1" },
+    canManageIdentity: true,
+  });
+  expect(linkedPayload).toMatchObject({ branch_id: "branch-uuid-1" });
+
+  const unlinkedPayload = buildAgentProfilePayload({
+    profileId: "agent-1",
+    data: { ...formData, branch_id: "" },
+    canManageIdentity: true,
+  });
+  expect(unlinkedPayload).toMatchObject({ branch_id: null });
 });
 
 test("accepts the root-relative photo paths the seed script writes", () => {

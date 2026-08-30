@@ -18,9 +18,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { canonicalLink, SITE_URL } from "@/content/seo";
 import { estateRegistry } from "@/content/estate-registry";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
-import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
-import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
-import { agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
+import { fetchNeonBranches, fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
+import type { NeonBranchRecord, NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { agentBranchName, agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 
 // Mirrors /listings' DISTRICT_LABELS (src/routes/listings.tsx) -- same four
@@ -80,6 +80,7 @@ const agentsSearchSchema = z.object({
 function matchesAgentFilters(
   agent: NeonPublicAgentProfile,
   filters: AgentDirectorySearch,
+  branches: NeonBranchRecord[] = [],
 ): boolean {
   const query = filters.q?.trim().toLowerCase();
   if (query) {
@@ -89,7 +90,7 @@ function matchesAgentFilters(
       .toLowerCase();
     if (!haystack.includes(query)) return false;
   }
-  if (filters.branch && agent.branch !== filters.branch) return false;
+  if (filters.branch && agentBranchName(agent, branches) !== filters.branch) return false;
   if (filters.district && !agentDistrictSlugs(agent).includes(filters.district)) return false;
   if (filters.speciality && !agent.specialties.includes(filters.speciality)) return false;
   if (filters.language && !agent.languages.includes(filters.language)) return false;
@@ -99,20 +100,27 @@ function matchesAgentFilters(
 type AgentGroup = { branch: string | null; agents: NeonPublicAgentProfile[] };
 
 /**
- * Groups by the agent's real `branch` string, never a guessed/defaulted one
- * -- an agent with no branch lands in its own `branch: null` group (rendered
- * last, under a generic heading) rather than being folded into an existing
- * named branch or dropped. See "branch is never defaulted in either agent
- * route" in agents.contract.test.mjs for why that distinction matters here.
+ * Groups by the agent's resolved branch name (branch_id-linked `branches`
+ * row preferred, free-text `branch` string as fallback -- see
+ * agentBranchName() in src/lib/agent-directory.ts), never a guessed/defaulted
+ * one -- an agent with neither lands in its own `branch: null` group
+ * (rendered last, under a generic heading) rather than being folded into an
+ * existing named branch or dropped. See "branch is never defaulted in either
+ * agent route" in agents.contract.test.mjs for why that distinction matters
+ * here.
  */
-function groupAgentsByBranch(agents: NeonPublicAgentProfile[]): AgentGroup[] {
+function groupAgentsByBranch(
+  agents: NeonPublicAgentProfile[],
+  branches: NeonBranchRecord[] = [],
+): AgentGroup[] {
   const named = new Map<string, NeonPublicAgentProfile[]>();
   const unassigned: NeonPublicAgentProfile[] = [];
   for (const agent of agents) {
-    if (agent.branch) {
-      const list = named.get(agent.branch) ?? [];
+    const branch = agentBranchName(agent, branches);
+    if (branch) {
+      const list = named.get(branch) ?? [];
       list.push(agent);
-      named.set(agent.branch, list);
+      named.set(branch, list);
     } else {
       unassigned.push(agent);
     }
@@ -130,8 +138,16 @@ export const Route = createFileRoute("/agents")({
   // "client-side filter over already-loaded agents is fine given the small
   // roster size" in this plan) that filtering is a pure client-side
   // derivation over the one already-loaded list, not a new fetch per filter
-  // change. The loader itself stays exactly as it was.
-  loader: async () => (await fetchNeonPublicAgentProfiles()) as NeonPublicAgentProfile[],
+  // change. branches is fetched alongside it for branch_id resolution (see
+  // agentBranchName in src/lib/agent-directory.ts) -- small and public, same
+  // reasoning as the agent roster itself.
+  loader: async () => {
+    const [agents, branches] = await Promise.all([
+      fetchNeonPublicAgentProfiles() as Promise<NeonPublicAgentProfile[]>,
+      fetchNeonBranches(),
+    ]);
+    return { agents, branches };
+  },
   head: () => ({
     meta: [
       { title: "專業代理｜晉誠地產" },
@@ -148,7 +164,7 @@ export const Route = createFileRoute("/agents")({
 });
 
 function AgentsPage() {
-  const agents = Route.useLoaderData();
+  const { agents, branches } = Route.useLoaderData();
   const search = Route.useSearch();
   // itemListSchema stays derived from the FULL roster, not the current
   // filter selection -- same reasoning as /listings' bare canonical link:
@@ -165,8 +181,8 @@ function AgentsPage() {
         })
       : null;
 
-  const filteredAgents = agents.filter((agent) => matchesAgentFilters(agent, search));
-  const groups = groupAgentsByBranch(filteredAgents);
+  const filteredAgents = agents.filter((agent) => matchesAgentFilters(agent, search, branches));
+  const groups = groupAgentsByBranch(filteredAgents, branches);
   const hasActiveFilters = Boolean(
     search.q || search.branch || search.district || search.speciality || search.language,
   );
@@ -186,13 +202,17 @@ function AgentsPage() {
         {agents.length === 0 ? <DirectoryEmptyState /> : null}
         {agents.length > 0 ? (
           <>
-            <AgentDirectoryFilters agents={agents} search={search} />
+            <AgentDirectoryFilters agents={agents} branches={branches} search={search} />
             {filteredAgents.length === 0 ? (
               <NoMatchingAgents hasActiveFilters={hasActiveFilters} />
             ) : (
               <div className="space-y-10">
                 {groups.map((group) => (
-                  <AgentGroupSection key={group.branch ?? "__unassigned__"} group={group} />
+                  <AgentGroupSection
+                    key={group.branch ?? "__unassigned__"}
+                    group={group}
+                    branches={branches}
+                  />
                 ))}
               </div>
             )}
@@ -203,7 +223,13 @@ function AgentsPage() {
   );
 }
 
-function AgentGroupSection({ group }: { group: AgentGroup }) {
+function AgentGroupSection({
+  group,
+  branches,
+}: {
+  group: AgentGroup;
+  branches: NeonBranchRecord[];
+}) {
   return (
     <div>
       <h2 className="mb-4 flex items-baseline gap-2 border-b pb-2 text-lg font-semibold">
@@ -212,7 +238,7 @@ function AgentGroupSection({ group }: { group: AgentGroup }) {
       </h2>
       <div className="grid gap-4 md:grid-cols-2">
         {group.agents.map((agent) => (
-          <AgentDirectoryCard key={agent.id} agent={agent} />
+          <AgentDirectoryCard key={agent.id} agent={agent} branches={branches} />
         ))}
       </div>
     </div>
@@ -252,14 +278,18 @@ function NoMatchingAgents({ hasActiveFilters }: { hasActiveFilters: boolean }) {
  */
 function AgentDirectoryFilters({
   agents,
+  branches,
   search,
 }: {
   agents: NeonPublicAgentProfile[];
+  branches: NeonBranchRecord[];
   search: AgentDirectorySearch;
 }) {
   const navigate = useNavigate({ from: "/agents" });
   const branchOptions = uniqueSorted(
-    agents.map((a) => a.branch).filter((branch): branch is string => Boolean(branch)),
+    agents
+      .map((a) => agentBranchName(a, branches))
+      .filter((branch): branch is string => Boolean(branch)),
   );
   const districtOptions = uniqueSorted(agents.flatMap(agentDistrictSlugs));
   const specialityOptions = uniqueSorted(agents.flatMap((a) => a.specialties));
@@ -427,13 +457,22 @@ function AgentDirectoryHeader() {
   );
 }
 
-function AgentDirectoryCard({ agent }: { agent: NeonPublicAgentProfile }) {
+function AgentDirectoryCard({
+  agent,
+  branches,
+}: {
+  agent: NeonPublicAgentProfile;
+  branches: NeonBranchRecord[];
+}) {
   const name = agent.name_zh || agent.name_en || "晉誠地產代理";
   // No fallback: this used to default to the first configured branch (麗都分行), which
   // printed a real branch name on agents who work elsewhere. A missing branch renders
   // nothing — 董事 legitimately has none, and a blank beats a confident wrong answer.
-  const branch = agent.branch;
-  const contact = resolveAgentContact(agent);
+  // agentBranchName prefers a branch_id match against `branches` (the real,
+  // admin-editable table) over the free-text `branch` string, and null if
+  // neither resolves.
+  const branch = agentBranchName(agent, branches);
+  const contact = resolveAgentContact(agent, branches);
   const note = agentContactNote(contact);
   const phoneHref = toTelHref(contact.phone);
   const whatsappHref = toWhatsAppHref(contact.whatsapp);

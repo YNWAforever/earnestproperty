@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
 import { AgentProfileForm } from "@/components/admin/AgentProfileForm";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
-import { fetchAdminAgentEditorContext } from "@/lib/neon/admin-data";
+import { fetchAdminAgentEditorContext, fetchAdminBranches } from "@/lib/neon/admin-data";
+import type { AdminBranchOption } from "@/lib/neon/admin-data.types";
 
 export const Route = createFileRoute("/admin/agents_/new")({
   loader: () => fetchAdminAgentEditorContext(),
@@ -17,6 +19,23 @@ export const Route = createFileRoute("/admin/agents_/new")({
 function NewAdminAgent() {
   const navigate = useNavigate();
   const editorContext = Route.useLoaderData();
+  // Fetched client-side, separately from the loader's editor-context call,
+  // so the loader keeps obtaining editor context through exactly one call
+  // (agents.contract.test.mjs asserts this) -- a failed fetch here just
+  // leaves the 分行 dropdown showing only "未連結", never blocks the form.
+  const [branches, setBranches] = useState<AdminBranchOption[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAdminBranches()
+      .then((data) => {
+        if (!cancelled) setBranches(data as AdminBranchOption[]);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AdminShell title="新增代理" description="建立代理公開資料。">
@@ -35,6 +54,7 @@ function NewAdminAgent() {
         {editorContext ? (
           <AgentProfileForm
             canManageIdentity={editorContext.canManageIdentity}
+            branches={branches}
             onSaved={() => navigate({ to: "/admin/agents" })}
           />
         ) : null}

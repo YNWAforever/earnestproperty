@@ -57,6 +57,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260830130000_estate_expansion.sql",
   "20260830140000_transaction_provenance.sql",
   "20260830150000_agent_languages.sql",
+  "20260830160000_branches_entity.sql",
 ]);
 
 /**

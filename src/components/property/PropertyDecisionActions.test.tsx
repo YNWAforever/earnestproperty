@@ -119,6 +119,84 @@ describe("PropertyDecisionActions", () => {
     expect($("[data-property-cash-required]")).toHaveLength(0);
   });
 
+  test("agent branch label prefers a resolved branch_id over the free-text branch string", () => {
+    const branches = [
+      {
+        id: "branch-uuid-1",
+        slug: "rhine",
+        name: "海韻分行",
+        address: null,
+        phone: null,
+        whatsapp: null,
+        photo: null,
+      },
+    ];
+    const agent = {
+      name_zh: "陳大文",
+      name_en: null,
+      phone: null,
+      whatsapp: null,
+      licence_no: null,
+      avatar_url: null,
+      branch: "麗都分行",
+      branch_id: "branch-uuid-1",
+    };
+
+    const $ = load(
+      renderToStaticMarkup(
+        createElement(PropertyDecisionActions, {
+          agent,
+          branchContact: SITE_BRANCHES[0],
+          branches,
+          fallbackWhatsapp: "85291234567",
+          listingNo: "B059390",
+          title: "測試售盤",
+          dealType: "sale",
+          price: null,
+          onInquiry: () => undefined,
+        }),
+      ),
+    );
+
+    expect($.text()).toContain("海韻分行");
+    expect($.text()).not.toContain("麗都分行");
+  });
+
+  test("an agent with neither branch_id nor a free-text branch renders no branch label at all", () => {
+    const agent = {
+      name_zh: "陳大文",
+      name_en: null,
+      phone: null,
+      whatsapp: null,
+      licence_no: null,
+      avatar_url: null,
+      branch: null,
+      branch_id: null,
+    };
+
+    const $ = load(
+      renderToStaticMarkup(
+        createElement(PropertyDecisionActions, {
+          agent,
+          branchContact: SITE_BRANCHES[0],
+          branches: [],
+          fallbackWhatsapp: "85291234567",
+          listingNo: "B059390",
+          title: "測試售盤",
+          dealType: "sale",
+          price: null,
+          onInquiry: () => undefined,
+        }),
+      ),
+    );
+
+    // Neither of the configured branch names may appear anywhere on the
+    // card -- a blank beats a confident wrong answer (CHANGELOG.md:79-87).
+    expect($.text()).not.toContain("麗都分行");
+    expect($.text()).not.toContain("海韻分行");
+    expect($.text()).not.toContain("青山公路豪景分行");
+  });
+
   test("cash-required-at-closing (and the whole mortgage teaser) never renders for a rent listing", () => {
     // Deposit/stamp duty are sale-transaction concepts; PropertyDecisionActions
     // already gates the entire mortgage card on decision.showMortgage, which

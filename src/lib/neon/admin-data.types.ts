@@ -163,7 +163,13 @@ export type AdminAgentProfileInput = {
   whatsapp: string | null;
   licence_no: string | null;
   avatar_url: string | null;
+  /** Free-text branch label -- the legacy field, kept as the fallback when
+   * `branch_id` is unset. Never dropped; see 20260830160000_branches_entity.sql. */
   branch: string | null;
+  /** FK into `branches.id`, nullable. Starts NULL for every existing agent --
+   * no backfill/guess of which real branch they belong to. Set by a human via
+   * this form's 分行 dropdown (see AgentProfileForm.tsx), never inferred. */
+  branch_id: string | null;
   bio: string | null;
   specialties: string[];
   served_estate_slugs: string[];
@@ -182,6 +188,14 @@ export type AdminAgentProfileMutationInput = Omit<
 
 export type AdminAgentEditorContext = {
   canManageIdentity: boolean;
+};
+
+/** A row from the `branches` table, as offered to the admin agent-profile
+ * form's 分行 dropdown -- see fetchAdminBranches(). */
+export type AdminBranchOption = {
+  id: string;
+  slug: string;
+  name: string;
 };
 
 export type AdminAgentProfileRow = AdminAgentProfileInput & {

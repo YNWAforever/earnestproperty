@@ -59,6 +59,16 @@ export async function fetchAdminAgentProfiles() {
   );
 }
 
+const fetchAdminBranchesServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager"]);
+  const data = await import("./admin-data.server");
+  return data.fetchAdminBranches();
+});
+
+export async function fetchAdminBranches() {
+  return callStaffServerFn(async () => fetchAdminBranchesServer(await withStaffAuthHeaders({})));
+}
+
 const fetchAdminAgentProfileServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {

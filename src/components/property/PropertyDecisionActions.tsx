@@ -4,8 +4,10 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { propertyEnquiryMessage, type PropertyBranchContact } from "@/config/site";
+import { agentBranchName } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { calculateMortgage } from "@/lib/mortgage";
+import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
 
 import { getPropertyDecision } from "./property-decision.js";
 
@@ -17,11 +19,20 @@ type PublicAgent = {
   licence_no: string | null;
   avatar_url: string | null;
   branch: string | null;
+  /** Optional: property.profiles carries this (NeonPublicAgentProfile), but
+   * this component's PublicAgent stays a narrow, hand-picked subset -- see
+   * agentBranchName in src/lib/agent-directory.ts for the preference logic. */
+  branch_id?: string | null;
 };
 
 type PropertyDecisionActionsProps = {
   agent: PublicAgent | null;
   branchContact: PropertyBranchContact;
+  /** Resolves agent.branch_id against a real branches.name -- see
+   * agentBranchName. Defaults to [] (free-text `branch` fallback only) so
+   * every existing caller/test that doesn't pass this keeps working exactly
+   * as before. */
+  branches?: NeonBranchRecord[];
   fallbackWhatsapp: string;
   listingNo: string;
   title: string;
@@ -39,6 +50,7 @@ function formatMoney(value: number) {
 export function PropertyMobileContactSummary({
   agent,
   branchContact,
+  branches = [],
   fallbackWhatsapp,
   listingNo,
   title,
@@ -47,6 +59,10 @@ export function PropertyMobileContactSummary({
   onInquiry,
 }: PropertyMobileContactSummaryProps) {
   const decision = getPropertyDecision({ dealType, price });
+  // agentBranchName prefers a branch_id match against `branches` over the
+  // agent's free-text `branch` string, and null if neither resolves --
+  // never a guessed default (see agents.tsx for the documented history).
+  const branch = agent ? agentBranchName(agent, branches) : null;
   const branchPhone = "phone" in branchContact ? branchContact.phone : branchContact.phoneTel;
   const phone = agent?.phone || branchPhone;
   // Branch WhatsApp numbers are all null until the client confirms them (the
@@ -82,9 +98,7 @@ export function PropertyMobileContactSummary({
               {agent.licence_no ? (
                 <p className="text-xs text-muted-foreground">牌照 {agent.licence_no}</p>
               ) : null}
-              {agent.branch ? (
-                <p className="text-xs text-muted-foreground">{agent.branch}</p>
-              ) : null}
+              {branch ? <p className="text-xs text-muted-foreground">{branch}</p> : null}
             </div>
           </div>
         ) : (
@@ -130,6 +144,7 @@ export function PropertyMobileContactSummary({
 export function PropertyDecisionActions({
   agent,
   branchContact,
+  branches = [],
   fallbackWhatsapp,
   listingNo,
   title,
@@ -138,6 +153,10 @@ export function PropertyDecisionActions({
   onInquiry,
 }: PropertyDecisionActionsProps) {
   const decision = getPropertyDecision({ dealType, price });
+  // agentBranchName prefers a branch_id match against `branches` over the
+  // agent's free-text `branch` string, and null if neither resolves --
+  // never a guessed default (see agents.tsx for the documented history).
+  const branch = agent ? agentBranchName(agent, branches) : null;
   const branchPhone = "phone" in branchContact ? branchContact.phone : branchContact.phoneTel;
   const phone = agent?.phone || branchPhone;
   // Branch WhatsApp numbers are all null until the client confirms them (the
@@ -180,9 +199,7 @@ export function PropertyDecisionActions({
                   {agent.licence_no ? (
                     <p className="text-xs text-muted-foreground">牌照 {agent.licence_no}</p>
                   ) : null}
-                  {agent.branch ? (
-                    <p className="text-xs text-muted-foreground">{agent.branch}</p>
-                  ) : null}
+                  {branch ? <p className="text-xs text-muted-foreground">{branch}</p> : null}
                 </div>
               </div>
             ) : (

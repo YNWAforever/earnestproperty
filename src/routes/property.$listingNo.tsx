@@ -45,6 +45,8 @@ import {
   type EstateTransaction,
 } from "@/lib/queries";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
+import { fetchNeonBranches } from "@/lib/neon/public-data";
+import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
 import {
   formatArea,
   formatHkd,
@@ -86,11 +88,7 @@ type PropertyHeadData = {
 // that doesn't exist at all.
 const UNAVAILABLE_STATUSES = new Set(["sold", "rented"]);
 
-function formatDealPrice(
-  isRent: boolean,
-  rent: number | null,
-  price: number | null,
-): string {
+function formatDealPrice(isRent: boolean, rent: number | null, price: number | null): string {
   if (isRent) {
     const rentDisplay = formatHkd(rent);
     return rentDisplay ? `${rentDisplay} / 月` : "—";
@@ -107,15 +105,20 @@ export const Route = createFileRoute("/property/$listingNo")({
     if (!property || (!UNAVAILABLE_STATUSES.has(property.status) && property.status !== "active")) {
       throw notFound();
     }
-    const [similar, txns] = await Promise.all([
+    const [similar, txns, branches] = await Promise.all([
       property.estate_id
         ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4)
         : Promise.resolve([] as SimilarListing[]),
       property.estate_id
         ? fetchEstateTransactions(property.estate_id, 8)
         : Promise.resolve([] as EstateTransaction[]),
+      // Non-essential: resolves property.profiles' branch_id to a real
+      // branches.name (see agentBranchName in src/lib/agent-directory.ts) --
+      // a failed fetch just falls back to the agent's free-text `branch`,
+      // exactly like before this table existed.
+      fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
     ]);
-    return { property, similar, txns };
+    return { property, similar, txns, branches };
   },
   head: ({ loaderData }) => {
     const p = (loaderData as PropertyHeadData | undefined)?.property;
@@ -134,8 +137,7 @@ export const Route = createFileRoute("/property/$listingNo")({
     const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
     const title = `${safeTitle}｜${priceStr}｜晉誠地產`;
     const safeDescription = sanitizeListingText(p.description);
-    const desc =
-      (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
+    const desc = (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
     const img = p.images?.[0];
     return {
       meta: [
@@ -210,10 +212,11 @@ function toEmbed(u: string) {
 }
 
 function PropertyPage() {
-  const { property, similar, txns } = Route.useLoaderData() as {
+  const { property, similar, txns, branches } = Route.useLoaderData() as {
     property: PropertyDetail;
     similar: SimilarListing[];
     txns: EstateTransaction[];
+    branches: NeonBranchRecord[];
   };
   // Imported listing text can arrive malformed (raw CSV artifacts, stray
   // quotes, exact "NaN"/"null"/"$0" tokens) -- sanitize once here and reuse
@@ -231,16 +234,10 @@ function PropertyPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
-  const { favourited, toggle: toggleFavourited } = useFavourite(
-    property.listing_no,
-  );
+  const { favourited, toggle: toggleFavourited } = useFavourite(property.listing_no);
 
   const isRent = property.deal_type === "rent";
-  const priceLabel = formatDealPrice(
-    isRent,
-    Number(property.rent),
-    Number(property.price),
-  );
+  const priceLabel = formatDealPrice(isRent, Number(property.rent), Number(property.price));
   const psf =
     property.price && property.saleable_area
       ? Math.round(Number(property.price) / property.saleable_area)
@@ -446,15 +443,8 @@ function PropertyPage() {
           <span>編號 {property.listing_no}</span>
         </nav>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={toggleFavourited}
-            aria-pressed={favourited}
-          >
-            <Heart
-              className={`mr-1.5 h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`}
-            />
+          <Button variant="outline" size="sm" onClick={toggleFavourited} aria-pressed={favourited}>
+            <Heart className={`mr-1.5 h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`} />
             {favourited ? "已加入心水" : "加入心水"}
           </Button>
           <Button variant="outline" size="sm" onClick={handleShare}>
@@ -519,10 +509,7 @@ function PropertyPage() {
           />
           <Spec label="建築面積" value={property.gross_area ? `${property.gross_area} 呎` : "—"} />
           <Spec label="座向" value={property.orientation ?? "—"} />
-          <Spec
-            label="管理費"
-            value={formatHkd(property.management_fee) ?? "—"}
-          />
+          <Spec label="管理費" value={formatHkd(property.management_fee) ?? "—"} />
           <Spec
             icon={<Calendar className="h-4 w-4" />}
             label="入伙年份"
@@ -707,6 +694,7 @@ function PropertyPage() {
             <PropertyMobileContactSummary
               agent={agent}
               branchContact={branchContact}
+              branches={branches}
               fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
               listingNo={property.listing_no}
               title={safeTitle}
@@ -813,9 +801,7 @@ function PropertyPage() {
                     <TableBody>
                       {txns.map((t, i) => (
                         <TableRow key={i}>
-                          <TableCell>
-                            {formatHkDate(t.deal_date) ?? "—"}
-                          </TableCell>
+                          <TableCell>{formatHkDate(t.deal_date) ?? "—"}</TableCell>
                           <TableCell>{t.unit ?? "—"}</TableCell>
                           <TableCell className="text-right">
                             {formatArea(t.saleable_area) ?? "—"}
@@ -864,6 +850,7 @@ function PropertyPage() {
               <PropertyDecisionActions
                 agent={agent}
                 branchContact={branchContact}
+                branches={branches}
                 fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
                 listingNo={property.listing_no}
                 title={safeTitle}
@@ -1006,11 +993,7 @@ function Spec({
 function SimilarCard({ listing }: { listing: SimilarListing }) {
   const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
   const isRent = listing.deal_type === "rent";
-  const price = formatDealPrice(
-    isRent,
-    Number(listing.rent),
-    Number(listing.price),
-  );
+  const price = formatDealPrice(isRent, Number(listing.rent), Number(listing.price));
   const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
   return (
     <Link

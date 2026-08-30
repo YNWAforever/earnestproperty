@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import type {
+  NeonBranchRecord,
   NeonCorridorInventoryInput,
   NeonCorridorInventoryResult,
   NeonEstateOption,
@@ -16,6 +17,7 @@ import type {
 } from "./public-data.types";
 import { getSql } from "./db.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
+import { isMissingBranchesTableError } from "./branches-schema";
 
 type DbRow = Record<string, unknown>;
 
@@ -41,6 +43,13 @@ const publicAgentProfileColumns = `
   s.licence_no AS agent_licence_no,
   s.avatar_url AS agent_avatar_url,
   s.branch AS agent_branch,
+  -- Guarded the same way languages/public_slug/etc. are (to_jsonb, never a
+  -- bare column reference) -- branch_id is new in this exact deploy
+  -- (20260830160000_branches_entity.sql), so referencing it directly would
+  -- break every one of this projection's callers on a database that hasn't
+  -- run that migration yet. See "public SQL must remain valid before the
+  -- agent-profile migration adds these columns" in agent-profiles.contract.test.mjs.
+  to_jsonb(s)->>'branch_id' AS agent_branch_id,
   s.bio AS agent_bio,
   ARRAY(SELECT jsonb_array_elements_text(COALESCE(to_jsonb(s)->'specialties', '[]'::jsonb)))
     AS agent_specialties,
@@ -183,6 +192,7 @@ function mapPublicAgentProfile(row: DbRow): NeonPublicAgentProfile | null {
     licence_no: stringOrNull(row.agent_licence_no),
     avatar_url: stringOrNull(row.agent_avatar_url),
     branch: stringOrNull(row.agent_branch),
+    branch_id: stringOrNull(row.agent_branch_id),
     bio: stringOrNull(row.agent_bio),
     specialties: textArrayOrNull(row.agent_specialties) ?? [],
     served_estate_slugs: textArrayOrNull(row.agent_served_estate_slugs) ?? [],
@@ -745,6 +755,41 @@ export async function fetchPublicAgentProfileBySlug(input: {
     );
     return rows[0] ? mapPublicAgentProfile(rows[0]) : null;
   }, null);
+}
+
+/**
+ * All rows from the `branches` table (20260830160000_branches_entity.sql).
+ * Small, fully-public, no filters needed -- callers resolve a specific
+ * agent's branch_id against this list themselves (see agentBranchName() in
+ * src/lib/agent-directory.ts), rather than this function taking an id and
+ * risking a `.find()` that silently falls back to the first row on a miss.
+ *
+ * Deliberately NOT joined into publicAgentJoin/publicAgentProfileColumns
+ * (the query shared by every property/listing/agent-profile fetch): joining
+ * a brand-new table into that widely-shared join would make five unrelated,
+ * already-working queries fail if `branches` hasn't been migrated yet. A
+ * dedicated, independently-guarded function (matching fetchCmsVideos'
+ * isMissingCmsVideosTableError precedent) keeps that blast radius to just
+ * the branch_id resolution itself.
+ */
+export async function listBranches(): Promise<NeonBranchRecord[]> {
+  try {
+    const rows = await sql().query(
+      "SELECT id, slug, name, address, phone, whatsapp, photo FROM branches ORDER BY name ASC",
+    );
+    return rows.map((row) => ({
+      id: stringOrEmpty(row.id),
+      slug: stringOrEmpty(row.slug),
+      name: stringOrEmpty(row.name),
+      address: stringOrNull(row.address),
+      phone: stringOrNull(row.phone),
+      whatsapp: stringOrNull(row.whatsapp),
+      photo: stringOrNull(row.photo),
+    }));
+  } catch (error) {
+    if (isMissingBranchesTableError(error)) return [];
+    throw error;
+  }
 }
 
 export async function fetchListingCountsByEstate(): Promise<Record<string, number>> {
