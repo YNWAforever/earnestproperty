@@ -134,6 +134,11 @@ export type EstateRecord = {
   // already arrive on every row -- this only widens the type to expose them.
   seo_title: string | null;
   seo_description: string | null;
+  // P4 Task 2's migration added this column; every row (including the 5 with
+  // real detail pages) is NULL until an estate is manually verified. `SELECT
+  // *` already returns it -- widening the type here is what lets Task 4's
+  // verified-facts DataNote read it type-safely.
+  verified_at: string | null;
 };
 
 export async function fetchEstateBySlug(slug: string): Promise<EstateRecord | null> {

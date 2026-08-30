@@ -7,14 +7,18 @@ import {
 } from "@/components/ui/accordion";
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
+import { DataNote } from "@/components/layout/DataNote";
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
+import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { getEstatePageContent } from "@/content/estate-pages";
+import { shamTsengSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
+import { formatHkDate } from "@/lib/format";
 import {
   fetchEstateBySlug,
   fetchEstateTransactions,
@@ -107,6 +111,19 @@ function EstatePage() {
     estate.year_completed ? `${estate.year_completed} 年落成` : "",
     estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "單位數待查",
   ].filter(Boolean);
+  // Task 4 (P4 plan): transport + school-net sections reuse already-curated
+  // content instead of inventing new facts. transportSegment is null (not a
+  // placeholder) when the estate's district isn't part of a known corridor
+  // segment -- true today of the 3 unknown-district estates from Task 2, none
+  // of which have a page yet, but this must still degrade cleanly rather than
+  // crash if that ever changes. showSchoolNet is only true for the one
+  // district with real, sourced school-net data (school-nets.ts) -- see that
+  // file's own comment for why other districts intentionally render nothing
+  // here rather than invented figures.
+  const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(
+    estate.district_slug,
+  );
+  const showSchoolNet = estate.district_slug === "sham-tseng";
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -146,9 +163,6 @@ function EstatePage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <p className="text-sm opacity-80">深井屋苑獨立 SEO 頁</p>
           <h1 className="mt-2 text-4xl font-bold sm:text-5xl">{seo?.nameZh ?? estate.name_zh}</h1>
-          {estateFacts.length > 0 && (
-            <p className="mt-3 text-base opacity-85">{estateFacts.join(" · ")}</p>
-          )}
           <p className="mt-5 max-w-3xl text-base leading-relaxed opacity-90">
             {content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
           </p>
@@ -157,6 +171,32 @@ function EstatePage() {
           </div>
         </div>
       </section>
+
+      {/* Verified-facts block: the plain "· "-joined summary this used to be
+          carried no source or as-of date. estate.verified_at (P4 Task 2's
+          column) is null for every estate today, including the 5 with real
+          detail pages -- the DataNote shows an honest caveat rather than a
+          fabricated verification date in that case. The facts themselves are
+          still real DB data and still render either way. */}
+      {estateFacts.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+          <DataNote
+            source="本行屋苑資料庫"
+            asOf={
+              estate.verified_at
+                ? (formatHkDate(estate.verified_at) ?? undefined)
+                : undefined
+            }
+            caveat={
+              estate.verified_at
+                ? undefined
+                : "以上資料尚待人手覆核並標註核實日期，如有出入以最新單位資料為準。"
+            }
+          >
+            {estateFacts.join(" · ")}
+          </DataNote>
+        </section>
+      )}
 
       <EstateMarketSnapshot
         avgPsf={Number(estate.avg_saleable_psf ?? 0) || null}
@@ -223,6 +263,76 @@ function EstatePage() {
           </div>
         )}
       </section>
+
+      {/* Transport + school-net: both reuse already-curated content (the
+          corridor segment's own transport copy, school-nets.ts) rather than
+          inventing new facts for this estate specifically. Either half is
+          omitted entirely (not shown as an empty placeholder) when there is
+          nothing real to show -- transportSegment is null outside a known
+          corridor segment, showSchoolNet is only true in sham-tseng. */}
+      {(transportSegment || showSchoolNet) && (
+        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div
+            className={
+              transportSegment && showSchoolNet
+                ? "grid gap-5 lg:grid-cols-2"
+                : "grid gap-5"
+            }
+          >
+            {transportSegment && (
+              <div className="rounded-lg border bg-card p-5">
+                <h3 className="text-lg font-bold text-primary">附近交通</h3>
+                <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                  {transportSegment.transport}
+                </p>
+                <Link
+                  to="/castle-peak-road/$segment"
+                  params={{ segment: transportSegment.slug }}
+                  className="mt-4 inline-block text-sm font-semibold text-primary underline"
+                >
+                  查看{transportSegment.nameZh}交通及生活資訊 →
+                </Link>
+              </div>
+            )}
+            {showSchoolNet && (
+              <div className="rounded-lg border bg-card p-5">
+                <h3 className="text-lg font-bold text-primary">
+                  校網 {shamTsengSchoolNet.netCode}（小學）
+                </h3>
+                <p className="mt-4 text-sm text-muted-foreground">
+                  {seo?.nameZh ?? estate.name_zh}屬
+                  {shamTsengSchoolNet.districtLabel}{" "}
+                  {shamTsengSchoolNet.netCode} 校網。
+                </p>
+                {shamTsengSchoolNet.primarySchools.length > 0 && (
+                  <ul className="mt-3 space-y-2 text-sm">
+                    {shamTsengSchoolNet.primarySchools.map((s) => (
+                      <li
+                        key={s.name}
+                        className="flex items-center justify-between rounded-md border px-3 py-2"
+                      >
+                        <span>{s.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {s.type}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <DataNote
+                  className="mt-4"
+                  source={shamTsengSchoolNet.source}
+                  sourceUrl={shamTsengSchoolNet.sourceUrl ?? undefined}
+                  asOf={shamTsengSchoolNet.verifiedOn ?? undefined}
+                  caveat="實際派位及校網資料以教育局最新公布為準，並因應個別地址及入學年度而有所不同。"
+                >
+                  中學屬{shamTsengSchoolNet.districtLabel}中學校網。
+                </DataNote>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">

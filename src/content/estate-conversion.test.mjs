@@ -3,6 +3,13 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import ts from "typescript";
 
+// Plain data modules with no imports of their own (see each file's header
+// comment), so -- like castle-peak-road.test.mjs already does for the same
+// module -- they can be imported directly under Node's native TS stripping,
+// letting the P4 Task 4 tests below prove real behavior instead of grepping.
+import { findCastlePeakRoadSegmentByDistrictSlug } from "./castle-peak-road.ts";
+import { shamTsengSchoolNet } from "./school-nets.ts";
+
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 }
@@ -389,4 +396,97 @@ test("homepage shows featured property videos after featured listings", () => {
   assert.ok(featuredAt > -1, "featured listings section should carry its eyebrow");
   assert.ok(videosAt > -1, "video section should carry its eyebrow");
   assert.ok(featuredAt < videosAt, "精選樓盤影片 must render after 精選筍盤");
+});
+
+// --- P4 Task 4: verified-facts DataNote, transport, school-net, PSF trend ---
+
+test("findCastlePeakRoadSegmentByDistrictSlug resolves the real district of every hasPage estate and degrades to null outside a known segment (P4 Task 4)", () => {
+  // All five of today's real /estate/$slug estates carry
+  // district_slug === "sham-tseng" (estate-registry.ts) -- the estate
+  // template's new transport section must actually match for them, not just
+  // compile against the function's type signature.
+  const shamTsengMatch = findCastlePeakRoadSegmentByDistrictSlug("sham-tseng");
+  assert.notEqual(shamTsengMatch, null);
+  assert.equal(typeof shamTsengMatch.transport, "string");
+  assert.ok(shamTsengMatch.transport.length > 0);
+
+  // Task 2's three unknown-district estates (帝華軒/海韻台/龍騰閣) have
+  // district_slug === null in both the DB row and EstateRecord's type. The
+  // route isn't reachable for them yet (hasPage: false), but the lookup
+  // itself must still degrade to null rather than throw if that ever changes.
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug(null), null);
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug(undefined), null);
+
+  // A district outside every known corridor segment resolves to null too --
+  // "hide, don't placeholder" rather than a false match.
+  assert.equal(findCastlePeakRoadSegmentByDistrictSlug("mong-kok"), null);
+});
+
+test("shamTsengSchoolNet stays the estate template's only school-net source, imported not re-derived (P4 Task 4)", () => {
+  assert.equal(shamTsengSchoolNet.netCode, "62");
+  assert.equal(Array.isArray(shamTsengSchoolNet.primarySchools), true);
+});
+
+test("estate route wires the verified-facts DataNote, transport, and school-net sections (P4 Task 4)", () => {
+  const route = read("src/routes/estate.$slug.tsx");
+
+  assert.match(
+    route,
+    /import \{ DataNote \} from "@\/components\/layout\/DataNote";/,
+  );
+  assert.match(
+    route,
+    /import \{ findCastlePeakRoadSegmentByDistrictSlug \} from "@\/content\/castle-peak-road";/,
+  );
+  assert.match(
+    route,
+    /import \{ shamTsengSchoolNet \} from "@\/content\/school-nets";/,
+  );
+
+  // Verified-facts block: sourced from estate.verified_at (Task 2's column,
+  // null for every estate today), with an honest caveat rather than a
+  // fabricated date when it's null -- and the DataNote component is actually
+  // used, not just a plain paragraph.
+  assert.match(route, /estate\.verified_at/);
+  assert.match(route, /<DataNote/);
+  assert.match(route, /尚待人手覆核並標註核實日期/);
+
+  // Transport + school-net are each gated on the real derived value (not a
+  // hardcoded true), so both the "renders" and "omitted" branches are
+  // reachable in the actual output -- the "renders" branch is proven for
+  // real above via findCastlePeakRoadSegmentByDistrictSlug/shamTsengSchoolNet
+  // directly; this proves the route's rendering is actually conditioned on
+  // that same result rather than always showing (or always hiding) the
+  // section.
+  assert.match(
+    route,
+    /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/,
+  );
+  assert.match(
+    route,
+    /const showSchoolNet = estate\.district_slug === "sham-tseng";/,
+  );
+  assert.match(route, /\{transportSegment && \(/);
+  assert.match(route, /\{showSchoolNet && \(/);
+});
+
+test("EstateMarketSnapshot renders a PSF-trend line chart fed by the real transactions prop, hidden below two data points (P4 Task 4)", () => {
+  const snapshot = read("src/components/site/EstateMarketSnapshot.tsx");
+
+  assert.match(snapshot, /from "recharts";/);
+  assert.match(snapshot, /LineChart/);
+  assert.match(snapshot, /ResponsiveContainer/);
+
+  // Built from the transactions param already passed into the component and
+  // already used for the 5-row table -- not a new query, not a fixture.
+  assert.match(
+    snapshot,
+    /function buildPsfTrend\(transactions: EstateTransaction\[\]\): PsfTrendPoint\[\]/,
+  );
+  assert.match(snapshot, /const psfTrend = buildPsfTrend\(transactions\);/);
+  assert.doesNotMatch(snapshot, /fetchEstateTransactions\(/);
+
+  // A single point (or zero) can't draw a trend -- must be hidden, not shown
+  // broken, matching this repo's established "hide, don't placeholder" rule.
+  assert.match(snapshot, /psfTrend\.length >= 2/);
 });
