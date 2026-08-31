@@ -41,6 +41,7 @@ import { Route as ApiYoutubeSyncRouteImport } from './routes/api.youtube-sync'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
+import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AdminTeamRouteImport } from './routes/admin.team'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
@@ -238,6 +239,11 @@ const AgentsSlugRoute = AgentsSlugRouteImport.update({
 const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
   id: '/whatsapp',
   path: '/whatsapp',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminTeamRoute = AdminTeamRouteImport.update({
@@ -470,6 +476,7 @@ export interface FileRoutesByFullPath {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -540,6 +547,7 @@ export interface FileRoutesByTo {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -613,6 +621,7 @@ export interface FileRoutesById {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents_/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -687,6 +696,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/segments'
     | '/admin/team'
+    | '/admin/transactions'
     | '/admin/whatsapp'
     | '/agents/$slug'
     | '/api/mls-sync'
@@ -757,6 +767,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/segments'
     | '/admin/team'
+    | '/admin/transactions'
     | '/admin/whatsapp'
     | '/agents/$slug'
     | '/api/mls-sync'
@@ -829,6 +840,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/segments'
     | '/admin/team'
+    | '/admin/transactions'
     | '/admin/whatsapp'
     | '/agents_/$slug'
     | '/api/mls-sync'
@@ -1149,6 +1161,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminWhatsappRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/transactions': {
+      id: '/admin/transactions'
+      path: '/transactions'
+      fullPath: '/admin/transactions'
+      preLoaderRoute: typeof AdminTransactionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/team': {
       id: '/admin/team'
       path: '/team'
@@ -1428,6 +1447,7 @@ interface AdminRouteChildren {
   AdminOperationsRoute: typeof AdminOperationsRoute
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminTeamRoute: typeof AdminTeamRoute
+  AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminAgentsIdRoute: typeof AdminAgentsIdRoute
@@ -1449,6 +1469,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminOperationsRoute: AdminOperationsRoute,
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminTeamRoute: AdminTeamRoute,
+  AdminTransactionsRoute: AdminTransactionsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminAgentsIdRoute: AdminAgentsIdRoute,
