@@ -78,6 +78,7 @@ export type AdminCmsVideoInput = {
   description: string | null;
   sort_order: number;
   published: boolean;
+  category: string | null;
 };
 
 export type AdminCmsVideoRow = AdminCmsVideoInput & {
