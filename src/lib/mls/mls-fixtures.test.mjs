@@ -96,7 +96,7 @@ test("inferDistrictSlug separates Sham Tseng, Ting Kau, and Tsuen Wan", () => {
     inferDistrictSlug({ streetZh: "青山公路汀九段386號", buildingZh: "觀海別墅" }),
     "ting-kau",
   );
-  assert.equal(inferDistrictSlug({ streetZh: "荃灣西", buildingZh: "海雲軒" }), "tsuen-wan");
+  assert.equal(inferDistrictSlug({ streetZh: "荃灣西", buildingZh: "海雲軒" }), "sham-tseng");
 });
 
 test("normalizeListingDetail creates a sale property row", () => {

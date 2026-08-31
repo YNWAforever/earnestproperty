@@ -2,10 +2,61 @@ import { splitFeatureText } from "./parse-old-site.mjs";
 
 const ESTATE_PATTERNS = [
   ["bellagio", [/碧堤半島/i, /BELLAGIO/i]],
+  [
+    "tai-wah-hin",
+    [/帝華軒/i, /浪翠園5期/i, /浪翠園五期/i, /ROYAL SEA CREST/i, /SEA CREST VILLA PHASE 5/i],
+  ],
   ["sea-crest-villa", [/浪翠園/i, /SEA CREST VILLA/i]],
   ["hong-kong-garden", [/豪景花園/i, /HONG KONG GARDEN/i]],
+  ["hoi-wan-toi", [/海韻臺/i, /海韻台/i, /RHINE TERRACE/i]],
   ["rhine-garden", [/海韻花園/i, /RHINE GARDEN/i]],
   ["lido-garden", [/麗都花園/i, /LIDO GDN/i, /LIDO GARDEN/i]],
+  ["hoi-wan-hin", [/海雲軒/i, /ANGLERS' BAY/i, /ANGLERS BAY/i]],
+  ["chun-wong-kui", [/縉皇居/i, /OCEAN POINTE/i]],
+  ["lung-tang-kok", [/龍騰閣/i, /LUNG TANG COURT/i]],
+  ["mun-ming-shan", [/滿名山/i, /THE BLOOMSWAY/i, /BLOOMSWAY/i]],
+  [
+    "wong-gam-hoi-waan",
+    [/黃金海灣/i, /GOLD COAST BAY/i, /意嵐/i, /THE UPPLAND/i, /珀岸/i, /THE RESERVE/i],
+  ],
+  [
+    "wong-gam-hoi-ngon",
+    [/香港黃金海岸/i, /黃金海岸/i, /HONG KONG GOLD COAST/i, /HK GOLD COAST/i, /GOLD COAST/i],
+  ],
+  ["oi-kam-hoi-ngon", [/愛琴海岸/i, /AEGEAN COAST/i]],
+  [
+    "tai-yu",
+    [
+      /帝御金灣/i,
+      /帝御‧金灣/i,
+      /SEACOAST ROYALE/i,
+      /帝御星濤/i,
+      /帝御‧星濤/i,
+      /STARFRONT ROYALE/i,
+      /帝御嵐天/i,
+      /帝御‧嵐天/i,
+      /SKYPOINT ROYALE/i,
+      /帝御/i,
+      /THE ROYALE/i,
+    ],
+  ],
+  ["sing-tai", [/星堤/i, /AVIGNON/i]],
+  ["seong-yuen", [/上源/i, /LE PONT/i]],
+  ["the-carmel", [/THE CARMEL/i]],
+  ["oma-oma", [/OMA OMA/i]],
+  ["lin-shan", [/漣山/i, /THE HILLGROVE/i]],
+  ["long-tou-waan", [/浪濤灣/i, /AQUA BLUE/i]],
+  [
+    "tai-tou-waan",
+    [
+      /帝濤灣/i,
+      /帝濤灣浪琴軒/i,
+      /帝濤灣海琴軒/i,
+      /GRAND PACIFIC VIEW/i,
+      /GRAND PACIFIC HEIGHTS/i,
+      /PALATIAL COAST/i,
+    ],
+  ],
 ];
 
 export function resolveEstateSlug(detail) {
@@ -22,8 +73,11 @@ export function inferDistrictSlug(detail) {
   const haystack = `${detail.streetZh ?? ""} ${detail.streetEn ?? ""} ${detail.buildingZh ?? ""}`;
 
   if (/汀九|TING KAU|觀海別墅|嘉御龍庭|汀九別墅/i.test(haystack)) return "ting-kau";
-  if (/深井|SHAM TSENG|麗都花園|碧堤半島|浪翠園|海韻花園/i.test(haystack)) return "sham-tseng";
-  if (/荃灣|TSUEN WAN|海雲軒|縉皇居/i.test(haystack)) return "tsuen-wan";
+  if (
+    /深井|SHAM TSENG|麗都花園|碧堤半島|浪翠園|海韻花園|海雲軒|縉皇居|海韻臺|海韻台/i.test(haystack)
+  )
+    return "sham-tseng";
+  if (/荃灣|TSUEN WAN/i.test(haystack)) return "tsuen-wan";
   if (/青山公路|CASTLE PEAK/i.test(haystack)) return "castle-peak-road";
 
   return "tsuen-wan";
