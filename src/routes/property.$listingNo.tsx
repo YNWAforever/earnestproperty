@@ -570,6 +570,7 @@ function PropertyPage() {
                   height={900}
                   className="aspect-[4/3] w-full object-cover"
                   loading="eager"
+                  fetchPriority="high"
                 />
                 {images.length > 1 && (
                   <>
