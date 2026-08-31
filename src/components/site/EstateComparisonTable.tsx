@@ -1,8 +1,10 @@
 import { Link } from "@tanstack/react-router";
 
+import { formatHkDate } from "@/lib/format";
 import {
   buildComparisonColumns,
   buildComparisonRowDefs,
+  latestComparisonAsOf,
   type EstateComparisonRow,
 } from "./estate-comparison";
 
@@ -33,12 +35,14 @@ export function EstateComparisonTable({
   if (!columns) return null;
 
   const rows = buildComparisonRowDefs();
+  const asOf = formatHkDate(latestComparisonAsOf(columns));
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <h2 className="text-xl font-bold text-primary">附近屋苑比較</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        同區或同段屋苑的基本資料比較，資料暫缺時顯示「—」。
+        同區或同段屋苑的基本資料比較，資料暫缺時顯示「—」
+        {asOf ? `，資料更新於 ${asOf}` : ""}。
       </p>
       <div className="mt-4 max-w-full overflow-x-auto rounded-md border">
         <table className="w-full min-w-[480px] text-left text-sm">
@@ -51,20 +55,14 @@ export function EstateComparisonTable({
                       with a real detail page (hasPage) gets a link, and the
                       current estate (index 0) is already on its own page. */}
                   {index > 0 && estate.hasPage ? (
-                    <Link
-                      to="/estate/$slug"
-                      params={{ slug: estate.slug }}
-                      className="underline"
-                    >
+                    <Link to="/estate/$slug" params={{ slug: estate.slug }} className="underline">
                       {estate.nameZh}
                     </Link>
                   ) : (
                     estate.nameZh
                   )}
                   {index === 0 && (
-                    <span className="ml-1 font-normal text-muted-foreground">
-                      （目前瀏覽）
-                    </span>
+                    <span className="ml-1 font-normal text-muted-foreground">（目前瀏覽）</span>
                   )}
                 </th>
               ))}

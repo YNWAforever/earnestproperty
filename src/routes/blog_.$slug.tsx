@@ -72,6 +72,7 @@ async function resolveCompareEstates(
         totalUnits: record?.total_units ?? null,
         yearCompleted: record?.year_completed ?? null,
         developer: record?.developer ?? null,
+        asOf: record?.verified_at ?? null,
       };
     }),
   );

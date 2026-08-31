@@ -433,18 +433,12 @@ test("shamTsengSchoolNet stays the estate template's only school-net source, imp
 test("estate route wires the verified-facts DataNote, transport, and school-net sections (P4 Task 4)", () => {
   const route = read("src/routes/estate.$slug.tsx");
 
-  assert.match(
-    route,
-    /import \{ DataNote \} from "@\/components\/layout\/DataNote";/,
-  );
+  assert.match(route, /import \{ DataNote \} from "@\/components\/layout\/DataNote";/);
   assert.match(
     route,
     /import \{ findCastlePeakRoadSegmentByDistrictSlug \} from "@\/content\/castle-peak-road";/,
   );
-  assert.match(
-    route,
-    /import \{ shamTsengSchoolNet \} from "@\/content\/school-nets";/,
-  );
+  assert.match(route, /import \{ shamTsengSchoolNet \} from "@\/content\/school-nets";/);
 
   // Verified-facts block: sourced from estate.verified_at (Task 2's column,
   // null for every estate today), with an honest caveat rather than a
@@ -461,14 +455,8 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
   // directly; this proves the route's rendering is actually conditioned on
   // that same result rather than always showing (or always hiding) the
   // section.
-  assert.match(
-    route,
-    /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/,
-  );
-  assert.match(
-    route,
-    /const showSchoolNet = estate\.district_slug === "sham-tseng";/,
-  );
+  assert.match(route, /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/);
+  assert.match(route, /const showSchoolNet = estate\.district_slug === "sham-tseng";/);
   assert.match(route, /\{transportSegment && \(/);
   assert.match(route, /\{showSchoolNet && \(/);
 });
@@ -514,18 +502,12 @@ test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 T
     route,
     /import \{\s*EstateComparisonTable,\s*type EstateComparisonRow,\s*\} from "@\/components\/site\/EstateComparisonTable";/,
   );
-  assert.match(
-    route,
-    /import \{ findComparableEstates \} from "@\/content\/estate-registry";/,
-  );
+  assert.match(route, /import \{ findComparableEstates \} from "@\/content\/estate-registry";/);
 
   // Up to 2 comparables, computed from the registry alone (before any DB
   // fetch), so the "which estates are comparable" decision stays
   // deterministic and independent of what facts happen to be in the DB.
-  assert.match(
-    route,
-    /const comparableEntries = findComparableEstates\(estate\.slug, 2\);/,
-  );
+  assert.match(route, /const comparableEntries = findComparableEstates\(estate\.slug, 2\);/);
 
   // A `null` DB record for a comparable (no row, or an unpublished row)
   // still keeps its registry name/hasPage and simply renders every fact as
@@ -538,10 +520,7 @@ test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 T
   // The current estate's own column uses the same avgPsf conversion
   // EstateMarketSnapshot already gets below it, so a non-numeric/zero DB
   // value can't silently read as a real $0 psf in either component.
-  assert.match(
-    route,
-    /avgPsf: Number\(estate\.avg_saleable_psf \?\? 0\) \|\| null,/,
-  );
+  assert.match(route, /avgPsf: Number\(estate\.avg_saleable_psf \?\? 0\) \|\| null,/);
 
   assert.match(route, /<EstateComparisonTable/);
   assert.match(route, /current=\{currentComparisonRow\}/);
@@ -553,16 +532,13 @@ test("EstateComparisonTable renders nothing for zero comparables and never links
 
   assert.match(
     component,
-    /import \{\s*buildComparisonColumns,\s*buildComparisonRowDefs,\s*type EstateComparisonRow,\s*\} from "\.\/estate-comparison";/,
+    /import \{\s*buildComparisonColumns,\s*buildComparisonRowDefs,[\s\S]*?type EstateComparisonRow,\s*\} from "\.\/estate-comparison";/,
   );
 
   // The "0 comparable -> section absent entirely" behaviour is gated on the
   // real, shared buildComparisonColumns result (proven by direct execution
   // in estate-comparison.test.mjs), not a hardcoded `true`/`false` here.
-  assert.match(
-    component,
-    /const columns = buildComparisonColumns\(current, comparables\);/,
-  );
+  assert.match(component, /const columns = buildComparisonColumns\(current, comparables\);/);
   assert.match(component, /if \(!columns\) return null;/);
 
   // Every row's cell comes from the same shared row definitions -- no
