@@ -15,13 +15,19 @@ test("the estate expansion facts migration exists", () => {
 test("the migration never seeds avg_saleable_psf, price, listing counts, or transactions", () => {
   const sql = readFileSync(path.join(MIGRATIONS_DIR, migrationFile), "utf8");
   assert.ok(!/avg_saleable_psf\s*=/i.test(sql), "must never set avg_saleable_psf");
-  assert.ok(!sql.toLowerCase().includes("insert into transactions"), "must never insert transaction rows");
+  assert.ok(
+    !sql.toLowerCase().includes("insert into transactions"),
+    "must never insert transaction rows",
+  );
 });
 
 test("the migration does not touch published or verified_at", () => {
   const sql = readFileSync(path.join(MIGRATIONS_DIR, migrationFile), "utf8");
   assert.ok(!/published\s*=\s*true/i.test(sql), "must never flip published to true");
-  assert.ok(!/verified_at\s*=\s*(now\(\)|'[^']+')/i.test(sql), "must never set a real verified_at timestamp");
+  assert.ok(
+    !/verified_at\s*=\s*(now\(\)|'[^']+')/i.test(sql),
+    "must never set a real verified_at timestamp",
+  );
 });
 
 test("the migration is registered in migration-versions.js", async () => {
