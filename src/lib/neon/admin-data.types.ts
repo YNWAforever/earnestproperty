@@ -51,6 +51,48 @@ export type AdminListingRow = {
   agent_name: string | null;
 };
 
+export type AdminTransactionRow = {
+  id: string;
+  estate_id: string | null;
+  estate_name_zh: string | null;
+  deal_type: string;
+  price: number | null;
+  saleable_area: number | null;
+  saleable_psf: number | null;
+  deal_date: string | null;
+  unit: string | null;
+  block: string | null;
+  floor_band: string | null;
+  source: string | null;
+  source_url: string | null;
+  verification_state: string;
+  published: boolean;
+  agent_id: string | null;
+  agent_name: string | null;
+};
+
+export type AdminTransactionInput = {
+  id?: string;
+  estate_id: string;
+  deal_type: "sale" | "rent";
+  price: number;
+  saleable_area: number;
+  deal_date: string;
+  unit: string | null;
+  block: string | null;
+  floor_band: string | null;
+  source: string | null;
+  source_url: string | null;
+  verified: boolean;
+};
+
+export type AdminTransactionFiltersInput = {
+  q?: string;
+  deal_type?: "sale" | "rent" | "all";
+  estate_id?: string;
+  verification_state?: "unverified" | "pending" | "verified" | "all";
+};
+
 export type AdminEstateCmsRow = AdminEstateInput & {
   id: string;
   updated_at: string | null;
