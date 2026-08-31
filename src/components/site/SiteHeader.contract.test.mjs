@@ -35,3 +35,23 @@ test("SiteHeader's mobile Sheet close control is zh-HK, not the vendored English
   assert.doesNotMatch(sheetSource, /<span className="sr-only">Close<\/span>/);
   assert.match(sheetSource, /<span className="sr-only">關閉<\/span>/);
 });
+
+// P7b: closing the mega menu via Escape or an outside click used to leave
+// focus nowhere (the panel it was on had just been removed from the DOM) --
+// WCAG 2.4.3 Focus Order wants it returned to the trigger that opened it.
+test("mega menu returns focus to its trigger on close, not just to nothing", () => {
+  assert.match(headerSource, /function closeMegaMenu\(\)/);
+  assert.match(headerSource, /triggerRefs\.current\.get\(current\)\?\.focus\(\)/);
+  assert.doesNotMatch(
+    headerSource,
+    /if \(event\.key === "Escape"\) \{\s*setActiveMegaMenu\(null\);/,
+    "Escape should call closeMegaMenu(), not setActiveMegaMenu(null) directly",
+  );
+  assert.match(headerSource, /onLinkClick=\{closeMegaMenu\}/);
+});
+
+// P7b: the hamburger's aria-label was a static "開啟主選單" regardless of
+// whether the sheet was actually open.
+test("mobile nav trigger's aria-label reflects open/closed state", () => {
+  assert.match(headerSource, /aria-label=\{open \? "關閉主選單" : "開啟主選單"\}/);
+});

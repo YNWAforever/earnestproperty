@@ -307,7 +307,11 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
+    // Not <main> -- __root.tsx already wraps every route's <Outlet/> in its
+    // own <main className="flex-1">, so a second <main> here produced two
+    // nested main landmarks (axe: landmark-no-duplicate-main /
+    // landmark-unique), caught by P7b's new a11y suite.
+    <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14">
       <header className="max-w-3xl">
         <div className="flex items-center gap-2 text-sm font-semibold text-coral">
           <Calculator className="h-4 w-4" aria-hidden="true" />
@@ -739,6 +743,6 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
           </p>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
