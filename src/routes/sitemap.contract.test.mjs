@@ -27,10 +27,7 @@ import { estateRegistry, estatesWithPage } from "../content/estate-registry.ts";
 // `estateSeo` → path mapping) against the real content modules directly.
 
 function readSitemapSource() {
-  return readFileSync(
-    new URL("./sitemap[.]xml.ts", import.meta.url),
-    "utf8",
-  );
+  return readFileSync(new URL("./sitemap[.]xml.ts", import.meta.url), "utf8");
 }
 
 test("sitemap[.]xml.ts enumerates estate paths from estateSeo, not the full estate registry", () => {
@@ -105,4 +102,35 @@ test("the sitemap's computed estate paths contain none of the 17 unpublished P4 
       `unpublished estate "${slug}" must never appear in the sitemap's estate URLs`,
     );
   }
+});
+
+// P7a: estate and article URLs get a real per-page lastmod (their tables'
+// own updated_at) instead of sharing the sitemap's one generation timestamp
+// with every other page -- most other pages have no tracked per-page change
+// signal at all, so they keep the shared timestamp (an honest "generated at"
+// value, not a fabricated per-page one).
+test("sitemap gives estate and article URLs a real lastmod, falling back to the generation timestamp only when no real date exists", () => {
+  const source = readSitemapSource();
+
+  assert.match(source, /fetchSitemapTimestamps/);
+  assert.match(
+    source,
+    /path\.startsWith\("\/estate\/"\)/,
+    "estate URLs should look up a real per-slug date",
+  );
+  assert.match(
+    source,
+    /path\.startsWith\("\/blog\/"\)/,
+    "article URLs should look up a real per-slug date",
+  );
+  assert.match(
+    source,
+    /timestamps\.estates\[slug\]\?\.slice\(0, 10\) \?\? generatedAt/,
+    "an estate with no real updated_at should fall back to the shared generation timestamp, not a fabricated date",
+  );
+  assert.match(
+    source,
+    /timestamps\.articles\[slug\]\?\.slice\(0, 10\) \?\? generatedAt/,
+    "an article with no real updated_at should fall back to the shared generation timestamp, not a fabricated date",
+  );
 });

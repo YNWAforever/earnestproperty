@@ -758,6 +758,31 @@ export async function fetchPublicAgentProfileBySlug(input: {
 }
 
 /**
+ * Real per-entity `updated_at` for the sitemap's estate and article URLs
+ * (P7a) -- both columns are already written by the admin CMS's archive/
+ * publish paths. Genuinely static pages (home, about, district hubs, etc.)
+ * have no per-page change signal to draw on and keep sitemap.xml.ts's
+ * existing shared generation timestamp instead of a fabricated one.
+ */
+export async function fetchSitemapTimestamps(): Promise<{
+  estates: Record<string, string | null>;
+  articles: Record<string, string | null>;
+}> {
+  const [estateRows, articleRows] = await Promise.all([
+    sql().query("SELECT slug, updated_at FROM estates WHERE published = true"),
+    sql().query("SELECT slug, updated_at FROM articles WHERE published = true"),
+  ]);
+  return {
+    estates: Object.fromEntries(
+      estateRows.map((row) => [stringOrEmpty(row.slug), dateOrNull(row.updated_at)]),
+    ),
+    articles: Object.fromEntries(
+      articleRows.map((row) => [stringOrEmpty(row.slug), dateOrNull(row.updated_at)]),
+    ),
+  };
+}
+
+/**
  * All rows from the `branches` table (20260830160000_branches_entity.sql).
  * Small, fully-public, no filters needed -- callers resolve a specific
  * agent's branch_id against this list themselves (see agentBranchName() in
