@@ -16,6 +16,8 @@ artifacts/old-site-migration/
 .tanstack/**
 .nitro
 *.local
+playwright-report/
+test-results/
 
 # Wrangler / Cloudflare
 .wrangler/

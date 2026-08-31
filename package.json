@@ -44,6 +44,7 @@
     "test:youtube-sync:db": "bun test --no-env-file src/lib/youtube-sync/youtube-sync.integration.test.mjs",
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
     "test:legal": "node --test src/routes/legal-pages.contract.test.mjs",
+    "test:a11y": "playwright test",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",
     "migration:import": "node scripts/old-site-migration/import.mjs",
@@ -124,9 +125,11 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@cloudflare/workers-types": "5.20260820.1",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^1.4.0",
+    "@playwright/test": "^1.62.1",
     "@types/bun": "^1.3.14",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
