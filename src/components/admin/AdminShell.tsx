@@ -45,6 +45,7 @@ const navGroups = [
         activeExact: false,
         includeSearch: false,
       },
+      { to: "/admin/estates", label: "屋苑管理", icon: Building2, activeExact: false },
       { to: "/admin/segments", label: "客戶分群", icon: Users, activeExact: false },
       { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle, activeExact: false },
       { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false },

@@ -64,7 +64,7 @@ import {
   restoreAdminCmsRevision,
   saveAdminCmsDraft,
 } from "@/lib/neon/admin-cms";
-import type { CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
+import type { CmsPayloadValue, CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
 import {
   checkAdminFaqConflicts,
   deleteAdminFaq,
@@ -217,6 +217,16 @@ function AdminCms() {
   const [faqImportChecking, setFaqImportChecking] = useState(false);
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
   const [estateRevisions, setEstateRevisions] = useState<CmsRevisionSummary[] | null>(null);
+  // The full latest-revision payload, including the ~10 estate fields this
+  // dialog has no UI for (aliases/geo/PSF/etc, added by the /admin/estates
+  // editor). Every draft save here must carry them forward unchanged --
+  // otherwise saving through this dialog would silently blank them out on
+  // next publish, since the shared projector writes whatever key is (or
+  // isn't) present in the payload it's given.
+  const [estateLatestPayload, setEstateLatestPayload] = useState<Record<
+    string,
+    CmsPayloadValue
+  > | null>(null);
   const [articleRevisions, setArticleRevisions] = useState<CmsRevisionSummary[] | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState<{ type: "estate" | "article"; id: string } | null>(
@@ -386,15 +396,18 @@ function AdminCms() {
   async function loadEstateRevisions(resourceId: string | undefined) {
     if (!resourceId) {
       setEstateRevisions(null);
+      setEstateLatestPayload(null);
       return;
     }
     try {
-      const { revisions } = await fetchAdminCmsEditor({
+      const { revisions, payload } = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId },
       });
       setEstateRevisions(revisions);
+      setEstateLatestPayload(payload);
     } catch {
       setEstateRevisions(null);
+      setEstateLatestPayload(null);
     }
   }
 
@@ -417,7 +430,10 @@ function AdminCms() {
           data: {
             resourceType: "estate",
             resourceId: editingEstate.id,
-            payload: { ...editingEstate },
+            // estateLatestPayload first so this dialog's own 15 known fields
+            // (from editingEstate) always win for the fields it controls,
+            // while the ~10 fields it has no UI for pass through unchanged.
+            payload: { ...estateLatestPayload, ...editingEstate },
             basePublishedVersion: estateRevisions?.find(
               (revision) => revision.state === "published",
             )?.versionNumber,
@@ -443,7 +459,10 @@ function AdminCms() {
           data: {
             resourceType: "estate",
             resourceId: editingEstate.id,
-            payload: { ...editingEstate },
+            // estateLatestPayload first so this dialog's own 15 known fields
+            // (from editingEstate) always win for the fields it controls,
+            // while the ~10 fields it has no UI for pass through unchanged.
+            payload: { ...estateLatestPayload, ...editingEstate },
             basePublishedVersion: estateRevisions?.find(
               (revision) => revision.state === "published",
             )?.versionNumber,
@@ -994,6 +1013,7 @@ function AdminCms() {
                       onClick={() => {
                         setEditingEstate({ ...emptyEstate });
                         setEstateRevisions(null);
+                        setEstateLatestPayload(null);
                       }}
                     >
                       <Plus className="h-4 w-4" />

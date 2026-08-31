@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { blogArticles } from "@/content/blog-articles";
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
-import { SITE_URL, blogArticles, estateSeo, pageSeo } from "@/content/seo";
+import { SITE_URL, estateSeo, pageSeo } from "@/content/seo";
 import { listPublicAgentProfiles } from "@/lib/neon/public-data.server";
 import { fetchPublishedArticlesByCategory, fetchRecentTransactions } from "@/lib/queries";
 
