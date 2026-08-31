@@ -22,7 +22,7 @@ import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { findComparableEstates } from "@/content/estate-registry";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
-import { shamTsengSchoolNet } from "@/content/school-nets";
+import { getSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
 import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
