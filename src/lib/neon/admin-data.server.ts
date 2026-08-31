@@ -1200,7 +1200,7 @@ export async function listAdminTransactions(
     `
     SELECT
       t.id, t.estate_id, t.deal_type, t.price, t.saleable_area, t.saleable_psf,
-      t.deal_date, t.unit, t.block, t.floor_band, t.source, t.source_url,
+      t.deal_date::text AS deal_date, t.unit, t.block, t.floor_band, t.source, t.source_url,
       t.verification_state, t.published, t.agent_id,
       e.name_zh AS estate_name_zh,
       s.name_zh AS agent_name_zh,
@@ -1222,7 +1222,7 @@ export async function listAdminTransactions(
     price: numberOrNull(row.price),
     saleable_area: numberOrNull(row.saleable_area),
     saleable_psf: numberOrNull(row.saleable_psf),
-    deal_date: dateOrNull(row.deal_date),
+    deal_date: stringOrNull(row.deal_date),
     unit: stringOrNull(row.unit),
     block: stringOrNull(row.block),
     floor_band: stringOrNull(row.floor_band),
@@ -1244,7 +1244,7 @@ export async function getAdminTransaction(
     `
     SELECT
       t.id, t.estate_id, t.deal_type, t.price, t.saleable_area, t.saleable_psf,
-      t.deal_date, t.unit, t.block, t.floor_band, t.source, t.source_url,
+      t.deal_date::text AS deal_date, t.unit, t.block, t.floor_band, t.source, t.source_url,
       t.verification_state, t.published, t.agent_id,
       e.name_zh AS estate_name_zh,
       s.name_zh AS agent_name_zh,
@@ -1267,7 +1267,7 @@ export async function getAdminTransaction(
     price: numberOrNull(row.price),
     saleable_area: numberOrNull(row.saleable_area),
     saleable_psf: numberOrNull(row.saleable_psf),
-    deal_date: dateOrNull(row.deal_date),
+    deal_date: stringOrNull(row.deal_date),
     unit: stringOrNull(row.unit),
     block: stringOrNull(row.block),
     floor_band: stringOrNull(row.floor_band),
@@ -1326,7 +1326,7 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           source_url = $11,
           verification_state = $12::transaction_verification_state,
           published = $13,
-          verified_at = CASE WHEN $13 THEN now() ELSE NULL END
+          verified_at = CASE WHEN $13 THEN COALESCE(verified_at, now()) ELSE NULL END
         WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
         RETURNING id
         `,

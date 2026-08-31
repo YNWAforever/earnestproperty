@@ -51,3 +51,8 @@ workers/mls-container/.wrangler/
 
 # Brainstorm session artifacts (superpowers visual companion)
 .superpowers/
+
+# Contract-test scratch dir: admin-transactions.contract.test.mjs transpiles
+# its module graph to real files here (cleaned up in the test's `after()`);
+# an interrupted run can leave this behind.
+src/lib/neon/.admin-transactions-contract-tmp/

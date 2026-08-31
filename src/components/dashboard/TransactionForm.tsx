@@ -39,7 +39,8 @@ const schema = z.object({
   price: z.coerce.number({ invalid_type_error: "請輸入數字" }).positive("請輸入大於 0 的數字"),
   saleable_area: z.coerce
     .number({ invalid_type_error: "請輸入數字" })
-    .positive("請輸入大於 0 的數字"),
+    .positive("請輸入大於 0 的數字")
+    .int("請輸入整數，不要小數點"),
   deal_date: z.string().trim().min(1, "請輸入成交日期"),
   unit: optionalText,
   block: optionalText,
