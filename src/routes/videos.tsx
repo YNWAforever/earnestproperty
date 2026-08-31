@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { SITE_YOUTUBE_CHANNEL, whatsappUrl } from "@/config/site";
 import { canonicalLink } from "@/content/seo";
+import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
 import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
 import { summarizeVideoDescription } from "@/lib/video-description.js";
@@ -33,6 +34,7 @@ const VIDEOS_PER_PAGE = 12;
 // rewording a label never invalidates a link someone already shared.
 const searchSchema = z.object({
   estate: fallback(z.string().optional(), undefined),
+  category: fallback(z.string().optional(), undefined),
   sort: fallback(z.enum(["newest", "oldest", "featured"]), "newest").default("newest"),
   q: fallback(z.string().optional(), undefined),
 });
@@ -64,7 +66,7 @@ function isSortValue(value: string): value is SortValue {
 
 function VideosPage() {
   const { cmsVideos, listingVideos } = Route.useLoaderData();
-  const { estate, sort, q } = Route.useSearch();
+  const { estate, category, sort, q } = Route.useSearch();
   const navigate = useNavigate({ from: "/videos" });
   const [visibleCount, setVisibleCount] = useState(VIDEOS_PER_PAGE);
   const [showAllTags, setShowAllTags] = useState(false);
@@ -74,6 +76,17 @@ function VideosPage() {
   const trimmedQuery = (q ?? "").trim().toLowerCase();
 
   const tagCounts = useMemo(() => buildTagCounts(cmsVideos), [cmsVideos]);
+
+  // Category is a real admin-assigned column (see video-categories.ts's own
+  // doc comment for why it can't be derived like the estate tag above), so an
+  // uncategorised video simply doesn't count toward any chip -- never guessed.
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const video of cmsVideos) {
+      if (video.category) counts.set(video.category, (counts.get(video.category) ?? 0) + 1);
+    }
+    return VIDEO_CATEGORIES.map((cat) => ({ category: cat, count: counts.get(cat) ?? 0 }));
+  }, [cmsVideos]);
 
   // The chip row collapses to the top 8, but the URL can name any estate. A link
   // to a long-tail estate filtered correctly while leaving every chip
@@ -112,10 +125,11 @@ function VideosPage() {
   const matchingCmsVideos = useMemo(() => {
     return cmsVideos.filter((video) => {
       if (estate && deriveEstateTag(video.title)?.tag !== estate) return false;
+      if (category && video.category !== category) return false;
       if (trimmedQuery && !video.title?.toLowerCase().includes(trimmedQuery)) return false;
       return true;
     });
-  }, [cmsVideos, estate, trimmedQuery]);
+  }, [cmsVideos, estate, category, trimmedQuery]);
 
   const sortedCmsVideos = useMemo(() => {
     const rows = [...matchingCmsVideos];
@@ -135,6 +149,12 @@ function VideosPage() {
   // video underneath, and counted it in 搵到 N 條影片. A filter that shows a
   // different estate than the one selected reads as broken.
   const matchingListingVideos = useMemo(() => {
+    // Listing videos have no cms_videos row and no category column, but a
+    // property-listing video is unambiguously a 樓盤實拍 by construction -- so
+    // narrowing to any other category correctly excludes this whole section,
+    // rather than either always showing it (wrong once a category is active)
+    // or fabricating a category value for rows that don't have one.
+    if (category && category !== "樓盤實拍") return [];
     return listingVideos.filter((listing) => {
       if (estate && listing.estates?.name_zh !== estate) return false;
       if (
@@ -147,11 +167,11 @@ function VideosPage() {
       }
       return true;
     });
-  }, [listingVideos, estate, trimmedQuery]);
+  }, [listingVideos, estate, category, trimmedQuery]);
 
   // Every filter change resets paging: page 3 of an old filter is meaningless
   // against a new one.
-  type VideoSearch = { estate?: string; sort: SortValue; q?: string };
+  type VideoSearch = { estate?: string; category?: string; sort: SortValue; q?: string };
   const updateSearch = (next: Partial<VideoSearch>) => {
     setVisibleCount(VIDEOS_PER_PAGE);
     navigate({
@@ -171,10 +191,7 @@ function VideosPage() {
           active search/category). DR-6 -- structured data for content the
           page doesn't render is misleading to crawlers and inflates payload
           for no benefit. */}
-      <AllVideoSchemas
-        cmsVideos={visibleCmsVideos}
-        listingVideos={matchingListingVideos}
-      />
+      <AllVideoSchemas cmsVideos={visibleCmsVideos} listingVideos={matchingListingVideos} />
 
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
@@ -198,6 +215,39 @@ function VideosPage() {
         {hasVideos ? (
           <div className="space-y-12">
             <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-primary">分類</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateSearch({ category: undefined })}
+                    aria-pressed={!category}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                      !category
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-input bg-background hover:bg-muted"
+                    }`}
+                  >
+                    全部 {cmsVideos.length}
+                  </button>
+                  {categoryCounts.map((entry) => (
+                    <button
+                      key={entry.category}
+                      type="button"
+                      onClick={() => updateSearch({ category: entry.category })}
+                      aria-pressed={category === entry.category}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                        category === entry.category
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-input bg-background hover:bg-muted"
+                      }`}
+                    >
+                      {entry.category} {entry.count}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <p className="text-sm font-semibold text-primary">屋苑</p>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -284,7 +334,7 @@ function VideosPage() {
               </div>
 
               <p className="text-sm text-muted-foreground" aria-live="polite">
-                {estate || trimmedQuery
+                {estate || category || trimmedQuery
                   ? `搵到 ${sortedCmsVideos.length + matchingListingVideos.length} 條影片`
                   : `共 ${cmsVideos.length + listingVideos.length} 條影片`}
               </p>
@@ -299,7 +349,9 @@ function VideosPage() {
                 <Button
                   variant="outline"
                   className="mt-4"
-                  onClick={() => updateSearch({ estate: undefined, q: undefined })}
+                  onClick={() =>
+                    updateSearch({ estate: undefined, category: undefined, q: undefined })
+                  }
                 >
                   清除篩選
                 </Button>
