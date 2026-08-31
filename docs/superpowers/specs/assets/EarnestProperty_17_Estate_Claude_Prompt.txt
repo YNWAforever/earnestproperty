@@ -1,0 +1,42 @@
+You are working in https://github.com/YNWAforever/earnestproperty.
+
+Implement the 17-estate expansion using these attached files:
+1. EarnestProperty_17_Estate_Claude_Master_Spec.md
+2. estate-expansion-17.data.json
+3. estate-expansion-17.patch.ts
+4. 20260901090000_estate_page_content_17.sql
+
+Use https://earnestproperty.vercel.app/estate/sea-crest-villa as the information-architecture reference, not as permission to duplicate a route 17 times.
+
+Non-negotiable rules:
+- Read current main and existing tests before editing.
+- Reuse src/routes/estate.$slug.tsx; do not create 17 route files.
+- Update the existing 17 registry placeholders; do not create duplicate slugs.
+- Preserve every canonical slug in the data pack.
+- Treat 上源 and The Carmel as separate estates.
+- Use canonical display names 海韻臺 and 香港黃金海岸 while retaining aliases.
+- Add all English names so existing identity helpers do not throw.
+- Make eyebrow, breadcrumb, CTA district, transport and school-net 62/71 data-driven.
+- Add school net 71 from EDB; do not invent/copy named schools from portals.
+- Expand MLS aliases using the exact precedence rules.
+- Keep every new row published=false and verified_at=NULL.
+- Do not seed avg_saleable_psf, current prices, counts or transactions.
+- Do not hotlink portal photos; keep photo=null until licensed assets exist.
+- Exclude unpublished estates from public sitemap, homepage and public search.
+- Use CMS revision workflow for FAQ/content publishing.
+- Preserve Neon, auth, CRM, MLS, analytics, WhatsApp and current public behavior.
+- Resolve facts conflicts only with evidence; otherwise keep the field blocked/null.
+- Do not deploy and do not publish.
+
+Test first. Cover identity parity, alias collisions, school nets, dynamic area UI, unpublished isolation, null market metrics and all related links.
+
+Run:
+bun run test:estate-conversion
+bun run test:seo
+bun run test:corridor
+bun run test:listing-search
+bun run typecheck
+bun run build
+bun run test:a11y  # when Playwright is available
+
+End with changed files, migration status, tests, per-estate blockers and confirmation production remains unchanged.
