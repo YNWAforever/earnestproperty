@@ -23,3 +23,16 @@ test("admin.transactions.tsx route is registered with noindex", () => {
   const source = read("src/routes/admin.transactions.tsx");
   assert.match(source, /content: "noindex"/);
 });
+
+test("admin.transactions_.new.tsx renders TransactionForm and navigates back to the list on save", () => {
+  const source = read("src/routes/admin.transactions_.new.tsx");
+  assert.match(source, /<TransactionForm/);
+  assert.match(source, /to: "\/admin\/transactions"/);
+});
+
+test("admin.transactions_.$id.tsx fetches the transaction, shows a not-found state, and renders TransactionForm", () => {
+  const source = read("src/routes/admin.transactions_.$id.tsx");
+  assert.match(source, /fetchAdminTransaction/);
+  assert.match(source, /<TransactionForm/);
+  assert.match(source, /找不到此成交記錄|無權限編輯/);
+});

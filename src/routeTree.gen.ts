@@ -57,6 +57,8 @@ import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webh
 import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
 import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
 import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent.handoff'
+import { Route as AdminTransactionsNewRouteImport } from './routes/admin.transactions_.new'
+import { Route as AdminTransactionsIdRouteImport } from './routes/admin.transactions_.$id'
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
 import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
 import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
@@ -321,6 +323,16 @@ const ApiLiveAgentHandoffRoute = ApiLiveAgentHandoffRouteImport.update({
   path: '/api/live-agent/handoff',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminTransactionsNewRoute = AdminTransactionsNewRouteImport.update({
+  id: '/transactions_/new',
+  path: '/transactions/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTransactionsIdRoute = AdminTransactionsIdRouteImport.update({
+  id: '/transactions_/$id',
+  path: '/transactions/$id',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminListingsNewRoute = AdminListingsNewRouteImport.update({
   id: '/listings_/new',
   path: '/listings/new',
@@ -500,6 +512,8 @@ export interface FileRoutesByFullPath {
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
+  '/admin/transactions/$id': typeof AdminTransactionsIdRoute
+  '/admin/transactions/new': typeof AdminTransactionsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -571,6 +585,8 @@ export interface FileRoutesByTo {
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
+  '/admin/transactions/$id': typeof AdminTransactionsIdRoute
+  '/admin/transactions/new': typeof AdminTransactionsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -645,6 +661,8 @@ export interface FileRoutesById {
   '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings_/$id': typeof AdminListingsIdRoute
   '/admin/listings_/new': typeof AdminListingsNewRoute
+  '/admin/transactions_/$id': typeof AdminTransactionsIdRoute
+  '/admin/transactions_/new': typeof AdminTransactionsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -720,6 +738,8 @@ export interface FileRouteTypes {
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
+    | '/admin/transactions/$id'
+    | '/admin/transactions/new'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -791,6 +811,8 @@ export interface FileRouteTypes {
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
+    | '/admin/transactions/$id'
+    | '/admin/transactions/new'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -864,6 +886,8 @@ export interface FileRouteTypes {
     | '/admin/leads_/command-center'
     | '/admin/listings_/$id'
     | '/admin/listings_/new'
+    | '/admin/transactions_/$id'
+    | '/admin/transactions_/new'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -1273,6 +1297,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLiveAgentHandoffRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/transactions_/new': {
+      id: '/admin/transactions_/new'
+      path: '/transactions/new'
+      fullPath: '/admin/transactions/new'
+      preLoaderRoute: typeof AdminTransactionsNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/transactions_/$id': {
+      id: '/admin/transactions_/$id'
+      path: '/transactions/$id'
+      fullPath: '/admin/transactions/$id'
+      preLoaderRoute: typeof AdminTransactionsIdRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/listings_/new': {
       id: '/admin/listings_/new'
       path: '/listings/new'
@@ -1457,6 +1495,8 @@ interface AdminRouteChildren {
   AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
   AdminListingsIdRoute: typeof AdminListingsIdRoute
   AdminListingsNewRoute: typeof AdminListingsNewRoute
+  AdminTransactionsIdRoute: typeof AdminTransactionsIdRoute
+  AdminTransactionsNewRoute: typeof AdminTransactionsNewRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
@@ -1479,6 +1519,8 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
   AdminListingsIdRoute: AdminListingsIdRoute,
   AdminListingsNewRoute: AdminListingsNewRoute,
+  AdminTransactionsIdRoute: AdminTransactionsIdRoute,
+  AdminTransactionsNewRoute: AdminTransactionsNewRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
