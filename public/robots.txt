@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /auth
+Disallow: /account
 
 Sitemap: https://earnestproperty.vercel.app/sitemap.xml
