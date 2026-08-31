@@ -54,36 +54,36 @@ test("core-estates.ts's photo/district/hasPage fields are exactly the registry's
   }
 });
 
-test("every hasPage:true entry has a matching estateSeo and estatePageContent entry, and no orphans exist on either side", () => {
-  const registryPageSlugs = estatesWithPage.map((entry) => entry.slug).sort();
-  const seoSlugs = Object.keys(estateSeo).sort();
-  const pageContentSlugs = Object.keys(estatePageContent).sort();
-
-  assert.deepEqual(registryPageSlugs, seoSlugs, "estateSeo must cover exactly the hasPage:true slugs");
-  assert.deepEqual(
-    registryPageSlugs,
-    pageContentSlugs,
-    "estatePageContent must cover exactly the hasPage:true slugs",
-  );
-
-  for (const entry of estateRegistry) {
-    assert.equal(
-      entry.hasPage,
-      Object.hasOwn(estateSeo, entry.slug),
-      `${entry.slug}'s hasPage must agree with estateSeo membership`,
+test("every estateSeo/estatePageContent entry has a matching hasPage:true registry entry (no orphans on the content side)", () => {
+  // Estate Expansion 17 (2026-09-01 data pack, this plan's Task 1) flips
+  // `hasPage: true` for all 22 registry entries up front, but the matching
+  // estateSeo (Task 3) and estatePageContent (Task 4) entries for the 17
+  // newly-true slugs land in later tasks of the same plan -- so the reverse
+  // direction ("every hasPage:true entry already has content") does not hold
+  // yet and is intentionally not asserted here. This direction (content
+  // implies hasPage) has no such lag and must always hold.
+  for (const slug of Object.keys(estateSeo)) {
+    assert.ok(
+      getEstateEntry(slug).hasPage,
+      `${slug} has an estateSeo entry but the registry doesn't mark hasPage:true`,
     );
-    assert.equal(
-      entry.hasPage,
-      Object.hasOwn(estatePageContent, entry.slug),
-      `${entry.slug}'s hasPage must agree with estatePageContent membership`,
+  }
+  for (const slug of Object.keys(estatePageContent)) {
+    assert.ok(
+      getEstateEntry(slug).hasPage,
+      `${slug} has an estatePageContent entry but the registry doesn't mark hasPage:true`,
     );
   }
 });
 
 test("estateSeo and estatePageContent source their slug/name fields from the registry, not a second copy", () => {
-  for (const entry of estatesWithPage) {
-    const seo = estateSeo[entry.slug];
-    const page = estatePageContent[entry.slug];
+  // Scoped to slugs that currently have real estateSeo/estatePageContent
+  // entries -- not the full `estatesWithPage` list (22 entries as of this
+  // task; Estate Expansion 17's Task 3/4 add the other 17's entries later).
+  for (const slug of Object.keys(estateSeo)) {
+    const entry = getEstateEntry(slug);
+    const seo = estateSeo[slug];
+    const page = estatePageContent[slug];
     assert.equal(seo.slug, entry.slug);
     assert.equal(seo.nameZh, entry.nameZh);
     assert.equal(seo.nameEn, entry.nameEn);
@@ -94,9 +94,10 @@ test("estateSeo and estatePageContent source their slug/name fields from the reg
 });
 
 test("estateSeo's oldSlugs agrees with the registry's legacySlug field", () => {
-  for (const entry of estatesWithPage) {
+  for (const slug of Object.keys(estateSeo)) {
+    const entry = getEstateEntry(slug);
     const expected = entry.legacySlug ? [entry.legacySlug] : [];
-    assert.deepEqual(estateSeo[entry.slug].oldSlugs, expected);
+    assert.deepEqual(estateSeo[slug].oldSlugs, expected);
   }
 });
 
@@ -119,13 +120,15 @@ test("corridorSegment matches exactly what castle-peak-road.ts's segments' estat
 
 test("the ting-kau segment's estateSlugs stays empty -- no estate counts as strict inventory yet", () => {
   // 海雲軒 / 縉皇居 (hoi-wan-hin / chun-wong-kui) already appear in ting-kau's
-  // featuredEstates/textAliases as free text. Since P4 Task 2 they DO have a
-  // real `estates` table row (district_slug: "ting-kau"), but that row ships
-  // `published = false` with no verified facts -- corridorSegment stays null
-  // for all 17 P4 estates "for now" (the master plan's D2 note), so neither
-  // belongs in estateSlugs (real, DB-joinable, published inventory) yet --
-  // this pins that as a deliberate registry decision, not an oversight, and
-  // guards the corridor SQL scoping behaviour staying unchanged.
+  // featuredEstates/textAliases as free text. They DO have a real `estates`
+  // table row (district_slug corrected to "sham-tseng" by Estate Expansion
+  // 17's data pack -- see estate-registry.ts's own comment on why), but that
+  // row ships `published = false` with no verified facts -- corridorSegment
+  // stays null for all 17 P4 estates "for now" (the master plan's D2 note),
+  // so neither belongs in estateSlugs (real, DB-joinable, published
+  // inventory) yet -- this pins that as a deliberate registry decision, not
+  // an oversight, and guards the corridor SQL scoping behaviour staying
+  // unchanged.
   const tingKau = castlePeakRoadSegments.find((segment) => segment.slug === "ting-kau");
   assert.deepEqual(tingKau.estateSlugs, []);
 });
@@ -135,13 +138,14 @@ test("registry slugs agree with estate.$slug.tsx's real slug-resolution surface"
   const queries = read("src/lib/queries.ts");
 
   // Ground truth (P4 plan): estate.$slug.tsx only ever reads estateSeo[slug] /
-  // estatePageContent[slug] directly -- confirm that wiring is still true and
-  // that every hasPage:true registry slug actually resolves through it.
+  // estatePageContent[slug] directly -- confirm that wiring is still true.
+  // (Not asserted here: every hasPage:true registry slug resolving through
+  // it -- Estate Expansion 17's Task 1 flips hasPage:true for 17 slugs
+  // whose estateSeo/estatePageContent entries land in that plan's Task 3/4;
+  // see the dedicated orphan-check test above for the direction that does
+  // hold today.)
   assert.match(route, /estateSeo\[/);
   assert.match(route, /getEstatePageContent/);
-  for (const entry of estatesWithPage) {
-    assert.ok(Object.hasOwn(estateSeo, entry.slug), `${entry.slug} must resolve via estateSeo`);
-  }
 
   // queries.ts's ESTATE_DB_SLUG_FALLBACKS must be derived from the registry's
   // legacySlug field rather than a second hand-maintained copy.
@@ -176,94 +180,110 @@ const P4_EXPANSION_SLUGS = [
   "tai-tou-waan",
 ];
 
-// The 3 estates with a genuinely unknown district (must not be guessed).
-const UNKNOWN_DISTRICT_SLUGS = ["tai-wah-hin", "hoi-wan-toi", "lung-tang-kok"];
+// The 5 深井／青龍頭 estates from P4 Task 2, whose districtSlug the 2026-09-01
+// Estate Expansion 17 data pack corrects (was "ting-kau"/null placeholders).
+const CORRECTED_DISTRICT_SLUGS = {
+  "hoi-wan-hin": "sham-tseng",
+  "tai-wah-hin": "tsing-lung-tau",
+  "hoi-wan-toi": "sham-tseng",
+  "chun-wong-kui": "sham-tseng",
+  "lung-tang-kok": "tsing-lung-tau",
+};
 
-test("districts and English names are never guessed for estates without a detail page", () => {
-  const noPageSlugs = estateRegistry.filter((entry) => !entry.hasPage).map((entry) => entry.slug);
-  assert.equal(noPageSlugs.length, 17, "all 17 P4 estates plus none of the original hasPage:true 5");
-  assert.deepEqual(noPageSlugs.slice().sort(), P4_EXPANSION_SLUGS.slice().sort());
+// The 12 青山公路 estates -- districtSlug was already "castle-peak-road" as a
+// placeholder and is unchanged by this task.
+const CASTLE_PEAK_ROAD_SLUGS = [
+  "mun-ming-shan",
+  "wong-gam-hoi-ngon",
+  "oi-kam-hoi-ngon",
+  "tai-yu",
+  "wong-gam-hoi-waan",
+  "sing-tai",
+  "seong-yuen",
+  "the-carmel",
+  "oma-oma",
+  "lin-shan",
+  "long-tou-waan",
+  "tai-tou-waan",
+];
 
-  for (const entry of estateRegistry) {
-    if (entry.hasPage) continue;
-    // nameEn is never guessed for a no-page estate -- "The Carmel"/"Oma Oma"
-    // are exceptions in *name*, not this rule: their nameZh IS their only
-    // given name (already Latin-script), and nameEn stays null too.
-    assert.equal(entry.nameEn, null, `${entry.slug} has no supplied English name`);
-    assert.equal(entry.corridorSegment, null, `${entry.slug} has no strict corridor inventory yet`);
-    if (UNKNOWN_DISTRICT_SLUGS.includes(entry.slug)) {
-      assert.equal(entry.districtSlug, null, `${entry.slug}'s districtSlug must not be guessed`);
-    }
-  }
-
-  // The two client-approved exceptions with real evidence elsewhere in the repo.
-  assert.equal(getEstateEntry("hoi-wan-hin").homepageDistrict, "汀九");
-  assert.equal(getEstateEntry("chun-wong-kui").homepageDistrict, "汀九");
-  for (const slug of UNKNOWN_DISTRICT_SLUGS) {
-    assert.equal(getEstateEntry(slug).homepageDistrict, null, `${slug} district must not be guessed`);
-  }
-});
-
-test("P4 Task 2: all 17 new/reconciled estates have hasPage:false and corridorSegment:null", () => {
+test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates now have hasPage:true and no photo", () => {
+  assert.equal(P4_EXPANSION_SLUGS.length, 17);
   for (const slug of P4_EXPANSION_SLUGS) {
     const entry = getEstateEntry(slug);
-    assert.equal(entry.hasPage, false, `${slug} must not link to a detail page yet`);
-    assert.equal(entry.corridorSegment, null, `${slug} must not claim strict corridor inventory yet`);
-    assert.equal(entry.photo, null, `${slug} has no supplied photo`);
+    assert.equal(entry.hasPage, true, `${slug} must now link to a detail page`);
+    assert.equal(entry.photo, null, `${slug} has no supplied photo yet`);
   }
+  // Every registry entry (5 original + 17 new) is hasPage:true after this task.
+  assert.equal(
+    estateRegistry.every((entry) => entry.hasPage),
+    true,
+  );
+  assert.equal(estatesWithPage.length, estateRegistry.length);
 });
 
-test("P4 Task 2: exactly 3 of the 17 estates carry a genuinely unknown (null) districtSlug", () => {
-  const withNullDistrict = P4_EXPANSION_SLUGS.filter(
-    (slug) => getEstateEntry(slug).districtSlug === null,
-  );
-  assert.deepEqual(withNullDistrict.slice().sort(), UNKNOWN_DISTRICT_SLUGS.slice().sort());
-
-  const withKnownDistrict = P4_EXPANSION_SLUGS.filter(
-    (slug) => !UNKNOWN_DISTRICT_SLUGS.includes(slug),
-  );
-  assert.equal(withKnownDistrict.length, 14);
-  for (const slug of withKnownDistrict) {
-    const districtSlug = getEstateEntry(slug).districtSlug;
-    assert.ok(
-      districtSlug === "ting-kau" || districtSlug === "castle-peak-road",
-      `${slug}'s districtSlug (${districtSlug}) must be a real, grounded district`,
+test("Estate Expansion 17: corridorSegment stays null for all 17 estates (regression guard -- this task must never silently pull any of them into corridor listing-search scope)", () => {
+  for (const slug of P4_EXPANSION_SLUGS) {
+    assert.equal(
+      getEstateEntry(slug).corridorSegment,
+      null,
+      `${slug} must not claim strict corridor inventory yet`,
     );
   }
+});
 
-  // The two 汀九 estates specifically -- real evidence in castle-peak-road.ts.
-  assert.equal(getEstateEntry("hoi-wan-hin").districtSlug, "ting-kau");
-  assert.equal(getEstateEntry("chun-wong-kui").districtSlug, "ting-kau");
+test("Estate Expansion 17: the 5 corrected districtSlug values match exactly, and the 12 青山公路 estates keep castle-peak-road", () => {
+  for (const [slug, expected] of Object.entries(CORRECTED_DISTRICT_SLUGS)) {
+    assert.equal(getEstateEntry(slug).districtSlug, expected, `${slug}'s corrected districtSlug`);
+  }
 
-  // The 12 青山公路 estates all share "castle-peak-road".
-  const castlePeakRoadSlugs = [
-    "mun-ming-shan",
-    "wong-gam-hoi-ngon",
-    "oi-kam-hoi-ngon",
-    "tai-yu",
-    "wong-gam-hoi-waan",
-    "sing-tai",
-    "seong-yuen",
-    "the-carmel",
-    "oma-oma",
-    "lin-shan",
-    "long-tou-waan",
-    "tai-tou-waan",
-  ];
-  assert.equal(castlePeakRoadSlugs.length, 12);
-  for (const slug of castlePeakRoadSlugs) {
+  assert.equal(CASTLE_PEAK_ROAD_SLUGS.length, 12);
+  for (const slug of CASTLE_PEAK_ROAD_SLUGS) {
     assert.equal(getEstateEntry(slug).districtSlug, "castle-peak-road");
+  }
+
+  // No entry -- among the 17, or the whole registry -- has a null districtSlug
+  // anymore; the data pack grounds every one.
+  assert.equal(
+    estateRegistry.some((entry) => entry.districtSlug === null),
+    false,
+  );
+
+  // The two 深井 homepageDistrict overrides for the 汀九-adjacent estates
+  // (see each entry's own comment in estate-registry.ts for why).
+  assert.equal(getEstateEntry("hoi-wan-hin").homepageDistrict, "深井");
+  assert.equal(getEstateEntry("chun-wong-kui").homepageDistrict, "深井");
+  assert.equal(getEstateEntry("tai-wah-hin").homepageDistrict, "深井");
+  assert.equal(getEstateEntry("lung-tang-kok").homepageDistrict, "深井");
+  assert.equal(getEstateEntry("hoi-wan-toi").homepageDistrict, "深井");
+});
+
+test("Estate Expansion 17: tai-wah-hin.parentEstateSlug is sea-crest-villa; every other entry (including all 5 originals) has parentEstateSlug:null", () => {
+  assert.equal(getEstateEntry("tai-wah-hin").parentEstateSlug, "sea-crest-villa");
+  for (const entry of estateRegistry) {
+    if (entry.slug === "tai-wah-hin") continue;
+    assert.equal(entry.parentEstateSlug, null, `${entry.slug} must not carry a parentEstateSlug`);
   }
 });
 
-test("P4 Task 2: The Carmel / Oma Oma carry their only given name in nameZh, never a guessed nameEn", () => {
-  for (const slug of ["the-carmel", "oma-oma"]) {
+test("Estate Expansion 17: every one of the 22 estates has non-null heroEyebrow/districtHref/locationLabelZh (regression guard for the original-5 backfill)", () => {
+  for (const entry of estateRegistry) {
+    assert.notEqual(entry.heroEyebrow, null, `${entry.slug} must have a heroEyebrow`);
+    assert.notEqual(entry.districtHref, null, `${entry.slug} must have a districtHref`);
+    assert.notEqual(entry.locationLabelZh, null, `${entry.slug} must have a locationLabelZh`);
+  }
+});
+
+test("Estate Expansion 17: the data pack supplies a real nameEn for all 17 estates, including The Carmel / Oma Oma whose nameZh is already Latin-script", () => {
+  for (const slug of P4_EXPANSION_SLUGS) {
     const entry = getEstateEntry(slug);
-    assert.equal(entry.nameEn, null);
+    assert.notEqual(entry.nameEn, null, `${slug} must have a supplied English name`);
     assert.ok(entry.nameZh.length > 0);
   }
   assert.equal(getEstateEntry("the-carmel").nameZh, "The Carmel");
+  assert.equal(getEstateEntry("the-carmel").nameEn, "The Carmel");
   assert.equal(getEstateEntry("oma-oma").nameZh, "Oma Oma");
+  assert.equal(getEstateEntry("oma-oma").nameEn, "OMA OMA");
 });
 
 test("every alias is a non-empty string and every hasPage:true entry's aliases cover its own name", () => {
@@ -286,9 +306,7 @@ test("every alias is a non-empty string and every hasPage:true entry's aliases c
 // DB read (this session must not touch the live sandbox database) -- it
 // parses the migration file's own INSERT statement text.
 test("estate_expansion migration: every one of the 17 inserted rows sets published = false explicitly", () => {
-  const migration = read(
-    "neon/migrations/20260830130000_estate_expansion.sql",
-  );
+  const migration = read("neon/migrations/20260830130000_estate_expansion.sql");
 
   const insertMatch = migration.match(
     /INSERT INTO estates \(slug, name_zh, name_en, district_slug, published\) VALUES\s*([\s\S]*?)\nON CONFLICT \(slug\) DO NOTHING;/,
@@ -330,11 +348,7 @@ test("findComparableEstates never returns the estate itself, and is deterministi
     "the same input must yield the same output every time -- required for a stable table/test, not random",
   );
   for (const entry of first) {
-    assert.notEqual(
-      entry.slug,
-      "bellagio",
-      "an estate must never compare against itself",
-    );
+    assert.notEqual(entry.slug, "bellagio", "an estate must never compare against itself");
   }
 });
 
@@ -358,11 +372,18 @@ test("findComparableEstates returns [] rather than throwing for an unknown slug"
   assert.deepEqual(findComparableEstates("not-a-real-slug", 2), []);
 });
 
-test("findComparableEstates returns [] for an entry whose districtSlug and corridorSegment are both null, without crashing (P4 Task 2's 3 unknown-district estates)", () => {
+test("findComparableEstates matches tai-wah-hin to lung-tang-kok, the only other 青龍頭 (tsing-lung-tau) districtSlug entry", () => {
+  // Estate Expansion 17 corrects tai-wah-hin's districtSlug from the old
+  // placeholder `null` to "tsing-lung-tau" (grounded: it's 浪翠園 Phase 5,
+  // sharing 青龍頭 with lung-tang-kok, its only district-mate). corridorSegment
+  // stays null for both, so this exercises the districtSlug half of the OR.
   const entry = getEstateEntry("tai-wah-hin");
-  assert.equal(entry.districtSlug, null);
+  assert.equal(entry.districtSlug, "tsing-lung-tau");
   assert.equal(entry.corridorSegment, null);
-  assert.deepEqual(findComparableEstates("tai-wah-hin", 2), []);
+  assert.deepEqual(
+    findComparableEstates("tai-wah-hin", 5).map((e) => e.slug),
+    ["lung-tang-kok"],
+  );
 });
 
 test("findComparableEstates matches purely on districtSlug when corridorSegment is null for the whole group (P4 Task 2's 12 青山公路 estates)", () => {
@@ -379,13 +400,27 @@ test("findComparableEstates matches purely on districtSlug when corridorSegment 
   }
 });
 
-test("findComparableEstates matches purely on districtSlug for a group of exactly 2 (ting-kau)", () => {
-  // hoi-wan-hin and chun-wong-kui are the only two "ting-kau"-district
-  // entries and both carry corridorSegment: null -- exactly one real
-  // comparable exists, so the result is length 1, not padded to 2.
-  const result = findComparableEstates("hoi-wan-hin", 2);
+test("findComparableEstates matches hoi-wan-hin against the wider sham-tseng districtSlug group, respecting the limit", () => {
+  // Estate Expansion 17 corrects hoi-wan-hin's districtSlug from the old
+  // "ting-kau" placeholder to "sham-tseng" -- it now shares that districtSlug
+  // with all 5 original hasPage:true estates plus hoi-wan-toi/chun-wong-kui,
+  // 7 comparables total (registry array order: bellagio, hong-kong-garden,
+  // sea-crest-villa, lido-garden, rhine-garden, hoi-wan-toi, chun-wong-kui).
+  assert.equal(getEstateEntry("hoi-wan-hin").districtSlug, "sham-tseng");
   assert.deepEqual(
-    result.map((entry) => entry.slug),
-    ["chun-wong-kui"],
+    findComparableEstates("hoi-wan-hin", 10).map((entry) => entry.slug),
+    [
+      "bellagio",
+      "hong-kong-garden",
+      "sea-crest-villa",
+      "lido-garden",
+      "rhine-garden",
+      "hoi-wan-toi",
+      "chun-wong-kui",
+    ],
+  );
+  assert.deepEqual(
+    findComparableEstates("hoi-wan-hin", 2).map((entry) => entry.slug),
+    ["bellagio", "hong-kong-garden"],
   );
 });

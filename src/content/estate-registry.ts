@@ -96,6 +96,27 @@ export type EstateRegistryEntry = {
   /** Card photo path under `public/`, or `null` when none has been supplied. */
   photo: string | null;
   homepageDistrict: EstateHomepageDistrict | null;
+  /**
+   * Another estate's slug this one is a phase of (e.g. 帝華軒 is 浪翠園 Phase 5).
+   * `null` for every estate that isn't a named phase of a different estate's
+   * own registry entry. Informational only today -- no consumer joins on it
+   * yet; added for 帝華軒/tai-wah-hin per the 2026-09-01 data pack.
+   */
+  parentEstateSlug: string | null;
+  /**
+   * Small text shown above the H1 on this estate's detail page
+   * (`estate.$slug.tsx`). Was hardcoded to "深井屋苑獨立 SEO 頁" for every
+   * estate; now per-estate so a 青山公路 estate doesn't claim to be a 深井 page.
+   */
+  heroEyebrow: string | null;
+  /** The estate's own district/corridor guide link, used in the detail page's
+   * breadcrumb JSON-LD. Was hardcoded to "/district/sham-tseng" for every
+   * estate. */
+  districtHref: string | null;
+  /** Display label used in the detail page's WhatsApp CTA context
+   * (`ctaContext.districtName`) -- e.g. "深井 / 青山公路" or "掃管笏". Was
+   * hardcoded to "深井 / 青山公路" for every estate. */
+  locationLabelZh: string | null;
 };
 
 export const estateRegistry: EstateRegistryEntry[] = [
@@ -112,6 +133,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
     hasPage: true,
     photo: "/estates/bellagio.jpg",
     homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井 / 青山公路",
   },
   {
     slug: "hong-kong-garden",
@@ -125,6 +150,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
     // TODO(client): 豪景花園 photo not supplied -- the other four arrived in 屋苑相/.
     photo: null,
     homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "深井屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井 / 青山公路",
   },
   {
     slug: "sea-crest-villa",
@@ -137,6 +166,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
     hasPage: true,
     photo: "/estates/sea-crest-villa.jpg",
     homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井 / 青山公路",
   },
   {
     slug: "lido-garden",
@@ -149,6 +182,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
     hasPage: true,
     photo: "/estates/lido-garden.jpg",
     homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井 / 青山公路",
   },
   {
     slug: "rhine-garden",
@@ -162,243 +199,330 @@ export const estateRegistry: EstateRegistryEntry[] = [
     hasPage: true,
     photo: "/estates/rhine-garden.jpg",
     homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井 / 青山公路",
   },
 
-  // The five the client added (docx p13/p15) with no detail page, no figures
-  // and no photo -- see core-estates.ts for why they still ship as
-  // non-linking homepage cards instead of being omitted, and
-  // src/routes/index.tsx's `linkableEstates` filter for why the homepage
-  // grid itself never links them.
+  // The five 深井／青龍頭 estates the client added (docx p13/p15). Estate
+  // Expansion 17 (2026-09-01 data pack) gives all five a real detail page
+  // (`hasPage: true`) and content, no photo yet -- see core-estates.ts for
+  // why they still ship as non-linking homepage cards instead of being added
+  // to CLIENT_ORDER_SLUGS, and src/routes/index.tsx's `linkableEstates`
+  // filter for why the homepage grid itself never links them.
   {
     slug: "hoi-wan-hin",
     nameZh: "海雲軒",
-    nameEn: null,
-    aliases: ["海雲軒"],
-    // P4 Task 2: real DB row now exists (estate_expansion.sql), district_slug
-    // = "ting-kau" -- grounded in this estate already appearing in
-    // castle-peak-road.ts's ting-kau segment's featuredEstates/textAliases,
-    // not a new guess.
-    districtSlug: "ting-kau",
-    // Still null despite the real district_id: corridorSegment means real,
-    // DB-joinable STRICT inventory for a published, verified estate, and this
-    // row is `published = false` with no facts yet (per D2/the master plan's
-    // publish gate). Not counted in castle-peak-road.ts's ting-kau segment's
-    // estateSlugs for the same reason. It already appears in that segment's
-    // featuredEstates/textAliases (free-text display + matching, not
-    // identity data) -- see castle-peak-road.ts for why those stay their own
-    // curated arrays.
+    nameEn: "Anglers' Bay",
+    aliases: ["海雲軒", "Anglers' Bay", "Anglers Bay", "ANGLERS BAY"],
+    districtSlug: "sham-tseng",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: "汀九",
+    homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井／青龍頭屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井／青龍頭",
   },
   {
     slug: "tai-wah-hin",
     nameZh: "帝華軒",
-    nameEn: null,
-    aliases: ["帝華軒"],
-    // P4 Task 2: real DB row now exists (estate_expansion.sql), but
-    // district_slug is NULL there too -- still no reference anywhere in this
-    // repo for this estate's district, and the master plan explicitly
-    // forbids guessing one.
-    districtSlug: null,
+    nameEn: "Royal Sea Crest",
+    aliases: [
+      "帝華軒",
+      "浪翠園5期",
+      "浪翠園五期",
+      "浪翠園帝華軒",
+      "Royal Sea Crest",
+      "Sea Crest Villa Phase 5",
+    ],
+    districtSlug: "tsing-lung-tau",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    // TODO(client): district unknown -- no reference anywhere in the repo.
-    homepageDistrict: null,
+    homepageDistrict: "深井",
+    parentEstateSlug: "sea-crest-villa",
+    heroEyebrow: "浪翠園五期屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road/sham-tseng",
+    locationLabelZh: "青龍頭／深井",
   },
   {
     slug: "hoi-wan-toi",
-    nameZh: "海韻台",
-    nameEn: null,
-    aliases: ["海韻台"],
-    // P4 Task 2: real DB row now exists (estate_expansion.sql), but
-    // district_slug is NULL there too -- see tai-wah-hin's comment above.
-    districtSlug: null,
+    nameZh: "海韻臺",
+    nameEn: "Rhine Terrace",
+    aliases: ["海韻臺", "海韻台", "Rhine Terrace", "RHINE TERRACE"],
+    districtSlug: "sham-tseng",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    // TODO(client): district unknown. Do not assume it follows 海韻花園 just
-    // because the names share 海韻.
-    homepageDistrict: null,
+    homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井單幢屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井",
   },
   {
     slug: "chun-wong-kui",
     nameZh: "縉皇居",
-    nameEn: null,
-    aliases: ["縉皇居"],
-    // P4 Task 2: real DB row now exists (estate_expansion.sql), district_slug
-    // = "ting-kau" -- see hoi-wan-hin's comment above; the same grounding
-    // applies to 縉皇居.
-    districtSlug: "ting-kau",
+    nameEn: "Ocean Pointe",
+    aliases: ["縉皇居", "Ocean Pointe", "OCEAN POINTE"],
+    districtSlug: "sham-tseng",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    // As with 海雲軒, the corridor registry already places 縉皇居 in 油柑頭 / 汀九.
-    homepageDistrict: "汀九",
+    homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "深井高層海景屋苑獨立 SEO 頁",
+    districtHref: "/district/sham-tseng",
+    locationLabelZh: "深井",
   },
   {
     slug: "lung-tang-kok",
     nameZh: "龍騰閣",
-    nameEn: null,
-    aliases: ["龍騰閣"],
-    // P4 Task 2: real DB row now exists (estate_expansion.sql), but
-    // district_slug is NULL there too -- see tai-wah-hin's comment above.
-    districtSlug: null,
+    nameEn: "Lung Tang Court",
+    aliases: ["龍騰閣", "Lung Tang Court", "LUNG TANG COURT"],
+    districtSlug: "tsing-lung-tau",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    // TODO(client): district unknown -- no reference anywhere in the repo.
-    homepageDistrict: null,
+    homepageDistrict: "深井",
+    parentEstateSlug: null,
+    heroEyebrow: "青龍頭低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road/sham-tseng",
+    locationLabelZh: "青龍頭",
   },
 
   // P4 Task 2: the 12 青山公路 estates from the client's 17-estate expansion.
   // None have a homepage card (core-estates.ts's CLIENT_ORDER_SLUGS is
-  // unchanged by this task, still exactly the original 10 slugs) -- unlike
-  // the five entries above, `homepageDistrict: null` here means "no homepage
-  // card exists yet", not "district unknown" (their real district_slug IS
-  // known: "castle-peak-road", see each row's comment). Per D2, this group
-  // stays out of corridorRegionScope / corridorSegment even once published,
-  // so corridorSegment is a deliberate `null`, not a placeholder to fix
-  // later.
+  // unchanged by this task, still exactly the original 10 slugs) --
+  // `homepageDistrict: null` here means "no homepage card exists yet", not
+  // "district unknown" (their real district_slug IS known:
+  // "castle-peak-road", see each row's own value). Per D2, this group stays
+  // out of corridorRegionScope / corridorSegment even once published, so
+  // corridorSegment is a deliberate `null`, not a placeholder to fix later.
+  // nameEn/aliases/heroEyebrow/districtHref/locationLabelZh below are copied
+  // verbatim from the 2026-09-01 data pack
+  // (docs/superpowers/specs/assets/estate-expansion-17.data.json).
   {
     slug: "mun-ming-shan",
     nameZh: "滿名山",
-    nameEn: null,
-    aliases: ["滿名山"],
+    nameEn: "The Bloomsway",
+    aliases: ["滿名山", "The Bloomsway", "BLOOMSWAY"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "掃管笏低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "掃管笏",
   },
   {
     slug: "wong-gam-hoi-ngon",
     nameZh: "黃金海岸",
-    nameEn: null,
-    aliases: ["黃金海岸"],
+    nameEn: "Hong Kong Gold Coast",
+    aliases: ["香港黃金海岸", "黃金海岸", "Hong Kong Gold Coast", "HK Gold Coast", "GOLD COAST"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "青山灣海濱屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "青山灣／掃管笏",
   },
   {
     slug: "oi-kam-hoi-ngon",
     nameZh: "愛琴海岸",
-    nameEn: null,
-    aliases: ["愛琴海岸"],
+    nameEn: "Aegean Coast",
+    aliases: ["愛琴海岸", "Aegean Coast", "AEGEAN COAST"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "掃管笏成熟屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "掃管笏",
   },
   {
     slug: "tai-yu",
     nameZh: "帝御",
-    nameEn: null,
-    aliases: ["帝御"],
+    nameEn: "The Royale",
+    aliases: [
+      "帝御",
+      "The Royale",
+      "THE ROYALE",
+      "帝御金灣",
+      "帝御‧金灣",
+      "Seacoast Royale",
+      "帝御星濤",
+      "帝御‧星濤",
+      "Starfront Royale",
+      "帝御嵐天",
+      "帝御‧嵐天",
+      "Skypoint Royale",
+    ],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "青山灣較新屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "青山灣／掃管笏",
   },
   {
     slug: "wong-gam-hoi-waan",
     nameZh: "黃金海灣",
-    nameEn: null,
-    aliases: ["黃金海灣"],
+    nameEn: "Gold Coast Bay",
+    aliases: [
+      "黃金海灣",
+      "Gold Coast Bay",
+      "GOLD COAST BAY",
+      "意嵐",
+      "The Uppland",
+      "珀岸",
+      "The Reserve",
+    ],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "青山灣新式屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "青山灣",
   },
   {
     slug: "sing-tai",
     nameZh: "星堤",
-    nameEn: null,
-    aliases: ["星堤"],
+    nameEn: "Avignon",
+    aliases: ["星堤", "Avignon", "AVIGNON"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "掃管笏低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "掃管笏",
   },
   {
     slug: "seong-yuen",
     nameZh: "上源",
-    nameEn: null,
-    aliases: ["上源"],
+    nameEn: "Le Pont",
+    aliases: ["上源", "Le Pont", "LE PONT"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "掃管笏大型低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "掃管笏",
   },
   {
     slug: "the-carmel",
     // The master plan gives only one name, already Latin-script -- no
     // separate Chinese name to pair it with. nameZh holds the only value
-    // known (satisfies the non-null type); nameEn stays null rather than
-    // duplicating the same string, which would look like a genuine zh/en
-    // translation pair when none was ever supplied. Matches the DB row.
+    // known (satisfies the non-null type). The 2026-09-01 data pack does
+    // supply a distinct nameEn value here (matches nameZh exactly, but is a
+    // genuine field the data pack chose to populate rather than a guess).
     nameZh: "The Carmel",
-    nameEn: null,
-    aliases: ["The Carmel"],
+    nameEn: "The Carmel",
+    aliases: ["The Carmel", "THE CARMEL"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "大欖低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "大欖／掃管笏",
   },
   {
     slug: "oma-oma",
-    // Same reasoning as "The Carmel" above.
+    // Same reasoning as "The Carmel" above -- the data pack's nameEn ("OMA
+    // OMA") differs only in casing from nameZh ("Oma Oma"), still a genuine
+    // supplied value, not a guess.
     nameZh: "Oma Oma",
-    nameEn: null,
-    aliases: ["Oma Oma"],
+    nameEn: "OMA OMA",
+    aliases: ["OMA OMA", "Oma Oma", "oma oma"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "掃管笏較新屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "掃管笏",
   },
   {
     slug: "lin-shan",
     nameZh: "漣山",
-    nameEn: null,
-    aliases: ["漣山"],
+    nameEn: "The Hillgrove",
+    aliases: ["漣山", "The Hillgrove", "HILLGROVE"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "小欖低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "小欖",
   },
   {
     slug: "long-tou-waan",
     nameZh: "浪濤灣",
-    nameEn: null,
-    aliases: ["浪濤灣"],
+    nameEn: "Aqua Blue",
+    aliases: ["浪濤灣", "Aqua Blue", "AQUA BLUE"],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "小欖臨海低密度屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "小欖",
   },
   {
     slug: "tai-tou-waan",
     nameZh: "帝濤灣",
-    nameEn: null,
-    aliases: ["帝濤灣"],
+    nameEn: "Palatial Coast",
+    aliases: [
+      "帝濤灣",
+      "Palatial Coast",
+      "PALATIAL COAST",
+      "帝濤灣浪琴軒",
+      "浪琴軒",
+      "Grand Pacific View",
+      "帝濤灣海琴軒",
+      "海琴軒",
+      "Grand Pacific Heights",
+    ],
     districtSlug: "castle-peak-road",
     corridorSegment: null,
-    hasPage: false,
+    hasPage: true,
     photo: null,
-    homepageDistrict: null,
+    homepageDistrict: "青山公路",
+    parentEstateSlug: null,
+    heroEyebrow: "小欖成熟海景屋苑獨立 SEO 頁",
+    districtHref: "/castle-peak-road",
+    locationLabelZh: "小欖／大欖",
   },
 ];
 
@@ -426,9 +550,7 @@ export const estatesWithPage = estateRegistry.filter((entry) => entry.hasPage);
  * inventory. castle-peak-road.ts's `CorridorSegment.estateSlugs` derives from
  * this instead of hardcoding the list.
  */
-export function estateSlugsForCorridorSegment(
-  segment: CorridorSegmentSlug,
-): string[] {
+export function estateSlugsForCorridorSegment(segment: CorridorSegmentSlug): string[] {
   return estateRegistry
     .filter((entry) => entry.corridorSegment === segment)
     .map((entry) => entry.slug);
@@ -444,17 +566,14 @@ export function estateSlugsForCorridorSegment(
  * deterministic comparison table, not a cosmetic nicety.
  *
  * Most of the registry is sparse right now (17 of its 22 entries carry
- * `corridorSegment: null`, and 3 of those also carry `districtSlug: null` --
- * see each entry's own comment). An unknown slug, or an entry whose both
- * fields are `null`, simply matches nothing and returns `[]`; this never
- * throws, unlike `getEstateEntry`, because a UI comparison section degrading
- * to "nothing to show" is the correct behaviour here, not a bug to surface
- * loudly.
+ * `corridorSegment: null` -- see each entry's own comment; every entry does
+ * carry a non-null `districtSlug` since the 2026-09-01 data pack). An unknown
+ * slug, or an entry whose `districtSlug` and `corridorSegment` are both
+ * `null`, simply matches nothing and returns `[]`; this never throws, unlike
+ * `getEstateEntry`, because a UI comparison section degrading to "nothing to
+ * show" is the correct behaviour here, not a bug to surface loudly.
  */
-export function findComparableEstates(
-  slug: string,
-  limit: number,
-): EstateRegistryEntry[] {
+export function findComparableEstates(slug: string, limit: number): EstateRegistryEntry[] {
   const current = estateRegistry.find((entry) => entry.slug === slug);
   if (!current) return [];
 
@@ -464,15 +583,9 @@ export function findComparableEstates(
     .slice(0, limit);
 }
 
-function isComparableEntry(
-  current: EstateRegistryEntry,
-  entry: EstateRegistryEntry,
-): boolean {
-  const sameDistrict =
-    current.districtSlug !== null &&
-    entry.districtSlug === current.districtSlug;
+function isComparableEntry(current: EstateRegistryEntry, entry: EstateRegistryEntry): boolean {
+  const sameDistrict = current.districtSlug !== null && entry.districtSlug === current.districtSlug;
   const sameCorridor =
-    current.corridorSegment !== null &&
-    entry.corridorSegment === current.corridorSegment;
+    current.corridorSegment !== null && entry.corridorSegment === current.corridorSegment;
   return sameDistrict || sameCorridor;
 }
