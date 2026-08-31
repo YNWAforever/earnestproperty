@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { whatsappIntentUrl, type WhatsAppIntentContext } from "@/config/site";
 import { createValuationLead } from "@/lib/neon/admin-data";
 import { VALUATION_CONSENT_TEXT } from "@/lib/neon/valuation-leads.js";
+import { buildContext, track } from "@/lib/analytics/events";
 
 const UTM_PARAM_KEYS = [
   "utm_source",
@@ -82,6 +83,7 @@ function ValuationLeadForm({ estateId }: { estateId?: string }) {
     }
     setSubmitted(true);
     toast.success("已收到你嘅估價查詢，我們會盡快聯絡你。");
+    track({ name: "valuation_form_submit", payload: {} }, buildContext());
   }
 
   if (submitted) {

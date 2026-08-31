@@ -372,6 +372,7 @@ const QUERIES_STUB_PUBLIC_DATA_EXPORTS = [
   "fetchNeonPropertyByListingNo",
   "fetchNeonPublishedArticles",
   "fetchNeonRecentTransactions",
+  "fetchNeonRecentTransactionsCount",
   "fetchNeonSimilarListings",
   "searchNeonListings",
 ];

@@ -42,6 +42,7 @@ import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { deriveEstateTag } from "@/lib/video-tags.js";
 import { renderableFaqs } from "@/lib/faq";
 import { jsonLdScript } from "@/lib/schema";
+import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
@@ -177,6 +178,19 @@ function EstatePage() {
   };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
+  useTrackPageView(
+    () => ({
+      event: {
+        name: "estate_view",
+        payload: { estateSlug: estate.slug, districtSlug: estate.district_slug ?? undefined },
+      },
+      context: buildContext({
+        estateSlug: estate.slug,
+        districtSlug: estate.district_slug ?? undefined,
+      }),
+    }),
+    [estate.slug],
+  );
   // Task 5 (P4 plan): the current estate's own comparison-table column.
   // avgPsf mirrors the exact conversion EstateMarketSnapshot already gets
   // below (`Number(x ?? 0) || null`), so a non-numeric/zero DB value can't

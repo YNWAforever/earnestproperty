@@ -52,7 +52,7 @@ function AboutPage() {
   const teamPreview = team.filter((agent) => agent.avatar_url).slice(0, 8);
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">關於晉誠地產</p>
@@ -205,6 +205,6 @@ function AboutPage() {
           </Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

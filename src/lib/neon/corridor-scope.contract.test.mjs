@@ -89,6 +89,7 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
   "fetchNeonPropertyByListingNo",
   "fetchNeonPublishedArticles",
   "fetchNeonRecentTransactions",
+  "fetchNeonRecentTransactionsCount",
   "fetchNeonSimilarListings",
   "searchNeonListings",
 ];

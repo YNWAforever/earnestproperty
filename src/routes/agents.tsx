@@ -188,7 +188,7 @@ function AgentsPage() {
   );
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       {listSchema ? (
         <script
           type="application/ld+json"
@@ -219,7 +219,7 @@ function AgentsPage() {
           </>
         ) : null}
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -550,12 +550,12 @@ function AgentDirectoryCard({
 
 function AgentDirectoryPending() {
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <AgentDirectoryHeader />
       <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <DirectorySkeleton />
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -585,7 +585,7 @@ function DirectoryEmptyState() {
 
 function AgentDirectoryError() {
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <AgentDirectoryHeader />
       <section
         className="mx-auto max-w-6xl px-4 py-10 text-center sm:px-6 lg:px-8"
@@ -600,6 +600,6 @@ function AgentDirectoryError() {
           </Button>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

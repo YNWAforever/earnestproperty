@@ -3,6 +3,7 @@ import { Building2, TrainFront, MapPinned } from "lucide-react";
 
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import { pageSeo, seo } from "@/content/seo";
+import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 // P7e: synthesis of the master plan's 4 named answer-summary questions,
 // restating only facts already stated elsewhere on this same page (AREAS
@@ -44,8 +45,15 @@ export const Route = createFileRoute("/district/tsuen-wan")({
 });
 
 function TsuenWanPage() {
+  useTrackPageView(
+    () => ({
+      event: { name: "district_view", payload: { districtSlug: "tsuen-wan" } },
+      context: buildContext({ districtSlug: "tsuen-wan" }),
+    }),
+    [],
+  );
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">荃灣 Tsuen Wan</p>
@@ -120,6 +128,6 @@ function TsuenWanPage() {
           </Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

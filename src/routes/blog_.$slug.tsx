@@ -12,6 +12,7 @@ import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
 import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
+import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type ArticleDetail = {
   slug: string;
@@ -149,14 +150,25 @@ function BlogArticlePage() {
     compareEstates: EstateComparisonRow[];
   };
 
+  useTrackPageView(
+    () =>
+      article
+        ? {
+            event: { name: "article_view", payload: { articleSlug: article.slug } },
+            context: buildContext(),
+          }
+        : null,
+    [article?.slug],
+  );
+
   if (!article) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-24 text-center">
+      <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <h1 className="text-2xl font-bold">文章不存在</h1>
         <Link to="/blog" className="mt-4 inline-block text-sm font-semibold text-primary">
           返回 Blog
         </Link>
-      </main>
+      </div>
     );
   }
 
@@ -191,7 +203,7 @@ function BlogArticlePage() {
   };
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
@@ -283,6 +295,6 @@ function BlogArticlePage() {
           </nav>
         )}
       </article>
-    </main>
+    </div>
   );
 }

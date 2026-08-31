@@ -25,12 +25,23 @@ test("styles.css still keeps --coral as a working alias (not retired in P1 -- se
   assert.match(source, /--coral:\s*var\(--brand-primary\);/);
 });
 
-test("__root.tsx preloads the Google Fonts stylesheet ahead of the blocking stylesheet link", () => {
+// P7c: fonts are self-hosted via @fontsource (no Google Fonts CDN request at
+// all) instead of a preloaded external stylesheet -- this replaces the old
+// "preloads the Google Fonts stylesheet" assertion, which stopped describing
+// real behavior once that migration landed.
+test("__root.tsx self-hosts fonts via @fontsource and preloads the real Inter woff2 file", () => {
   const source = read("src/routes/__root.tsx");
+  assert.match(source, /import "@fontsource\/inter\/400\.css";/);
+  assert.match(source, /import "@fontsource\/noto-sans-tc\/400\.css";/);
   assert.match(
     source,
-    /rel:\s*"preload",\s*\n\s*as:\s*"style",\s*\n\s*href:\s*"https:\/\/fonts\.googleapis\.com\/css2\?family=Inter/,
+    /import interLatin400 from "@fontsource\/inter\/files\/inter-latin-400-normal\.woff2\?url";/,
   );
+  assert.match(
+    source,
+    /rel:\s*"preload",\s*\n\s*as:\s*"font",\s*\n\s*type:\s*"font\/woff2",\s*\n\s*href:\s*interLatin400,/,
+  );
+  assert.doesNotMatch(source, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
 });
 
 test("the homepage hero headline uses text-balance and a non-breaking brand span, not a hard <br>", () => {

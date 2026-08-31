@@ -11,6 +11,7 @@ import { agentBranchName, agentContactNote, resolveAgentContact } from "@/lib/ag
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { fetchListingsForAgent, type ListingRow } from "@/lib/queries";
 import { agentPersonSchema, jsonLdScript } from "@/lib/schema";
+import { buildContext, track, useTrackPageView } from "@/lib/analytics/events";
 
 export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
@@ -63,9 +64,20 @@ function AgentProfilePage() {
     image: profile.avatar_url,
     url: profile.public_slug ? `${SITE_URL}/agents/${profile.public_slug}` : SITE_URL,
   });
+  const agentSlug = profile.public_slug ?? profile.id;
+  useTrackPageView(
+    () => ({
+      event: { name: "agent_view", payload: { agentSlug } },
+      context: buildContext({ agentSlug }),
+    }),
+    [agentSlug],
+  );
+  function handleWhatsAppClick() {
+    track({ name: "agent_whatsapp_click", payload: { agentSlug } }, buildContext({ agentSlug }));
+  }
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -155,7 +167,12 @@ function AgentProfilePage() {
               ) : null}
               {whatsappHref ? (
                 <Button asChild variant="brand" className="w-full justify-start">
-                  <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={whatsappHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={handleWhatsAppClick}
+                  >
                     <MessageCircle className="mr-2 h-4 w-4" />
                     WhatsApp 聯絡
                   </a>
@@ -203,7 +220,7 @@ function AgentProfilePage() {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -252,7 +269,7 @@ function AgentListingCard({ listing }: { listing: ListingRow }) {
 
 function AgentProfileError() {
   return (
-    <main className="mx-auto max-w-md px-4 py-24 text-center">
+    <div className="mx-auto max-w-md px-4 py-24 text-center">
       <div role="alert" aria-live="polite">
         <h1 className="text-2xl font-semibold">暫時未能載入代理資料</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -267,18 +284,18 @@ function AgentProfileError() {
           </Button>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 
 function AgentNotFound() {
   return (
-    <main className="mx-auto max-w-md px-4 py-24 text-center">
+    <div className="mx-auto max-w-md px-4 py-24 text-center">
       <h1 className="text-2xl font-semibold">找不到代理資料</h1>
       <p className="mt-3 text-sm text-muted-foreground">此代理資料可能尚未公開，或連結已更新。</p>
       <Button asChild className="mt-6">
         <Link to="/agents">返回代理團隊</Link>
       </Button>
-    </main>
+    </div>
   );
 }

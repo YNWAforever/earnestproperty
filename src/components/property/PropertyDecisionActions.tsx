@@ -8,6 +8,7 @@ import { agentBranchName } from "@/lib/agent-directory";
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { calculateMortgage } from "@/lib/mortgage";
 import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
+import { buildContext, track } from "@/lib/analytics/events";
 
 import { getPropertyDecision } from "./property-decision.js";
 
@@ -78,6 +79,12 @@ export function PropertyMobileContactSummary({
     enquiryMessage,
   );
   const hasWhatsapp = whatsappHref !== null;
+  function handleWhatsAppClick() {
+    track(
+      { name: "listing_whatsapp_click", payload: { listingNo, dealType } },
+      buildContext({ listingNo }),
+    );
+  }
 
   return (
     <Card data-listing-no={listingNo}>
@@ -123,6 +130,7 @@ export function PropertyMobileContactSummary({
               href={whatsappHref ?? "/contact"}
               target={hasWhatsapp ? "_blank" : undefined}
               rel="noopener noreferrer"
+              onClick={handleWhatsAppClick}
             >
               <MessageCircle className="mr-2 h-4 w-4" />
               WhatsApp
@@ -172,6 +180,12 @@ export function PropertyDecisionActions({
     enquiryMessage,
   );
   const hasWhatsapp = whatsappHref !== null;
+  function handleWhatsAppClick() {
+    track(
+      { name: "listing_whatsapp_click", payload: { listingNo, dealType } },
+      buildContext({ listingNo }),
+    );
+  }
   const mortgage =
     decision.hasMortgagePrice && price !== null ? calculateMortgage({ price }) : null;
   const callLabel = decision.mobileCommands[0];
@@ -225,6 +239,7 @@ export function PropertyDecisionActions({
                   href={whatsappHref ?? "/contact"}
                   target={hasWhatsapp ? "_blank" : undefined}
                   rel="noopener noreferrer"
+                  onClick={handleWhatsAppClick}
                 >
                   <MessageCircle className="mr-2 h-4 w-4" />
                   WhatsApp
@@ -312,6 +327,7 @@ export function PropertyDecisionActions({
               href={whatsappHref ?? "/contact"}
               target={hasWhatsapp ? "_blank" : undefined}
               rel="noopener noreferrer"
+              onClick={handleWhatsAppClick}
             >
               <MessageCircle className="mr-1 h-4 w-4" />
               {whatsappLabel}

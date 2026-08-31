@@ -210,6 +210,7 @@ function HomePage() {
             width={2048}
             height={1370}
             loading="eager"
+            fetchPriority="high"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
         </div>
