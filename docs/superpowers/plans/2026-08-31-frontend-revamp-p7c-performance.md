@@ -11,17 +11,17 @@
 3. **Transactions pagination reuses the existing `RESULT_LIMIT`/filter shape** — adds `page` to the search schema and `offset`/total-count to the query layer, not a redesign of the filter UI.
 4. **Fonts self-host via `@fontsource` packages** (Inter, Noto Sans TC) rather than hand-downloading `.woff2` files — same fonts, same weights, MIT-licensed, already-optimized subsets, no external request at all (replacing the Google Fonts `<link>` tags in `__root.tsx` entirely, not just adding a preload).
 
-## Task 1: fetchPriority fix
+## Task 1: fetchPriority fix [x] done
 
 - Add `fetchPriority="high"` to `index.tsx`'s hero `<AppImage>` (~line 212) and `property.$listingNo.tsx`'s hero image (~line 572).
 - Remove `fetchPriority="high"` from `SiteHeader.tsx`'s logo (~line 357) — keep `loading="eager"` there (still reasonable, it's always visible immediately, just not the LCP element).
 
-## Task 2: self-hosted fonts
+## Task 2: self-hosted fonts [x] done
 
 - `npm install @fontsource/inter @fontsource/noto-sans-tc` (only the weights actually used: 400/500/600/700 for Inter, 400/500/700/900 for Noto Sans TC, per `__root.tsx`'s current Google Fonts URL).
 - Replace `__root.tsx`'s `preconnect`/`preload`/`stylesheet` links to `fonts.googleapis.com`/`fonts.gstatic.com` with `import` statements for the specific weight files, plus a `<link rel="preload" as="font">` for the two most-used weights (400/700 body text).
 
-## Task 3: transactions pagination
+## Task 3: transactions pagination [x] done
 
 - Add `page` to `transactions.tsx`'s search schema (default 1).
 - Server: add `offset` to `NeonRecentTransactionsInput`/SQL (`OFFSET`), and a total count (window function `COUNT(*) OVER()` on the same query, cheapest way to get both in one round trip).
