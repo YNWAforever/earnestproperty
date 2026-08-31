@@ -322,7 +322,10 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "wong-gam-hoi-ngon",
-    nameZh: "黃金海岸",
+    // Canonical display is 香港黃金海岸 per the 2026-09-01 data pack's naming
+    // rule (distinct from the unrelated 黃金海灣/wong-gam-hoi-waan estate);
+    // 黃金海岸 is kept as an alias below, not the display name.
+    nameZh: "香港黃金海岸",
     nameEn: "Hong Kong Gold Coast",
     aliases: ["香港黃金海岸", "黃金海岸", "Hong Kong Gold Coast", "HK Gold Coast", "GOLD COAST"],
     districtSlug: "castle-peak-road",
