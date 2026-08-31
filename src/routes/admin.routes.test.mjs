@@ -228,6 +228,9 @@ test("admin server functions recover from stale deployed hashes", () => {
     "fetchAdminConversations",
     "fetchAdminCampaigns",
     "updateAdminInquiryStatus",
+    "fetchAdminTransactionsFiltered",
+    "fetchAdminTransaction",
+    "saveAdminTransaction",
   ];
 
   for (const name of protectedFetches) {
