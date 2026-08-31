@@ -165,6 +165,7 @@ export type NeonRecentTransactionsInput = {
   minPrice?: number;
   maxPrice?: number;
   limit: number;
+  offset?: number;
 };
 
 export type NeonTransactionEstateSnapshot = {
