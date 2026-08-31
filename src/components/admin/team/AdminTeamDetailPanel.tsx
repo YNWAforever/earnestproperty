@@ -82,7 +82,7 @@ export function AdminTeamDetailPanel({
           {!canManage ? <span className="text-sm text-muted-foreground">唯讀</span> : null}
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          {(["admin", "manager", "agent"] as const).map((role) => (
+          {(["admin", "manager", "agent", "viewer"] as const).map((role) => (
             <div className="flex items-center gap-2" key={role}>
               <Checkbox
                 aria-label={teamRoleLabel(role)}

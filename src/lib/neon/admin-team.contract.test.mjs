@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createAdminTeamReadModel, decodeAdminTeamCursor } from "./admin-team.server.ts";
-import { createAdminTeamServerBoundary } from "./admin-team.ts";
+import {
+  changeStaffRolesSchema,
+  createAdminTeamServerBoundary,
+  inviteStaffMemberSchema,
+} from "./admin-team.ts";
 
 const actor = {
   staffId: "11111111-1111-4111-8111-111111111111",
@@ -305,4 +309,22 @@ test("manager and agent mutation attempts fail before the lifecycle service is l
     );
     assert.equal(lifecycleLoaded, false, `${role} must not load lifecycle service`);
   }
+});
+
+test("invite and change-roles schemas accept the viewer role", () => {
+  const invite = inviteStaffMemberSchema.safeParse({
+    email: "viewer@example.test",
+    name: "Reviewer",
+    roles: ["viewer"],
+  });
+  assert.equal(invite.success, true);
+
+  const changeRoles = changeStaffRolesSchema.safeParse({ staffId, roles: ["viewer"] });
+  assert.equal(changeRoles.success, true);
+});
+
+test("invite and change-roles schemas accept all four roles at once (max bound tracks StaffRole's size)", () => {
+  const roles = ["admin", "manager", "agent", "viewer"];
+  assert.equal(inviteStaffMemberSchema.safeParse({ email: "a@example.test", roles }).success, true);
+  assert.equal(changeStaffRolesSchema.safeParse({ staffId, roles }).success, true);
 });

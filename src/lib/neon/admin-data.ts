@@ -3,6 +3,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { withStaffAuthHeaders } from "@/auth";
+import { requireStaffPermission } from "../control-plane/permissions";
 import { ServerFnResponseError, unwrapServerFnResponse } from "./server-fn-response.ts";
 import { deriveAgentProfileEditorContext } from "./staff-security-policy";
 import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
@@ -443,7 +444,7 @@ export async function fetchAdminCmsVideos() {
 const saveAdminCmsVideoServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminCmsVideoInput) => data)
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.saveAdminCmsVideo(data, staff);
   });
@@ -467,7 +468,7 @@ export const fetchAdminAiKnowledgeStatus = async function fetchAdminAiKnowledgeS
 };
 
 const rebuildAdminAiKnowledgeServer = createServerFn({ method: "POST" }).handler(async () => {
-  const staff = await requireStaff(["admin", "manager"]);
+  const staff = await requireStaffPermission(getRequest(), "ai.knowledge.rebuild");
   const data = await import("./admin-data.server");
   return data.rebuildAdminAiKnowledge(staff);
 });
@@ -870,7 +871,7 @@ export async function fetchAdminWoztellStatus() {
 const saveAdminEstateServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminEstateInput) => data)
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.saveAdminEstate(data, staff);
   });
@@ -882,7 +883,7 @@ export async function saveAdminEstate(options: { data: AdminEstateInput }) {
 const saveAdminArticleServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminArticleInput) => data)
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.saveAdminArticle(data, staff);
   });
@@ -894,7 +895,7 @@ export async function saveAdminArticle(options: { data: AdminArticleInput }) {
 const saveAdminFaqServer = createServerFn({ method: "POST" })
   .inputValidator((data: AdminFaqInput) => data)
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.saveAdminFaq(data, staff);
   });
@@ -906,7 +907,7 @@ export async function saveAdminFaq(options: { data: AdminFaqInput }) {
 const deleteAdminFaqServer = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.deleteAdminFaq(data.id, staff);
   });
@@ -918,7 +919,7 @@ export async function deleteAdminFaq(options: { data: { id: string } }) {
 const checkAdminFaqConflictsServer = createServerFn({ method: "POST" })
   .inputValidator((data: { keys: Array<{ scope: string; question: string }> }) => data)
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.checkAdminFaqConflicts(data.keys, staff);
   });
@@ -987,7 +988,7 @@ const updateAdminMediaAssetServer = createServerFn({ method: "POST" })
       data,
   )
   .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
     return adminData.updateAdminMediaAsset(data, staff);
   });
