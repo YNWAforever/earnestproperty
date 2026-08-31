@@ -29,6 +29,7 @@ import { renderableFaqs } from "@/lib/faq";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { jsonLdScript } from "@/lib/schema";
 import { shamTsengSchoolNet } from "@/content/school-nets";
+import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type LoaderData = {
   estates: EstateSummary[];
@@ -118,6 +119,13 @@ function aggregateByMonth(rows: DistrictTransaction[]) {
 function ShamTsengPage() {
   const { estates, faqs: faqRows, transactions } = Route.useLoaderData() as LoaderData;
   const faqs = renderableFaqs(faqRows);
+  useTrackPageView(
+    () => ({
+      event: { name: "district_view", payload: { districtSlug: "sham-tseng" } },
+      context: buildContext({ districtSlug: "sham-tseng" }),
+    }),
+    [],
+  );
   const chartData = aggregateByMonth(transactions);
   const latestPsf = chartData.length ? chartData[chartData.length - 1].psf : 0;
   const firstPsf = chartData.length ? chartData[0].psf : 0;

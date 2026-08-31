@@ -11,6 +11,7 @@ import { agentBranchName, agentContactNote, resolveAgentContact } from "@/lib/ag
 import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { fetchListingsForAgent, type ListingRow } from "@/lib/queries";
 import { agentPersonSchema, jsonLdScript } from "@/lib/schema";
+import { buildContext, track, useTrackPageView } from "@/lib/analytics/events";
 
 export const Route = createFileRoute("/agents_/$slug")({
   loader: async ({ params }) => {
@@ -63,6 +64,17 @@ function AgentProfilePage() {
     image: profile.avatar_url,
     url: profile.public_slug ? `${SITE_URL}/agents/${profile.public_slug}` : SITE_URL,
   });
+  const agentSlug = profile.public_slug ?? profile.id;
+  useTrackPageView(
+    () => ({
+      event: { name: "agent_view", payload: { agentSlug } },
+      context: buildContext({ agentSlug }),
+    }),
+    [agentSlug],
+  );
+  function handleWhatsAppClick() {
+    track({ name: "agent_whatsapp_click", payload: { agentSlug } }, buildContext({ agentSlug }));
+  }
 
   return (
     <main className="bg-background">
@@ -155,7 +167,12 @@ function AgentProfilePage() {
               ) : null}
               {whatsappHref ? (
                 <Button asChild variant="brand" className="w-full justify-start">
-                  <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={whatsappHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={handleWhatsAppClick}
+                  >
                     <MessageCircle className="mr-2 h-4 w-4" />
                     WhatsApp 聯絡
                   </a>
