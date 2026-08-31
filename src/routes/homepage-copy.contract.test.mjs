@@ -41,10 +41,7 @@ test("the future 青山公路／汀九屋苑 block is not added by this slice", 
 // docs/ROUTE_FUNCTION_PARITY.md for the full before/after/why log.
 test("ABOUT PREVIEW no longer restates the local-expertise paragraph", () => {
   assert.doesNotMatch(source, /我哋係一間以深井、青山公路為核心的本地地產代理/);
-  assert.doesNotMatch(
-    source,
-    /對每個屋苑座向、樓層景觀、車位、會所和近期叫價都有第一手理解/,
-  );
+  assert.doesNotMatch(source, /對每個屋苑座向、樓層景觀、車位、會所和近期叫價都有第一手理解/);
   // The section still has a teaser line and its existing /about CTA -- this
   // is a consolidation, not a deletion of the whole section.
   assert.match(source, /ABOUT PREVIEW/);
@@ -52,10 +49,7 @@ test("ABOUT PREVIEW no longer restates the local-expertise paragraph", () => {
 });
 
 test("AGENT TEAM PREVIEW no longer restates the local-market/instant-WhatsApp tagline", () => {
-  assert.doesNotMatch(
-    source,
-    /熟悉深井、青山公路及汀九市場，直接 WhatsApp 查詢。/,
-  );
+  assert.doesNotMatch(source, /熟悉深井、青山公路及汀九市場，直接 WhatsApp 查詢。/);
   // The section still has its own CTA and renders the agent cards.
   const agentPreview = source.slice(
     source.indexOf("{/* AGENT TEAM PREVIEW */}"),
@@ -66,22 +60,13 @@ test("AGENT TEAM PREVIEW no longer restates the local-market/instant-WhatsApp ta
 });
 
 test("featured-listings PropertyCard shows a FreshnessStamp", () => {
-  assert.match(
-    source,
-    /import \{ FreshnessStamp \} from "@\/components\/layout\/FreshnessStamp";/,
-  );
+  assert.match(source, /import \{ FreshnessStamp \} from "@\/components\/layout\/FreshnessStamp";/);
   const propertyCard = source.slice(source.indexOf("function PropertyCard("));
-  assert.match(
-    propertyCard,
-    /<FreshnessStamp updatedAt=\{property\.last_seen_at\}/,
-  );
+  assert.match(propertyCard, /<FreshnessStamp updatedAt=\{property\.last_seen_at\}/);
 });
 
 test("featured-listings empty state uses the shared EmptyState component", () => {
-  assert.match(
-    source,
-    /import \{ EmptyState \} from "@\/components\/layout\/EmptyState";/,
-  );
+  assert.match(source, /import \{ EmptyState \} from "@\/components\/layout\/EmptyState";/);
   const featuredSection = source.slice(
     source.indexOf("{/* FEATURED LISTINGS"),
     source.indexOf("{/* FEATURED VIDEOS"),
@@ -102,8 +87,35 @@ test("CoreEstateGrid renders an em-dash, never 0, for missing avg PSF or listing
     gridSource,
     /psf === null \|\| psf === undefined \|\| !Number\.isFinite\(psf\)\s*\?\s*"—"/,
   );
+  assert.match(gridSource, /listingCount === null \|\| listingCount === undefined\s*\?\s*"—"/);
+});
+
+// 2026-09-01 17-estate expansion: estate-registry.ts's hasPage:true no longer
+// implies published -- 17 of the 22 registry entries have hasPage:true while
+// staying published=false in Neon until a human clears each one. A card must
+// only link (and only count toward the grid at all) once its live DB row
+// actually exists in `estates`, or the grid ships a link to a page that
+// 404s. This is a real regression this repo shipped and fixed once already
+// (see design/estate-expansion-17's final review) -- guarding it here so it
+// can't silently return.
+test("CoreEstateGrid gates both grid membership and card linking on a live DB row, not hasPage alone", () => {
+  const gridSource = source.slice(
+    source.indexOf("function CoreEstateGrid("),
+    source.indexOf("function SectionHeader("),
+  );
   assert.match(
     gridSource,
-    /listingCount === null \|\| listingCount === undefined\s*\?\s*"—"/,
+    /coreEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
+    "linkableEstates must require both hasPage and a live DB row, not hasPage alone",
+  );
+  assert.doesNotMatch(
+    gridSource,
+    /coreEstates\.filter\(\(estate\) => estate\.hasPage\)/,
+    "must not regress to gating the grid on hasPage alone",
+  );
+  assert.match(
+    gridSource,
+    /return dbRow \? \(/,
+    "the card's <Link> wrapper must be gated on dbRow, not estate.hasPage",
   );
 });

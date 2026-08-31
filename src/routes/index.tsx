@@ -632,13 +632,17 @@ function CoreEstateGrid({
 }) {
   const [expanded, setExpanded] = useState(false);
   const live = new Map(estates.map((estate) => [estate.slug, estate]));
-  // Estates without a detail page (hasPage: false) also have no figures and no
-  // photo, so rendering them left a dead, non-clickable gradient box next to
-  // real cards. Filter them out of the homepage grid entirely rather than
-  // shipping five thin pages just to make them clickable -- core-estates.ts
-  // itself is untouched, so the full client-approved list is ready the
-  // moment real slugs and pages exist for the rest.
-  const linkableEstates = coreEstates.filter((estate) => estate.hasPage);
+  // hasPage:true means the route/content/SEO plumbing exists for this estate
+  // (estate-registry.ts's own doc comment); it does NOT mean the estate is
+  // actually published -- the 2026-09-01 17-estate expansion gave all 22
+  // registry entries hasPage:true while 17 of them stay published=false in
+  // Neon until a human clears each one individually. A card must only link
+  // (or count toward the grid at all) once its live DB row actually exists
+  // in `estates` -- gating on hasPage alone would ship a link to a page that
+  // 404s. This also naturally reproduces the original "no detail page yet"
+  // behavior: filter unreachable estates out of the grid entirely rather
+  // than shipping thin, non-clickable cards next to real ones.
+  const linkableEstates = coreEstates.filter((estate) => estate.hasPage && live.has(estate.slug));
   const visible = expanded ? linkableEstates : linkableEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
 
   return (
@@ -700,7 +704,7 @@ function CoreEstateGrid({
                       : `${listingCount} 個`}
                   </p>
                 </div>
-                {estate.hasPage ? (
+                {dbRow ? (
                   <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
                     <span>瀏覽屋苑詳情</span>
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -713,7 +717,12 @@ function CoreEstateGrid({
           const shell =
             "group relative overflow-hidden rounded-2xl border border-border bg-card shadow-card";
 
-          return estate.hasPage ? (
+          // dbRow presence (not estate.hasPage alone) gates the link -- see
+          // linkableEstates's own comment above. visible is already filtered
+          // to entries with a live dbRow, so this is always true here today;
+          // kept as an explicit per-card check so this stays safe even if
+          // that upstream filter is ever loosened without updating this line.
+          return dbRow ? (
             <Link
               key={estate.slug}
               to="/estate/$slug"
