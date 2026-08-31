@@ -1,15 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen, Building2, MessageCircle } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
+import { getEstateEntry } from "@/content/estate-registry";
 import { canonicalLink } from "@/content/seo";
 import {
   fetchEstateOptions,
   fetchPublishedArticlesByCategory,
   type ArticleSummary,
 } from "@/lib/queries";
+
+const DISTRICT_FILTERS = ["全部", "深井", "青山公路", "汀九"] as const;
+type DistrictFilter = (typeof DISTRICT_FILTERS)[number];
 
 export const Route = createFileRoute("/estate-reviews")({
   loader: async () => {
@@ -43,6 +48,30 @@ export const Route = createFileRoute("/estate-reviews")({
 function EstateReviewsPage() {
   const { articles, estates } = Route.useLoaderData();
   const inquiryUrl = whatsappUrl("你好，我想查詢深井／青山公路／汀九屋苑開箱及筍盤");
+  const [districtFilter, setDistrictFilter] = useState<DistrictFilter>("全部");
+
+  // homepageDistrict is the registry's existing display grouping for the
+  // homepage estate cards -- reused here rather than a new district map.
+  // getEstateEntry() throws for a slug it doesn't recognise, but
+  // fetchEstateOptions() only ever returns real published estates, and every
+  // one of today's has a registry entry (asserted by
+  // estate-registry.test.mjs's own "every hasPage:true entry has a matching
+  // estateSeo" test), so a direct call here is safe, not a guess.
+  const estatesWithDistrict = useMemo(
+    () =>
+      estates.map((estate) => ({
+        ...estate,
+        homepageDistrict: getEstateEntry(estate.slug).homepageDistrict,
+      })),
+    [estates],
+  );
+  const filteredEstates = useMemo(
+    () =>
+      districtFilter === "全部"
+        ? estatesWithDistrict
+        : estatesWithDistrict.filter((estate) => estate.homepageDistrict === districtFilter),
+    [estatesWithDistrict, districtFilter],
+  );
 
   return (
     <div className="bg-background">
@@ -94,8 +123,27 @@ function EstateReviewsPage() {
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-coral">屋苑專頁</p>
           <h2 className="mt-2 text-2xl font-bold text-primary">屋苑入口</h2>
+          {estatesWithDistrict.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="按地區篩選屋苑">
+              {DISTRICT_FILTERS.map((district) => (
+                <button
+                  key={district}
+                  type="button"
+                  aria-pressed={districtFilter === district}
+                  onClick={() => setDistrictFilter(district)}
+                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                    districtFilter === district
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-input bg-background text-muted-foreground hover:bg-muted"
+                  }`}
+                >
+                  {district}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {estates.map((estate) => (
+            {filteredEstates.map((estate) => (
               <Link
                 key={estate.slug}
                 to="/estate/$slug"
@@ -124,7 +172,7 @@ function ArticleCard({ article }: { article: ArticleSummary }) {
       <div className="flex aspect-video items-center justify-center bg-primary/10 text-primary">
         <AppImage
           src={article.cover_image}
-          alt=""
+          alt={article.title}
           width={640}
           height={360}
           className="h-full w-full object-cover"
