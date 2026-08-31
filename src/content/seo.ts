@@ -132,6 +132,34 @@ export const pageSeo = {
 } satisfies Record<string, PageSeo>;
 
 /**
+ * `intro`/`fit`/`developer`/`yearLabel`/`phases`/`totalUnits`/`areaLabel` are
+ * optional: the original 5 core estates carry all of them (hand-written
+ * market-fact prose predating estate-pages.ts's own `content` object), while
+ * the 17 estates added 2026-09-01 carry only `title`/`description` -- their
+ * equivalent prose lives in estate-pages.ts's `content.heroPositioning`/
+ * `content.buyerFit` instead (Task 4), which estate.$slug.tsx already prefers
+ * over these fields (`content?.heroPositioning ?? seo?.fit ?? ...`). Declaring
+ * this type explicitly, rather than letting TypeScript infer a disjoint union
+ * from 22 differently-shaped object literals, is what lets that fallback
+ * chain type-check for every estate, not just the original 5.
+ */
+export type EstateSeo = {
+  slug: string;
+  oldSlugs: string[];
+  nameZh: string;
+  nameEn: string;
+  title: string;
+  description: string;
+  developer?: string;
+  yearLabel?: string;
+  phases?: number;
+  totalUnits?: number;
+  areaLabel?: string;
+  intro?: string;
+  fit?: string;
+};
+
+/**
  * Identity fields (slug, oldSlugs, nameZh, nameEn) come from estate-registry.ts
  * (DR-10) instead of being retyped here -- this object keeps only its own SEO
  * copy (title/description/intro/fit) and market facts.
@@ -149,7 +177,7 @@ function estateSeoIdentity(slug: string) {
   };
 }
 
-export const estateSeo = {
+export const estateSeo: Record<string, EstateSeo> = {
   bellagio: {
     ...estateSeoIdentity("bellagio"),
     developer: "會德豐 / 九龍倉",
@@ -322,7 +350,7 @@ export const estateSeo = {
     description:
       "帝濤灣（Palatial Coast）小欖／大欖屋苑專頁：兩期放盤、成交、海景、家庭戶、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
   },
-} as const;
+};
 
 /**
  * Derived from estate-registry.ts's `aliases` field (DR-10) rather than a

@@ -19,17 +19,16 @@ import { estateRegistry, estatesWithPage } from "../content/estate-registry.ts";
 // a real `/estate/$slug` detail page, backed by a real (but currently
 // `published = false`) DB row from
 // neon/migrations/20260830130000_estate_expansion.sql. `estateSeo`
-// (src/content/seo.ts's Task 3) now legitimately covers all 22 slugs, and
-// gating on whether a page is actually live moved to the DB `published`
-// column -- checked at the SQL layer by `fetchEstateBySlug`, which 404s an
-// unpublished row entirely -- rather than to registry-level `hasPage` or
-// sitemap-level exclusion.
-//
-// This file still pins two real invariants: (1) sitemap[.]xml.ts must keep
-// deriving estate paths from `estateSeo`, never `estateRegistry` directly,
-// so estateSeo stays the one place that curates which slugs are
-// sitemap-worthy; and (2) estateSeo must exactly match the registry's
-// hasPage:true set (today, all 22) so the two can never silently diverge.
+// (src/content/seo.ts's Task 3) now legitimately covers all 22 slugs, so it
+// can no longer double as "the set of sitemap-worthy slugs" on its own --
+// sitemap[.]xml.ts now additionally filters estateSeo's paths through
+// fetchSitemapTimestamps()'s live `SELECT slug FROM estates WHERE published
+// = true` result (already fetched there for lastmod dates) before mapping to
+// URLs, so only estates the DB actually has published = true today reach the
+// sitemap. Content-level leakage was never possible either way -- an
+// unpublished estate's page 404s entirely at the DB query layer
+// (fetchEstateBySlug) -- this filter is purely about not advertising a
+// soft-404 URL.
 //
 // sitemap[.]xml.ts itself cannot be imported directly under `node --test`:
 // it pulls in `src/lib/neon/public-data.server.ts`, which starts with
@@ -39,23 +38,33 @@ import { estateRegistry, estatesWithPage } from "../content/estate-registry.ts";
 // works around this the same way: source-scan the route file's text, and
 // exercise its pure, DB-independent derivation logic (here, the
 // `estateSeo` → path mapping) against the real content modules directly.
+// The publish-state filter itself needs a live `estates` row to actually
+// exercise -- this file cannot prove that filter *excludes* an unpublished
+// slug at runtime, only that the filter exists in the route's source; a
+// live-DB pass (manual, or a future `*.integration.test.mjs`) is the only
+// way to prove the filter's runtime behavior against real rows.
 
 function readSitemapSource() {
   return readFileSync(new URL("./sitemap[.]xml.ts", import.meta.url), "utf8");
 }
 
-test("sitemap[.]xml.ts enumerates estate paths from estateSeo, not the full estate registry", () => {
+test("sitemap[.]xml.ts derives estate paths from estateSeo, filtered by live published state, never from the full estate registry", () => {
   const source = readSitemapSource();
 
-  // The one line this whole test suite exists to guard: the sitemap must map
-  // over estateSeo's *values*, not estateRegistry's directly -- even though
-  // both are 22 entries wide today, estateSeo is the file that curates real
-  // title/description SEO copy per estate, and is the intended single source
-  // of truth for "does this slug get a sitemap URL".
+  // estateSeo is still the curated source of which slugs get real SEO
+  // copy/URLs at all -- but must be filtered by fetchSitemapTimestamps()'s
+  // live published-estates result before becoming a sitemap path, not mapped
+  // unconditionally (that would list every hasPage:true estate regardless of
+  // DB published state).
   assert.match(
     source,
-    /Object\.values\(estateSeo\)\.map\(\(estate\) => `\/estate\/\$\{estate\.slug\}`\)/,
-    "sitemap must derive estate URLs from Object.values(estateSeo)",
+    /Object\.values\(estateSeo\)\s*\n?\s*\.filter\(\(estate\) => estate\.slug in timestamps\.estates\)/,
+    "sitemap must filter estateSeo's entries by whether the slug is a key in the live fetchSitemapTimestamps().estates result",
+  );
+  assert.match(
+    source,
+    /\.map\(\(estate\) => `\/estate\/\$\{estate\.slug\}`\)/,
+    "sitemap must still map the filtered estates to /estate/{slug} paths",
   );
 
   // estateRegistry must never be imported into this route directly -- that
@@ -90,38 +99,60 @@ test("estateSeo's entry count matches exactly estate-registry.ts's hasPage:true 
   assert.equal(seoSlugs.length, 22, "all 22 registry estates should have a live detail page today");
 });
 
-test("the sitemap's computed estate paths match every hasPage:true registry slug, with no duplicates", () => {
-  // Reproduce sitemap[.]xml.ts's actual derivation logic (Object.values(estateSeo)
-  // .map(estate => `/estate/${estate.slug}`)) against the real content module,
-  // rather than trusting the source-scan regex alone to prove the *data*, not
-  // just the *code shape*, is correct.
-  const sitemapEstatePaths = Object.values(estateSeo).map((estate) => `/estate/${estate.slug}`);
+test("simulating fetchSitemapTimestamps' publish filter against estateSeo never includes a slug the simulated published set excludes", () => {
+  // A DB-independent stand-in for fetchSitemapTimestamps().estates -- proves
+  // the *shape* of the filter (an object whose keys gate inclusion) behaves
+  // correctly against real estateSeo data, without needing a live DB. This
+  // cannot prove which estates are published in a real database today (that
+  // answer only exists in Neon) -- only that IF the DB reports zero
+  // estates published (true for all 22 as of this commit -- see
+  // neon/migrations/20260830130000_estate_expansion.sql), the sitemap
+  // computes zero estate paths, and IF the DB reports some estates
+  // published, only those slugs' paths appear.
+  function simulateSitemapEstatePaths(publishedTimestamps) {
+    return Object.values(estateSeo)
+      .filter((estate) => estate.slug in publishedTimestamps)
+      .map((estate) => `/estate/${estate.slug}`);
+  }
 
-  assert.equal(sitemapEstatePaths.length, 22);
-  assert.equal(
-    new Set(sitemapEstatePaths).size,
-    22,
-    "no duplicate estate paths in the sitemap's estate URL list",
+  assert.deepEqual(
+    simulateSitemapEstatePaths({}),
+    [],
+    "zero published estates (today's real state) must produce zero sitemap estate paths",
   );
 
-  // All 22 estate-registry.ts entries ship hasPage:true today (2026-09-01
-  // Estate Expansion 17 data pack), so this loop is a live canary rather
-  // than a stale pin: if a future edit ever reintroduces a hasPage:false
-  // entry, its slug must NOT appear in the sitemap's estate paths. Whether a
-  // page is actually reachable today is gated at the DB `published` column
-  // (fetchEstateBySlug's SQL filter 404s an unpublished row entirely), not
-  // by sitemap exclusion -- but a hasPage:false estate has no estateSeo
-  // entry at all (per the assertion above), so it can never reach the
-  // sitemap regardless.
-  const unpublishedSlugs = estateRegistry
+  const onePublished = { bellagio: "2026-01-01" };
+  assert.deepEqual(
+    simulateSitemapEstatePaths(onePublished),
+    ["/estate/bellagio"],
+    "only the slug present in the published-timestamps map should appear",
+  );
+
+  const allEstatesPublished = Object.fromEntries(
+    Object.keys(estateSeo).map((slug) => [slug, "2026-01-01"]),
+  );
+  const allPaths = simulateSitemapEstatePaths(allEstatesPublished);
+  assert.equal(allPaths.length, 22);
+  assert.equal(new Set(allPaths).size, 22, "no duplicate estate paths");
+});
+
+test("a hasPage:false registry estate (none exist today) would never get an estateSeo entry to begin with", () => {
+  // estateSeoIdentity() (seo.ts) is only ever called for the 22 hasPage:true
+  // slugs -- a hasPage:false estate has no estateSeo entry at all, so it's
+  // structurally impossible for it to reach the sitemap regardless of the
+  // publish-state filter tested above. This is a live canary, not a stale
+  // pin: today estateRegistry has zero hasPage:false entries, but if a
+  // future estate is added as a placeholder again, this proves it still
+  // can't leak into estateSeo (and therefore the sitemap) by construction.
+  const unpublishedRegistrySlugs = estateRegistry
     .filter((entry) => !entry.hasPage)
     .map((entry) => entry.slug);
 
-  for (const slug of unpublishedSlugs) {
+  for (const slug of unpublishedRegistrySlugs) {
     assert.equal(
-      sitemapEstatePaths.includes(`/estate/${slug}`),
+      slug in estateSeo,
       false,
-      `hasPage:false estate "${slug}" must never appear in the sitemap's estate URLs`,
+      `hasPage:false estate "${slug}" must have no estateSeo entry`,
     );
   }
 });
