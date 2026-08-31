@@ -100,3 +100,103 @@ test("every route with children in the generated tree renders an Outlet", () => 
     );
   }
 });
+
+// P5e1 Task 4: blog_.$slug.tsx grew a ToC, byline, sources note, answer-summary
+// box, and a live comparison table. This is a source-text scan (like the rest
+// of this file) rather than a rendered-DOM assertion, since blog_.$slug.tsx's
+// component reads its own createFileRoute loader data via Route.useLoaderData(),
+// which isn't available outside a real router context.
+test("blog article template renders a ToC that anchors each section heading", () => {
+  const source = read("src/routes/blog_.$slug.tsx");
+  assert.match(source, /aria-label="目錄"/, "article should render a ToC nav");
+  assert.match(
+    source,
+    /article\.sections\.length >= 2/,
+    "ToC should only render for 2+ sections (a single-section article doesn't need one)",
+  );
+  assert.match(
+    source,
+    /href=\{`#\$\{sectionAnchors\[index\]\}`\}/,
+    "each ToC entry should link to its section's anchor id",
+  );
+});
+
+test("blog article template renders an author byline unconditionally and a reviewer byline only when set", () => {
+  const source = read("src/routes/blog_.$slug.tsx");
+  assert.match(source, /作者：\{article\.author\}/, "author should always render");
+  assert.match(
+    source,
+    /\{article\.reviewer && <span>審閱：\{article\.reviewer\}<\/span>\}/,
+    "reviewer should only render when non-null -- never a fabricated placeholder",
+  );
+});
+
+test("blog article template renders an answer-summary callout before the ToC", () => {
+  const source = read("src/routes/blog_.$slug.tsx");
+  assert.match(
+    source,
+    /article\.answerSummary &&/,
+    "answer summary should be conditionally rendered",
+  );
+  assert.match(source, /重點摘要/, "answer summary should be visually labelled as a summary");
+});
+
+test("blog article template mounts the live comparison table when compareEstateSlugs is present", () => {
+  const source = read("src/routes/blog_.$slug.tsx");
+  assert.match(
+    source,
+    /import \{\s*BlogEstateComparisonTable/,
+    "should import the neutral N-way comparison table component",
+  );
+  assert.match(
+    source,
+    /compareEstates\.length > 0 && <BlogEstateComparisonTable estates=\{compareEstates\} \/>/,
+    "comparison table should mount only when there are estates to compare",
+  );
+  assert.match(
+    source,
+    /fetchEstateBySlug/,
+    "comparison rows should be fetched live, never hand-typed",
+  );
+});
+
+// P5e1 Task 5: /blog gained category filter chips, a search box, and richer
+// card metadata (author, published date, cover image).
+test("blog list renders a category filter for every named category plus an 全部 option", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /CATEGORY_FILTERS = \["全部", \.\.\.BLOG_CATEGORIES\]/,
+    "category filter should cover 全部 plus every BLOG_CATEGORIES entry, not a hand-picked subset",
+  );
+  assert.match(source, /aria-pressed=\{selectedCategory === category\}/);
+});
+
+test("blog list renders a client-side search box over the loaded articles", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(source, /type="search"/, "search input should exist");
+  assert.match(
+    source,
+    /matchesSearch\(searchQuery, \[article\.title, article\.excerpt, article\.category\]\)/,
+    "search should filter by title/excerpt/category, no new DB query",
+  );
+});
+
+test("blog list cards show author (defaulting to the editorial byline) and published date", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /\{article\.author \?\? EDITORIAL_AUTHOR\}/,
+    "DB-sourced articles with no author column should default to the org byline, not a per-article guess",
+  );
+  assert.match(source, /formatHkDate\(article\.published_at\)/);
+});
+
+test("blog list cards render a cover image only when one exists", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /\{article\.cover_image && \(\s*<AppImage/,
+    "cover image should be conditionally rendered, not a fallback box on every card",
+  );
+});
