@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, TrainFront, MapPinned } from "lucide-react";
 
-import { SITE_URL, pageSeo } from "@/content/seo";
+import { pageSeo, seo } from "@/content/seo";
 
 const AREAS = [
   {
@@ -19,13 +19,17 @@ const AREAS = [
 ];
 
 export const Route = createFileRoute("/district/tsuen-wan")({
-  head: () => ({
-    meta: [
-      { title: pageSeo.tsuenWan.title },
-      { name: "description", content: pageSeo.tsuenWan.description },
-    ],
-    links: [{ rel: "canonical", href: `${SITE_URL}${pageSeo.tsuenWan.path}` }],
-  }),
+  head: () =>
+    seo({
+      title: pageSeo.tsuenWan.title,
+      description: pageSeo.tsuenWan.description,
+      path: pageSeo.tsuenWan.path,
+      // Scope decision (P7a §0.2): orphaned (no nav/sitemap entry) but
+      // previously indexable -- noindex it rather than silently reinstating
+      // it into nav/sitemap, which is a content/IA decision this SEO-hygiene
+      // pass has no mandate to make.
+      noindex: true,
+    }),
   component: TsuenWanPage,
 });
 

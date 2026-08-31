@@ -25,6 +25,33 @@ export function canonicalLink(path: string) {
   return { rel: "canonical", href: `${SITE_URL}${path}` } as const;
 }
 
+/**
+ * Combinator for the common `head()` shape (title, description, og mirrors,
+ * canonical, optional noindex) -- built for and applied to the handful of
+ * routes whose title/description genuinely equal their og:title/og:description
+ * (most routes already work fine with a hand-rolled head() and were not
+ * migrated onto this; see P7a's scope decision).
+ */
+export function seo(input: {
+  title: string;
+  description: string;
+  path: string;
+  ogImage?: string;
+  noindex?: boolean;
+}) {
+  return {
+    meta: [
+      { title: input.title },
+      { name: "description", content: input.description },
+      { property: "og:title", content: input.title },
+      { property: "og:description", content: input.description },
+      ...(input.ogImage ? [{ property: "og:image", content: input.ogImage }] : []),
+      ...(input.noindex ? [{ name: "robots", content: "noindex,follow" }] : []),
+    ],
+    links: [canonicalLink(input.path)],
+  };
+}
+
 export const pageSeo = {
   home: {
     path: "/",
@@ -85,8 +112,7 @@ export const pageSeo = {
   privacy: {
     path: "/privacy",
     title: "私隱政策｜晉誠地產 Earnest Property",
-    description:
-      "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
+    description: "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
   },
   disclaimer: {
     path: "/disclaimer",
@@ -108,9 +134,7 @@ export const pageSeo = {
 function estateSeoIdentity(slug: string) {
   const entry = getEstateEntry(slug);
   if (!entry.nameEn) {
-    throw new Error(
-      `seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`,
-    );
+    throw new Error(`seo.ts: estateSeo requires a supplied nameEn, but "${slug}" has none`);
   }
   return {
     slug: entry.slug,
@@ -199,12 +223,11 @@ export const estateSeo = {
  * (confirmed by a repo-wide grep) but kept exported for parity with the
  * pre-refactor API.
  */
-export const estateAliases: Record<string, keyof typeof estateSeo> =
-  Object.fromEntries(
-    (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
-      getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
-    ),
-  );
+export const estateAliases: Record<string, keyof typeof estateSeo> = Object.fromEntries(
+  (Object.keys(estateSeo) as Array<keyof typeof estateSeo>).flatMap((slug) =>
+    getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
+  ),
+);
 
 export const blogArticles = [
   {
