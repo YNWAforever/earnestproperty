@@ -47,6 +47,7 @@
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
     "test:legal": "node --test src/routes/legal-pages.contract.test.mjs",
     "test:a11y": "playwright test",
+    "test:analytics": "node --test src/lib/analytics/events.test.mjs",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",
     "migration:import": "node scripts/old-site-migration/import.mjs",
