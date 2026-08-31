@@ -20,7 +20,7 @@ import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
-import { findComparableEstates, getEstateEntry } from "@/content/estate-registry";
+import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
@@ -190,7 +190,13 @@ function EstatePage() {
   };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
-  const registryEntry = getEstateEntry(estate.slug);
+  // Not getEstateEntry(): that throws on a miss by design (registry drift is
+  // a bug for the 22 known estates it covers), but this route also serves
+  // any estate the admin CMS creates, which can carry a slug not yet present
+  // in the static registry file at all -- a genuinely expected case, not
+  // drift. Falls back to null and every read below degrades gracefully
+  // rather than crashing the whole page for a brand-new estate.
+  const registryEntry = estateRegistry.find((entry) => entry.slug === estate.slug) ?? null;
   useTrackPageView(
     () => ({
       event: {
@@ -228,7 +234,7 @@ function EstatePage() {
   ]);
   const ctaContext = {
     estateName: seo?.nameZh ?? estate.name_zh,
-    districtName: registryEntry.locationLabelZh ?? "深井 / 青山公路",
+    districtName: registryEntry?.locationLabelZh ?? "深井 / 青山公路",
     source: `estate-${estate.slug}`,
   };
   const estateFacts = [
@@ -251,7 +257,7 @@ function EstatePage() {
   // here rather than invented figures.
   const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(estate.district_slug);
   const schoolNet = getSchoolNet(
-    registryEntry.districtSlug ? SCHOOL_NET_BY_DISTRICT[registryEntry.districtSlug] : null,
+    registryEntry?.districtSlug ? SCHOOL_NET_BY_DISTRICT[registryEntry.districtSlug] : null,
   );
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
@@ -262,7 +268,7 @@ function EstatePage() {
         "@type": "ListItem",
         position: 2,
         name: "屋苑",
-        item: `${SITE_URL}${registryEntry.districtHref ?? "/district/sham-tseng"}`,
+        item: `${SITE_URL}${registryEntry?.districtHref ?? "/district/sham-tseng"}`,
       },
       {
         "@type": "ListItem",
@@ -295,11 +301,13 @@ function EstatePage() {
       )}
       <section className="bg-gradient-to-br from-primary to-primary/70 py-16 text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          {/* registryEntry.heroEyebrow is non-null for every current entry
-              (see estate-registry.ts); no literal fallback here on purpose --
-              a hardcoded 深井-only string would defeat the point of this
-              field existing per-estate at all. */}
-          <p className="text-sm opacity-80">{registryEntry.heroEyebrow}</p>
+          {/* registryEntry.heroEyebrow is non-null for every registry entry
+              (see estate-registry.ts) -- the fallback below only fires for
+              an estate the admin CMS created that has no registry entry yet,
+              where we genuinely don't know the district, so it stays
+              generic rather than defaulting to a specific (possibly wrong)
+              claim. */}
+          <p className="text-sm opacity-80">{registryEntry?.heroEyebrow ?? "屋苑獨立 SEO 頁"}</p>
           <h1 className="mt-2 text-4xl font-bold sm:text-5xl">{seo?.nameZh ?? estate.name_zh}</h1>
           <p className="mt-5 max-w-3xl text-base leading-relaxed opacity-90">
             {content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}

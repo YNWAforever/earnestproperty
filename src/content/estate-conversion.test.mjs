@@ -519,13 +519,17 @@ test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 T
     route,
     /import \{\s*EstateComparisonTable,\s*type EstateComparisonRow,\s*\} from "@\/components\/site\/EstateComparisonTable";/,
   );
-  // P4 Task 5 (district-driven route, docs/superpowers/plans/2026-08-30-...)
-  // merged getEstateEntry into this same import statement rather than adding
-  // a second import line -- match either shape, since which named exports
-  // share the statement isn't the invariant this test protects.
+  // This route's estate-registry.ts import statement has changed shape twice
+  // (P4 Task 5 merged in getEstateEntry; the 17-estate expansion's final
+  // review swapped that for a null-safe estateRegistry.find(), since
+  // getEstateEntry throws on a miss and this route also serves
+  // admin-CMS-created estates not yet in the static registry) -- match any
+  // shape that imports findComparableEstates from the right module, since
+  // which other named exports share the statement isn't the invariant this
+  // test protects.
   assert.match(
     route,
-    /import \{ findComparableEstates(?:, getEstateEntry)? \} from "@\/content\/estate-registry";/,
+    /import \{[^}]*findComparableEstates[^}]*\} from "@\/content\/estate-registry";/,
   );
 
   // Up to 2 comparables, computed from the registry alone (before any DB
