@@ -1041,6 +1041,7 @@ export async function fetchRecentTransactions(
   const params: unknown[] = [];
   const where = transactionsWhere(input, params);
   const limitParam = addParam(params, Math.min(Math.max(1, input.limit), 100));
+  const offsetParam = addParam(params, Math.max(0, input.offset ?? 0));
   const rows = await sql().query(
     `
     SELECT
@@ -1064,10 +1065,37 @@ export async function fetchRecentTransactions(
     WHERE ${where}
     ORDER BY t.deal_date DESC NULLS LAST, t.created_at DESC
     LIMIT ${limitParam}
+    OFFSET ${offsetParam}
     `,
     params,
   );
   return rows.map(mapTransactionRow);
+}
+
+/**
+ * Total row count for the same filters fetchRecentTransactions applies --
+ * kept as a separate query (not a window function on the paged query above)
+ * so callers that only want existence/paging metadata, like this function's
+ * own callers, aren't forced to also fetch a page of rows, and so
+ * fetchRecentTransactions's own return shape (a plain row array) stays
+ * unchanged for its existing callers (e.g. sitemap[.]xml.ts's `limit: 1`
+ * existence check).
+ */
+export async function fetchRecentTransactionsCount(
+  input: Omit<NeonRecentTransactionsInput, "limit" | "offset">,
+): Promise<number> {
+  const params: unknown[] = [];
+  const where = transactionsWhere({ ...input, limit: 0 }, params);
+  const rows = await sql().query(
+    `
+    SELECT count(*)::int AS count
+    FROM transactions t
+    INNER JOIN estates e ON e.id = t.estate_id
+    WHERE ${where}
+    `,
+    params,
+  );
+  return numberOrNull(rows[0]?.count) ?? 0;
 }
 
 export async function fetchPublishedArticles() {

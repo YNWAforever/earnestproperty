@@ -16,6 +16,7 @@ import {
   fetchNeonPropertyByListingNo,
   fetchNeonPublishedArticles,
   fetchNeonRecentTransactions,
+  fetchNeonRecentTransactionsCount,
   fetchNeonSimilarListings,
   searchNeonListings,
 } from "@/lib/neon/public-data";
@@ -586,6 +587,7 @@ export type RecentTransactionFilters = {
   minPrice?: number;
   maxPrice?: number;
   limit?: number;
+  offset?: number;
 };
 
 /**
@@ -610,7 +612,23 @@ export async function fetchRecentTransactions(
       minPrice: filters.minPrice,
       maxPrice: filters.maxPrice,
       limit: filters.limit ?? 24,
+      offset: filters.offset,
     },
   });
   return rows as RecentTransaction[];
+}
+
+export async function fetchRecentTransactionsCount(
+  filters: Omit<RecentTransactionFilters, "limit" | "offset"> = {},
+): Promise<number> {
+  return fetchNeonRecentTransactionsCount({
+    data: {
+      estateSlug: filters.estateSlug,
+      districtSlug: filters.districtSlug,
+      dealType: filters.dealType,
+      month: filters.month,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+    },
+  });
 }
