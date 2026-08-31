@@ -26,7 +26,7 @@
 - Modify: `src/components/site/SiteHeader.tsx`
 - Modify: `src/components/site/SiteHeader.contract.test.mjs`
 
-- [ ] **Step 1: Add a trigger-ref registry and a `closeMegaMenu` helper.** Near the top of `SiteHeader()`, alongside the existing `headerRef`:
+- [x] **Step 1: Add a trigger-ref registry and a `closeMegaMenu` helper.** Near the top of `SiteHeader()`, alongside the existing `headerRef`:
 
 ```typescript
 const triggerRefs = useRef<Map<MegaMenuId, HTMLButtonElement>>(new Map());
@@ -42,7 +42,7 @@ function closeMegaMenu() {
 }
 ```
 
-- [ ] **Step 2: Wire `closeMegaMenu` into the Escape and outside-click handlers**, replacing their current `setActiveMegaMenu(null)`:
+- [x] **Step 2: Wire `closeMegaMenu` into the Escape and outside-click handlers**, replacing their current `setActiveMegaMenu(null)`:
 
 ```typescript
 function handleKeyDown(event: KeyboardEvent) {
@@ -58,7 +58,7 @@ function handlePointerDown(event: MouseEvent) {
 }
 ```
 
-- [ ] **Step 3: Register each trigger button in the map**, via a ref callback on the `Button` inside the `megaMenus.map(...)` block:
+- [x] **Step 3: Register each trigger button in the map**, via a ref callback on the `Button` inside the `megaMenus.map(...)` block:
 
 ```tsx
 <Button
@@ -77,13 +77,13 @@ function handlePointerDown(event: MouseEvent) {
 
 (Keep every other prop on this button exactly as it is today — only adding `ref`.)
 
-- [ ] **Step 4: Route `MegaMenuPanel`'s `onLinkClick` through `closeMegaMenu` too** — a link inside the panel that the user dismisses via keyboard (not by actually navigating) should get the same focus-return behaviour:
+- [x] **Step 4: Route `MegaMenuPanel`'s `onLinkClick` through `closeMegaMenu` too** — a link inside the panel that the user dismisses via keyboard (not by actually navigating) should get the same focus-return behaviour:
 
 ```tsx
 <MegaMenuPanel menu={activeMenu} onLinkClick={closeMegaMenu} />
 ```
 
-- [ ] **Step 5: Fix the mobile nav trigger's static `aria-label`** so it reflects `open`:
+- [x] **Step 5: Fix the mobile nav trigger's static `aria-label`** so it reflects `open`:
 
 ```tsx
 <Button
@@ -95,7 +95,7 @@ function handlePointerDown(event: MouseEvent) {
 >
 ```
 
-- [ ] **Step 6: Extend `SiteHeader.contract.test.mjs`** (source-scan, matching its existing 3 tests' style):
+- [x] **Step 6: Extend `SiteHeader.contract.test.mjs`** (source-scan, matching its existing 3 tests' style):
 
 ```javascript
 test("mega menu returns focus to its trigger on close, not just to nothing", () => {
@@ -120,11 +120,11 @@ test("mobile nav trigger's aria-label reflects open/closed state", () => {
 
 (Adjust the exact regex for whichever quoting/escaping the real diff produces — write the actual code first, then match it, don't guess the exact source text blind.)
 
-- [ ] **Step 7: Typecheck and run**
+- [x] **Step 7: Typecheck and run**
 
 Run: `npx tsc --noEmit && npm run test:homepage`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/components/site/SiteHeader.tsx src/components/site/SiteHeader.contract.test.mjs
@@ -134,6 +134,8 @@ git commit -m "fix(a11y): return focus to the mega-menu trigger on close, fix st
 ---
 
 ## Task 2: Wire `jsx-a11y` into `eslint.config.js` at `warn`
+
+> **BLOCKED, not done.** This machine has a config-protection hook that refuses any edit to `eslint.config.js`, even one that only adds a plugin rather than weakening an existing rule. The hook's own message says to disable it temporarily if the change is legitimate -- that's the user's call, not something to route around. The design below is still correct and ready to apply once that's cleared; nothing here needs to change.
 
 **Files:**
 - Modify: `eslint.config.js`
@@ -186,7 +188,7 @@ git commit -m "feat(a11y): wire eslint-plugin-jsx-a11y into eslint.config.js at 
 - Create: `e2e/a11y.spec.ts`
 - Create: `.gitignore` entry for `playwright-report/`, `test-results/` (check if already covered by an existing broad ignore rule first)
 
-- [ ] **Step 1: Install dependencies**
+- [x] **Step 1: Install dependencies**
 
 ```bash
 npm install --save-dev @playwright/test @axe-core/playwright
@@ -195,7 +197,7 @@ npx playwright install --with-deps chromium
 
 (Chromium only, not all 3 browsers — this is an a11y regression gate, not a cross-browser compat suite; keep the install light.)
 
-- [ ] **Step 2: Write `playwright.config.ts`** at the repo root:
+- [x] **Step 2: Write `playwright.config.ts`** at the repo root:
 
 ```typescript
 import { defineConfig, devices } from "@playwright/test";
@@ -221,7 +223,7 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 3: Write `e2e/a11y.spec.ts`** covering all 7 master-plan-named surfaces, gracefully skipping any that need live data this environment doesn't have (scope decision §0.2):
+- [x] **Step 3: Write `e2e/a11y.spec.ts`** covering all 7 master-plan-named surfaces, gracefully skipping any that need live data this environment doesn't have (scope decision §0.2):
 
 ```typescript
 import { test, expect } from "@playwright/test";
@@ -269,21 +271,21 @@ test.skip(
 );
 ```
 
-- [ ] **Step 4: Add the `test:a11y` script**
+- [x] **Step 4: Add the `test:a11y` script**
 
 ```json
 "test:a11y": "playwright test",
 ```
 
-- [ ] **Step 5: Verify it runs and passes against this environment's actual state** (3 pages render, rest skip):
+- [x] **Step 5: Verify it runs and passes against this environment's actual state** (3 pages render, rest skip):
 
 Run: `npm run test:a11y`
 
 Expected: `/contact`, `/mortgage` pass with 0 axe violations; `/`, `/listings`, `/estate/bellagio` report skipped (500, no live DB); no hard failures. If `/blog` or another DB-independent page later gets added to `PAGES`, verify it the same way before assuming it passes.
 
-- [ ] **Step 6: Add `playwright-report/` and `test-results/` to `.gitignore`** if not already covered by an existing pattern (check first — this repo's `.gitignore` may already have a broad `dist`/build-output rule that happens to cover these).
+- [x] **Step 6: Add `playwright-report/` and `test-results/` to `.gitignore`** if not already covered by an existing pattern (check first — this repo's `.gitignore` may already have a broad `dist`/build-output rule that happens to cover these).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add package.json package-lock.json playwright.config.ts e2e/a11y.spec.ts .gitignore
@@ -298,8 +300,9 @@ Run: `npx tsc --noEmit && npm run test:homepage && npm run lint 2>&1 | tail -5 &
 
 ## Acceptance
 
-- Mega-menu closing via Escape or an outside click returns focus to the trigger button that opened it.
-- Mobile nav trigger's `aria-label` reflects whether the sheet is open.
-- `eslint-plugin-jsx-a11y` is registered in `eslint.config.js` at `warn` (not silently absent, not yet `error`).
-- `npm run test:a11y` exists, runs, and passes against whatever this environment can actually render — honestly scoped, not claiming coverage it can't verify.
-- The 4 pages needing live data (`/`, `/listings`, `/estate/$slug`, `/property/$listingNo`, `/agents`) are written into the suite and will be exercised automatically the moment a real `DATABASE_URL` is available, with zero changes needed to the test file itself.
+- [x] Mega-menu closing via Escape or an outside click returns focus to the trigger button that opened it.
+- [x] Mobile nav trigger's `aria-label` reflects whether the sheet is open.
+- [ ] **`eslint-plugin-jsx-a11y` registration — blocked by a local config-protection hook, not done.** See Task 2's note.
+- [x] `npm run test:a11y` exists, runs, and passes against whatever this environment can actually render — honestly scoped, not claiming coverage it can't verify.
+- [x] The 4 pages needing live data (`/`, `/listings`, `/estate/$slug`, `/property/$listingNo`, `/agents`) are written into the suite and will be exercised automatically the moment a real `DATABASE_URL` is available, with zero changes needed to the test file itself.
+- [x] (Unplanned, found while building the suite) Two real defects fixed: `MortgageCalculator.tsx`'s duplicate `<main>` landmark, and `ui/slider.tsx` forwarding `aria-label` to an element with no valid role. A third, sitewide instance of the same duplicate-`<main>` pattern across ~10 other routes was found and flagged as a separate follow-up task, not fixed in this PR.
