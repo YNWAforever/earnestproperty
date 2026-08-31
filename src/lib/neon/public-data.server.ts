@@ -860,7 +860,7 @@ export async function fetchCmsVideos() {
   try {
     rows = await sql().query(
       `
-      SELECT id, title, video_url, description, sort_order, created_at, youtube_published_at
+      SELECT id, title, video_url, description, sort_order, created_at, youtube_published_at, category
       FROM cms_videos
       WHERE published = true
         AND (youtube_managed = false OR youtube_available = true)
@@ -880,6 +880,7 @@ export async function fetchCmsVideos() {
     sort_order: Number(row.sort_order ?? 0),
     created_at: dateOrNull(row.created_at),
     youtube_published_at: dateOrNull(row.youtube_published_at),
+    category: stringOrNull(row.category),
   }));
 }
 

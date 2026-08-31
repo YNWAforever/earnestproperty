@@ -436,6 +436,7 @@ export type CmsVideo = {
   created_at: string | null;
   /** Real upload date from YouTube. Null for videos added by hand in the CMS. */
   youtube_published_at: string | null;
+  category: string | null;
 };
 
 export async function fetchCmsVideos(): Promise<CmsVideo[]> {

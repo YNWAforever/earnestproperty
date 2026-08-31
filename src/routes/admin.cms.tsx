@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
@@ -166,6 +167,7 @@ const emptyCmsVideo: AdminCmsVideoInput = {
   description: null,
   sort_order: 0,
   published: true,
+  category: null,
 };
 
 // Captures the editing object's shape at the moment a dialog opens (the ref
@@ -1825,6 +1827,26 @@ function CmsVideoDialog({
                   value={video.sort_order}
                   onChange={(value) => onChange({ ...video, sort_order: value ?? 0 })}
                 />
+                <Field label="分類">
+                  <Select
+                    value={video.category ?? "none"}
+                    onValueChange={(value) =>
+                      onChange({ ...video, category: value === "none" ? null : value })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="未分類" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">未分類</SelectItem>
+                      {VIDEO_CATEGORIES.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
                 <Field label="發布">
                   <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
                     <Switch
@@ -2689,6 +2711,7 @@ function cmsVideoFingerprintValues(
     video_url: video.video_url,
     sort_order: video.sort_order,
     published: video.published,
+    category: video.category,
     created_at: persisted?.created_at ?? null,
     updated_at: persisted?.updated_at ?? null,
   };
@@ -2739,6 +2762,7 @@ function cmsVideoToInput(video: AdminCmsVideoRow): AdminCmsVideoInput {
     description: video.description,
     sort_order: video.sort_order,
     published: video.published,
+    category: video.category,
   };
 }
 

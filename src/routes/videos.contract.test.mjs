@@ -23,6 +23,27 @@ test("estate and q are optional free text", () => {
   assert.match(source, /q:\s*fallback\(/);
 });
 
+// P5e2: category is a real admin-assigned column (video-categories.ts), not a
+// title-derived heuristic like the estate tag above, so it needs its own
+// search-schema field and filter guard on both video arrays.
+test("category is a URL search param sourced from the shared taxonomy", () => {
+  assert.match(source, /category:\s*fallback\(/);
+  assert.match(source, /import \{ VIDEO_CATEGORIES \} from "@\/content\/video-categories"/);
+});
+
+test("category filters cmsVideos by the exact stored value", () => {
+  assert.match(source, /if \(category && video\.category !== category\) return false;/);
+});
+
+test("listing videos are scoped to 樓盤實拍 when any other category is active", () => {
+  assert.match(source, /if \(category && category !== "樓盤實拍"\) return \[\];/);
+});
+
+test("category chip row renders every named category with a live count", () => {
+  assert.match(source, /categoryCounts\.map\(\(entry\) =>/);
+  assert.match(source, /VIDEO_CATEGORIES\.map\(\(cat\) => \(\{ category: cat, count:/);
+});
+
 // DR-6: VideoObject JSON-LD used to be emitted for every video in the raw
 // loader data, regardless of paging or the active search/category filter --
 // structured data for content the page doesn't render is misleading to

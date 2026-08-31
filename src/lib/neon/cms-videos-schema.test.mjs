@@ -47,3 +47,15 @@ test("admin video reads and writes degrade only when cms_videos is unavailable",
   assert.match(saveFunction ?? "", /isMissingCmsVideosTableError/);
   assert.match(saveFunction ?? "", /影片資料表尚未建立/);
 });
+
+// P5e2: cms_videos gained a nullable `category` column -- assert the admin
+// write path actually persists it rather than silently dropping it.
+test("saveAdminCmsVideo persists the category column", () => {
+  const source = readFileSync(join(process.cwd(), "src/lib/neon/admin-data.server.ts"), "utf8");
+  const saveFunction = source.match(
+    /export async function saveAdminCmsVideo[\s\S]*?\r?\n}\r?\n\r?\nexport async function saveAdminEstate/,
+  )?.[0];
+
+  assert.match(saveFunction ?? "", /category = \$6/);
+  assert.match(saveFunction ?? "", /input\.category/);
+});

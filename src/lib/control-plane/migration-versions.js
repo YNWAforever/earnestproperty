@@ -60,6 +60,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260830160000_branches_entity.sql",
   "20260830170000_valuation_leads.sql",
   "20260831090000_staff_viewer_role.sql",
+  "20260831180000_video_category.sql",
 ]);
 
 /**

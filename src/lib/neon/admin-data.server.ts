@@ -1687,7 +1687,7 @@ export async function fetchAdminCmsVideos() {
   try {
     rows = await queryRows(
       `
-    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at
+    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, category
     FROM cms_videos
     ORDER BY sort_order ASC, created_at DESC
     `,
@@ -1706,6 +1706,7 @@ export async function fetchAdminCmsVideos() {
     published: booleanOrFalse(row.published),
     created_at: dateOrNull(row.created_at),
     updated_at: dateOrNull(row.updated_at),
+    category: stringOrNull(row.category),
   }));
 }
 
@@ -1720,6 +1721,7 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     input.description,
     input.sort_order,
     input.published,
+    input.category,
   ];
 
   let rows;
@@ -1733,16 +1735,17 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
           description = $3,
           sort_order = $4,
           published = $5,
+          category = $6,
           updated_at = now()
-        WHERE id = $6
+        WHERE id = $7
         RETURNING id
         `,
           [...params, input.id],
         )
       : await queryRows(
           `
-        INSERT INTO cms_videos (title, video_url, description, sort_order, published)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO cms_videos (title, video_url, description, sort_order, published, category)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         `,
           params,
