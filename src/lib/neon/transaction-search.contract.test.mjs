@@ -77,7 +77,7 @@ test("fetchRecentTransactions always filters on published=true AND verification_
 test("the published/verified predicates are unconditional -- present even with every optional filter unset", async () => {
   const call = await runRecent({ limit: 24 });
   assert.match(call.text, /WHERE t\.published = true AND t\.verification_state = 'verified'/);
-  assert.deepEqual(call.params, [24]);
+  assert.deepEqual(call.params, [24, 0]);
 });
 
 test("districtSlug and estateSlug become bound predicates, not interpolated literals", async () => {
@@ -88,7 +88,7 @@ test("districtSlug and estateSlug become bound predicates, not interpolated lite
   });
   assert.match(call.text, /e\.district_slug = \$1/);
   assert.match(call.text, /e\.slug = \$2/);
-  assert.deepEqual(call.params, ["sham-tseng", "bellagio", 10]);
+  assert.deepEqual(call.params, ["sham-tseng", "bellagio", 10, 0]);
   assert.doesNotMatch(call.text, /sham-tseng|bellagio/);
 });
 
@@ -99,22 +99,22 @@ test("dealType='all' adds no deal_type predicate; a real deal type is bound and 
   // predicate FORM ("t.deal_type = $"), not the bare column name, which
   // would false-positive on that unconditional SELECT entry.
   assert.doesNotMatch(all.text, /t\.deal_type = \$/);
-  assert.deepEqual(all.params, [10]);
+  assert.deepEqual(all.params, [10, 0]);
 
   const sale = await runRecent({ dealType: "sale", limit: 10 });
   assert.match(sale.text, /t\.deal_type = \$1::deal_type/);
-  assert.deepEqual(sale.params, ["sale", 10]);
+  assert.deepEqual(sale.params, ["sale", 10, 0]);
 
   const rent = await runRecent({ dealType: "rent", limit: 10 });
   assert.match(rent.text, /t\.deal_type = \$1::deal_type/);
-  assert.deepEqual(rent.params, ["rent", 10]);
+  assert.deepEqual(rent.params, ["rent", 10, 0]);
 });
 
 test("a valid month bounds deal_date to that calendar month, both ends bound parameters", async () => {
   const call = await runRecent({ month: "2026-03", limit: 10 });
   assert.match(call.text, /t\.deal_date >= \$1::date/);
   assert.match(call.text, /t\.deal_date < \(\$2::date \+ INTERVAL '1 month'\)/);
-  assert.deepEqual(call.params, ["2026-03-01", "2026-03-01", 10]);
+  assert.deepEqual(call.params, ["2026-03-01", "2026-03-01", 10, 0]);
 });
 
 test("a malformed month is silently ignored rather than reaching the date cast", async () => {
@@ -128,7 +128,7 @@ test("a malformed month is silently ignored rather than reaching the date cast",
       /t\.deal_date >= \$|t\.deal_date < \(/,
       `month="${month}" must add no predicate`,
     );
-    assert.deepEqual(call.params, [10], `month="${month}" must add no bound parameter`);
+    assert.deepEqual(call.params, [10, 0], `month="${month}" must add no bound parameter`);
   }
 });
 
@@ -136,15 +136,29 @@ test("minPrice/maxPrice become bound comparisons against t.price", async () => {
   const call = await runRecent({ minPrice: 5_000_000, maxPrice: 8_000_000, limit: 10 });
   assert.match(call.text, /t\.price >= \$1/);
   assert.match(call.text, /t\.price <= \$2/);
-  assert.deepEqual(call.params, [5_000_000, 8_000_000, 10]);
+  assert.deepEqual(call.params, [5_000_000, 8_000_000, 10, 0]);
 });
 
-test("the limit is clamped to [1, 100] and always the final bound parameter", async () => {
+// P7c: offset (defaulting to 0, for pagination) is now the true final bound
+// parameter -- limit is second-to-last.
+test("the limit is clamped to [1, 100] and always the second-to-last bound parameter", async () => {
   const tooHigh = await runRecent({ limit: 5000 });
-  assert.equal(tooHigh.params.at(-1), 100);
+  assert.equal(tooHigh.params.at(-2), 100);
 
   const tooLow = await runRecent({ limit: 0 });
-  assert.equal(tooLow.params.at(-1), 1);
+  assert.equal(tooLow.params.at(-2), 1);
+});
+
+test("offset defaults to 0 (page 1) and is a real bound parameter, floored at 0 for a negative value", async () => {
+  const noOffset = await runRecent({ limit: 30 });
+  assert.equal(noOffset.params.at(-1), 0);
+  assert.match(noOffset.text, /OFFSET \$\d+/);
+
+  const page3 = await runRecent({ limit: 30, offset: 60 });
+  assert.equal(page3.params.at(-1), 60);
+
+  const negative = await runRecent({ limit: 30, offset: -5 });
+  assert.equal(negative.params.at(-1), 0);
 });
 
 test("every optional filter stays a bound parameter, including an injection attempt", async () => {
@@ -165,6 +179,21 @@ test("fetchRecentTransactions selects t.id (needed for the ?tx=<id> share/highli
 test("results are ordered newest-deal-first with a stable tiebreaker", async () => {
   const call = await runRecent({ limit: 10 });
   assert.match(call.text, /ORDER BY t\.deal_date DESC NULLS LAST, t\.created_at DESC/);
+});
+
+test("fetchRecentTransactionsCount reuses the same WHERE (published/verified + filters) as fetchRecentTransactions, no limit/offset", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+  await server.fetchRecentTransactionsCount({ districtSlug: "sham-tseng", dealType: "sale" });
+  assert.equal(calls.length, 1);
+  const [call] = calls;
+  assert.match(call.text, /SELECT count\(\*\)::int AS count/);
+  assert.match(call.text, /t\.published = true/);
+  assert.match(call.text, /t\.verification_state = 'verified'/);
+  assert.match(call.text, /e\.district_slug = \$1/);
+  assert.match(call.text, /t\.deal_type = \$2::deal_type/);
+  assert.doesNotMatch(call.text, /LIMIT|OFFSET/);
+  assert.deepEqual(call.params, ["sham-tseng", "sale"]);
 });
 
 // --- fetchDistrictTransactions / fetchEstateTransactions -------------------

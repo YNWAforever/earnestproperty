@@ -20,7 +20,12 @@ import { whatsappUrl } from "@/config/site";
 import { canonicalLink, SITE_URL } from "@/content/seo";
 import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
-import { fetchEstateOptions, fetchRecentTransactions, type RecentTransaction } from "@/lib/queries";
+import {
+  fetchEstateOptions,
+  fetchRecentTransactions,
+  fetchRecentTransactionsCount,
+  type RecentTransaction,
+} from "@/lib/queries";
 import { buildContext, track } from "@/lib/analytics/events";
 
 const DISTRICT_LABELS: Record<string, string> = {
@@ -60,6 +65,7 @@ const searchSchema = z.object({
   // the current filters' top RESULT_LIMIT rows -- a known, low-risk
   // limitation, not a bug.
   tx: fallback(z.string().optional(), undefined),
+  page: fallback(z.number().int().min(1), 1).default(1),
 });
 
 export const Route = createFileRoute("/transactions")({
@@ -71,21 +77,27 @@ export const Route = createFileRoute("/transactions")({
     month: search.month,
     minPrice: search.minPrice,
     maxPrice: search.maxPrice,
+    page: search.page,
   }),
   loader: async ({ deps }) => {
-    const [transactions, estates] = await Promise.all([
+    const countFilters = {
+      districtSlug: deps.district,
+      estateSlug: deps.estate,
+      dealType: deps.dealType,
+      month: deps.month,
+      minPrice: deps.minPrice,
+      maxPrice: deps.maxPrice,
+    };
+    const [transactions, estates, totalCount] = await Promise.all([
       fetchRecentTransactions({
-        districtSlug: deps.district,
-        estateSlug: deps.estate,
-        dealType: deps.dealType,
-        month: deps.month,
-        minPrice: deps.minPrice,
-        maxPrice: deps.maxPrice,
+        ...countFilters,
         limit: RESULT_LIMIT,
+        offset: (deps.page - 1) * RESULT_LIMIT,
       }),
       fetchEstateOptions(),
+      fetchRecentTransactionsCount(countFilters),
     ]);
-    return { transactions, estates };
+    return { transactions, estates, totalCount };
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -394,8 +406,9 @@ function handleTransactionShare(transaction: RecentTransaction) {
 
 function TransactionsPage() {
   const search = Route.useSearch();
-  const { transactions, estates } = Route.useLoaderData();
+  const { transactions, estates, totalCount } = Route.useLoaderData();
   const filters = useTransactionFiltersState(search);
+  const totalPages = Math.max(1, Math.ceil(totalCount / RESULT_LIMIT));
   const activeChips = buildActiveFilterChips(search, estates);
   const inquiryUrl = whatsappUrl("你好，我想查詢深井／青山公路／汀九近期成交及估價");
   const highlightedId = search.tx;
@@ -411,7 +424,9 @@ function TransactionsPage() {
   }, [highlightedId, transactions]);
 
   // Mirrors listings.tsx's listing_search: fires on the resolved (post-loader)
-  // search, so resultCount reflects the filters actually applied.
+  // search, so resultCount reflects the filters actually applied. Uses the
+  // real totalCount (P7c pagination), not transactions.length -- the latter
+  // is just the current page's row count, not the true match count.
   useEffect(() => {
     track(
       {
@@ -420,12 +435,12 @@ function TransactionsPage() {
           dealType: search.dealType,
           districtSlug: search.district,
           month: search.month,
-          resultCount: transactions.length,
+          resultCount: totalCount,
         },
       },
       buildContext({ districtSlug: search.district }),
     );
-  }, [search.dealType, search.district, search.month, transactions.length]);
+  }, [search.dealType, search.district, search.month, totalCount]);
 
   const sources = Array.from(
     new Set(transactions.map((t) => t.source).filter((value): value is string => Boolean(value))),
@@ -521,6 +536,46 @@ function TransactionsPage() {
                 </tbody>
               </table>
             </div>
+            {totalPages > 1 && (
+              <nav
+                className="mt-6 flex items-center justify-center gap-3"
+                aria-label="成交記錄分頁"
+              >
+                <Link
+                  to="/transactions"
+                  search={(prev: Record<string, unknown>) => ({
+                    ...prev,
+                    page: search.page - 1,
+                  })}
+                  aria-disabled={search.page === 1}
+                  className={`inline-flex h-11 items-center justify-center rounded-md border px-4 text-sm font-medium transition ${
+                    search.page === 1
+                      ? "pointer-events-none border-input text-muted-foreground opacity-40"
+                      : "border-input hover:bg-accent"
+                  }`}
+                >
+                  上一頁
+                </Link>
+                <span className="text-sm text-muted-foreground">
+                  第 {search.page} 頁，共 {totalPages} 頁
+                </span>
+                <Link
+                  to="/transactions"
+                  search={(prev: Record<string, unknown>) => ({
+                    ...prev,
+                    page: search.page + 1,
+                  })}
+                  aria-disabled={search.page === totalPages}
+                  className={`inline-flex h-11 items-center justify-center rounded-md border px-4 text-sm font-medium transition ${
+                    search.page === totalPages
+                      ? "pointer-events-none border-input text-muted-foreground opacity-40"
+                      : "border-input hover:bg-accent"
+                  }`}
+                >
+                  下一頁
+                </Link>
+              </nav>
+            )}
           </>
         ) : (
           <EmptyState

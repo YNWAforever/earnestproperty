@@ -354,7 +354,6 @@ export function SiteHeader() {
             width={60}
             height={60}
             loading="eager"
-            fetchPriority="high"
             className="h-14 w-14 object-contain sm:h-[60px] sm:w-[60px]"
           />
           <div className="flex flex-col leading-none">

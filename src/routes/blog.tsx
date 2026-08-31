@@ -77,7 +77,7 @@ function BlogPage() {
   );
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">深井 / 荃灣樓市分析</p>
@@ -178,6 +178,6 @@ function BlogPage() {
           。
         </p>
       </section>
-    </main>
+    </div>
   );
 }

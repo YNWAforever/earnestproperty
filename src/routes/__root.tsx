@@ -9,6 +9,25 @@ import {
 import { NeonAuthUIProvider } from "@neondatabase/auth-ui";
 
 import appCss from "../styles.css?url";
+// Self-hosted fonts (P7c) -- replaces the Google Fonts CDN <link> tags that
+// used to sit in head() below. Only the weights styles.css's --font-sans/
+// --font-display actually reference (Inter 400/500/600/700, Noto Sans TC
+// 400/500/700/900), matching the old Google Fonts URL's own weight list
+// exactly, not fontsource's full 100-900 range.
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/noto-sans-tc/400.css";
+import "@fontsource/noto-sans-tc/500.css";
+import "@fontsource/noto-sans-tc/700.css";
+import "@fontsource/noto-sans-tc/900.css";
+// The one file worth a real preload hint: Inter's Latin subset at the
+// default body weight, used by nearly every ASCII character on the page.
+// Noto Sans TC's CJK glyphs are split across many unicode-range chunks
+// (fontsource's own subsetting) with no single "primary" file to preload
+// correctly, so this doesn't guess one.
+import interLatin400 from "@fontsource/inter/files/inter-latin-400-normal.woff2?url";
 import { authClient } from "@/auth";
 import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
 import { SiteHeader } from "@/components/site/SiteHeader";
@@ -64,16 +83,12 @@ export const Route = createRootRoute({
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
         rel: "preload",
-        as: "style",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap",
-      },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap",
+        as: "font",
+        type: "font/woff2",
+        href: interLatin400,
+        crossOrigin: "anonymous",
       },
     ],
   }),

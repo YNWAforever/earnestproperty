@@ -139,6 +139,13 @@ export const fetchNeonRecentTransactions = createServerFn({ method: "GET" })
     return neonData.fetchRecentTransactions(data);
   });
 
+export const fetchNeonRecentTransactionsCount = createServerFn({ method: "GET" })
+  .inputValidator((data: Omit<NeonRecentTransactionsInput, "limit" | "offset">) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchRecentTransactionsCount(data);
+  });
+
 export const fetchNeonPublishedArticles = createServerFn({ method: "GET" }).handler(async () => {
   const neonData = await import("./public-data.server");
   return neonData.fetchPublishedArticles();

@@ -72,7 +72,18 @@ test("the loader forwards every filter param to fetchRecentTransactions and also
   assert.match(loaderBody, /minPrice: deps\.minPrice/);
   assert.match(loaderBody, /maxPrice: deps\.maxPrice/);
   assert.match(loaderBody, /fetchEstateOptions\(\)/);
-  assert.match(source, /return \{ transactions, estates \};/);
+  assert.match(source, /return \{ transactions, estates, totalCount \};/);
+});
+
+// P7c: transactions gained real pagination (RESULT_LIMIT was previously a
+// hard, un-navigable cap).
+test("the loader also fetches a total count for pagination, offset by page", () => {
+  const loaderBody = source.slice(
+    source.indexOf("loader: async ({ deps }) => {"),
+    source.indexOf("return { transactions, estates, totalCount };"),
+  );
+  assert.match(loaderBody, /fetchRecentTransactionsCount\(countFilters\)/);
+  assert.match(loaderBody, /offset: \(deps\.page - 1\) \* RESULT_LIMIT/);
 });
 
 test("loaderDeps excludes tx -- sharing/highlighting a row must not force a reload", () => {

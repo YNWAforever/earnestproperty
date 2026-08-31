@@ -77,7 +77,7 @@ function AgentProfilePage() {
   }
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -220,7 +220,7 @@ function AgentProfilePage() {
           </div>
         </section>
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -269,7 +269,7 @@ function AgentListingCard({ listing }: { listing: ListingRow }) {
 
 function AgentProfileError() {
   return (
-    <main className="mx-auto max-w-md px-4 py-24 text-center">
+    <div className="mx-auto max-w-md px-4 py-24 text-center">
       <div role="alert" aria-live="polite">
         <h1 className="text-2xl font-semibold">暫時未能載入代理資料</h1>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -284,18 +284,18 @@ function AgentProfileError() {
           </Button>
         </div>
       </div>
-    </main>
+    </div>
   );
 }
 
 function AgentNotFound() {
   return (
-    <main className="mx-auto max-w-md px-4 py-24 text-center">
+    <div className="mx-auto max-w-md px-4 py-24 text-center">
       <h1 className="text-2xl font-semibold">找不到代理資料</h1>
       <p className="mt-3 text-sm text-muted-foreground">此代理資料可能尚未公開，或連結已更新。</p>
       <Button asChild className="mt-6">
         <Link to="/agents">返回代理團隊</Link>
       </Button>
-    </main>
+    </div>
   );
 }

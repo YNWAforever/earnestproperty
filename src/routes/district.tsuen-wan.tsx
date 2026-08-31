@@ -43,7 +43,7 @@ function TsuenWanPage() {
     [],
   );
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <section className="border-b bg-muted/30">
         <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
           <p className="text-sm font-semibold text-primary">荃灣 Tsuen Wan</p>
@@ -114,6 +114,6 @@ function TsuenWanPage() {
           </Link>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

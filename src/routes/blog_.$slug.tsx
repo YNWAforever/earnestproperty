@@ -161,12 +161,12 @@ function BlogArticlePage() {
 
   if (!article) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-24 text-center">
+      <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <h1 className="text-2xl font-bold">文章不存在</h1>
         <Link to="/blog" className="mt-4 inline-block text-sm font-semibold text-primary">
           返回 Blog
         </Link>
-      </main>
+      </div>
     );
   }
 
@@ -201,7 +201,7 @@ function BlogArticlePage() {
   };
 
   return (
-    <main className="bg-background">
+    <div className="bg-background">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
@@ -298,6 +298,6 @@ function BlogArticlePage() {
           </nav>
         )}
       </article>
-    </main>
+    </div>
   );
 }
