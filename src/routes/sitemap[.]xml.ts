@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { blogArticles } from "@/content/blog-articles";
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
 import { SITE_URL, estateSeo, pageSeo } from "@/content/seo";
-import { listPublicAgentProfiles } from "@/lib/neon/public-data.server";
+import { fetchSitemapTimestamps, listPublicAgentProfiles } from "@/lib/neon/public-data.server";
 import { fetchPublishedArticlesByCategory, fetchRecentTransactions } from "@/lib/queries";
 
 const staticPaths = [
@@ -81,24 +81,45 @@ export const Route = createFileRoute("/sitemap.xml")({
         // have real rows; both routes also stamp their own noindex meta in the
         // same empty case (see their head()), so this self-heals the moment
         // data lands with no further deploy needed.
-        const [transactions, estateReviewArticles] = await Promise.all([
+        const [transactions, estateReviewArticles, timestamps] = await Promise.all([
           fetchRecentTransactions({ limit: 1 }).catch(() => []),
           fetchPublishedArticlesByCategory("屋苑開箱").catch(() => []),
+          fetchSitemapTimestamps().catch(
+            (): Awaited<ReturnType<typeof fetchSitemapTimestamps>> => ({
+              estates: {},
+              articles: {},
+            }),
+          ),
         ]);
         const conditionalPaths = [
           transactions.length > 0 ? "/transactions" : null,
           estateReviewArticles.length > 0 ? "/estate-reviews" : null,
         ].filter((path) => path !== null);
 
-        // No per-page revision history is tracked for these routes, so every
-        // URL shares one generation timestamp rather than a fabricated
-        // per-page value -- an honest "this sitemap was generated at" signal.
-        const lastmod = new Date().toISOString().slice(0, 10);
+        // Most pages here (home, about, district hubs, corridor pages, ...)
+        // have no tracked per-page revision history, so they share one
+        // generation timestamp rather than a fabricated per-page value -- an
+        // honest "this sitemap was generated at" signal. Estate and article
+        // pages DO have a real updated_at (fetchSitemapTimestamps, both
+        // columns already written by the admin CMS's archive/publish paths),
+        // so those get their actual last-modified date instead.
+        const generatedAt = new Date().toISOString().slice(0, 10);
+        function lastmodFor(path: string): string {
+          if (path.startsWith("/estate/")) {
+            const slug = path.slice("/estate/".length);
+            return timestamps.estates[slug]?.slice(0, 10) ?? generatedAt;
+          }
+          if (path.startsWith("/blog/")) {
+            const slug = path.slice("/blog/".length);
+            return timestamps.articles[slug]?.slice(0, 10) ?? generatedAt;
+          }
+          return generatedAt;
+        }
         const body = [
           '<?xml version="1.0" encoding="UTF-8"?>',
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
           ...uniquePaths([...staticPaths, ...conditionalPaths, ...agentPaths]).map((path) =>
-            urlXml(path, lastmod),
+            urlXml(path, lastmodFor(path)),
           ),
           "</urlset>",
         ].join("\n");

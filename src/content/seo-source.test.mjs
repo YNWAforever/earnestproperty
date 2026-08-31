@@ -174,7 +174,10 @@ test("root and public trust pages use localized first-party metadata", () => {
 
   assert.match(root, /<html lang=["']zh-HK["']/);
   assert.match(root, /SITE_OG_IMAGE/);
-  assert.match(home, /RealEstateAgent/);
+  // P7a: Organization/RealEstateAgent JSON-LD moved sitewide into __root.tsx
+  // (organizationSchema()), so home no longer carries it directly.
+  assert.match(root, /organizationSchema/);
+  assert.doesNotMatch(home, /RealEstateAgent/);
   assert.match(contact, /聯絡晉誠地產/);
   assert.match(agents, /持牌/);
 });

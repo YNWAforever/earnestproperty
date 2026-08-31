@@ -17,8 +17,12 @@ test("canonicalLink is a bare-path helper, not a root-level canonical", () => {
   );
 });
 
-// Before this, only 4 routes (castle-peak-road.index, castle-peak-road.$segment,
-// district.sham-tseng, district.tsuen-wan) emitted a canonical link at all.
+// P7a: castle-peak-road.index, castle-peak-road.$segment, and
+// district.tsuen-wan were the last 3 routes still inlining a raw
+// `{ rel: "canonical", href: ... }` object instead of calling the helper --
+// district.sham-tseng was fixed alongside them (now `canonicalLink`, not the
+// `seo()` combinator, since its og:title/og:description genuinely differ
+// from its meta title/description).
 test("every public route emits a canonical link", () => {
   const staticRoutes = [
     ["src/routes/index.tsx", "canonicalLink(pageSeo.home.path)"],
@@ -36,6 +40,7 @@ test("every public route emits a canonical link", () => {
     ["src/routes/privacy.tsx", "canonicalLink(pageSeo.privacy.path)"],
     ["src/routes/disclaimer.tsx", "canonicalLink(pageSeo.disclaimer.path)"],
     ["src/routes/terms.tsx", "canonicalLink(pageSeo.terms.path)"],
+    ["src/routes/district.sham-tseng.tsx", "canonicalLink(pageSeo.shamTseng.path)"],
   ];
   for (const [file, expected] of staticRoutes) {
     assert.ok(read(file).includes(expected), `${file} should emit ${expected}`);
@@ -63,4 +68,30 @@ test("every public route emits a canonical link", () => {
     read("src/routes/property.$listingNo.tsx"),
     /canonicalLink\(`\/property\/\$\{p\.listing_no\}`\)/,
   );
+});
+
+// P7a: these 3 routes adopt the seo() combinator, which calls canonicalLink()
+// internally (see seo.ts) -- their own source calls seo({ path: ... }), not
+// canonicalLink() directly, so they need their own assertions rather than
+// fitting the literal-string check above.
+test("castle-peak-road and tsuen-wan routes emit a canonical via the seo() combinator", () => {
+  const indexSource = read("src/routes/castle-peak-road.index.tsx");
+  assert.match(indexSource, /seo\(\{/);
+  assert.match(indexSource, /path: castlePeakRoadHub\.path/);
+  assert.doesNotMatch(indexSource, /rel: "canonical", href: `\$\{SITE_URL\}/);
+
+  const segmentSource = read("src/routes/castle-peak-road.$segment.tsx");
+  assert.match(segmentSource, /seo\(\{/);
+  assert.match(segmentSource, /path: loaderData\?\.segment\.path \?\? castlePeakRoadHub\.path/);
+  assert.doesNotMatch(segmentSource, /rel: "canonical", href: `\$\{SITE_URL\}/);
+
+  const tsuenWanSource = read("src/routes/district.tsuen-wan.tsx");
+  assert.match(tsuenWanSource, /seo\(\{/);
+  assert.match(tsuenWanSource, /path: pageSeo\.tsuenWan\.path/);
+  assert.match(
+    tsuenWanSource,
+    /noindex: true/,
+    "district.tsuen-wan is orphaned (no nav/sitemap entry) -- must stay noindexed",
+  );
+  assert.doesNotMatch(tsuenWanSource, /rel: "canonical", href: `\$\{SITE_URL\}/);
 });

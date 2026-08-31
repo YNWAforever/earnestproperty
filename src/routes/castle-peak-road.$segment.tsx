@@ -9,7 +9,7 @@ import {
   getCastlePeakRoadSegment,
   type CorridorSegment,
 } from "@/content/castle-peak-road";
-import { SITE_URL } from "@/content/seo";
+import { seo, SITE_URL } from "@/content/seo";
 import { whatsappUrl } from "@/config/site";
 import {
   emptyCorridorInventory,
@@ -55,26 +55,12 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
 
     return { segment, inventory, nearbyInventory };
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      { title: loaderData?.segment.title ?? castlePeakRoadHub.title },
-      {
-        name: "description",
-        content: loaderData?.segment.description ?? castlePeakRoadHub.description,
-      },
-      { property: "og:title", content: loaderData?.segment.title ?? castlePeakRoadHub.title },
-      {
-        property: "og:description",
-        content: loaderData?.segment.description ?? castlePeakRoadHub.description,
-      },
-    ],
-    links: [
-      {
-        rel: "canonical",
-        href: `${SITE_URL}${loaderData?.segment.path ?? castlePeakRoadHub.path}`,
-      },
-    ],
-  }),
+  head: ({ loaderData }) =>
+    seo({
+      title: loaderData?.segment.title ?? castlePeakRoadHub.title,
+      description: loaderData?.segment.description ?? castlePeakRoadHub.description,
+      path: loaderData?.segment.path ?? castlePeakRoadHub.path,
+    }),
   errorComponent: CastlePeakRoadSegmentError,
   component: CastlePeakRoadSegmentPage,
 });

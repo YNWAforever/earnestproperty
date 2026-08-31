@@ -25,6 +25,33 @@ export function canonicalLink(path: string) {
   return { rel: "canonical", href: `${SITE_URL}${path}` } as const;
 }
 
+/**
+ * Combinator for the common `head()` shape (title, description, og mirrors,
+ * canonical, optional noindex) -- built for and applied to the handful of
+ * routes whose title/description genuinely equal their og:title/og:description
+ * (most routes already work fine with a hand-rolled head() and were not
+ * migrated onto this; see P7a's scope decision).
+ */
+export function seo(input: {
+  title: string;
+  description: string;
+  path: string;
+  ogImage?: string;
+  noindex?: boolean;
+}) {
+  return {
+    meta: [
+      { title: input.title },
+      { name: "description", content: input.description },
+      { property: "og:title", content: input.title },
+      { property: "og:description", content: input.description },
+      ...(input.ogImage ? [{ property: "og:image", content: input.ogImage }] : []),
+      ...(input.noindex ? [{ name: "robots", content: "noindex,follow" }] : []),
+    ],
+    links: [canonicalLink(input.path)],
+  };
+}
+
 export const pageSeo = {
   home: {
     path: "/",
