@@ -1,6 +1,7 @@
 import { MessageCircle } from "lucide-react";
 
 import { whatsappUrl } from "@/config/site";
+import { buildContext, track } from "@/lib/analytics/events";
 
 /**
  * Site-wide mobile-only sticky WhatsApp CTA (audit item 14: "no sticky
@@ -23,6 +24,9 @@ export function StickyWhatsAppBar() {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() =>
+          track({ name: "whatsapp_cta_click", payload: { source: "sticky-bar" } }, buildContext())
+        }
         className="mx-auto flex max-w-6xl items-center justify-center gap-2 rounded-md bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe57]"
       >
         <MessageCircle className="h-4 w-4" />

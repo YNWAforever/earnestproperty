@@ -39,6 +39,7 @@ import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { formatHkd, formatSaleDisplay, sanitizeListingText } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
+import { buildContext, track } from "@/lib/analytics/events";
 import {
   deleteSavedSearch,
   getSavedSearches,
@@ -961,6 +962,17 @@ function ListingAlertForm({ search }: { search: ReturnType<typeof Route.useSearc
     }
     setSubmitted(true);
     toast.success("已設定通知，有符合條件嘅新盤會盡快聯絡你。");
+    track(
+      {
+        name: "zero_results_notify",
+        payload: {
+          dealType: search.deal,
+          districtSlug: search.district,
+          source: "listings-zero-results",
+        },
+      },
+      buildContext({ districtSlug: search.district }),
+    );
   }
 
   if (submitted) {
@@ -1107,6 +1119,26 @@ function ListingsPage() {
           })),
         })
       : null;
+
+  // Fires on the resolved (post-loader) search, not inside apply() -- that
+  // way resultCount is the real count for the filters actually applied, and
+  // a shared /listings?district=... link fires the same event a manual
+  // filter change would.
+  useEffect(() => {
+    track(
+      {
+        name: "listing_search",
+        payload: {
+          dealType: search.deal,
+          districtSlug: search.district,
+          minPrice: search.minPrice,
+          maxPrice: search.maxPrice,
+          resultCount: total,
+        },
+      },
+      buildContext({ districtSlug: search.district }),
+    );
+  }, [search.deal, search.district, search.minPrice, search.maxPrice, total]);
 
   return (
     <div className="bg-background">

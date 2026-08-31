@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, TrainFront, MapPinned } from "lucide-react";
 
 import { pageSeo, seo } from "@/content/seo";
+import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 const AREAS = [
   {
@@ -34,6 +35,13 @@ export const Route = createFileRoute("/district/tsuen-wan")({
 });
 
 function TsuenWanPage() {
+  useTrackPageView(
+    () => ({
+      event: { name: "district_view", payload: { districtSlug: "tsuen-wan" } },
+      context: buildContext({ districtSlug: "tsuen-wan" }),
+    }),
+    [],
+  );
   return (
     <div className="bg-background">
       <section className="border-b bg-muted/30">

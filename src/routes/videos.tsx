@@ -22,6 +22,7 @@ import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
 import { summarizeVideoDescription } from "@/lib/video-description.js";
 import { buildTagCounts, deriveEstateTag } from "@/lib/video-tags.js";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-url.js";
+import { buildContext, track } from "@/lib/analytics/events";
 
 // The channel sync imports the full back catalogue, so this page went from 1
 // video to 96 in a single run. Rendering every card at once produced a 60,710px
@@ -426,6 +427,8 @@ function VideoSection({ title, children }: { title: string; children: ReactNode 
 function CmsVideoCard({ video }: { video: CmsVideo }) {
   return (
     <VideoFrame
+      videoId={video.id}
+      category={video.category ?? undefined}
       title={video.title || "晉誠地產 YouTube影片"}
       url={video.video_url}
       eyebrow="官方頻道"
@@ -437,6 +440,7 @@ function CmsVideoCard({ video }: { video: CmsVideo }) {
 function ListingVideoCard({ listing }: { listing: VideoListing }) {
   return (
     <VideoFrame
+      videoId={listing.id}
       title={listing.title_zh}
       url={listing.video_url}
       eyebrow={`${listing.estates?.name_zh ?? "深井 / 青山公路"} · ${
@@ -506,12 +510,16 @@ function AllVideoSchemas({
 }
 
 function VideoFrame({
+  videoId,
+  category,
   title,
   url,
   eyebrow,
   description,
   footer,
 }: {
+  videoId: string;
+  category?: string;
   title: string;
   url: string;
   eyebrow: string;
@@ -543,7 +551,10 @@ function VideoFrame({
         ) : (
           <button
             type="button"
-            onClick={() => setIsPlaying(true)}
+            onClick={() => {
+              setIsPlaying(true);
+              track({ name: "video_click", payload: { videoId, category } }, buildContext());
+            }}
             aria-label={`播放影片：${title}`}
             className="group relative flex aspect-video w-full items-center justify-center overflow-hidden bg-primary/10"
           >

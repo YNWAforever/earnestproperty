@@ -11,6 +11,7 @@ import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
 import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
+import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type ArticleDetail = {
   slug: string;
@@ -146,6 +147,17 @@ function BlogArticlePage() {
     article: ArticleDetail | null;
     compareEstates: EstateComparisonRow[];
   };
+
+  useTrackPageView(
+    () =>
+      article
+        ? {
+            event: { name: "article_view", payload: { articleSlug: article.slug } },
+            context: buildContext(),
+          }
+        : null,
+    [article?.slug],
+  );
 
   if (!article) {
     return (

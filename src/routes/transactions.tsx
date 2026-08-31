@@ -26,6 +26,7 @@ import {
   fetchRecentTransactionsCount,
   type RecentTransaction,
 } from "@/lib/queries";
+import { buildContext, track } from "@/lib/analytics/events";
 
 const DISTRICT_LABELS: Record<string, string> = {
   "sham-tseng": "深井",
@@ -400,6 +401,7 @@ function handleTransactionShare(transaction: RecentTransaction) {
   const url = new URL(`${SITE_URL}/transactions`);
   url.searchParams.set("tx", transaction.id);
   void shareUrl(`${label} 成交記錄`, url.toString());
+  track({ name: "transaction_share", payload: { transactionId: transaction.id } }, buildContext());
 }
 
 function TransactionsPage() {
@@ -420,6 +422,25 @@ function TransactionsPage() {
       .getElementById(`tx-${highlightedId}`)
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [highlightedId, transactions]);
+
+  // Mirrors listings.tsx's listing_search: fires on the resolved (post-loader)
+  // search, so resultCount reflects the filters actually applied. Uses the
+  // real totalCount (P7c pagination), not transactions.length -- the latter
+  // is just the current page's row count, not the true match count.
+  useEffect(() => {
+    track(
+      {
+        name: "transaction_filter",
+        payload: {
+          dealType: search.dealType,
+          districtSlug: search.district,
+          month: search.month,
+          resultCount: totalCount,
+        },
+      },
+      buildContext({ districtSlug: search.district }),
+    );
+  }, [search.dealType, search.district, search.month, totalCount]);
 
   const sources = Array.from(
     new Set(transactions.map((t) => t.source).filter((value): value is string => Boolean(value))),

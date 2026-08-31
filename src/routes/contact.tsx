@@ -19,6 +19,7 @@ import { toWhatsAppHref } from "@/lib/contact-links";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
 import { createWebsiteInquiry } from "@/lib/neon/admin-data";
+import { buildContext, track } from "@/lib/analytics/events";
 import {
   createSubmitGuard,
   ENQUIRY_TYPE_OPTIONS,
@@ -115,6 +116,10 @@ function ContactPage() {
           return;
         case "success":
           toast.success("已收到查詢，我們會盡快聯絡你。");
+          track(
+            { name: "contact_form_submit", payload: { hasPhone: raw.phone.trim().length > 0 } },
+            buildContext(),
+          );
           form.reset();
           setConsentWhatsapp(false);
           setEnquiryType("");
