@@ -296,9 +296,20 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [activeMegaMenu, setActiveMegaMenu] = useState<MegaMenuId | null>(null);
   const headerRef = useRef<HTMLElement | null>(null);
+  const triggerRefs = useRef<Map<MegaMenuId, HTMLButtonElement>>(new Map());
   const location = useRouterState({ select: (state) => state.location });
   const WHATSAPP_URL = whatsappUrl("你好，我想查詢深井／青山公路／汀九物業");
   const activeMenu = megaMenus.find((menu) => menu.id === activeMegaMenu);
+
+  // Closing via Escape or an outside click must not strand focus on a
+  // removed panel -- return it to the trigger the panel came from, the same
+  // as any WCAG-conformant disclosure widget (2.4.3 Focus Order).
+  function closeMegaMenu() {
+    setActiveMegaMenu((current) => {
+      if (current) triggerRefs.current.get(current)?.focus();
+      return null;
+    });
+  }
 
   useEffect(() => {
     if (!activeMegaMenu) {
@@ -307,13 +318,13 @@ export function SiteHeader() {
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setActiveMegaMenu(null);
+        closeMegaMenu();
       }
     }
 
     function handlePointerDown(event: MouseEvent) {
       if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
-        setActiveMegaMenu(null);
+        closeMegaMenu();
       }
     }
 
@@ -366,6 +377,10 @@ export function SiteHeader() {
             return (
               <Button
                 key={menu.id}
+                ref={(el) => {
+                  if (el) triggerRefs.current.set(menu.id, el);
+                  else triggerRefs.current.delete(menu.id);
+                }}
                 type="button"
                 variant="ghost"
                 size="sm"
@@ -396,9 +411,7 @@ export function SiteHeader() {
             onClick={() => setActiveMegaMenu(null)}
             className="whitespace-nowrap"
           />
-          {activeMenu ? (
-            <MegaMenuPanel menu={activeMenu} onLinkClick={() => setActiveMegaMenu(null)} />
-          ) : null}
+          {activeMenu ? <MegaMenuPanel menu={activeMenu} onLinkClick={closeMegaMenu} /> : null}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -421,7 +434,7 @@ export function SiteHeader() {
                 variant="ghost"
                 size="icon"
                 className="lg:hidden"
-                aria-label="開啟主選單"
+                aria-label={open ? "關閉主選單" : "開啟主選單"}
                 onClick={() => setActiveMegaMenu(null)}
               >
                 <Menu className="h-5 w-5" />
