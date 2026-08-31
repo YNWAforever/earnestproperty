@@ -13,6 +13,25 @@ test("schema.ts exports the builders the audit's structured-data gaps need", () 
   assert.match(source, /export function branchLocalBusinessSchema/);
   assert.match(source, /export function videoObjectSchema/);
   assert.match(source, /"@type": "VideoObject"/);
+  assert.match(source, /export function organizationSchema/);
+  assert.match(source, /identifier: "C-018613"/);
+});
+
+// P7a: Organization/RealEstateAgent JSON-LD used to be homepage-only --
+// moved sitewide into __root.tsx (gated to public pages the same way
+// SiteHeader/SiteFooter already are) so every crawled page carries the
+// site's identity, not just "/".
+test("organization JSON-LD is rendered sitewide from __root.tsx, not just the homepage", () => {
+  const root = read("src/routes/__root.tsx");
+  assert.match(root, /organizationSchema\(\)/);
+  assert.match(root, /showSiteChrome && \(/, "should be gated to public pages, not /admin");
+
+  const home = read("src/routes/index.tsx");
+  assert.doesNotMatch(
+    home,
+    /"@type": "RealEstateAgent"/,
+    "the inline homepage-only block should be removed now that it's sitewide",
+  );
 });
 
 // Article on blog posts and listing-level Offer schema already existed before

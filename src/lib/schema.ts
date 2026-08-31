@@ -1,4 +1,4 @@
-import { SITE_URL } from "@/content/seo";
+import { SITE_LOGO_URL, SITE_URL } from "@/content/seo";
 
 /**
  * Shared schema.org JSON-LD node builders. Every existing page inlined its own
@@ -36,6 +36,31 @@ export function jsonLdScript(value: unknown) {
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026");
+}
+
+/**
+ * P7a: the sitewide Organization/RealEstateAgent identity, rendered once in
+ * __root.tsx (gated to public pages) rather than only on the homepage. Fields
+ * reproduced exactly from index.tsx's former inline block -- not
+ * re-derived, since address/areaServed/identifier are real facts, not
+ * boilerplate to paraphrase.
+ */
+export function organizationSchema() {
+  return {
+    "@type": "RealEstateAgent",
+    name: "晉誠地產 Earnest Property",
+    description: "深井．青山公路．汀九物業專家",
+    url: SITE_URL,
+    logo: SITE_LOGO_URL,
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "新界深井青山公路深井段 23 號麗都花園地下 5A 舖",
+      addressRegion: "新界",
+      addressCountry: "HK",
+    },
+    areaServed: ["深井 Sham Tseng", "青山公路 Castle Peak Road", "汀九 Ting Kau"],
+    identifier: "C-018613",
+  };
 }
 
 export function agentPersonSchema(input: {

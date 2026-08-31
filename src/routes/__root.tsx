@@ -15,6 +15,7 @@ import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
 import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR } from "@/content/seo";
+import { jsonLdScript, organizationSchema } from "@/lib/schema";
 
 function NotFoundComponent() {
   return (
@@ -104,6 +105,14 @@ function RootComponent() {
   return (
     <NeonAuthUIProvider authClient={authClient} defaultTheme="light">
       <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-16 lg:pb-0" : ""}`}>
+        {showSiteChrome && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: jsonLdScript({ "@context": "https://schema.org", ...organizationSchema() }),
+            }}
+          />
+        )}
         {showSiteChrome ? <SiteHeader /> : null}
         <main className="flex-1">
           <Outlet />

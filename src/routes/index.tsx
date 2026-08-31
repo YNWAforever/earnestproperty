@@ -48,7 +48,7 @@ import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
 import { formatHkd } from "@/lib/format";
 import { AppImage } from "@/components/media/AppImage";
-import { SITE_URL, SITE_LOGO_URL, canonicalLink, pageSeo } from "@/content/seo";
+import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import {
   fetchCmsVideos,
   fetchEstates,
@@ -612,29 +612,6 @@ function HomePage() {
           </div>
         </div>
       </section>
-
-      {/* Organization JSON-LD */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: jsonLdScript({
-            "@context": "https://schema.org",
-            "@type": "RealEstateAgent",
-            name: "晉誠地產 Earnest Property",
-            description: "深井．青山公路．汀九物業專家",
-            url: SITE_URL,
-            logo: SITE_LOGO_URL,
-            address: {
-              "@type": "PostalAddress",
-              streetAddress: "新界深井青山公路深井段 23 號麗都花園地下 5A 舖",
-              addressRegion: "新界",
-              addressCountry: "HK",
-            },
-            areaServed: ["深井 Sham Tseng", "青山公路 Castle Peak Road", "汀九 Ting Kau"],
-            identifier: "C-018613",
-          }),
-        }}
-      />
     </div>
   );
 }
