@@ -70,6 +70,7 @@ import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-r
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
 import { useFavourite } from "@/lib/saved-listings";
+import { buildContext, track, useTrackPageView } from "@/lib/analytics/events";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 type PropertyHeadData = {
@@ -284,7 +285,22 @@ function PropertyPage() {
   async function handleShare() {
     const url = typeof window !== "undefined" ? window.location.href : "";
     await shareUrl(safeTitle, url);
+    track(
+      { name: "listing_share", payload: { listingNo: property.listing_no } },
+      buildContext({ listingNo: property.listing_no }),
+    );
   }
+
+  useTrackPageView(
+    () => ({
+      event: {
+        name: "listing_view",
+        payload: { listingNo: property.listing_no, dealType: property.deal_type },
+      },
+      context: buildContext({ listingNo: property.listing_no, estateSlug: estate?.slug }),
+    }),
+    [property.listing_no],
+  );
 
   // Cycles through ALL images (not just the visible thumbnails), wrapping at
   // both ends -- both the arrow buttons and Left/Right keys funnel through
