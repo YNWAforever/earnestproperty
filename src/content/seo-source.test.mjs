@@ -59,14 +59,19 @@ test("root metadata no longer references lovable preview assets", () => {
 });
 
 test("seo content registry contains required full-content routes", () => {
-  const source = read("src/content/seo.ts");
+  const seo = read("src/content/seo.ts");
+  for (const slug of ["bellagio", "rhine-garden"]) {
+    assert.match(seo, new RegExp(slug));
+  }
+
+  // The two flagship blog articles moved out of seo.ts into their own content
+  // model (P5e1) -- their slugs live in blog-articles.ts now, not seo.ts.
+  const blogArticles = read("src/content/blog-articles.ts");
   for (const slug of [
-    "bellagio",
-    "rhine-garden",
     "sham-tseng-buying-guide-2026",
     "bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
   ]) {
-    assert.match(source, new RegExp(slug));
+    assert.match(blogArticles, new RegExp(slug));
   }
 });
 

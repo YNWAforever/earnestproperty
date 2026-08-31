@@ -30,6 +30,10 @@ test("every public route emits a canonical link", () => {
     ["src/routes/contact.tsx", "canonicalLink(pageSeo.contact.path)"],
     ["src/routes/agents.tsx", 'canonicalLink("/agents")'],
     ["src/routes/blog.tsx", "canonicalLink(pageSeo.blog.path)"],
+    [
+      "src/routes/blog_.editorial-standards.tsx",
+      "canonicalLink(pageSeo.blogEditorialStandards.path)",
+    ],
     ["src/routes/videos.tsx", 'canonicalLink("/videos")'],
     ["src/routes/transactions.tsx", 'canonicalLink("/transactions")'],
     ["src/routes/estate-reviews.tsx", 'canonicalLink("/estate-reviews")'],

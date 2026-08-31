@@ -1046,6 +1046,15 @@ export async function listAdminEstateOptions() {
   }));
 }
 
+export async function listAdminDistrictOptions() {
+  const rows = await queryRows("SELECT id, slug, name_zh FROM districts ORDER BY name_zh ASC");
+  return rows.map((row) => ({
+    id: stringOrEmpty(row.id),
+    slug: stringOrEmpty(row.slug),
+    name_zh: stringOrEmpty(row.name_zh),
+  }));
+}
+
 export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffAccess) {
   const scope = agentScope(actor);
   // Scoped agents may only ever own their own rows: ignore any caller-supplied

@@ -33,6 +33,7 @@ import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wa
 import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
 import { Route as DistrictShamTsengRouteImport } from './routes/district.sham-tseng'
 import { Route as CastlePeakRoadSegmentRouteImport } from './routes/castle-peak-road.$segment'
+import { Route as BlogEditorialStandardsRouteImport } from './routes/blog_.editorial-standards'
 import { Route as BlogSlugRouteImport } from './routes/blog_.$slug'
 import { Route as AuthLoginRouteImport } from './routes/auth.login'
 import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
@@ -45,6 +46,7 @@ import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
 import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
+import { Route as AdminEstatesRouteImport } from './routes/admin.estates'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
 import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
 import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
@@ -57,6 +59,8 @@ import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
 import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
 import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
+import { Route as AdminEstatesNewRouteImport } from './routes/admin.estates_.new'
+import { Route as AdminEstatesIdRouteImport } from './routes/admin.estates_.$id'
 import { Route as AdminAgentsNewRouteImport } from './routes/admin.agents_.new'
 import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendTemplateRouteImport } from './routes/api.admin.woztell.send-template'
@@ -196,6 +200,11 @@ const CastlePeakRoadSegmentRoute = CastlePeakRoadSegmentRouteImport.update({
   path: '/$segment',
   getParentRoute: () => CastlePeakRoadRoute,
 } as any)
+const BlogEditorialStandardsRoute = BlogEditorialStandardsRouteImport.update({
+  id: '/blog_/editorial-standards',
+  path: '/blog/editorial-standards',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
   id: '/blog_/$slug',
   path: '/blog/$slug',
@@ -256,6 +265,11 @@ const AdminLeadsRoute = AdminLeadsRouteImport.update({
   path: '/leads',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminEstatesRoute = AdminEstatesRouteImport.update({
+  id: '/estates',
+  path: '/estates',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminCmsRoute = AdminCmsRouteImport.update({
   id: '/cms',
   path: '/cms',
@@ -314,6 +328,16 @@ const AdminListingsIdRoute = AdminListingsIdRouteImport.update({
 const AdminLeadsCommandCenterRoute = AdminLeadsCommandCenterRouteImport.update({
   id: '/leads_/command-center',
   path: '/leads/command-center',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEstatesNewRoute = AdminEstatesNewRouteImport.update({
+  id: '/estates_/new',
+  path: '/estates/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEstatesIdRoute = AdminEstatesIdRouteImport.update({
+  id: '/estates_/$id',
+  path: '/estates/$id',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminAgentsNewRoute = AdminAgentsNewRouteImport.update({
@@ -440,6 +464,7 @@ export interface FileRoutesByFullPath {
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
+  '/admin/estates': typeof AdminEstatesRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
@@ -452,6 +477,7 @@ export interface FileRoutesByFullPath {
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog/editorial-standards': typeof BlogEditorialStandardsRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -462,6 +488,8 @@ export interface FileRoutesByFullPath {
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/admin/agents/$id': typeof AdminAgentsIdRoute
   '/admin/agents/new': typeof AdminAgentsNewRoute
+  '/admin/estates/$id': typeof AdminEstatesIdRoute
+  '/admin/estates/new': typeof AdminEstatesNewRoute
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
@@ -506,6 +534,7 @@ export interface FileRoutesByTo {
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
+  '/admin/estates': typeof AdminEstatesRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
@@ -518,6 +547,7 @@ export interface FileRoutesByTo {
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog/editorial-standards': typeof BlogEditorialStandardsRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -528,6 +558,8 @@ export interface FileRoutesByTo {
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
   '/admin/agents/$id': typeof AdminAgentsIdRoute
   '/admin/agents/new': typeof AdminAgentsNewRoute
+  '/admin/estates/$id': typeof AdminEstatesIdRoute
+  '/admin/estates/new': typeof AdminEstatesNewRoute
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
@@ -575,6 +607,7 @@ export interface FileRoutesById {
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
+  '/admin/estates': typeof AdminEstatesRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
@@ -587,6 +620,7 @@ export interface FileRoutesById {
   '/auth/$pathname': typeof AuthPathnameRoute
   '/auth/login': typeof AuthLoginRoute
   '/blog_/$slug': typeof BlogSlugRoute
+  '/blog_/editorial-standards': typeof BlogEditorialStandardsRoute
   '/castle-peak-road/$segment': typeof CastlePeakRoadSegmentRoute
   '/district/sham-tseng': typeof DistrictShamTsengRoute
   '/district/ting-kau': typeof DistrictTingKauRoute
@@ -597,6 +631,8 @@ export interface FileRoutesById {
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/admin/agents_/$id': typeof AdminAgentsIdRoute
   '/admin/agents_/new': typeof AdminAgentsNewRoute
+  '/admin/estates_/$id': typeof AdminEstatesIdRoute
+  '/admin/estates_/new': typeof AdminEstatesNewRoute
   '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings_/$id': typeof AdminListingsIdRoute
   '/admin/listings_/new': typeof AdminListingsNewRoute
@@ -645,6 +681,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
+    | '/admin/estates'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
@@ -657,6 +694,7 @@ export interface FileRouteTypes {
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/blog/editorial-standards'
     | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -667,6 +705,8 @@ export interface FileRouteTypes {
     | '/castle-peak-road/'
     | '/admin/agents/$id'
     | '/admin/agents/new'
+    | '/admin/estates/$id'
+    | '/admin/estates/new'
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
@@ -711,6 +751,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
+    | '/admin/estates'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
@@ -723,6 +764,7 @@ export interface FileRouteTypes {
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog/$slug'
+    | '/blog/editorial-standards'
     | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -733,6 +775,8 @@ export interface FileRouteTypes {
     | '/castle-peak-road'
     | '/admin/agents/$id'
     | '/admin/agents/new'
+    | '/admin/estates/$id'
+    | '/admin/estates/new'
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
@@ -779,6 +823,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
+    | '/admin/estates'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
@@ -791,6 +836,7 @@ export interface FileRouteTypes {
     | '/auth/$pathname'
     | '/auth/login'
     | '/blog_/$slug'
+    | '/blog_/editorial-standards'
     | '/castle-peak-road/$segment'
     | '/district/sham-tseng'
     | '/district/ting-kau'
@@ -801,6 +847,8 @@ export interface FileRouteTypes {
     | '/castle-peak-road/'
     | '/admin/agents_/$id'
     | '/admin/agents_/new'
+    | '/admin/estates_/$id'
+    | '/admin/estates_/new'
     | '/admin/leads_/command-center'
     | '/admin/listings_/$id'
     | '/admin/listings_/new'
@@ -851,6 +899,7 @@ export interface RootRouteChildren {
   AuthPathnameRoute: typeof AuthPathnameRoute
   AuthLoginRoute: typeof AuthLoginRoute
   BlogSlugRoute: typeof BlogSlugRoute
+  BlogEditorialStandardsRoute: typeof BlogEditorialStandardsRoute
   DistrictShamTsengRoute: typeof DistrictShamTsengRoute
   DistrictTingKauRoute: typeof DistrictTingKauRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
@@ -1044,6 +1093,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CastlePeakRoadSegmentRouteImport
       parentRoute: typeof CastlePeakRoadRoute
     }
+    '/blog_/editorial-standards': {
+      id: '/blog_/editorial-standards'
+      path: '/blog/editorial-standards'
+      fullPath: '/blog/editorial-standards'
+      preLoaderRoute: typeof BlogEditorialStandardsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/blog_/$slug': {
       id: '/blog_/$slug'
       path: '/blog/$slug'
@@ -1128,6 +1184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLeadsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/estates': {
+      id: '/admin/estates'
+      path: '/estates'
+      fullPath: '/admin/estates'
+      preLoaderRoute: typeof AdminEstatesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/cms': {
       id: '/admin/cms'
       path: '/cms'
@@ -1210,6 +1273,20 @@ declare module '@tanstack/react-router' {
       path: '/leads/command-center'
       fullPath: '/admin/leads/command-center'
       preLoaderRoute: typeof AdminLeadsCommandCenterRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/estates_/new': {
+      id: '/admin/estates_/new'
+      path: '/estates/new'
+      fullPath: '/admin/estates/new'
+      preLoaderRoute: typeof AdminEstatesNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/estates_/$id': {
+      id: '/admin/estates_/$id'
+      path: '/estates/$id'
+      fullPath: '/admin/estates/$id'
+      preLoaderRoute: typeof AdminEstatesIdRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/agents_/new': {
@@ -1345,6 +1422,7 @@ interface AdminRouteChildren {
   AdminAgentsRoute: typeof AdminAgentsRoute
   AdminBlastsRoute: typeof AdminBlastsRoute
   AdminCmsRoute: typeof AdminCmsRoute
+  AdminEstatesRoute: typeof AdminEstatesRoute
   AdminLeadsRoute: typeof AdminLeadsRoute
   AdminListingsRoute: typeof AdminListingsRoute
   AdminOperationsRoute: typeof AdminOperationsRoute
@@ -1354,6 +1432,8 @@ interface AdminRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   AdminAgentsIdRoute: typeof AdminAgentsIdRoute
   AdminAgentsNewRoute: typeof AdminAgentsNewRoute
+  AdminEstatesIdRoute: typeof AdminEstatesIdRoute
+  AdminEstatesNewRoute: typeof AdminEstatesNewRoute
   AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
   AdminListingsIdRoute: typeof AdminListingsIdRoute
   AdminListingsNewRoute: typeof AdminListingsNewRoute
@@ -1363,6 +1443,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAgentsRoute: AdminAgentsRoute,
   AdminBlastsRoute: AdminBlastsRoute,
   AdminCmsRoute: AdminCmsRoute,
+  AdminEstatesRoute: AdminEstatesRoute,
   AdminLeadsRoute: AdminLeadsRoute,
   AdminListingsRoute: AdminListingsRoute,
   AdminOperationsRoute: AdminOperationsRoute,
@@ -1372,6 +1453,8 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   AdminAgentsIdRoute: AdminAgentsIdRoute,
   AdminAgentsNewRoute: AdminAgentsNewRoute,
+  AdminEstatesIdRoute: AdminEstatesIdRoute,
+  AdminEstatesNewRoute: AdminEstatesNewRoute,
   AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
   AdminListingsIdRoute: AdminListingsIdRoute,
   AdminListingsNewRoute: AdminListingsNewRoute,
@@ -1464,6 +1547,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthPathnameRoute: AuthPathnameRoute,
   AuthLoginRoute: AuthLoginRoute,
   BlogSlugRoute: BlogSlugRoute,
+  BlogEditorialStandardsRoute: BlogEditorialStandardsRoute,
   DistrictShamTsengRoute: DistrictShamTsengRoute,
   DistrictTingKauRoute: DistrictTingKauRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,

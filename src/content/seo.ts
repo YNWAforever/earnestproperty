@@ -97,6 +97,11 @@ export const pageSeo = {
     description:
       "深井買樓租樓攻略、屋苑比較、校網交通、成交走勢分析。由深井 hyperlocal 專家撰寫，助你睇通深井樓市。",
   },
+  blogEditorialStandards: {
+    path: "/blog/editorial-standards",
+    title: "編採及事實查核標準｜晉誠地產 Blog",
+    description: "晉誠地產 Blog 文章的資料來源、審閱制度及事實查核標準說明。",
+  },
   about: {
     path: "/about",
     title: "關於晉誠地產 Earnest Property｜深井、青山公路物業專家",
@@ -228,43 +233,3 @@ export const estateAliases: Record<string, keyof typeof estateSeo> = Object.from
     getEstateEntry(slug).aliases.map((alias) => [alias, slug] as const),
   ),
 );
-
-export const blogArticles = [
-  {
-    slug: "sham-tseng-buying-guide-2026",
-    title: "深井買樓全攻略 2026：5 大屋苑、呎價、校網、交通一次睇晒",
-    excerpt:
-      "深井買樓睇呢篇就夠：碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園逐個分析，連呎價、62 校網、去中環交通全攻略。",
-    category: "買樓攻略",
-    readingMinutes: 8,
-    content: [
-      "想喺深井買樓，但唔知五大屋苑點揀、呎價幾多、校網又屬邊個網？呢篇由深井 hyperlocal 專家整理嘅 2026 全攻略，一次過幫你睇通深井樓市。",
-      "深井位於新界荃灣西、青山公路沿線，背靠大欖郊野公園，面向汀九橋同青馬大橋海峽。佢最大賣點係同價海景，平過半山。",
-      "碧堤半島適合預算充足、想要海景同會所嘅家庭；浪翠園適合上車及換樓；豪景花園適合想用上車價買三房；海韻花園適合海景行先；麗都花園適合入門上車同租住。",
-      "深井屬荃灣 62 校網，交通上可用小巴 96M 接荃灣站，X961 經西隧約 35 分鐘到中環，自駕經青馬橋往機場約 22 分鐘。",
-    ],
-    links: [
-      { href: "/district/sham-tseng", label: "深井地區攻略" },
-      { href: "/estate/bellagio", label: "碧堤半島放盤" },
-      { href: "/listings?deal=all&page=1", label: "搜尋深井放盤" },
-    ],
-  },
-  {
-    slug: "bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
-    title: "碧堤半島 vs 浪翠園 vs 豪景花園：深井三大屋苑點揀好？",
-    excerpt:
-      "碧堤半島、浪翠園、豪景花園三大深井屋苑點揀？由呎價、樓齡、海景、會所到適合人群逐項對比。",
-    category: "屋苑比較",
-    readingMinutes: 6,
-    content: [
-      "深井三大屋苑成日令買家揀到頭痛。三個都係海景大社區，但定位差好遠。",
-      "碧堤半島最新，會所同園林維護到位，俾人度假式感覺；浪翠園和豪景花園樓齡較長，勝在社區成熟、實用和入場門檻較低。",
-      "想要最新、最強會所同海景，預算充足就睇碧堤半島；想要海景但預算有限就睇浪翠園；想用最抵價錢買到實用三房就睇豪景花園。",
-    ],
-    links: [
-      { href: "/estate/bellagio", label: "碧堤半島 Bellagio" },
-      { href: "/estate/sea-crest-villa", label: "浪翠園 Sea Crest Villa" },
-      { href: "/estate/hong-kong-garden", label: "豪景花園 Hong Kong Garden" },
-    ],
-  },
-] as const;
