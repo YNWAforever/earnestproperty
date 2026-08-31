@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Clock } from "lucide-react";
 
 import { DataNote } from "@/components/layout/DataNote";
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import {
   BlogEstateComparisonTable,
   type EstateComparisonRow,
@@ -73,6 +74,7 @@ async function resolveCompareEstates(
         totalUnits: record?.total_units ?? null,
         yearCompleted: record?.year_completed ?? null,
         developer: record?.developer ?? null,
+        asOf: record?.verified_at ?? null,
       };
     }),
   );
@@ -242,12 +244,7 @@ function BlogArticlePage() {
           {article.sourcesNote && <DataNote source={article.sourcesNote} className="mt-3" />}
         </header>
 
-        {article.answerSummary && (
-          <div className="mt-8 rounded-md border border-primary/30 bg-primary/5 p-4">
-            <p className="text-sm font-semibold text-primary">重點摘要</p>
-            <p className="mt-1 text-sm leading-7 text-foreground">{article.answerSummary}</p>
-          </div>
-        )}
+        <AnswerSummaryCallout summary={article.answerSummary} />
 
         {article.sections.length >= 2 && (
           <nav aria-label="目錄" className="mt-8 rounded-md border bg-muted/30 p-4">

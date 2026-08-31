@@ -25,7 +25,24 @@ export type EstateComparisonRow = {
   totalUnits: number | null;
   yearCompleted: number | null;
   developer: string | null;
+  /** `estates.verified_at` -- null for every estate today (no verification
+   * pass has run yet), so this self-heals to a real date the moment one
+   * does, rather than needing new plumbing added later. */
+  asOf?: string | null;
 };
+
+/**
+ * The most recent non-null `asOf` across the rendered rows, or null when
+ * none carry one -- callers fall back to the existing static caption in that
+ * case rather than claiming a verification date that doesn't exist yet.
+ */
+export function latestComparisonAsOf(rows: EstateComparisonRow[]): string | null {
+  const dates = rows
+    .map((row) => row.asOf)
+    .filter((value): value is string => Boolean(value))
+    .sort();
+  return dates.at(-1) ?? null;
+}
 
 /**
  * The estate columns the table should render, current estate first, or
@@ -117,8 +134,7 @@ export function buildComparisonRowDefs(): ComparisonRowDef[] {
     {
       key: "yearCompleted",
       label: "落成年份",
-      formatCell: (estate) =>
-        `${comparisonYearFigure(estate.yearCompleted)} 年`,
+      formatCell: (estate) => `${comparisonYearFigure(estate.yearCompleted)} 年`,
     },
     {
       key: "developer",

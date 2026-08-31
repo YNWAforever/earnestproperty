@@ -20,6 +20,7 @@ export type CorridorHub = {
   h1: string;
   intro: string[];
   faqs: CorridorFaq[];
+  answerSummary: string;
 };
 
 export type CorridorSegment = {
@@ -39,6 +40,13 @@ export type CorridorSegment = {
    */
   zoneSummary: string[];
   buyerFit: string;
+  /**
+   * P7e: a short synthesis of the master plan's 4 named answer-summary
+   * questions (適合邊類家庭／交通取捨／同價有咩選擇／睇樓前要留意甚麼),
+   * hand-written but restating only facts already stated elsewhere on this
+   * same segment (buyerFit/transport/faqs) -- no new claim, no new number.
+   */
+  answerSummary: string;
   transport: string;
   schoolNet?: string;
   housingProfile: string;
@@ -96,6 +104,15 @@ export const castlePeakRoadHub = {
         "頁面會讀取網站已接入的 Neon-backed 公開真盤資料。實際可睇盤源、業主最新叫價和未公開放盤，建議直接 WhatsApp 晉誠地產查詢。",
     },
   ],
+  // P7e: hub-level synthesis of the master plan's 4 named answer-summary
+  // questions -- restates only facts already stated on this page (the 2
+  // FAQs above) or on the per-segment pages this hub links to (each
+  // segment's own answerSummary), never a new claim.
+  answerSummary:
+    "適合邊類家庭：適合想用荃灣市區以外預算換取海景、空間、屋苑尺度或低密度生活的買家，自駕家庭、機場或港島通勤客、換樓客和收租投資者都會比較這條走廊。 " +
+    "交通取捨：交通配套因地段而異，油柑頭/汀九主要靠巴士、小巴和自駕，深井/青龍頭段多一條小巴直接接駁荃灣站，詳見下方各地段頁面。 " +
+    "同價有咩選擇：可以先由油柑頭/汀九，深井/青龍頭段入手，再按交通、校網、樓齡、海景和放盤量收窄選擇。 " +
+    "睇樓前要留意：各地段盤源、樓齡和管理狀況差異大，建議先揀定地段再同日比較多個放盤。",
 } satisfies CorridorHub;
 
 export const castlePeakRoadSegments: CorridorSegment[] = [
@@ -115,8 +132,12 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     ],
     zoneSummary: ["主打面積比較大，低密度海景、洋房及屋地"],
     buyerFit: "適合重視海景、低密度、私隱、泊車和安靜生活的家庭與換樓客。",
-    transport:
-      "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
+    answerSummary:
+      "適合邊類家庭：適合重視海景、低密度、私隱、泊車和安靜生活的家庭與換樓客。 " +
+      "交通取捨：主要靠青山公路巴士、小巴和自駕，往荃灣、深井、青衣和機場方向成熟，但不屬港鐵步行生活圈。 " +
+      "同價有咩選擇：想要大型屋苑、商店和較多放盤可先比較深井；想要低密度、海景、私隱和較寧靜環境，汀九會更合適。 " +
+      "睇樓前要留意：相比深井大型屋苑，盤源更稀少，睇樓時需要仔細比較維修、管理費、車位和實用面積。",
+    transport: "主要靠青山公路巴士、小巴及自駕，往荃灣、深井、機場和青衣方向成熟。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
     housingProfile: "低密度別墅、洋房、海景住宅和少量分層單位，流通量較低。",
     featuredEstates: [
@@ -230,12 +251,16 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "碧堤半島、浪翠園、麗都花園、海韻花園與周邊屋苑形成穩定自住及租務市場，車位比例高，租售價錢十分相宜",
     ],
     buyerFit: "適合想要海景、屋苑管理、會所、較多盤源和成熟生活配套的家庭。",
+    answerSummary:
+      "適合邊類家庭：適合想要海景、屋苑管理、會所、較多盤源和成熟生活配套的家庭。 " +
+      "交通取捨：小巴接駁荃灣站，巴士往九龍、港島、機場及青衣方向成熟；青龍頭段主要靠青山公路巴士、小巴和自駕，往荃灣、屯門和機場均有路線。 " +
+      "同價有咩選擇：深井較成熟和多盤源，汀九較低密度和私隱度高，預算、交通和生活節奏會直接影響選擇。 " +
+      "睇樓前要留意：青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
     // 青龍頭's transport detail is retained here because this zone absorbed it.
     transport:
       "小巴接駁荃灣站，巴士往九龍、港島、機場及青衣方向成熟；青龍頭段主要靠青山公路巴士、小巴和自駕，往荃灣、屯門和機場均有路線。",
     schoolNet: "62 校網。實際派位及校網資料以教育局最新公布為準。",
-    housingProfile:
-      "大型海景屋苑、成熟分層住宅、山海景單位和部分低密度臨海單位。",
+    housingProfile: "大型海景屋苑、成熟分層住宅、山海景單位和部分低密度臨海單位。",
     featuredEstates: [
       "Bellagio 碧堤半島",
       "Sea Crest Villa 浪翠園",
@@ -267,23 +292,19 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     faqs: [
       {
         question: "深井在青山公路沿線有咩優勢？",
-        answer:
-          "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
+        answer: "深井放盤量、屋苑選擇和生活配套較集中，適合想同日比較多個海景屋苑的買家。",
       },
       {
         question: "深井同汀九有咩分別？",
-        answer:
-          "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
+        answer: "深井較成熟和多盤源，汀九較低密度和私隱度高。預算、交通和生活節奏會直接影響選擇。",
       },
       {
         question: "青龍頭適合上車客嗎？",
-        answer:
-          "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
+        answer: "青龍頭部分屋苑入場門檻較深井核心屋苑低，適合想用較務實預算換取面積的買家。",
       },
       {
         question: "青龍頭交通會否太遠？",
-        answer:
-          "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
+        answer: "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
       },
     ],
     links: [
@@ -303,9 +324,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
 ];
 
 export function getCastlePeakRoadSegment(slug: string): CorridorSegment | null {
-  return (
-    castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null
-  );
+  return castlePeakRoadSegments.find((segment) => segment.slug === slug) ?? null;
 }
 
 /**
@@ -327,9 +346,7 @@ export function findCastlePeakRoadSegmentByDistrictSlug(
 ): CorridorSegment | null {
   if (!districtSlug) return null;
   return (
-    castlePeakRoadSegments.find((segment) =>
-      segment.districtSlugs.includes(districtSlug),
-    ) ?? null
+    castlePeakRoadSegments.find((segment) => segment.districtSlugs.includes(districtSlug)) ?? null
   );
 }
 
@@ -350,13 +367,7 @@ export const castlePeakRoadSitemapPaths = [
 export const corridorRegionScope = {
   /** The region names as the client wrote them — single source of truth for docs and tests. */
   labels: ["深井", "青山公路", "汀九", "青龍頭", "油柑頭"],
-  districtSlugs: [
-    "sham-tseng",
-    "castle-peak-road",
-    "ting-kau",
-    "tsing-lung-tau",
-    "yau-kom-tau",
-  ],
+  districtSlugs: ["sham-tseng", "castle-peak-road", "ting-kau", "tsing-lung-tau", "yau-kom-tau"],
   /**
    * Place- and estate-name whitelist. 青山公路 and "Castle Peak Road" are
    * deliberately excluded: the road runs all the way to 屯門, so matching on it
@@ -425,8 +436,7 @@ export function isWithinCorridorRegion(input: {
 }): boolean {
   // Already attached to a corridor estate: the strongest signal there is, and
   // not something the place-name gate should be allowed to override.
-  if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug))
-    return true;
+  if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug)) return true;
 
   const haystack = (input.text ?? [])
     .filter((value): value is string => Boolean(value))
@@ -438,10 +448,7 @@ export function isWithinCorridorRegion(input: {
   );
   if (isOutOfScope) return false;
 
-  if (
-    input.districtSlug &&
-    corridorRegionScope.districtSlugs.includes(input.districtSlug)
-  ) {
+  if (input.districtSlug && corridorRegionScope.districtSlugs.includes(input.districtSlug)) {
     return true;
   }
   if (
@@ -451,7 +458,5 @@ export function isWithinCorridorRegion(input: {
     return true;
   }
 
-  return corridorRegionScope.textAliases.some((alias) =>
-    haystack.includes(alias.toUpperCase()),
-  );
+  return corridorRegionScope.textAliases.some((alias) => haystack.includes(alias.toUpperCase()));
 }

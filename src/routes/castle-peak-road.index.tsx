@@ -3,6 +3,7 @@ import { ArrowRight, HelpCircle, Home, MapPin, TrendingUp, Waves } from "lucide-
 
 import { Button } from "@/components/ui/button";
 import { DataNote } from "@/components/layout/DataNote";
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import {
   buildAreaComparisonRows,
   buyerFitHighlights,
@@ -456,6 +457,9 @@ function CastlePeakRoadHubPage() {
             {castlePeakRoadHub.intro.map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
             ))}
+          </div>
+          <div className="mt-5 max-w-3xl">
+            <AnswerSummaryCallout summary={castlePeakRoadHub.answerSummary} />
           </div>
         </div>
       </section>

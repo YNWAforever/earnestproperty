@@ -132,13 +132,19 @@ test("blog article template renders an author byline unconditionally and a revie
 });
 
 test("blog article template renders an answer-summary callout before the ToC", () => {
+  // P7e: extracted into a shared AnswerSummaryCallout (reused by
+  // estate.$slug.tsx too) -- the conditional-render and "重點摘要" label now
+  // live in that component, not duplicated in this route's own source.
   const source = read("src/routes/blog_.$slug.tsx");
   assert.match(
     source,
-    /article\.answerSummary &&/,
-    "answer summary should be conditionally rendered",
+    /import \{ AnswerSummaryCallout \} from "@\/components\/site\/AnswerSummaryCallout";/,
   );
-  assert.match(source, /重點摘要/, "answer summary should be visually labelled as a summary");
+  assert.match(source, /<AnswerSummaryCallout summary={article\.answerSummary} \/>/);
+
+  const component = read("src/components/site/AnswerSummaryCallout.tsx");
+  assert.match(component, /if \(!summary\) return null;/, "should hide, not fabricate, a summary");
+  assert.match(component, /重點摘要/, "answer summary should be visually labelled as a summary");
 });
 
 test("blog article template mounts the live comparison table when compareEstateSlugs is present", () => {

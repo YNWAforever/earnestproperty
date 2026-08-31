@@ -50,9 +50,7 @@ export const earnestPublicTrust = {
 function estatePageIdentity(slug: string) {
   const entry = getEstateEntry(slug);
   if (!entry.nameEn) {
-    throw new Error(
-      `estate-pages.ts: estatePageContent requires a nameEn, but "${slug}" has none`,
-    );
+    throw new Error(`estate-pages.ts: estatePageContent requires a nameEn, but "${slug}" has none`);
   }
   return { slug: entry.slug, nameZh: entry.nameZh, nameEn: entry.nameEn };
 }
@@ -71,23 +69,17 @@ export const estatePageContent = {
       "看重租務承接力和屋苑知名度的投資者。",
     ],
     pros: ["屋苑辨識度高", "海景及青馬橋景選擇多", "會所及管理配套成熟"],
-    watchouts: [
-      "不同期數景觀和實用率差異大",
-      "熱門座向叫價較硬",
-      "繁忙時間需預留接駁交通時間",
-    ],
+    watchouts: ["不同期數景觀和實用率差異大", "熱門座向叫價較硬", "繁忙時間需預留接駁交通時間"],
     transportLifestyle:
       "小巴及巴士接駁荃灣、九龍、港島和機場方向，日常生活依靠深井商店、餐飲和鄰近屋苑配套。",
-    marketNote:
-      "成交和呎價需要按期數、座向、樓層和海景質素分開比較，不能只看屋苑平均數。",
+    marketNote: "成交和呎價需要按期數、座向、樓層和海景質素分開比較，不能只看屋苑平均數。",
     saleCta: "想買碧堤半島？講低預算、期數和海景要求，代理幫你配盤。",
     rentCta: "想租碧堤半島？講低月租、入住日期和房數，代理幫你搵盤。",
     valuationCta: "碧堤半島業主可 WhatsApp 索取深井業主估價報告。",
     faqs: [
       {
         question: "碧堤半島適合自住定投資？",
-        answer:
-          "兩者都適合。自住買家重視海景和會所，投資者則會留意租客需求、叫租和管理質素。",
+        answer: "兩者都適合。自住買家重視海景和會所，投資者則會留意租客需求、叫租和管理質素。",
       },
       {
         question: "買碧堤半島最需要比較甚麼？",
@@ -116,11 +108,7 @@ export const estatePageContent = {
       "想比較租務回報的長線投資者。",
     ],
     pros: ["放盤類型多", "生活圈成熟", "部分單位海景質素吸引"],
-    watchouts: [
-      "分期多，質素和景觀要逐個比較",
-      "樓齡較新盤高",
-      "部分座數與交通接駁距離較遠",
-    ],
+    watchouts: ["分期多，質素和景觀要逐個比較", "樓齡較新盤高", "部分座數與交通接駁距離較遠"],
     transportLifestyle:
       "屋苑依靠青山公路巴士及小巴接駁荃灣，生活配套與深井餐飲、超市和鄰近屋苑共用。",
     marketNote: "浪翠園呎價通常要按期數和座向拆開看，海景盤和內園盤差距明顯。",
@@ -135,8 +123,7 @@ export const estatePageContent = {
       },
       {
         question: "浪翠園買盤要注意甚麼？",
-        answer:
-          "要留意期數、維修、景觀、座向和交通接駁位置，最好用同一期數近期成交作比較。",
+        answer: "要留意期數、維修、景觀、座向和交通接駁位置，最好用同一期數近期成交作比較。",
       },
     ],
     relatedLinks: [
@@ -161,23 +148,17 @@ export const estatePageContent = {
       "長線持有或收租投資者。",
     ],
     pros: ["入場價相對吸引", "單位面積選擇多", "山海環境較開揚"],
-    watchouts: [
-      "交通較依賴巴士小巴或自駕",
-      "屋苑不同座數位置差異大",
-      "樓齡和維修狀態要仔細檢查",
-    ],
+    watchouts: ["交通較依賴巴士小巴或自駕", "屋苑不同座數位置差異大", "樓齡和維修狀態要仔細檢查"],
     transportLifestyle:
       "主要依靠青山公路交通往返荃灣、屯門和機場方向，適合能接受巴士小巴或自駕的家庭。",
-    marketNote:
-      "豪景花園成交比較要留意座數、面積、裝修和景觀，單看平均呎價容易失真。",
+    marketNote: "豪景花園成交比較要留意座數、面積、裝修和景觀，單看平均呎價容易失真。",
     saleCta: "想買豪景花園？講低預算、面積和交通要求，代理幫你配盤。",
     rentCta: "想租豪景花園？講低月租和入住日期，代理幫你篩選可睇盤。",
     valuationCta: "豪景花園業主可 WhatsApp 查詢青龍頭同類單位估值。",
     faqs: [
       {
         question: "豪景花園適合家庭客嗎？",
-        answer:
-          "適合重視空間和預算效率的家庭，但要先確認日常交通和校網安排是否配合生活需要。",
+        answer: "適合重視空間和預算效率的家庭，但要先確認日常交通和校網安排是否配合生活需要。",
       },
       {
         question: "豪景花園同深井核心屋苑點揀？",
@@ -208,23 +189,19 @@ export const estatePageContent = {
     ],
     pros: ["臨海感強", "環境相對寧靜", "深井生活圈成熟"],
     watchouts: ["樓齡和維修狀態要檢查", "盤源不一定充足", "不同座向景觀差距大"],
-    transportLifestyle:
-      "日常可使用深井青山公路交通和生活配套，適合接受非鐵路步行生活圈的住戶。",
-    marketNote:
-      "海韻花園估值應按海景質素和單位狀態比較，近期可睇盤量亦會影響議價空間。",
+    transportLifestyle: "日常可使用深井青山公路交通和生活配套，適合接受非鐵路步行生活圈的住戶。",
+    marketNote: "海韻花園估值應按海景質素和單位狀態比較，近期可睇盤量亦會影響議價空間。",
     saleCta: "想買海韻花園？講低景觀、預算和面積要求，代理幫你留意新盤。",
     rentCta: "想租海韻花園？講低月租、入住日期和景觀要求，代理幫你配盤。",
     valuationCta: "海韻花園業主可 WhatsApp 查詢臨海單位估值。",
     faqs: [
       {
         question: "海韻花園最大賣點是甚麼？",
-        answer:
-          "主要是臨海位置、景觀和較寧靜的居住感，適合把景觀和生活節奏放在前面的買家。",
+        answer: "主要是臨海位置、景觀和較寧靜的居住感，適合把景觀和生活節奏放在前面的買家。",
       },
       {
         question: "海韻花園盤源多嗎？",
-        answer:
-          "盤源會按市場流通變化，建議直接 WhatsApp 查詢最新可睇盤和業主叫價。",
+        answer: "盤源會按市場流通變化，建議直接 WhatsApp 查詢最新可睇盤和業主叫價。",
       },
     ],
     relatedLinks: [
@@ -249,23 +226,17 @@ export const estatePageContent = {
       "希望有穩定租務需求的業主和投資者。",
     ],
     pros: ["生活配套方便", "深井核心位置", "晉誠地產地舖就在屋苑生活圈"],
-    watchouts: [
-      "樓齡較高，單位狀態差異大",
-      "景觀和座向要逐間比較",
-      "優質放盤流通速度快",
-    ],
+    watchouts: ["樓齡較高，單位狀態差異大", "景觀和座向要逐間比較", "優質放盤流通速度快"],
     transportLifestyle:
       "鄰近深井主要商店、餐飲和青山公路交通，適合想住在深井核心生活圈的買家和租客。",
-    marketNote:
-      "麗都花園成交比較應分開看裝修、景觀和樓層，租盤則要留意交吉時間和家具電器狀態。",
+    marketNote: "麗都花園成交比較應分開看裝修、景觀和樓層，租盤則要留意交吉時間和家具電器狀態。",
     saleCta: "想買麗都花園？講低預算和單位狀態要求，代理幫你篩盤。",
     rentCta: "想租麗都花園？講低月租、入住日期和家具要求，代理幫你搵盤。",
     valuationCta: "麗都花園業主可直接 WhatsApp 地舖團隊查詢估值。",
     faqs: [
       {
         question: "麗都花園適合租客嗎？",
-        answer:
-          "適合。麗都花園位置成熟，生活配套方便，對想住深井核心生活圈的租客有吸引力。",
+        answer: "適合。麗都花園位置成熟，生活配套方便，對想住深井核心生活圈的租客有吸引力。",
       },
       {
         question: "麗都花園業主估價要提供甚麼？",
@@ -312,9 +283,55 @@ export function getEstatePhoto(slug: string): string | null {
 }
 
 export function getEstatePageContent(slug: string): EstatePageContent | null {
-  if (!Object.prototype.hasOwnProperty.call(estatePageContent, slug))
-    return null;
+  if (!Object.prototype.hasOwnProperty.call(estatePageContent, slug)) return null;
   return estatePageContent[slug as keyof typeof estatePageContent];
 }
 
 export const coreEstatePageSlugs = Object.keys(estatePageContent);
+
+/**
+ * P7e: composes the master plan's 4 named answer-summary questions
+ * (適合邊類家庭／交通取捨／同價有咩選擇／睇樓前要留意甚麼) from content this
+ * estate already has, rather than writing new templated copy per estate.
+ * 適合邊類家庭 and 睇樓前要留意甚麼 reuse `buyerFit`/`watchouts` verbatim;
+ * 交通取捨 reuses `transportLifestyle`; 同價有咩選擇 is COMPUTED, not written
+ * -- the comparable estates already fetched for EstateComparisonTable,
+ * sorted by real avgPsf proximity to this estate, named by their actual
+ * figures rather than a hand-written claim. Callers only invoke this once
+ * `content` (this function's first argument) is known non-null -- an
+ * estate with no `estate-pages.ts` entry gets no answer summary at all,
+ * matching the rest of this file's hide-don't-fabricate convention.
+ */
+export function buildEstateAnswerSummary(
+  content: EstatePageContent,
+  currentAvgPsf: number | null,
+  comparableEstates: readonly { nameZh: string; avgPsf: number | null }[],
+): string {
+  const parts: string[] = [];
+
+  if (content.buyerFit.length > 0) {
+    parts.push(`適合邊類家庭：${content.buyerFit.join("；")}`);
+  }
+
+  if (content.transportLifestyle) {
+    parts.push(`交通取捨：${content.transportLifestyle}`);
+  }
+
+  const pricedComparables = comparableEstates
+    .filter((entry): entry is { nameZh: string; avgPsf: number } => entry.avgPsf !== null)
+    .sort((a, b) =>
+      currentAvgPsf === null
+        ? 0
+        : Math.abs(a.avgPsf - currentAvgPsf) - Math.abs(b.avgPsf - currentAvgPsf),
+    );
+  if (pricedComparables.length > 0) {
+    const names = pricedComparables.map((entry) => entry.nameZh).join("、");
+    parts.push(`同價有咩選擇：可留意 ${names}，實際呎價、單位數及落成年份詳見下方屋苑比較。`);
+  }
+
+  if (content.watchouts.length > 0) {
+    parts.push(`睇樓前要留意：${content.watchouts.join("；")}`);
+  }
+
+  return parts.join(" ");
+}

@@ -50,12 +50,22 @@ test("mortgage calculator exposes practical controls, results, and official refe
     "mortgageInputsFromSearch",
     "編輯中，暫無法顯示結果",
     "此入息無法計算",
-    "https://www.ird.gov.hk/chi/faq/avd.htm",
     "https://www.hkmc.com.hk/eng/our_business/mortgage_insurance_programme.html",
     "本計算機並未估算按揭保險保費",
   ]) {
     assert.match(component, new RegExp(text.replaceAll(".", "\\.")), `${text} should be present`);
   }
+
+  // P7e: the stamp-duty citation is a real DataNote sourced from
+  // RESIDENTIAL_STAMP_DUTY_SCHEDULE (policy-rates.ts), not a second
+  // hardcoded copy of its URL/date as prose text.
+  assert.match(component, /import \{ DataNote \} from "@\/components\/layout\/DataNote";/);
+  assert.match(
+    component,
+    /import \{ RESIDENTIAL_STAMP_DUTY_SCHEDULE \} from "@\/content\/policy-rates";/,
+  );
+  assert.match(component, /sourceUrl=\{RESIDENTIAL_STAMP_DUTY_SCHEDULE\.sourceUrl/);
+  assert.match(component, /asOf=\{RESIDENTIAL_STAMP_DUTY_SCHEDULE\.effectiveDate\}/);
 
   assert.match(component, /htmlFor=/);
   assert.match(component, /aria-label=/);

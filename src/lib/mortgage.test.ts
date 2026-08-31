@@ -321,21 +321,25 @@ describe("policy-rates.ts extraction", () => {
     const { sourceUrl } = RESIDENTIAL_STAMP_DUTY_SCHEDULE;
     if (sourceUrl === null) return;
 
-    // The component's own "重要事項" note is where this citation was first
-    // added (when the component was translated to zh-HK) -- the extracted
-    // content file must reuse that exact URL, not carry a different,
-    // invented one.
-    expect(mortgageComponentSource).toContain(sourceUrl);
+    // P7e: the component now renders a real DataNote sourced directly from
+    // RESIDENTIAL_STAMP_DUTY_SCHEDULE.sourceUrl (was previously a second,
+    // hardcoded copy of the same URL in prose text, which this test used to
+    // string-match) -- checking the wiring is a stronger guarantee than
+    // text-matching, since the two values can no longer drift apart at all.
+    expect(mortgageComponentSource).toContain(
+      "sourceUrl={RESIDENTIAL_STAMP_DUTY_SCHEDULE.sourceUrl ?? undefined}",
+    );
   });
 
-  test("effective date matches what the UI already asserts to users", () => {
-    const normalizedNote = mortgageComponentSource.replace(/\s+/g, "");
-    const normalizedEffectiveDate = RESIDENTIAL_STAMP_DUTY_SCHEDULE.effectiveDate.replace(
-      /\s+/g,
-      "",
+  test("effective date is read from the shared constant via a real DataNote, not a second hardcoded copy", () => {
+    // P7e: the component used to hardcode this date as prose text (which
+    // this test previously string-matched); it now renders a real DataNote
+    // sourced directly from RESIDENTIAL_STAMP_DUTY_SCHEDULE.effectiveDate --
+    // a stronger guarantee than text-matching, since the two values can no
+    // longer drift apart at all (same constant, not a copy of its text).
+    expect(mortgageComponentSource).toContain(
+      "asOf={RESIDENTIAL_STAMP_DUTY_SCHEDULE.effectiveDate}",
     );
-
-    expect(normalizedNote).toContain(normalizedEffectiveDate);
   });
 
   test("brackets are ordered ascending and cover every price with no gaps", () => {

@@ -16,6 +16,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { DataNote } from "@/components/layout/DataNote";
+import { RESIDENTIAL_STAMP_DUTY_SCHEDULE } from "@/content/policy-rates";
 import {
   Table,
   TableBody,
@@ -724,18 +726,18 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               重要事項
             </h2>
           </div>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            住宅印花稅按香港稅階計算，於 2026 年 2 月 26 日生效。如需核實最新稅階，請參閱{" "}
-            <a
-              className="font-medium text-primary underline underline-offset-4"
-              href="https://www.ird.gov.hk/chi/faq/avd.htm"
-              target="_blank"
-              rel="noreferrer"
-            >
-              稅務局
-            </a>
-            。
-          </p>
+          <DataNote
+            className="mt-2"
+            source={RESIDENTIAL_STAMP_DUTY_SCHEDULE.source}
+            sourceUrl={RESIDENTIAL_STAMP_DUTY_SCHEDULE.sourceUrl ?? undefined}
+            asOf={RESIDENTIAL_STAMP_DUTY_SCHEDULE.effectiveDate}
+            caveat="住宅印花稅按香港稅階計算，如需核實最新稅階請以官方公佈為準。"
+          />
+          <DataNote
+            className="mt-3"
+            source="本網站預設參考值（可自行調整）"
+            caveat="利率、按揭成數及壓力測試假設並非銀行實際批核條件，僅供試算參考，實際按揭條款以銀行審批為準。"
+          />
         </div>
         <div>
           <div className="flex items-center gap-2">

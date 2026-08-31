@@ -8,6 +8,7 @@ import {
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { DataNote } from "@/components/layout/DataNote";
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import {
   EstateComparisonTable,
   type EstateComparisonRow,
@@ -20,19 +21,25 @@ import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { findComparableEstates } from "@/content/estate-registry";
-import { getEstatePageContent } from "@/content/estate-pages";
+import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { shamTsengSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
+import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
 import {
+  fetchCmsVideos,
   fetchEstateBySlug,
   fetchEstateTransactions,
   fetchFaqs,
   fetchListingsForEstate,
+  type CmsVideo,
   type EstateTransaction,
   type FaqItem,
   type ListingRow,
 } from "@/lib/queries";
+import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
+import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
+import { deriveEstateTag } from "@/lib/video-tags.js";
 import { renderableFaqs } from "@/lib/faq";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
@@ -48,12 +55,34 @@ export const Route = createFileRoute("/estate/$slug")({
     // to compute even for the 3 unknown-district estates (returns []
     // instead of crashing; see findComparableEstates's own doc comment).
     const comparableEntries = findComparableEstates(estate.slug, 2);
-    const [faqs, latestListings, transactions, comparableRecords] = await Promise.all([
-      fetchFaqs(`estate:${params.slug}`),
-      fetchListingsForEstate(params.slug, 6),
-      fetchEstateTransactions(estate.id, 8),
-      Promise.all(comparableEntries.map((entry) => fetchEstateBySlug(entry.slug))),
-    ]);
+    const [faqs, latestListings, transactions, comparableRecords, agentProfiles, cmsVideos] =
+      await Promise.all([
+        fetchFaqs(`estate:${params.slug}`),
+        fetchListingsForEstate(params.slug, 6),
+        fetchEstateTransactions(estate.id, 8),
+        Promise.all(comparableEntries.map((entry) => fetchEstateBySlug(entry.slug))),
+        // Non-essential entity-linking fetches: a Neon blip here shouldn't
+        // fail the whole estate page, it just means that section renders
+        // nothing (matches fetchNeonBranches' own catch(() => []) pattern
+        // elsewhere in this route tree).
+        (fetchNeonPublicAgentProfiles() as Promise<NeonPublicAgentProfile[]>).catch(() => []),
+        (fetchCmsVideos() as Promise<CmsVideo[]>).catch(() => []),
+      ]);
+    // Reverse lookups over already-fetched data -- no new SQL. served_estate_slugs
+    // already exists on every public agent profile (agents_.$slug.tsx reads
+    // the forward direction); deriveEstateTag parses the same "＃屋苑名" video
+    // title marker videos.tsx already filters on, matched against this
+    // estate's real Chinese name; compareEstateSlugs is the static field
+    // blog-articles.ts already carries per article.
+    const relatedAgents = agentProfiles.filter((agent) =>
+      agent.served_estate_slugs.includes(estate.slug),
+    );
+    const relatedVideos = cmsVideos.filter(
+      (video) => deriveEstateTag(video.title)?.tag === estate.name_zh,
+    );
+    const relatedArticles = blogArticles.filter((article) =>
+      article.compareEstateSlugs?.includes(estate.slug),
+    );
     // A comparable's real facts (avg PSF / units / year / developer) live in
     // the DB, not the registry -- combine each entry with its fetched record
     // here so the route/component only ever deal with one flat shape. A
@@ -71,9 +100,19 @@ export const Route = createFileRoute("/estate/$slug")({
         totalUnits: record?.total_units ?? null,
         yearCompleted: record?.year_completed ?? null,
         developer: record?.developer ?? null,
+        asOf: record?.verified_at ?? null,
       };
     });
-    return { estate, faqs, latestListings, transactions, comparableEstates };
+    return {
+      estate,
+      faqs,
+      latestListings,
+      transactions,
+      comparableEstates,
+      relatedAgents,
+      relatedVideos,
+      relatedArticles,
+    };
   },
   head: ({ loaderData }) => {
     const slug = loaderData?.estate.slug as keyof typeof estateSeo | undefined;
@@ -118,14 +157,25 @@ export const Route = createFileRoute("/estate/$slug")({
 });
 
 function EstatePage() {
-  const { estate, faqs, latestListings, transactions, comparableEstates } =
-    Route.useLoaderData() as {
-      estate: EstateDetail;
-      faqs: FaqItem[];
-      latestListings: ListingRow[];
-      transactions: EstateTransaction[];
-      comparableEstates: EstateComparisonRow[];
-    };
+  const {
+    estate,
+    faqs,
+    latestListings,
+    transactions,
+    comparableEstates,
+    relatedAgents,
+    relatedVideos,
+    relatedArticles,
+  } = Route.useLoaderData() as {
+    estate: EstateDetail;
+    faqs: FaqItem[];
+    latestListings: ListingRow[];
+    transactions: EstateTransaction[];
+    comparableEstates: EstateComparisonRow[];
+    relatedAgents: NeonPublicAgentProfile[];
+    relatedVideos: CmsVideo[];
+    relatedArticles: BlogArticleMeta[];
+  };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
   useTrackPageView(
@@ -153,7 +203,11 @@ function EstatePage() {
     totalUnits: estate.total_units ?? null,
     yearCompleted: estate.year_completed ?? null,
     developer: estate.developer ?? null,
+    asOf: estate.verified_at ?? null,
   };
+  const answerSummary = content
+    ? buildEstateAnswerSummary(content, currentComparisonRow.avgPsf, comparableEstates)
+    : null;
   type VisibleFaq = { question: string; answer: string };
   const visibleFaqs: VisibleFaq[] = renderableFaqs([
     ...(content?.faqs ?? []),
@@ -233,6 +287,12 @@ function EstatePage() {
           </div>
         </div>
       </section>
+
+      {answerSummary ? (
+        <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+          <AnswerSummaryCallout summary={answerSummary} />
+        </div>
+      ) : null}
 
       {/* Verified-facts block: the plain "· "-joined summary this used to be
           carried no source or as-of date. estate.verified_at (P4 Task 2's
@@ -394,6 +454,73 @@ function EstatePage() {
           how it stacks up against its neighbours before moving on to actual
           inventory. */}
       <EstateComparisonTable current={currentComparisonRow} comparables={comparableEstates} />
+
+      {/* P7e: entity links to agent/video/article -- all three are reverse
+          lookups over data the app already fetches elsewhere (agents'
+          served_estate_slugs, videos' "＃屋苑名" title marker, articles'
+          compareEstateSlugs), not new SQL. Renders nothing for a
+          sub-section with zero matches rather than an empty placeholder. */}
+      {relatedAgents.length > 0 || relatedVideos.length > 0 || relatedArticles.length > 0 ? (
+        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <h2 className="text-xl font-bold text-primary">相關資源</h2>
+          <div className="mt-4 grid gap-6 sm:grid-cols-3">
+            {relatedAgents.length > 0 ? (
+              <div>
+                <p className="text-sm font-semibold text-foreground">熟悉呢個屋苑嘅代理</p>
+                <ul className="mt-2 space-y-1.5">
+                  {relatedAgents.map((agent) => (
+                    <li key={agent.id}>
+                      <Link
+                        to="/agents/$slug"
+                        params={{ slug: agent.public_slug ?? agent.id }}
+                        className="text-sm text-primary underline underline-offset-2"
+                      >
+                        {agent.name_zh ?? agent.name_en ?? "晉誠地產代理"}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {relatedVideos.length > 0 ? (
+              <div>
+                <p className="text-sm font-semibold text-foreground">相關影片</p>
+                <ul className="mt-2 space-y-1.5">
+                  {relatedVideos.map((video) => (
+                    <li key={video.id}>
+                      <Link
+                        to="/videos"
+                        search={{ estate: estate.name_zh }}
+                        className="text-sm text-primary underline underline-offset-2"
+                      >
+                        {video.title || "晉誠地產 YouTube影片"}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {relatedArticles.length > 0 ? (
+              <div>
+                <p className="text-sm font-semibold text-foreground">相關文章</p>
+                <ul className="mt-2 space-y-1.5">
+                  {relatedArticles.map((article) => (
+                    <li key={article.slug}>
+                      <Link
+                        to="/blog/$slug"
+                        params={{ slug: article.slug }}
+                        className="text-sm text-primary underline underline-offset-2"
+                      >
+                        {article.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="flex items-end justify-between gap-4">

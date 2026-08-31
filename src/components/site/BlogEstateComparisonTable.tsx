@@ -1,6 +1,11 @@
 import { Link } from "@tanstack/react-router";
 
-import { buildComparisonRowDefs, type EstateComparisonRow } from "./estate-comparison";
+import { formatHkDate } from "@/lib/format";
+import {
+  buildComparisonRowDefs,
+  latestComparisonAsOf,
+  type EstateComparisonRow,
+} from "./estate-comparison";
 
 export type { EstateComparisonRow };
 
@@ -19,12 +24,14 @@ export function BlogEstateComparisonTable({ estates }: { estates: EstateComparis
   if (estates.length === 0) return null;
 
   const rows = buildComparisonRowDefs();
+  const asOf = formatHkDate(latestComparisonAsOf(estates));
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <h2 className="text-xl font-bold text-primary">屋苑實時比較</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        資料實時來自本網站屋苑資料庫，暫缺時顯示「—」。
+        資料實時來自本網站屋苑資料庫，暫缺時顯示「—」
+        {asOf ? `，資料更新於 ${asOf}` : ""}。
       </p>
       <div className="mt-4 max-w-full overflow-x-auto rounded-md border">
         <table className="w-full min-w-[480px] text-left text-sm">
