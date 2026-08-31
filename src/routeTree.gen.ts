@@ -41,6 +41,7 @@ import { Route as ApiYoutubeSyncRouteImport } from './routes/api.youtube-sync'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
+import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AdminTeamRouteImport } from './routes/admin.team'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
@@ -56,6 +57,8 @@ import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webh
 import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
 import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
 import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent.handoff'
+import { Route as AdminTransactionsNewRouteImport } from './routes/admin.transactions_.new'
+import { Route as AdminTransactionsIdRouteImport } from './routes/admin.transactions_.$id'
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
 import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
 import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
@@ -240,6 +243,11 @@ const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
   path: '/whatsapp',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminTeamRoute = AdminTeamRouteImport.update({
   id: '/team',
   path: '/team',
@@ -314,6 +322,16 @@ const ApiLiveAgentHandoffRoute = ApiLiveAgentHandoffRouteImport.update({
   id: '/api/live-agent/handoff',
   path: '/api/live-agent/handoff',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTransactionsNewRoute = AdminTransactionsNewRouteImport.update({
+  id: '/transactions_/new',
+  path: '/transactions/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminTransactionsIdRoute = AdminTransactionsIdRouteImport.update({
+  id: '/transactions_/$id',
+  path: '/transactions/$id',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminListingsNewRoute = AdminListingsNewRouteImport.update({
   id: '/listings_/new',
@@ -470,6 +488,7 @@ export interface FileRoutesByFullPath {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -493,6 +512,8 @@ export interface FileRoutesByFullPath {
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
+  '/admin/transactions/$id': typeof AdminTransactionsIdRoute
+  '/admin/transactions/new': typeof AdminTransactionsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -540,6 +561,7 @@ export interface FileRoutesByTo {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -563,6 +585,8 @@ export interface FileRoutesByTo {
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
+  '/admin/transactions/$id': typeof AdminTransactionsIdRoute
+  '/admin/transactions/new': typeof AdminTransactionsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -613,6 +637,7 @@ export interface FileRoutesById {
   '/admin/operations': typeof AdminOperationsRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
   '/agents_/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
@@ -636,6 +661,8 @@ export interface FileRoutesById {
   '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings_/$id': typeof AdminListingsIdRoute
   '/admin/listings_/new': typeof AdminListingsNewRoute
+  '/admin/transactions_/$id': typeof AdminTransactionsIdRoute
+  '/admin/transactions_/new': typeof AdminTransactionsNewRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -687,6 +714,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/segments'
     | '/admin/team'
+    | '/admin/transactions'
     | '/admin/whatsapp'
     | '/agents/$slug'
     | '/api/mls-sync'
@@ -710,6 +738,8 @@ export interface FileRouteTypes {
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
+    | '/admin/transactions/$id'
+    | '/admin/transactions/new'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -757,6 +787,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/segments'
     | '/admin/team'
+    | '/admin/transactions'
     | '/admin/whatsapp'
     | '/agents/$slug'
     | '/api/mls-sync'
@@ -780,6 +811,8 @@ export interface FileRouteTypes {
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
+    | '/admin/transactions/$id'
+    | '/admin/transactions/new'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -829,6 +862,7 @@ export interface FileRouteTypes {
     | '/admin/operations'
     | '/admin/segments'
     | '/admin/team'
+    | '/admin/transactions'
     | '/admin/whatsapp'
     | '/agents_/$slug'
     | '/api/mls-sync'
@@ -852,6 +886,8 @@ export interface FileRouteTypes {
     | '/admin/leads_/command-center'
     | '/admin/listings_/$id'
     | '/admin/listings_/new'
+    | '/admin/transactions_/$id'
+    | '/admin/transactions_/new'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -1149,6 +1185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminWhatsappRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/transactions': {
+      id: '/admin/transactions'
+      path: '/transactions'
+      fullPath: '/admin/transactions'
+      preLoaderRoute: typeof AdminTransactionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/team': {
       id: '/admin/team'
       path: '/team'
@@ -1253,6 +1296,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/live-agent/handoff'
       preLoaderRoute: typeof ApiLiveAgentHandoffRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/transactions_/new': {
+      id: '/admin/transactions_/new'
+      path: '/transactions/new'
+      fullPath: '/admin/transactions/new'
+      preLoaderRoute: typeof AdminTransactionsNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/transactions_/$id': {
+      id: '/admin/transactions_/$id'
+      path: '/transactions/$id'
+      fullPath: '/admin/transactions/$id'
+      preLoaderRoute: typeof AdminTransactionsIdRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/listings_/new': {
       id: '/admin/listings_/new'
@@ -1428,6 +1485,7 @@ interface AdminRouteChildren {
   AdminOperationsRoute: typeof AdminOperationsRoute
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminTeamRoute: typeof AdminTeamRoute
+  AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminAgentsIdRoute: typeof AdminAgentsIdRoute
@@ -1437,6 +1495,8 @@ interface AdminRouteChildren {
   AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
   AdminListingsIdRoute: typeof AdminListingsIdRoute
   AdminListingsNewRoute: typeof AdminListingsNewRoute
+  AdminTransactionsIdRoute: typeof AdminTransactionsIdRoute
+  AdminTransactionsNewRoute: typeof AdminTransactionsNewRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
@@ -1449,6 +1509,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminOperationsRoute: AdminOperationsRoute,
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminTeamRoute: AdminTeamRoute,
+  AdminTransactionsRoute: AdminTransactionsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminAgentsIdRoute: AdminAgentsIdRoute,
@@ -1458,6 +1519,8 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
   AdminListingsIdRoute: AdminListingsIdRoute,
   AdminListingsNewRoute: AdminListingsNewRoute,
+  AdminTransactionsIdRoute: AdminTransactionsIdRoute,
+  AdminTransactionsNewRoute: AdminTransactionsNewRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)

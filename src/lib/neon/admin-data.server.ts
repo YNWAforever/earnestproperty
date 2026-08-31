@@ -40,6 +40,9 @@ import type {
   AdminLeadRow,
   AdminLeadUpdateInput,
   AdminListingFiltersInput,
+  AdminTransactionFiltersInput,
+  AdminTransactionInput,
+  AdminTransactionRow,
   AdminAudiencePreview,
   AdminAiKnowledgeRebuildResult,
   AdminAiKnowledgeStatus,
@@ -1164,6 +1167,196 @@ export async function deleteAdminProperty(id: string, actor: StaffAccess) {
   if (!rows[0]) return { ok: false, error: "Not found" };
   await writeAudit(actor.staffId, "property.delete", "property", id);
   return { ok: true };
+}
+
+export async function listAdminTransactions(
+  input: AdminTransactionFiltersInput = {},
+  actor?: StaffAccess,
+): Promise<AdminTransactionRow[]> {
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  const scope = actor ? agentScope(actor) : null;
+  if (scope !== null) {
+    where.push(`t.agent_id = ${addParam(params, scope)}`);
+  }
+
+  if (input.q?.trim()) {
+    where.push(`e.name_zh ILIKE ${addParam(params, `%${input.q.trim()}%`)}`);
+  }
+  if (input.deal_type && input.deal_type !== "all") {
+    where.push(`t.deal_type = ${addParam(params, input.deal_type)}::deal_type`);
+  }
+  if (input.estate_id && input.estate_id !== "all") {
+    where.push(`t.estate_id = ${addParam(params, input.estate_id)}`);
+  }
+  if (input.verification_state && input.verification_state !== "all") {
+    where.push(
+      `t.verification_state = ${addParam(params, input.verification_state)}::transaction_verification_state`,
+    );
+  }
+
+  const rows = await queryRows(
+    `
+    SELECT
+      t.id, t.estate_id, t.deal_type, t.price, t.saleable_area, t.saleable_psf,
+      t.deal_date::text AS deal_date, t.unit, t.block, t.floor_band, t.source, t.source_url,
+      t.verification_state, t.published, t.agent_id,
+      e.name_zh AS estate_name_zh,
+      s.name_zh AS agent_name_zh,
+      s.name_en AS agent_name_en
+    FROM transactions t
+    LEFT JOIN estates e ON e.id = t.estate_id
+    LEFT JOIN staff_users s ON s.id = t.agent_id
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY t.deal_date DESC NULLS LAST, t.created_at DESC
+    LIMIT 200
+    `,
+    params,
+  );
+  return rows.map((row) => ({
+    id: stringOrEmpty(row.id),
+    estate_id: stringOrNull(row.estate_id),
+    estate_name_zh: stringOrNull(row.estate_name_zh),
+    deal_type: stringOrEmpty(row.deal_type),
+    price: numberOrNull(row.price),
+    saleable_area: numberOrNull(row.saleable_area),
+    saleable_psf: numberOrNull(row.saleable_psf),
+    deal_date: stringOrNull(row.deal_date),
+    unit: stringOrNull(row.unit),
+    block: stringOrNull(row.block),
+    floor_band: stringOrNull(row.floor_band),
+    source: stringOrNull(row.source),
+    source_url: stringOrNull(row.source_url),
+    verification_state: stringOrEmpty(row.verification_state),
+    published: booleanOrFalse(row.published),
+    agent_id: stringOrNull(row.agent_id),
+    agent_name: stringOrNull(row.agent_name_zh) ?? stringOrNull(row.agent_name_en),
+  }));
+}
+
+export async function getAdminTransaction(
+  id: string,
+  actor?: StaffAccess,
+): Promise<AdminTransactionRow | null> {
+  const scope = actor ? agentScope(actor) : null;
+  const rows = await queryRows(
+    `
+    SELECT
+      t.id, t.estate_id, t.deal_type, t.price, t.saleable_area, t.saleable_psf,
+      t.deal_date::text AS deal_date, t.unit, t.block, t.floor_band, t.source, t.source_url,
+      t.verification_state, t.published, t.agent_id,
+      e.name_zh AS estate_name_zh,
+      s.name_zh AS agent_name_zh,
+      s.name_en AS agent_name_en
+    FROM transactions t
+    LEFT JOIN estates e ON e.id = t.estate_id
+    LEFT JOIN staff_users s ON s.id = t.agent_id
+    WHERE t.id = $1${scope !== null ? " AND t.agent_id = $2" : ""}
+    LIMIT 1
+    `,
+    scope !== null ? [id, scope] : [id],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: stringOrEmpty(row.id),
+    estate_id: stringOrNull(row.estate_id),
+    estate_name_zh: stringOrNull(row.estate_name_zh),
+    deal_type: stringOrEmpty(row.deal_type),
+    price: numberOrNull(row.price),
+    saleable_area: numberOrNull(row.saleable_area),
+    saleable_psf: numberOrNull(row.saleable_psf),
+    deal_date: stringOrNull(row.deal_date),
+    unit: stringOrNull(row.unit),
+    block: stringOrNull(row.block),
+    floor_band: stringOrNull(row.floor_band),
+    source: stringOrNull(row.source),
+    source_url: stringOrNull(row.source_url),
+    verification_state: stringOrEmpty(row.verification_state),
+    published: booleanOrFalse(row.published),
+    agent_id: stringOrNull(row.agent_id),
+    agent_name: stringOrNull(row.agent_name_zh) ?? stringOrNull(row.agent_name_en),
+  };
+}
+
+export async function saveAdminTransaction(input: AdminTransactionInput, actor: StaffAccess) {
+  const scope = agentScope(actor);
+  const saleablePsf =
+    input.saleable_area > 0 ? Math.round(input.price / input.saleable_area) : null;
+  const verificationState = input.verified ? "verified" : "unverified";
+  const published = input.verified;
+
+  // Shared by both branches -- but agent_id is deliberately NOT one of them.
+  // Unlike saveAdminProperty, AdminTransactionInput has no agent_id field at
+  // all (no form control to assign a transaction to someone else): on
+  // INSERT it's set once to whoever is creating it; on UPDATE it must stay
+  // untouched, or an admin/manager editing another agent's transaction
+  // would silently reassign authorship to themselves.
+  const params = [
+    input.estate_id,
+    input.deal_type,
+    input.price,
+    input.saleable_area,
+    saleablePsf,
+    input.deal_date,
+    input.unit,
+    input.block,
+    input.floor_band,
+    input.source,
+    input.source_url,
+    verificationState,
+    published,
+  ];
+
+  const rows = input.id
+    ? await queryRows(
+        `
+        UPDATE transactions SET
+          estate_id = $1,
+          deal_type = $2::deal_type,
+          price = $3,
+          saleable_area = $4,
+          saleable_psf = $5,
+          deal_date = $6,
+          unit = $7,
+          block = $8,
+          floor_band = $9,
+          source = $10,
+          source_url = $11,
+          verification_state = $12::transaction_verification_state,
+          published = $13,
+          verified_at = CASE WHEN $13 THEN COALESCE(verified_at, now()) ELSE NULL END
+        WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
+        RETURNING id
+        `,
+        scope !== null ? [...params, input.id, scope] : [...params, input.id],
+      )
+    : await queryRows(
+        `
+        INSERT INTO transactions (
+          estate_id, deal_type, price, saleable_area, saleable_psf, deal_date,
+          unit, block, floor_band, source, source_url, verification_state,
+          published, verified_at, agent_id
+        )
+        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $13 THEN now() ELSE NULL END, $14)
+        RETURNING id
+        `,
+        [...params, actor.staffId],
+      );
+
+  if (input.id && !rows[0]) {
+    if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    return { id: "", error: "Not found" };
+  }
+  const id = stringOrEmpty(rows[0]?.id);
+  await writeAudit(
+    actor.staffId,
+    input.id ? "transaction.update" : "transaction.create",
+    "transaction",
+    id,
+  );
+  return { id };
 }
 
 export async function fetchAdminAgents() {

@@ -24,6 +24,8 @@ import type {
   AdminLeadUpdateInput,
   AdminListingFiltersInput,
   AdminPropertyInput,
+  AdminTransactionFiltersInput,
+  AdminTransactionInput,
   StaffRole,
 } from "./admin-data.types";
 
@@ -1028,6 +1030,50 @@ export async function updateAdminPropertyStatus(options: {
 }) {
   return callStaffServerFn(async () =>
     updateAdminPropertyStatusServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminTransactionsFilteredServer = createServerFn({ method: "GET" })
+  .inputValidator((data: AdminTransactionFiltersInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.listAdminTransactions(data, staff);
+  });
+
+export async function fetchAdminTransactionsFiltered(options: {
+  data: AdminTransactionFiltersInput;
+}) {
+  return callStaffServerFn(async () =>
+    fetchAdminTransactionsFilteredServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const fetchAdminTransactionServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.getAdminTransaction(data.id, staff);
+  });
+
+export async function fetchAdminTransaction(options: { data: { id: string } }) {
+  return callStaffServerFn(async () =>
+    fetchAdminTransactionServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const saveAdminTransactionServer = createServerFn({ method: "POST" })
+  .inputValidator((data: AdminTransactionInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.saveAdminTransaction(data, staff);
+  });
+
+export async function saveAdminTransaction(options: { data: AdminTransactionInput }) {
+  return callStaffServerFn(async () =>
+    saveAdminTransactionServer(await withStaffAuthHeaders(options)),
   );
 }
 
