@@ -367,6 +367,18 @@ export async function fetchAdminEstateOptions() {
   return callStaffServerFn(async () => fetchAdminEstateOptionsServer(await withStaffAuthHeaders()));
 }
 
+const fetchAdminDistrictOptionsServer = createServerFn({ method: "GET" }).handler(async () => {
+  await requireStaff(["admin", "manager", "agent"]);
+  const data = await import("./admin-data.server");
+  return data.listAdminDistrictOptions();
+});
+
+export async function fetchAdminDistrictOptions() {
+  return callStaffServerFn(async () =>
+    fetchAdminDistrictOptionsServer(await withStaffAuthHeaders()),
+  );
+}
+
 const fetchAdminPropertyServer = createServerFn({ method: "GET" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {

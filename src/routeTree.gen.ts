@@ -45,6 +45,7 @@ import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
 import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
+import { Route as AdminEstatesRouteImport } from './routes/admin.estates'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
 import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
 import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
@@ -57,6 +58,8 @@ import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
 import { Route as AdminListingsIdRouteImport } from './routes/admin.listings_.$id'
 import { Route as AdminLeadsCommandCenterRouteImport } from './routes/admin.leads_.command-center'
+import { Route as AdminEstatesNewRouteImport } from './routes/admin.estates_.new'
+import { Route as AdminEstatesIdRouteImport } from './routes/admin.estates_.$id'
 import { Route as AdminAgentsNewRouteImport } from './routes/admin.agents_.new'
 import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendTemplateRouteImport } from './routes/api.admin.woztell.send-template'
@@ -256,6 +259,11 @@ const AdminLeadsRoute = AdminLeadsRouteImport.update({
   path: '/leads',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminEstatesRoute = AdminEstatesRouteImport.update({
+  id: '/estates',
+  path: '/estates',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminCmsRoute = AdminCmsRouteImport.update({
   id: '/cms',
   path: '/cms',
@@ -314,6 +322,16 @@ const AdminListingsIdRoute = AdminListingsIdRouteImport.update({
 const AdminLeadsCommandCenterRoute = AdminLeadsCommandCenterRouteImport.update({
   id: '/leads_/command-center',
   path: '/leads/command-center',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEstatesNewRoute = AdminEstatesNewRouteImport.update({
+  id: '/estates_/new',
+  path: '/estates/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEstatesIdRoute = AdminEstatesIdRouteImport.update({
+  id: '/estates_/$id',
+  path: '/estates/$id',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminAgentsNewRoute = AdminAgentsNewRouteImport.update({
@@ -440,6 +458,7 @@ export interface FileRoutesByFullPath {
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
+  '/admin/estates': typeof AdminEstatesRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
@@ -462,6 +481,8 @@ export interface FileRoutesByFullPath {
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/admin/agents/$id': typeof AdminAgentsIdRoute
   '/admin/agents/new': typeof AdminAgentsNewRoute
+  '/admin/estates/$id': typeof AdminEstatesIdRoute
+  '/admin/estates/new': typeof AdminEstatesNewRoute
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
@@ -506,6 +527,7 @@ export interface FileRoutesByTo {
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
+  '/admin/estates': typeof AdminEstatesRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
@@ -528,6 +550,8 @@ export interface FileRoutesByTo {
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
   '/admin/agents/$id': typeof AdminAgentsIdRoute
   '/admin/agents/new': typeof AdminAgentsNewRoute
+  '/admin/estates/$id': typeof AdminEstatesIdRoute
+  '/admin/estates/new': typeof AdminEstatesNewRoute
   '/admin/leads/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings/$id': typeof AdminListingsIdRoute
   '/admin/listings/new': typeof AdminListingsNewRoute
@@ -575,6 +599,7 @@ export interface FileRoutesById {
   '/admin/agents': typeof AdminAgentsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
+  '/admin/estates': typeof AdminEstatesRoute
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
@@ -597,6 +622,8 @@ export interface FileRoutesById {
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/admin/agents_/$id': typeof AdminAgentsIdRoute
   '/admin/agents_/new': typeof AdminAgentsNewRoute
+  '/admin/estates_/$id': typeof AdminEstatesIdRoute
+  '/admin/estates_/new': typeof AdminEstatesNewRoute
   '/admin/leads_/command-center': typeof AdminLeadsCommandCenterRoute
   '/admin/listings_/$id': typeof AdminListingsIdRoute
   '/admin/listings_/new': typeof AdminListingsNewRoute
@@ -645,6 +672,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
+    | '/admin/estates'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
@@ -667,6 +695,8 @@ export interface FileRouteTypes {
     | '/castle-peak-road/'
     | '/admin/agents/$id'
     | '/admin/agents/new'
+    | '/admin/estates/$id'
+    | '/admin/estates/new'
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
@@ -711,6 +741,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
+    | '/admin/estates'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
@@ -733,6 +764,8 @@ export interface FileRouteTypes {
     | '/castle-peak-road'
     | '/admin/agents/$id'
     | '/admin/agents/new'
+    | '/admin/estates/$id'
+    | '/admin/estates/new'
     | '/admin/leads/command-center'
     | '/admin/listings/$id'
     | '/admin/listings/new'
@@ -779,6 +812,7 @@ export interface FileRouteTypes {
     | '/admin/agents'
     | '/admin/blasts'
     | '/admin/cms'
+    | '/admin/estates'
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
@@ -801,6 +835,8 @@ export interface FileRouteTypes {
     | '/castle-peak-road/'
     | '/admin/agents_/$id'
     | '/admin/agents_/new'
+    | '/admin/estates_/$id'
+    | '/admin/estates_/new'
     | '/admin/leads_/command-center'
     | '/admin/listings_/$id'
     | '/admin/listings_/new'
@@ -1128,6 +1164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLeadsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/estates': {
+      id: '/admin/estates'
+      path: '/estates'
+      fullPath: '/admin/estates'
+      preLoaderRoute: typeof AdminEstatesRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/cms': {
       id: '/admin/cms'
       path: '/cms'
@@ -1210,6 +1253,20 @@ declare module '@tanstack/react-router' {
       path: '/leads/command-center'
       fullPath: '/admin/leads/command-center'
       preLoaderRoute: typeof AdminLeadsCommandCenterRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/estates_/new': {
+      id: '/admin/estates_/new'
+      path: '/estates/new'
+      fullPath: '/admin/estates/new'
+      preLoaderRoute: typeof AdminEstatesNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/estates_/$id': {
+      id: '/admin/estates_/$id'
+      path: '/estates/$id'
+      fullPath: '/admin/estates/$id'
+      preLoaderRoute: typeof AdminEstatesIdRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/agents_/new': {
@@ -1345,6 +1402,7 @@ interface AdminRouteChildren {
   AdminAgentsRoute: typeof AdminAgentsRoute
   AdminBlastsRoute: typeof AdminBlastsRoute
   AdminCmsRoute: typeof AdminCmsRoute
+  AdminEstatesRoute: typeof AdminEstatesRoute
   AdminLeadsRoute: typeof AdminLeadsRoute
   AdminListingsRoute: typeof AdminListingsRoute
   AdminOperationsRoute: typeof AdminOperationsRoute
@@ -1354,6 +1412,8 @@ interface AdminRouteChildren {
   AdminIndexRoute: typeof AdminIndexRoute
   AdminAgentsIdRoute: typeof AdminAgentsIdRoute
   AdminAgentsNewRoute: typeof AdminAgentsNewRoute
+  AdminEstatesIdRoute: typeof AdminEstatesIdRoute
+  AdminEstatesNewRoute: typeof AdminEstatesNewRoute
   AdminLeadsCommandCenterRoute: typeof AdminLeadsCommandCenterRoute
   AdminListingsIdRoute: typeof AdminListingsIdRoute
   AdminListingsNewRoute: typeof AdminListingsNewRoute
@@ -1363,6 +1423,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAgentsRoute: AdminAgentsRoute,
   AdminBlastsRoute: AdminBlastsRoute,
   AdminCmsRoute: AdminCmsRoute,
+  AdminEstatesRoute: AdminEstatesRoute,
   AdminLeadsRoute: AdminLeadsRoute,
   AdminListingsRoute: AdminListingsRoute,
   AdminOperationsRoute: AdminOperationsRoute,
@@ -1372,6 +1433,8 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminIndexRoute: AdminIndexRoute,
   AdminAgentsIdRoute: AdminAgentsIdRoute,
   AdminAgentsNewRoute: AdminAgentsNewRoute,
+  AdminEstatesIdRoute: AdminEstatesIdRoute,
+  AdminEstatesNewRoute: AdminEstatesNewRoute,
   AdminLeadsCommandCenterRoute: AdminLeadsCommandCenterRoute,
   AdminListingsIdRoute: AdminListingsIdRoute,
   AdminListingsNewRoute: AdminListingsNewRoute,

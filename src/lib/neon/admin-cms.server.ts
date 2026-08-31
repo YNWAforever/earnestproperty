@@ -9,6 +9,7 @@ import type {
   CmsEditorResult,
   CmsHubRow,
   CmsHubView,
+  CmsPayloadValue,
   CmsPublishInput,
   CmsRestoreInput,
 } from "./admin-cms.types";
@@ -233,6 +234,10 @@ export async function fetchAdminCmsEditor(input: {
       createdAt: dateOrNull(revision.created_at) ?? new Date(0).toISOString(),
       createdBy: stringOrNull(revision.created_by),
     })),
+    payload:
+      latest && latest.payload && typeof latest.payload === "object"
+        ? (latest.payload as Record<string, CmsPayloadValue>)
+        : null,
   };
 }
 
@@ -327,19 +332,30 @@ function projectorSql(resourceType: CmsResourceType) {
     return `${common}
     INSERT INTO estates (id, slug, name_zh, name_en, district_slug, developer, year_completed,
       phases, total_units, area_min, area_max, description, hero_image, facilities,
-      seo_title, seo_description, published)
+      seo_title, seo_description, aliases, address, blocks, school_net_code, transport_note,
+      verified_at, district_id, avg_saleable_psf, lat, lng, published)
     SELECT resource_id, payload->>'slug', payload->>'name_zh', payload->>'name_en',
       payload->>'district_slug', payload->>'developer', (payload->>'year_completed')::int,
       (payload->>'phases')::int, (payload->>'total_units')::int, (payload->>'area_min')::int,
       (payload->>'area_max')::int, payload->>'description', payload->>'hero_image',
       ARRAY(SELECT jsonb_array_elements_text(COALESCE(payload->'facilities', '[]'::jsonb))),
-      payload->>'seo_title', payload->>'seo_description', true FROM eligible
+      payload->>'seo_title', payload->>'seo_description',
+      ARRAY(SELECT jsonb_array_elements_text(COALESCE(payload->'aliases', '[]'::jsonb))),
+      payload->>'address', (payload->>'blocks')::int, payload->>'school_net_code',
+      payload->>'transport_note', NULLIF(payload->>'verified_at', '')::timestamptz,
+      NULLIF(payload->>'district_id', '')::uuid, (payload->>'avg_saleable_psf')::numeric,
+      (payload->>'lat')::numeric, (payload->>'lng')::numeric, true
+    FROM eligible
     ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug, name_zh=EXCLUDED.name_zh,
       name_en=EXCLUDED.name_en, district_slug=EXCLUDED.district_slug, developer=EXCLUDED.developer,
       year_completed=EXCLUDED.year_completed, phases=EXCLUDED.phases, total_units=EXCLUDED.total_units,
       area_min=EXCLUDED.area_min, area_max=EXCLUDED.area_max, description=EXCLUDED.description,
       hero_image=EXCLUDED.hero_image, facilities=EXCLUDED.facilities, seo_title=EXCLUDED.seo_title,
-      seo_description=EXCLUDED.seo_description, published=true, updated_at=now() RETURNING id`;
+      seo_description=EXCLUDED.seo_description, aliases=EXCLUDED.aliases, address=EXCLUDED.address,
+      blocks=EXCLUDED.blocks, school_net_code=EXCLUDED.school_net_code,
+      transport_note=EXCLUDED.transport_note, verified_at=EXCLUDED.verified_at,
+      district_id=EXCLUDED.district_id, avg_saleable_psf=EXCLUDED.avg_saleable_psf,
+      lat=EXCLUDED.lat, lng=EXCLUDED.lng, published=true, updated_at=now() RETURNING id`;
   if (resourceType === "article")
     return `${common}
     INSERT INTO articles (id, slug, title, excerpt, content, cover_image, category,
