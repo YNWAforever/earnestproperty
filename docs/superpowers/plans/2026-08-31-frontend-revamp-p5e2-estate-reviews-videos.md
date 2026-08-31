@@ -1,6 +1,6 @@
 # P5e2 — /estate-reviews filters + /videos category taxonomy
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Finish the remaining two items from P5's deferred editorial backlog (the master plan's `/estate-reviews` and `/videos` line items) that P5e1 didn't cover: a real district filter + an accessibility fix on `/estate-reviews`, and a video category taxonomy (樓盤實拍/屋苑開箱/市場評論/社區生活) on `/videos`, including the admin editor needed to actually assign one.
 
@@ -30,7 +30,7 @@
 - Create: `src/content/video-categories.ts`
 - Create: `src/content/video-categories.test.mjs`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```sql
 -- neon/migrations/20260831180000_video_category.sql
@@ -39,7 +39,7 @@ ALTER TABLE cms_videos ADD COLUMN IF NOT EXISTS category text;
 
 No `NOT NULL`, no default other than the implicit `NULL` — every existing row (currently ~96 YouTube-synced videos) has no assigned category, and none should be guessed.
 
-- [ ] **Step 2: Define the taxonomy**
+- [x] **Step 2: Define the taxonomy**
 
 ```typescript
 // src/content/video-categories.ts
@@ -51,7 +51,7 @@ export function isVideoCategory(value: string): value is VideoCategory {
 }
 ```
 
-- [ ] **Step 3: Test the taxonomy guard**
+- [x] **Step 3: Test the taxonomy guard**
 
 ```javascript
 // src/content/video-categories.test.mjs
@@ -75,7 +75,7 @@ test("isVideoCategory accepts only the named 4 categories", () => {
 
 Run: `node --test src/content/video-categories.test.mjs` — expect all pass.
 
-- [ ] **Step 4: Add `category` to `CmsVideo` and the public read query**
+- [x] **Step 4: Add `category` to `CmsVideo` and the public read query**
 
 In `src/lib/queries.ts`, extend the type:
 
@@ -102,7 +102,7 @@ WHERE published = true
 
 and in the row-mapping object add `category: stringOrNull(row.category),`.
 
-- [ ] **Step 5: Add `category` to the admin read/write path**
+- [x] **Step 5: Add `category` to the admin read/write path**
 
 In `src/lib/neon/admin-data.types.ts`:
 
@@ -151,11 +151,11 @@ RETURNING id
 
 (Update the positional `input.id` param slot from `$6`/`[...params, input.id]` to `$7` — same array-append pattern already used, just one slot further along.)
 
-- [ ] **Step 6: Typecheck**
+- [x] **Step 6: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add neon/migrations/20260831180000_video_category.sql src/content/video-categories.ts src/content/video-categories.test.mjs src/lib/queries.ts src/lib/neon/public-data.server.ts src/lib/neon/admin-data.server.ts src/lib/neon/admin-data.types.ts
@@ -169,9 +169,9 @@ git commit -m "feat(videos): add a nullable category column and taxonomy for cms
 **Files:**
 - Modify: `src/routes/admin.cms.tsx`
 
-- [ ] **Step 1: Add `category: null` to `emptyCmsVideo`** (the "new video" default object, currently missing the field entirely — check its exact current shape before editing, it sits near the top of the file alongside `emptyCmsVideo`'s sibling empty-object constants).
+- [x] **Step 1: Add `category: null` to `emptyCmsVideo`** (the "new video" default object, currently missing the field entirely — check its exact current shape before editing, it sits near the top of the file alongside `emptyCmsVideo`'s sibling empty-object constants).
 
-- [ ] **Step 2: Add a category `<Select>` to `CmsVideoDialog`**, after the "排序" `NumberField` and before the "發布" `Field`:
+- [x] **Step 2: Add a category `<Select>` to `CmsVideoDialog`**, after the "排序" `NumberField` and before the "發布" `Field`:
 
 ```tsx
 <Field label="分類">
@@ -196,13 +196,13 @@ git commit -m "feat(videos): add a nullable category column and taxonomy for cms
 
 Import `VIDEO_CATEGORIES` from `@/content/video-categories`. Check whether `Field` (the label-wrapper component already used for "發布" a few lines below) is generic enough to wrap a `<Select>` directly, or whether it expects a specific child shape — read its definition in this same file before assuming.
 
-- [ ] **Step 3: Propagate `category` through `cmsVideoToInput` and `cmsVideoFingerprintValues`** (both near the bottom of the file, both already listed in the earlier grep of this file) — add `category: video.category` to `cmsVideoToInput`'s returned object, and `category` to whatever field list `cmsVideoFingerprintValues` builds for videos (matching how it already includes `title`/`description`/etc. — read the function first to match its existing shape).
+- [x] **Step 3: Propagate `category` through `cmsVideoToInput` and `cmsVideoFingerprintValues`** (both near the bottom of the file, both already listed in the earlier grep of this file) — add `category: video.category` to `cmsVideoToInput`'s returned object, and `category` to whatever field list `cmsVideoFingerprintValues` builds for videos (matching how it already includes `title`/`description`/etc. — read the function first to match its existing shape).
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 5: Extend `cms-videos-schema.test.mjs` or a new source-scan assertion** confirming `saveAdminCmsVideo`'s SQL includes `category` (source-text scan, matching this file's existing style):
+- [x] **Step 5: Extend `cms-videos-schema.test.mjs` or a new source-scan assertion** confirming `saveAdminCmsVideo`'s SQL includes `category` (source-text scan, matching this file's existing style):
 
 ```javascript
 test("saveAdminCmsVideo persists the category column", () => {
@@ -220,7 +220,7 @@ test("saveAdminCmsVideo persists the category column", () => {
 
 Run: `node --test src/lib/neon/cms-videos-schema.test.mjs`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/routes/admin.cms.tsx src/lib/neon/cms-videos-schema.test.mjs
@@ -235,7 +235,7 @@ git commit -m "feat(admin): add a video category selector to the CMS video edito
 - Modify: `src/routes/videos.tsx`
 - Modify: `src/routes/videos.contract.test.mjs`
 
-- [ ] **Step 1: Add `category` to the URL search schema**
+- [x] **Step 1: Add `category` to the URL search schema**
 
 ```typescript
 const searchSchema = z.object({
@@ -246,15 +246,15 @@ const searchSchema = z.object({
 });
 ```
 
-- [ ] **Step 2: Read `category` from `Route.useSearch()`** alongside the existing `estate`/`sort`/`q` destructure.
+- [x] **Step 2: Read `category` from `Route.useSearch()`** alongside the existing `estate`/`sort`/`q` destructure.
 
-- [ ] **Step 3: Filter `matchingCmsVideos` by category**, composed with the existing estate/query filters (add one more `if` guard in the same `.filter()` callback):
+- [x] **Step 3: Filter `matchingCmsVideos` by category**, composed with the existing estate/query filters (add one more `if` guard in the same `.filter()` callback):
 
 ```typescript
 if (category && video.category !== category) return false;
 ```
 
-- [ ] **Step 4: Filter `matchingListingVideos` by category** — per scope decision §0.5, listing videos are implicitly "樓盤實拍":
+- [x] **Step 4: Filter `matchingListingVideos` by category** — per scope decision §0.5, listing videos are implicitly "樓盤實拍":
 
 ```typescript
 if (category && category !== "樓盤實拍") return false;
@@ -262,7 +262,7 @@ if (category && category !== "樓盤實拍") return false;
 
 (add this alongside the existing `estate`/`trimmedQuery` guards in that filter's callback)
 
-- [ ] **Step 5: Compute category counts and render chips**, mirroring the existing estate-tag chip row exactly (same `aria-pressed` pattern, same "全部 N" first chip) — place this as a second chip row, above or below "屋苑" (choose above, since narrowing by content type is a coarser filter than narrowing by estate):
+- [x] **Step 5: Compute category counts and render chips**, mirroring the existing estate-tag chip row exactly (same `aria-pressed` pattern, same "全部 N" first chip) — place this as a second chip row, above or below "屋苑" (choose above, since narrowing by content type is a coarser filter than narrowing by estate):
 
 ```typescript
 const categoryCounts = useMemo(() => {
@@ -303,17 +303,17 @@ const categoryCounts = useMemo(() => {
 
 Import `VIDEO_CATEGORIES` from `@/content/video-categories`. Add `category` to the `VideoSearch` type and to `updateSearch`'s partial-update signature (both already exist for `estate`/`sort`/`q`).
 
-- [ ] **Step 6: Update the empty-state / "搵到 N 條影片" count copy** if it hardcodes a filter list — check the existing empty-state JSX (search for "搵到" or "清除篩選" in this file) and confirm the category filter is included wherever it resets/reports active filters, matching how `estate`/`q` already are.
+- [x] **Step 6: Update the empty-state / "搵到 N 條影片" count copy** if it hardcodes a filter list — check the existing empty-state JSX (search for "搵到" or "清除篩選" in this file) and confirm the category filter is included wherever it resets/reports active filters, matching how `estate`/`q` already are.
 
-- [ ] **Step 7: Typecheck**
+- [x] **Step 7: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 8: Extend `videos.contract.test.mjs`** (source-text scan, matching its existing style) with assertions for: the `category` search-schema field, the category filter guards on both video arrays, the chip row rendering `VIDEO_CATEGORIES`, and the listing-video 樓盤實拍-only guard.
+- [x] **Step 8: Extend `videos.contract.test.mjs`** (source-text scan, matching its existing style) with assertions for: the `category` search-schema field, the category filter guards on both video arrays, the chip row rendering `VIDEO_CATEGORIES`, and the listing-video 樓盤實拍-only guard.
 
 Run: `npm run test:videos`
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/routes/videos.tsx src/routes/videos.contract.test.mjs
@@ -328,7 +328,7 @@ git commit -m "feat(videos): add a category filter (樓盤實拍/屋苑開箱/�
 - Modify: `src/routes/estate-reviews.tsx`
 - Create: `src/routes/estate-reviews.contract.test.mjs`
 
-- [ ] **Step 1: Fix the article cover image's `alt=""`**
+- [x] **Step 1: Fix the article cover image's `alt=""`**
 
 ```tsx
 <AppImage
@@ -341,7 +341,7 @@ git commit -m "feat(videos): add a category filter (樓盤實拍/屋苑開箱/�
 />
 ```
 
-- [ ] **Step 2: Cross-reference the loaded estates against the registry's `homepageDistrict`**, computed once via `useMemo` in the component (not in the loader — this is presentation grouping over already-loaded data, not a new fetch):
+- [x] **Step 2: Cross-reference the loaded estates against the registry's `homepageDistrict`**, computed once via `useMemo` in the component (not in the loader — this is presentation grouping over already-loaded data, not a new fetch):
 
 ```typescript
 import { getEstateEntry } from "@/content/estate-registry";
@@ -362,7 +362,7 @@ const estatesWithDistrict = useMemo(
 
 `getEstateEntry` throws for a slug it doesn't recognise (see `estate-registry.ts:413`) — `fetchEstateOptions()` only returns real published-estate rows, and every one of today's 5 published estates already has a registry entry (asserted elsewhere, e.g. `estate-registry.test.mjs`'s own "every hasPage:true entry has a matching estateSeo" test), so this is safe as a direct call, not a `.find()` needing a null-guard.
 
-- [ ] **Step 3: Add district filter chips and wire them to the estate grid**
+- [x] **Step 3: Add district filter chips and wire them to the estate grid**
 
 ```tsx
 const [districtFilter, setDistrictFilter] = useState<DistrictFilter>("全部");
@@ -377,11 +377,11 @@ const filteredEstates = useMemo(
 
 Render the chip row (same visual pattern as `/videos`' and `/blog`'s existing filter chips — `aria-pressed`, active/inactive class pair) above the estate grid, inside the "屋苑入口" section, only when `estatesWithDistrict.length > 0`. Render `filteredEstates` instead of `estates` in the grid's `.map()`.
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 5: Write a contract test** (source-text scan, matching `blog.editorial-standards.contract.test.mjs`'s style) asserting: the cover image's `alt` is `article.title` (not `""`), the district-filter chips render `DISTRICT_FILTERS`, and `getEstateEntry` (not a guessed/hardcoded district map) is the source of each estate's district.
+- [x] **Step 5: Write a contract test** (source-text scan, matching `blog.editorial-standards.contract.test.mjs`'s style) asserting: the cover image's `alt` is `article.title` (not `""`), the district-filter chips render `DISTRICT_FILTERS`, and `getEstateEntry` (not a guessed/hardcoded district map) is the source of each estate's district.
 
 ```javascript
 // src/routes/estate-reviews.contract.test.mjs
@@ -408,9 +408,9 @@ test("estate-reviews district filter sources its grouping from the registry, not
 
 Run: `node --test src/routes/estate-reviews.contract.test.mjs`
 
-- [ ] **Step 6: Register the new test** in `package.json` — check whether an existing `test:*` script already covers `estate-reviews.tsx`; if not, add `src/routes/estate-reviews.contract.test.mjs` to the most relevant existing script (`test:homepage` or a similarly-scoped one) rather than inventing a new one-file script.
+- [x] **Step 6: Register the new test** in `package.json` — check whether an existing `test:*` script already covers `estate-reviews.tsx`; if not, add `src/routes/estate-reviews.contract.test.mjs` to the most relevant existing script (`test:homepage` or a similarly-scoped one) rather than inventing a new one-file script.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/routes/estate-reviews.tsx src/routes/estate-reviews.contract.test.mjs package.json
