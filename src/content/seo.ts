@@ -220,6 +220,108 @@ export const estateSeo = {
       "麗都花園（Lido Garden）位於深井青山公路深井段，1988 年落成，提供約 1,392 個單位，是深井其中一個最早期嘅臨海屋苑，亦係晉誠地產門市所在地。",
     fit: "預算入門嘅上車客、想要方便生活圈嘅租客、收租投資者。",
   },
+  "hoi-wan-hin": {
+    ...estateSeoIdentity("hoi-wan-hin"),
+    title: "海雲軒 Anglers' Bay 深井／青龍頭｜放盤、成交、海景、戶型",
+    description:
+      "海雲軒（Anglers' Bay）深井／青龍頭屋苑專頁：放盤、成交、海景、戶型、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "tai-wah-hin": {
+    ...estateSeoIdentity("tai-wah-hin"),
+    title: "帝華軒 Royal Sea Crest 青龍頭／深井｜浪翠園五期、大三房、放盤成交",
+    description:
+      "帝華軒（Royal Sea Crest）青龍頭／深井屋苑專頁：浪翠園五期、大三房、放盤成交、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "hoi-wan-toi": {
+    ...estateSeoIdentity("hoi-wan-toi"),
+    title: "海韻臺 Rhine Terrace 深井｜放盤、成交、海景、單幢住宅",
+    description:
+      "海韻臺（Rhine Terrace）深井屋苑專頁：放盤、成交、海景、單幢住宅、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "chun-wong-kui": {
+    ...estateSeoIdentity("chun-wong-kui"),
+    title: "縉皇居 Ocean Pointe 深井｜放盤、成交、高層海景、戶型",
+    description:
+      "縉皇居（Ocean Pointe）深井屋苑專頁：放盤、成交、高層海景、戶型、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "lung-tang-kok": {
+    ...estateSeoIdentity("lung-tang-kok"),
+    title: "龍騰閣 Lung Tang Court 青龍頭｜放盤、成交、大單位、低密度",
+    description:
+      "龍騰閣（Lung Tang Court）青龍頭屋苑專頁：放盤、成交、大單位、低密度、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "mun-ming-shan": {
+    ...estateSeoIdentity("mun-ming-shan"),
+    title: "滿名山 The Bloomsway 掃管笏｜分層、洋房、放盤成交、戶型",
+    description:
+      "滿名山（The Bloomsway）掃管笏屋苑專頁：分層、洋房、放盤成交、戶型、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "wong-gam-hoi-ngon": {
+    ...estateSeoIdentity("wong-gam-hoi-ngon"),
+    title: "香港黃金海岸 Hong Kong Gold Coast 青山灣／掃管笏｜五期放盤、成交、海景、生活配套",
+    description:
+      "香港黃金海岸（Hong Kong Gold Coast）青山灣／掃管笏屋苑專頁：五期放盤、成交、海景、生活配套、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "oi-kam-hoi-ngon": {
+    ...estateSeoIdentity("oi-kam-hoi-ngon"),
+    title: "愛琴海岸 Aegean Coast 掃管笏｜兩三房放盤、成交、會所、戶型",
+    description:
+      "愛琴海岸（Aegean Coast）掃管笏屋苑專頁：兩三房放盤、成交、會所、戶型、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "tai-yu": {
+    ...estateSeoIdentity("tai-yu"),
+    title: "帝御 The Royale 青山灣／掃管笏｜金灣、星濤、嵐天三期放盤成交",
+    description:
+      "帝御（The Royale）青山灣／掃管笏屋苑專頁：金灣、星濤、嵐天三期放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "wong-gam-hoi-waan": {
+    ...estateSeoIdentity("wong-gam-hoi-waan"),
+    title: "黃金海灣 Gold Coast Bay 青山灣｜意嵐、珀岸兩期放盤成交",
+    description:
+      "黃金海灣（Gold Coast Bay）青山灣屋苑專頁：意嵐、珀岸兩期放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "sing-tai": {
+    ...estateSeoIdentity("sing-tai"),
+    title: "星堤 Avignon 掃管笏｜分層、洋房、低密度放盤成交",
+    description:
+      "星堤（Avignon）掃管笏屋苑專頁：分層、洋房、低密度放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "seong-yuen": {
+    ...estateSeoIdentity("seong-yuen"),
+    title: "上源 Le Pont 掃管笏｜分層、洋房、1,154伙放盤成交",
+    description:
+      "上源（Le Pont）掃管笏屋苑專頁：分層、洋房、1,154伙放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "the-carmel": {
+    ...estateSeoIdentity("the-carmel"),
+    title: "The Carmel 大欖／掃管笏｜分層、洋房、低密度放盤成交",
+    description:
+      "The Carmel 大欖／掃管笏屋苑專頁：分層、洋房、低密度放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "oma-oma": {
+    ...estateSeoIdentity("oma-oma"),
+    title: "OMA OMA 掃管笏｜放盤、成交、細戶、家庭戶",
+    description:
+      "OMA OMA 掃管笏屋苑專頁：放盤、成交、細戶、家庭戶、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "lin-shan": {
+    ...estateSeoIdentity("lin-shan"),
+    title: "漣山 The Hillgrove 小欖｜低密度、大單位、放盤成交",
+    description:
+      "漣山（The Hillgrove）小欖屋苑專頁：低密度、大單位、放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "long-tou-waan": {
+    ...estateSeoIdentity("long-tou-waan"),
+    title: "浪濤灣 Aqua Blue 小欖｜分層、洋房、海景放盤成交",
+    description:
+      "浪濤灣（Aqua Blue）小欖屋苑專頁：分層、洋房、海景放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
+  "tai-tou-waan": {
+    ...estateSeoIdentity("tai-tou-waan"),
+    title: "帝濤灣 Palatial Coast 小欖／大欖｜兩期放盤、成交、海景、家庭戶",
+    description:
+      "帝濤灣（Palatial Coast）小欖／大欖屋苑專頁：兩期放盤、成交、海景、家庭戶、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+  },
 } as const;
 
 /**
