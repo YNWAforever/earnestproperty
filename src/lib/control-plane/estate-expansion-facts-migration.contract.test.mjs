@@ -38,10 +38,37 @@ test("the migration is registered in migration-versions.js", async () => {
   );
 });
 
-test("the migration only updates the 17 expansion estates, never inserts new rows", () => {
+test("the migration only touches the 17 expansion estates, never inserts new rows", () => {
   const sql = readFileSync(path.join(MIGRATIONS_DIR, migrationFile), "utf8");
   assert.ok(!/insert\s+into\s+estates/i.test(sql), "must never insert new estate rows");
   const slugs = [...sql.matchAll(/WHERE slug = '([a-z0-9-]+)';/g)].map((m) => m[1]);
-  assert.equal(slugs.length, 17, "expected exactly 17 UPDATE statements, one per expansion estate");
-  assert.equal(new Set(slugs).size, 17, "every slug should be updated exactly once");
+  // 5 of the 17 slugs (深井/汀九) get 2 UPDATE statements each: one
+  // district_slug correction plus the facts UPDATE every slug gets, so the
+  // total statement count exceeds 17 -- what must stay true is that every
+  // touched slug is one of the 17 real expansion estates, and every one of
+  // the 17 is touched at least once.
+  assert.equal(
+    new Set(slugs).size,
+    17,
+    "expected every one of the 17 expansion estates to be touched, no more no fewer",
+  );
+});
+
+test("only the 5 深井/汀九 estates get a district_slug correction, and each exactly once", () => {
+  const sql = readFileSync(path.join(MIGRATIONS_DIR, migrationFile), "utf8");
+  const correctedSlugs = [
+    ...sql.matchAll(
+      /UPDATE estates SET district_slug = '[a-z-]+'(?:, name_zh = '[^']+')? WHERE slug = '([a-z0-9-]+)';/g,
+    ),
+  ].map((m) => m[1]);
+  assert.deepEqual(
+    correctedSlugs.sort(),
+    ["chun-wong-kui", "hoi-wan-hin", "hoi-wan-toi", "lung-tang-kok", "tai-wah-hin"].sort(),
+    "exactly these 5 slugs should get a district_slug correction",
+  );
+  assert.equal(
+    new Set(correctedSlugs).size,
+    correctedSlugs.length,
+    "no slug should be corrected twice",
+  );
 });

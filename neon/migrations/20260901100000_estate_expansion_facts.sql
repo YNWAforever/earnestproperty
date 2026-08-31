@@ -14,6 +14,24 @@
 -- phases (SEO titles for several of these already advertise a phase count,
 -- e.g. 香港黃金海岸's "五期放盤" -- this column has to agree) is omitted only
 -- for mun-ming-shan, whose data-pack value is genuinely null.
+--
+-- district_slug corrections (and hoi-wan-toi's name_zh) for the 5 深井/汀九
+-- estates: 20260830130000_estate_expansion.sql seeded hoi-wan-hin and
+-- chun-wong-kui as 'ting-kau' and left tai-wah-hin/hoi-wan-toi/lung-tang-kok
+-- NULL -- a placeholder guess made before this data pack's real, sourced
+-- addresses existed. All five are genuinely 深井/青龍頭 estates per those
+-- addresses (see estate-registry.ts's own comment on the same correction,
+-- made there for the content layer). Fixed here too so fetchEstates()'s
+-- district_slug-based query and castle-peak-road.ts's corridor-segment
+-- lookup pick up the correct district the moment each estate individually
+-- publishes -- district_slug is the one identity field the original
+-- estate_expansion migration got wrong, so it's fixed alongside the facts
+-- columns here rather than in a separate migration.
+UPDATE estates SET district_slug = 'sham-tseng' WHERE slug = 'hoi-wan-hin';
+UPDATE estates SET district_slug = 'tsing-lung-tau' WHERE slug = 'tai-wah-hin';
+UPDATE estates SET district_slug = 'sham-tseng', name_zh = '海韻臺' WHERE slug = 'hoi-wan-toi';
+UPDATE estates SET district_slug = 'sham-tseng' WHERE slug = 'chun-wong-kui';
+UPDATE estates SET district_slug = 'tsing-lung-tau' WHERE slug = 'lung-tang-kok';
 
 UPDATE estates SET
   address = '青山公路18A號',
