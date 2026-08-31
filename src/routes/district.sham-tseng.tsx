@@ -17,6 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DataNote } from "@/components/layout/DataNote";
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import {
   fetchEstates,
   fetchFaqs,
@@ -97,6 +98,16 @@ const TRANSIT = [
   { to: "港珠澳大橋口岸", mode: "巴士 B6", minutes: 25 },
 ];
 
+// P7e: synthesis of the master plan's 4 named answer-summary questions,
+// restating only facts already stated elsewhere on this same page (the
+// "西半山平民海景區" section, the TRANSIT table above, and the school-net
+// caveat below) -- no new claim, no new number.
+const ANSWER_SUMMARY =
+  "適合邊類家庭：自住客重視環境安靜、實用率高、屋苑規模成熟；投資者則睇中機場、荃灣、港島通勤需求帶來嘅租務穩定性。 " +
+  "交通取捨：深井主要靠小巴同巴士接駁荃灣站、葵芳站及機場方向，車程由 12 分鐘到 35 分鐘不等，並非港鐵直達，睇樓前應按上班地點實測繁忙時間車程。 " +
+  "同價有咩選擇：碧堤半島、浪翠園、海韻花園、麗都花園沿青山公路排開，生活圈集中，各屋苑樓齡、會所同景觀都有分別，可以一程比較。 " +
+  "睇樓前要留意：校網 62 嘅實際派位同入學安排因應個別地址同入學年度而有所不同，應以教育局最新公布核實。";
+
 function aggregateByMonth(rows: DistrictTransaction[]) {
   const buckets = new Map<string, { sum: number; n: number }>();
   for (const r of rows) {
@@ -152,6 +163,8 @@ function ShamTsengPage() {
           caveat="「主要屋苑」及「總單位」按目前資料庫屋苑記錄計算；「最新平均實呎」及「12 個月走勢」按近 12 個月成交記錄計算，數字隨資料更新而變動，並非固定核實日期的靜態數字。"
         />
       </header>
+
+      <AnswerSummaryCallout summary={ANSWER_SUMMARY} />
 
       <section className="mt-10 rounded-lg border bg-muted/30 p-6">
         <h2 className="text-2xl font-semibold">西半山平民海景區</h2>

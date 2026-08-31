@@ -1,7 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, TrainFront, MapPinned } from "lucide-react";
 
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import { pageSeo, seo } from "@/content/seo";
+
+// P7e: synthesis of the master plan's 4 named answer-summary questions,
+// restating only facts already stated elsewhere on this same page (AREAS
+// below, and the 交通點揀／點樣比較荃灣同深井 sections) -- no new claim.
+const ANSWER_SUMMARY =
+  "適合邊類家庭：想要鐵路和商場便利可睇荃灣市中心／荃灣西；想要海景、低密度和較高實用面積，青山公路沿線（汀九、深井、青龍頭）較適合換樓家庭及追求環境的客人。 " +
+  "交通取捨：想日日靠港鐵返工，荃灣市中心同荃灣西最直接；想用同等預算換取更大面積、海景或寧靜環境，就應比較深井及汀九，青山公路沿線主要靠巴士、小巴和自駕接駁。 " +
+  "同價有咩選擇：荃灣市中心勝在鐵路和購物，深井勝在海景、屋苑尺度和生活節奏，可以先睇荃灣，再到深井、汀九作同日比較。 " +
+  "睇樓前要留意：三個地段嘅生活配套、樓齡和呎價差異大，建議先確定想要嘅生活圈，再同日比較幾個地段嘅放盤。";
 
 const AREAS = [
   {
@@ -47,6 +57,10 @@ function TsuenWanPage() {
           </p>
         </div>
       </section>
+
+      <div className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
+        <AnswerSummaryCallout summary={ANSWER_SUMMARY} />
+      </div>
 
       <section className="mx-auto grid max-w-6xl gap-5 px-4 py-10 sm:px-6 md:grid-cols-3 lg:px-8">
         {AREAS.map((area) => (

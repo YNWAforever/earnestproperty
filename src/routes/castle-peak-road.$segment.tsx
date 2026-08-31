@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { ArrowRight, Building2, MapPinned, School, TrainFront } from "lucide-react";
 
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import { CorridorInventory } from "@/components/site/CorridorInventory";
 import { Button } from "@/components/ui/button";
 import {
@@ -302,6 +303,10 @@ function CastlePeakRoadSegmentPage() {
             </Button>
           </div>
         </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <AnswerSummaryCallout summary={segment.answerSummary} />
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
