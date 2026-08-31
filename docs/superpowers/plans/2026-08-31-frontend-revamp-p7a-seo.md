@@ -1,6 +1,6 @@
 # P7a — SEO hygiene (canonical helper, sitewide Organization JSON-LD, real sitemap dates, robots.txt)
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Close the 6 still-open items from the master plan's P7 SEO work item, verified against current code by a fresh audit (2026-08-31) rather than the stale 2026-08-28 register: no shared `seo()` helper, 4 routes still inlining a raw canonical link, Organization/RealEstateAgent JSON-LD is homepage-only, sitemap shares one timestamp across every URL even where a real per-entity date exists, `robots.txt` has zero `Disallow` rules, and `/district/tsuen-wan` is still undecided (indexable but orphaned).
 
@@ -27,7 +27,7 @@
 - Modify: `src/routes/district.sham-tseng.tsx`
 - Modify: `src/routes/district.tsuen-wan.tsx`
 
-- [ ] **Step 1: Add the helper to `seo.ts`**, next to the existing `canonicalLink`:
+- [x] **Step 1: Add the helper to `seo.ts`**, next to the existing `canonicalLink`:
 
 ```typescript
 export function seo(input: {
@@ -51,7 +51,7 @@ export function seo(input: {
 }
 ```
 
-- [ ] **Step 2: `castle-peak-road.index.tsx`** — replace the current `head: () => ({ meta: [...], links: [{ rel: "canonical", href: \`${SITE_URL}${castlePeakRoadHub.path}\` }] })` with:
+- [x] **Step 2: `castle-peak-road.index.tsx`** — replace the current `head: () => ({ meta: [...], links: [{ rel: "canonical", href: \`${SITE_URL}${castlePeakRoadHub.path}\` }] })` with:
 
 ```typescript
 head: () => seo({
@@ -63,7 +63,7 @@ head: () => seo({
 
 Import `seo` from `@/content/seo` alongside whatever's already imported from there. If `SITE_URL` becomes unused in this file after the change, remove that import too (check with a grep for other `SITE_URL` usages in the file first).
 
-- [ ] **Step 3: `castle-peak-road.$segment.tsx`** — same pattern, but the title/description/path already fall back to `castlePeakRoadHub` when `loaderData` is absent:
+- [x] **Step 3: `castle-peak-road.$segment.tsx`** — same pattern, but the title/description/path already fall back to `castlePeakRoadHub` when `loaderData` is absent:
 
 ```typescript
 head: ({ loaderData }) =>
@@ -74,7 +74,7 @@ head: ({ loaderData }) =>
   }),
 ```
 
-- [ ] **Step 4: `district.sham-tseng.tsx`** — this route's og:title/og:description currently differ slightly from its meta title/description (four distinct strings, not two). `seo()` only takes one title/description pair, so use the meta title/description for both (the og-specific variants were never meaningfully different marketing copy, just a shorter restatement — check the actual current 4 strings before deciding, but if they're substantively different, keep this route on its current hand-rolled `head()` rather than forcing a lossy fit, and only replace its `links` line with `canonicalLink(pageSeo.shamTseng.path)` instead of adopting `seo()` wholesale):
+- [x] **Step 4: `district.sham-tseng.tsx`** — this route's og:title/og:description currently differ slightly from its meta title/description (four distinct strings, not two). `seo()` only takes one title/description pair, so use the meta title/description for both (the og-specific variants were never meaningfully different marketing copy, just a shorter restatement — check the actual current 4 strings before deciding, but if they're substantively different, keep this route on its current hand-rolled `head()` rather than forcing a lossy fit, and only replace its `links` line with `canonicalLink(pageSeo.shamTseng.path)` instead of adopting `seo()` wholesale):
 
 ```typescript
 links: [canonicalLink(pageSeo.shamTseng.path)],
@@ -82,7 +82,7 @@ links: [canonicalLink(pageSeo.shamTseng.path)],
 
 (Read the actual current 4 strings before choosing between the full `seo()` swap and the narrower `canonicalLink`-only fix — don't guess.)
 
-- [ ] **Step 5: `district.tsuen-wan.tsx`** — adopt `seo()` with `noindex: true` (scope decision §0.2):
+- [x] **Step 5: `district.tsuen-wan.tsx`** — adopt `seo()` with `noindex: true` (scope decision §0.2):
 
 ```typescript
 head: () =>
@@ -94,15 +94,15 @@ head: () =>
   }),
 ```
 
-- [ ] **Step 6: Test.** Add or extend a test asserting: `seo()` returns a `noindex` robots meta only when `input.noindex` is true, and that all 4 routes now import `canonicalLink`/`seo` from `@/content/seo` (source-text scan, matching this codebase's existing style — see `canonical-links.test.mjs` for the pattern). Update `canonical-links.test.mjs`'s existing entries for these 4 files if it has any currently-passing assertions that would need adjusting for the new code shape.
+- [x] **Step 6: Test.** Add or extend a test asserting: `seo()` returns a `noindex` robots meta only when `input.noindex` is true, and that all 4 routes now import `canonicalLink`/`seo` from `@/content/seo` (source-text scan, matching this codebase's existing style — see `canonical-links.test.mjs` for the pattern). Update `canonical-links.test.mjs`'s existing entries for these 4 files if it has any currently-passing assertions that would need adjusting for the new code shape.
 
 Run: `node --test src/content/seo-source.test.mjs src/content/canonical-links.test.mjs`
 
-- [ ] **Step 7: Typecheck**
+- [x] **Step 7: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/content/seo.ts src/content/canonical-links.test.mjs src/routes/castle-peak-road.index.tsx src/routes/castle-peak-road.\$segment.tsx src/routes/district.sham-tseng.tsx src/routes/district.tsuen-wan.tsx
@@ -119,7 +119,7 @@ git commit -m "feat(seo): add a seo() head() helper and migrate the last 4 inlin
 - Modify: `src/routes/index.tsx`
 - Modify: `src/lib/schema.test.mjs` or `src/lib/schema.test.ts` (check which one already covers `schema.ts`'s builders — extend that one)
 
-- [ ] **Step 1: Add `organizationSchema()` to `schema.ts`**, extracted from `index.tsx`'s current inline block (read `index.tsx`'s exact current object first — reproduce it exactly, don't paraphrase the address/areaServed/identifier):
+- [x] **Step 1: Add `organizationSchema()` to `schema.ts`**, extracted from `index.tsx`'s current inline block (read `index.tsx`'s exact current object first — reproduce it exactly, don't paraphrase the address/areaServed/identifier):
 
 ```typescript
 export function organizationSchema() {
@@ -143,7 +143,7 @@ export function organizationSchema() {
 
 Import `SITE_LOGO_URL` into `schema.ts` alongside the existing `SITE_URL` import.
 
-- [ ] **Step 2: Render it in `__root.tsx`**, gated by `showSiteChrome` (same public/admin split `SiteHeader`/`SiteFooter` already use — an internal admin page doesn't need a public-facing Organization schema):
+- [x] **Step 2: Render it in `__root.tsx`**, gated by `showSiteChrome` (same public/admin split `SiteHeader`/`SiteFooter` already use — an internal admin page doesn't need a public-facing Organization schema):
 
 ```tsx
 {showSiteChrome && (
@@ -158,17 +158,17 @@ Import `SITE_LOGO_URL` into `schema.ts` alongside the existing `SITE_URL` import
 
 Import `jsonLdScript` from `@/lib/schema` and `organizationSchema` from the same module. Place it inside `RootComponent()`'s returned tree (e.g. right after the closing `</NeonAuthUIProvider>` opening, or wherever a sitewide script tag reads cleanly next to the existing conditional renders).
 
-- [ ] **Step 3: Remove the inline block from `index.tsx`** — delete the `{/* Organization JSON-LD */}` comment and its `<script>` tag entirely (it's now sitewide via `__root.tsx`). Check whether `index.tsx` has any OTHER JSON-LD (the file's own doc comments elsewhere in this codebase mention an `FAQPage` block on the homepage) — leave any other schema block untouched, only remove the Organization/RealEstateAgent one.
+- [x] **Step 3: Remove the inline block from `index.tsx`** — delete the `{/* Organization JSON-LD */}` comment and its `<script>` tag entirely (it's now sitewide via `__root.tsx`). Check whether `index.tsx` has any OTHER JSON-LD (the file's own doc comments elsewhere in this codebase mention an `FAQPage` block on the homepage) — leave any other schema block untouched, only remove the Organization/RealEstateAgent one.
 
-- [ ] **Step 4: Update/extend the schema test file** with an assertion that `organizationSchema()` returns the exact fields above, and a source-scan assertion that `__root.tsx` renders it (not `index.tsx` alone anymore).
+- [x] **Step 4: Update/extend the schema test file** with an assertion that `organizationSchema()` returns the exact fields above, and a source-scan assertion that `__root.tsx` renders it (not `index.tsx` alone anymore).
 
 Run: whichever of `bun test src/lib/schema.test.ts` / `node --test src/lib/schema.test.mjs` currently covers `schema.ts` (check `test:seo`'s script definition for which one).
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/schema.ts src/routes/__root.tsx src/routes/index.tsx src/lib/schema.test.mjs src/lib/schema.test.ts
@@ -187,9 +187,9 @@ git commit -m "feat(seo): move Organization/RealEstateAgent JSON-LD sitewide int
 - Modify: `src/routes/sitemap[.]xml.ts`
 - Modify: `src/routes/sitemap.contract.test.mjs`
 
-- [ ] **Step 1: Read `sitemap[.]xml.ts`'s current imports first** to determine whether it calls `.server.ts` functions directly (it's a server-only route handler) or goes through the client-wrapper (`public-data.ts`) layer like public pages must. Match whatever pattern it already uses for `listPublicAgentProfiles`/`fetchRecentTransactions`/`fetchPublishedArticlesByCategory` — don't introduce a second pattern.
+- [x] **Step 1: Read `sitemap[.]xml.ts`'s current imports first** to determine whether it calls `.server.ts` functions directly (it's a server-only route handler) or goes through the client-wrapper (`public-data.ts`) layer like public pages must. Match whatever pattern it already uses for `listPublicAgentProfiles`/`fetchRecentTransactions`/`fetchPublishedArticlesByCategory` — don't introduce a second pattern.
 
-- [ ] **Step 2: Add a lightweight sitemap-dates query**, in whichever file the existing estate/article read functions live:
+- [x] **Step 2: Add a lightweight sitemap-dates query**, in whichever file the existing estate/article read functions live:
 
 ```typescript
 export async function fetchSitemapTimestamps(): Promise<{
@@ -213,7 +213,7 @@ export async function fetchSitemapTimestamps(): Promise<{
 
 (Match the exact helper names — `stringOrEmpty`/`dateOrNull` — already used elsewhere in the same file; don't reinvent them if they're already imported there.)
 
-- [ ] **Step 3: Wire it into `sitemap[.]xml.ts`**. Fetch `fetchSitemapTimestamps()` alongside the existing `Promise.all([...])` calls. Change `urlXml(path, lastmod)` to accept a per-path lastmod, falling back to the shared generation timestamp:
+- [x] **Step 3: Wire it into `sitemap[.]xml.ts`**. Fetch `fetchSitemapTimestamps()` alongside the existing `Promise.all([...])` calls. Change `urlXml(path, lastmod)` to accept a per-path lastmod, falling back to the shared generation timestamp:
 
 ```typescript
 function urlXml(path: string, lastmod: string) {
@@ -224,15 +224,15 @@ function urlXml(path: string, lastmod: string) {
 
 Build a `Map<string, string>` (or plain object) from path → date for the estate and blog-article paths specifically (`/estate/${slug}` → `timestamps.estates[slug]`, `/blog/${slug}` → `timestamps.articles[slug]`), falling back to the existing shared `lastmod` (rename it to `generatedAt` for clarity) wherever a specific date is missing or null. Every other path (static pages, agent paths, conditional paths) keeps using `generatedAt` exactly as today — extend, don't replace, the existing comment explaining why (§0.3 above).
 
-- [ ] **Step 4: Extend `sitemap.contract.test.mjs`** with an assertion that an estate/article path's `<lastmod>` can differ from the generation timestamp when a real `updated_at` exists (mock or source-scan, matching this test file's existing style — check whether it currently does a live-fetch-based test or a pure source-text scan first).
+- [x] **Step 4: Extend `sitemap.contract.test.mjs`** with an assertion that an estate/article path's `<lastmod>` can differ from the generation timestamp when a real `updated_at` exists (mock or source-scan, matching this test file's existing style — check whether it currently does a live-fetch-based test or a pure source-text scan first).
 
 Run: `node --test src/routes/sitemap.contract.test.mjs`
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 Run: `npx tsc --noEmit`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/routes/sitemap[.]xml.ts src/routes/sitemap.contract.test.mjs
@@ -248,7 +248,7 @@ git commit -m "feat(seo): give estate and article sitemap entries a real per-pag
 - Modify: `public/robots.txt`
 - Create or extend a contract test asserting the disallow rules exist (check whether one already exists for `robots.txt` — likely not, per the audit; add one, matching `sitemap.contract.test.mjs`'s style)
 
-- [ ] **Step 1: Update `public/robots.txt`** from:
+- [x] **Step 1: Update `public/robots.txt`** from:
 
 ```
 User-agent: *
@@ -269,7 +269,7 @@ Disallow: /account
 Sitemap: https://earnestproperty.vercel.app/sitemap.xml
 ```
 
-- [ ] **Step 2: Write a contract test** (new file `public/robots.test.mjs` or wherever this repo's convention puts non-`src/` tests — check if any existing test reads from `public/`, otherwise place it in `src/routes/` alongside `sitemap.contract.test.mjs` since both are SEO-surface files):
+- [x] **Step 2: Write a contract test** (new file `public/robots.test.mjs` or wherever this repo's convention puts non-`src/` tests — check if any existing test reads from `public/`, otherwise place it in `src/routes/` alongside `sitemap.contract.test.mjs` since both are SEO-surface files):
 
 ```javascript
 import assert from "node:assert/strict";
@@ -285,11 +285,11 @@ test("robots.txt disallows staff-only surfaces", () => {
 });
 ```
 
-- [ ] **Step 3: Register the test** in `package.json`'s `test:seo` script.
+- [x] **Step 3: Register the test** in `package.json`'s `test:seo` script.
 
 Run: `npm run test:seo`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add public/robots.txt src/routes/robots.test.mjs package.json
