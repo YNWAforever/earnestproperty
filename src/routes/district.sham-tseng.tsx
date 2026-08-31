@@ -29,7 +29,7 @@ import {
 import { renderableFaqs } from "@/lib/faq";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { jsonLdScript } from "@/lib/schema";
-import { shamTsengSchoolNet } from "@/content/school-nets";
+import { schoolNets } from "@/content/school-nets";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type LoaderData = {
@@ -268,11 +268,11 @@ function ShamTsengPage() {
           </CardHeader>
           <CardContent>
             <p className="mb-4 text-sm text-muted-foreground">
-              深井屬荃灣 {shamTsengSchoolNet.netCode} 校網。
+              深井屬荃灣 {schoolNets["62"].netCode} 校網。
             </p>
-            {shamTsengSchoolNet.primarySchools.length > 0 ? (
+            {schoolNets["62"].primarySchools.length > 0 ? (
               <ul className="space-y-2">
-                {shamTsengSchoolNet.primarySchools.map((s) => (
+                {schoolNets["62"].primarySchools.map((s) => (
                   <li
                     key={s.name}
                     className="flex items-center justify-between rounded-md border px-3 py-2"
@@ -285,9 +285,9 @@ function ShamTsengPage() {
             ) : null}
             <DataNote
               className="mt-4"
-              source={shamTsengSchoolNet.source}
-              sourceUrl={shamTsengSchoolNet.sourceUrl ?? undefined}
-              asOf={shamTsengSchoolNet.verifiedOn ?? undefined}
+              source={schoolNets["62"].source}
+              sourceUrl={schoolNets["62"].sourceUrl ?? undefined}
+              asOf={schoolNets["62"].verifiedOn ?? undefined}
               caveat="實際派位及校網資料以教育局最新公布為準，並因應個別地址及入學年度而有所不同。"
             >
               中學屬荃灣中學校網。

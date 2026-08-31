@@ -6,10 +6,7 @@ test("district.sham-tseng.tsx no longer hardcodes a named school list", () => {
   const source = readFileSync("src/routes/district.sham-tseng.tsx", "utf8");
   assert.doesNotMatch(source, /const SCHOOLS = \[/);
   assert.doesNotMatch(source, /深井天主教小學/);
-  assert.match(
-    source,
-    /import \{ shamTsengSchoolNet \} from "@\/content\/school-nets"/,
-  );
+  assert.match(source, /import \{ schoolNets \} from "@\/content\/school-nets"/);
   assert.match(source, /<DataNote/);
 });
 
