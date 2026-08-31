@@ -8,6 +8,7 @@ import {
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { DataNote } from "@/components/layout/DataNote";
+import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import {
   EstateComparisonTable,
   type EstateComparisonRow,
@@ -20,7 +21,7 @@ import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { findComparableEstates } from "@/content/estate-registry";
-import { getEstatePageContent } from "@/content/estate-pages";
+import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { shamTsengSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
 import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
@@ -190,6 +191,9 @@ function EstatePage() {
     developer: estate.developer ?? null,
     asOf: estate.verified_at ?? null,
   };
+  const answerSummary = content
+    ? buildEstateAnswerSummary(content, currentComparisonRow.avgPsf, comparableEstates)
+    : null;
   type VisibleFaq = { question: string; answer: string };
   const visibleFaqs: VisibleFaq[] = renderableFaqs([
     ...(content?.faqs ?? []),
@@ -269,6 +273,12 @@ function EstatePage() {
           </div>
         </div>
       </section>
+
+      {answerSummary ? (
+        <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+          <AnswerSummaryCallout summary={answerSummary} />
+        </div>
+      ) : null}
 
       {/* Verified-facts block: the plain "· "-joined summary this used to be
           carried no source or as-of date. estate.verified_at (P4 Task 2's
