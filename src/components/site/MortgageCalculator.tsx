@@ -38,6 +38,7 @@ import {
   type MortgageScenario,
   type MortgageSearch,
 } from "@/lib/mortgage";
+import { buildContext, track } from "@/lib/analytics/events";
 
 type MortgageCalculatorProps = {
   initialSearch: MortgageSearch;
@@ -279,6 +280,10 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
   const commitDraft = (key: MortgageInputKey) => {
     setState((current) => {
       const inputs = commitMortgageDraft(current.inputs, key, current.drafts[key]);
+      track(
+        { name: "mortgage_calculate", payload: { hasIncome: inputs.monthlyIncome !== undefined } },
+        buildContext(),
+      );
       return {
         inputs,
         drafts: { ...current.drafts, [key]: draftValue(inputs[key]) },
@@ -290,6 +295,10 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
   const commitSlider = (key: MortgageInputKey, value: number) => {
     setState((current) => {
       const inputs = normalizeMortgageInputs({ ...current.inputs, [key]: value });
+      track(
+        { name: "mortgage_calculate", payload: { hasIncome: inputs.monthlyIncome !== undefined } },
+        buildContext(),
+      );
       return {
         inputs,
         drafts: { ...current.drafts, [key]: draftValue(inputs[key]) },
@@ -300,6 +309,10 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
 
   const handleSaveScenario = () => {
     setScenarios((current) => saveMortgageScenario(current, state.inputs));
+    track(
+      { name: "mortgage_scenario_save", payload: { scenarioCount: scenarios.length + 1 } },
+      buildContext(),
+    );
   };
 
   const handleRemoveScenario = (id: string) => {

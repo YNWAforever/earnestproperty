@@ -2,6 +2,7 @@ import { Home, KeyRound, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { whatsappIntentUrl, type WhatsAppIntent, type WhatsAppIntentContext } from "@/config/site";
+import { buildContext, track } from "@/lib/analytics/events";
 
 const intentItems: Array<{
   intent: WhatsAppIntent;
@@ -48,6 +49,15 @@ export function IntentWhatsAppCTA({
               href={whatsappIntentUrl(item.intent, context)}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() =>
+                track(
+                  {
+                    name: "whatsapp_cta_click",
+                    payload: { intent: item.intent, source: context?.source ?? "intent-cta" },
+                  },
+                  buildContext(),
+                )
+              }
             >
               <Icon className="h-4 w-4" />
               {item.label}
