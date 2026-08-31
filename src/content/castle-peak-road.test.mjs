@@ -397,10 +397,7 @@ test("castle-peak-road.ts never names a specific school in schoolNet copy (DR-5)
   // the real registry, per the plan's instruction to verify it actually
   // distinguishes a generic net-code sentence from a named school, rather
   // than just checking for the presence of 小學/中學.
-  assert.doesNotMatch(
-    "62 校網。實際派位及校網資料以教育局最新公布為準。",
-    NAMED_SCHOOL_PATTERN,
-  );
+  assert.doesNotMatch("62 校網。實際派位及校網資料以教育局最新公布為準。", NAMED_SCHOOL_PATTERN);
   assert.doesNotMatch("中學屬荃灣中學校網。", NAMED_SCHOOL_PATTERN);
   assert.match("深井天主教小學", NAMED_SCHOOL_PATTERN);
   assert.match("海壩街官立小學", NAMED_SCHOOL_PATTERN);
@@ -538,14 +535,8 @@ test("castle peak road links and media use route-aware safeguards", () => {
 test("CorridorInventory.tsx sanitizes listing.title_zh before it reaches alt/heading render (DR-4)", () => {
   const inventory = read("src/components/site/CorridorInventory.tsx");
 
-  assert.match(
-    inventory,
-    /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/,
-  );
-  assert.match(
-    inventory,
-    /sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/,
-  );
+  assert.match(inventory, /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/);
+  assert.match(inventory, /sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/);
 });
 
 // Task 1 introduced the `eyebrow` prop with an English default ("Live
@@ -563,14 +554,8 @@ test("CorridorInventory.tsx eyebrow default is zh-HK, not the old English placeh
 test("castle-peak-road.$segment.tsx sanitizes listing.title_zh before it reaches ItemList JSON-LD (DR-4)", () => {
   const segment = read("src/routes/castle-peak-road.$segment.tsx");
 
-  assert.match(
-    segment,
-    /import \{ sanitizeListingText \} from "@\/lib\/format"/,
-  );
-  assert.match(
-    segment,
-    /name: sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/,
-  );
+  assert.match(segment, /import \{ sanitizeListingText \} from "@\/lib\/format"/);
+  assert.match(segment, /name: sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/);
 });
 
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
@@ -591,21 +576,28 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(vercel, /\/district\/ting-kau/);
   assert.match(vercel, /\/district\/ting-kau\//);
   assert.match(vercel, /\/castle-peak-road\/ting-kau/);
-  assert.match(hubRoute, /rel:\s*["']canonical["']/);
+  // P7a: hubRoute moved onto the seo() combinator (which calls canonicalLink()
+  // internally, see seo.ts) instead of inlining `rel: "canonical"` itself.
+  assert.match(hubRoute, /seo\(\{/);
   assert.match(hubRoute, /SITE_URL/);
   assert.match(hubRoute, /castlePeakRoadHub\.path/);
   assert.match(layoutRoute, /<Outlet \/>/);
   assert.doesNotMatch(layoutRoute, /rel:\s*["']canonical["']/);
-  assert.match(segmentRoute, /rel:\s*["']canonical["']/);
+  // P7a: same seo() migration as hubRoute above.
+  assert.match(segmentRoute, /seo\(\{/);
   assert.match(segmentRoute, /loaderData\?\.segment\.path/);
   assert.match(segmentRoute, /castlePeakRoadHub\.path/);
   assert.match(tingKauRoute, /redirect/);
   assert.match(tingKauRoute, /\/castle-peak-road\/\$segment/);
   assert.match(tingKauRoute, /statusCode:\s*(301|308)/);
-  assert.match(tsuenWanRoute, /rel:\s*["']canonical["']/);
+  // P7a: tsuenWanRoute also moved onto seo() (with noindex: true -- it's
+  // orphaned, no nav/sitemap entry); shamTsengRoute moved onto canonicalLink()
+  // directly instead (its og:title/og:description genuinely differ from its
+  // meta pair, so seo()'s single title/description pair would have been lossy).
+  assert.match(tsuenWanRoute, /seo\(\{/);
   assert.match(tsuenWanRoute, /pageSeo\.tsuenWan\.path/);
   assert.match(tsuenWanRoute, /\/castle-peak-road/);
-  assert.match(shamTsengRoute, /rel:\s*["']canonical["']/);
+  assert.match(shamTsengRoute, /canonicalLink\(/);
   assert.match(shamTsengRoute, /pageSeo\.shamTseng\.path/);
   assert.match(shamTsengRoute, /\/castle-peak-road/);
   assert.match(header, /青山公路/);
@@ -643,10 +635,7 @@ test("estateDirectoryForSegment only lists estates the registry actually claims 
       .filter((entry) => entry.corridorSegment === segment.slug)
       .map((entry) => entry.slug)
       .sort();
-    assert.deepEqual(
-      directory.map((entry) => entry.slug).sort(),
-      expectedSlugs,
-    );
+    assert.deepEqual(directory.map((entry) => entry.slug).sort(), expectedSlugs);
   }
 
   // Pin today's real, current state (not a bug to "fix"): no estate has a
@@ -830,13 +819,10 @@ test("castle-peak-road.index.tsx's price-snapshot fetch is wired to filter throu
     /import \{[\s\S]*?\bisWithinCorridorRegion\b[\s\S]*?\} from "@\/content\/castle-peak-road"/,
   );
   const priceSnapshotFetch = hub.slice(
-    hub.indexOf("segment.districtSlugs.map(\n"),
-    hub.indexOf("]);", hub.indexOf("segment.districtSlugs.map(\n")),
+    hub.indexOf("segment.districtSlugs.map("),
+    hub.indexOf("]);", hub.indexOf("segment.districtSlugs.map(")),
   );
-  assert.match(
-    priceSnapshotFetch,
-    /fetchDistrictTransactions\(districtSlug, 12\)/,
-  );
+  assert.match(priceSnapshotFetch, /fetchDistrictTransactions\(districtSlug, 12\)/);
   assert.match(priceSnapshotFetch, /rows\.filter\(/);
   assert.match(priceSnapshotFetch, /isWithinCorridorRegion\(\{/);
   assert.match(priceSnapshotFetch, /districtSlug,/);
@@ -864,11 +850,7 @@ test("castle-peak-road.index.tsx's price-snapshot fetch is wired to filter throu
   // castle-peak-road-tagged Gold Coast row above, run through the exact same
   // per-slug-batch filter-then-flatten the loader performs.
   const shamTseng = getCastlePeakRoadSegment("sham-tseng");
-  assert.deepEqual(shamTseng.districtSlugs, [
-    "sham-tseng",
-    "tsing-lung-tau",
-    "castle-peak-road",
-  ]);
+  assert.deepEqual(shamTseng.districtSlugs, ["sham-tseng", "tsing-lung-tau", "castle-peak-road"]);
 
   const rowsByDistrictSlug = {
     "sham-tseng": [
