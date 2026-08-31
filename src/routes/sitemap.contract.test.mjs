@@ -5,17 +5,31 @@ import { test } from "node:test";
 import { estateSeo } from "../content/seo.ts";
 import { estateRegistry, estatesWithPage } from "../content/estate-registry.ts";
 
-// P4 Task 8 (docs/superpowers/plans/2026-08-30-frontend-revamp-p4-areas-estates.md):
-// dedicated regression guard for the sitemap leak risk the plan called out by
-// name -- Task 1 made estateSeo (src/content/seo.ts) *derive* its identity
-// fields from estate-registry.ts, which grew from 10 to 22 entries in Task 2
-// (17 new, fact-less, `published = false` estates). If that derivation had
-// accidentally widened from "the hasPage:true subset" to "every registry
-// entry", sitemap[.]xml.ts's `Object.values(estateSeo).map(e => \`/estate/${e.slug}\`)`
-// would silently start publishing 17 unpublished, photo-less, fact-less
-// estate URLs into the sitemap. This file pins the current, correct
-// behaviour so a future edit that re-widens estateSeo fails loudly here
-// instead of shipping a silent SEO regression.
+// P4 Task 8 (docs/superpowers/plans/2026-08-30-frontend-revamp-p4-areas-estates.md)
+// originally pinned a regression guard here: at that point in the plan,
+// estate-registry.ts's 17 net-new estates were all `hasPage: false`
+// (fact-less placeholders), and this file asserted estateSeo must never grow
+// beyond the 5 real-detail-page slugs, or sitemap[.]xml.ts's
+// `Object.values(estateSeo).map(e => \`/estate/${e.slug}\`)` would leak
+// unpublished estate URLs into the sitemap.
+//
+// The 2026-09-01 "Estate Expansion 17" data pack changed that design: all 22
+// estate-registry.ts entries now ship `hasPage: true` (see that file's own
+// comment above the hoi-wan-hin block) -- every one of them is meant to get
+// a real `/estate/$slug` detail page, backed by a real (but currently
+// `published = false`) DB row from
+// neon/migrations/20260830130000_estate_expansion.sql. `estateSeo`
+// (src/content/seo.ts's Task 3) now legitimately covers all 22 slugs, and
+// gating on whether a page is actually live moved to the DB `published`
+// column -- checked at the SQL layer by `fetchEstateBySlug`, which 404s an
+// unpublished row entirely -- rather than to registry-level `hasPage` or
+// sitemap-level exclusion.
+//
+// This file still pins two real invariants: (1) sitemap[.]xml.ts must keep
+// deriving estate paths from `estateSeo`, never `estateRegistry` directly,
+// so estateSeo stays the one place that curates which slugs are
+// sitemap-worthy; and (2) estateSeo must exactly match the registry's
+// hasPage:true set (today, all 22) so the two can never silently diverge.
 //
 // sitemap[.]xml.ts itself cannot be imported directly under `node --test`:
 // it pulls in `src/lib/neon/public-data.server.ts`, which starts with
@@ -34,19 +48,20 @@ test("sitemap[.]xml.ts enumerates estate paths from estateSeo, not the full esta
   const source = readSitemapSource();
 
   // The one line this whole test suite exists to guard: the sitemap must map
-  // over estateSeo's *values*, not estateRegistry's -- estateRegistry is 22
-  // entries wide (10 client-approved + 12 net-new 青山公路 estates) and
-  // includes 17 hasPage:false rows that must never resolve to a public URL.
+  // over estateSeo's *values*, not estateRegistry's directly -- even though
+  // both are 22 entries wide today, estateSeo is the file that curates real
+  // title/description SEO copy per estate, and is the intended single source
+  // of truth for "does this slug get a sitemap URL".
   assert.match(
     source,
     /Object\.values\(estateSeo\)\.map\(\(estate\) => `\/estate\/\$\{estate\.slug\}`\)/,
-    "sitemap must derive estate URLs from Object.values(estateSeo), the hasPage:true-only export",
+    "sitemap must derive estate URLs from Object.values(estateSeo)",
   );
 
-  // estateRegistry (the 22-entry superset) must never be imported into this
-  // route at all -- importing it "just for a lookup" is exactly the kind of
-  // change that could reintroduce the leak without anyone noticing, since
-  // nothing else in this file would obviously look wrong in review.
+  // estateRegistry must never be imported into this route directly -- that
+  // would let path derivation drift from estateSeo's curated set without
+  // anyone noticing, since nothing else in this file would obviously look
+  // wrong in review.
   assert.doesNotMatch(
     source,
     /estate-registry/,
@@ -64,42 +79,49 @@ test("estateSeo's entry count matches exactly estate-registry.ts's hasPage:true 
     "estateSeo must cover exactly the registry's hasPage:true slugs -- no more, no fewer",
   );
 
-  // Pin the exact number too, not just set-equality -- if both estateSeo and
-  // the registry's hasPage:true count drifted upward together (e.g. someone
-  // flips hasPage to true for one of the 17 fact-less estates *and* adds an
-  // estateSeo entry for it), the set-equality assertion above would still
-  // pass even though that estate has no verified facts or photo yet.
-  assert.equal(seoSlugs.length, 5, "exactly 5 estates should have a live detail page today");
+  // Pin the exact number too, not just set-equality -- if the registry grew
+  // a new hasPage:true entry without a matching estateSeo record (or vice
+  // versa), the set-equality assertion above already catches the mismatch,
+  // but pinning the literal count makes an accidental registry-only or
+  // estateSeo-only addition impossible to miss in review. All 22
+  // estate-registry.ts entries have shipped `hasPage: true` since the
+  // 2026-09-01 Estate Expansion 17 data pack (see that file's own comment);
+  // Task 3 (src/content/seo.ts) brought estateSeo's count up to match.
+  assert.equal(seoSlugs.length, 22, "all 22 registry estates should have a live detail page today");
 });
 
-test("the sitemap's computed estate paths contain none of the 17 unpublished P4 expansion estates", () => {
+test("the sitemap's computed estate paths match every hasPage:true registry slug, with no duplicates", () => {
   // Reproduce sitemap[.]xml.ts's actual derivation logic (Object.values(estateSeo)
   // .map(estate => `/estate/${estate.slug}`)) against the real content module,
   // rather than trusting the source-scan regex alone to prove the *data*, not
   // just the *code shape*, is correct.
   const sitemapEstatePaths = Object.values(estateSeo).map((estate) => `/estate/${estate.slug}`);
 
-  assert.equal(sitemapEstatePaths.length, 5);
+  assert.equal(sitemapEstatePaths.length, 22);
   assert.equal(
     new Set(sitemapEstatePaths).size,
-    5,
+    22,
     "no duplicate estate paths in the sitemap's estate URL list",
   );
 
+  // All 22 estate-registry.ts entries ship hasPage:true today (2026-09-01
+  // Estate Expansion 17 data pack), so this loop is a live canary rather
+  // than a stale pin: if a future edit ever reintroduces a hasPage:false
+  // entry, its slug must NOT appear in the sitemap's estate paths. Whether a
+  // page is actually reachable today is gated at the DB `published` column
+  // (fetchEstateBySlug's SQL filter 404s an unpublished row entirely), not
+  // by sitemap exclusion -- but a hasPage:false estate has no estateSeo
+  // entry at all (per the assertion above), so it can never reach the
+  // sitemap regardless.
   const unpublishedSlugs = estateRegistry
     .filter((entry) => !entry.hasPage)
     .map((entry) => entry.slug);
-  assert.equal(
-    unpublishedSlugs.length,
-    17,
-    "sanity check: still exactly 17 hasPage:false estates in the registry",
-  );
 
   for (const slug of unpublishedSlugs) {
     assert.equal(
       sitemapEstatePaths.includes(`/estate/${slug}`),
       false,
-      `unpublished estate "${slug}" must never appear in the sitemap's estate URLs`,
+      `hasPage:false estate "${slug}" must never appear in the sitemap's estate URLs`,
     );
   }
 });
