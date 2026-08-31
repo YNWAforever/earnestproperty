@@ -376,9 +376,12 @@ test("sitemap includes property experience routes and only discovered public age
 
   assert.match(sitemap, /"\/mortgage"/);
   assert.match(sitemap, /"\/agents"/);
+  // P7a: sitemap[.]xml.ts's import of listPublicAgentProfiles now shares one
+  // import statement with fetchSitemapTimestamps, so this only pins the
+  // name/module, not an exact single-name import shape.
   assert.match(
     sitemap,
-    /import \{ listPublicAgentProfiles \} from "@\/lib\/neon\/public-data\.server"/,
+    /import \{[\s\S]*?\blistPublicAgentProfiles\b[\s\S]*?\} from "@\/lib\/neon\/public-data\.server"/,
   );
   assert.match(sitemap, /await listPublicAgentProfiles\(\)/);
   assert.match(
