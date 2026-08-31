@@ -9,6 +9,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Receipt,
   Send,
   ServerCog,
   UserRoundCog,
@@ -33,6 +34,7 @@ const navGroups = [
       { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true },
       { to: "/admin/leads", label: "客戶查詢", icon: ContactRound, activeExact: false },
       { to: "/admin/listings", label: "樓盤管理", icon: Building2, activeExact: false },
+      { to: "/admin/transactions", label: "成交管理", icon: Receipt, activeExact: false },
     ],
   },
   {

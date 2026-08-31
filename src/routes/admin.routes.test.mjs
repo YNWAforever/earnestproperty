@@ -96,6 +96,12 @@ test("operations shell follows the approved navigation groups and exact Team sta
   assert.match(teamEntry, /includeSearch:\s*false/);
 });
 
+test("sidebar includes a 成交管理 entry linking to /admin/transactions", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+  assert.match(shell, /to: "\/admin\/transactions"/);
+  assert.match(shell, /label: "成交管理"/);
+});
+
 test("Overview reads operational sources independently without polling", () => {
   const overview = read("src/routes/admin.index.tsx");
 
@@ -954,7 +960,7 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     destinations.length,
     `duplicate sidebar destination: ${destinations.join(", ")}`,
   );
-  assert.equal(destinations.length, 11);
+  assert.equal(destinations.length, 12);
 
   for (const heading of ["Workspace", "Growth", "Administration"]) {
     assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
