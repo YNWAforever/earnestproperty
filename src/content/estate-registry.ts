@@ -95,6 +95,14 @@ export type EstateRegistryEntry = {
   hasPage: boolean;
   /** Card photo path under `public/`, or `null` when none has been supplied. */
   photo: string | null;
+  /**
+   * Attribution line for `photo`, required whenever the photo is CC-licensed
+   * (Wikimedia Commons etc.) rather than client-supplied. Omitted (undefined)
+   * for every client-supplied photo, since those need no credit. Rendered
+   * next to the photo wherever it's shown, per the license's attribution
+   * requirement.
+   */
+  photoCredit?: string;
   homepageDistrict: EstateHomepageDistrict | null;
   /**
    * Another estate's slug this one is a phase of (e.g. 帝華軒 is 浪翠園 Phase 5).
@@ -256,7 +264,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "sham-tseng",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/hoi-wan-toi.jpg",
+    photoCredit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "深井",
     parentEstateSlug: null,
     heroEyebrow: "深井單幢屋苑獨立 SEO 頁",
@@ -271,7 +280,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "sham-tseng",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/chun-wong-kui.jpg",
+    photoCredit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "深井",
     parentEstateSlug: null,
     heroEyebrow: "深井高層海景屋苑獨立 SEO 頁",
@@ -313,7 +323,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "castle-peak-road",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/mun-ming-shan.jpg",
+    photoCredit: "Fotointheworld / Wikimedia Commons, CC BY 4.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
     heroEyebrow: "掃管笏低密度屋苑獨立 SEO 頁",
@@ -331,7 +342,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "castle-peak-road",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/wong-gam-hoi-ngon.jpg",
+    photoCredit: "Minghong / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
     heroEyebrow: "青山灣海濱屋苑獨立 SEO 頁",
@@ -346,7 +358,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "castle-peak-road",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/oi-kam-hoi-ngon.jpg",
+    photoCredit: "Wpcpey / Wikimedia Commons, CC BY 3.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
     heroEyebrow: "掃管笏成熟屋苑獨立 SEO 頁",
@@ -412,7 +425,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "castle-peak-road",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/sing-tai.jpg",
+    photoCredit: "Wpcpey / Wikimedia Commons, CC BY 3.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
     heroEyebrow: "掃管笏低密度屋苑獨立 SEO 頁",
@@ -520,7 +534,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     districtSlug: "castle-peak-road",
     corridorSegment: null,
     hasPage: true,
-    photo: null,
+    photo: "/estates/tai-tou-waan.jpg",
+    photoCredit: "Kaihin0812 / Wikimedia Commons, CC BY-SA 3.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
     heroEyebrow: "小欖成熟海景屋苑獨立 SEO 頁",

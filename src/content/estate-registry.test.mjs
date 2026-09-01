@@ -207,12 +207,32 @@ const CASTLE_PEAK_ROAD_SLUGS = [
   "tai-tou-waan",
 ];
 
-test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates now have hasPage:true and no photo", () => {
+// 2026-09-02: 7 of the 17 gained a real, license-verified Wikimedia Commons
+// photo (see estate-photo-credits research this session) -- the remaining 10
+// still have no supplied photo. This test now checks hasPage:true for all 17
+// and photo state matches exactly that 7/10 split, rather than asserting
+// every one is still photo-less.
+const P4_PHOTO_SLUGS = [
+  "hoi-wan-toi",
+  "chun-wong-kui",
+  "mun-ming-shan",
+  "wong-gam-hoi-ngon",
+  "oi-kam-hoi-ngon",
+  "sing-tai",
+  "tai-tou-waan",
+];
+
+test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates have hasPage:true; 7 now have a license-verified photo, 10 still don't", () => {
   assert.equal(P4_EXPANSION_SLUGS.length, 17);
   for (const slug of P4_EXPANSION_SLUGS) {
     const entry = getEstateEntry(slug);
     assert.equal(entry.hasPage, true, `${slug} must now link to a detail page`);
-    assert.equal(entry.photo, null, `${slug} has no supplied photo yet`);
+    if (P4_PHOTO_SLUGS.includes(slug)) {
+      assert.notEqual(entry.photo, null, `${slug} must have its sourced photo`);
+      assert.ok(entry.photoCredit, `${slug}'s photo must carry attribution`);
+    } else {
+      assert.equal(entry.photo, null, `${slug} has no supplied photo yet`);
+    }
   }
   // Every registry entry (5 original + 17 new) is hasPage:true after this task.
   assert.equal(

@@ -760,6 +760,11 @@ function CoreEstateGrid({
                   <h3 className="text-2xl font-bold">{estate.name}</h3>
                   <p className="text-xs opacity-80">{meta}</p>
                 </div>
+                {estate.photo && estate.photoCredit ? (
+                  <p className="absolute bottom-1 right-2 text-[9px] text-primary-foreground/60">
+                    {estate.photoCredit}
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-3 p-5">
                 <div>
