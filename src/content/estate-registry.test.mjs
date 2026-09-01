@@ -207,11 +207,16 @@ const CASTLE_PEAK_ROAD_SLUGS = [
   "tai-tou-waan",
 ];
 
-// 2026-09-02: 7 of the 17 gained a real, license-verified Wikimedia Commons
-// photo (see estate-photo-credits research this session) -- the remaining 10
-// still have no supplied photo. This test now checks hasPage:true for all 17
-// and photo state matches exactly that 7/10 split, rather than asserting
-// every one is still photo-less.
+// 2026-09-02: 11 of the 17 now have a real, license-verified Wikimedia Commons
+// photo -- 7 from the first research pass (see estate-photo-credits research
+// that session), plus hoi-wan-hin/tai-wah-hin/seong-yuen/the-carmel from this
+// session's pass over the remaining 10 (of which 6 -- lung-tang-kok, tai-yu,
+// wong-gam-hoi-waan, oma-oma, lin-shan, long-tou-waan -- still have no
+// qualifying photo after a genuine search: no Commons coverage at all, or only
+// under-construction/unverified-license/wrong-building candidates that didn't
+// survive verification). This test now checks hasPage:true for all 17 and
+// photo state matches exactly that 11/6 split, rather than asserting every one
+// is still photo-less.
 const P4_PHOTO_SLUGS = [
   "hoi-wan-toi",
   "chun-wong-kui",
@@ -220,9 +225,13 @@ const P4_PHOTO_SLUGS = [
   "oi-kam-hoi-ngon",
   "sing-tai",
   "tai-tou-waan",
+  "hoi-wan-hin",
+  "tai-wah-hin",
+  "seong-yuen",
+  "the-carmel",
 ];
 
-test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates have hasPage:true; 7 now have a license-verified photo, 10 still don't", () => {
+test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates have hasPage:true; 11 now have a license-verified photo, 6 still don't", () => {
   assert.equal(P4_EXPANSION_SLUGS.length, 17);
   for (const slug of P4_EXPANSION_SLUGS) {
     const entry = getEstateEntry(slug);
