@@ -119,3 +119,34 @@ test("CoreEstateGrid gates both grid membership and card linking on a live DB ro
     "the card's <Link> wrapper must be gated on dbRow, not estate.hasPage",
   );
 });
+
+// Real production bug (systematic-debugging, 2026-09-01): when a
+// CoreEstateGrid group has zero linkable estates (true today for 青山公路屋苑
+// -- all 12 of its estates stay published=false until each individually
+// clears the publish gate), the section rendered its SectionHeader with a
+// bare, cardless grid underneath -- looking broken, not like an honest
+// "nothing here yet" state. estate-reviews.tsx's own 屋苑文章 section (and
+// this same file's 精選筍盤 section, a few hundred lines up) already
+// established the pattern for this: a shared EmptyState component, not a
+// silently-empty container.
+test("CoreEstateGrid renders the shared EmptyState, not a bare cardless grid, when a group has zero linkable estates", () => {
+  const gridSource = source.slice(
+    source.indexOf("function CoreEstateGrid("),
+    source.indexOf("function SectionHeader("),
+  );
+  assert.match(
+    gridSource,
+    /if \(linkableEstates\.length === 0\)/,
+    "must explicitly branch on the zero-estates case",
+  );
+  assert.match(
+    gridSource,
+    /<EmptyState/,
+    "the zero-estates branch must render the shared EmptyState component, matching estate-reviews.tsx's own pattern",
+  );
+  assert.match(
+    gridSource,
+    /whatsappUrl\(`你好，想查詢\$\{districtLabel\}屋苑放盤`\)/,
+    "the empty state's CTA must be per-district, not a hardcoded 深井 message",
+  );
+});
