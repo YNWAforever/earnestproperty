@@ -58,9 +58,11 @@ test("unknown estates still produce a tag", () => {
 test("district comes from the curated list, and is null when unknown", () => {
   assert.equal(deriveEstateTag("💚＃豪景花園💚 《700呎》3房")?.district, "青山公路");
   assert.equal(deriveEstateTag("💚＃碧堤半島💚 《900呎》4房")?.district, "深井");
-  // 帝華軒 is in the curated list but its district is deliberately null there.
-  assert.equal(deriveEstateTag("💚＃帝華軒💚 《500呎》2房")?.district, null);
-  // 漣山 is not in the curated list at all.
+  // 帝華軒 was in the curated list with a deliberately null district before
+  // the 2026-09-01 17-estate expansion sourced a real address for it.
+  assert.equal(deriveEstateTag("💚＃帝華軒💚 《500呎》2房")?.district, "深井");
+  // 漣山 is a 青山公路 estate -- not in this curated (10-estate) list at all
+  // by design (D2 keeps that group off the homepage/core-estates.ts).
   assert.equal(deriveEstateTag("💚＃漣山💚 《650呎》2房")?.district, null);
 });
 
