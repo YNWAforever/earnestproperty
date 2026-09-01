@@ -215,10 +215,23 @@ export const estateRegistry: EstateRegistryEntry[] = [
 
   // The five 深井／青龍頭 estates the client added (docx p13/p15). Estate
   // Expansion 17 (2026-09-01 data pack) gives all five a real detail page
-  // (`hasPage: true`) and content, no photo yet -- see core-estates.ts for
-  // why they still ship as non-linking homepage cards instead of being added
-  // to CLIENT_ORDER_SLUGS, and src/routes/index.tsx's `linkableEstates`
-  // filter for why the homepage grid itself never links them.
+  // (`hasPage: true`) and content. All five are now in core-estates.ts's
+  // CLIENT_ORDER_SLUGS and link normally on the homepage once each
+  // individually publishes -- this comment used to say otherwise, before
+  // PR #103 added them to that list; kept accurate here so it doesn't
+  // mislead the next reader.
+  //
+  // hoi-wan-hin's districtSlug is 'sham-tseng', not 'tsing-lung-tau', even
+  // though GeoInfo Map (2026-09-02 verification) resolves its door-plate
+  // address (青山公路18A號) to the "TSING LUNG TAU" road segment, and
+  // Wikipedia's own entry cites the same official address. This is
+  // deliberate: every property portal (house730/Centaline/Ricacorp/etc.)
+  // markets this estate as 深井 Sham Tseng regardless of the postal
+  // segment name, and -- decisively -- fetchEstates() in src/lib/queries.ts
+  // is hardcoded to fetchEstatesByDistrict("sham-tseng"); it never queries
+  // "tsing-lung-tau". Since hoi-wan-hin is in CLIENT_ORDER_SLUGS's 深井
+  // group, districtSlug must stay 'sham-tseng' for it to ever appear on
+  // the homepage at all -- 'tsing-lung-tau' would silently remove it.
   {
     slug: "hoi-wan-hin",
     nameZh: "海雲軒",
