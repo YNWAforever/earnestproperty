@@ -363,10 +363,16 @@ test("segment registry carries live listing aliases and FAQ content", () => {
   assert.match(source, /getCastlePeakRoadSegment\(slug: string\): CorridorSegment \| null/);
 
   const tingKau = getCastlePeakRoadSegment("ting-kau");
-  // 油柑頭 was folded into this zone; without these aliases its inventory
-  // (海雲軒 / 縉皇居, both normalised to tsuen-wan) disappears from the corridor.
-  for (const alias of ["油柑頭", "Yau Kom Tau", "海雲軒", "縉皇居"]) {
+  // 油柑頭 was folded into this zone; without this alias its inventory
+  // (which normalises to tsuen-wan) disappears from the corridor.
+  for (const alias of ["油柑頭", "Yau Kom Tau"]) {
     assert.ok(tingKau.textAliases.includes(alias), `ting-kau should still match ${alias}`);
+  }
+  // 2026-09-01: 海雲軒/縉皇居 were removed from here -- the 17-estate expansion
+  // sourced real addresses placing both in 深井 (sham-tseng), not ting-kau, and
+  // fixed the MLS normalizer bug that used to misclassify them as tsuen-wan.
+  for (const alias of ["海雲軒", "縉皇居"]) {
+    assert.ok(!tingKau.textAliases.includes(alias), `ting-kau should no longer claim ${alias}`);
   }
   assert.ok(!tingKau.districtSlugs.includes("tsuen-wan"));
   for (const estate of ["觀海別墅", "嘉御龍庭", "汀九別墅"]) {

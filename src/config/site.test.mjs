@@ -255,15 +255,20 @@ test("homepage puts 精選筍盤 above 深井核心屋苑", () => {
 });
 
 // Audit finding: 海雲軒/帝華軒/海韻台/縉皇居/龍騰閣 (core-estates.ts's hasPage:false
-// entries) rendered as non-clickable gradient boxes next to real cards. The fix
-// filters them out of the homepage grid entirely rather than shipping five thin
-// pages -- core-estates.ts itself keeps all ten client-approved entries.
-test("homepage estate grid only renders estates with a detail page", () => {
+// entries at the time) rendered as non-clickable gradient boxes next to real
+// cards. The fix filters them out of the homepage grid entirely rather than
+// shipping five thin pages -- core-estates.ts itself keeps all ten
+// client-approved entries. The 2026-09-01 17-estate expansion later gave all
+// five hasPage:true (their route/content plumbing now exists) while keeping
+// them published=false in Neon -- hasPage alone stopped being a safe proxy
+// for "reachable", so the grid now also requires a live DB row
+// (live.has(estate.slug)) before treating an estate as linkable.
+test("homepage estate grid only renders estates with a live, reachable detail page", () => {
   const source = readFileSync("src/routes/index.tsx", "utf8");
 
   assert.match(
     source,
-    /const linkableEstates = coreEstates\.filter\(\(estate\) => estate\.hasPage\)/,
+    /const linkableEstates = coreEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
   );
   assert.match(source, /const visible = expanded\s*\n?\s*\?\s*linkableEstates/);
   assert.match(source, /linkableEstates\.length > CORE_ESTATES_PREVIEW_COUNT/);

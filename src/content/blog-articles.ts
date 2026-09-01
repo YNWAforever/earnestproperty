@@ -19,7 +19,7 @@
  */
 import { castlePeakRoadSegments } from "./castle-peak-road.ts";
 import { estateRegistry } from "./estate-registry.ts";
-import { shamTsengSchoolNet } from "./school-nets.ts";
+import { schoolNets } from "./school-nets.ts";
 
 export const BLOG_CATEGORIES = [
   "買樓攻略",
@@ -96,9 +96,7 @@ export const blogArticles: readonly BlogArticleMeta[] = [
       },
       {
         heading: "校網",
-        paragraphs: [
-          `深井屬荃灣 ${shamTsengSchoolNet.netCode} 校網。${shamTsengSegment.schoolNet}`,
-        ],
+        paragraphs: [`深井屬荃灣 ${schoolNets["62"].netCode} 校網。${shamTsengSegment.schoolNet}`],
       },
     ],
     compareEstateSlugs: [

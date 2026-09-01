@@ -144,8 +144,6 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "Vista Del Mar 觀海別墅",
       "Royal Dragon Villa 嘉御龍庭",
       "Ting Kau Villa 汀九別墅",
-      "海雲軒",
-      "縉皇居",
       "油柑頭海景住宅",
     ],
     // 油柑頭 stock normalises to tsuen-wan (see src/lib/mls/normalize-old-site.mjs),
@@ -164,11 +162,16 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     // normalises to "tsuen-wan" and is recovered via the textAliases below).
     districtSlugs: ["ting-kau"],
     // Derived from estate-registry.ts (DR-10): no registry entry has
-    // corridorSegment "ting-kau" today because no estate in this zone has a
-    // real `estates` table row yet (海雲軒 / 縉皇居 already appear below in
-    // featuredEstates/textAliases as free text -- a different, looser kind of
-    // matching than this field, see estate-registry.ts's own comment on why
-    // they stay out of it).
+    // corridorSegment "ting-kau" today. 海雲軒/縉皇居 previously appeared here
+    // as free-text featuredEstates/textAliases entries, compensating for the
+    // old MLS normalizer's bug that misclassified both as tsuen-wan (see
+    // normalize-old-site.mjs's inferDistrictSlug). The 2026-09-01 17-estate
+    // expansion sourced real addresses placing both in 深井 proper
+    // (districtSlug: "sham-tseng", not ting-kau) and fixed the normalizer bug
+    // at its root -- both estates now normalise straight to sham-tseng and
+    // are recovered there via that segment's own estateSlugs/districtSlugs,
+    // not via this segment's free text. Keeping them here too would have
+    // double-matched the same listing into both segments.
     estateSlugs: estateSlugsForCorridorSegment("ting-kau"),
     textAliases: [
       "汀九",
@@ -182,8 +185,6 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       "Ting Kau Villa",
       "油柑頭",
       "Yau Kom Tau",
-      "海雲軒",
-      "縉皇居",
     ],
     nearbyDistrictSlugs: ["castle-peak-road"],
     nearbyEstateSlugs: [],

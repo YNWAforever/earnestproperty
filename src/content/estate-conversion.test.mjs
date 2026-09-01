@@ -8,7 +8,7 @@ import ts from "typescript";
 // module -- they can be imported directly under Node's native TS stripping,
 // letting the P4 Task 4 tests below prove real behavior instead of grepping.
 import { findCastlePeakRoadSegmentByDistrictSlug } from "./castle-peak-road.ts";
-import { shamTsengSchoolNet } from "./school-nets.ts";
+import { getSchoolNet } from "./school-nets.ts";
 
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
@@ -425,9 +425,22 @@ test("findCastlePeakRoadSegmentByDistrictSlug resolves the real district of ever
   assert.equal(findCastlePeakRoadSegmentByDistrictSlug("mong-kok"), null);
 });
 
-test("shamTsengSchoolNet stays the estate template's only school-net source, imported not re-derived (P4 Task 4)", () => {
-  assert.equal(shamTsengSchoolNet.netCode, "62");
-  assert.equal(Array.isArray(shamTsengSchoolNet.primarySchools), true);
+test("getSchoolNet stays the estate template's only school-net source, imported not re-derived (P4 Task 5)", () => {
+  // Task 5 replaced the single shamTsengSchoolNet constant with a
+  // schoolNets map + getSchoolNet(code) lookup so the route can resolve a
+  // school net per-estate instead of only ever showing sham-tseng's. Net 62
+  // (荃灣, covering sham-tseng and tsing-lung-tau) is still real, sourced
+  // data -- same invariant as before, just addressed by code now.
+  const net62 = getSchoolNet("62");
+  assert.notEqual(net62, null);
+  assert.equal(net62.netCode, "62");
+  assert.equal(Array.isArray(net62.primarySchools), true);
+
+  // An unknown/missing code degrades to null rather than throwing or
+  // inventing data -- the route treats null as "omit the section".
+  assert.equal(getSchoolNet("no-such-code"), null);
+  assert.equal(getSchoolNet(null), null);
+  assert.equal(getSchoolNet(undefined), null);
 });
 
 test("estate route wires the verified-facts DataNote, transport, and school-net sections (P4 Task 4)", () => {
@@ -438,7 +451,7 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
     route,
     /import \{ findCastlePeakRoadSegmentByDistrictSlug \} from "@\/content\/castle-peak-road";/,
   );
-  assert.match(route, /import \{ shamTsengSchoolNet \} from "@\/content\/school-nets";/);
+  assert.match(route, /import \{ getSchoolNet \} from "@\/content\/school-nets";/);
 
   // Verified-facts block: sourced from estate.verified_at (Task 2's column,
   // null for every estate today), with an honest caveat rather than a
@@ -451,14 +464,18 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
   // Transport + school-net are each gated on the real derived value (not a
   // hardcoded true), so both the "renders" and "omitted" branches are
   // reachable in the actual output -- the "renders" branch is proven for
-  // real above via findCastlePeakRoadSegmentByDistrictSlug/shamTsengSchoolNet
+  // real above via findCastlePeakRoadSegmentByDistrictSlug/getSchoolNet
   // directly; this proves the route's rendering is actually conditioned on
   // that same result rather than always showing (or always hiding) the
-  // section.
+  // section. Task 5 made schoolNet per-estate (derived from the registry
+  // entry's districtSlug), replacing the old hardcoded
+  // `district_slug === "sham-tseng"` gate -- see
+  // estate.district-driven.contract.test.mjs for the tests that guard
+  // against that hardcoding coming back.
   assert.match(route, /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/);
-  assert.match(route, /const showSchoolNet = estate\.district_slug === "sham-tseng";/);
+  assert.match(route, /const schoolNet = getSchoolNet\(/);
   assert.match(route, /\{transportSegment && \(/);
-  assert.match(route, /\{showSchoolNet && \(/);
+  assert.match(route, /\{schoolNet && \(/);
 });
 
 test("EstateMarketSnapshot renders a PSF-trend line chart fed by the real transactions prop, hidden below two data points (P4 Task 4)", () => {
@@ -502,7 +519,18 @@ test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 T
     route,
     /import \{\s*EstateComparisonTable,\s*type EstateComparisonRow,\s*\} from "@\/components\/site\/EstateComparisonTable";/,
   );
-  assert.match(route, /import \{ findComparableEstates \} from "@\/content\/estate-registry";/);
+  // This route's estate-registry.ts import statement has changed shape twice
+  // (P4 Task 5 merged in getEstateEntry; the 17-estate expansion's final
+  // review swapped that for a null-safe estateRegistry.find(), since
+  // getEstateEntry throws on a miss and this route also serves
+  // admin-CMS-created estates not yet in the static registry) -- match any
+  // shape that imports findComparableEstates from the right module, since
+  // which other named exports share the statement isn't the invariant this
+  // test protects.
+  assert.match(
+    route,
+    /import \{[^}]*findComparableEstates[^}]*\} from "@\/content\/estate-registry";/,
+  );
 
   // Up to 2 comparables, computed from the registry alone (before any DB
   // fetch), so the "which estates are comparable" decision stays

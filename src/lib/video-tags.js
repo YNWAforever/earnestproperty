@@ -34,6 +34,10 @@ const TAG_ALIASES = new Map([
   ["黃金海灣珀岸", "黃金海灣"],
   ["意嵐", "黃金海灣"],
   ["珀岸", "黃金海灣"],
+  // hoi-wan-toi's canonical display name became 海韻臺 (2026-09-01 17-estate
+  // expansion; 海韻台 kept as a registry alias) -- a video title tagged with
+  // the older spelling still resolves to the same estate/district.
+  ["海韻台", "海韻臺"],
 ]);
 
 /** 浪翠園一期 / 浪翠園三期 -> 浪翠園 */
@@ -58,8 +62,14 @@ export const ESTATE_DISTRICTS = new Map([
   ["麗都花園", "深井"],
   ["海韻花園", "深井"],
   ["豪景花園", "青山公路"],
-  ["海雲軒", "汀九"],
-  ["縉皇居", "汀九"],
+  // 2026-09-01 17-estate expansion sourced real addresses placing all five
+  // of these in 深井 -- corrected from a placeholder 汀九/null guess. See
+  // estate-registry.ts's own comment on the same correction.
+  ["海雲軒", "深井"],
+  ["帝華軒", "深井"],
+  ["海韻臺", "深井"],
+  ["縉皇居", "深井"],
+  ["龍騰閣", "深井"],
 ]);
 
 /**

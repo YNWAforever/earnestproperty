@@ -12,12 +12,19 @@ const CLIENT_ORDER = [
   "海韻花園",
   "海雲軒",
   "帝華軒",
-  "海韻台",
+  "海韻臺",
   "縉皇居",
   "龍騰閣",
 ];
 
-const ADDED_BY_CLIENT = ["海雲軒", "帝華軒", "海韻台", "縉皇居", "龍騰閣"];
+// All ten now link to a real /estate/$slug page (2026-09-01's 17-estate
+// expansion gave each of these five a registry entry with hasPage: true,
+// sourced facts, and content -- see estate-registry.ts and
+// docs/superpowers/specs/assets/estate-expansion-17.data.json). Figures
+// (units/avgPsf/listingCount) stay null regardless -- those are never
+// hardcoded on the card, always merged live from the DB by slug at render
+// time (see the next test).
+const ADDED_BY_CLIENT = ["海雲軒", "帝華軒", "海韻臺", "縉皇居", "龍騰閣"];
 
 test("all ten client-approved estates ship in the client's order", () => {
   assert.deepEqual(
@@ -28,25 +35,17 @@ test("all ten client-approved estates ship in the client's order", () => {
   assert.ok(coreEstates.length > CORE_ESTATES_PREVIEW_COUNT);
 });
 
-test("the five estates the client added carry no invented figures", () => {
+test("all ten client-approved estates now link to a detail page", () => {
   for (const name of ADDED_BY_CLIENT) {
     const estate = coreEstates.find((candidate) => candidate.name === name);
     assert.ok(estate, `${name} must be present`);
-    // The client supplied no numbers for these. `0` is the failure mode that
-    // matters: the card used to do `(units ?? 0).toLocaleString()` and printed a
-    // confident "0 個單位" / "$0" for anything the DB had not filled in.
-    for (const field of ["units", "avgPsf", "listingCount"]) {
-      assert.equal(estate[field], null, `${name}.${field} must be null, not a figure`);
-    }
-    assert.equal(estate.photo, null, `${name} has no supplied photo`);
-    // No detail page exists, so the card must not link — a link would ship a thin page.
-    assert.equal(estate.hasPage, false, `${name} must not link to a detail page`);
+    assert.equal(estate.hasPage, true, `${name} must link to a detail page`);
   }
 });
 
 test("estates with a detail page keep their figures in the database", () => {
   const withPages = coreEstates.filter((estate) => estate.hasPage);
-  assert.equal(withPages.length, 5);
+  assert.equal(withPages.length, 10);
   for (const estate of withPages) {
     // Hardcoding a figure here would let the card drift from the estate page,
     // so live values are merged by slug at render time instead.
@@ -66,15 +65,17 @@ test("every declared photo exists on disk", () => {
 });
 
 test("districts are never guessed", () => {
-  // 海雲軒 and 縉皇居 are listed among 油柑頭 / 汀九's featured estates in
-  // castle-peak-road.ts, so placing them in 深井 would be a false location. The
-  // other three have no evidence anywhere in the repo and stay null rather than
-  // inheriting the section's 深井 heading.
+  // 2026-09-01's 17-estate expansion sourced real addresses for all five
+  // (中原地產/28Hse listing pages, cited in the data pack) placing them in
+  // 深井／青龍頭 -- superseding the earlier placement based only on
+  // castle-peak-road.ts's ting-kau segment mentioning some of them as
+  // "featured estates" (a looser, non-authoritative signal). 青龍頭 estates
+  // (帝華軒/龍騰閣) fold into "深井" here since EstateHomepageDistrict has no
+  // separate 青龍頭 value and castle-peak-road.ts's own sham-tseng segment
+  // already absorbs 青龍頭 the same way.
   const byName = Object.fromEntries(coreEstates.map((estate) => [estate.name, estate]));
-  assert.equal(byName["海雲軒"].district, "汀九");
-  assert.equal(byName["縉皇居"].district, "汀九");
-  for (const name of ["帝華軒", "海韻台", "龍騰閣"]) {
-    assert.equal(byName[name].district, null, `${name} district must not be guessed`);
+  for (const name of ADDED_BY_CLIENT) {
+    assert.equal(byName[name].district, "深井", `${name} district must be 深井`);
   }
 });
 

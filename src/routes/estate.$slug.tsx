@@ -20,9 +20,9 @@ import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
-import { findComparableEstates } from "@/content/estate-registry";
+import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
-import { shamTsengSchoolNet } from "@/content/school-nets";
+import { getSchoolNet } from "@/content/school-nets";
 import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
 import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
@@ -45,6 +45,18 @@ import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
+
+/** Maps a registry entry's districtSlug to its school net code, mirroring
+ * the data pack's `areaMeta[districtSlug].schoolNetCode`. sham-tseng and
+ * tsing-lung-tau both carry net 62; castle-peak-road (the 掃管笏/青山灣/小欖
+ * group) carries net 71. Any districtSlug not listed here has no known
+ * school net -- getSchoolNet(undefined) returns null, which the render site
+ * below already treats as "omit the section", not an error. */
+const SCHOOL_NET_BY_DISTRICT: Record<string, string> = {
+  "sham-tseng": "62",
+  "tsing-lung-tau": "62",
+  "castle-peak-road": "71",
+};
 
 export const Route = createFileRoute("/estate/$slug")({
   loader: async ({ params }) => {
@@ -178,6 +190,13 @@ function EstatePage() {
   };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
+  // Not getEstateEntry(): that throws on a miss by design (registry drift is
+  // a bug for the 22 known estates it covers), but this route also serves
+  // any estate the admin CMS creates, which can carry a slug not yet present
+  // in the static registry file at all -- a genuinely expected case, not
+  // drift. Falls back to null and every read below degrades gracefully
+  // rather than crashing the whole page for a brand-new estate.
+  const registryEntry = estateRegistry.find((entry) => entry.slug === estate.slug) ?? null;
   useTrackPageView(
     () => ({
       event: {
@@ -215,7 +234,7 @@ function EstatePage() {
   ]);
   const ctaContext = {
     estateName: seo?.nameZh ?? estate.name_zh,
-    districtName: "深井 / 青山公路",
+    districtName: registryEntry?.locationLabelZh ?? "深井 / 青山公路",
     source: `estate-${estate.slug}`,
   };
   const estateFacts = [
@@ -224,17 +243,22 @@ function EstatePage() {
     estate.year_completed ? `${estate.year_completed} 年落成` : "",
     estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "單位數待查",
   ].filter(Boolean);
-  // Task 4 (P4 plan): transport + school-net sections reuse already-curated
-  // content instead of inventing new facts. transportSegment is null (not a
-  // placeholder) when the estate's district isn't part of a known corridor
-  // segment -- true today of the 3 unknown-district estates from Task 2, none
-  // of which have a page yet, but this must still degrade cleanly rather than
-  // crash if that ever changes. showSchoolNet is only true for the one
-  // district with real, sourced school-net data (school-nets.ts) -- see that
+  // Task 4 (P4 plan) / Task 5 (P4 plan): transport + school-net sections
+  // reuse already-curated content instead of inventing new facts.
+  // transportSegment is null (not a placeholder) when the estate's district
+  // isn't part of a known corridor segment -- true today of the 3
+  // unknown-district estates from Task 2, none of which have a page yet, but
+  // this must still degrade cleanly rather than crash if that ever changes.
+  // schoolNet is resolved per-estate via the registry entry's districtSlug ->
+  // SCHOOL_NET_BY_DISTRICT -> getSchoolNet(code), instead of being hardcoded
+  // to a single district -- it's null (section omitted) for any district
+  // without real, sourced school-net data (school-nets.ts) -- see that
   // file's own comment for why other districts intentionally render nothing
   // here rather than invented figures.
   const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(estate.district_slug);
-  const showSchoolNet = estate.district_slug === "sham-tseng";
+  const schoolNet = getSchoolNet(
+    registryEntry?.districtSlug ? SCHOOL_NET_BY_DISTRICT[registryEntry.districtSlug] : null,
+  );
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -244,7 +268,7 @@ function EstatePage() {
         "@type": "ListItem",
         position: 2,
         name: "屋苑",
-        item: `${SITE_URL}/district/sham-tseng`,
+        item: `${SITE_URL}${registryEntry?.districtHref ?? "/district/sham-tseng"}`,
       },
       {
         "@type": "ListItem",
@@ -277,7 +301,13 @@ function EstatePage() {
       )}
       <section className="bg-gradient-to-br from-primary to-primary/70 py-16 text-primary-foreground">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <p className="text-sm opacity-80">深井屋苑獨立 SEO 頁</p>
+          {/* registryEntry.heroEyebrow is non-null for every registry entry
+              (see estate-registry.ts) -- the fallback below only fires for
+              an estate the admin CMS created that has no registry entry yet,
+              where we genuinely don't know the district, so it stays
+              generic rather than defaulting to a specific (possibly wrong)
+              claim. */}
+          <p className="text-sm opacity-80">{registryEntry?.heroEyebrow ?? "屋苑獨立 SEO 頁"}</p>
           <h1 className="mt-2 text-4xl font-bold sm:text-5xl">{seo?.nameZh ?? estate.name_zh}</h1>
           <p className="mt-5 max-w-3xl text-base leading-relaxed opacity-90">
             {content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
@@ -387,13 +417,12 @@ function EstatePage() {
           inventing new facts for this estate specifically. Either half is
           omitted entirely (not shown as an empty placeholder) when there is
           nothing real to show -- transportSegment is null outside a known
-          corridor segment, showSchoolNet is only true in sham-tseng. */}
-      {(transportSegment || showSchoolNet) && (
+          corridor segment, schoolNet is null outside a district with real,
+          sourced school-net data. */}
+      {(transportSegment || schoolNet) && (
         <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           <div
-            className={
-              transportSegment && showSchoolNet ? "grid gap-5 lg:grid-cols-2" : "grid gap-5"
-            }
+            className={transportSegment && schoolNet ? "grid gap-5 lg:grid-cols-2" : "grid gap-5"}
           >
             {transportSegment && (
               <div className="rounded-lg border bg-card p-5">
@@ -410,18 +439,16 @@ function EstatePage() {
                 </Link>
               </div>
             )}
-            {showSchoolNet && (
+            {schoolNet && (
               <div className="rounded-lg border bg-card p-5">
-                <h3 className="text-lg font-bold text-primary">
-                  校網 {shamTsengSchoolNet.netCode}（小學）
-                </h3>
+                <h3 className="text-lg font-bold text-primary">校網 {schoolNet.netCode}（小學）</h3>
                 <p className="mt-4 text-sm text-muted-foreground">
-                  {seo?.nameZh ?? estate.name_zh}屬{shamTsengSchoolNet.districtLabel}{" "}
-                  {shamTsengSchoolNet.netCode} 校網。
+                  {seo?.nameZh ?? estate.name_zh}屬{schoolNet.districtLabel} {schoolNet.netCode}{" "}
+                  校網。
                 </p>
-                {shamTsengSchoolNet.primarySchools.length > 0 && (
+                {schoolNet.primarySchools.length > 0 && (
                   <ul className="mt-3 space-y-2 text-sm">
-                    {shamTsengSchoolNet.primarySchools.map((s) => (
+                    {schoolNet.primarySchools.map((s) => (
                       <li
                         key={s.name}
                         className="flex items-center justify-between rounded-md border px-3 py-2"
@@ -434,12 +461,12 @@ function EstatePage() {
                 )}
                 <DataNote
                   className="mt-4"
-                  source={shamTsengSchoolNet.source}
-                  sourceUrl={shamTsengSchoolNet.sourceUrl ?? undefined}
-                  asOf={shamTsengSchoolNet.verifiedOn ?? undefined}
+                  source={schoolNet.source}
+                  sourceUrl={schoolNet.sourceUrl ?? undefined}
+                  asOf={schoolNet.verifiedOn ?? undefined}
                   caveat="實際派位及校網資料以教育局最新公布為準，並因應個別地址及入學年度而有所不同。"
                 >
-                  中學屬{shamTsengSchoolNet.districtLabel}中學校網。
+                  中學屬{schoolNet.districtLabel}中學校網。
                 </DataNote>
               </div>
             )}

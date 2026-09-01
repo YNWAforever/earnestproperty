@@ -24,7 +24,6 @@ const staticPaths = [
   "/mortgage",
   "/agents",
   "/videos",
-  ...Object.values(estateSeo).map((estate) => `/estate/${estate.slug}`),
   ...blogArticles.map((article) => `/blog/${article.slug}`),
   ...castlePeakRoadSitemapPaths,
 ];
@@ -96,6 +95,22 @@ export const Route = createFileRoute("/sitemap.xml")({
           estateReviewArticles.length > 0 ? "/estate-reviews" : null,
         ].filter((path) => path !== null);
 
+        // Only estates the DB actually has published = true today belong in
+        // the sitemap. estateSeo (src/content/seo.ts) curates real SEO copy
+        // for all 22 registry estates as of the 2026-09-01 Estate Expansion
+        // 17 data pack, so each has a real title/description the moment it
+        // publishes -- but listing an unpublished estate's URL here would
+        // still be a soft-404 risk (the page itself already 404s at the DB
+        // query layer, see fetchEstateBySlug, so no unverified content ever
+        // leaks -- this filter is purely about sitemap hygiene). timestamps.
+        // estates's keys are exactly `SELECT slug FROM estates WHERE
+        // published = true` (fetchSitemapTimestamps, already awaited above
+        // for lastmod dates) -- reused here as the live publish-state
+        // filter rather than issuing a second query for the same fact.
+        const publishedEstatePaths = Object.values(estateSeo)
+          .filter((estate) => estate.slug in timestamps.estates)
+          .map((estate) => `/estate/${estate.slug}`);
+
         // Most pages here (home, about, district hubs, corridor pages, ...)
         // have no tracked per-page revision history, so they share one
         // generation timestamp rather than a fabricated per-page value -- an
@@ -118,9 +133,12 @@ export const Route = createFileRoute("/sitemap.xml")({
         const body = [
           '<?xml version="1.0" encoding="UTF-8"?>',
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-          ...uniquePaths([...staticPaths, ...conditionalPaths, ...agentPaths]).map((path) =>
-            urlXml(path, lastmodFor(path)),
-          ),
+          ...uniquePaths([
+            ...staticPaths,
+            ...publishedEstatePaths,
+            ...conditionalPaths,
+            ...agentPaths,
+          ]).map((path) => urlXml(path, lastmodFor(path))),
           "</urlset>",
         ].join("\n");
 
