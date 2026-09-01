@@ -43,7 +43,13 @@ import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
 import logoMark from "@/assets/logo-earnest-mark.png";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
-import { coreEstates, estateFigure, CORE_ESTATES_PREVIEW_COUNT } from "@/content/core-estates";
+import {
+  coreEstates,
+  estateFigure,
+  CORE_ESTATES_PREVIEW_COUNT,
+  type CoreEstate,
+} from "@/content/core-estates";
+import { castlePeakRoadEstates } from "@/content/castle-peak-road-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
 import { formatHkd } from "@/lib/format";
@@ -52,6 +58,7 @@ import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import {
   fetchCmsVideos,
   fetchEstates,
+  fetchEstatesByDistrict,
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
@@ -76,19 +83,27 @@ export const Route = createFileRoute("/")({
     // `fetchVideosPageData()` (what /videos uses) -- that also runs a 36-row
     // searchListings pass to find listing videos, and the homepage can derive
     // those for free from `featured`, which already selects `video_url`.
-    const [estates, featured, faqs, counts, agentProfiles, cmsVideos] = await Promise.all([
-      fetchEstates(),
-      fetchFeaturedProperties(),
-      fetchFaqs("district:sham-tseng"),
-      fetchListingCountsByEstate(),
-      fetchNeonPublicAgentProfiles(),
-      // Decorative video section: a real DB error here (fetchCmsVideos only
-      // special-cases the missing-table case and rethrows everything else)
-      // must not take down the whole homepage.
-      fetchCmsVideos().catch(() => []),
-    ]);
+    const [estates, castlePeakRoadDbEstates, featured, faqs, counts, agentProfiles, cmsVideos] =
+      await Promise.all([
+        fetchEstates(),
+        // Same live-figure merge as the 深井 group above, scoped to the
+        // 青山公路 district -- fetchEstates() itself is hardcoded to
+        // "sham-tseng" (it delegates to fetchEstatesByDistrict internally),
+        // so this is the first caller to pass a different district through
+        // fetchEstatesByDistrict directly.
+        fetchEstatesByDistrict("castle-peak-road"),
+        fetchFeaturedProperties(),
+        fetchFaqs("district:sham-tseng"),
+        fetchListingCountsByEstate(),
+        fetchNeonPublicAgentProfiles(),
+        // Decorative video section: a real DB error here (fetchCmsVideos only
+        // special-cases the missing-table case and rethrows everything else)
+        // must not take down the whole homepage.
+        fetchCmsVideos().catch(() => []),
+      ]);
     return {
       estates,
+      castlePeakRoadDbEstates,
       featured,
       faqs,
       counts: Object.fromEntries(counts),
@@ -159,7 +174,15 @@ const ESTATE_GRADIENTS: Record<string, string> = {
 };
 
 function HomePage() {
-  const { estates, featured, faqs: faqRows, counts, agents, cmsVideos } = Route.useLoaderData();
+  const {
+    estates,
+    castlePeakRoadDbEstates,
+    featured,
+    faqs: faqRows,
+    counts,
+    agents,
+    cmsVideos,
+  } = Route.useLoaderData();
   const faqs = renderableFaqs(faqRows as FaqItem[]);
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
@@ -368,7 +391,23 @@ function HomePage() {
       {/* CORE ESTATES */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader title="深井核心屋苑" desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉" />
-        <CoreEstateGrid estates={estates} counts={counts} />
+        <CoreEstateGrid
+          estates={estates}
+          counts={counts}
+          staticEstates={coreEstates}
+          districtLabel="深井"
+        />
+      </section>
+
+      {/* CASTLE PEAK ROAD ESTATES */}
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+        <SectionHeader title="青山公路屋苑" desc="掃管笏、青山灣、小欖一帶屋苑，我哋同樣熟悉" />
+        <CoreEstateGrid
+          estates={castlePeakRoadDbEstates}
+          counts={counts}
+          staticEstates={castlePeakRoadEstates}
+          districtLabel="青山公路"
+        />
       </section>
 
       {/* WHY US */}
@@ -626,9 +665,13 @@ function HomePage() {
 function CoreEstateGrid({
   estates,
   counts,
+  staticEstates,
+  districtLabel,
 }: {
   estates: EstateSummary[];
   counts: Record<string, number>;
+  staticEstates: CoreEstate[];
+  districtLabel: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const live = new Map(estates.map((estate) => [estate.slug, estate]));
@@ -642,7 +685,7 @@ function CoreEstateGrid({
   // 404s. This also naturally reproduces the original "no detail page yet"
   // behavior: filter unreachable estates out of the grid entirely rather
   // than shipping thin, non-clickable cards next to real ones.
-  const linkableEstates = coreEstates.filter((estate) => estate.hasPage && live.has(estate.slug));
+  const linkableEstates = staticEstates.filter((estate) => estate.hasPage && live.has(estate.slug));
   const visible = expanded ? linkableEstates : linkableEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
 
   return (
@@ -669,7 +712,7 @@ function CoreEstateGrid({
               >
                 <AppImage
                   src={estate.photo}
-                  alt={`${estate.name} 深井 放盤`}
+                  alt={`${estate.name} ${districtLabel} 放盤`}
                   width={1600}
                   height={900}
                   // The first row is above the fold on desktop; the rest are not.
