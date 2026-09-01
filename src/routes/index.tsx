@@ -688,6 +688,37 @@ function CoreEstateGrid({
   const linkableEstates = staticEstates.filter((estate) => estate.hasPage && live.has(estate.slug));
   const visible = expanded ? linkableEstates : linkableEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
 
+  // Mirrors the already-established pattern for "this section has nothing
+  // real to show yet" elsewhere in this codebase (estate-reviews.tsx's own
+  // 屋苑文章 section, and this same file's 精選筍盤 EmptyState above) --
+  // rendering the section heading with a bare, cardless grid underneath
+  // looks broken, not like an honest "nothing here yet" state. This is a
+  // real, currently-live case: the 青山公路屋苑 group's own estates all stay
+  // published=false until each individually clears its publish gate, so
+  // this section shows the EmptyState until at least one of them does.
+  if (linkableEstates.length === 0) {
+    return (
+      <EmptyState
+        className="mt-10"
+        icon={Building2}
+        title={`暫未有${districtLabel}屋苑專頁`}
+        description="屋苑專頁陸續上線，歡迎先直接 WhatsApp 我哋查詢最新放盤。"
+        action={
+          <a
+            href={whatsappUrl(`你好，想查詢${districtLabel}屋苑放盤`)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="outline">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp 查詢
+            </Button>
+          </a>
+        }
+      />
+    );
+  }
+
   return (
     <>
       <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">

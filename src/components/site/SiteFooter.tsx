@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
+import { estatesWithPage } from "@/content/estate-registry";
 import logoMark from "@/assets/logo-earnest-mark.png";
 
 export function SiteFooter() {
@@ -71,52 +72,33 @@ export function SiteFooter() {
             <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
               屋苑 Estates
             </h3>
-            <ul className="mt-4 space-y-2 text-sm">
-              <li>
-                <Link
-                  to="/estate/$slug"
-                  params={{ slug: "bellagio" }}
-                  className="opacity-80 hover:opacity-100"
-                >
-                  碧堤半島
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/estate/$slug"
-                  params={{ slug: "sea-crest-villa" }}
-                  className="opacity-80 hover:opacity-100"
-                >
-                  浪翠園
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/estate/$slug"
-                  params={{ slug: "hong-kong-garden" }}
-                  className="opacity-80 hover:opacity-100"
-                >
-                  豪景花園
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/estate/$slug"
-                  params={{ slug: "rhine-garden" }}
-                  className="opacity-80 hover:opacity-100"
-                >
-                  海韻花園
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/estate/$slug"
-                  params={{ slug: "lido-garden" }}
-                  className="opacity-80 hover:opacity-100"
-                >
-                  麗都花園
-                </Link>
-              </li>
+            {/*
+              Derived from estate-registry.ts's hasPage:true set (DR-10),
+              not a second hand-maintained list -- this grew from 5 to 22
+              with the 2026-09-01 17-estate expansion. hasPage:true does NOT
+              mean published (estate-registry.ts's own doc comment): 17 of
+              these 22 only become actually reachable once
+              20260901110000_estate_expansion_publish.sql is applied to the
+              live database. Until then, this list links ahead of that
+              migration -- a real, temporary 404 risk for the 17 new
+              entries, accepted here since the migration is already queued
+              and this list self-heals the moment it's applied, with no
+              further deploy needed. Two columns keep this footer column's
+              height in line with its siblings now that it lists 22 estates
+              instead of 5.
+            */}
+            <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {estatesWithPage.map((estate) => (
+                <li key={estate.slug}>
+                  <Link
+                    to="/estate/$slug"
+                    params={{ slug: estate.slug }}
+                    className="opacity-80 hover:opacity-100"
+                  >
+                    {estate.nameZh}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
