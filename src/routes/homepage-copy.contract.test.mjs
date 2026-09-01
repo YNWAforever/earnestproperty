@@ -105,12 +105,12 @@ test("CoreEstateGrid gates both grid membership and card linking on a live DB ro
   );
   assert.match(
     gridSource,
-    /coreEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
+    /staticEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
     "linkableEstates must require both hasPage and a live DB row, not hasPage alone",
   );
   assert.doesNotMatch(
     gridSource,
-    /coreEstates\.filter\(\(estate\) => estate\.hasPage\)/,
+    /staticEstates\.filter\(\(estate\) => estate\.hasPage\)/,
     "must not regress to gating the grid on hasPage alone",
   );
   assert.match(

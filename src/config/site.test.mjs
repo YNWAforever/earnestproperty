@@ -268,7 +268,7 @@ test("homepage estate grid only renders estates with a live, reachable detail pa
 
   assert.match(
     source,
-    /const linkableEstates = coreEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
+    /const linkableEstates = staticEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
   );
   assert.match(source, /const visible = expanded\s*\n?\s*\?\s*linkableEstates/);
   assert.match(source, /linkableEstates\.length > CORE_ESTATES_PREVIEW_COUNT/);
