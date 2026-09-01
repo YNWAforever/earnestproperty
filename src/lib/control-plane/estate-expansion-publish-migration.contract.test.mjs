@@ -34,8 +34,8 @@ test("the publish migration exists", () => {
 
 test("the migration sets published = true for exactly the 17 expansion slugs, no more no fewer", () => {
   const sql = readFileSync(path.join(MIGRATIONS_DIR, migrationFile), "utf8");
-  const slugs = [...sql.matchAll(/WHERE slug (?:= '([a-z0-9-]+)'|IN \(([^)]+)\))/g)].flatMap(
-    (m) => (m[1] ? [m[1]] : m[2].split(",").map((s) => s.trim().replace(/^'|'$/g, ""))),
+  const slugs = [...sql.matchAll(/WHERE slug (?:= '([a-z0-9-]+)'|IN \(([^)]+)\))/g)].flatMap((m) =>
+    m[1] ? [m[1]] : m[2].split(",").map((s) => s.trim().replace(/^'|'$/g, "")),
   );
   assert.deepEqual(slugs.sort(), [...EXPANSION_SLUGS].sort());
 });
