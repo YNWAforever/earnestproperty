@@ -1,0 +1,39 @@
+-- 2026-09-02: verified all 17 estate-expansion school_net_code values
+-- against real Primary One Admission (POA) school-net sources -- no
+-- guessing, no general web search. Two sources were used:
+--
+--   1. EDB's own "小一學校網" / "區域與小一學校網對照表" page
+--      (https://www.edb.gov.hk/tc/edu-system/primary-secondary/spa-systems/
+--      primary-1-admission/school-lists/index.html), which lists, per POA
+--      net, the exact "涵蓋地區 / Areas Covered" -- both district names
+--      (e.g. 深井, 青龍頭, 小欖, 掃管笏, 大欖涌) and, for larger
+--      developments, the estate name itself. Page footer shows
+--      "修訂日期: 2026年9月01日" (revised the day before this check).
+--   2. GeoInfo Map (map.gov.hk), the Lands Department's official address
+--      search, used to resolve each facts-migration address to its
+--      government-recognised district segment (e.g. "18A CASTLE PEAK
+--      ROAD - TSING LUNG TAU", "168 CASTLE PEAK ROAD - TAI LAM") where the
+--      EDB table needed a district-level rather than estate-level match.
+--
+-- Net 62 (荃灣, covers 深井 / 青龍頭 per the EDB table) -- confirmed for
+-- all 5: hoi-wan-hin (18A Castle Peak Road resolves to Tsing Lung Tau
+-- per GeoInfo Map), tai-wah-hin (part of 浪翠園 / Sea Crest Villa, named
+-- explicitly in the EDB net-62 list), hoi-wan-toi (address itself reads
+-- "青山公路深井段28號" -- Sham Tseng section), chun-wong-kui (縉皇居
+-- named explicitly in the EDB net-62 list), lung-tang-kok (address reads
+-- "青山公路青龍頭段88–90號" -- Tsing Lung Tau section).
+--
+-- Net 71 (屯門東, covers 小欖 / 掃管笏 / 大欖涌 per the EDB table) --
+-- confirmed for all 12: mun-ming-shan (滿名山), wong-gam-hoi-ngon
+-- (黃金海岸), oi-kam-hoi-ngon (愛琴海岸), tai-yu (帝御),
+-- wong-gam-hoi-waan (黃金海灣), sing-tai (星堤), lin-shan (漣山),
+-- long-tou-waan (浪濤灣), and tai-tou-waan (帝濤灣) are all named
+-- explicitly, by exact estate name, in the EDB net-71 list. seong-yuen
+-- (掃管笏路99號) and oma-oma (掃管笏路108號) both resolve via GeoInfo
+-- Map to 掃管笏 addresses in Tuen Mun. the-carmel (青山公路大欖段168號)
+-- resolves via GeoInfo Map to "168 CASTLE PEAK ROAD - TAI LAM", matching
+-- the EDB net-71 area "大欖涌".
+--
+-- All 17 confirmed correct as recorded by
+-- 20260901100000_estate_expansion_facts.sql -- no corrections needed.
+-- This file exists as the verification record.

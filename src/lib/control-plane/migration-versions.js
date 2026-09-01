@@ -63,6 +63,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260831180000_video_category.sql",
   "20260901100000_estate_expansion_facts.sql",
   "20260901110000_estate_expansion_publish.sql",
+  "20260902100000_estate_expansion_school_net_correction.sql",
   "20260902110000_estate_expansion_facts_resolution.sql",
 ]);
 
