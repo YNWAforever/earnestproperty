@@ -40,6 +40,7 @@ export const castlePeakRoadEstates: CoreEstate[] = CASTLE_PEAK_ROAD_SLUGS.map((s
     avgPsf: null,
     listingCount: null,
     photo: entry.photo,
+    photoCredit: entry.photoCredit,
     district: entry.homepageDistrict,
     hasPage: entry.hasPage,
   };

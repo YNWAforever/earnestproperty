@@ -27,6 +27,8 @@ export type CoreEstate = {
   avgPsf: number | null;
   listingCount: number | null;
   photo: string | null;
+  /** Attribution line for `photo`, when it's CC-licensed rather than client-supplied. */
+  photoCredit?: string;
   /**
    * null where the client has not said and the repo has no evidence. The spec's
    * schema does not allow null here, but guessing a district would put a false
@@ -69,6 +71,7 @@ export const coreEstates: CoreEstate[] = CLIENT_ORDER_SLUGS.map((slug) => {
     avgPsf: null,
     listingCount: null,
     photo: entry.photo,
+    photoCredit: entry.photoCredit,
     district: entry.homepageDistrict,
     hasPage: entry.hasPage,
   };
