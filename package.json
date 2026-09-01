@@ -30,7 +30,7 @@
     "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
     "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs src/routes/contact.test.mjs && bun test src/lib/contact-inquiry-form.test.ts",
     "test:valuation": "node --test src/lib/neon/valuation-leads.test.mjs",
-    "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs src/content/estate-registry.test.mjs src/content/estate-pages.test.mjs src/content/school-nets.test.mjs src/components/site/estate-comparison.test.mjs src/routes/estate.district-driven.contract.test.mjs",
+    "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs src/content/castle-peak-road-estates.test.mjs src/content/estate-registry.test.mjs src/content/estate-pages.test.mjs src/content/school-nets.test.mjs src/components/site/estate-comparison.test.mjs src/routes/estate.district-driven.contract.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs src/config/neon-only.test.mjs",
     "test:command-center": "node --test src/lib/neon/command-center.test.mjs src/lib/neon/admin-data.contract.test.mjs src/lib/neon/admin-data-permissions.test.mjs src/routes/admin.routes.test.mjs",
     "test:woztell": "node --test src/lib/woztell/woztell.test.mjs src/lib/woztell/woztell-history.test.mjs src/lib/neon/admin-workflow.test.mjs src/routes/admin.routes.test.mjs && bun test src/lib/woztell/template-preview.test.ts",
