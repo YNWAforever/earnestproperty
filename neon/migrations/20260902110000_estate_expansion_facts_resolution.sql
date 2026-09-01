@@ -1,0 +1,53 @@
+-- Attempts to resolve the 4 documented cross-source fact conflicts left NULL
+-- by 20260901100000_estate_expansion_facts.sql. That migration's own comments
+-- and each estate's publishBlockers entry explain why each field was left
+-- unset; this migration is the follow-up check against Hong Kong government
+-- sources (rather than another round of general web search, which is what
+-- produced the disputed values in the first place).
+--
+-- Sources checked directly, by address, on 2026-09-02:
+--   * 差餉物業估價署 (Rating and Valuation Department) Property Information
+--     Online (https://www.rvdpi.gov.hk) -- the free "Public Inspection of
+--     Valuation List and Government Rent Roll" service confirms its
+--     statutory display period for the 2026-2027 list expired 31 May 2026;
+--     the only remaining address-searchable service, "Enquiry on Property
+--     Information (Age, Area and Permitted Use)", is a paid per-search
+--     service (credit card/PPS/Apple Pay/Google Pay/FPS checkout). The
+--     other free service ("Property Information (Area and Age) for
+--     Individual Payers") only lets a logged-in payer view their own
+--     registered property, not an arbitrary address.
+--   * 屋宇署 (Buildings Department) BRAVO online building records
+--     (https://bravo.bd.gov.hk) -- viewing any building's approved plans
+--     requires a registered BRAVO account verified against a Hong Kong
+--     Identity Card/passport (Form BIC5 plus ID copy) or a linked iAM Smart
+--     digital identity; there is no anonymous or guest search.
+--
+-- Neither portal offers a free, anonymous, address-searchable path to the
+-- disputed fields for these 4 buildings. Completing either path would mean
+-- either submitting a payment or registering an identity-verified account on
+-- the user's behalf, both outside what this task can do unattended. So none
+-- of the 4 conflicts resolve here -- each stays NULL, same as the data pack
+-- left it, with the specific check recorded below so a later attempt (e.g.
+-- once someone has a BRAVO account, or authorizes an RVD PIO paid lookup)
+-- knows what was already ruled out.
+
+-- lung-tang-kok (龍騰閣, 青山公路青龍頭段88–90號) developer: RVD PIO and BD
+-- BRAVO both checked 2026-09-02 per the access constraints above -- neither
+-- is reachable as a free, anonymous lookup for this building's developer.
+-- Stays NULL, still pending 屋苑文件確認 as the data pack's publishBlockers
+-- entry describes.
+
+-- sing-tai (星堤, 管翠路1號) area_max (2,766/4,054/4,484 呎 disputed): RVD PIO
+-- and BD BRAVO both checked 2026-09-02 per the access constraints above --
+-- RVD's floor-area enquiry is paid-only (free public-inspection window
+-- expired) and BD BRAVO requires an identity-verified account. Stays NULL.
+
+-- seong-yuen (上源, 掃管笏路99號) blocks (5 buildings vs. 10 A/B sub-blocks
+-- disputed): RVD PIO and BD BRAVO both checked 2026-09-02 per the access
+-- constraints above -- BD BRAVO's approved building plans, which would
+-- settle the counting convention, are not viewable without an
+-- identity-verified account. Stays NULL.
+
+-- tai-tou-waan (帝濤灣, 小欖村路2號) area_max (2,841/3,421 呎 disputed): RVD
+-- PIO and BD BRAVO both checked 2026-09-02 per the access constraints above
+-- -- same paid/account-gated outcome as sing-tai's area_max. Stays NULL.
