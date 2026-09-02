@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, KeyRound, Mail, PauseCircle, RotateCcw, ShieldCheck } from "lucide-react";
+import { Activity, KeyRound, Link2, Mail, PauseCircle, RotateCcw, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,7 +16,27 @@ import type { StaffRole } from "@/lib/neon/auth.server";
 
 import { AdminTeamStatusBadge, teamRoleLabel } from "./AdminTeamStatusBadge";
 
-export type TeamMemberAction = "resend" | "roles" | "suspend" | "reactivate" | "reset";
+export type TeamMemberAction = "resend" | "roles" | "suspend" | "reactivate" | "reset" | "link";
+
+/**
+ * Identity line for the member header. The wording deliberately avoids the
+ * literal "連結帳戶" so that string is only ever the admin action button.
+ */
+function accountStateCopy(identity: AdminTeamMemberDetail["identity"]) {
+  if (identity.authUserLinked) return "帳戶身份已連結。";
+  switch (identity.account) {
+    case "unregistered":
+      return "帳戶身份未連結：此成員尚未註冊登入帳戶，請分享註冊連結（/auth/sign-up）並提醒使用相同電郵。";
+    case "unverified":
+      // Neon Auth's default: the member signed up, nothing verified the email,
+      // so sign-in never auto-binds. Only an admin link gets them in.
+      return "帳戶身份未連結：此成員已註冊登入帳戶，但電郵未驗證，系統未有自動連結。管理員可在此為成員完成連結。";
+    case "verified":
+      return "帳戶身份未連結：此成員已註冊並驗證電郵，下次登入時會自動連結，亦可立即完成連結。";
+    default:
+      return "帳戶身份未連結。";
+  }
+}
 export type TeamMemberActionOptions = { roles?: StaffRole[]; reassignToStaffId?: string | null };
 
 export function AdminTeamDetailPanel({
@@ -44,6 +64,11 @@ export function AdminTeamDetailPanel({
   const canReset = active && detail.identity.authUserLinked && !isSelfResetTarget;
   const canSuspend = active;
   const canReactivate = !active && detail.identity.authUserLinked;
+  const canLink =
+    canManage &&
+    active &&
+    !detail.identity.authUserLinked &&
+    detail.identity.account !== "unregistered";
   const [roles, setRoles] = useState<StaffRole[]>(member.roles);
   const [successorId, setSuccessorId] = useState("");
 
@@ -70,9 +95,19 @@ export function AdminTeamDetailPanel({
             <AdminTeamStatusBadge kind="invitation" value={member.invitationState} />
           </div>
         </div>
-        <p className="mt-3 text-sm text-muted-foreground">
-          {detail.identity.authUserLinked ? "已連結帳戶身份" : "尚未連結帳戶身份"}
-        </p>
+        <p className="mt-3 text-sm text-muted-foreground">{accountStateCopy(detail.identity)}</p>
+        {canLink ? (
+          <Button
+            className="mt-3"
+            onClick={() => onAction("link")}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            <Link2 aria-hidden="true" />
+            連結帳戶
+          </Button>
+        ) : null}
       </section>
       <section aria-labelledby="team-roles-heading" className="rounded-lg border bg-card p-4">
         <div className="flex items-center justify-between gap-2">

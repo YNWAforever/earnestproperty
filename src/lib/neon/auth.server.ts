@@ -1,7 +1,12 @@
 import "@tanstack/react-start/server-only";
 
-import { queryRows, stringOrEmpty, stringOrNull } from "./db.server";
-import { shouldBootstrapFirstAdmin } from "./staff-security-policy";
+import {
+  queryRows as defaultQueryRows,
+  stringOrEmpty,
+  stringOrNull,
+  type DbRow,
+} from "./db.server.ts";
+import { shouldBootstrapFirstAdmin } from "./staff-security-policy.ts";
 
 export type StaffRole = "admin" | "manager" | "agent" | "viewer";
 
@@ -14,8 +19,40 @@ export type StaffAccess = {
   bootstrap: boolean;
 };
 
+/**
+ * Why a signed-in Neon Auth account was refused staff access, carried as the
+ * body of the 403 so the client can tell it apart from a plain "Forbidden".
+ *
+ * "staff-email-unverified": a staff row matched this account by email only
+ * (auth_user_id still NULL) but the Neon Auth account's email is unverified,
+ * so the bind was refused. Neon Auth does not verify emails unless the project
+ * turns it on, so this is the state every invited member lands in by default
+ * -- and before it had its own reason it was indistinguishable from "not a
+ * staff member at all": every page failed with a generic no-permission error
+ * and an admin's role changes appeared to do nothing.
+ */
+export type StaffAccessDenialReason = "staff-email-unverified";
+export const STAFF_EMAIL_UNVERIFIED: StaffAccessDenialReason = "staff-email-unverified";
+
 type StaffLookup = StaffAccess & {
   matchedProfileOnly: boolean;
+};
+
+type StaffLookupResult = {
+  staff: StaffLookup | null;
+  denial: StaffAccessDenialReason | null;
+};
+
+export type NeonSession = {
+  user: { id: string; email: string | null; name: string | null };
+  session: unknown;
+};
+
+type QueryRows = <T extends DbRow = DbRow>(statement: string, params?: unknown[]) => Promise<T[]>;
+
+export type StaffAccessResolverDependencies = {
+  queryRows?: QueryRows;
+  getSession?: (request: Request) => Promise<NeonSession | null>;
 };
 
 type AnyRecord = Record<string, unknown>;
@@ -82,300 +119,160 @@ function isTokenTimeValid(payload: AnyRecord) {
   return true;
 }
 
-async function listNeonAuthJwks() {
-  const rows = await queryRows(
-    `
-    SELECT "publicKey"
-    FROM neon_auth.jwks
-    WHERE "expiresAt" IS NULL OR "expiresAt" > now()
-    ORDER BY "createdAt" DESC
-    `,
-  ).catch(() => []);
-  return rows
-    .map((row) => {
-      if (typeof row.publicKey !== "string") return null;
-      return JSON.parse(row.publicKey) as JsonWebKey;
-    })
-    .filter((jwk): jwk is JsonWebKey => Boolean(jwk));
-}
-
-async function verifyNeonJwt(token: string) {
-  const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
-  if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
-
-  const header = base64UrlToJson(encodedHeader);
-  if (header.alg !== "EdDSA") return null;
-
-  const payload = base64UrlToJson(encodedPayload);
-  if (!isTokenTimeValid(payload)) return null;
-
-  // Validate issuer/audience when configured (env unset = skip that specific check).
-  const expectedIssuer = process.env.NEON_AUTH_ISSUER;
-  if (expectedIssuer && payload.iss !== expectedIssuer) return null;
-  const expectedAudience = process.env.NEON_AUTH_AUDIENCE;
-  if (expectedAudience) {
-    const aud = payload.aud;
-    const audiences = Array.isArray(aud) ? aud.map(String) : typeof aud === "string" ? [aud] : [];
-    if (!audiences.includes(expectedAudience)) return null;
-  }
-
-  const signedData = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
-  const signature = base64UrlToBytes(encodedSignature);
-  for (const jwk of await listNeonAuthJwks()) {
-    if (jwk.kty !== "OKP" || jwk.crv !== "Ed25519") continue;
-    const key = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["verify"]);
-    if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, signedData)) {
-      return payload;
-    }
-  }
-
-  return null;
-}
-
-async function findNeonAuthUser(authUserId: string) {
-  const rows = await queryRows(
-    `
-    SELECT id::text AS id, email, name
-    FROM neon_auth."user"
-    WHERE id::text = $1
-    LIMIT 1
-    `,
-    [authUserId],
-  ).catch(() => []);
-  return rows[0] ?? null;
-}
-
-async function findNeonAuthSession(token: string) {
-  const rows = await queryRows(
-    `
-    SELECT u.id::text AS id, u.email, u.name
-    FROM neon_auth.session s
-    INNER JOIN neon_auth."user" u ON u.id = s."userId"
-    WHERE s.token = $1
-      AND s."expiresAt" > now()
-    LIMIT 1
-    `,
-    [token],
-  ).catch(() => []);
-  return rows[0] ?? null;
-}
-
-async function getNeonSessionFromBearerToken(token: string) {
-  const payload = await verifyNeonJwt(token).catch(() => null);
-  if (!payload) {
-    const authSession = await findNeonAuthSession(token);
-    if (!authSession?.id) return null;
-
-    return {
-      user: {
-        id: stringOrEmpty(authSession.id),
-        email: stringOrNull(authSession.email),
-        name: stringOrNull(authSession.name),
-      },
-      session: { token },
-    };
-  }
-
-  const authUserId = claimAsString(payload, ["sub", "userId", "user_id", "id"]);
-  if (!authUserId) return null;
-
-  const authUser = await findNeonAuthUser(authUserId);
-  const email = stringOrNull(authUser?.email) ?? claimAsString(payload, ["email"]);
-  const name = stringOrNull(authUser?.name) ?? claimAsString(payload, ["name"]);
-
-  return {
-    user: {
-      id: authUserId,
-      email,
-      name,
-    },
-    session: { token },
-  };
-}
-
-export async function getNeonSessionFromRequest(request: Request) {
-  const authUrl = getAuthBaseUrl();
-  if (!authUrl) return null;
-  const cookie = request.headers.get("cookie");
-  const bearerToken = getBearerToken(request);
-
-  if (cookie) {
-    const res = await fetch(`${authUrl.replace(/\/$/, "")}/get-session`, {
-      headers: {
-        cookie,
-        accept: "application/json",
-      },
-    }).catch(() => null);
-
-    if (res?.ok) {
-      const body = asRecord(await res.json().catch(() => null));
-      const data = asRecord(body.data ?? body);
-      const user = asRecord(data.user);
-      if (user.id) {
-        return {
-          user: {
-            id: stringOrEmpty(user.id),
-            email: stringOrNull(user.email),
-            name: stringOrNull(user.name),
-          },
-          session: data.session ?? null,
-        };
-      }
-    }
-  }
-
-  return bearerToken ? getNeonSessionFromBearerToken(bearerToken) : null;
-}
-
-async function bootstrapStaffRows() {
-  const rows = await queryRows(`
-    SELECT
-      s.auth_user_id,
-      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
-    FROM staff_users s
-    LEFT JOIN staff_roles r ON r.staff_user_id = s.id
-    GROUP BY s.id
-  `);
-  return rows.map((row) => ({
-    authUserId: stringOrNull(row.auth_user_id),
-    roles: staffRolesFromValue(row.roles),
-  }));
-}
-
 /**
- * Whether Neon Auth considers this account's email address verified.
- *
- * Load-bearing for the email-match branch in findStaff. staff_users rows are
- * routinely seeded with an email and a blank auth_user_id ("add the colleague,
- * they log in later" -- see saveAdminAgentProfile), and /auth/sign-up is
- * publicly reachable. Without this gate, anyone who knew a not-yet-activated
- * staff address could register it and permanently inherit that row's roles, up
- * to admin.
- *
- * Returns false rather than throwing when the column or row cannot be read:
- * this decides whether to hand out staff roles, so an unreadable answer must
- * fail closed. auth_user_id matches are unaffected -- only first-time binding
- * by email needs the check.
+ * Resolve the signed-in Neon Auth user for a request: the provider's session
+ * cookie when one is present, else the bearer token the admin client attaches
+ * (withStaffAuthHeaders), verified as a Neon Auth JWT or looked up as a raw
+ * session token in the neon_auth tables this database already holds.
  */
-async function isNeonAuthEmailVerified(authUserId: string) {
-  try {
+export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows) {
+  async function listNeonAuthJwks() {
     const rows = await queryRows(
       `
-      SELECT "emailVerified" AS email_verified
+      SELECT "publicKey"
+      FROM neon_auth.jwks
+      WHERE "expiresAt" IS NULL OR "expiresAt" > now()
+      ORDER BY "createdAt" DESC
+      `,
+    ).catch(() => []);
+    return rows
+      .map((row) => {
+        if (typeof row.publicKey !== "string") return null;
+        return JSON.parse(row.publicKey) as JsonWebKey;
+      })
+      .filter((jwk): jwk is JsonWebKey => Boolean(jwk));
+  }
+
+  async function verifyNeonJwt(token: string) {
+    const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
+    if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
+
+    const header = base64UrlToJson(encodedHeader);
+    if (header.alg !== "EdDSA") return null;
+
+    const payload = base64UrlToJson(encodedPayload);
+    if (!isTokenTimeValid(payload)) return null;
+
+    // Validate issuer/audience when configured (env unset = skip that specific check).
+    const expectedIssuer = process.env.NEON_AUTH_ISSUER;
+    if (expectedIssuer && payload.iss !== expectedIssuer) return null;
+    const expectedAudience = process.env.NEON_AUTH_AUDIENCE;
+    if (expectedAudience) {
+      const aud = payload.aud;
+      const audiences = Array.isArray(aud) ? aud.map(String) : typeof aud === "string" ? [aud] : [];
+      if (!audiences.includes(expectedAudience)) return null;
+    }
+
+    const signedData = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
+    const signature = base64UrlToBytes(encodedSignature);
+    for (const jwk of await listNeonAuthJwks()) {
+      if (jwk.kty !== "OKP" || jwk.crv !== "Ed25519") continue;
+      const key = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["verify"]);
+      if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, signedData)) {
+        return payload;
+      }
+    }
+
+    return null;
+  }
+
+  async function findNeonAuthUser(authUserId: string) {
+    const rows = await queryRows(
+      `
+      SELECT id::text AS id, email, name
       FROM neon_auth."user"
       WHERE id::text = $1
       LIMIT 1
       `,
       [authUserId],
-    );
-    return rows[0]?.email_verified === true;
-  } catch (error) {
-    // Fail closed, but LOUDLY. If neon_auth."user"."emailVerified" is ever
-    // absent or renamed, every first-time staff activation by email stops
-    // working -- and silently, because the caller just sees "no match" and falls
-    // through to the no-staff path. That is indistinguishable from a genuinely
-    // unrecognised account, so without this line the cause would be invisible.
-    console.error(
-      '[auth] Could not read neon_auth."user"."emailVerified"; ' +
-        "email-based staff activation is disabled until this is resolved.",
-      error,
-    );
-    return false;
-  }
-}
-
-async function findStaff(authUserId: string, email: string | null): Promise<StaffLookup | null> {
-  const rows = await queryRows(
-    `
-    SELECT
-      s.id,
-      s.auth_user_id,
-      s.email,
-      COALESCE(s.name_zh, s.name_en) AS name,
-      COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
-    FROM staff_users s
-    LEFT JOIN staff_roles r ON r.staff_user_id = s.id
-    WHERE s.active = true
-      AND (
-        s.auth_user_id = $1
-        OR ($2::text IS NOT NULL AND lower(s.email) = lower($2::text) AND s.auth_user_id IS NULL)
-      )
-    GROUP BY s.id
-    LIMIT 1
-    `,
-    [authUserId, email],
-  );
-  const row = rows[0];
-  if (!row) return null;
-  const matchedProfileOnly = stringOrNull(row.auth_user_id) === null;
-  if (matchedProfileOnly) {
-    // Email verification is checked HERE, not before the query, because it only
-    // matters on this branch: matching on auth_user_id is already proof of
-    // identity. Checking up-front cost every authenticated admin request an
-    // extra serial round-trip for a condition that is false on all but the very
-    // first request a staff member ever makes.
-    //
-    // Without it, /auth/sign-up being public plus staff rows seeded with an
-    // email and a blank auth_user_id (saveAdminAgentProfile) meant anyone who
-    // knew a not-yet-activated staff address could register it and permanently
-    // inherit that row's roles, up to admin.
-    if (!(await isNeonAuthEmailVerified(authUserId))) return null;
-
-    await queryRows(
-      `
-      UPDATE staff_users
-      SET auth_user_id = $1, updated_at = now()
-      WHERE id = $2
-        AND auth_user_id IS NULL
-      `,
-      [authUserId, row.id],
     ).catch(() => []);
+    return rows[0] ?? null;
   }
-  return {
-    staffId: stringOrEmpty(row.id),
-    authUserId,
-    email: stringOrNull(row.email),
-    name: stringOrNull(row.name),
-    roles: staffRolesFromValue(row.roles),
-    bootstrap: false,
-    matchedProfileOnly,
+
+  async function findNeonAuthSession(token: string) {
+    const rows = await queryRows(
+      `
+      SELECT u.id::text AS id, u.email, u.name
+      FROM neon_auth.session s
+      INNER JOIN neon_auth."user" u ON u.id = s."userId"
+      WHERE s.token = $1
+        AND s."expiresAt" > now()
+      LIMIT 1
+      `,
+      [token],
+    ).catch(() => []);
+    return rows[0] ?? null;
+  }
+
+  async function getNeonSessionFromBearerToken(token: string): Promise<NeonSession | null> {
+    const payload = await verifyNeonJwt(token).catch(() => null);
+    if (!payload) {
+      const authSession = await findNeonAuthSession(token);
+      if (!authSession?.id) return null;
+
+      return {
+        user: {
+          id: stringOrEmpty(authSession.id),
+          email: stringOrNull(authSession.email),
+          name: stringOrNull(authSession.name),
+        },
+        session: { token },
+      };
+    }
+
+    const authUserId = claimAsString(payload, ["sub", "userId", "user_id", "id"]);
+    if (!authUserId) return null;
+
+    const authUser = await findNeonAuthUser(authUserId);
+    const email = stringOrNull(authUser?.email) ?? claimAsString(payload, ["email"]);
+    const name = stringOrNull(authUser?.name) ?? claimAsString(payload, ["name"]);
+
+    return {
+      user: {
+        id: authUserId,
+        email,
+        name,
+      },
+      session: { token },
+    };
+  }
+
+  return async function getNeonSessionFromRequest(request: Request): Promise<NeonSession | null> {
+    const authUrl = getAuthBaseUrl();
+    if (!authUrl) return null;
+    const cookie = request.headers.get("cookie");
+    const bearerToken = getBearerToken(request);
+
+    if (cookie) {
+      const res = await fetch(`${authUrl.replace(/\/$/, "")}/get-session`, {
+        headers: {
+          cookie,
+          accept: "application/json",
+        },
+      }).catch(() => null);
+
+      if (res?.ok) {
+        const body = asRecord(await res.json().catch(() => null));
+        const data = asRecord(body.data ?? body);
+        const user = asRecord(data.user);
+        if (user.id) {
+          return {
+            user: {
+              id: stringOrEmpty(user.id),
+              email: stringOrNull(user.email),
+              name: stringOrNull(user.name),
+            },
+            session: data.session ?? null,
+          };
+        }
+      }
+    }
+
+    return bearerToken ? getNeonSessionFromBearerToken(bearerToken) : null;
   };
 }
 
-async function bootstrapFirstStaff(input: {
-  authUserId: string;
-  email: string | null;
-  name: string | null;
-}): Promise<StaffAccess> {
-  const rows = await queryRows(
-    `
-    INSERT INTO staff_users (auth_user_id, email, name_en, active)
-    VALUES ($1, $2, $3, true)
-    ON CONFLICT (auth_user_id) DO UPDATE SET
-      email = COALESCE(EXCLUDED.email, staff_users.email),
-      updated_at = now()
-    RETURNING id, auth_user_id, email, COALESCE(name_zh, name_en) AS name
-    `,
-    [input.authUserId, input.email, input.name],
-  );
-  const staff = rows[0];
-  await queryRows(
-    `
-    INSERT INTO staff_roles (staff_user_id, role)
-    VALUES ($1, 'admin')
-    ON CONFLICT DO NOTHING
-    `,
-    [staff.id],
-  );
-  return {
-    staffId: stringOrEmpty(staff.id),
-    authUserId: stringOrEmpty(staff.auth_user_id),
-    email: stringOrNull(staff.email),
-    name: stringOrNull(staff.name),
-    roles: ["admin"],
-    bootstrap: true,
-  };
-}
+export const getNeonSessionFromRequest = createNeonSessionReader();
 
 // ADMIN_BOOTSTRAP_EMAILS: comma-separated allowlist of emails permitted to become the
 // first admin when staff_users is empty. If unset/empty, first-login bootstrap is disabled
@@ -405,33 +302,217 @@ export function isProtectedStaffEmail(email: string | null | undefined) {
   return bootstrapAllowlist().has(normalized);
 }
 
+/**
+ * The staff-access boundary behind every admin server function, with its two
+ * external dependencies injectable so the binding rules can be unit-tested
+ * (auth.server.test.mjs). The default instance below is what production uses;
+ * every SQL statement is identical either way.
+ */
+export function createStaffAccessResolver(dependencies: StaffAccessResolverDependencies = {}) {
+  const queryRows = dependencies.queryRows ?? defaultQueryRows;
+  const getSession = dependencies.getSession ?? createNeonSessionReader(queryRows);
+
+  async function bootstrapStaffRows() {
+    const rows = await queryRows(`
+      SELECT
+        s.auth_user_id,
+        COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
+      FROM staff_users s
+      LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+      GROUP BY s.id
+    `);
+    return rows.map((row) => ({
+      authUserId: stringOrNull(row.auth_user_id),
+      roles: staffRolesFromValue(row.roles),
+    }));
+  }
+
+  /**
+   * Whether Neon Auth considers this account's email address verified.
+   *
+   * Load-bearing for the email-match branch in findStaff. staff_users rows are
+   * routinely seeded with an email and a blank auth_user_id ("add the colleague,
+   * they log in later" -- see saveAdminAgentProfile and inviteStaffMember), and
+   * /auth/sign-up is publicly reachable. Without this gate, anyone who knew a
+   * not-yet-activated staff address could register it and permanently inherit
+   * that row's roles, up to admin.
+   *
+   * Returns false rather than throwing when the column or row cannot be read:
+   * this decides whether to hand out staff roles, so an unreadable answer must
+   * fail closed. auth_user_id matches are unaffected -- only first-time binding
+   * by email needs the check.
+   */
+  async function isNeonAuthEmailVerified(authUserId: string) {
+    try {
+      const rows = await queryRows(
+        `
+        SELECT "emailVerified" AS email_verified
+        FROM neon_auth."user"
+        WHERE id::text = $1
+        LIMIT 1
+        `,
+        [authUserId],
+      );
+      return rows[0]?.email_verified === true;
+    } catch (error) {
+      // Fail closed, but LOUDLY. If neon_auth."user"."emailVerified" is ever
+      // absent or renamed, every first-time staff activation by email stops
+      // working -- and silently, because the caller just sees "no match" and falls
+      // through to the no-staff path. That is indistinguishable from a genuinely
+      // unrecognised account, so without this line the cause would be invisible.
+      console.error(
+        '[auth] Could not read neon_auth."user"."emailVerified"; ' +
+          "email-based staff activation is disabled until this is resolved.",
+        error,
+      );
+      return false;
+    }
+  }
+
+  async function findStaff(authUserId: string, email: string | null): Promise<StaffLookupResult> {
+    const rows = await queryRows(
+      `
+      SELECT
+        s.id,
+        s.auth_user_id,
+        s.email,
+        COALESCE(s.name_zh, s.name_en) AS name,
+        COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
+      FROM staff_users s
+      LEFT JOIN staff_roles r ON r.staff_user_id = s.id
+      WHERE s.active = true
+        AND (
+          s.auth_user_id = $1
+          OR ($2::text IS NOT NULL AND lower(s.email) = lower($2::text) AND s.auth_user_id IS NULL)
+        )
+      GROUP BY s.id
+      LIMIT 1
+      `,
+      [authUserId, email],
+    );
+    const row = rows[0];
+    if (!row) return { staff: null, denial: null };
+    const matchedProfileOnly = stringOrNull(row.auth_user_id) === null;
+    if (matchedProfileOnly) {
+      // Email verification is checked HERE, not before the query, because it only
+      // matters on this branch: matching on auth_user_id is already proof of
+      // identity. Checking up-front cost every authenticated admin request an
+      // extra serial round-trip for a condition that is false on all but the very
+      // first request a staff member ever makes.
+      //
+      // Without it, /auth/sign-up being public plus staff rows seeded with an
+      // email and a blank auth_user_id meant anyone who knew a not-yet-activated
+      // staff address could register it and permanently inherit that row's
+      // roles, up to admin.
+      if (!(await isNeonAuthEmailVerified(authUserId))) {
+        // Neon Auth does not verify emails unless the project enables it, so
+        // this is where every invited member lands by default. Say so: the
+        // denial reason reaches the member's screen, and the admin's Team page
+        // offers the explicit link that activates them without the provider
+        // setting (linkStaffIdentity in staff-lifecycle.server.ts).
+        console.warn(
+          "[auth] Staff row matched by email but the Neon Auth account's email is unverified; " +
+            "refusing to bind. An admin can link the account from 團隊成員.",
+          { staffId: stringOrEmpty(row.id), authUserId },
+        );
+        return { staff: null, denial: STAFF_EMAIL_UNVERIFIED };
+      }
+
+      await queryRows(
+        `
+        UPDATE staff_users
+        SET auth_user_id = $1, updated_at = now()
+        WHERE id = $2
+          AND auth_user_id IS NULL
+        `,
+        [authUserId, row.id],
+      ).catch(() => []);
+    }
+    return {
+      staff: {
+        staffId: stringOrEmpty(row.id),
+        authUserId,
+        email: stringOrNull(row.email),
+        name: stringOrNull(row.name),
+        roles: staffRolesFromValue(row.roles),
+        bootstrap: false,
+        matchedProfileOnly,
+      },
+      denial: null,
+    };
+  }
+
+  async function bootstrapFirstStaff(input: {
+    authUserId: string;
+    email: string | null;
+    name: string | null;
+  }): Promise<StaffAccess> {
+    const rows = await queryRows(
+      `
+      INSERT INTO staff_users (auth_user_id, email, name_en, active)
+      VALUES ($1, $2, $3, true)
+      ON CONFLICT (auth_user_id) DO UPDATE SET
+        email = COALESCE(EXCLUDED.email, staff_users.email),
+        updated_at = now()
+      RETURNING id, auth_user_id, email, COALESCE(name_zh, name_en) AS name
+      `,
+      [input.authUserId, input.email, input.name],
+    );
+    const staff = rows[0];
+    await queryRows(
+      `
+      INSERT INTO staff_roles (staff_user_id, role)
+      VALUES ($1, 'admin')
+      ON CONFLICT DO NOTHING
+      `,
+      [staff.id],
+    );
+    return {
+      staffId: stringOrEmpty(staff.id),
+      authUserId: stringOrEmpty(staff.auth_user_id),
+      email: stringOrNull(staff.email),
+      name: stringOrNull(staff.name),
+      roles: ["admin"],
+      bootstrap: true,
+    };
+  }
+
+  async function requireStaffAccess(request: Request, allowed: StaffRole[] = ["admin"]) {
+    const session = await getSession(request);
+    if (!session) throw new Response("Unauthorized", { status: 401 });
+
+    const email = session.user.email?.trim().toLowerCase() ?? "";
+    const allowlist = bootstrapAllowlist();
+    const bootstrapRows = email && allowlist.has(email) ? await bootstrapStaffRows() : [];
+    const { staff, denial } = await findStaff(session.user.id, session.user.email);
+    let access: StaffAccess | null = staff;
+    if (
+      shouldBootstrapFirstAdmin({
+        email,
+        allowlistedEmails: allowlist,
+        access: staff,
+        staffRows: bootstrapRows,
+      })
+    ) {
+      access = await bootstrapFirstStaff({
+        authUserId: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+      });
+    }
+
+    if (!access) throw new Response(denial ?? "Forbidden", { status: 403 });
+    if (!allowed.some((role) => access.roles.includes(role))) {
+      throw new Response("Forbidden", { status: 403 });
+    }
+    return access;
+  }
+
+  return { requireStaffAccess };
+}
+
+const defaultStaffAccessResolver = createStaffAccessResolver();
+
 export async function requireStaffAccess(request: Request, allowed: StaffRole[] = ["admin"]) {
-  const session = await getNeonSessionFromRequest(request);
-  if (!session) throw new Response("Unauthorized", { status: 401 });
-
-  const email = session.user.email?.trim().toLowerCase() ?? "";
-  const allowlist = bootstrapAllowlist();
-  const bootstrapRows = email && allowlist.has(email) ? await bootstrapStaffRows() : [];
-  const staff = await findStaff(session.user.id, session.user.email);
-  let access: StaffAccess | null = staff;
-  if (
-    shouldBootstrapFirstAdmin({
-      email,
-      allowlistedEmails: allowlist,
-      access: staff,
-      staffRows: bootstrapRows,
-    })
-  ) {
-    access = await bootstrapFirstStaff({
-      authUserId: session.user.id,
-      email: session.user.email,
-      name: session.user.name,
-    });
-  }
-
-  if (!access) throw new Response("Forbidden", { status: 403 });
-  if (!allowed.some((role) => access.roles.includes(role))) {
-    throw new Response("Forbidden", { status: 403 });
-  }
-  return access;
+  return defaultStaffAccessResolver.requireStaffAccess(request, allowed);
 }

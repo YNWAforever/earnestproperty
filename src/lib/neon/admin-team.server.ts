@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import type { StaffAccess, StaffRole } from "./auth.server.ts";
 import { queryRows, type DbRow } from "./db.server.ts";
 import type {
+  AdminTeamAccountState,
   AdminTeamFilterState,
   AdminTeamInvitationState,
   AdminTeamList,
@@ -22,7 +23,10 @@ type FetchStaffAccessSummary = (
 }>;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const staffRoles = new Set<StaffRole>(["admin", "manager", "agent"]);
+// Must track StaffRole (auth.server.ts): a role missing here is silently
+// stripped from every Team projection and rejected as a filter, which is how
+// members given the viewer role showed no roles at all.
+const staffRoles = new Set<StaffRole>(["admin", "manager", "agent", "viewer"]);
 const filterStates = new Set<AdminTeamFilterState>(["active", "suspended", "invited", "attention"]);
 const actionTypes = new Set([
   "invite",
@@ -302,6 +306,8 @@ export function createAdminTeamReadModel(
                 latest_action.safe_error_code AS latest_safe_error_code,
                 latest_action.retry_after AS latest_retry_after,
                 latest_action.provider_expires_at AS latest_provider_expires_at,
+                neon_user.id AS neon_auth_user_id,
+                neon_user.email_verified AS neon_auth_email_verified,
                 COALESCE((
                   SELECT json_agg(activity ORDER BY activity.created_at DESC, activity.id DESC)
                   FROM (
@@ -315,9 +321,17 @@ export function createAdminTeamReadModel(
            FROM staff_users s
            LEFT JOIN staff_roles r ON r.staff_user_id = s.id
            ${latestActionSql}
+           LEFT JOIN LATERAL (
+             SELECT u.id::text AS id, u."emailVerified" AS email_verified
+             FROM neon_auth."user" u
+             WHERE s.email IS NOT NULL AND lower(u.email) = lower(s.email)
+             ORDER BY u."createdAt" DESC
+             LIMIT 1
+           ) neon_user ON TRUE
           WHERE s.id = $1::uuid
           GROUP BY s.id, latest_action.action, latest_action.state, latest_action.safe_error_code,
-                   latest_action.retry_after, latest_action.provider_expires_at`,
+                   latest_action.retry_after, latest_action.provider_expires_at,
+                   neon_user.id, neon_user.email_verified`,
         [input.staffId],
       );
       const row = rows[0];
@@ -341,11 +355,21 @@ export function createAdminTeamReadModel(
           createdAt: dateString(item.createdAt ?? item.created_at) ?? "",
         }))
         .filter((item) => item.id && item.action && item.outcome && item.createdAt);
+      const authUserLinked = typeof row.auth_user_id === "string" && row.auth_user_id.length > 0;
+      const registered =
+        typeof row.neon_auth_user_id === "string" && row.neon_auth_user_id.length > 0;
+      // The Neon Auth user id itself stays server-side: the client only needs
+      // the state, and linking resolves the account again by email at write time.
+      const account: AdminTeamAccountState = authUserLinked
+        ? "linked"
+        : !registered
+          ? "unregistered"
+          : row.neon_auth_email_verified === true
+            ? "verified"
+            : "unverified";
       return {
         member,
-        identity: {
-          authUserLinked: typeof row.auth_user_id === "string" && row.auth_user_id.length > 0,
-        },
+        identity: { authUserLinked, account },
         ownership: { counts: access.owned, total: access.ownedTotal },
         latestOperation: {
           action: safeAction(

@@ -34,7 +34,7 @@ const member: AdminTeamMember = {
 
 const detail: AdminTeamMemberDetail = {
   member,
-  identity: { authUserLinked: true },
+  identity: { authUserLinked: true, account: "linked" },
   ownership: { counts: { inquiries: 2 }, total: 2 },
   latestOperation: {
     action: "invite",
@@ -298,5 +298,57 @@ describe("Admin Team request safety", () => {
       active: false,
       reassignToStaffId: "22222222-2222-4222-8222-222222222222",
     });
+  });
+});
+
+describe("Admin Team account linking", () => {
+  // Neon Auth leaves emailVerified false unless the project turns verification
+  // on, so an invited member who signs up is never auto-bound by
+  // auth.server.ts. The detail panel must say which state the member is in and
+  // give admins the explicit link action that unblocks them.
+  const unverified: AdminTeamMemberDetail = {
+    ...detail,
+    identity: { authUserLinked: false, account: "unverified" },
+  };
+
+  test("an unlinked member with an unverified sign-up gets a link action for admins only", () => {
+    const admin = render(
+      createElement(AdminTeamDetailPanel, {
+        detail: unverified,
+        canManage: true,
+        onAction: () => undefined,
+      }),
+    );
+    const manager = render(
+      createElement(AdminTeamDetailPanel, {
+        detail: unverified,
+        canManage: false,
+        onAction: () => undefined,
+      }),
+    );
+
+    expect(admin.text()).toContain("電郵未驗證");
+    expect(admin.text()).toContain("連結帳戶");
+    expect(manager.text()).toContain("電郵未驗證");
+    expect(manager.text()).not.toContain("連結帳戶");
+  });
+
+  test("an unregistered member is told to sign up first and cannot be linked yet", () => {
+    const $ = render(
+      createElement(AdminTeamDetailPanel, {
+        detail: { ...detail, identity: { authUserLinked: false, account: "unregistered" } },
+        canManage: true,
+        onAction: () => undefined,
+      }),
+    );
+
+    expect($.text()).toContain("尚未註冊");
+    expect($.text()).not.toContain("連結帳戶");
+  });
+
+  test("linking a record that already carries admin needs typed confirmation", () => {
+    expect(teamDialogCopy("link", ["admin", "agent"]).requiresConfirmation).toBe(true);
+    expect(teamDialogCopy("link", ["agent"]).requiresConfirmation).toBe(false);
+    expect(teamDialogCopy("link").description).toContain("相同電郵");
   });
 });

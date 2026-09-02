@@ -32,9 +32,18 @@ export type AdminTeamListInput = {
   limit?: number;
 };
 
+/**
+ * Where an unlinked member's Neon Auth sign-up stands, resolved by email:
+ * "linked" (auth_user_id bound; nothing to do), "unregistered" (no Neon Auth
+ * account with this email yet), "unverified" (registered, but Neon Auth has
+ * not verified the email -- its default -- so auth.server.ts refuses to
+ * auto-bind), "verified" (will auto-bind on the member's next request).
+ */
+export type AdminTeamAccountState = "linked" | "unregistered" | "unverified" | "verified";
+
 export type AdminTeamMemberDetail = {
   member: AdminTeamMember;
-  identity: { authUserLinked: boolean };
+  identity: { authUserLinked: boolean; account: AdminTeamAccountState };
   ownership: { counts: Record<string, number>; total: number };
   latestOperation: {
     action: "invite" | "resend_invitation" | "password_reset" | "session_revocation" | null;
@@ -52,6 +61,7 @@ export type InviteStaffMemberInput = { email: string; name?: string | null; role
 export type ResendStaffInvitationInput = { staffId: string };
 export type SendStaffPasswordResetInput = { staffId: string };
 export type ChangeStaffRolesInput = { staffId: string; roles: StaffRole[] };
+export type LinkStaffIdentityInput = { staffId: string };
 export type ChangeStaffActiveInput = {
   staffId: string;
   active: boolean;

@@ -37,6 +37,7 @@ describe("unwrapStaffAccessResponse", () => {
       ["successor-is-target", /接手人不能是同一位同事/],
       ["Unauthorized", /重新登入/],
       ["Forbidden", /沒有權限/],
+      ["staff-email-unverified", /尚未完成驗證/],
     ];
 
     for (const [reason, expected] of cases) {

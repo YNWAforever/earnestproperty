@@ -12,6 +12,7 @@ import type {
   ChangeStaffActiveInput,
   ChangeStaffRolesInput,
   InviteStaffMemberInput,
+  LinkStaffIdentityInput,
   ResendStaffInvitationInput,
   SendStaffPasswordResetInput,
   StaffLifecycleResult,
@@ -58,6 +59,9 @@ export const changeStaffActiveSchema = z
     reassignToStaffId: staffIdSchema.nullable().optional(),
   })
   .strict() as z.ZodType<ChangeStaffActiveInput>;
+export const linkStaffIdentitySchema = z
+  .object({ staffId: staffIdSchema })
+  .strict() as z.ZodType<LinkStaffIdentityInput>;
 export type AdminTeamLifecycleResult = StaffLifecycleResult;
 
 type ReadModel = {
@@ -98,6 +102,11 @@ type LifecycleService = {
     actor: StaffAccess,
     request: Request,
   ): Promise<{ ok: true; reassigned: Record<string, number> | null; requestId: string }>;
+  linkStaffIdentity(
+    input: LinkStaffIdentityInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<{ ok: true; emailVerified: boolean; requestId: string }>;
 };
 
 type AdminTeamServerBoundaryDependencies = {
@@ -175,6 +184,11 @@ export function createAdminTeamServerBoundary(
         service.changeStaffActive(input, actor, request),
       );
     },
+    linkStaffIdentity(input: LinkStaffIdentityInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.linkStaffIdentity(input, actor, request),
+      );
+    },
   };
 }
 
@@ -201,6 +215,9 @@ const changeStaffRolesServer = createServerFn({ method: "POST" })
 const changeStaffActiveServer = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => changeStaffActiveSchema.parse(data))
   .handler(({ data }) => boundary.changeStaffActive(data, getRequest()));
+const linkStaffIdentityServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => linkStaffIdentitySchema.parse(data))
+  .handler(({ data }) => boundary.linkStaffIdentity(data, getRequest()));
 
 async function withStaffHeaders<T extends { data: unknown }>(options: T) {
   // Keep the browser auth client out of the server boundary module's eager
@@ -227,5 +244,7 @@ export const changeStaffRoles = async (options: { data: ChangeStaffRolesInput })
   unwrapServerFnResponse(changeStaffRolesServer(await withStaffHeaders(options)));
 export const changeStaffActive = async (options: { data: ChangeStaffActiveInput }) =>
   unwrapServerFnResponse(changeStaffActiveServer(await withStaffHeaders(options)));
+export const linkStaffIdentity = async (options: { data: LinkStaffIdentityInput }) =>
+  unwrapServerFnResponse(linkStaffIdentityServer(await withStaffHeaders(options)));
 
 export type { AdminTeamFilterState };
