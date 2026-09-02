@@ -1,16 +1,101 @@
-import { createContext, useContext } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
+import { fetchStaffSession } from "@/lib/neon/admin-data";
 import type { StaffSession, StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
 
-/**
- * The signed-in user's staff identity as the server resolved it, provided by
- * AdminShell. `null` while it is still loading or when the lookup itself
- * failed -- consumers must treat null as "unknown", never as "denied".
- */
-export const StaffSessionContext = createContext<StaffSession | null>(null);
+export type StaffSessionSnapshot = {
+  userId: string | null;
+  /** null = not known yet, or the lookup itself failed. Never treat as denied. */
+  session: StaffSession | null;
+  loading: boolean;
+};
 
-export function useStaffSession() {
-  return useContext(StaffSessionContext);
+const EMPTY: StaffSessionSnapshot = { userId: null, session: null, loading: false };
+
+/**
+ * The signed-in user's staff identity as the server resolved it, held in a
+ * small shared store rather than React context.
+ *
+ * Context was the first attempt and it failed in production: the Provider
+ * lived inside AdminShell, but /admin/team reads the session in the component
+ * that RENDERS AdminShell -- above the Provider -- so it always saw null,
+ * canManage was false for every admin, and 連結帳戶 / 邀請成員 / 變更角色 all
+ * disappeared. A store can be read from any component regardless of tree
+ * position, and one lookup per signed-in user is shared by the shell and the
+ * page instead of being repeated on every page mount.
+ */
+export function createStaffSessionStore(fetcher: () => Promise<StaffSession>) {
+  let state: StaffSessionSnapshot = EMPTY;
+  let inFlight: { userId: string; promise: Promise<StaffSession | null> } | null = null;
+  const listeners = new Set<() => void>();
+
+  function publish(next: StaffSessionSnapshot) {
+    state = next;
+    for (const listener of listeners) listener();
+  }
+
+  function subscribe(listener: () => void) {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }
+
+  function getSnapshot() {
+    return state;
+  }
+
+  function reset() {
+    inFlight = null;
+    publish(EMPTY);
+  }
+
+  function refresh(userId: string): Promise<StaffSession | null> {
+    if (inFlight?.userId === userId) return inFlight.promise;
+    // Keep the previous answer visible while re-checking: a denial card that
+    // blanked on every 重新檢查 would look as if the check had cleared it.
+    publish({ userId, session: state.userId === userId ? state.session : null, loading: true });
+    const promise = fetcher()
+      .then((session): StaffSession | null => session)
+      .catch((): StaffSession | null => null)
+      .then((session) => {
+        if (inFlight?.promise === promise) inFlight = null;
+        // The user may have signed out (reset) or changed while this was in
+        // flight; only the current user's answer is published.
+        if (state.userId === userId) publish({ userId, session, loading: false });
+        return session;
+      });
+    inFlight = { userId, promise };
+    return promise;
+  }
+
+  function useStaffSession(userId: string | null) {
+    const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+    useEffect(() => {
+      if (!userId) {
+        if (state.userId !== null) reset();
+        return;
+      }
+      if (state.userId !== userId || (state.session === null && !state.loading)) {
+        void refresh(userId);
+      }
+    }, [userId]);
+    const current = snapshot.userId === userId ? snapshot : EMPTY;
+    return {
+      session: current.session,
+      loading: current.loading,
+      refresh: () => (userId ? refresh(userId) : Promise.resolve(null)),
+    };
+  }
+
+  return { subscribe, getSnapshot, reset, refresh, useStaffSession };
+}
+
+export const staffSessionStore = createStaffSessionStore(fetchStaffSession);
+
+/** Read (and lazily load) the signed-in user's staff session from any component. */
+export function useStaffSession(userId: string | null) {
+  return staffSessionStore.useStaffSession(userId);
 }
 
 /**

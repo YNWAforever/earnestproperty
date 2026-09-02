@@ -140,7 +140,7 @@ function AdminTeam() {
   // and reading the first hit's roles, so an admin whose staff email differed
   // from their sign-in email (or whose row was still unbound) saw a read-only
   // Team page with no explanation.
-  const staffSession = useStaffSession();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
   const canManage = staffSession?.status === "ok" && staffSession.roles.includes("admin");
   const [pending, setPending] = useState<PendingTeamDialog | null>(null);
   const [pendingOptions, setPendingOptions] = useState<TeamMemberActionOptions>({});
