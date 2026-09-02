@@ -1,7 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Building2, TrainFront, MapPinned } from "lucide-react";
 
+import { Container } from "@/components/layout/Container";
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
+import { PageHero } from "@/components/site/PageHero";
 import { pageSeo, seo } from "@/content/seo";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
@@ -54,52 +56,46 @@ function TsuenWanPage() {
   );
   return (
     <div className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-primary">荃灣 Tsuen Wan</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-5xl">
-            荃灣物業：港鐵、商場、海景生活圈一次比較
-          </h1>
-          <p className="mt-5 max-w-3xl text-muted-foreground">
-            荃灣由港鐵荃灣綫總站到荃灣西，再伸延至青山公路深井、汀九一帶，選擇橫跨市中心鐵路盤、海景大屋苑同低密度住宅。
-          </p>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="荃灣 Tsuen Wan"
+        title="荃灣物業：港鐵、商場、海景生活圈一次比較"
+        lead="荃灣由港鐵荃灣綫總站到荃灣西，再伸延至青山公路深井、汀九一帶，選擇橫跨市中心鐵路盤、海景大屋苑同低密度住宅。"
+      />
 
-      <div className="mx-auto max-w-6xl px-4 pt-6 sm:px-6 lg:px-8">
+      <Container className="py-12">
         <AnswerSummaryCallout summary={ANSWER_SUMMARY} />
-      </div>
 
-      <section className="mx-auto grid max-w-6xl gap-5 px-4 py-10 sm:px-6 md:grid-cols-3 lg:px-8">
-        {AREAS.map((area) => (
-          <article key={area.title} className="rounded-lg border bg-card p-5">
-            <Building2 className="h-6 w-6 text-primary" />
-            <h2 className="mt-4 text-lg font-semibold">{area.title}</h2>
-            <p className="mt-2 text-sm leading-7 text-muted-foreground">{area.text}</p>
+        <section className="mt-10 grid gap-5 md:grid-cols-3">
+          {AREAS.map((area) => (
+            <article key={area.title} className="rounded-lg border bg-card p-5">
+              <Building2 className="h-6 w-6 text-primary" />
+              <h2 className="mt-4 text-lg font-semibold">{area.title}</h2>
+              <p className="mt-2 text-sm leading-7 text-muted-foreground">{area.text}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="mt-6 grid gap-6 md:grid-cols-2">
+          <article className="rounded-lg border bg-card p-6">
+            <TrainFront className="h-7 w-7 text-primary" />
+            <h2 className="mt-4 text-xl font-semibold">交通點揀</h2>
+            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              想日日靠港鐵返工，荃灣市中心同荃灣西最直接；想用同等預算換取更大面積、海景或寧靜環境，就應比較深井及汀九。
+              青山公路沿線靠巴士、小巴和自駕接駁，通往中環、尖沙咀、機場都成熟。
+            </p>
           </article>
-        ))}
-      </section>
-
-      <section className="mx-auto grid max-w-6xl gap-6 px-4 pb-12 sm:px-6 md:grid-cols-2 lg:px-8">
-        <article className="rounded-lg border bg-card p-6">
-          <TrainFront className="h-7 w-7 text-primary" />
-          <h2 className="mt-4 text-xl font-semibold">交通點揀</h2>
-          <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            想日日靠港鐵返工，荃灣市中心同荃灣西最直接；想用同等預算換取更大面積、海景或寧靜環境，就應比較深井及汀九。
-            青山公路沿線靠巴士、小巴和自駕接駁，通往中環、尖沙咀、機場都成熟。
-          </p>
-        </article>
-        <article className="rounded-lg border bg-card p-6">
-          <MapPinned className="h-7 w-7 text-primary" />
-          <h2 className="mt-4 text-xl font-semibold">點樣比較荃灣同深井</h2>
-          <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            荃灣市中心勝在鐵路和購物，深井勝在海景、屋苑尺度和生活節奏。若你需要學校、上班時間和預算同時平衡，可以先睇荃灣，再到深井、汀九作同日比較。
-          </p>
-        </article>
-      </section>
+          <article className="rounded-lg border bg-card p-6">
+            <MapPinned className="h-7 w-7 text-primary" />
+            <h2 className="mt-4 text-xl font-semibold">點樣比較荃灣同深井</h2>
+            <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              荃灣市中心勝在鐵路和購物，深井勝在海景、屋苑尺度和生活節奏。若你需要學校、上班時間和預算同時平衡，可以先睇荃灣，再到深井、汀九作同日比較。
+            </p>
+          </article>
+        </section>
+      </Container>
 
       <section className="border-t bg-muted/30">
-        <div className="mx-auto flex max-w-6xl flex-wrap gap-3 px-4 py-8 sm:px-6 lg:px-8">
+        <Container className="flex flex-wrap gap-3 py-8">
           <Link
             to="/district/sham-tseng"
             className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
@@ -126,7 +122,7 @@ function TsuenWanPage() {
           >
             搜尋荃灣 / 深井放盤
           </Link>
-        </div>
+        </Container>
       </section>
     </div>
   );

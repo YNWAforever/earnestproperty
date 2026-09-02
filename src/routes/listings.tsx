@@ -35,6 +35,8 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SkeletonBlock } from "@/components/layout/SkeletonBlock";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
+import { Container } from "@/components/layout/Container";
+import { PageHero } from "@/components/site/PageHero";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { formatHkd, formatSaleDisplay, sanitizeListingText } from "@/lib/format";
@@ -1052,11 +1054,11 @@ function ListingsPendingComponent() {
   return (
     <div className="bg-background">
       <div className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Container className="py-8">
           <SkeletonBlock lines={2} className="max-w-xs" />
-        </div>
+        </Container>
       </div>
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[280px_1fr] lg:px-8">
+      <Container className="grid gap-6 py-8 lg:grid-cols-[280px_1fr]">
         <div className="hidden lg:block">
           <div className="rounded-lg border bg-card p-5">
             <SkeletonBlock lines={7} />
@@ -1071,7 +1073,7 @@ function ListingsPendingComponent() {
             ))}
           </ul>
         </div>
-      </div>
+      </Container>
     </div>
   );
 }
@@ -1153,21 +1155,19 @@ function ListingsPage() {
           }}
         />
       ) : null}
-      <div className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">搜尋放盤</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            共 {total.toLocaleString()} 個放盤符合篩選條件
-          </p>
-        </div>
-      </div>
+      <PageHero
+        size="compact"
+        eyebrow="放盤搜尋"
+        title="搜尋放盤"
+        lead={`共 ${total.toLocaleString()} 個放盤符合篩選條件`}
+      />
 
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[280px_1fr] lg:px-8">
+      <Container className="grid gap-6 py-8 lg:grid-cols-[280px_1fr]">
         <aside className="hidden lg:block lg:sticky lg:top-20 lg:self-start">
           <DesktopFiltersPanel estates={estates} filters={filters} />
         </aside>
 
-        <section>
+        <section aria-label="搜尋結果">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <MobileFiltersSheet
               estates={estates}
@@ -1253,7 +1253,7 @@ function ListingsPage() {
 
           {totalPages > 1 && <Pagination current={search.page} total={totalPages} />}
         </section>
-      </div>
+      </Container>
     </div>
   );
 }
@@ -1446,7 +1446,7 @@ function ListingCardRow({ p }: { p: ListingRow }) {
 function Pagination({ current, total }: { current: number; total: number }) {
   const pages = pageRange(current, total);
   return (
-    <nav className="mt-8 flex items-center justify-center gap-1">
+    <nav aria-label="分頁" className="mt-8 flex items-center justify-center gap-1">
       <PageLink page={current - 1} disabled={current === 1} aria-label="上一頁">
         <ChevronLeft className="h-4 w-4" />
       </PageLink>

@@ -525,7 +525,10 @@ test("castle peak road links and media use route-aware safeguards", () => {
   assert.doesNotMatch(segment, /district=\$\{segment\.districtSlugs\[0\]/);
   assert.match(segment, /function getSegmentListingsHref/);
   assert.match(segment, /const supportedListingDistrictSlugs/);
-  assert.match(segment, /function CorridorRelatedLink/);
+  // UI refinement 2026-09-03: the page-local CorridorRelatedLink mapper was
+  // superseded by the site-wide SiteLink (src/components/site/SiteLink.tsx).
+  assert.match(segment, /<SiteLink\b/);
+  assert.doesNotMatch(segment, /function CorridorRelatedLink/);
   assert.doesNotMatch(segment, /<a\s+key=\{link\.href\}/);
   assert.match(inventory, /function ListingHrefLink/);
   assert.doesNotMatch(inventory, /<a href=\{listingsHref\}/);

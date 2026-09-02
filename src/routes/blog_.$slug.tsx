@@ -1,12 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
+import { Container } from "@/components/layout/Container";
 import { DataNote } from "@/components/layout/DataNote";
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
 import {
   BlogEstateComparisonTable,
   type EstateComparisonRow,
 } from "@/components/site/BlogEstateComparisonTable";
+import { Breadcrumbs } from "@/components/site/Breadcrumbs";
+import { PageHero } from "@/components/site/PageHero";
+import { SiteLink } from "@/components/site/SiteLink";
 import { blogArticles, EDITORIAL_AUTHOR, type BlogArticleSection } from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
@@ -208,17 +212,18 @@ function BlogArticlePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
       />
-      <article className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        <Link
-          to="/blog"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          返回 Blog
-        </Link>
-
-        <header className="mt-8 border-b pb-8">
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      <PageHero
+        breadcrumb={
+          <Breadcrumbs
+            items={[
+              { label: "首頁", href: "/" },
+              { label: "市場分析", href: "/blog" },
+              { label: article.title },
+            ]}
+          />
+        }
+        eyebrow={
+          <span className="inline-flex flex-wrap items-center gap-3">
             {article.category && (
               <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
                 {article.category}
@@ -228,73 +233,75 @@ function BlogArticlePage() {
               <Clock className="h-3.5 w-3.5" />
               {article.reading_minutes ?? 5} 分鐘閱讀
             </span>
-          </div>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">{article.title}</h1>
-          {article.excerpt && (
-            <p className="mt-4 text-lg leading-8 text-muted-foreground">{article.excerpt}</p>
+          </span>
+        }
+        title={article.title}
+        lead={article.excerpt}
+      >
+        <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span>作者：{article.author}</span>
+          {article.reviewer && <span>審閱：{article.reviewer}</span>}
+          <Link to="/blog/editorial-standards" className="text-primary underline">
+            編採標準
+          </Link>
+        </div>
+        {article.sourcesNote && <DataNote source={article.sourcesNote} className="mt-3" />}
+      </PageHero>
+
+      <Container className="py-12">
+        <article className="max-w-3xl">
+          <AnswerSummaryCallout summary={article.answerSummary} />
+
+          {article.sections.length >= 2 && (
+            <nav aria-label="目錄" className="mt-8 rounded-md border bg-muted/30 p-4">
+              <h2 className="text-sm font-semibold">目錄</h2>
+              <ol className="mt-2 space-y-1 text-sm">
+                {article.sections.map((section, index) => (
+                  <li key={sectionAnchors[index]}>
+                    <a href={`#${sectionAnchors[index]}`} className="text-primary hover:underline">
+                      {section.heading}
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
           )}
 
-          <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-            <span>作者：{article.author}</span>
-            {article.reviewer && <span>審閱：{article.reviewer}</span>}
-            <Link to="/blog/editorial-standards" className="text-primary underline">
-              編採標準
-            </Link>
+          <div className="prose prose-neutral mt-8 max-w-none">
+            {article.sections.map((section, index) => (
+              <section key={sectionAnchors[index]} id={sectionAnchors[index]}>
+                {section.heading && (
+                  <h2 className="text-xl font-bold text-foreground">{section.heading}</h2>
+                )}
+                {section.paragraphs.map((paragraph, paragraphIndex) => (
+                  <p key={paragraphIndex} className="leading-8 text-foreground/85">
+                    {paragraph}
+                  </p>
+                ))}
+              </section>
+            ))}
           </div>
-          {article.sourcesNote && <DataNote source={article.sourcesNote} className="mt-3" />}
-        </header>
 
-        <AnswerSummaryCallout summary={article.answerSummary} />
+          {compareEstates.length > 0 && <BlogEstateComparisonTable estates={compareEstates} />}
 
-        {article.sections.length >= 2 && (
-          <nav aria-label="目錄" className="mt-8 rounded-md border bg-muted/30 p-4">
-            <h2 className="text-sm font-semibold">目錄</h2>
-            <ol className="mt-2 space-y-1 text-sm">
-              {article.sections.map((section, index) => (
-                <li key={sectionAnchors[index]}>
-                  <a href={`#${sectionAnchors[index]}`} className="text-primary hover:underline">
-                    {section.heading}
-                  </a>
-                </li>
-              ))}
-            </ol>
-          </nav>
-        )}
-
-        <div className="prose prose-neutral mt-8 max-w-none">
-          {article.sections.map((section, index) => (
-            <section key={sectionAnchors[index]} id={sectionAnchors[index]}>
-              {section.heading && (
-                <h2 className="text-xl font-bold text-foreground">{section.heading}</h2>
-              )}
-              {section.paragraphs.map((paragraph, paragraphIndex) => (
-                <p key={paragraphIndex} className="leading-8 text-foreground/85">
-                  {paragraph}
-                </p>
-              ))}
-            </section>
-          ))}
-        </div>
-
-        {compareEstates.length > 0 && <BlogEstateComparisonTable estates={compareEstates} />}
-
-        {article.links && article.links.length > 0 && (
-          <nav className="mt-10 rounded-lg border bg-muted/30 p-5">
-            <h2 className="text-sm font-semibold">延伸閱讀</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {article.links.map((link) => (
-                <Link
-                  key={link.href}
-                  to={link.href}
-                  className="rounded-md border bg-background px-3 py-2 text-sm font-medium hover:border-primary hover:text-primary"
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          </nav>
-        )}
-      </article>
+          {article.links && article.links.length > 0 && (
+            <nav className="mt-10 rounded-lg border bg-muted/30 p-5">
+              <h2 className="text-sm font-semibold">延伸閱讀</h2>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {article.links.map((link) => (
+                  <SiteLink
+                    key={link.href}
+                    href={link.href}
+                    className="rounded-md border bg-background px-3 py-2 text-sm font-medium hover:border-primary hover:text-primary"
+                  >
+                    {link.label}
+                  </SiteLink>
+                ))}
+              </div>
+            </nav>
+          )}
+        </article>
+      </Container>
     </div>
   );
 }

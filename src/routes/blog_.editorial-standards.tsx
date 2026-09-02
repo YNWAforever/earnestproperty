@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
+import { Container } from "@/components/layout/Container";
+import { PageHero } from "@/components/site/PageHero";
 import { canonicalLink, pageSeo } from "@/content/seo";
 
 // `blog_` (not `blog`) opts this route out of nesting under /blog, matching
@@ -19,20 +21,17 @@ export const Route = createFileRoute("/blog_/editorial-standards")({
 
 function EditorialStandardsPage() {
   return (
-    <main className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-primary">Blog</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">編採及事實查核標準</h1>
-          <p className="mt-4 text-muted-foreground">
-            本頁說明晉誠地產 Blog
-            文章的資料來源、審閱制度，以及邊啲內容係已核實嘅事實、邊啲係我哋嘅分析意見。
-          </p>
-        </div>
-      </section>
+    // A <div>, not <main> -- __root.tsx already wraps every route's <Outlet/>
+    // in the page's one <main>, so a second one here nested two main landmarks.
+    <div className="bg-background">
+      <PageHero
+        eyebrow="Blog"
+        title="編採及事實查核標準"
+        lead="本頁說明晉誠地產 Blog 文章的資料來源、審閱制度，以及邊啲內容係已核實嘅事實、邊啲係我哋嘅分析意見。"
+      />
 
-      <section className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="prose prose-neutral max-w-none space-y-6">
+      <Container className="py-12">
+        <div className="prose prose-neutral max-w-3xl space-y-6">
           <div>
             <h2 className="text-xl font-semibold">資料來源</h2>
             <p className="mt-3 leading-7 text-muted-foreground">
@@ -72,7 +71,7 @@ function EditorialStandardsPage() {
             。
           </p>
         </div>
-      </section>
-    </main>
+      </Container>
+    </div>
   );
 }

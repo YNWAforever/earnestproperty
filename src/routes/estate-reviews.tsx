@@ -2,7 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen, Building2, MessageCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { Container } from "@/components/layout/Container";
+import { EmptyState } from "@/components/layout/EmptyState";
 import { AppImage } from "@/components/media/AppImage";
+import { PageHero } from "@/components/site/PageHero";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { getEstateEntry } from "@/content/estate-registry";
@@ -75,19 +78,13 @@ function EstateReviewsPage() {
 
   return (
     <div className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-coral">屋苑開箱</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-5xl">
-            深井 青山公路 汀九屋苑開箱
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
-            先睇屋苑文章，再入屋苑頁比較放盤、成交、校網、交通和生活配套。
-          </p>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="屋苑開箱"
+        title="深井 青山公路 汀九屋苑開箱"
+        lead="先睇屋苑文章，再入屋苑頁比較放盤、成交、校網、交通和生活配套。"
+      />
 
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <Container className="py-12">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-coral">屋苑文章</p>
@@ -108,19 +105,17 @@ function EstateReviewsPage() {
             ))}
           </div>
         ) : (
-          <div className="mt-6 rounded-lg border bg-card p-6 text-center shadow-card">
-            <BookOpen className="mx-auto h-8 w-8 text-coral" />
-            <h3 className="mt-3 text-lg font-semibold text-primary">暫未有屋苑開箱文章</h3>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-muted-foreground">
-              文章未發佈前，可先由下方屋苑入口睇放盤與成交；想要現場開箱影片或睇樓路線，歡迎直接
-              WhatsApp。
-            </p>
-          </div>
+          <EmptyState
+            className="mt-6"
+            icon={BookOpen}
+            title="暫未有屋苑開箱文章"
+            description="文章未發佈前，可先由下方屋苑入口睇放盤與成交；想要現場開箱影片或睇樓路線，歡迎直接 WhatsApp。"
+          />
         )}
-      </section>
+      </Container>
 
       <section className="border-y bg-card">
-        <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+        <Container className="py-12">
           <p className="text-sm font-semibold text-coral">屋苑專頁</p>
           <h2 className="mt-2 text-2xl font-bold text-primary">屋苑入口</h2>
           {estatesWithDistrict.length > 0 && (
@@ -142,21 +137,32 @@ function EstateReviewsPage() {
               ))}
             </div>
           )}
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredEstates.map((estate) => (
-              <Link
-                key={estate.slug}
-                to="/estate/$slug"
-                params={{ slug: estate.slug }}
-                className="rounded-lg border bg-background p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-elegant"
-              >
-                <Building2 className="h-6 w-6 text-coral" />
-                <h3 className="mt-4 text-lg font-semibold text-primary">{estate.name_zh}</h3>
-                <p className="mt-2 text-sm text-muted-foreground">查看放盤、成交及屋苑資料</p>
-              </Link>
-            ))}
-          </div>
-        </div>
+          {filteredEstates.length > 0 ? (
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredEstates.map((estate) => (
+                <Link
+                  key={estate.slug}
+                  to="/estate/$slug"
+                  params={{ slug: estate.slug }}
+                  className="rounded-lg border bg-background p-5 shadow-card transition hover:-translate-y-0.5 hover:shadow-elegant"
+                >
+                  <Building2 className="h-6 w-6 text-coral" />
+                  <h3 className="mt-4 text-lg font-semibold text-primary">{estate.name_zh}</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">查看放盤、成交及屋苑資料</p>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            // A district chip that matches nothing used to leave an empty
+            // grid with no message. "全部" contributes no district word so the
+            // no-estates-at-all case doesn't read as 「暫未有全部屋苑專頁」.
+            <EmptyState
+              className="mt-6 bg-background"
+              title={`暫未有${districtFilter === "全部" ? "" : districtFilter}屋苑專頁`}
+              description="試試其他地區，或直接 WhatsApp 查詢。"
+            />
+          )}
+        </Container>
       </section>
     </div>
   );
