@@ -545,7 +545,10 @@ function AdminBlasts() {
   }
 
   return (
-    <AdminShell title="WhatsApp 群發" description="只用已審批範本、只發給已同意接收的客戶。">
+    <AdminShell
+      title="推廣活動"
+      description="WhatsApp 群發：只用已審批範本、只發給已同意接收的客戶。"
+    >
       {error ? <AdminError message={error} /> : null}
 
       <AdminToolbar
@@ -623,7 +626,10 @@ function AdminBlasts() {
             <CardDescription>WhatsApp 範本群發及送達狀況。</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {campaignRows.length ? (
+            {/* `rows` is null until the first load answers: rendering the
+                「未有 Campaign」 empty state off `campaignRows.length` alone
+                painted it under the loading skeleton on every visit. */}
+            {!rows ? null : campaignRows.length ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -1482,12 +1488,15 @@ function CampaignStatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{campaignStatusLabels[status] ?? status}</Badge>;
 }
 
+// A wrapping <label> associates the text with the first form control inside
+// it -- the previous `<Label>` sat beside the control with no htmlFor, so
+// screen readers announced every dialog field as unlabelled.
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="grid gap-2">
-      <Label>{label}</Label>
+    <label className="grid gap-2 text-sm font-medium">
+      <span>{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 

@@ -960,7 +960,9 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     destinations.length,
     `duplicate sidebar destination: ${destinations.join(", ")}`,
   );
-  assert.equal(destinations.length, 12);
+  // 13 = the 12 approved destinations plus /admin/leads/command-center, which
+  // had no sidebar entry at all (its only way in was a button on /admin/leads).
+  assert.equal(destinations.length, 13);
 
   for (const heading of ["Workspace", "Growth", "Administration"]) {
     assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);

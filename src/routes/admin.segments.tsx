@@ -57,6 +57,12 @@ const defaultPrompt = "深井買家，預算 800-1000 萬，最近 90 日查詢�
 // discarding work that did not exist.
 const defaultSegmentName = "深井買家 WhatsApp Segment";
 
+const SEGMENT_STATUS_LABELS: Record<string, string> = {
+  draft: "草稿",
+  active: "使用中",
+  archived: "已封存",
+};
+
 export const Route = createFileRoute("/admin/segments")({
   head: () => ({
     meta: [{ title: "Segments｜Earnest Admin" }, { name: "robots", content: "noindex" }],
@@ -74,6 +80,7 @@ function AdminSegments() {
   const [previewState, setPreviewState] = useState<AdminCrmSegmentPreviewState | null>(null);
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [materializing, setMaterializing] = useState(false);
   const [creatingAudienceSegmentId, setCreatingAudienceSegmentId] = useState<string | null>(null);
@@ -150,7 +157,7 @@ function AdminSegments() {
   );
 
   const previewSummary = useMemo(() => {
-    if (!preview) return "No preview";
+    if (!preview) return "未有預覽";
     return `${preview.total} 位符合條件，其中 ${preview.eligible} 位可接收訊息`;
   }, [preview]);
 
@@ -158,13 +165,16 @@ function AdminSegments() {
     // Gate EVERY path that overwrites the editor, including 新增 segment --
     // which resets name/status/prompt just as destructively as loading another
     // segment, but sat above the confirm and so discarded unsaved work silently.
-    if (
-      hasUnsavedSegmentEdits &&
-      !window.confirm("你尚未儲存目前的分群描述，切換後會遺失。確定要切換嗎？")
-    ) {
+    // Asked through the shared AdminConfirmDialog rather than window.confirm,
+    // which was the one native browser dialog left in the admin.
+    if (hasUnsavedSegmentEdits) {
+      setPendingSwitchId(segmentId);
       return;
     }
+    applySegmentSelection(segmentId);
+  }
 
+  function applySegmentSelection(segmentId: string) {
     if (segmentId === "new") {
       setSelectedSegmentId("");
       setName(defaultSegmentName);
@@ -333,8 +343,8 @@ function AdminSegments() {
 
   return (
     <AdminShell
-      title="AI 客戶分群"
-      description="用自然語言描述條件，建立可供 WhatsApp 群發使用的客戶名單。"
+      title="客戶分群"
+      description="AI 分群：用自然語言描述條件，建立可供 WhatsApp 群發使用的客戶名單。"
     >
       {error ? <AdminError message={error} /> : null}
 
@@ -402,34 +412,34 @@ function AdminSegments() {
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px]">
               <div className="space-y-2">
-                <Label htmlFor="segment-name">Name</Label>
+                <Label htmlFor="segment-name">分群名稱</Label>
                 <Input
                   id="segment-name"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  aria-label="Segment name"
+                  aria-label="分群名稱"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="segment-status">Status</Label>
+                <Label htmlFor="segment-status">狀態</Label>
                 <Select
                   value={status}
                   onValueChange={(value) => setStatus(value as AdminCrmSegmentRow["status"])}
                 >
-                  <SelectTrigger id="segment-status" aria-label="Segment status">
+                  <SelectTrigger id="segment-status" aria-label="分群狀態">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
+                    <SelectItem value="draft">草稿</SelectItem>
+                    <SelectItem value="active">使用中</SelectItem>
+                    <SelectItem value="archived">已封存</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="segment-prompt">Prompt</Label>
+              <Label htmlFor="segment-prompt">客戶條件描述</Label>
               <Textarea
                 id="segment-prompt"
                 value={prompt}
@@ -437,12 +447,21 @@ function AdminSegments() {
                   setPrompt(event.target.value);
                   clearPreviewState();
                 }}
-                aria-label="Segment prompt"
+                aria-label="客戶條件描述"
                 rows={4}
               />
             </div>
 
-            {preview ? (
+            {previewLoading && !preview ? (
+              // A slow preview used to render the "no preview" empty state
+              // until the answer arrived, so it looked like zero matches.
+              <div role="status" aria-live="polite" className="space-y-3 rounded-md border p-4">
+                <p className="text-sm text-muted-foreground">正在預覽符合條件的客戶…</p>
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-full" />
+                <Skeleton className="h-8 w-2/3" />
+              </div>
+            ) : preview ? (
               <div className="rounded-md border">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
                   <div>
@@ -485,8 +504,18 @@ function AdminSegments() {
               </div>
             ) : (
               <AdminEmptyState
-                title="No segment preview"
-                description="Enter an audience prompt and preview matched contacts."
+                title="未有預覽結果"
+                description="輸入客戶條件描述後按「預覽」，即可查看符合條件及可接收訊息的客戶。"
+                action={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void runPreview()}
+                    disabled={previewLoading || !prompt.trim()}
+                  >
+                    預覽名單
+                  </Button>
+                }
               />
             )}
           </CardContent>
@@ -494,16 +523,24 @@ function AdminSegments() {
 
         <Card className="h-fit">
           <CardHeader>
-            <CardTitle className="text-base">Saved segments</CardTitle>
-            <CardDescription>{segments?.length ?? 0} CRM segments</CardDescription>
+            <CardTitle as="h2" className="text-base">
+              已儲存的分群
+            </CardTitle>
+            <CardDescription>{segments?.length ?? 0} 個 CRM 分群</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {segments?.length ? (
               segments.map((segment) => (
-                <div key={segment.id} className="w-full rounded-md border p-3">
+                <div
+                  key={segment.id}
+                  className={`w-full rounded-md border p-3 ${
+                    segment.id === selectedSegmentId ? "border-primary bg-primary/5" : ""
+                  }`}
+                >
                   <button
                     type="button"
                     className="-m-1 w-[calc(100%+0.5rem)] rounded p-1 text-left transition hover:bg-accent"
+                    aria-current={segment.id === selectedSegmentId ? "true" : undefined}
                     onClick={() => selectSegment(segment.id)}
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -514,7 +551,7 @@ function AdminSegments() {
                         </p>
                       </div>
                       <Badge variant={segment.status === "active" ? "default" : "secondary"}>
-                        {segment.status}
+                        {SEGMENT_STATUS_LABELS[segment.status] ?? segment.status}
                       </Badge>
                     </div>
                   </button>
@@ -539,8 +576,8 @@ function AdminSegments() {
               ))
             ) : (
               <AdminEmptyState
-                title="No saved segments"
-                description="Save a previewed segment before materializing an audience."
+                title="未有已儲存的分群"
+                description="先預覽並儲存一個分群，之後才可以建立推廣活動的收件群組。"
               />
             )}
           </CardContent>
@@ -585,6 +622,21 @@ function AdminSegments() {
           <SegmentFilterSummary filters={preview?.filters} />
         </div>
       </AdminConfirmDialog>
+      <AdminConfirmDialog
+        open={pendingSwitchId !== null}
+        title="尚未儲存"
+        description="你尚未儲存目前的分群描述，切換後會遺失。確定要切換嗎？"
+        confirmLabel="切換並放棄修改"
+        confirmVariant="destructive"
+        onOpenChange={(open) => {
+          if (!open) setPendingSwitchId(null);
+        }}
+        onConfirm={() => {
+          const next = pendingSwitchId;
+          setPendingSwitchId(null);
+          if (next !== null) applySegmentSelection(next);
+        }}
+      />
     </AdminShell>
   );
 }

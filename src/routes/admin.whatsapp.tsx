@@ -757,7 +757,7 @@ function AdminWhatsapp() {
 
   return (
     <AdminShell
-      title="WhatsApp Inbox"
+      title="WhatsApp 收件匣"
       description="集中處理 Woztell 收件匣、客服狀態及 24 小時服務窗口內的回覆。"
     >
       <AdminToolbar
