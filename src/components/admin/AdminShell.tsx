@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -22,13 +22,12 @@ import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { adminErrorText } from "@/components/admin/admin-error-text";
-import { StaffSessionContext, staffSessionDenialCopy } from "@/components/admin/staff-session";
+import { staffSessionDenialCopy, useStaffSession } from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { fetchStaffSession } from "@/lib/neon/admin-data";
-import type { StaffSession, StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
+import type { StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
 
 // Prefix matching is reserved for sections that own child routes. Team and
 // Operations deliberately stay exact so neither can illuminate the other.
@@ -222,41 +221,15 @@ export function AdminShell({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  // The server's resolution of who this signed-in user is as a staff member.
-  // null = not known yet (or the lookup itself failed): pages render as normal
-  // and the data layer still enforces access. Only an explicit denial swaps
-  // the page for an explanation.
-  const [staffSession, setStaffSession] = useState<StaffSession | null>(null);
-  const [rechecking, setRechecking] = useState(false);
-  const userId = user?.id ?? null;
-
-  const loadStaffSession = useCallback(async () => {
-    if (!userId) return;
-    setRechecking(true);
-    try {
-      setStaffSession(await fetchStaffSession());
-    } catch {
-      setStaffSession(null);
-    } finally {
-      setRechecking(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    setStaffSession(null);
-    if (!userId) return;
-    let cancelled = false;
-    fetchStaffSession()
-      .then((session) => {
-        if (!cancelled) setStaffSession(session);
-      })
-      .catch(() => {
-        if (!cancelled) setStaffSession(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
+  // The server's resolution of who this signed-in user is as a staff member,
+  // from the shared store in staff-session.ts. null = not known yet (or the
+  // lookup itself failed): pages render as normal and the data layer still
+  // enforces access. Only an explicit denial swaps the page for an explanation.
+  const {
+    session: staffSession,
+    loading: rechecking,
+    refresh: refreshStaffSession,
+  } = useStaffSession(user?.id ?? null);
 
   async function handleSignOut() {
     // Sat one item below 群發 in the sidebar with no confirmation, no pending
@@ -309,104 +282,102 @@ export function AdminShell({
   }
 
   return (
-    <StaffSessionContext.Provider value={staffSession}>
-      <div className="min-h-screen bg-slate-50/70">
-        <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
-          {/* lg:top-20 clears the 64px sticky public SiteHeader, which previously
+    <div className="min-h-screen bg-slate-50/70">
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
+        {/* lg:top-20 clears the 64px sticky public SiteHeader, which previously
             overlapped the sidebar's identity block and first nav item once
             scrolled. overflow-y-auto lets the last nav items and 登出 be
             reached on short laptop viewports. */}
-          <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-20 lg:block lg:h-[calc(100vh-6rem)] lg:overflow-y-auto">
-            <AdminIdentity email={user.email} />
-            <div className="mt-4">
-              <AdminNav />
-            </div>
-            <div className="mt-4 border-t pt-3">
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-                onClick={() => setSignOutOpen(true)}
-              >
-                <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
-                登出
-              </Button>
-            </div>
-          </aside>
+        <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-20 lg:block lg:h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <AdminIdentity email={user.email} />
+          <div className="mt-4">
+            <AdminNav />
+          </div>
+          <div className="mt-4 border-t pt-3">
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => setSignOutOpen(true)}
+            >
+              <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
+              登出
+            </Button>
+          </div>
+        </aside>
 
-          <div className="min-w-0 py-4 lg:px-6 lg:py-0">
-            <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  {/* Below lg the sidebar is a drawer: previously the 11-item nav
+        <div className="min-w-0 py-4 lg:px-6 lg:py-0">
+          <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                {/* Below lg the sidebar is a drawer: previously the 11-item nav
                     stacked above every page, pushing the actual content ~600px
                     down on any phone or tablet visit. */}
-                  <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-                    <SheetTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="lg:hidden"
-                        aria-label="開啟後台選單"
-                      >
-                        <Menu className="h-5 w-5" aria-hidden="true" />
-                      </Button>
-                    </SheetTrigger>
-                    <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)]">
-                      <SheetTitle className="sr-only">後台選單</SheetTitle>
-                      <div className="flex h-full flex-col">
-                        <div className="mt-8">
-                          <AdminIdentity email={user.email} />
-                        </div>
-                        <div className="mt-4 flex-1 overflow-y-auto pr-1">
-                          <AdminNav onNavigate={() => setMobileNavOpen(false)} />
-                        </div>
-                        <div className="border-t pt-3">
-                          <Button
-                            variant="ghost"
-                            className="w-full justify-start"
-                            onClick={() => setSignOutOpen(true)}
-                          >
-                            <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
-                            登出
-                          </Button>
-                        </div>
+                <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="lg:hidden"
+                      aria-label="開啟後台選單"
+                    >
+                      <Menu className="h-5 w-5" aria-hidden="true" />
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)]">
+                    <SheetTitle className="sr-only">後台選單</SheetTitle>
+                    <div className="flex h-full flex-col">
+                      <div className="mt-8">
+                        <AdminIdentity email={user.email} />
                       </div>
-                    </SheetContent>
-                  </Sheet>
-                  <h1 className="truncate text-2xl font-semibold tracking-normal">{title}</h1>
-                </div>
-                {breadcrumb ? (
-                  <div className="mt-1 text-xs text-muted-foreground">{breadcrumb}</div>
-                ) : null}
-                <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+                      <div className="mt-4 flex-1 overflow-y-auto pr-1">
+                        <AdminNav onNavigate={() => setMobileNavOpen(false)} />
+                      </div>
+                      <div className="border-t pt-3">
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start"
+                          onClick={() => setSignOutOpen(true)}
+                        >
+                          <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
+                          登出
+                        </Button>
+                      </div>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+                <h1 className="truncate text-2xl font-semibold tracking-normal">{title}</h1>
               </div>
-              {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-            </header>
-            {staffSession?.status === "denied" ? (
-              <StaffAccessDenied
-                reason={staffSession.reason}
-                email={user.email}
-                rechecking={rechecking}
-                onRecheck={() => void loadStaffSession()}
-                onSignOut={() => setSignOutOpen(true)}
-              />
-            ) : (
-              children
-            )}
-          </div>
+              {breadcrumb ? (
+                <div className="mt-1 text-xs text-muted-foreground">{breadcrumb}</div>
+              ) : null}
+              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+            </div>
+            {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+          </header>
+          {staffSession?.status === "denied" ? (
+            <StaffAccessDenied
+              reason={staffSession.reason}
+              email={user.email}
+              rechecking={rechecking}
+              onRecheck={() => void refreshStaffSession()}
+              onSignOut={() => setSignOutOpen(true)}
+            />
+          ) : (
+            children
+          )}
         </div>
-
-        <AdminConfirmDialog
-          open={signOutOpen}
-          title="確認登出？"
-          description="登出後需要重新使用 Neon Auth 登入才可返回後台。未儲存的修改會遺失。"
-          confirmLabel="登出"
-          isPending={signingOut}
-          onOpenChange={setSignOutOpen}
-          onConfirm={() => void handleSignOut()}
-        />
       </div>
-    </StaffSessionContext.Provider>
+
+      <AdminConfirmDialog
+        open={signOutOpen}
+        title="確認登出？"
+        description="登出後需要重新使用 Neon Auth 登入才可返回後台。未儲存的修改會遺失。"
+        confirmLabel="登出"
+        isPending={signingOut}
+        onOpenChange={setSignOutOpen}
+        onConfirm={() => void handleSignOut()}
+      />
+    </div>
   );
 }
 
