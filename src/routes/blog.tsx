@@ -32,7 +32,9 @@ const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
   author: article.author,
 }));
 
-const primaryArticleTitle = "深井買樓全攻略 2026";
+// The flagship guide gets a "start here" link in the hero rather than being
+// spliced into the lead sentence (「由「…」開始」 read as broken copy).
+const primaryArticle = { slug: "sham-tseng-buying-guide-2026", title: "深井買樓全攻略 2026" };
 
 const CATEGORY_FILTERS = ["全部", ...BLOG_CATEGORIES] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
@@ -82,10 +84,19 @@ function BlogPage() {
   return (
     <div className="bg-background">
       <PageHero
-        eyebrow="深井 / 荃灣樓市分析"
-        title="深井樓市 Blog"
-        lead={`由「${primaryArticleTitle}」開始，整理屋苑比較、交通校網同最新放盤觀察，幫你更快判斷深井樓市。`}
-      />
+        eyebrow="市場分析 Blog"
+        title="深井 青山公路 汀九樓市分析"
+        lead="整理屋苑比較、交通校網、成交走勢同最新放盤觀察，幫你更快判斷深井、青山公路及汀九樓市。"
+      >
+        <Link
+          to="/blog/$slug"
+          params={{ slug: primaryArticle.slug }}
+          className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-md border bg-background px-4 text-sm font-semibold text-primary transition hover:border-primary"
+        >
+          新手先睇：{primaryArticle.title}
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </PageHero>
 
       <Container className="py-12">
         <section>

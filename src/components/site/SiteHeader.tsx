@@ -94,14 +94,16 @@ const megaMenus: MegaMenuGroup[] = [
         description: "查看汀九筍盤、海景屋苑及區內成交資訊。",
       },
     ],
+    // Direct estate entry points (the client's homepage order, the five with
+    // a detail page first). This replaced a single generic 屋苑入口 link that
+    // opened one estate -- redundant next to the district pages, and its
+    // description only restated the label.
     links: [
-      {
-        href: "/estate/bellagio",
-        label: "屋苑入口",
-        // Names the destination: a generic label that lands on one specific
-        // estate otherwise reads as a wrong turn.
-        description: "由碧堤半島屋苑頁開始，再比較深井、青山公路其他屋苑。",
-      },
+      { href: "/estate/bellagio", label: "碧堤半島" },
+      { href: "/estate/sea-crest-villa", label: "浪翠園" },
+      { href: "/estate/lido-garden", label: "麗都花園" },
+      { href: "/estate/rhine-garden", label: "海韻花園" },
+      { href: "/estate/hong-kong-garden", label: "豪景花園" },
       { to: "/estate-reviews", label: "屋苑開箱", description: "用開箱內容比較屋苑特色。" },
     ],
     cta: { to: "/listings", label: "查看全部放盤" },

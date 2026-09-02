@@ -238,6 +238,10 @@ function PropertyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
   const { favourited, toggle: toggleFavourited } = useFavourite(property.listing_no);
+  // The breadcrumb shows the short id the title already uses (#C024131); the
+  // full "C024131-6714584-S" wrapped onto a second line on phones and is
+  // repeated verbatim in the badge row just below.
+  const shortListingNo = property.listing_no.split("-")[0] || property.listing_no;
 
   const isRent = property.deal_type === "rent";
   const priceLabel = formatDealPrice(isRent, Number(property.rent), Number(property.price));
@@ -442,7 +446,7 @@ function PropertyPage() {
             { label: "首頁", href: "/" },
             { label: "搜尋放盤", href: "/listings" },
             ...(estate ? [{ label: estate.name_zh, href: `/estate/${estate.slug}` }] : []),
-            { label: `編號 ${property.listing_no}` },
+            { label: `編號 ${shortListingNo}` },
           ]}
         />
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -793,8 +797,10 @@ function PropertyPage() {
             {txns.length > 0 && (
               <section className="mt-6">
                 <h2 className="text-xl font-semibold">屋苑近期成交</h2>
-                <div className="mt-3 overflow-hidden rounded-lg border">
-                  <Table>
+                {/* overflow-x-auto (not overflow-hidden): five columns do not fit a
+                    phone, and clipping hid the price/實呎 columns entirely. */}
+                <div className="mt-3 overflow-x-auto rounded-lg border">
+                  <Table className="min-w-[520px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>成交日期</TableHead>

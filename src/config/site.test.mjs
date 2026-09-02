@@ -310,7 +310,9 @@ test("header exposes approved mega menu structure and controls", () => {
     "深井區買樓租樓",
     "青山公路區買樓租樓",
     "汀九豪宅區買樓租樓",
-    "屋苑入口",
+    // 屋苑入口 (one generic link to one estate) became direct estate links.
+    "碧堤半島",
+    "浪翠園",
     "查看全部放盤",
     "買樓",
     "租樓",
