@@ -325,7 +325,6 @@ export function createAdminTeamReadModel(
              SELECT u.id::text AS id, u."emailVerified" AS email_verified
              FROM neon_auth."user" u
              WHERE s.email IS NOT NULL AND lower(u.email) = lower(s.email)
-             ORDER BY u."createdAt" DESC
              LIMIT 1
            ) neon_user ON TRUE
           WHERE s.id = $1::uuid

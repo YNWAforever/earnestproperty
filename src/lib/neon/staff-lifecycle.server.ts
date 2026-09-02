@@ -710,7 +710,6 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         `SELECT id::text AS id, "emailVerified" AS email_verified
            FROM neon_auth."user"
           WHERE lower(email) = lower($1)
-          ORDER BY "createdAt" DESC
           LIMIT 1`,
         [member.email],
       );
