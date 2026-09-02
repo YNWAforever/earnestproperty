@@ -143,9 +143,9 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <a href="/#owner-valuation" className="opacity-80 hover:opacity-100">
+                <Link to="/" hash="owner-valuation" className="opacity-80 hover:opacity-100">
                   業主放盤 / 免費估價
-                </a>
+                </Link>
               </li>
               <li>
                 <Link to="/contact" className="opacity-80 hover:opacity-100">

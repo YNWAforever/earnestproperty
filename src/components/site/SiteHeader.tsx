@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppImage } from "@/components/media/AppImage";
+import { SiteLink } from "@/components/site/SiteLink";
+import { hrefPathname } from "@/lib/site-links";
 import { whatsappUrl } from "@/config/site";
 import logoMark from "@/assets/logo-earnest-mark.png";
 
@@ -25,6 +27,9 @@ type NavItem =
       to: RouteTo;
       label: string;
       description?: string;
+      // Extra pathname prefixes this entry "owns" for the active state, e.g.
+      // 搜尋放盤 also lights up on a listing detail page.
+      ownsPrefixes?: string[];
     }
   | {
       href: string;
@@ -50,9 +55,19 @@ type MegaMenuGroup = {
   // would silently reintroduce a duplicate mobile menu entry with no error.
   // Declaring it explicitly can't drift.
   ctaMirrorsGlobalWhatsapp?: boolean;
+  // Pathname prefixes that light this trigger up as "you are here". Declared
+  // per group rather than derived from the items above because param routes
+  // (/estate/$slug, /agents/$slug, /blog/$slug …) are reached from cards, not
+  // from the menu, yet still belong to a section -- and because 屋苑開箱 is
+  // listed under two groups but should light only one.
+  ownsPrefixes: string[];
 };
 
-const listingNavItem: NavItem = { to: "/listings", label: "搜尋放盤" };
+const listingNavItem: NavItem = {
+  to: "/listings",
+  label: "搜尋放盤",
+  ownsPrefixes: ["/listings", "/property"],
+};
 
 const megaMenus: MegaMenuGroup[] = [
   {
@@ -80,10 +95,17 @@ const megaMenus: MegaMenuGroup[] = [
       },
     ],
     links: [
-      { href: "/estate/bellagio", label: "屋苑入口", description: "直接前往重點屋苑頁面。" },
+      {
+        href: "/estate/bellagio",
+        label: "屋苑入口",
+        // Names the destination: a generic label that lands on one specific
+        // estate otherwise reads as a wrong turn.
+        description: "由碧堤半島屋苑頁開始，再比較深井、青山公路其他屋苑。",
+      },
       { to: "/estate-reviews", label: "屋苑開箱", description: "用開箱內容比較屋苑特色。" },
     ],
     cta: { to: "/listings", label: "查看全部放盤" },
+    ownsPrefixes: ["/district", "/castle-peak-road", "/estate"],
   },
   {
     id: "services",
@@ -112,6 +134,7 @@ const megaMenus: MegaMenuGroup[] = [
     ],
     cta: { href: whatsappUrl("你好，我想查詢深井／青山公路／汀九物業"), label: "WhatsApp 查詢" },
     ctaMirrorsGlobalWhatsapp: true,
+    ownsPrefixes: ["/mortgage", "/agents", "/contact"],
   },
   {
     id: "market",
@@ -133,6 +156,7 @@ const megaMenus: MegaMenuGroup[] = [
       { to: "/blog", label: "市場分析", description: "閱讀深井、青山公路、汀九樓市觀察。" },
     ],
     cta: { to: "/videos", label: "觀看最新影片" },
+    ownsPrefixes: ["/videos", "/transactions", "/blog", "/estate-reviews"],
   },
 ];
 
@@ -156,12 +180,23 @@ function itemHref(item: NavItem) {
   return "href" in item ? item.href : item.to;
 }
 
+function pathnameOwnedBy(pathname: string, prefixes: string[]) {
+  return prefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+}
+
+// Active state compares pathnames, not full hrefs: the old exact compare
+// against `location.href` never matched `/listings?deal=sale&page=2`, and
+// could not light a section for a page reached from a card (/estate/bellagio).
 function itemMatchesLocation(item: NavItem, href: string) {
-  return itemHref(item) === href;
+  const pathname = hrefPathname(href);
+  if ("to" in item && item.ownsPrefixes) {
+    return pathnameOwnedBy(pathname, item.ownsPrefixes);
+  }
+  return hrefPathname(itemHref(item)) === pathname;
 }
 
 function menuMatchesLocation(menu: MegaMenuGroup, href: string) {
-  return [...menu.featured, ...menu.links].some((item) => itemMatchesLocation(item, href));
+  return pathnameOwnedBy(hrefPathname(href), menu.ownsPrefixes);
 }
 
 function menuMobileItems(menu: MegaMenuGroup) {
@@ -175,44 +210,35 @@ function menuMobileItems(menu: MegaMenuGroup) {
 
 function HeaderNavLink({
   item,
+  currentHref,
   onClick,
   className = "",
 }: {
   item: NavItem;
+  currentHref: string;
   onClick?: () => void;
   className?: string;
 }) {
-  const baseClassName = [
-    "inline-flex items-center rounded-md px-3 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground",
+  const active = itemMatchesLocation(item, currentHref);
+  const linkClassName = [
+    "inline-flex items-center rounded-md px-3 py-2 text-sm transition-colors",
+    active
+      ? "bg-accent font-semibold text-primary"
+      : "font-medium text-foreground/80 hover:bg-accent hover:text-foreground",
     className,
   ]
     .filter(Boolean)
     .join(" ");
-
-  const activeClassName = [
-    "inline-flex items-center rounded-md bg-accent px-3 py-2 text-sm font-semibold text-primary",
-    className,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  if ("href" in item) {
-    return (
-      <a href={item.href} onClick={onClick} className={baseClassName}>
-        {item.label}
-      </a>
-    );
-  }
 
   return (
-    <Link
-      to={item.to}
+    <SiteLink
+      href={itemHref(item)}
       onClick={onClick}
-      className={baseClassName}
-      activeProps={{ className: activeClassName }}
+      className={linkClassName}
+      aria-current={active ? "page" : undefined}
     >
       {item.label}
-    </Link>
+    </SiteLink>
   );
 }
 
@@ -245,18 +271,14 @@ function MegaMenuLink({
     </>
   );
 
-  if ("href" in item) {
-    return (
-      <a href={item.href} onClick={onClick} className={className}>
-        {content}
-      </a>
-    );
-  }
-
+  // SiteLink turns every internal href (including `/listings?deal=sale`,
+  // `/castle-peak-road/ting-kau` and `/#owner-valuation`) into a typed router
+  // Link, so no menu item is a full document reload any more; wa.me stays a
+  // plain anchor opening in a new tab.
   return (
-    <Link to={item.to} onClick={onClick} className={className}>
+    <SiteLink href={itemHref(item)} onClick={onClick} className={className}>
       {content}
-    </Link>
+    </SiteLink>
   );
 }
 
@@ -367,11 +389,13 @@ export function SiteHeader() {
         <nav className="relative hidden items-center gap-1 lg:flex" aria-label="主選單">
           <HeaderNavLink
             item={listingNavItem}
+            currentHref={location.href}
             onClick={() => setActiveMegaMenu(null)}
             className="whitespace-nowrap"
           />
           {megaMenus.map((menu) => {
-            const isActive = activeMegaMenu === menu.id || menuMatchesLocation(menu, location.href);
+            const isCurrentSection = menuMatchesLocation(menu, location.href);
+            const isActive = activeMegaMenu === menu.id || isCurrentSection;
 
             return (
               <Button
@@ -383,8 +407,10 @@ export function SiteHeader() {
                 type="button"
                 variant="ghost"
                 size="sm"
+                aria-haspopup="true"
                 aria-expanded={activeMegaMenu === menu.id}
                 aria-controls={getMegaMenuId(menu.id)}
+                aria-current={isCurrentSection ? "true" : undefined}
                 className={[
                   "gap-1 whitespace-nowrap px-3 text-sm font-medium text-foreground/80 hover:text-foreground",
                   isActive ? "bg-accent text-primary" : "",
@@ -407,6 +433,7 @@ export function SiteHeader() {
           })}
           <HeaderNavLink
             item={aboutNavItem}
+            currentHref={location.href}
             onClick={() => setActiveMegaMenu(null)}
             className="whitespace-nowrap"
           />
@@ -444,6 +471,7 @@ export function SiteHeader() {
                 <div className="mt-8 flex-1 overflow-y-auto pr-1">
                   <HeaderNavLink
                     item={listingNavItem}
+                    currentHref={location.href}
                     onClick={() => setOpen(false)}
                     className="mb-3 flex w-full justify-start px-3 py-2.5 text-base"
                   />
@@ -469,6 +497,7 @@ export function SiteHeader() {
                     ))}
                     <HeaderNavLink
                       item={aboutNavItem}
+                      currentHref={location.href}
                       onClick={() => setOpen(false)}
                       className="flex w-full justify-start px-3 py-2.5 text-base"
                     />

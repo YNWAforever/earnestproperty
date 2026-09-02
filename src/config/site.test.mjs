@@ -204,7 +204,9 @@ test("a sticky mobile WhatsApp bar is mounted site-wide, suppressed where a page
   assert.match(root, /"\/admin", "\/auth", "\/account", "\/dashboard"/);
   // The bar is `fixed`, so a page needs bottom padding reserved or its own
   // last content (e.g. footer) sits underneath it with no way to scroll clear.
-  assert.match(root, /showStickyWhatsAppBar \? "pb-16 lg:pb-0" : ""/);
+  // pb-16 only matched the bar's bottom-16 offset and left the bar's own
+  // ~52px height covering the footer; the reservation must clear both.
+  assert.match(root, /showStickyWhatsAppBar \? "pb-32 lg:pb-0" : ""/);
 });
 
 test("homepage and navigation include Ting Kau content entry points", () => {
