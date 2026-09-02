@@ -1010,3 +1010,18 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     "explicitUndefined must stay true, or an entry with no search params (like /admin) can match a URL carrying extra search state it should not",
   );
 });
+
+test("Neon Auth UI is given the absolute site origin so password-reset links return to this app", () => {
+  // The auth server lives on Neon's domain, not ours. With the provider's
+  // baseURL left empty, the built-in 忘記密碼 form sends a RELATIVE
+  // redirectTo ("/auth/reset-password"), which the auth server can only
+  // resolve against its own origin -- so the emailed reset link never comes
+  // back to this app. Neon's own password-reset example passes
+  // `${window.location.origin}/reset-password`; the admin-side reset in
+  // staff-identity-provider.server.ts already builds an absolute URL the same
+  // way. SITE_URL is the canonical production origin, so preview deployments
+  // finish the reset on production, where the same Neon Auth token is valid.
+  const root = read("src/routes/__root.tsx");
+  assert.match(root, /import \{[^}]*\bSITE_URL\b[^}]*\} from "@\/content\/seo"/);
+  assert.match(root, /<NeonAuthUIProvider[^>]*baseURL=\{SITE_URL\}/);
+});

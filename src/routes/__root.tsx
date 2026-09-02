@@ -33,7 +33,7 @@ import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
-import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR } from "@/content/seo";
+import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR, SITE_URL } from "@/content/seo";
 import { jsonLdScript, organizationSchema } from "@/lib/schema";
 
 function NotFoundComponent() {
@@ -118,7 +118,12 @@ function RootComponent() {
   const showSiteChrome = isPublicSitePath(location.pathname);
 
   return (
-    <NeonAuthUIProvider authClient={authClient} defaultTheme="light">
+    // baseURL: the absolute origin Neon Auth sends people back to from emailed
+    // links (password reset first of all). Left empty, the built-in 忘記密碼
+    // form sent a relative "/auth/reset-password", which an auth server on
+    // Neon's domain resolves against ITS origin, not ours. SITE_URL rather than
+    // window.location.origin so server and client render the same value.
+    <NeonAuthUIProvider authClient={authClient} baseURL={SITE_URL} defaultTheme="light">
       <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-16 lg:pb-0" : ""}`}>
         {showSiteChrome && (
           <script
