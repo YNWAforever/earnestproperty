@@ -27,6 +27,10 @@ const SERVER_ERROR_BODY_STATUS = new Map<string, number>([
   ["Staff member not found.", 404],
   ["Team member not found.", 404],
   ["This change conflicted with another concurrent staff-access update. Please retry.", 409],
+  ["staff-email-unverified", 403],
+  ["account-not-found", 404],
+  ["already-linked", 409],
+  ["account-already-linked", 409],
 ]);
 
 /**

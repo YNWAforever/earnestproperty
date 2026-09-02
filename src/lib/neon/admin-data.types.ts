@@ -556,6 +556,25 @@ export type CommandCenterData = {
 
 export type StaffAccessRole = "admin" | "manager" | "agent" | "viewer";
 
+/**
+ * Why the signed-in Neon Auth account is not (yet) a usable staff account.
+ * "staff-email-unverified" mirrors auth.server.ts's StaffAccessDenialReason;
+ * "forbidden" is "no active staff row for this account"; "unauthorized" is
+ * "the server could not see a valid session at all".
+ */
+export type StaffSessionDenialReason = "unauthorized" | "forbidden" | "staff-email-unverified";
+
+/** The signed-in user's own staff identity, as the server resolves it. */
+export type StaffSession =
+  | {
+      status: "ok";
+      staffId: string;
+      email: string | null;
+      name: string | null;
+      roles: StaffAccessRole[];
+    }
+  | { status: "denied"; reason: StaffSessionDenialReason };
+
 /** One key per entry in STAFF_OWNERSHIP_COLUMNS, keyed by table name. */
 export type StaffOwnedCounts = {
   properties: number;

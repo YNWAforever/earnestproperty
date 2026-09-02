@@ -27,11 +27,52 @@ import type {
   AdminTransactionFiltersInput,
   AdminTransactionInput,
   StaffRole,
+  StaffSession,
+  StaffSessionDenialReason,
 } from "./admin-data.types";
 
 async function requireStaff(roles: StaffRole[] = ["admin"]) {
   const { requireStaffAccess } = await import("./auth.server");
   return requireStaffAccess(getRequest(), roles);
+}
+
+async function staffSessionDenialReason(response: Response): Promise<StaffSessionDenialReason> {
+  if (response.status === 401) return "unauthorized";
+  const body = (await response.text().catch(() => "")).trim();
+  return body === "staff-email-unverified" ? body : "forbidden";
+}
+
+/**
+ * The signed-in user's own staff identity. Unlike every other server function
+ * here, a 401/403 from requireStaffAccess is a RESULT, not an error: the point
+ * is to tell the admin shell (and the user) why the account cannot use the
+ * admin, instead of letting every page fail with a generic no-permission
+ * message -- which is what an invited member whose Neon Auth email is
+ * unverified used to see, with no hint that a role change could never help.
+ */
+const fetchStaffSessionServer = createServerFn({ method: "GET" }).handler(
+  async (): Promise<StaffSession> => {
+    const { requireStaffAccess } = await import("./auth.server");
+    try {
+      const staff = await requireStaffAccess(getRequest(), ["admin", "manager", "agent", "viewer"]);
+      return {
+        status: "ok",
+        staffId: staff.staffId,
+        email: staff.email,
+        name: staff.name,
+        roles: staff.roles,
+      };
+    } catch (error) {
+      if (error instanceof Response && (error.status === 401 || error.status === 403)) {
+        return { status: "denied", reason: await staffSessionDenialReason(error) };
+      }
+      throw error;
+    }
+  },
+);
+
+export async function fetchStaffSession(): Promise<StaffSession> {
+  return callStaffServerFn(async () => fetchStaffSessionServer(await withStaffAuthHeaders()));
 }
 
 const fetchAdminAgentEditorContextServer = createServerFn({ method: "GET" }).handler(async () => {
@@ -126,6 +167,8 @@ const STAFF_ACCESS_ERROR_MESSAGES: Record<string, string> = {
   "successor-is-target": "接手人不能是同一位同事，請選擇其他人。",
   Unauthorized: "登入已失效，請重新登入後再試。",
   Forbidden: "你沒有權限進行此操作。",
+  "staff-email-unverified":
+    "你的登入電郵尚未完成驗證，系統未能把此帳戶連結至職員記錄。請聯絡管理員在「團隊成員」為你連結帳戶。",
 };
 
 /**

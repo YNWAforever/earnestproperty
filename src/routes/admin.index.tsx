@@ -230,6 +230,7 @@ function staffActivityLabel(action: string) {
     "staff.password_reset.requested": "已要求重設密碼",
     "staff.session_revocation": "已撤銷工作階段",
     "staff.roles_changed": "已更新團隊角色",
+    "staff.identity_linked": "已連結成員登入帳戶",
     "staff.suspended": "已暫停團隊帳戶",
     "staff.reactivated": "已重新啟用團隊帳戶",
   };

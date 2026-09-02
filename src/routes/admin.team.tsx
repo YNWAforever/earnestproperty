@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
+import { useStaffSession } from "@/components/admin/staff-session";
 import {
   AdminTeamDetailPanel,
   type TeamMemberAction,
@@ -44,6 +45,7 @@ import {
   changeStaffRoles,
   getAdminTeamMember,
   inviteStaffMember,
+  linkStaffIdentity,
   listAdminTeam,
   resendStaffInvitation,
   sendStaffPasswordReset,
@@ -104,8 +106,14 @@ function safeError(error: unknown, action?: PendingTeamDialog["action"]) {
     return action === "reset"
       ? "這項密碼重設不能套用於目前成員。請確認選取的是其他已連結帳戶的成員；如要重設自己的密碼，請在登入頁面使用「忘記密碼」。"
       : "這項團隊操作未能執行，請重新載入資料後再試。";
-  if (status === 404) return "此成員已不存在，目錄已重新整理。";
-  if (status === 409) return "資料已被其他管理員更新，請重新確認。";
+  if (status === 404)
+    return action === "link"
+      ? "找不到以此電郵註冊的登入帳戶。請確認成員已在 /auth/sign-up 以相同電郵註冊，然後重新載入。"
+      : "此成員已不存在，目錄已重新整理。";
+  if (status === 409)
+    return action === "link"
+      ? "此登入帳戶已連結至其他成員，或此成員已完成連結，請重新載入資料。"
+      : "資料已被其他管理員更新，請重新確認。";
   if (status === 429) return "操作正在冷卻中，請於可重試時間後再試。";
   return "暫時無法更新團隊資料，請稍後再試。";
 }
@@ -127,7 +135,13 @@ function AdminTeam() {
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [forbidden, setForbidden] = useState(false);
-  const [canManage, setCanManage] = useState(false);
+  // Authoritative: the server's own resolution of the signed-in staff member.
+  // This used to be inferred by searching the directory for the auth email
+  // and reading the first hit's roles, so an admin whose staff email differed
+  // from their sign-in email (or whose row was still unbound) saw a read-only
+  // Team page with no explanation.
+  const staffSession = useStaffSession();
+  const canManage = staffSession?.status === "ok" && staffSession.roles.includes("admin");
   const [pending, setPending] = useState<PendingTeamDialog | null>(null);
   const [pendingOptions, setPendingOptions] = useState<TeamMemberActionOptions>({});
   const [confirmError, setConfirmError] = useState<string | null>(null);
@@ -159,20 +173,14 @@ function AdminTeam() {
       requestRef.current = request;
       setLoading(true);
       try {
-        const [nextTeam, selfResult] = await Promise.all([
-          listAdminTeam({
-            data: { q: search.q, role: search.role, state: search.state, cursor },
-          }),
-          user.email
-            ? listAdminTeam({ data: { q: user.email, limit: 1 } })
-            : Promise.resolve(emptyTeam),
-        ]);
+        const nextTeam = await listAdminTeam({
+          data: { q: search.q, role: search.role, state: search.state, cursor },
+        });
         if (request !== requestRef.current) return;
         const resolvedTeam =
           cursor && teamRef.current ? mergeAdminTeamPages(teamRef.current, nextTeam) : nextTeam;
         setTeam(resolvedTeam);
         teamRef.current = resolvedTeam;
-        setCanManage(Boolean(selfResult.members[0]?.roles.includes("admin")));
         setError(null);
         setStale(false);
         setForbidden(false);
@@ -362,6 +370,8 @@ function AdminTeam() {
         result = await resendStaffInvitation({ data: { staffId: activeDetail.member.id } });
       else if (pending.action === "reset")
         result = await sendStaffPasswordReset({ data: { staffId: activeDetail.member.id } });
+      else if (pending.action === "link")
+        result = await linkStaffIdentity({ data: { staffId: activeDetail.member.id } });
       else if (pending.action === "roles")
         result = await changeStaffRoles({
           data: teamActionPayload({
@@ -400,7 +410,9 @@ function AdminTeam() {
       closeConfirmation(false);
       await refreshAll();
     } catch (reason) {
-      if (serverErrorStatus(reason) === 409) {
+      // A link conflict is a decision for the admin (whose account is this?),
+      // not a stale-data retry, so it stays in the dialog with its own text.
+      if (serverErrorStatus(reason) === 409 && pending.action !== "link") {
         const conflictMessage = "資料已被其他管理員更新，已重新載入最新資料，請再次確認。";
         closeConfirmation(false);
         if (pending.memberId) await loadDetail(pending.memberId);

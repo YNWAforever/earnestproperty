@@ -8,7 +8,7 @@ import type { AdminTeamMember } from "@/lib/neon/admin-team.types";
 import type { StaffRole } from "@/lib/neon/auth.server";
 
 export type PendingTeamDialog = {
-  action: "invite" | "resend" | "roles" | "suspend" | "reactivate" | "reset";
+  action: "invite" | "resend" | "roles" | "suspend" | "reactivate" | "reset" | "link";
   member: Pick<AdminTeamMember, "name" | "email">;
   memberId: string | null;
   originalRoles?: StaffRole[];
@@ -26,7 +26,7 @@ const copy = {
   invite: {
     title: "確認邀請成員",
     description:
-      "系統不會自動發送邀請電郵。確認後請將本網站的註冊連結（/auth/sign-up）分享給此成員；成員以此電郵註冊並完成驗證後，即自動獲得所選角色的權限。",
+      "系統不會自動發送邀請電郵。確認後請將本網站的註冊連結（/auth/sign-up）分享給此成員。成員以此電郵註冊後，如 Neon Auth 已啟用電郵驗證，完成驗證即自動連結；否則請在成員詳情按「連結帳戶」完成啟用。",
     label: "確認邀請",
   },
   resend: {
@@ -55,6 +55,12 @@ const copy = {
     description: "使用者會收到一次性電郵；Earnest 不會看到密碼，也不會設定或顯示密碼。",
     label: "發送重設連結",
   },
+  link: {
+    title: "確認連結帳戶",
+    description:
+      "系統會把此成員的職員記錄連結至以相同電郵註冊的登入帳戶；連結後，該帳戶即以此成員現有角色取得後台權限。請先確認該登入帳戶確實屬於此成員。",
+    label: "連結帳戶",
+  },
 } as const;
 
 export function teamDialogCopy(
@@ -64,7 +70,14 @@ export function teamDialogCopy(
 ) {
   const adminMembershipChanged =
     action === "roles" && originalRoles.includes("admin") !== proposedRoles.includes("admin");
-  return { ...copy[action], requiresConfirmation: action === "invite" || adminMembershipChanged };
+  // Linking hands the account whatever the record already carries, so a
+  // record that carries admin is a privilege grant and gets the same typed
+  // confirmation as promoting someone to admin.
+  const grantsAdminByLink = action === "link" && originalRoles.includes("admin");
+  return {
+    ...copy[action],
+    requiresConfirmation: action === "invite" || adminMembershipChanged || grantsAdminByLink,
+  };
 }
 
 export function AdminTeamDialogs({

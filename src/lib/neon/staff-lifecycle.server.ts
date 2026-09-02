@@ -6,6 +6,7 @@ import type {
   ChangeStaffActiveInput,
   ChangeStaffRolesInput,
   InviteStaffMemberInput,
+  LinkStaffIdentityInput,
   ResendStaffInvitationInput,
   SendStaffPasswordResetInput,
   StaffLifecycleFailureCode,
@@ -44,6 +45,7 @@ type AuditInput = {
     | "staff.password_reset.requested"
     | "staff.session_revocation"
     | "staff.roles_changed"
+    | "staff.identity_linked"
     | "staff.suspended"
     | "staff.reactivated";
   targetStaffId: string;
@@ -683,6 +685,67 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         metadata: { afterRoles: result.roles },
       });
       return { ...result, requestId };
+    },
+
+    /**
+     * Bind a staff row to the Neon Auth account registered with the same
+     * email, on an admin's say-so.
+     *
+     * auth.server.ts only auto-binds by email once Neon Auth reports the
+     * address verified, and Neon Auth does not verify emails unless the
+     * project enables it -- so by default an invited member who signs up is
+     * refused on every request, indefinitely, however their roles are set.
+     * An explicit admin confirmation is at least as strong an identity claim
+     * as a verification click, and it works regardless of the provider
+     * setting. Same-email only: an admin who wants a different address must
+     * first correct the member's email, so the audit trail stays honest.
+     */
+    async linkStaffIdentity(input: LinkStaffIdentityInput, actor: StaffAccess, _request: Request) {
+      requireAdmin(actor);
+      const requestId = nextRequestId();
+      const member = await memberById(input.staffId);
+      if (member.authUserId) throw new Response("already-linked", { status: 409 });
+
+      const accounts = await runQuery<Record<string, unknown>>(
+        `SELECT id::text AS id, "emailVerified" AS email_verified
+           FROM neon_auth."user"
+          WHERE lower(email) = lower($1)
+          ORDER BY "createdAt" DESC
+          LIMIT 1`,
+        [member.email],
+      );
+      const account = accounts[0];
+      const authUserId = typeof account?.id === "string" && account.id ? account.id : null;
+      if (!authUserId) throw new Response("account-not-found", { status: 404 });
+
+      // staff_users.auth_user_id is UNIQUE; check first so a clash is a clear
+      // 409 instead of a constraint error surfacing as a 500.
+      const owners = await runQuery<Record<string, unknown>>(
+        `SELECT id::text AS id FROM staff_users WHERE auth_user_id = $1 AND id <> $2::uuid LIMIT 1`,
+        [authUserId, member.id],
+      );
+      if (owners.length) throw new Response("account-already-linked", { status: 409 });
+
+      const updated = await runQuery<Record<string, unknown>>(
+        `UPDATE staff_users
+            SET auth_user_id = $1, updated_at = now()
+          WHERE id = $2::uuid AND auth_user_id IS NULL
+          RETURNING id::text AS id`,
+        [authUserId, member.id],
+      );
+      if (!updated.length) throw new Response("already-linked", { status: 409 });
+
+      const emailVerified = account.email_verified === true;
+      await safeAudit(dependencies.writeAudit, {
+        actor,
+        permission: "staff.manage",
+        action: "staff.identity_linked",
+        targetStaffId: member.id,
+        requestId,
+        outcome: "success",
+        metadata: { emailVerified },
+      });
+      return { ok: true as const, emailVerified, requestId };
     },
 
     async changeStaffActive(input: ChangeStaffActiveInput, actor: StaffAccess, request: Request) {

@@ -6,6 +6,7 @@ import {
   changeStaffRolesSchema,
   createAdminTeamServerBoundary,
   inviteStaffMemberSchema,
+  linkStaffIdentitySchema,
 } from "./admin-team.ts";
 
 const actor = {
@@ -26,7 +27,7 @@ const staffId = "22222222-2222-4222-8222-222222222222";
 // Computed relative to test-run time so it never does.
 const FUTURE_INVITATION_EXPIRY = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-function fixture() {
+function fixture({ detailRow = {} } = {}) {
   const queries = [];
   const model = createAdminTeamReadModel({
     queryRows: async (statement, params = []) => {
@@ -71,31 +72,32 @@ function fixture() {
           },
         ];
       }
-      return [
-        {
-          id: staffId,
-          name: "Ada Lovelace",
-          email: "ada@example.test",
-          auth_user_id: "auth-ada",
-          roles: ["admin"],
-          active: true,
-          created_at: "2026-08-16T00:00:00.123Z",
-          updated_at: "2026-08-16T01:00:00.456Z",
-          latest_action: "invite",
-          latest_action_state: "retryable_failure",
-          latest_safe_error_code: "PROVIDER_UNAVAILABLE",
-          latest_retry_after: "2026-08-16T02:00:00.000Z",
-          latest_provider_expires_at: "2026-08-17T00:00:00.000Z",
-          activity: [
-            {
-              id: "33333333-3333-4333-8333-333333333333",
-              action: "staff.invited",
-              outcome: "success",
-              createdAt: "2026-08-16T00:00:00.000Z",
-            },
-          ],
-        },
-      ];
+      const defaultDetailRow = {
+        id: staffId,
+        name: "Ada Lovelace",
+        email: "ada@example.test",
+        auth_user_id: "auth-ada",
+        neon_auth_user_id: "auth-ada",
+        neon_auth_email_verified: true,
+        roles: ["admin"],
+        active: true,
+        created_at: "2026-08-16T00:00:00.123Z",
+        updated_at: "2026-08-16T01:00:00.456Z",
+        latest_action: "invite",
+        latest_action_state: "retryable_failure",
+        latest_safe_error_code: "PROVIDER_UNAVAILABLE",
+        latest_retry_after: "2026-08-16T02:00:00.000Z",
+        latest_provider_expires_at: "2026-08-17T00:00:00.000Z",
+        activity: [
+          {
+            id: "33333333-3333-4333-8333-333333333333",
+            action: "staff.invited",
+            outcome: "success",
+            createdAt: "2026-08-16T00:00:00.000Z",
+          },
+        ],
+      };
+      return [{ ...defaultDetailRow, ...detailRow }];
     },
     fetchStaffAccessSummary: async () => ({
       staffId,
@@ -327,4 +329,89 @@ test("invite and change-roles schemas accept all four roles at once (max bound t
   const roles = ["admin", "manager", "agent", "viewer"];
   assert.equal(inviteStaffMemberSchema.safeParse({ email: "a@example.test", roles }).success, true);
   assert.equal(changeStaffRolesSchema.safeParse({ staffId, roles }).success, true);
+});
+
+test("getAdminTeamMember reports whether an unlinked member has registered a Neon Auth account", async () => {
+  // Neon Auth does not verify emails unless the project enables it, so an
+  // invited member who signs up sits at emailVerified=false and auth.server.ts
+  // never binds them. The admin previously saw only 尚未連結帳戶身份 and had no
+  // way to tell "never signed up" from "signed up, blocked by verification".
+  const cases = [
+    {
+      row: {
+        auth_user_id: "auth-ada",
+        neon_auth_user_id: "auth-ada",
+        neon_auth_email_verified: true,
+      },
+      linked: true,
+      account: "linked",
+    },
+    {
+      row: { auth_user_id: null, neon_auth_user_id: null, neon_auth_email_verified: null },
+      linked: false,
+      account: "unregistered",
+    },
+    {
+      row: { auth_user_id: null, neon_auth_user_id: "auth-ada", neon_auth_email_verified: false },
+      linked: false,
+      account: "unverified",
+    },
+    {
+      row: { auth_user_id: null, neon_auth_user_id: "auth-ada", neon_auth_email_verified: true },
+      linked: false,
+      account: "verified",
+    },
+  ];
+  for (const { row, linked, account } of cases) {
+    const { model, queries } = fixture({ detailRow: row });
+    const result = await model.getAdminTeamMember({ staffId }, actor);
+    assert.equal(result.identity.authUserLinked, linked, account);
+    assert.equal(result.identity.account, account);
+    assert.match(queries[0].statement, /neon_auth\."user"/);
+    assert.match(queries[0].statement, /lower\([^)]*email\)/);
+  }
+
+  const { model } = fixture({
+    detailRow: { auth_user_id: null, neon_auth_user_id: "auth-secret" },
+  });
+  const projection = JSON.stringify(await model.getAdminTeamMember({ staffId }, actor));
+  assert.doesNotMatch(projection, /auth-secret/, "the Neon Auth user id never reaches the client");
+});
+
+test("the viewer role survives the Team projection and is an accepted role filter", async () => {
+  // admin-team.ts and the detail panel already offer viewer (P6a), but the
+  // read model's role allowlist was never widened: a member given viewer showed
+  // no roles at all, and ?role=viewer was rejected as an invalid Team query.
+  const { model, queries } = fixture({ detailRow: { roles: ["viewer"] } });
+  const detail = await model.getAdminTeamMember({ staffId }, actor);
+  assert.deepEqual(detail.member.roles, ["viewer"]);
+
+  await model.listAdminTeam({ role: "viewer" }, actor);
+  assert.equal(queries.at(-1).params[1], "viewer");
+});
+
+test("linkStaffIdentity is admin-only and runs through the lifecycle boundary", async () => {
+  const request = new Request("https://earnest.test/admin/team");
+  const calls = [];
+  const boundary = createAdminTeamServerBoundary({
+    requireStaffAccess: async (_request, roles) => {
+      calls.push({ kind: "auth", roles });
+      return actor;
+    },
+    loadLifecycleService: async () => ({
+      linkStaffIdentity: async (input, receivedActor) => {
+        calls.push({ kind: "link", input, receivedActor });
+        return { ok: true, emailVerified: false, requestId: "request-1" };
+      },
+    }),
+  });
+
+  const result = await boundary.linkStaffIdentity({ staffId }, request);
+
+  assert.deepEqual(calls[0], { kind: "auth", roles: ["admin"] });
+  assert.deepEqual(calls[1].input, { staffId });
+  assert.equal(calls[1].receivedActor, actor);
+  assert.equal(result.ok, true);
+  assert.equal(linkStaffIdentitySchema.safeParse({ staffId: "not-a-uuid" }).success, false);
+  assert.equal(linkStaffIdentitySchema.safeParse({ staffId, extra: true }).success, false);
 });

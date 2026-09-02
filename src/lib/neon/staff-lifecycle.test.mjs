@@ -882,3 +882,108 @@ test("lifecycle actions generate a request id without depending on crypto.random
     Object.defineProperty(globalThis, "crypto", { value: realCrypto, configurable: true });
   }
 });
+
+test("linking binds an invited member to the Neon Auth account registered with the same email", async () => {
+  // Neon Auth leaves emailVerified false unless the project enables
+  // verification, so auth.server.ts's verified-email bind never fires: the
+  // member is 403 on every admin page no matter which roles the admin assigns,
+  // and nothing says why. An explicit admin link is the activation path that
+  // does not depend on the provider setting.
+  const queries = [];
+  const { service, calls } = fixture({
+    queryRows: async (statement, params = []) => {
+      queries.push({ statement, params });
+      if (statement.includes("FROM staff_users") && statement.includes("WHERE id")) {
+        return [
+          { id: targetId, email: "kevinfong@example.test", auth_user_id: null, active: true },
+        ];
+      }
+      if (statement.includes('neon_auth."user"'))
+        return [{ id: "auth-kevin", email_verified: false }];
+      if (statement.includes("UPDATE staff_users")) return [{ id: targetId }];
+      return [];
+    },
+  });
+
+  const result = await service.linkStaffIdentity({ staffId: targetId }, admin, request);
+
+  assert.deepEqual(result, {
+    ok: true,
+    emailVerified: false,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  const lookup = queries.find((query) => query.statement.includes('neon_auth."user"'));
+  assert.match(lookup.statement, /lower\(email\) = lower\(\$1\)/);
+  assert.deepEqual(lookup.params, ["kevinfong@example.test"]);
+  const update = queries.find((query) => query.statement.includes("UPDATE staff_users"));
+  assert.match(update.statement, /auth_user_id IS NULL/);
+  assert.deepEqual(update.params, ["auth-kevin", targetId]);
+  assert.equal(calls.audit.at(-1).action, "staff.identity_linked");
+  assert.equal(calls.audit.at(-1).permission, "staff.manage");
+  assert.equal(calls.audit.at(-1).outcome, "success");
+  assert.deepEqual(calls.audit.at(-1).metadata, { emailVerified: false });
+});
+
+test("linking refuses without a registered account, for an already-linked member, and for an account owned by another member", async () => {
+  const cases = [
+    {
+      name: "no account",
+      member: { auth_user_id: null },
+      neonUser: [],
+      conflict: [],
+      status: 404,
+      body: "account-not-found",
+    },
+    {
+      name: "already linked",
+      member: { auth_user_id: "auth-existing" },
+      neonUser: [{ id: "auth-kevin", email_verified: true }],
+      conflict: [],
+      status: 409,
+      body: "already-linked",
+    },
+    {
+      name: "account owned by another member",
+      member: { auth_user_id: null },
+      neonUser: [{ id: "auth-kevin", email_verified: true }],
+      conflict: [{ id: "99999999-9999-4999-8999-999999999999" }],
+      status: 409,
+      body: "account-already-linked",
+    },
+  ];
+  for (const testCase of cases) {
+    const { service, calls } = fixture({
+      queryRows: async (statement) => {
+        if (statement.includes("FROM staff_users") && statement.includes("WHERE id")) {
+          return [
+            { id: targetId, email: "kevinfong@example.test", active: true, ...testCase.member },
+          ];
+        }
+        if (statement.includes('neon_auth."user"')) return testCase.neonUser;
+        if (statement.includes("WHERE auth_user_id = $1")) return testCase.conflict;
+        if (statement.includes("UPDATE staff_users")) {
+          return assert.fail(`${testCase.name}: must not write`);
+        }
+        return [];
+      },
+    });
+    const error = await service.linkStaffIdentity({ staffId: targetId }, admin, request).then(
+      () => null,
+      (reason) => reason,
+    );
+    assert.ok(error instanceof Response, `${testCase.name}: expected a Response`);
+    assert.equal(error.status, testCase.status, testCase.name);
+    assert.equal(await error.text(), testCase.body, testCase.name);
+    assert.equal(
+      calls.audit.some((entry) => entry.action === "staff.identity_linked"),
+      false,
+      `${testCase.name}: no audit row for a refused link`,
+    );
+  }
+
+  const { service } = fixture();
+  await assert.rejects(
+    () => service.linkStaffIdentity({ staffId: targetId }, manager, request),
+    (error) => error instanceof Response && error.status === 403,
+  );
+});
