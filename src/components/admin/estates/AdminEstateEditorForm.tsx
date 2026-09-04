@@ -4,6 +4,7 @@ import { History, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -176,9 +177,17 @@ export function AdminEstateEditorForm({
   onSaved: (resourceId: string) => void;
 }) {
   const [form, setForm] = useState<FormState>(() => createInitialForm(payload, resourceId));
+  // The last saved/loaded state, so leaving with unsaved edits can be caught.
+  // This is the largest form in the admin (~40 fields) and a sidebar click
+  // used to discard all of it silently; PropertyForm and AgentProfileForm
+  // already guard the same way.
+  const [pristine, setPristine] = useState<FormState>(() => createInitialForm(payload, resourceId));
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const [pendingRestoreId, setPendingRestoreId] = useState<string | null>(null);
+  const [pendingFaqDeleteId, setPendingFaqDeleteId] = useState<string | null>(null);
   const [districts, setDistricts] = useState<DistrictOption[]>([]);
   const [revisions, setRevisions] = useState<CmsRevisionSummary[] | null>(null);
   const [faqs, setFaqs] = useState<AdminFaqCmsRow[] | null>(null);
@@ -255,6 +264,7 @@ export function AdminEstateEditorForm({
         }),
       );
       set("id", result.resourceId);
+      setPristine({ ...form, id: result.resourceId });
       onSaved(result.resourceId);
       await refreshRevisions(result.resourceId);
       await refreshFaqs(form.slug);
@@ -306,7 +316,9 @@ export function AdminEstateEditorForm({
       const editor = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId: result.resourceId },
       });
-      setForm(createInitialForm(editor.payload, result.resourceId));
+      const restored = createInitialForm(editor.payload, result.resourceId);
+      setForm(restored);
+      setPristine(restored);
       await refreshRevisions(result.resourceId);
       toast.success("已還原為新草稿，請檢查內容後發布");
     } catch (err) {
@@ -369,6 +381,10 @@ export function AdminEstateEditorForm({
   }
 
   const disabled = saving || publishing;
+  const isDirty = (Object.keys(form) as Array<keyof FormState>).some(
+    (key) => form[key] !== pristine[key],
+  );
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
@@ -661,7 +677,7 @@ export function AdminEstateEditorForm({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          onClick={() => void handleDeleteFaq(faq.id)}
+                          onClick={() => setPendingFaqDeleteId(faq.id)}
                         >
                           刪除
                         </Button>
@@ -691,7 +707,18 @@ export function AdminEstateEditorForm({
             <Save className="h-4 w-4" />
             {saving ? "儲存中…" : "儲存草稿"}
           </Button>
-          <Button type="button" onClick={handlePublish} disabled={disabled}>
+          <Button
+            type="button"
+            onClick={() => {
+              const error = validate();
+              if (error) {
+                toast.error(error);
+                return;
+              }
+              setConfirmingPublish(true);
+            }}
+            disabled={disabled}
+          >
             <Upload className="h-4 w-4" />
             {publishing ? "發布中…" : "發布"}
           </Button>
@@ -720,7 +747,7 @@ export function AdminEstateEditorForm({
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => void handleRestore(revision.id)}
+                      onClick={() => setPendingRestoreId(revision.id)}
                     >
                       <History className="h-4 w-4" />
                       還原
@@ -783,6 +810,52 @@ export function AdminEstateEditorForm({
         onOpenChange={setArchiving}
         onConfirm={() => void handleArchive()}
       />
+      {/* 發布 goes live on the public site, 還原 overwrites the whole draft and
+          FAQ 刪除 is permanent -- all three fired on a single click while
+          only 封存 asked first. */}
+      <AdminConfirmDialog
+        open={confirmingPublish}
+        title="發布屋苑資料？"
+        description="發布後會即時更新公開網站的屋苑頁面。請確認資料已核對。"
+        confirmLabel="發布"
+        isPending={publishing}
+        onOpenChange={setConfirmingPublish}
+        onConfirm={() => {
+          setConfirmingPublish(false);
+          void handlePublish();
+        }}
+      />
+      <AdminConfirmDialog
+        open={pendingRestoreId !== null}
+        title="還原此版本？"
+        description="還原會以該版本內容建立新草稿，並覆蓋目前表單內未儲存的修改。"
+        confirmLabel="還原"
+        isPending={saving}
+        onOpenChange={(open) => {
+          if (!open) setPendingRestoreId(null);
+        }}
+        onConfirm={() => {
+          const id = pendingRestoreId;
+          setPendingRestoreId(null);
+          if (id) void handleRestore(id);
+        }}
+      />
+      <AdminConfirmDialog
+        open={pendingFaqDeleteId !== null}
+        title="刪除 FAQ？"
+        description="刪除後無法還原，公開屋苑頁面會即時移除此問答。"
+        confirmLabel="刪除"
+        confirmVariant="destructive"
+        onOpenChange={(open) => {
+          if (!open) setPendingFaqDeleteId(null);
+        }}
+        onConfirm={() => {
+          const id = pendingFaqDeleteId;
+          setPendingFaqDeleteId(null);
+          if (id) void handleDeleteFaq(id);
+        }}
+      />
+      {leaveGuardDialog}
     </div>
   );
 }

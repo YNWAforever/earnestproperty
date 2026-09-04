@@ -14,8 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Container } from "@/components/layout/Container";
 import { DataNote } from "@/components/layout/DataNote";
 import { EmptyState } from "@/components/layout/EmptyState";
+import { PageHero } from "@/components/site/PageHero";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink, SITE_URL } from "@/content/seo";
 import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
@@ -453,25 +455,21 @@ function TransactionsPage() {
 
   return (
     <div className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-coral">晉誠地產最新成交</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-5xl">
-            深井 青山公路 汀九近期成交
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
-            集中近期屋苑成交資料，配合即時放盤和前線業主叫價，幫你判斷買樓租樓節奏。
-          </p>
-          <Button asChild className="mt-6 bg-coral text-coral-foreground hover:bg-primary-hover">
+      <PageHero
+        eyebrow="晉誠地產最新成交"
+        title="深井 青山公路 汀九近期成交"
+        lead="集中近期屋苑成交資料，配合即時放盤和前線業主叫價，幫你判斷買樓租樓節奏。"
+        actions={
+          <Button asChild className="bg-coral text-coral-foreground hover:bg-primary-hover">
             <a href={inquiryUrl} target="_blank" rel="noopener noreferrer">
               <MessageCircle className="h-4 w-4" />
               WhatsApp 查成交及估價
             </a>
           </Button>
-        </div>
-      </section>
+        }
+      />
 
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <Container className="py-12">
         <div className="mb-6 rounded-lg border bg-card p-5">
           <h2 className="mb-4 text-sm font-semibold">篩選條件</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -599,7 +597,7 @@ function TransactionsPage() {
             }
           />
         )}
-      </section>
+      </Container>
     </div>
   );
 }

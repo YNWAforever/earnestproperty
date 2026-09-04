@@ -7,8 +7,10 @@ import {
 } from "@/components/ui/accordion";
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
+import { Container } from "@/components/layout/Container";
 import { DataNote } from "@/components/layout/DataNote";
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
+import { Breadcrumbs, type BreadcrumbItem } from "@/components/site/Breadcrumbs";
 import {
   EstateComparisonTable,
   type EstateComparisonRow,
@@ -16,6 +18,7 @@ import {
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
+import { PageHero } from "@/components/site/PageHero";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
@@ -241,7 +244,7 @@ function EstatePage() {
     seo?.nameEn ?? estate.name_en ?? "",
     estate.developer ?? "",
     estate.year_completed ? `${estate.year_completed} 年落成` : "",
-    estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "單位數待查",
+    estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "",
   ].filter(Boolean);
   // Task 4 (P4 plan) / Task 5 (P4 plan): transport + school-net sections
   // reuse already-curated content instead of inventing new facts.
@@ -259,21 +262,42 @@ function EstatePage() {
   const schoolNet = getSchoolNet(
     registryEntry?.districtSlug ? SCHOOL_NET_BY_DISTRICT[registryEntry.districtSlug] : null,
   );
+  const estateName = seo?.nameZh ?? estate.name_zh;
+  // The visible trail and the BreadcrumbList JSON-LD are built from the same
+  // crumbs so they can never disagree. The middle crumb is the estate's own
+  // district guide -- the 深井 district page for a sham-tseng estate, the
+  // corridor hub for any other corridor estate -- and is omitted (not
+  // defaulted to a possibly-wrong district) when the registry knows neither.
+  const districtCrumb =
+    registryEntry?.districtSlug === "sham-tseng"
+      ? { label: "深井區買樓租樓", href: "/district/sham-tseng" }
+      : registryEntry?.corridorSegment
+        ? { label: "青山公路區買樓租樓", href: "/castle-peak-road" }
+        : null;
+  const breadcrumbItems: BreadcrumbItem[] = [
+    { label: "首頁", href: "/" },
+    ...(districtCrumb ? [districtCrumb] : []),
+    { label: estateName },
+  ];
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
+      ...(districtCrumb
+        ? [
+            {
+              "@type": "ListItem",
+              position: 2,
+              name: districtCrumb.label,
+              item: `${SITE_URL}${districtCrumb.href}`,
+            },
+          ]
+        : []),
       {
         "@type": "ListItem",
-        position: 2,
-        name: "屋苑",
-        item: `${SITE_URL}${registryEntry?.districtHref ?? "/district/sham-tseng"}`,
-      },
-      {
-        "@type": "ListItem",
-        position: 3,
-        name: seo?.nameZh ?? estate.name_zh,
+        position: districtCrumb ? 3 : 2,
+        name: estateName,
         item: `${SITE_URL}/estate/${estate.slug}`,
       },
     ],
@@ -299,29 +323,28 @@ function EstatePage() {
           dangerouslySetInnerHTML={{ __html: jsonLdScript(faqJsonLd) }}
         />
       )}
-      <section className="bg-gradient-to-br from-primary to-primary/70 py-16 text-primary-foreground">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          {/* registryEntry.heroEyebrow is non-null for every registry entry
-              (see estate-registry.ts) -- the fallback below only fires for
-              an estate the admin CMS created that has no registry entry yet,
-              where we genuinely don't know the district, so it stays
-              generic rather than defaulting to a specific (possibly wrong)
-              claim. */}
-          <p className="text-sm opacity-80">{registryEntry?.heroEyebrow ?? "屋苑獨立 SEO 頁"}</p>
-          <h1 className="mt-2 text-4xl font-bold sm:text-5xl">{seo?.nameZh ?? estate.name_zh}</h1>
-          <p className="mt-5 max-w-3xl text-base leading-relaxed opacity-90">
-            {content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
-          </p>
-          <div className="mt-6 max-w-3xl">
-            <IntentWhatsAppCTA context={ctaContext} />
-          </div>
+      {/* registryEntry.heroEyebrow is non-null for every registry entry
+          (see estate-registry.ts) -- the fallback below only fires for
+          an estate the admin CMS created that has no registry entry yet,
+          where we genuinely don't know the district, so it stays
+          generic rather than defaulting to a specific (possibly wrong)
+          claim. */}
+      <PageHero
+        tone="brand"
+        breadcrumb={<Breadcrumbs tone="inverse" items={breadcrumbItems} />}
+        eyebrow={registryEntry?.heroEyebrow ?? "屋苑獨立 SEO 頁"}
+        title={estateName}
+        lead={content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
+      >
+        <div className="mt-6 max-w-3xl">
+          <IntentWhatsAppCTA context={ctaContext} />
         </div>
-      </section>
+      </PageHero>
 
       {answerSummary ? (
-        <div className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <Container className="pt-6">
           <AnswerSummaryCallout summary={answerSummary} />
-        </div>
+        </Container>
       ) : null}
 
       {/* Verified-facts block: the plain "· "-joined summary this used to be
@@ -331,7 +354,7 @@ function EstatePage() {
           fabricated verification date in that case. The facts themselves are
           still real DB data and still render either way. */}
       {estateFacts.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+        <Container className="pt-6">
           <DataNote
             source="本行屋苑資料庫"
             asOf={estate.verified_at ? (formatHkDate(estate.verified_at) ?? undefined) : undefined}
@@ -343,7 +366,7 @@ function EstatePage() {
           >
             {estateFacts.join(" · ")}
           </DataNote>
-        </section>
+        </Container>
       )}
 
       <EstateMarketSnapshot
@@ -355,7 +378,7 @@ function EstatePage() {
         transactions={transactions}
       />
 
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <Container className="py-8">
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
             <p className="text-sm font-semibold text-coral">屋苑介紹</p>
@@ -410,7 +433,7 @@ function EstatePage() {
             </div>
           </div>
         )}
-      </section>
+      </Container>
 
       {/* Transport + school-net: both reuse already-curated content (the
           corridor segment's own transport copy, school-nets.ts) rather than
@@ -420,7 +443,7 @@ function EstatePage() {
           corridor segment, schoolNet is null outside a district with real,
           sourced school-net data. */}
       {(transportSegment || schoolNet) && (
-        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Container className="py-8">
           <div
             className={transportSegment && schoolNet ? "grid gap-5 lg:grid-cols-2" : "grid gap-5"}
           >
@@ -471,7 +494,7 @@ function EstatePage() {
               </div>
             )}
           </div>
-        </section>
+        </Container>
       )}
 
       {/* Task 5 (P4 plan): nearby-estate comparison. EstateComparisonTable
@@ -488,7 +511,7 @@ function EstatePage() {
           compareEstateSlugs), not new SQL. Renders nothing for a
           sub-section with zero matches rather than an empty placeholder. */}
       {relatedAgents.length > 0 || relatedVideos.length > 0 || relatedArticles.length > 0 ? (
-        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Container className="py-8">
           <h2 className="text-xl font-bold text-primary">相關資源</h2>
           <div className="mt-4 grid gap-6 sm:grid-cols-3">
             {relatedAgents.length > 0 ? (
@@ -546,10 +569,10 @@ function EstatePage() {
               </div>
             ) : null}
           </div>
-        </section>
+        </Container>
       ) : null}
 
-      <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <Container className="py-8">
         <div className="flex items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-primary">最新放盤</h2>
@@ -594,10 +617,10 @@ function EstatePage() {
             </div>
           </>
         )}
-      </section>
+      </Container>
 
       {content && (
-        <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <Container className="py-8">
           <div className="rounded-lg border bg-card p-5">
             <h2 className="text-xl font-bold text-primary">下一步</h2>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
@@ -630,28 +653,30 @@ function EstatePage() {
               </a>
             </div>
           </div>
-        </section>
+        </Container>
       )}
 
       <OwnerValuationPanel context={ctaContext} estateId={estate.id} />
       <TrustProofPanel />
 
       {visibleFaqs.length > 0 && (
-        <section className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-primary">常見問題</h2>
-          <Accordion type="single" collapsible className="mt-6">
-            {visibleFaqs.map((f: VisibleFaq, i: number) => (
-              <AccordionItem key={i} value={`faq-${i}`}>
-                <AccordionTrigger className="text-left text-base font-medium">
-                  {f.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                  {f.answer}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </section>
+        <Container className="py-8">
+          <div className="max-w-3xl">
+            <h2 className="text-2xl font-bold text-primary">常見問題</h2>
+            <Accordion type="single" collapsible className="mt-6">
+              {visibleFaqs.map((f: VisibleFaq, i: number) => (
+                <AccordionItem key={i} value={`faq-${i}`}>
+                  <AccordionTrigger className="text-left text-base font-medium">
+                    {f.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
+                    {f.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </Container>
       )}
     </div>
   );

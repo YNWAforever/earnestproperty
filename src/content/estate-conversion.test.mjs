@@ -242,7 +242,10 @@ test("conversion components avoid nested anchors and handle unknown market data"
   assert.doesNotMatch(trust, /publicLicenceNo/);
   assert.doesNotMatch(trust, /C-018613/);
   assert.doesNotMatch(snapshot, /totalUnits \?\? 0/);
-  assert.match(snapshot, /待查/);
+  // UI refinement 2026-09-03: an unknown unit count/phase/year renders as "—"
+  // (or is omitted), no longer as a "待查" placeholder that read like copy.
+  assert.doesNotMatch(snapshot, /待查/);
+  assert.match(snapshot, /"—"/);
   assert.match(snapshot, /overflow-x-auto/);
   assert.match(snapshot, /min-w-\[/);
 });

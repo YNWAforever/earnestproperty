@@ -701,7 +701,7 @@ function AdminLeads() {
     : "查看聯絡資料、Lead 欄位及 Activity 跟進紀錄。";
 
   return (
-    <AdminShell title="CRM" description="集中處理買樓、租樓及業主估價 leads。">
+    <AdminShell title="客戶查詢" description="CRM：集中處理買樓、租樓及業主估價 leads。">
       <AdminToolbar
         filters={
           <>

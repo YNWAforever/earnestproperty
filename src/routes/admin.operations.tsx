@@ -29,6 +29,7 @@ import type {
   MigrationState,
   OperationTab,
 } from "@/lib/admin/operations/operations-types";
+import { formatHkDateTime } from "@/lib/format";
 
 const operationsMetadata = { robots: "noindex, nofollow" } as const;
 
@@ -201,7 +202,9 @@ function AdminOperations() {
             {health ? (HEALTH_STATUS_LABELS[health.status] ?? health.status) : "載入中"}
           </Badge>
           {health ? (
-            <span className="text-sm text-muted-foreground">最後檢查：{health.checkedAt}</span>
+            <span className="text-sm text-muted-foreground">
+              最後檢查：{formatHkDateTime(health.checkedAt) ?? health.checkedAt}
+            </span>
           ) : null}
         </div>
         <Button

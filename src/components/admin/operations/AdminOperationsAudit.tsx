@@ -88,7 +88,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
         setRows((current) => (append ? [...current, ...result.data.rows] : result.data.rows));
         setNextCursor(result.data.nextCursor);
       } catch {
-        if (request === requestSequence.current) setError("Unable to load audit events.");
+        if (request === requestSequence.current) setError("未能載入審計紀錄，請稍後再試。");
       } finally {
         if (request === requestSequence.current) setLoading(false);
       }
@@ -192,7 +192,7 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
           />
         </label>
         <Button type="submit" variant="secondary" disabled={loading}>
-          Apply filters
+          套用篩選
         </Button>
       </form>
 

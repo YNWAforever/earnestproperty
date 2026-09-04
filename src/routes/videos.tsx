@@ -4,7 +4,9 @@ import { z } from "zod";
 import { ExternalLink, MessageCircle, PlayCircle, Search, Video } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { Container } from "@/components/layout/Container";
 import { AppImage } from "@/components/media/AppImage";
+import { PageHero } from "@/components/site/PageHero";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -194,25 +196,21 @@ function VideosPage() {
           for no benefit. */}
       <AllVideoSchemas cmsVideos={visibleCmsVideos} listingVideos={matchingListingVideos} />
 
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-coral">YouTube影片</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-5xl">
-            晉誠地產 YouTube影片
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
-            官方頻道影片、屋苑開箱及附影片樓盤集中一頁，睇樓前先了解景觀、間隔和屋苑環境。
-          </p>
-          <Button asChild className="mt-6 bg-coral text-coral-foreground hover:bg-primary-hover">
+      <PageHero
+        eyebrow="YouTube影片"
+        title="晉誠地產 YouTube影片"
+        lead="官方頻道影片、屋苑開箱及附影片樓盤集中一頁，睇樓前先了解景觀、間隔和屋苑環境。"
+        actions={
+          <Button asChild className="bg-coral text-coral-foreground hover:bg-primary-hover">
             <a href={SITE_YOUTUBE_CHANNEL.url} target="_blank" rel="noopener noreferrer">
               <ExternalLink className="h-4 w-4" />
               開啟 {SITE_YOUTUBE_CHANNEL.handleLabel}
             </a>
           </Button>
-        </div>
-      </section>
+        }
+      />
 
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <Container className="py-12">
         {hasVideos ? (
           <div className="space-y-12">
             <div className="space-y-4">
@@ -410,7 +408,7 @@ function VideosPage() {
             </div>
           </div>
         )}
-      </section>
+      </Container>
     </div>
   );
 }

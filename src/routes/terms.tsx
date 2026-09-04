@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 
 import { SITE_CONTACT } from "@/config/site";
+import { Container } from "@/components/layout/Container";
+import { PageHero } from "@/components/site/PageHero";
 import { canonicalLink, pageSeo } from "@/content/seo";
 
 // TODO(client/legal): reasonable template copy -- not a substitute for legal
@@ -19,18 +21,14 @@ export const Route = createFileRoute("/terms")({
 function TermsPage() {
   return (
     <div className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-3xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-primary">法律 Legal</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">使用條款</h1>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {"生效日期：[待補]　・　最後更新日期：[待補]"}
-          </p>
-        </div>
-      </section>
+      <PageHero eyebrow="法律 Legal" title="使用條款">
+        <p className="mt-2 text-xs text-muted-foreground">
+          {"生效日期：[待補]　・　最後更新日期：[待補]"}
+        </p>
+      </PageHero>
 
-      <section className="mx-auto max-w-3xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="prose prose-neutral max-w-none space-y-6">
+      <Container className="py-12">
+        <div className="prose prose-neutral max-w-3xl space-y-8">
           <p className="leading-7 text-muted-foreground">
             {`歡迎瀏覽晉誠地產 Earnest Property（牌照號 ${SITE_CONTACT.licenceNo}）網站。使用本網站即表示你同意以下條款。`}
           </p>
@@ -75,7 +73,7 @@ function TermsPage() {
             </p>
           </div>
         </div>
-      </section>
+      </Container>
     </div>
   );
 }

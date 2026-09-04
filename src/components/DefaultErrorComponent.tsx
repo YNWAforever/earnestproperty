@@ -1,17 +1,21 @@
-import { useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 
 /** Router-level fallback for an unhandled render/loader error.
  *
  * Lives here rather than in router.tsx so that file exports only the router
  * factory (react-refresh/only-export-components).
+ *
+ * zh-HK copy (this was the scaffold's English "Something went wrong") and
+ * page-sized rather than `min-h-screen`, which added a viewport of empty
+ * space under the sticky header.
  */
 
 export function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
+    <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-md text-center">
         <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -20,6 +24,7 @@ export function DefaultErrorComponent({ error, reset }: { error: Error; reset: (
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -28,31 +33,34 @@ export function DefaultErrorComponent({ error, reset }: { error: Error; reset: (
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Something went wrong</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          An unexpected error occurred. Please try again.
+        <h1 className="text-2xl font-bold tracking-tight text-primary sm:text-3xl">
+          頁面暫時未能顯示
+        </h1>
+        <p className="mt-3 text-base leading-7 text-muted-foreground">
+          載入時遇到未預期的問題。請再試一次；如果問題持續，可返回首頁或直接 WhatsApp 我們。
         </p>
         {import.meta.env.DEV && error.message && (
           <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
             {error.message}
           </pre>
         )}
-        <div className="mt-6 flex items-center justify-center gap-3">
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <button
+            type="button"
             onClick={() => {
               router.invalidate();
               reset();
             }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
           >
-            Try again
+            再試一次
           </button>
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+          <Link
+            to="/"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
           >
-            Go home
-          </a>
+            返回首頁
+          </Link>
         </div>
       </div>
     </div>

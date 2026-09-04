@@ -870,7 +870,7 @@ function AdminCms() {
   }
 
   return (
-    <AdminShell title="CMS" description="管理屋苑內容、文章、FAQ 及 SEO 資料。">
+    <AdminShell title="內容中心" description="CMS：管理屋苑內容、文章、FAQ 及 SEO 資料。">
       {error ? <AdminError message={error} /> : null}
       {!data && !error ? <Skeleton className="h-72 w-full" /> : null}
       {data ? (

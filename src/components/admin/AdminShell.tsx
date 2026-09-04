@@ -5,10 +5,14 @@ import {
   BookOpen,
   Building2,
   ContactRound,
+  ExternalLink,
   Home,
+  Landmark,
+  Lock,
   LogOut,
   Menu,
   MessageCircle,
+  Radar,
   Receipt,
   RefreshCw,
   Send,
@@ -16,6 +20,7 @@ import {
   ShieldAlert,
   UserRoundCog,
   Users,
+  UsersRound,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -27,18 +32,57 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import type { StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
+import type { StaffAccessRole, StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
 
 // Prefix matching is reserved for sections that own child routes. Team and
 // Operations deliberately stay exact so neither can illuminate the other.
+//
+// `roles` is the minimum staff role the destination's first server fetch
+// accepts (admin-data.ts / admin-team.ts / permissions.ts). The sidebar used
+// to show all 12 entries to everyone, so a `viewer` saw 12 links and could
+// open one, and an `agent` hit 403 on 7 of them with no hint why. An entry the
+// signed-in role cannot use still renders -- disabled, naming the role it
+// needs -- the way /admin/operations already treats its capability tabs.
+const STAFF: StaffAccessRole[] = ["admin", "manager", "agent"];
+const EDITORS: StaffAccessRole[] = ["admin", "manager"];
+const EVERYONE: StaffAccessRole[] = ["admin", "manager", "agent", "viewer"];
+
 const navGroups = [
   {
     heading: "Workspace",
     items: [
-      { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true },
-      { to: "/admin/leads", label: "客戶查詢", icon: ContactRound, activeExact: false },
-      { to: "/admin/listings", label: "樓盤管理", icon: Building2, activeExact: false },
-      { to: "/admin/transactions", label: "成交管理", icon: Receipt, activeExact: false },
+      { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true, roles: STAFF },
+      {
+        to: "/admin/leads",
+        label: "客戶查詢",
+        icon: ContactRound,
+        activeExact: false,
+        roles: STAFF,
+      },
+      {
+        // The daily lead-triage workspace had no sidebar entry at all: its only
+        // way in was one button on /admin/leads.
+        to: "/admin/leads/command-center",
+        label: "Lead Command Center",
+        icon: Radar,
+        activeExact: true,
+        includeSearch: false,
+        roles: EDITORS,
+      },
+      {
+        to: "/admin/listings",
+        label: "樓盤管理",
+        icon: Building2,
+        activeExact: false,
+        roles: STAFF,
+      },
+      {
+        to: "/admin/transactions",
+        label: "成交管理",
+        icon: Receipt,
+        activeExact: false,
+        roles: STAFF,
+      },
     ],
   },
   {
@@ -50,11 +94,30 @@ const navGroups = [
         icon: BookOpen,
         activeExact: false,
         includeSearch: false,
+        roles: EDITORS,
       },
-      { to: "/admin/estates", label: "屋苑管理", icon: Building2, activeExact: false },
-      { to: "/admin/segments", label: "客戶分群", icon: Users, activeExact: false },
-      { to: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle, activeExact: false },
-      { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false },
+      {
+        to: "/admin/estates",
+        label: "屋苑管理",
+        icon: Landmark,
+        activeExact: false,
+        roles: EDITORS,
+      },
+      {
+        to: "/admin/segments",
+        label: "客戶分群",
+        icon: UsersRound,
+        activeExact: false,
+        roles: EDITORS,
+      },
+      {
+        to: "/admin/whatsapp",
+        label: "WhatsApp",
+        icon: MessageCircle,
+        activeExact: false,
+        roles: EDITORS,
+      },
+      { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false, roles: EDITORS },
     ],
   },
   {
@@ -66,18 +129,51 @@ const navGroups = [
         icon: Users,
         activeExact: true,
         includeSearch: false,
+        roles: EDITORS,
       },
-      { to: "/admin/agents", label: "經紀檔案", icon: UserRoundCog, activeExact: false },
+      {
+        to: "/admin/agents",
+        label: "經紀檔案",
+        icon: UserRoundCog,
+        activeExact: false,
+        roles: EDITORS,
+      },
       {
         to: "/admin/operations",
         label: "系統營運",
         icon: ServerCog,
         activeExact: true,
         includeSearch: false,
+        roles: EVERYONE,
       },
     ],
   },
 ] as const;
+
+const ROLE_LABELS: Record<StaffAccessRole, string> = {
+  admin: "admin",
+  manager: "manager",
+  agent: "agent",
+  viewer: "viewer",
+};
+
+function roleCanOpen(
+  roles: readonly StaffAccessRole[] | null,
+  allowed: readonly StaffAccessRole[],
+) {
+  // null = the staff lookup hasn't answered (or failed): render everything as
+  // usable and let the data layer enforce, rather than greying out the whole
+  // sidebar on a transient error.
+  if (roles === null) return true;
+  return roles.some((role) => allowed.includes(role));
+}
+
+function requiredRoleLabel(allowed: readonly StaffAccessRole[]) {
+  // The least-privileged role that can open it is the one worth naming.
+  const order: StaffAccessRole[] = ["viewer", "agent", "manager", "admin"];
+  const lowest = order.find((role) => allowed.includes(role)) ?? "admin";
+  return ROLE_LABELS[lowest];
+}
 
 const navLinkClassName =
   "flex min-h-11 items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -90,7 +186,16 @@ const navLinkActiveProps = {
   "aria-current": "page" as const,
 };
 
-function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
+const navDisabledClassName =
+  "flex min-h-11 cursor-not-allowed items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground/60";
+
+function AdminNav({
+  roles,
+  onNavigate,
+}: {
+  roles: readonly StaffAccessRole[] | null;
+  onNavigate?: () => void;
+}) {
   return (
     <nav aria-label="後台選單" className="grid gap-4">
       {navGroups.map((group) => (
@@ -102,6 +207,22 @@ function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
           ) : null}
           {group.items.map((item) => {
             const Icon = item.icon;
+            if (!roleCanOpen(roles, item.roles)) {
+              const needed = requiredRoleLabel(item.roles);
+              return (
+                <span
+                  key={`${item.to}-${item.label}`}
+                  aria-disabled="true"
+                  title={`需要 ${needed} 或以上權限，請聯絡系統管理員`}
+                  className={navDisabledClassName}
+                >
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="flex-1">{item.label}</span>
+                  <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span className="sr-only">（需要 {needed} 或以上權限）</span>
+                </span>
+              );
+            }
             return (
               <Link
                 key={`${item.to}-${item.label}`}
@@ -181,16 +302,27 @@ function StaffAccessDenied({
 
 function AdminIdentity({ email }: { email: string | null | undefined }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-2">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-        <Home className="h-4 w-4" aria-hidden="true" />
+    <div className="px-2 py-2">
+      <div className="flex items-center gap-2">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <Home className="h-4 w-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">Earnest Admin</p>
+          <p className="truncate text-xs text-muted-foreground" title={email ?? undefined}>
+            {email}
+          </p>
+        </div>
       </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">Earnest Admin</p>
-        <p className="truncate text-xs text-muted-foreground" title={email ?? undefined}>
-          {email}
-        </p>
-      </div>
+      {/* The public SiteHeader no longer renders on /admin, so this is the
+          only way from the back office to the site it manages. */}
+      <Link
+        to="/"
+        className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-md px-1 text-xs font-medium text-muted-foreground hover:text-primary"
+      >
+        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+        查看公開網站
+      </Link>
     </div>
   );
 }
@@ -230,6 +362,7 @@ export function AdminShell({
     loading: rechecking,
     refresh: refreshStaffSession,
   } = useStaffSession(user?.id ?? null);
+  const staffRoles = staffSession?.status === "ok" ? staffSession.roles : null;
 
   async function handleSignOut() {
     // Sat one item below 群發 in the sidebar with no confirmation, no pending
@@ -284,14 +417,15 @@ export function AdminShell({
   return (
     <div className="min-h-screen bg-slate-50/70">
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
-        {/* lg:top-20 clears the 64px sticky public SiteHeader, which previously
-            overlapped the sidebar's identity block and first nav item once
-            scrolled. overflow-y-auto lets the last nav items and 登出 be
-            reached on short laptop viewports. */}
-        <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-20 lg:block lg:h-[calc(100vh-6rem)] lg:overflow-y-auto">
+        {/* The sticky offset used to be lg:top-20 to clear the public
+            SiteHeader, which __root.tsx no longer renders on /admin -- that
+            left 80px of dead space above the identity block and lost 96px of
+            sidebar height on every page. overflow-y-auto lets the last nav
+            items and 登出 be reached on short laptop viewports. */}
+        <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-4 lg:block lg:h-[calc(100vh-2rem)] lg:overflow-y-auto">
           <AdminIdentity email={user.email} />
           <div className="mt-4">
-            <AdminNav />
+            <AdminNav roles={staffRoles} />
           </div>
           <div className="mt-4 border-t pt-3">
             <Button
@@ -330,7 +464,7 @@ export function AdminShell({
                         <AdminIdentity email={user.email} />
                       </div>
                       <div className="mt-4 flex-1 overflow-y-auto pr-1">
-                        <AdminNav onNavigate={() => setMobileNavOpen(false)} />
+                        <AdminNav roles={staffRoles} onNavigate={() => setMobileNavOpen(false)} />
                       </div>
                       <div className="border-t pt-3">
                         <Button

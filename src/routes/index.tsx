@@ -323,10 +323,7 @@ function HomePage() {
               desc="即日新放盤，隨時 WhatsApp 查詢及預約睇樓。"
               className="text-left"
             />
-            <Link
-              to="/district/sham-tseng"
-              className="text-sm font-medium text-primary hover:underline"
-            >
+            <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
               所有放盤 →
             </Link>
           </div>
@@ -457,8 +454,8 @@ function HomePage() {
           <div className="mt-8 grid gap-5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
             {agents.map((agent) => {
               const name = agent.name_zh || agent.name_en || "晉誠地產代理";
-              return (
-                <div key={agent.id} className="text-center">
+              const card = (
+                <>
                   <div className="mx-auto aspect-square w-full overflow-hidden rounded-full bg-muted">
                     <AppImage
                       src={agent.avatar_url}
@@ -477,6 +474,22 @@ function HomePage() {
                   {agent.job_title ? (
                     <p className="text-xs text-muted-foreground">{agent.job_title}</p>
                   ) : null}
+                </>
+              );
+              // Six portraits with no click target read as decoration; /about's
+              // equivalent preview already links each person to their profile.
+              return agent.public_slug ? (
+                <Link
+                  key={agent.id}
+                  to="/agents/$slug"
+                  params={{ slug: agent.public_slug }}
+                  className="group text-center"
+                >
+                  {card}
+                </Link>
+              ) : (
+                <div key={agent.id} className="text-center">
+                  {card}
                 </div>
               );
             })}
@@ -829,11 +842,15 @@ function CoreEstateGrid({
   );
 }
 
+// Left-aligned by default: with `text-center` as the default, headings
+// alternated centre/left down the page depending on whether a section also
+// carried a right-hand action. Pass className="text-center" explicitly when a
+// section is genuinely centred.
 function SectionHeader({
   eyebrow,
   title,
   desc,
-  className = "text-center",
+  className = "text-left",
 }: {
   eyebrow?: string;
   title: string;

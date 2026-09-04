@@ -3,7 +3,9 @@ import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { Building2, MessageCircle, Phone, Search, UserRound, X } from "lucide-react";
 
+import { Container } from "@/components/layout/Container";
 import { AppImage } from "@/components/media/AppImage";
+import { PageHero } from "@/components/site/PageHero";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -198,7 +200,7 @@ function AgentsPage() {
         />
       ) : null}
       <AgentDirectoryHeader />
-      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      <Container className="py-12">
         {agents.length === 0 ? <DirectoryEmptyState /> : null}
         {agents.length > 0 ? (
           <>
@@ -218,7 +220,7 @@ function AgentsPage() {
             )}
           </>
         ) : null}
-      </section>
+      </Container>
     </div>
   );
 }
@@ -445,15 +447,11 @@ function AgentDirectoryFilters({
 
 function AgentDirectoryHeader() {
   return (
-    <section className="border-b bg-muted/30">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8">
-        <p className="text-sm font-semibold text-primary">晉誠專業代理</p>
-        <h1 className="mt-3 text-3xl font-bold sm:text-4xl">搵到合適代理，置業更清晰</h1>
-        <p className="mt-4 max-w-3xl text-base leading-7 text-muted-foreground">
-          持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。
-        </p>
-      </div>
-    </section>
+    <PageHero
+      eyebrow="晉誠專業代理"
+      title="搵到合適代理，置業更清晰"
+      lead="持牌代理團隊熟悉深井、青山公路及汀九市場，為買家、租客及業主提供直接、可靠的地產服務。"
+    />
   );
 }
 
@@ -496,7 +494,7 @@ function AgentDirectoryCard({
       <div className="min-w-0">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h2 className="text-xl font-semibold">{name}</h2>
+            <h3 className="text-xl font-semibold">{name}</h3>
             {agent.name_zh && agent.name_en ? (
               <p className="mt-1 text-sm text-muted-foreground">{agent.name_en}</p>
             ) : null}
@@ -552,9 +550,9 @@ function AgentDirectoryPending() {
   return (
     <div className="bg-background">
       <AgentDirectoryHeader />
-      <section className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      <Container className="py-12">
         <DirectorySkeleton />
-      </section>
+      </Container>
     </div>
   );
 }
@@ -587,11 +585,7 @@ function AgentDirectoryError() {
   return (
     <div className="bg-background">
       <AgentDirectoryHeader />
-      <section
-        className="mx-auto max-w-6xl px-4 py-10 text-center sm:px-6 lg:px-8"
-        role="alert"
-        aria-live="polite"
-      >
+      <Container className="py-12 text-center" role="alert" aria-live="polite">
         <div className="border-y border-destructive/30 py-10">
           <h2 className="text-xl font-semibold">暫時未能載入代理資料</h2>
           <p className="mt-3 text-sm text-muted-foreground">請稍後再試，或直接聯絡晉誠地產。</p>
@@ -599,7 +593,7 @@ function AgentDirectoryError() {
             <Link to="/contact">聯絡我們</Link>
           </Button>
         </div>
-      </section>
+      </Container>
     </div>
   );
 }

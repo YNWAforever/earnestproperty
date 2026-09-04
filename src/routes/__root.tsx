@@ -38,19 +38,30 @@ import { jsonLdScript, organizationSchema } from "@/lib/schema";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+    // zh-HK copy on a zh-HK site (this used to be the scaffold's English
+    // "Page not found"), and page-sized rather than `min-h-screen` -- that
+    // added a full viewport of empty space under the sticky header.
+    <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-md text-center">
+        <p className="text-sm font-semibold text-primary">404</p>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-4xl">
+          找不到這個頁面
+        </h1>
+        <p className="mt-4 text-base leading-7 text-muted-foreground">
+          你要找的頁面可能已移除或連結已更新。可以返回首頁，或直接搜尋放盤。
         </p>
-        <div className="mt-6">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary-hover"
+            className="inline-flex min-h-11 items-center justify-center rounded-md bg-primary px-5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
           >
-            Go home
+            返回首頁
+          </Link>
+          <Link
+            to="/listings"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border bg-background px-5 text-sm font-semibold text-primary transition-colors hover:border-primary"
+          >
+            搜尋放盤
           </Link>
         </div>
       </div>
@@ -124,7 +135,11 @@ function RootComponent() {
     // Neon's domain resolves against ITS origin, not ours. SITE_URL rather than
     // window.location.origin so server and client render the same value.
     <NeonAuthUIProvider authClient={authClient} baseURL={SITE_URL} defaultTheme="light">
-      <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-16 lg:pb-0" : ""}`}>
+      {/* The sticky WhatsApp bar is `fixed` at bottom-16 (above the 問樓助手
+          bubble) and ~52px tall, so the page needs ~116px reserved -- pb-16
+          only cleared the offset, leaving the footer's last lines under the
+          bar with no way to scroll past it. */}
+      <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-32 lg:pb-0" : ""}`}>
         {showSiteChrome && (
           <script
             type="application/ld+json"

@@ -40,7 +40,7 @@ function AdminAgents() {
   }, [user]);
 
   return (
-    <AdminShell title="代理管理" description="管理公開代理資料、帳戶連結、聯絡方式及發布狀態。">
+    <AdminShell title="經紀檔案" description="管理公開代理資料、帳戶連結、聯絡方式及發布狀態。">
       <AdminToolbar
         filters={
           <p className="self-center text-sm text-muted-foreground">代理資料由管理員或經理更新。</p>

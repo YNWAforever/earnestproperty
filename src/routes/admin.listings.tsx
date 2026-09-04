@@ -205,7 +205,7 @@ function AdminListings() {
   }
 
   return (
-    <AdminShell title="放盤" description="管理售盤、租盤、相片、代理及發布狀態。">
+    <AdminShell title="樓盤管理" description="管理售盤、租盤、相片、代理及發布狀態。">
       <AdminToolbar
         filters={
           <>

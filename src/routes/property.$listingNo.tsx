@@ -55,7 +55,9 @@ import {
   sanitizeListingText,
 } from "@/lib/format";
 import { AppImage } from "@/components/media/AppImage";
+import { Container } from "@/components/layout/Container";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
+import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
@@ -236,6 +238,10 @@ function PropertyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
   const { favourited, toggle: toggleFavourited } = useFavourite(property.listing_no);
+  // The breadcrumb shows the short id the title already uses (#C024131); the
+  // full "C024131-6714584-S" wrapped onto a second line on phones and is
+  // repeated verbatim in the badge row just below.
+  const shortListingNo = property.listing_no.split("-")[0] || property.listing_no;
 
   const isRent = property.deal_type === "rent";
   const priceLabel = formatDealPrice(isRent, Number(property.rent), Number(property.price));
@@ -432,32 +438,17 @@ function PropertyPage() {
         : null;
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-8 pb-32 lg:pb-8">
+    <Container className="py-8 pb-32 lg:pb-8">
       {/* Breadcrumb + actions */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <nav className="text-sm text-muted-foreground">
-          <Link to="/" className="hover:text-foreground">
-            首頁
-          </Link>
-          <span className="mx-2">›</span>
-          <Link to="/listings" className="hover:text-foreground">
-            搜尋放盤
-          </Link>
-          <span className="mx-2">›</span>
-          {estate ? (
-            <>
-              <Link
-                to="/estate/$slug"
-                params={{ slug: estate.slug }}
-                className="hover:text-foreground"
-              >
-                {estate.name_zh}
-              </Link>
-              <span className="mx-2">›</span>
-            </>
-          ) : null}
-          <span>編號 {property.listing_no}</span>
-        </nav>
+        <Breadcrumbs
+          items={[
+            { label: "首頁", href: "/" },
+            { label: "搜尋放盤", href: "/listings" },
+            ...(estate ? [{ label: estate.name_zh, href: `/estate/${estate.slug}` }] : []),
+            { label: `編號 ${shortListingNo}` },
+          ]}
+        />
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <Button variant="outline" size="sm" onClick={toggleFavourited} aria-pressed={favourited}>
             <Heart className={`mr-1.5 h-3.5 w-3.5 ${favourited ? "fill-coral text-coral" : ""}`} />
@@ -751,7 +742,9 @@ function PropertyPage() {
             {estate && (
               <Card className="mt-6">
                 <CardHeader>
-                  <CardTitle className="text-base">屋苑資料</CardTitle>
+                  <CardTitle as="h2" className="text-base">
+                    屋苑資料
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -778,7 +771,7 @@ function PropertyPage() {
             {transportSegment && (
               <Card className="mt-6" data-property-transport-card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-base">
+                  <CardTitle as="h2" className="flex items-center gap-2 text-base">
                     <TrainFront className="h-4 w-4" />
                     附近交通
                   </CardTitle>
@@ -804,8 +797,10 @@ function PropertyPage() {
             {txns.length > 0 && (
               <section className="mt-6">
                 <h2 className="text-xl font-semibold">屋苑近期成交</h2>
-                <div className="mt-3 overflow-hidden rounded-lg border">
-                  <Table>
+                {/* overflow-x-auto (not overflow-hidden): five columns do not fit a
+                    phone, and clipping hid the price/實呎 columns entirely. */}
+                <div className="mt-3 overflow-x-auto rounded-lg border">
+                  <Table className="min-w-[520px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead>成交日期</TableHead>
@@ -943,7 +938,7 @@ function PropertyPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdScript(jsonLd) }}
       />
-    </div>
+    </Container>
   );
 }
 

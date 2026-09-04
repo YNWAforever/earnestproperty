@@ -2,8 +2,10 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowRight, HelpCircle, Home, MapPin, TrendingUp, Waves } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Container } from "@/components/layout/Container";
 import { DataNote } from "@/components/layout/DataNote";
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
+import { PageHero } from "@/components/site/PageHero";
 import {
   buildAreaComparisonRows,
   buyerFitHighlights,
@@ -121,7 +123,7 @@ function SegmentCard({
       className="group rounded-lg border bg-card p-5 shadow-card transition hover:border-primary hover:shadow-elegant"
     >
       <p className="text-xs font-semibold uppercase text-coral">{segment.eyebrow}</p>
-      <h2 className="mt-2 text-xl font-bold text-primary">{segment.nameZh}</h2>
+      <h3 className="mt-2 text-xl font-bold text-primary">{segment.nameZh}</h3>
       <p className="mt-1 text-sm text-muted-foreground">{segment.nameEn}</p>
       <div className="mt-4 space-y-2 text-sm leading-7 text-muted-foreground">
         {segment.zoneSummary.map((paragraph) => (
@@ -175,7 +177,7 @@ function CastlePeakRoadRouteError({ error }: { error: Error }) {
  */
 function CorridorSchematic() {
   return (
-    <section className="mx-auto max-w-7xl px-4 pt-10 sm:px-6 lg:px-8">
+    <Container className="pt-10">
       <div className="flex items-center gap-2">
         <MapPin className="h-5 w-5 text-primary" />
         <h2 className="text-lg font-semibold text-primary">青山公路走向示意</h2>
@@ -205,7 +207,7 @@ function CorridorSchematic() {
       <p className="mt-2 text-xs text-muted-foreground">
         示意圖只反映沿線東西相對位置，並非實際地圖座標；如需準確路線及地圖，請以地圖應用程式為準。
       </p>
-    </section>
+    </Container>
   );
 }
 
@@ -215,7 +217,7 @@ function AreaComparisonSection() {
   const rows = buildAreaComparisonRows(castlePeakRoadSegments);
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <Container className="py-12">
       <h2 className="text-2xl font-bold text-primary">兩個生活圈比較</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         以下內容摘自各生活圈原有的地區介紹文字，方便同版面比較。
@@ -246,7 +248,7 @@ function AreaComparisonSection() {
           </tbody>
         </table>
       </div>
-    </section>
+    </Container>
   );
 }
 
@@ -260,7 +262,7 @@ function AreaComparisonSection() {
  */
 function EstateDirectorySection() {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <Container className="py-12">
       <div className="flex items-center gap-2">
         <Home className="h-6 w-6 text-primary" />
         <h2 className="text-2xl font-bold text-primary">屋苑一覽</h2>
@@ -306,7 +308,7 @@ function EstateDirectorySection() {
           );
         })}
       </div>
-    </section>
+    </Container>
   );
 }
 
@@ -331,7 +333,7 @@ function PriceSnapshotSection({
   if (entries.length === 0) return null;
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <Container className="py-12">
       <div className="flex items-center gap-2">
         <TrendingUp className="h-6 w-6 text-primary" />
         <h2 className="text-2xl font-bold text-primary">實呎價格快照</h2>
@@ -353,7 +355,7 @@ function PriceSnapshotSection({
           </div>
         ))}
       </div>
-    </section>
+    </Container>
   );
 }
 
@@ -365,7 +367,7 @@ function PriceSnapshotSection({
  */
 function DecisionGuideSection() {
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+    <Container className="py-12">
       <div className="flex items-center gap-2">
         <HelpCircle className="h-6 w-6 text-primary" />
         <h2 className="text-2xl font-bold text-primary">邊個區適合我？</h2>
@@ -401,7 +403,7 @@ function DecisionGuideSection() {
           );
         })}
       </div>
-    </section>
+    </Container>
   );
 }
 
@@ -444,29 +446,31 @@ function CastlePeakRoadHubPage() {
         />
       )}
 
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="inline-flex items-center gap-2 text-sm font-semibold text-coral">
+      {/* Second-level page, so no breadcrumb. The intro is a list of
+          paragraphs, which PageHero's single-<p> lead cannot hold, so it
+          renders as children in the lead's own type style. */}
+      <PageHero
+        eyebrow={
+          <span className="inline-flex items-center gap-2">
             <MapPin className="h-4 w-4" />
             {castlePeakRoadHub.label}
-          </p>
-          <h1 className="mt-3 max-w-4xl text-3xl font-bold tracking-tight text-primary sm:text-5xl">
-            {castlePeakRoadHub.h1}
-          </h1>
-          <div className="mt-5 max-w-3xl space-y-3 text-base leading-8 text-muted-foreground">
-            {castlePeakRoadHub.intro.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
-          </div>
-          <div className="mt-5 max-w-3xl">
-            <AnswerSummaryCallout summary={castlePeakRoadHub.answerSummary} />
-          </div>
+          </span>
+        }
+        title={castlePeakRoadHub.h1}
+      >
+        <div className="mt-5 max-w-3xl space-y-3 text-base leading-8 text-muted-foreground">
+          {castlePeakRoadHub.intro.map((paragraph) => (
+            <p key={paragraph}>{paragraph}</p>
+          ))}
         </div>
-      </section>
+        <div className="mt-5 max-w-3xl">
+          <AnswerSummaryCallout summary={castlePeakRoadHub.answerSummary} />
+        </div>
+      </PageHero>
 
       <CorridorSchematic />
 
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <Container className="py-12">
         <div className="flex items-center gap-2">
           <Waves className="h-6 w-6 text-primary" />
           <h2 className="text-2xl font-bold text-primary">由東至西比較青山公路</h2>
@@ -480,7 +484,7 @@ function CastlePeakRoadHubPage() {
             />
           ))}
         </div>
-      </section>
+      </Container>
 
       <AreaComparisonSection />
       <EstateDirectorySection />
@@ -489,17 +493,19 @@ function CastlePeakRoadHubPage() {
 
       {faqs.length > 0 && (
         <section className="border-y bg-card">
-          <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6 lg:px-8">
-            <h2 className="text-2xl font-bold text-primary">青山公路買樓 FAQ</h2>
-            <div className="mt-6 divide-y rounded-lg border bg-background">
-              {faqs.map((faq) => (
-                <article key={faq.question} className="p-5">
-                  <h3 className="font-semibold text-primary">{faq.question}</h3>
-                  <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
-                </article>
-              ))}
+          <Container className="py-12">
+            <div className="max-w-3xl">
+              <h2 className="text-2xl font-bold text-primary">青山公路買樓 FAQ</h2>
+              <div className="mt-6 divide-y rounded-lg border bg-background">
+                {faqs.map((faq) => (
+                  <article key={faq.question} className="p-5">
+                    <h3 className="font-semibold text-primary">{faq.question}</h3>
+                    <p className="mt-2 text-sm leading-7 text-muted-foreground">{faq.answer}</p>
+                  </article>
+                ))}
+              </div>
             </div>
-          </div>
+          </Container>
         </section>
       )}
     </div>

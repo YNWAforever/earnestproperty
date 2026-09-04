@@ -7,9 +7,13 @@ export function PropertyMediaContactLayout({ media, mobileContact, details, side
       className: "mt-8 grid gap-8 lg:grid-cols-[2fr_1fr]",
       "data-property-layout": "media-contact",
     },
+    // min-w-0 on both grid items: a grid track's automatic minimum is the
+    // item's min-content width, so the gallery image (natural width ~870px)
+    // widened the whole column past a 375px viewport and clipped the mobile
+    // contact card, description and similar-listing cards at the right edge.
     createElement(
       "div",
-      null,
+      { className: "min-w-0" },
       createElement("div", { "data-slot": "media" }, media),
       createElement(
         "div",
@@ -20,7 +24,7 @@ export function PropertyMediaContactLayout({ media, mobileContact, details, side
     ),
     createElement(
       "aside",
-      { "data-slot": "desktop-contact", className: "lg:sticky lg:top-6 lg:h-fit" },
+      { "data-slot": "desktop-contact", className: "min-w-0 lg:sticky lg:top-6 lg:h-fit" },
       sidebar,
     ),
   );

@@ -16,6 +16,7 @@ const staticPaths = [
   // an orphan in the sitemap invites a soft-404; the URL still resolves for
   // anyone arriving from an external link.
   pageSeo.blog.path,
+  pageSeo.blogEditorialStandards.path,
   pageSeo.about.path,
   pageSeo.contact.path,
   pageSeo.privacy.path,

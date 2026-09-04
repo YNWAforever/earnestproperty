@@ -93,7 +93,7 @@ export const pageSeo = {
   },
   blog: {
     path: "/blog",
-    title: "深井 / 荃灣樓市分析 Blog｜晉誠地產",
+    title: "深井 青山公路 汀九樓市分析 Blog｜晉誠地產",
     description:
       "深井買樓租樓攻略、屋苑比較、校網交通、成交走勢分析。由深井 hyperlocal 專家撰寫，助你睇通深井樓市。",
   },

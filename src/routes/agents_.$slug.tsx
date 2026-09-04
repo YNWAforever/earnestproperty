@@ -1,9 +1,12 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft, Bed, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
+import { Bed, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
+import { Container } from "@/components/layout/Container";
 import { AppImage } from "@/components/media/AppImage";
+import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { estateRegistry } from "@/content/estate-registry";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
 import { fetchNeonBranches, fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
 import type { NeonBranchRecord, NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
@@ -84,16 +87,17 @@ function AgentProfilePage() {
           __html: jsonLdScript({ "@context": "https://schema.org", ...personSchema }),
         }}
       />
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <Link
-          to="/agents"
-          className="inline-flex items-center gap-2 text-sm font-semibold text-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          返回代理團隊
-        </Link>
+      <Container className="py-8">
+        <Breadcrumbs
+          items={[
+            { label: "首頁", href: "/" },
+            { label: "代理團隊", href: "/agents" },
+            { label: name },
+          ]}
+          className="mb-6"
+        />
 
-        <section className="mt-7 grid gap-8 border-y py-8 md:grid-cols-[minmax(0,1fr)_240px]">
+        <section className="grid gap-8 border-y py-8 md:grid-cols-[minmax(0,1fr)_240px]">
           <div className="flex min-w-0 flex-col gap-6 sm:flex-row">
             <div className="h-32 w-32 shrink-0 overflow-hidden rounded-lg bg-muted">
               <AppImage
@@ -138,16 +142,20 @@ function AgentProfilePage() {
               {profile.served_estate_slugs.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2 text-sm">
                   <span className="text-muted-foreground">熟悉屋苑：</span>
-                  {profile.served_estate_slugs.map((slug) => (
-                    <Link
-                      key={slug}
-                      to="/estate/$slug"
-                      params={{ slug }}
-                      className="text-primary underline underline-offset-2"
-                    >
-                      {slug}
-                    </Link>
-                  ))}
+                  {profile.served_estate_slugs.map((slug) => {
+                    const entry = estateRegistry.find((e) => e.slug === slug);
+                    const label = entry?.nameZh ?? slug;
+                    return (
+                      <Link
+                        key={slug}
+                        to="/estate/$slug"
+                        params={{ slug }}
+                        className="text-primary underline underline-offset-2"
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
@@ -219,7 +227,7 @@ function AgentProfilePage() {
             </Button>
           </div>
         </section>
-      </div>
+      </Container>
     </div>
   );
 }

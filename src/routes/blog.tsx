@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock } from "lucide-react";
 
+import { Container } from "@/components/layout/Container";
+import { EmptyState } from "@/components/layout/EmptyState";
 import { AppImage } from "@/components/media/AppImage";
+import { PageHero } from "@/components/site/PageHero";
 import { Input } from "@/components/ui/input";
 import {
   BLOG_CATEGORIES,
@@ -29,7 +32,9 @@ const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
   author: article.author,
 }));
 
-const primaryArticleTitle = "深井買樓全攻略 2026";
+// The flagship guide gets a "start here" link in the hero rather than being
+// spliced into the lead sentence (「由「…」開始」 read as broken copy).
+const primaryArticle = { slug: "sham-tseng-buying-guide-2026", title: "深井買樓全攻略 2026" };
 
 const CATEGORY_FILTERS = ["全部", ...BLOG_CATEGORIES] as const;
 type CategoryFilter = (typeof CATEGORY_FILTERS)[number];
@@ -78,106 +83,110 @@ function BlogPage() {
 
   return (
     <div className="bg-background">
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
-          <p className="text-sm font-semibold text-primary">深井 / 荃灣樓市分析</p>
-          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">深井樓市 Blog</h1>
-          <p className="mt-4 max-w-2xl text-muted-foreground">
-            由「{primaryArticleTitle}
-            」開始，整理屋苑比較、交通校網同最新放盤觀察，幫你更快判斷深井樓市。
-          </p>
-        </div>
-      </section>
+      <PageHero
+        eyebrow="市場分析 Blog"
+        title="深井 青山公路 汀九樓市分析"
+        lead="整理屋苑比較、交通校網、成交走勢同最新放盤觀察，幫你更快判斷深井、青山公路及汀九樓市。"
+      >
+        <Link
+          to="/blog/$slug"
+          params={{ slug: primaryArticle.slug }}
+          className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-md border bg-background px-4 text-sm font-semibold text-primary transition hover:border-primary"
+        >
+          新手先睇：{primaryArticle.title}
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </PageHero>
 
-      <section className="mx-auto max-w-5xl px-4 pt-8 sm:px-6 lg:px-8">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="按分類篩選文章">
-          {CATEGORY_FILTERS.map((category) => (
-            <button
-              key={category}
-              type="button"
-              aria-pressed={selectedCategory === category}
-              onClick={() => setSelectedCategory(category)}
-              className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
-                selectedCategory === category
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-input bg-background text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
-        <Input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="搜尋文章標題或內容..."
-          aria-label="搜尋文章"
-          className="mt-4 max-w-sm"
-        />
-      </section>
+      <Container className="py-12">
+        <section>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="按分類篩選文章">
+            {CATEGORY_FILTERS.map((category) => (
+              <button
+                key={category}
+                type="button"
+                aria-pressed={selectedCategory === category}
+                onClick={() => setSelectedCategory(category)}
+                className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
+                  selectedCategory === category
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-input bg-background text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {category}
+              </button>
+            ))}
+          </div>
+          <Input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="搜尋文章標題或內容..."
+            aria-label="搜尋文章"
+            className="mt-4 max-w-sm"
+          />
+        </section>
 
-      <section className="mx-auto grid max-w-5xl gap-5 px-4 py-10 sm:px-6 lg:px-8">
-        {filteredArticles.length === 0 && (
-          <p className="text-sm text-muted-foreground">
-            未有符合條件的文章，請調整分類或搜尋字詞。
-          </p>
-        )}
-        {filteredArticles.map((article) => {
-          const publishedDate = formatHkDate(article.published_at);
-          return (
-            <Link
-              key={article.slug}
-              to="/blog/$slug"
-              params={{ slug: article.slug }}
-              className="group rounded-lg border bg-card p-6 transition hover:-translate-y-0.5 hover:shadow-card"
-            >
-              {article.cover_image && (
-                <AppImage
-                  src={article.cover_image}
-                  alt={article.title}
-                  width={800}
-                  height={320}
-                  className="mb-4 h-40 w-full rounded-md object-cover"
-                />
-              )}
-              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                {article.category && (
-                  <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
-                    {article.category}
-                  </span>
+        <section className="mt-8 grid gap-5">
+          {filteredArticles.length === 0 && (
+            <EmptyState title="未有符合條件的文章" description="請調整分類或搜尋字詞。" />
+          )}
+          {filteredArticles.map((article) => {
+            const publishedDate = formatHkDate(article.published_at);
+            return (
+              <Link
+                key={article.slug}
+                to="/blog/$slug"
+                params={{ slug: article.slug }}
+                className="group rounded-lg border bg-card p-6 transition hover:-translate-y-0.5 hover:shadow-card"
+              >
+                {article.cover_image && (
+                  <AppImage
+                    src={article.cover_image}
+                    alt={article.title}
+                    width={800}
+                    height={320}
+                    className="mb-4 h-40 w-full rounded-md object-cover"
+                  />
                 )}
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  {article.reading_minutes ?? 5} 分鐘閱讀
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  {article.category && (
+                    <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
+                      {article.category}
+                    </span>
+                  )}
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" />
+                    {article.reading_minutes ?? 5} 分鐘閱讀
+                  </span>
+                </div>
+                <h2 className="mt-4 text-2xl font-semibold tracking-tight group-hover:text-primary">
+                  {article.title}
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-muted-foreground">{article.excerpt}</p>
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                  <span>{article.author ?? EDITORIAL_AUTHOR}</span>
+                  {publishedDate && <span>{publishedDate}</span>}
+                </div>
+                <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                  閱讀文章
+                  <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
                 </span>
-              </div>
-              <h2 className="mt-4 text-2xl font-semibold tracking-tight group-hover:text-primary">
-                {article.title}
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">{article.excerpt}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
-                <span>{article.author ?? EDITORIAL_AUTHOR}</span>
-                {publishedDate && <span>{publishedDate}</span>}
-              </div>
-              <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                閱讀文章
-                <ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" />
-              </span>
-            </Link>
-          );
-        })}
-      </section>
+              </Link>
+            );
+          })}
+        </section>
 
-      <section className="mx-auto max-w-5xl px-4 pb-10 sm:px-6 lg:px-8">
-        <p className="text-xs text-muted-foreground">
-          文章資料來源及審閱制度請參閱
-          <Link to="/blog/editorial-standards" className="ml-1 text-primary underline">
-            編採及事實查核標準
-          </Link>
-          。
-        </p>
-      </section>
+        <section className="mt-10">
+          <p className="text-xs text-muted-foreground">
+            文章資料來源及審閱制度請參閱
+            <Link to="/blog/editorial-standards" className="ml-1 text-primary underline">
+              編採及事實查核標準
+            </Link>
+            。
+          </p>
+        </section>
+      </Container>
     </div>
   );
 }

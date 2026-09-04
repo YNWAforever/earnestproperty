@@ -68,6 +68,45 @@ const REASON_LABELS: Record<string, string> = {
   NEEDS_ANALYSIS: "需 AI 分析",
 };
 
+// Raw DB/AI enums used to print verbatim (buyer / high / 30_days) in a Chinese
+// UI; unknown values still fall through to the raw string rather than hiding.
+const INTENT_LABELS: Record<string, string> = {
+  buyer: "買家",
+  renter: "租客",
+  tenant: "租客",
+  seller: "賣家",
+  owner: "業主",
+  landlord: "業主",
+  investor: "投資者",
+};
+
+const URGENCY_LABELS: Record<string, string> = {
+  urgent: "緊急",
+  high: "高",
+  recent: "近期活躍",
+  normal: "一般",
+  medium: "中",
+  low: "低",
+};
+
+const TIMELINE_LABELS: Record<string, string> = {
+  immediate: "即時",
+  asap: "即時",
+  "30_days": "30 日內",
+  "60_days": "60 日內",
+  "90_days": "90 日內",
+  "3_months": "3 個月內",
+  "6_months": "6 個月內",
+  "12_months": "12 個月內",
+  flexible: "彈性",
+  unknown: "未定",
+};
+
+function enumLabel(map: Record<string, string>, value: string | null | undefined) {
+  if (!value) return "—";
+  return map[value] ?? value;
+}
+
 const WHATSAPP_BLOCKED_LABELS: Record<string, string> = {
   WOZTELL_DISABLED: "未設定 Woztell",
   CONTACT_OPTED_OUT: "客戶已 opt-out",
@@ -284,7 +323,7 @@ function CommandCenter() {
                         <p className="text-xs text-muted-foreground">{row.phone ?? "—"}</p>
                       </td>
                       <td className="p-3">
-                        <p>{row.intent ?? "—"}</p>
+                        <p>{enumLabel(INTENT_LABELS, row.intent)}</p>
                         <p className="text-xs tabular-nums text-muted-foreground">
                           {formatBudget(row)}
                         </p>
@@ -377,8 +416,8 @@ function CommandCenter() {
                 label="AI 分數"
                 value={selected.lead_score == null ? "未分析" : String(selected.lead_score)}
               />
-              <Detail label="緊急度" value={selected.urgency ?? "—"} />
-              <Detail label="時間線" value={selected.timeline ?? "—"} />
+              <Detail label="緊急度" value={enumLabel(URGENCY_LABELS, selected.urgency)} />
+              <Detail label="時間線" value={enumLabel(TIMELINE_LABELS, selected.timeline)} />
               <Detail label="預算" value={formatBudget(selected)} />
               <Detail label="WhatsApp" value={whatsappLabel(selected)} />
               <Detail label="逾期跟進" value={selected.has_overdue_followup ? "是" : "否"} />
@@ -392,7 +431,7 @@ function CommandCenter() {
 
 function KpiStrip({ data }: { data: CommandCenterData }) {
   const items = [
-    { label: "Hot leads", value: data.kpis.hot },
+    { label: "高分 leads", value: data.kpis.hot },
     { label: "逾期跟進", value: data.kpis.overdue },
     { label: "未分配", value: data.kpis.unassigned },
     { label: "新 Live Agent", value: data.kpis.handoffs },

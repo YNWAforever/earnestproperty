@@ -2,8 +2,12 @@ import type { ReactNode } from "react";
 import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { ArrowRight, Building2, MapPinned, School, TrainFront } from "lucide-react";
 
+import { Container } from "@/components/layout/Container";
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
+import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 import { CorridorInventory } from "@/components/site/CorridorInventory";
+import { PageHero } from "@/components/site/PageHero";
+import { SiteLink } from "@/components/site/SiteLink";
 import { Button } from "@/components/ui/button";
 import {
   castlePeakRoadHub,
@@ -26,8 +30,6 @@ type SegmentLoaderData = {
   inventory: CorridorInventoryData;
   nearbyInventory: CorridorInventoryData;
 };
-
-type ListingsDeal = "all" | "sale" | "rent";
 
 export const Route = createFileRoute("/castle-peak-road/$segment")({
   loader: async ({ params }): Promise<SegmentLoaderData> => {
@@ -83,93 +85,6 @@ function getSegmentListingsHref(segment: CorridorSegment) {
   if (estateSlug) return `/listings?deal=all&estate=${estateSlug}&page=1`;
 
   return "/listings?deal=all&district=castle-peak-road&page=1";
-}
-
-function parseListingsSearch(href: string) {
-  const [, query = ""] = href.split("?");
-  const params = new URLSearchParams(query);
-  const dealParam = params.get("deal");
-  const deal: ListingsDeal = dealParam === "sale" || dealParam === "rent" ? dealParam : "all";
-  const pageParam = Number(params.get("page") ?? 1);
-  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
-  const district = params.get("district") ?? undefined;
-  const estate = params.get("estate") ?? undefined;
-
-  return {
-    deal,
-    page,
-    ...(district ? { district } : {}),
-    ...(estate ? { estate } : {}),
-  };
-}
-
-function CorridorRelatedLink({
-  href,
-  children,
-  className,
-}: {
-  href: string;
-  children: ReactNode;
-  className: string;
-}) {
-  const corridorMatch = href.match(/^\/castle-peak-road\/([^/?#]+)$/);
-  if (href === "/castle-peak-road") {
-    return (
-      <Link to="/castle-peak-road" className={className}>
-        {children}
-      </Link>
-    );
-  }
-  if (corridorMatch) {
-    return (
-      <Link
-        to="/castle-peak-road/$segment"
-        params={{ segment: corridorMatch[1] }}
-        className={className}
-      >
-        {children}
-      </Link>
-    );
-  }
-
-  if (href === "/district/sham-tseng") {
-    return (
-      <Link to="/district/sham-tseng" className={className}>
-        {children}
-      </Link>
-    );
-  }
-  if (href === "/district/ting-kau") {
-    // Legacy URL — resolve straight to the canonical corridor page so content
-    // referencing it doesn't send readers through the 301.
-    return (
-      <Link to="/castle-peak-road/$segment" params={{ segment: "ting-kau" }} className={className}>
-        {children}
-      </Link>
-    );
-  }
-  const estateMatch = href.match(/^\/estate\/([^/?#]+)$/);
-  if (estateMatch) {
-    return (
-      <Link to="/estate/$slug" params={{ slug: estateMatch[1] }} className={className}>
-        {children}
-      </Link>
-    );
-  }
-
-  if (href.startsWith("/listings?")) {
-    return (
-      <Link to="/listings" search={parseListingsSearch(href)} className={className}>
-        {children}
-      </Link>
-    );
-  }
-
-  return (
-    <a href={href} className={className}>
-      {children}
-    </a>
-  );
 }
 
 function CastlePeakRoadSegmentError({ error }: { error: Error }) {
@@ -269,23 +184,21 @@ function CastlePeakRoadSegmentPage() {
         />
       )}
 
-      <section className="border-b bg-muted/30">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-          <nav className="text-sm text-muted-foreground">
-            <Link to="/castle-peak-road" className="hover:text-primary">
-              青山公路
-            </Link>
-            <span className="mx-2">/</span>
-            <span>{segment.nameZh}</span>
-          </nav>
-          <p className="mt-5 text-sm font-semibold text-coral">{segment.eyebrow}</p>
-          <h1 className="mt-3 max-w-4xl text-3xl font-bold tracking-tight text-primary sm:text-5xl">
-            {segment.h1}
-          </h1>
-          <p className="mt-5 max-w-3xl text-base leading-8 text-muted-foreground">
-            {segment.description}
-          </p>
-          <div className="mt-6 flex flex-wrap gap-3">
+      <PageHero
+        breadcrumb={
+          <Breadcrumbs
+            items={[
+              { label: "首頁", href: "/" },
+              { label: "青山公路區買樓租樓", href: "/castle-peak-road" },
+              { label: segment.nameZh },
+            ]}
+          />
+        }
+        eyebrow={segment.eyebrow}
+        title={segment.h1}
+        lead={segment.description}
+        actions={
+          <>
             <Button asChild className="bg-coral text-coral-foreground hover:bg-primary-hover">
               <a
                 href={whatsappUrl(`你好，我想查詢${segment.nameZh}樓盤`)}
@@ -301,15 +214,15 @@ function CastlePeakRoadSegmentPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
-          </div>
-        </div>
-      </section>
+          </>
+        }
+      />
 
-      <section className="mx-auto max-w-7xl px-4 pt-6 sm:px-6 lg:px-8">
+      <Container className="pt-6">
         <AnswerSummaryCallout summary={segment.answerSummary} />
-      </section>
+      </Container>
 
-      <section className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <Container className="py-12">
         <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
           <article className="space-y-4 text-base leading-8 text-muted-foreground">
             {segment.intro.map((paragraph) => (
@@ -327,9 +240,9 @@ function CastlePeakRoadSegmentPage() {
             </ul>
           </div>
         </div>
-      </section>
+      </Container>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-4 pb-12 sm:px-6 md:grid-cols-2 lg:grid-cols-4 lg:px-8">
+      <Container className="grid gap-5 pb-12 md:grid-cols-2 lg:grid-cols-4">
         <InfoCard
           icon={<Building2 className="h-5 w-5" />}
           title="住宅類型"
@@ -346,18 +259,18 @@ function CastlePeakRoadSegmentPage() {
           title="校網"
           text={segment.schoolNet ?? "按實際地址核實校網資料。"}
         />
-      </section>
+      </Container>
 
-      <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+      <Container className="pb-12">
         <CorridorInventory
           inventory={inventory}
           inquiryText={`你好，我想查詢${segment.nameZh}樓盤`}
           listingsHref={getSegmentListingsHref(segment)}
         />
-      </section>
+      </Container>
 
       {(nearbyInventory.saleRows.length > 0 || nearbyInventory.rentRows.length > 0) && (
-        <section className="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+        <Container className="pb-12">
           <CorridorInventory
             inventory={nearbyInventory}
             inquiryText={`你好，我想查詢${segment.nameZh}附近盤源`}
@@ -366,11 +279,11 @@ function CastlePeakRoadSegmentPage() {
             heading="附近選擇"
             description="呢啲放盤鄰近呢個分段，但唔屬於呢個分段嘅核心範圍，可 WhatsApp 查詢實際位置。"
           />
-        </section>
+        </Container>
       )}
 
       <section className="border-y bg-card">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_0.8fr] lg:px-8">
+        <Container className="grid gap-8 py-12 lg:grid-cols-[1fr_0.8fr]">
           {faqs.length > 0 && (
             <div>
               <h2 className="text-2xl font-bold text-primary">{segment.nameZh} FAQ</h2>
@@ -388,18 +301,18 @@ function CastlePeakRoadSegmentPage() {
             <h2 className="text-2xl font-bold text-primary">相關連結</h2>
             <div className="mt-5 grid gap-3">
               {segment.links.map((link) => (
-                <CorridorRelatedLink
+                <SiteLink
                   key={link.href}
                   href={link.href}
                   className="flex items-center justify-between rounded-lg border bg-background px-4 py-3 text-sm font-semibold text-primary hover:border-primary"
                 >
                   {link.label}
                   <ArrowRight className="h-4 w-4" />
-                </CorridorRelatedLink>
+                </SiteLink>
               ))}
             </div>
           </div>
-        </div>
+        </Container>
       </section>
     </div>
   );
