@@ -106,6 +106,9 @@ const errorMessages: Record<string, string> = {
   COPILOT_RESOURCE_NOT_FOUND: "找不到這筆資料，可能已被刪除，請重新載入頁面。",
   COPILOT_RESEARCH_UNAVAILABLE: "網頁研究服務暫時無法使用，可改用「只用內部資料」產生建議。",
   COPILOT_CONTENT_TOO_LONG: "內容過長，AI 未能處理。請先縮短描述後再試。",
+  OPENCODE_GO_TIMEOUT: "AI 服務未能在 30 秒內完成。請減少選擇欄位後重試；如持續失敗可先手動編輯。",
+  OPENCODE_GO_HTTP_ERROR: "AI 服務暫時未能接受請求，請稍後再試。",
+  OPENCODE_GO_RESPONSE_INVALID: "AI 回覆格式不正確，請重新產生建議。",
   COPILOT_TIMEOUT: "AI 回應逾時。請重試一次；如持續逾時請減少選擇的欄位。",
   VALIDATION_ERROR: "提交的資料不正確，請重新載入頁面後再試。",
 };
@@ -418,7 +421,9 @@ export function AdminContentCopilot({
         <div className="space-y-2" aria-live="polite">
           {/* The live region needs text: skeletons alone announced nothing for
               the 10s+ the LLM call takes. */}
-          <p className="text-sm text-muted-foreground">AI 正在產生建議，通常需要十多秒…</p>
+          <p className="text-sm text-muted-foreground">
+            AI 正在產生建議；內容生成最多等候 30 秒，網頁研究可能需要額外時間…
+          </p>
           <Skeleton className="h-16 w-full" aria-hidden="true" />
           <Skeleton className="h-16 w-full" aria-hidden="true" />
         </div>

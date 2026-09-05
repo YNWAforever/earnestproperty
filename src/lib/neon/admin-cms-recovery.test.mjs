@@ -500,3 +500,23 @@ for (const kind of ["Estate", "Article"])
     assert.equal(publishes, 0);
     assert.ok(errors.some((message) => message.includes("儲存草稿")));
   });
+
+test("estate editor can display the nullable facilities returned for Hoi Wan Hin", async () => {
+  const { api } = fixture({ live: { id: "estate", slug: "hoi-wan-hin", facilities: null } });
+  const { payload } = await api.fetchAdminCmsEditor({
+    resourceType: "estate",
+    resourceId: "estate",
+  });
+  const route = readFileSync("src/routes/admin.cms.tsx", "utf8");
+  const expression = route.match(/value=\{([^\n]*estate\.facilities[^\n]*)\}/)[1];
+  assert.equal(vm.runInNewContext(expression, { estate: payload }), "");
+  assert.equal(
+    vm.runInNewContext(expression, { estate: { facilities: ["泳池", "健身室"] } }),
+    "泳池\n健身室",
+  );
+  assert.equal(
+    payload.facilities,
+    null,
+    "display must preserve the authoritative payload for comparison",
+  );
+});
