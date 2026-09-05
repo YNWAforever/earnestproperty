@@ -67,9 +67,14 @@ jobs:
         run: |
           set +e
           npx eslint . --format json > eslint-report.json
+          ESLINT_EXIT=$?
           set -e
           PROBLEM_COUNT=$(jq '[.[] | (.errorCount + .warningCount)] | add // 0' eslint-report.json)
           echo "eslint reported $PROBLEM_COUNT problem(s); baseline is $ESLINT_BASELINE"
+          if [ "$ESLINT_EXIT" -gt 1 ]; then
+            echo "::error::eslint process failed with exit $ESLINT_EXIT before a trustworthy ratchet result"
+            exit "$ESLINT_EXIT"
+          fi
           if [ "$PROBLEM_COUNT" -gt "$ESLINT_BASELINE" ]; then
             npx eslint . || true
             echo "::error::eslint problem count ($PROBLEM_COUNT) exceeds the recorded baseline ($ESLINT_BASELINE) -- this PR introduced new lint problems"
@@ -84,10 +89,15 @@ jobs:
         run: |
           set +e
           npx tsc --noEmit > tsc-output.txt 2>&1
+          TSC_EXIT=$?
           set -e
           cat tsc-output.txt
           ERROR_COUNT=$(grep -c "error TS" tsc-output.txt || true)
           echo "tsc reported $ERROR_COUNT error(s); baseline is $TSC_BASELINE"
+          if [ "$TSC_EXIT" -ne 0 ] && [ "$ERROR_COUNT" -le "$TSC_BASELINE" ]; then
+            echo "::error::tsc process failed with exit $TSC_EXIT without a parsed TypeScript regression"
+            exit "$TSC_EXIT"
+          fi
           if [ "$ERROR_COUNT" -gt "$TSC_BASELINE" ]; then
             echo "::error::tsc error count ($ERROR_COUNT) exceeds the recorded baseline ($TSC_BASELINE) -- this PR introduced new type errors"
             exit 1
@@ -137,3 +147,31 @@ jobs:
       - run: npm run test:youtube-sync
       - run: npm run test:migration
       - run: npm run test:mls:cloudflare
+
+      # Suites added after the original matrix. src/test-wiring.test.mjs now
+      # fails when a deterministic test:* script is absent from this workflow.
+      # test:a11y needs a browser server; :db suites need a disposable database.
+      - run: npm run test:transactions
+      - run: npm run test:estate-reviews
+      - run: npm run test:valuation
+      - run: npm run test:admin-estates
+      - run: npm run test:legal
+      - run: npm run test:analytics
+  browser-staging:
+    if: ${{ vars.STAGING_BASE_URL != '' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # @playwright/test is lockfile-pinned; install only its Chromium revision.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:a11y
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ vars.STAGING_BASE_URL }}

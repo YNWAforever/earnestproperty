@@ -10,9 +10,9 @@ import ts from "typescript";
 // existing test file exercised listings.tsx's component tree before this
 // one), so -- matching SiteHeader.contract.test.mjs's established pattern
 // -- these assert against the raw source text rather than rendered output.
-const source = await readFile(
-  new URL("./listings.tsx", import.meta.url),
-  "utf8",
+const source = (await readFile(new URL("./listings.tsx", import.meta.url), "utf8")).replace(
+  /\r\n/g,
+  "\n",
 );
 
 // buildActiveFilterChips() is a plain, dependency-light function (no JSX,
@@ -64,14 +64,9 @@ test("mobile filters sheet trigger only shows below the lg breakpoint", () => {
   assert.match(source, /function MobileFiltersSheet/);
   // The trigger Button must carry lg:hidden -- same idiom SiteHeader.tsx
   // already uses for its own mobile nav trigger.
-  const mobileSheetBody = source.slice(
-    source.indexOf("function MobileFiltersSheet"),
-  );
+  const mobileSheetBody = source.slice(source.indexOf("function MobileFiltersSheet"));
   assert.match(mobileSheetBody, /<SheetTrigger asChild>/);
-  assert.match(
-    mobileSheetBody.slice(0, 800),
-    /className="relative gap-1\.5 lg:hidden"/,
-  );
+  assert.match(mobileSheetBody.slice(0, 800), /className="relative gap-1\.5 lg:hidden"/);
   assert.match(mobileSheetBody.slice(0, 2000), /篩選/);
 });
 
@@ -120,15 +115,11 @@ test("the deal=all price-bound explanatory copy lives in the single shared Filte
     source.indexOf("function FilterFields"),
     source.indexOf("function DesktopFiltersPanel"),
   );
-  assert.match(
-    fieldsBody,
-    /售價同月租唔同單位，揀「售盤」或「租盤」先可以設定價格。/,
-  );
+  assert.match(fieldsBody, /售價同月租唔同單位，揀「售盤」或「租盤」先可以設定價格。/);
   // Only one copy of the sentence in the whole file -- proof it wasn't
   // duplicated (and risk drifting) when the panel was split in two.
   const occurrences =
-    source.split("售價同月租唔同單位，揀「售盤」或「租盤」先可以設定價格。")
-      .length - 1;
+    source.split("售價同月租唔同單位，揀「售盤」或「租盤」先可以設定價格。").length - 1;
   assert.equal(occurrences, 1);
 });
 
@@ -189,10 +180,7 @@ test("active-filter chips never claim a price filter is active when deal=all, mi
   // Sanity check the fixture and the extraction itself: the same bounds
   // DO produce chips once a deal type narrows the price column, proving
   // this isn't just always returning an empty array.
-  const chipsUnderSaleDeal = buildActiveFilterChips(
-    { ...baseSearch, deal: "sale" },
-    [],
-  );
+  const chipsUnderSaleDeal = buildActiveFilterChips({ ...baseSearch, deal: "sale" }, []);
   assert.deepEqual(chipsUnderSaleDeal.map((chip) => chip.key).sort(), [
     "deal",
     "maxPrice",
@@ -201,27 +189,21 @@ test("active-filter chips never claim a price filter is active when deal=all, mi
 });
 
 test("each filter chip removes only its own param via a search merge function, not a whole-object replace", () => {
-  const chipBody = source.slice(
-    source.indexOf("function FilterChip"),
-    source.indexOf("/**\n * All the mutable"),
-  );
+  const chipStart = source.indexOf("function FilterChip");
+  const chipEnd = source.indexOf("/**\n * All the mutable", chipStart);
+  assert.ok(chipStart !== -1 && chipEnd > chipStart, "expected a bounded FilterChip body");
+  const chipBody = source.slice(chipStart, chipEnd);
   // The established, reviewer-checked-for pattern: `search: (prev) => ({ ...prev, ... })`,
   // never a static `search={{ ... }}` object that would drop every other
   // active param.
   assert.match(chipBody, /search={\(prev: Record<string, unknown>\) => {/);
-  assert.match(
-    chipBody,
-    /const next: Record<string, unknown> = { \.\.\.prev };/,
-  );
+  assert.match(chipBody, /const next: Record<string, unknown> = { \.\.\.prev };/);
   assert.match(chipBody, /delete next\[key\];/);
   assert.doesNotMatch(chipBody, /search={{ deal: "all", page: 1 }}/);
 });
 
 test("view mode is local component state, not a URL search param", () => {
-  assert.match(
-    source,
-    /const \[viewMode, setViewMode\] = useState<"grid" \| "list">\("grid"\);/,
-  );
+  assert.match(source, /const \[viewMode, setViewMode\] = useState<"grid" \| "list">\("grid"\);/);
   // It must not appear in the Zod search schema (that would make it a
   // shareable/URL-persisted param, which the plan explicitly says it is not).
   const schemaBody = source.slice(
@@ -242,8 +224,7 @@ test("a list-row card variant exists alongside the grid card, both fed by the sa
 test("the route defines pendingComponent and errorComponent", () => {
   const routeConfig = source.slice(
     source.indexOf('createFileRoute("/listings")({'),
-    source.indexOf("component: ListingsPage,") +
-      "component: ListingsPage,".length,
+    source.indexOf("component: ListingsPage,") + "component: ListingsPage,".length,
   );
   assert.match(routeConfig, /pendingComponent: ListingsPendingComponent,/);
   assert.match(routeConfig, /errorComponent: ListingsErrorComponent,/);
@@ -266,10 +247,7 @@ test("errorComponent explains the failure, retries via router.invalidate(), and 
   );
   assert.match(errorBody, /const router = useRouter\(\);/);
   assert.match(errorBody, /router\.invalidate\(\)/);
-  assert.match(
-    errorBody,
-    /<Link to="\/listings" search={{ deal: "all", page: 1 }}>/,
-  );
+  assert.match(errorBody, /<Link to="\/listings" search={{ deal: "all", page: 1 }}>/);
 });
 
 test("SkeletonBlock and Sheet primitives are imported from this repo's existing vendored components", () => {
@@ -297,10 +275,7 @@ test("the deal-type buttons form a labelled radiogroup, each button carrying rea
   // on the existing "類型" <Label>, rather than repeating the label text a
   // second time as a literal aria-label string.
   assert.match(fieldsBody, /id={dealTypeLabelId}/);
-  assert.match(
-    fieldsBody,
-    /role="radiogroup"\s+aria-labelledby={dealTypeLabelId}/,
-  );
+  assert.match(fieldsBody, /role="radiogroup"\s+aria-labelledby={dealTypeLabelId}/);
   assert.match(fieldsBody, /role="radio"/);
   assert.match(fieldsBody, /aria-checked={deal === v}/);
 });
@@ -314,12 +289,8 @@ test("aria-checked on the deal-type radios is a live expression that flips per b
   // to be correct once on initial render.
   const fieldsBody = extractFilterFieldsBody();
   const match = fieldsBody.match(/aria-checked={([^}]+)}/);
-  assert.ok(
-    match,
-    "expected an aria-checked={...} expression on the deal-type radio buttons",
-  );
-  const evalChecked = (deal, v) =>
-    new Function("deal", "v", `return (${match[1]});`)(deal, v);
+  assert.ok(match, "expected an aria-checked={...} expression on the deal-type radio buttons");
+  const evalChecked = (deal, v) => new Function("deal", "v", `return (${match[1]});`)(deal, v);
 
   for (const deal of ["all", "sale", "rent"]) {
     for (const v of ["all", "sale", "rent"]) {
@@ -404,10 +375,7 @@ test("FreshnessStamp replaces the raw formatHkDate '最後更新' text in BOTH L
 test("both card layouts get a share button reusing lib/share.ts's shareUrl (the exact mechanism property.$listingNo.tsx already used)", () => {
   assert.match(source, /from "@\/lib\/share"/);
   assert.match(source, /function handleCardShare\(/);
-  assert.match(
-    source,
-    /void shareUrl\(title, `\${SITE_URL}\/property\/\${listingNo}`\);/,
-  );
+  assert.match(source, /void shareUrl\(title, `\${SITE_URL}\/property\/\${listingNo}`\);/);
 
   const cardBody = source.slice(
     source.indexOf("function ListingCard("),
@@ -431,9 +399,7 @@ test("both card layouts get a share button reusing lib/share.ts's shareUrl (the 
     // reader unable to tell which element a click activates. Proven here by
     // checking the button's onClick appears AFTER the matching </Link>.
     const linkCloseIndex = body.indexOf("</Link>");
-    const buttonIndex = body.indexOf(
-      "onClick={() => handleCardShare(safeTitle, p.listing_no)}",
-    );
+    const buttonIndex = body.indexOf("onClick={() => handleCardShare(safeTitle, p.listing_no)}");
     assert.ok(linkCloseIndex !== -1, `expected ${name} to render a <Link>`);
     assert.ok(
       buttonIndex > linkCloseIndex,
@@ -443,10 +409,7 @@ test("both card layouts get a share button reusing lib/share.ts's shareUrl (the 
 });
 
 test("lib/share.ts exports the reusable shareUrl helper and property.$listingNo.tsx's own share button now delegates to it", () => {
-  const shareLibSource = readFileSync(
-    new URL("../lib/share.ts", import.meta.url),
-    "utf8",
-  );
+  const shareLibSource = readFileSync(new URL("../lib/share.ts", import.meta.url), "utf8");
   assert.match(shareLibSource, /export async function shareUrl\(/);
   assert.match(shareLibSource, /navigator\.share/);
   assert.match(shareLibSource, /navigator\.clipboard\.writeText/);
@@ -459,10 +422,7 @@ test("lib/share.ts exports the reusable shareUrl helper and property.$listingNo.
   assert.match(propertyPageSource, /await shareUrl\(safeTitle, url\);/);
   // The inline navigator.share/clipboard implementation this was extracted
   // from must actually be gone, not duplicated alongside the shared helper.
-  assert.doesNotMatch(
-    propertyPageSource,
-    /await navigator\.clipboard\.writeText\(url\);/,
-  );
+  assert.doesNotMatch(propertyPageSource, /await navigator\.clipboard\.writeText\(url\);/);
 });
 
 test("the zero-results notify-me form's consent checkbox is never preselected", () => {
@@ -481,10 +441,7 @@ test("the zero-results notify-me form's consent checkbox is never preselected", 
   assert.match(formSource, /id="alert-consent"/);
   // The consent copy is real, specific text -- imported from the same
   // module the server persists it from, not a locally-duplicated string.
-  assert.match(
-    formSource,
-    /\{LISTING_ALERT_CONSENT_TEXT\}/,
-  );
+  assert.match(formSource, /\{LISTING_ALERT_CONSENT_TEXT\}/);
   assert.doesNotMatch(formSource, /我同意接收/);
 
   // Submission is gated on the checkbox, both via the disabled submit
@@ -494,10 +451,7 @@ test("the zero-results notify-me form's consent checkbox is never preselected", 
 });
 
 test("the notify-me form submits the CURRENT validated search filters, and is wired to the real server fn (not a stub)", () => {
-  assert.match(
-    source,
-    /import \{ createListingAlert \} from "@\/lib\/neon\/admin-data";/,
-  );
+  assert.match(source, /import \{ createListingAlert \} from "@\/lib\/neon\/admin-data";/);
   assert.match(
     source,
     /import \{ LISTING_ALERT_CONSENT_TEXT \} from "@\/lib\/neon\/listing-alerts\.js";/,
@@ -517,7 +471,7 @@ test("ListingAlertForm renders inside the zero-results branch, alongside the exi
   assert.notEqual(zeroResultsStart, -1);
   const zeroResultsBlock = source.slice(
     zeroResultsStart,
-    source.indexOf(") : viewMode === \"grid\"", zeroResultsStart),
+    source.indexOf(') : viewMode === "grid"', zeroResultsStart),
   );
 
   assert.match(zeroResultsBlock, /<SearchFallbackCTA/);

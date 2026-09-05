@@ -220,6 +220,7 @@ export async function fetchListingCountsByEstate() {
 }
 
 export type ListingFilters = {
+  hasVideo?: boolean;
   deal: "sale" | "rent" | "all";
   keyword?: string;
   minPrice?: number;
@@ -449,6 +450,9 @@ export async function fetchVideoListings(limit = 12): Promise<VideoListing[]> {
     deal: "all",
     sort: "newest",
     page: 1,
+    hasVideo: true,
+    // Keep duplicate headroom: searchListings dedupes canonical source rows
+    // after the database has selected this bounded set of matching videos.
     pageSize: Math.max(limit * 3, limit),
   });
 

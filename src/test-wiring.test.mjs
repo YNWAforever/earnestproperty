@@ -83,3 +83,54 @@ test("this wiring guard is itself wired into a script", () => {
 test("the source tree walk sees a real directory", () => {
   assert.equal(statSync(join(root, "src")).isDirectory(), true);
 });
+
+test("CI runs every test script that does not need a database or browser server", () => {
+  const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+  const ciScripts = new Set(
+    [...workflow.matchAll(/^\s*- run: npm run (test:[\w:-]+)\s*$/gm)].map((match) => match[1]),
+  );
+  const environmentDependent = new Set([
+    "test:a11y",
+    "test:control-plane:db",
+    "test:mls:db",
+    "test:staff-bootstrap:db",
+    "test:youtube-sync:db",
+  ]);
+  const omitted = Object.keys(pkg.scripts).filter(
+    (name) => name.startsWith("test:") && !environmentDependent.has(name) && !ciScripts.has(name),
+  );
+
+  assert.deepEqual(omitted, [], `Add these deterministic suites to CI: ${omitted.join(", ")}`);
+  assert.deepEqual(
+    [...environmentDependent].filter((name) => !pkg.scripts[name]),
+    [],
+    "Every environment-dependent suite must remain explicitly registered in package.json",
+  );
+});
+
+test("CI fails when lint or typecheck tooling exits unexpectedly", () => {
+  const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+
+  assert.match(workflow, /ESLINT_EXIT=\$\?/);
+  assert.match(workflow, /if \[ "\$ESLINT_EXIT" -gt 1 \]/);
+  assert.match(workflow, /TSC_EXIT=\$\?/);
+  assert.match(workflow, /if \[ "\$TSC_EXIT" -ne 0 \]/);
+});
+
+test("CI exposes the browser suite as an explicit staging environment gate", () => {
+  const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
+
+  assert.match(workflow, /browser-staging:/);
+  assert.match(workflow, /environment: staging/);
+  assert.match(workflow, /PLAYWRIGHT_BASE_URL: \$\{\{ vars\.STAGING_BASE_URL \}\}/);
+  assert.match(workflow, /playwright install --with-deps chromium/);
+  assert.match(workflow, /npm run test:a11y/);
+});
+
+test("Playwright starts the local server only when no remote base URL is supplied", () => {
+  const config = readFileSync(join(root, "playwright.config.ts"), "utf8");
+
+  assert.match(config, /const remoteBaseUrl = process\.env\.PLAYWRIGHT_BASE_URL;/);
+  assert.match(config, /webServer: remoteBaseUrl\s*\? undefined\s*:/);
+});

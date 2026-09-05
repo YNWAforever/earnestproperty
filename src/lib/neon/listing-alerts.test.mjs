@@ -123,10 +123,14 @@ test("persistListingAlert awaits and propagates an injected query failure", asyn
 });
 
 test("createListingAlert delegates to persistListingAlert with the server's own consent constants, through one queryRows call", () => {
-  const source = readFileSync(new URL("./admin-data.server.ts", import.meta.url), "utf8");
+  const source = readFileSync(new URL("./admin-data.server.ts", import.meta.url), "utf8").replace(
+    /\r\n/g,
+    "\n",
+  );
   const start = source.indexOf("export async function createListingAlert");
   assert.notEqual(start, -1, "createListingAlert must exist in admin-data.server.ts");
   const end = source.indexOf("\n}\n", start);
+  assert.ok(end > start, "expected a bounded createListingAlert body");
   const fnSource = source.slice(start, end);
 
   assert.match(fnSource, /persistListingAlert/);

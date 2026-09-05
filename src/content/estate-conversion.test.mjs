@@ -32,6 +32,8 @@ function transpileAndRun(snippet) {
 }
 
 function buildEstateHead(routeSource) {
+  // Checkout line endings must not change which route function is exercised.
+  routeSource = routeSource.replace(/\r\n/g, "\n");
   const startNeedle = "head: ({ loaderData }) => {";
   const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
   assert.ok(bodyStart > startNeedle.length - 1, "expected the route head()");

@@ -1,6 +1,7 @@
 export type NeonListingSort = "newest" | "price_asc" | "price_desc" | "area" | "psf";
 
 export type NeonListingFiltersInput = {
+  hasVideo?: boolean;
   deal: "sale" | "rent" | "all";
   keyword?: string;
   minPrice?: number;

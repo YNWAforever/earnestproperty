@@ -377,9 +377,12 @@ const QUERIES_STUB_PUBLIC_DATA_EXPORTS = [
   "searchNeonListings",
 ];
 
-async function loadQueriesForDedupeTests() {
-  const publicDataStubSource = QUERIES_STUB_PUBLIC_DATA_EXPORTS.map(
-    (name) => `export async function ${name}() {
+async function loadListingQueries(searchListings) {
+  globalThis.__videoListingsSearch = searchListings;
+  const publicDataStubSource = QUERIES_STUB_PUBLIC_DATA_EXPORTS.map((name) =>
+    name === "searchNeonListings" && searchListings
+      ? "export const searchNeonListings = ({ data }) => globalThis.__videoListingsSearch(data);"
+      : `export async function ${name}() {
       throw new Error(${JSON.stringify(`${name} is not exercised by the dedupeListings tests`)});
     }`,
   ).join("\n");
@@ -390,9 +393,8 @@ async function loadQueriesForDedupeTests() {
   `;
 
   // DR-10 gave queries.ts a third aliased import, "@/content/estate-registry",
-  // for deriving ESTATE_DB_SLUG_FALLBACKS. dedupeListings (the only export this
-  // loader is used for, per the comment above) doesn't touch it, so an empty
-  // registry is a safe stub -- same rationale as the castle-peak-road stub above.
+  // for deriving ESTATE_DB_SLUG_FALLBACKS. These tests do not use an estate
+  // filter, so an empty registry is sufficient for dedupe and video queries.
   const estateRegistryStubSource = `export const estateRegistry = [];`;
 
   const queriesSource = transpile(read("src/lib/queries.ts"))
@@ -417,7 +419,7 @@ function dedupeFixture(overrides) {
 }
 
 test("dedupeListings keeps only the first row when canonical_property_no and deal_type both match", async () => {
-  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const { dedupeListings } = await loadListingQueries();
   const rows = [
     dedupeFixture({
       listing_no: "A1",
@@ -447,7 +449,7 @@ test("dedupeListings keeps only the first row when canonical_property_no and dea
 // never add a deal_type predicate (see listingWhere in
 // public-data.server.ts), so both rows flow through the same result set.
 test("dedupeListings keeps both rows of a sale+rent pair sharing one canonical_property_no", async () => {
-  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const { dedupeListings } = await loadListingQueries();
   const rows = [
     dedupeFixture({
       listing_no: "F1",
@@ -468,7 +470,7 @@ test("dedupeListings keeps both rows of a sale+rent pair sharing one canonical_p
 });
 
 test("dedupeListings does not merge two null-canonical rows with different listing_no", async () => {
-  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const { dedupeListings } = await loadListingQueries();
   const rows = [
     dedupeFixture({ listing_no: "B1", canonical_property_no: null }),
     dedupeFixture({ listing_no: "B2", canonical_property_no: null }),
@@ -481,7 +483,7 @@ test("dedupeListings does not merge two null-canonical rows with different listi
 });
 
 test("dedupeListings falls back to listing_no and dedupes two null-canonical rows sharing it", async () => {
-  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const { dedupeListings } = await loadListingQueries();
   const rows = [
     dedupeFixture({ listing_no: "C1", canonical_property_no: null }),
     dedupeFixture({ listing_no: "C1", canonical_property_no: null }),
@@ -495,7 +497,7 @@ test("dedupeListings falls back to listing_no and dedupes two null-canonical row
 });
 
 test("dedupeListings treats an empty-string canonical_property_no the same as null, not as its own identity", async () => {
-  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const { dedupeListings } = await loadListingQueries();
   const rows = [
     dedupeFixture({ listing_no: "D1", canonical_property_no: "" }),
     dedupeFixture({ listing_no: "D2", canonical_property_no: "" }),
@@ -584,7 +586,7 @@ test("minArea/maxArea apply even when deal=all, unlike price bounds", async () =
 });
 
 test("dedupeListings dedupes a mixed array of canonical and null-canonical rows independently", async () => {
-  const { dedupeListings } = await loadQueriesForDedupeTests();
+  const { dedupeListings } = await loadListingQueries();
   const rows = [
     dedupeFixture({ listing_no: "E1", canonical_property_no: "C900" }),
     dedupeFixture({ listing_no: "E2", canonical_property_no: null }),
@@ -596,5 +598,111 @@ test("dedupeListings dedupes a mixed array of canonical and null-canonical rows 
   assert.deepEqual(
     result.map((r) => r.listing_no),
     ["E1", "E2", "E4"],
+  );
+});
+
+test("video listings remain discoverable beyond the first 36 general listings", async () => {
+  const inventory = [
+    ...Array.from({ length: 40 }, (_, index) => ({
+      listing_no: `newer-${index}`,
+      status: "active",
+      deal_type: "sale",
+      video_url: [null, "", " \t\n "][index % 3],
+    })),
+    {
+      listing_no: "draft-video",
+      status: "draft",
+      deal_type: "sale",
+      video_url: "https://youtu.be/draft",
+    },
+    ...Array.from({ length: 15 }, (_, index) => ({
+      listing_no: `video-${index}`,
+      status: "active",
+      deal_type: index % 2 ? "rent" : "sale",
+      video_url: `https://youtu.be/video-${index}`,
+    })),
+  ];
+  const calls = [];
+  const server = await importPublicDataServerWithInjectedQuery(async (statement, params) => {
+    calls.push({ statement, params });
+    // The fixture is already in freshness order. Emulate only WHERE and
+    // pagination to reproduce the sampling bug without a database connection.
+    let eligible = inventory.filter((row) => row.status === "active");
+    if (statement.includes("p.video_url ~ '[^[:space:]]'")) {
+      eligible = eligible.filter(
+        (row) => typeof row.video_url === "string" && row.video_url.trim(),
+      );
+    }
+    if (/count\(\*\)/.test(statement)) return [{ total: eligible.length }];
+    const [limit, offset] = params.slice(-2);
+    return eligible.slice(offset, offset + limit);
+  });
+  const queries = await loadListingQueries(server.searchListings);
+  const result = await queries.fetchVideoListings(12);
+
+  assert.deepEqual(
+    result.map((row) => row.listing_no),
+    Array.from({ length: 12 }, (_, i) => `video-${i}`),
+  );
+  assert.deepEqual(
+    calls[1].params,
+    [36, 0],
+    "filter before bounded candidate selection and retain duplicate headroom",
+  );
+});
+
+test("video filtering precedes bounded candidate selection and retains public visibility and order", async () => {
+  const { count, rows } = await runSearch({
+    deal: "all",
+    sort: "newest",
+    hasVideo: true,
+    page: 1,
+    pageSize: 12,
+  });
+  for (const call of [count, rows]) {
+    assert.ok(call.text.includes("WHERE p.status = 'active' AND p.video_url ~ '[^[:space:]]'"));
+  }
+  assert.match(
+    rows.text,
+    /p\.video_url ~ '[^']+'[\s\S]*ORDER BY p\.featured DESC, p\.last_seen_at DESC NULLS LAST[\s\S]*LIMIT/,
+  );
+
+  for (const hasVideo of [undefined, false]) {
+    const regular = await runSearch({
+      deal: "all",
+      sort: "newest",
+      hasVideo,
+      page: 1,
+      pageSize: 12,
+    });
+    assert.doesNotMatch(regular.count.text, /p\.video_url ~ /);
+    assert.doesNotMatch(regular.rows.text, /p\.video_url ~ /);
+  }
+});
+
+test("video listing selection retains headroom for duplicate canonical source rows", async () => {
+  const inventory = Array.from({ length: 12 }, (_, index) =>
+    ["a", "b"].map((source) => ({
+      listing_no: `video-${index}-${source}`,
+      canonical_property_no: `unit-${index}`,
+      status: "active",
+      deal_type: index % 2 ? "rent" : "sale",
+      video_url: `https://youtu.be/video-${index}`,
+    })),
+  ).flat();
+  const server = await importPublicDataServerWithInjectedQuery(async (statement, params) => {
+    // All fixture rows are active videos, sorted newest first with the freshest
+    // source first. The real application query must dedupe the returned rows.
+    if (/count\(\*\)/.test(statement)) return [{ total: inventory.length }];
+    const [limit, offset] = params.slice(-2);
+    return inventory.slice(offset, offset + limit);
+  });
+  const queries = await loadListingQueries(server.searchListings);
+  const result = await queries.fetchVideoListings(12);
+
+  assert.deepEqual(
+    result.map((row) => row.listing_no),
+    Array.from({ length: 12 }, (_, index) => `video-${index}-a`),
+    "12 distinct video units must survive two source rows per canonical property",
   );
 });

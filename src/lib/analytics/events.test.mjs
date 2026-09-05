@@ -70,11 +70,15 @@ test("buildContext never invents a districtSlug/estateSlug/agentSlug the caller 
 
 const source = readFileSync(new URL("./events.ts", import.meta.url), "utf8");
 
-function loadTrackWithInjectedDev(devValue, calls) {
-  const start = source.indexOf("export function track(");
-  const end = source.indexOf("\n}\n", start) + 3;
-  const body = source
-    .slice(start, end)
+function loadTrackWithInjectedDev(devValue, calls, moduleSource = source) {
+  // Git checkouts can use CRLF. Normalize before locating the function boundary.
+  const normalizedSource = moduleSource.replace(/\r\n/g, "\n");
+  const start = normalizedSource.indexOf("export function track(");
+  assert.notEqual(start, -1, "track must exist in events.ts");
+  const end = normalizedSource.indexOf("\n}\n", start);
+  assert.notEqual(end, -1, "track's closing brace must be found");
+  const body = normalizedSource
+    .slice(start, end + 2)
     .replace("import.meta.env.DEV", String(devValue))
     .replace("export function track", "function track");
   const { outputText } = ts.transpileModule(`${body}\nexports.track = track;`, {
@@ -87,28 +91,35 @@ function loadTrackWithInjectedDev(devValue, calls) {
   return exportsObj.track;
 }
 
-test("track() calls console.debug in DEV, with the event name and merged payload/context", () => {
-  const calls = [];
-  const track = loadTrackWithInjectedDev(true, calls);
-  track(
-    { name: "listing_view", payload: { listingNo: "L1", dealType: "sale" } },
-    { route: "/property/L1" },
-  );
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "[analytics]");
-  assert.equal(calls[0][1], "listing_view");
-  assert.deepEqual(calls[0][2], { listingNo: "L1", dealType: "sale", route: "/property/L1" });
-});
+for (const [label, lineEnding] of [
+  ["LF", "\n"],
+  ["CRLF", "\r\n"],
+]) {
+  const moduleSource = source.replace(/\r?\n/g, lineEnding);
 
-test("track() is a real no-op outside DEV -- never calls console.debug", () => {
-  const calls = [];
-  const track = loadTrackWithInjectedDev(false, calls);
-  track(
-    { name: "listing_view", payload: { listingNo: "L1", dealType: "sale" } },
-    { route: "/property/L1" },
-  );
-  assert.equal(calls.length, 0);
-});
+  test(`track() calls console.debug in DEV, with the event name and merged payload/context (${label})`, () => {
+    const calls = [];
+    const track = loadTrackWithInjectedDev(true, calls, moduleSource);
+    track(
+      { name: "listing_view", payload: { listingNo: "L1", dealType: "sale" } },
+      { route: "/property/L1" },
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0], "[analytics]");
+    assert.equal(calls[0][1], "listing_view");
+    assert.deepEqual(calls[0][2], { listingNo: "L1", dealType: "sale", route: "/property/L1" });
+  });
+
+  test(`track() is a real no-op outside DEV -- never calls console.debug (${label})`, () => {
+    const calls = [];
+    const track = loadTrackWithInjectedDev(false, calls, moduleSource);
+    track(
+      { name: "listing_view", payload: { listingNo: "L1", dealType: "sale" } },
+      { route: "/property/L1" },
+    );
+    assert.equal(calls.length, 0);
+  });
+}
 
 test("no event payload/context field is a name/phone/email -- no PII in the taxonomy source", () => {
   const eventsBlock = source.slice(
