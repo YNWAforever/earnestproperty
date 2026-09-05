@@ -13,6 +13,7 @@ const sale = {
   price: 6480000,
   rent: null,
   status: "active",
+  description: "sale copy",
 };
 const rent = {
   id: "r",
@@ -21,6 +22,7 @@ const rent = {
   price: null,
   rent: 18500,
   status: "active",
+  description: "rent copy",
 };
 const unit = { ...sale, public_listing_no: "B", offerings: [sale, rent] };
 describe("unified property presentation", () => {
@@ -32,6 +34,7 @@ describe("unified property presentation", () => {
   });
   test("rent inquiry targets rent row and never inherits sale price", () => {
     expect(selectPropertyOffering(unit, "rent")).toEqual(rent);
+    expect(selectPropertyOffering(unit, "rent")?.description).toBe("rent copy");
   });
   test("withdrawn rent cannot be selected or shown as available", () => {
     const withdrawn = { ...unit, offerings: [sale, { ...rent, status: "inactive" }] };
@@ -43,4 +46,8 @@ describe("unified property presentation", () => {
     expect(publicPropertyNo(sale)).toBe("B-1-S");
     expect(activePropertyOfferings(sale)).toEqual([sale]);
   });
+});
+
+test("rented archive retains the rental label when no offers remain", () => {
+  expect(propertyDealLabel({ ...rent, status: "rented", offerings: [] })).toBe("租盤");
 });

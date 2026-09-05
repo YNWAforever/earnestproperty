@@ -7,6 +7,7 @@ export type PublicOffering = {
   price: number | null;
   rent: number | null;
   status: string;
+  description?: string | null;
 };
 type PublicProperty = {
   id?: string;
@@ -43,7 +44,11 @@ export function selectPropertyOffering(
 }
 export function propertyDealLabel(property: PublicProperty) {
   const deals = new Set(activePropertyOfferings(property).map((offer) => offer.deal_type));
-  return deals.size > 1 ? "可買可租" : deals.has("rent") ? "租盤" : "售盤";
+  return deals.size > 1
+    ? "可買可租"
+    : deals.has("rent") || (!deals.size && property.deal_type === "rent")
+      ? "租盤"
+      : "售盤";
 }
 export function propertyPriceSummary(property: PublicProperty) {
   const offers = activePropertyOfferings(property);

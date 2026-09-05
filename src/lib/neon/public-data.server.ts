@@ -115,7 +115,10 @@ const listingColumns = `
 
 // Listing-card transport has no long body, full gallery, floorplan or staff biography.
 const detailListingColumns = listingColumns
-  .replace("p.saleable_area,", "COALESCE(p.saleable_area, group_facts.saleable_area) AS saleable_area,")
+  .replace(
+    "p.saleable_area,",
+    "COALESCE(p.saleable_area, group_facts.saleable_area) AS saleable_area,",
+  )
   .replace("p.gross_area,", "COALESCE(p.gross_area, group_facts.gross_area) AS gross_area,")
   .replace("p.bedrooms,", "COALESCE(p.bedrooms, group_facts.bedrooms) AS bedrooms,")
   .replace("p.floor,", "COALESCE(p.floor, group_facts.floor) AS floor,");
@@ -300,9 +303,12 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
       ? row.offerings.map((offering): PropertyOffering => {
           const item = offering && typeof offering === "object" ? (offering as DbRow) : {};
           return {
-            id: stringOrEmpty(item.id), listing_no: stringOrEmpty(item.listing_no),
-            deal_type: dealType(item.deal_type), price: numberOrNull(item.price),
-            rent: numberOrNull(item.rent), status: stringOrEmpty(item.status),
+            id: stringOrEmpty(item.id),
+            listing_no: stringOrEmpty(item.listing_no),
+            deal_type: dealType(item.deal_type),
+            price: numberOrNull(item.price),
+            rent: numberOrNull(item.rent),
+            status: stringOrEmpty(item.status),
             ...(Object.prototype.hasOwnProperty.call(item, "description")
               ? { description: stringOrNull(item.description) }
               : {}),
@@ -788,13 +794,13 @@ export async function fetchPropertyByListingNo(input: {
           WHERE alias_member.public_listing_no = current_offerings.public_listing_no
           ORDER BY alias_property.listing_no
         ) AS listing_aliases,
-        (SELECT jsonb_agg(jsonb_build_object(
+        COALESCE((SELECT jsonb_agg(jsonb_build_object(
           'id', offering.id, 'listing_no', offering.listing_no,
           'deal_type', offering.deal_type, 'price', offering.price,
           'rent', offering.rent, 'status', offering.status,
           'description', offering.description
         ) ORDER BY offering.deal_type, offering.listing_no)
-        FROM current_offerings offering WHERE offering.status = 'active') AS offerings
+        FROM current_offerings offering WHERE offering.status = 'active'), '[]'::jsonb) AS offerings
       FROM current_offerings
       ORDER BY (current_offerings.status = 'active') DESC,
         current_offerings.source_updated_at DESC NULLS LAST,
