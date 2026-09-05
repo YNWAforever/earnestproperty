@@ -11,6 +11,7 @@ import type {
   NeonListingSort,
   NeonPublicAgentProfile,
   NeonPropertyRow,
+  PropertyOffering,
   NeonRecentTransactionsInput,
   NeonSimilarListingsInput,
   NeonTransactionRow,
@@ -65,6 +66,9 @@ const publicAgentProfileColumns = `
 const listingColumns = `
   p.id,
   p.listing_no,
+  c.public_listing_no,
+  c.listing_aliases,
+  c.offerings,
   p.canonical_property_no,
   p.title_zh,
   p.title_en,
@@ -110,8 +114,13 @@ const listingColumns = `
 `;
 
 // Listing-card transport has no long body, full gallery, floorplan or staff biography.
+const detailListingColumns = listingColumns
+  .replace("p.saleable_area,", "COALESCE(p.saleable_area, group_facts.saleable_area) AS saleable_area,")
+  .replace("p.gross_area,", "COALESCE(p.gross_area, group_facts.gross_area) AS gross_area,")
+  .replace("p.bedrooms,", "COALESCE(p.bedrooms, group_facts.bedrooms) AS bedrooms,")
+  .replace("p.floor,", "COALESCE(p.floor, group_facts.floor) AS floor,");
 const listingCardColumns = `
-  p.id, p.listing_no, p.canonical_property_no, p.title_zh, p.deal_type,
+  p.id, p.listing_no, c.public_listing_no, c.listing_aliases, c.offerings, p.canonical_property_no, p.title_zh, p.deal_type,
   p.price, p.rent, p.saleable_area, p.bedrooms, p.bathrooms, p.features,
   p.images[1:1] AS images, p.video_url, p.estate_id, p.district_slug, p.address,
   p.status, p.featured, p.source_site, p.last_seen_at, p.created_at, p.updated_at,
@@ -126,15 +135,51 @@ function mapListingCardRow(row: DbRow): NeonPropertyRow {
     images: Array.isArray(row.images) ? row.images.slice(0, 1) : null,
   });
 }
-// Deduplicate the filtered universe before count and LIMIT; a sale and a rent remain distinct.
-function canonicalListingCte(where: string) {
-  return `WITH canonical_candidates AS (
-    SELECT p.id, ROW_NUMBER() OVER (
-      PARTITION BY COALESCE('canonical:' || NULLIF(p.canonical_property_no, ''), 'listing:' || p.listing_no), p.deal_type
+// Rank across every status before applying public filters. A newer withdrawal
+// therefore suppresses an older active scrape for the same unit and deal.
+function canonicalListingCte(where: string, splitByDeal = false) {
+  return `WITH ranked_offerings AS (
+    SELECT p.id, ppm.public_listing_no, ROW_NUMBER() OVER (
+      PARTITION BY ppm.public_listing_no, p.deal_type
+      ORDER BY p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC
+    ) AS offering_rank
+    FROM properties p
+    JOIN property_public_members ppm ON ppm.property_id = p.id
+  ), current_offerings AS (
+    SELECT id, public_listing_no FROM ranked_offerings WHERE offering_rank = 1
+  ), eligible_candidates AS (
+    SELECT p.id, current_offerings.public_listing_no, ROW_NUMBER() OVER (
+      PARTITION BY current_offerings.public_listing_no${splitByDeal ? ", p.deal_type" : ""}
       ORDER BY ${LISTING_FRESHNESS_ORDER}
-    ) AS canonical_rank
-    FROM properties p LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}
-  ), canonical AS (SELECT id FROM canonical_candidates WHERE canonical_rank = 1)`;
+    ) AS group_rank
+    FROM current_offerings
+    JOIN properties p ON p.id = current_offerings.id
+    LEFT JOIN estates e ON e.id = p.estate_id
+    WHERE p.status = 'active' AND ${where}
+  ), eligible_groups AS (
+    SELECT id, public_listing_no FROM eligible_candidates WHERE group_rank = 1
+  ), canonical AS (
+    SELECT eligible_groups.id, eligible_groups.public_listing_no,
+      ARRAY(
+        SELECT alias_property.listing_no
+        FROM property_public_members alias_member
+        JOIN properties alias_property ON alias_property.id = alias_member.property_id
+        WHERE alias_member.public_listing_no = eligible_groups.public_listing_no
+        ORDER BY alias_property.listing_no
+      ) AS listing_aliases,
+      COALESCE((
+        SELECT jsonb_agg(jsonb_build_object(
+          'id', offering.id, 'listing_no', offering.listing_no,
+          'deal_type', offering.deal_type, 'price', offering.price,
+          'rent', offering.rent, 'status', offering.status
+        ) ORDER BY offering.deal_type, offering.listing_no)
+        FROM current_offerings all_current
+        JOIN properties offering ON offering.id = all_current.id
+        WHERE all_current.public_listing_no = eligible_groups.public_listing_no
+          AND offering.status = 'active'
+      ), '[]'::jsonb) AS offerings
+    FROM eligible_groups
+  )`;
 }
 
 function sql() {
@@ -249,6 +294,21 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
   return {
     id: stringOrEmpty(row.id),
     listing_no: stringOrEmpty(row.listing_no),
+    public_listing_no: stringOrNull(row.public_listing_no) ?? undefined,
+    listing_aliases: textArrayOrNull(row.listing_aliases) ?? undefined,
+    offerings: Array.isArray(row.offerings)
+      ? row.offerings.map((offering): PropertyOffering => {
+          const item = offering && typeof offering === "object" ? (offering as DbRow) : {};
+          return {
+            id: stringOrEmpty(item.id), listing_no: stringOrEmpty(item.listing_no),
+            deal_type: dealType(item.deal_type), price: numberOrNull(item.price),
+            rent: numberOrNull(item.rent), status: stringOrEmpty(item.status),
+            ...(Object.prototype.hasOwnProperty.call(item, "description")
+              ? { description: stringOrNull(item.description) }
+              : {}),
+          };
+        })
+      : undefined,
     canonical_property_no: stringOrNull(row.canonical_property_no),
     title_zh: stringOrEmpty(row.title_zh),
     title_en: stringOrNull(row.title_en),
@@ -536,7 +596,7 @@ async function fetchCorridorRows(
   // separate `LIMIT input.limit` query per deal type.
   const rows = await sql().query(
     `
-    ${canonicalListingCte(where)}
+    ${canonicalListingCte(where, true)}
     SELECT *
     FROM (
       SELECT
@@ -582,8 +642,7 @@ export async function searchListings(
   const [countRows, rows] = await Promise.all([
     db.query(
       `${canonicalListingCte(where)}
-      SELECT count(*)::int AS total FROM properties p JOIN canonical c ON c.id=p.id
-      LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}`,
+      SELECT count(*)::int AS total FROM eligible_groups`,
       params,
     ),
     db.query(
@@ -615,7 +674,7 @@ export async function fetchCorridorInventory(
   const [countRows, rows] = await Promise.all([
     sql().query(
       `
-      ${canonicalListingCte(countWhere)}
+      ${canonicalListingCte(countWhere, true)}
       SELECT p.deal_type, count(*)::int AS total
       FROM properties p JOIN canonical c ON c.id=p.id
       LEFT JOIN estates e ON e.id = p.estate_id
@@ -703,27 +762,93 @@ export async function fetchPropertyByListingNo(input: {
 }): Promise<NeonPropertyRow | null> {
   const rows = await sql().query(
     `
-    SELECT ${listingColumns}
-    FROM properties p
+    WITH requested AS (
+      SELECT requested.id, requested_public.public_listing_no
+      FROM properties requested
+      JOIN property_public_members requested_public ON requested_public.property_id = requested.id
+      WHERE requested.listing_no = $1 OR requested_public.public_listing_no = $1
+    ), ranked AS (
+      SELECT p.id, ppm.public_listing_no, ROW_NUMBER() OVER (
+        PARTITION BY ppm.public_listing_no, p.deal_type
+        ORDER BY p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC
+      ) AS offering_rank
+      FROM property_public_members ppm
+      JOIN properties p ON p.id = ppm.property_id
+      WHERE ppm.public_listing_no = (SELECT public_listing_no FROM requested LIMIT 1)
+    ), current_offerings AS (
+      SELECT p.*, ranked.public_listing_no
+      FROM ranked JOIN properties p ON p.id = ranked.id
+      WHERE ranked.offering_rank = 1
+    ), c AS (
+      SELECT current_offerings.id, current_offerings.public_listing_no,
+        ARRAY(
+          SELECT alias_property.listing_no
+          FROM property_public_members alias_member
+          JOIN properties alias_property ON alias_property.id = alias_member.property_id
+          WHERE alias_member.public_listing_no = current_offerings.public_listing_no
+          ORDER BY alias_property.listing_no
+        ) AS listing_aliases,
+        (SELECT jsonb_agg(jsonb_build_object(
+          'id', offering.id, 'listing_no', offering.listing_no,
+          'deal_type', offering.deal_type, 'price', offering.price,
+          'rent', offering.rent, 'status', offering.status,
+          'description', offering.description
+        ) ORDER BY offering.deal_type, offering.listing_no)
+        FROM current_offerings offering WHERE offering.status = 'active') AS offerings
+      FROM current_offerings
+      ORDER BY (current_offerings.status = 'active') DESC,
+        current_offerings.source_updated_at DESC NULLS LAST,
+        current_offerings.last_seen_at DESC NULLS LAST,
+        current_offerings.updated_at DESC NULLS LAST,
+        current_offerings.created_at DESC,
+        current_offerings.id ASC
+      LIMIT 1
+    )
+    SELECT ${detailListingColumns}
+    FROM c JOIN properties p ON p.id = c.id
     LEFT JOIN estates e ON e.id = p.estate_id
+    LEFT JOIN LATERAL (
+      SELECT MAX(member_property.saleable_area) AS saleable_area,
+        MAX(member_property.gross_area) AS gross_area,
+        MAX(member_property.bedrooms) AS bedrooms,
+        MAX(member_property.floor) AS floor
+      FROM property_public_members group_member
+      JOIN properties member_property ON member_property.id = group_member.property_id
+      WHERE group_member.public_listing_no = c.public_listing_no
+    ) group_facts ON true
     ${publicAgentJoin}
-    WHERE p.listing_no = $1
     LIMIT 1
     `,
     [input.listingNo],
   );
   return rows[0] ? mapListingRow(rows[0]) : null;
 }
-
 export async function fetchPropertyByLegacyDetailId(input: {
   oldId: string;
 }): Promise<NeonLegacyPropertyMatch> {
   const rows = await sql().query(
     `
-    SELECT listing_no
-    FROM properties
-    WHERE status = 'active' AND legacy_detail_id = $1
-    ORDER BY deal_type ASC
+    SELECT ppm.public_listing_no AS listing_no
+    FROM properties legacy
+    JOIN property_public_members ppm ON ppm.property_id = legacy.id
+    WHERE legacy.legacy_detail_id = $1
+      AND EXISTS (
+        SELECT 1
+        FROM (
+          SELECT latest.status, ROW_NUMBER() OVER (
+            PARTITION BY latest.deal_type
+            ORDER BY latest.source_updated_at DESC NULLS LAST,
+              latest.last_seen_at DESC NULLS LAST, latest.updated_at DESC NULLS LAST,
+              latest.created_at DESC, latest.id ASC
+          ) AS offering_rank
+          FROM property_public_members active_member
+          JOIN properties latest ON latest.id = active_member.property_id
+          WHERE active_member.public_listing_no = ppm.public_listing_no
+        ) current_group_offerings
+        WHERE current_group_offerings.offering_rank = 1
+          AND current_group_offerings.status = 'active'
+      )
+    ORDER BY legacy.deal_type ASC
     LIMIT 1
     `,
     [input.oldId],
@@ -738,11 +863,9 @@ export async function fetchSimilarListings(
     `
     ${canonicalListingCte(`p.status = 'active' AND p.estate_id = $1 AND p.deal_type = $2::deal_type AND p.id <> $3
       AND NOT EXISTS (
-        SELECT 1 FROM properties current_offering
-        WHERE current_offering.id = $3
-          AND current_offering.deal_type = p.deal_type
-          AND COALESCE('canonical:' || NULLIF(current_offering.canonical_property_no, ''), 'listing:' || current_offering.listing_no)
-            = COALESCE('canonical:' || NULLIF(p.canonical_property_no, ''), 'listing:' || p.listing_no)
+        SELECT 1 FROM property_public_members current_member
+        WHERE current_member.property_id = $3
+          AND current_member.public_listing_no = current_offerings.public_listing_no
       )`)}
     SELECT ${listingCardColumns}
     FROM properties p JOIN canonical c ON c.id=p.id

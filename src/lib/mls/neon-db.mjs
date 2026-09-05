@@ -47,6 +47,7 @@ function rowValues(row) {
     row.source_updated_at,
     row.last_seen_at,
     row.last_scraped_at,
+    row.canonical_property_no,
   ];
 }
 
@@ -116,16 +117,17 @@ export function createNeonMlsDb(sql) {
             price, rent, saleable_area, gross_area, bedrooms, bathrooms, floor, orientation,
             features, description, images, status, featured, legacy_detail_id,
             legacy_property_no, legacy_url, legacy_source_indexes, source_site, source_url,
-            source_updated_at, last_seen_at, last_scraped_at
+            source_updated_at, last_seen_at, last_scraped_at, canonical_property_no
           )
           VALUES (
             $1, $2, $3, $4::deal_type, $5, $6, $7,
             $8, $9, $10, $11, $12, $13, $14, $15,
             $16, $17, $18, $19::property_status, $20, $21,
-            $22, $23, $24, $25, $26, $27, $28, $29
+            $22, $23, $24, $25, $26, $27, $28, $29, $30
           )
           ON CONFLICT (legacy_detail_id, deal_type) DO UPDATE SET
             listing_no = EXCLUDED.listing_no,
+            canonical_property_no = EXCLUDED.canonical_property_no,
             title_zh = EXCLUDED.title_zh,
             title_en = EXCLUDED.title_en,
             estate_id = EXCLUDED.estate_id,
