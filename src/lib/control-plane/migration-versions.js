@@ -73,6 +73,9 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260905151000_consent_evidence.sql",
   "20260905180000_admin_message_paging.sql",
   "20260905181000_cms_browse_order.sql",
+  "20260906020000_whatsapp_delivery_events.sql",
+  "20260906021000_estate_editorial_backfill.sql",
+  "20260906022000_estate_verified_details.sql",
 ]);
 
 /**

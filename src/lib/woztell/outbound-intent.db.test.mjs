@@ -293,3 +293,95 @@ test(
     }
   },
 );
+test(
+  "disposable receipts reconcile out of order without transcript bubbles or identity leakage",
+  { skip: !url },
+  async () => {
+    assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
+    const sql = neon(url),
+      id = randomUUID(),
+      member = "receipt-" + id,
+      channel = "receipt-channel-" + id,
+      external = "receipt-message-" + id;
+    const tx = (statements) =>
+      sql.transaction((t) =>
+        statements.map(({ statement, params = [] }) => t.query(statement, params)),
+      );
+    const status = (type, chan = channel) =>
+      normalizeWoztellEvent({
+        type,
+        messageId: external,
+        member,
+        channel: chan,
+        timestamp: 1700000000,
+        data: { messageId: external },
+      });
+    try {
+      await ingestWoztellEvent(status("DELIVERED"), tx);
+      assert.equal(
+        (
+          await sql.query(
+            "SELECT count(*)::int AS n FROM whatsapp_messages WHERE external_message_id=$1",
+            [external],
+          )
+        )[0].n,
+        0,
+      );
+      await ingestWoztellEvent(
+        normalizeWoztellEvent({
+          type: "BOT",
+          memberId: member,
+          channelId: channel,
+          messageEvent: {
+            type: "TEXT",
+            messageId: external,
+            timestamp: 1700000000,
+            data: { text: "synthetic receipt test" },
+          },
+        }),
+        tx,
+      );
+      await ingestWoztellEvent(status("READ", "different-channel"), tx);
+      assert.equal(
+        (
+          await sql.query("SELECT status FROM whatsapp_messages WHERE external_message_id=$1", [
+            external,
+          ])
+        )[0].status,
+        "delivered",
+      );
+      await ingestWoztellEvent(status("READ"), tx);
+      await ingestWoztellEvent(status("DELIVERED"), tx);
+      await ingestWoztellEvent(status("FAILED"), tx);
+      const rows = await sql.query(
+        "SELECT text,status FROM whatsapp_messages WHERE external_message_id=$1",
+        [external],
+      );
+      assert.deepEqual(rows, [{ text: "synthetic receipt test", status: "read" }]);
+      await ingestWoztellEvent(status("READ", "different-channel"), tx);
+      assert.equal(
+        (
+          await sql.query(
+            "SELECT count(*)::int AS n FROM whatsapp_messages WHERE external_message_id=$1",
+            [external],
+          )
+        )[0].n,
+        1,
+      );
+      assert.equal(
+        (
+          await sql.query(
+            "SELECT last_inbound_at FROM whatsapp_conversations WHERE woztell_member_id=$1",
+            [member],
+          )
+        )[0].last_inbound_at,
+        null,
+      );
+    } finally {
+      await sql.query("DELETE FROM whatsapp_delivery_events WHERE woztell_member_id=$1", [member]);
+      await sql.query("DELETE FROM whatsapp_messages WHERE woztell_member_id=$1", [member]);
+      await sql.query("DELETE FROM whatsapp_conversations WHERE woztell_member_id=$1", [member]);
+      await sql.query("DELETE FROM crm_contacts WHERE whatsapp_member_id=$1", [member]);
+    }
+  },
+);

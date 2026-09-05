@@ -7,7 +7,7 @@ export type IngestOutcome = {
   contactId: string | null;
   conversationId: string | null;
   messageInserted: boolean;
-  skipped: "no-identity" | null;
+  skipped: "no-identity" | "status-event" | null;
 };
 
 /** Contact, thread and message commit together. Shared identity locks precede a fresh SQL snapshot. */
@@ -17,6 +17,58 @@ export async function ingestWoztellEvent(
 ): Promise<IngestOutcome> {
   const transactionRows =
     injectedTransaction ?? (await import("../neon/db.server.ts")).transactionRows;
+  const wrapped = event.payload.messageEvent;
+  const source =
+    wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)
+      ? (wrapped as Record<string, unknown>)
+      : event.payload;
+  const type = event.messageType.toUpperCase();
+  const receipt = ["SENT", "DELIVERED", "READ", "FAILED", "DELETED"].includes(type)
+    ? type.toLowerCase()
+    : type === "UNKNOWN" && source.error
+      ? "failed"
+      : null;
+  if (receipt) {
+    await transactionRows([
+      {
+        statement: "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        params: [`woztell-message:${event.externalMessageId}`],
+      },
+      {
+        statement: `INSERT INTO whatsapp_delivery_events(id,external_message_id,channel_id,woztell_member_id,status,payload,occurred_at)
+        VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::timestamptz) ON CONFLICT(id) DO NOTHING`,
+        params: [
+          JSON.stringify([
+            event.externalMessageId,
+            event.channelId,
+            event.woztellMemberId,
+            receipt,
+            event.timestamp,
+          ]),
+          event.legacyExternalMessageId === null ? event.externalMessageId : null,
+          event.channelId,
+          event.woztellMemberId,
+          receipt,
+          JSON.stringify(event.payload),
+          event.timestamp,
+        ],
+      },
+      {
+        statement: `UPDATE whatsapp_messages SET status=status WHERE external_message_id=$1 AND channel_id=$2 AND woztell_member_id=$3 AND direction='outbound'`,
+        params: [
+          event.legacyExternalMessageId === null ? event.externalMessageId : null,
+          event.channelId,
+          event.woztellMemberId,
+        ],
+      },
+    ]);
+    return {
+      contactId: null,
+      conversationId: null,
+      messageInserted: false,
+      skipped: "status-event",
+    };
+  }
   const phone = event.direction === "inbound" ? event.fromPhone : event.toPhone;
   const normalizedPhone = normalizeAdminPhone(phone),
     memberId = event.woztellMemberId;
