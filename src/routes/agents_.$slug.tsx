@@ -1,3 +1,9 @@
+import {
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Bed, Building2, MessageCircle, Phone, UserRound } from "lucide-react";
 
@@ -234,32 +240,25 @@ function AgentProfilePage() {
 
 function AgentListingCard({ listing }: { listing: ListingRow }) {
   const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
-  const isRent = listing.deal_type === "rent";
-  const price = isRent
-    ? listing.rent
-      ? `$${Number(listing.rent).toLocaleString()} / 月`
-      : "—"
-    : listing.price
-      ? `$${(Number(listing.price) / 1_000_000).toFixed(2)}M`
-      : "—";
-
+  const price = propertyPriceSummary(listing);
   return (
     <Link
       to="/property/$listingNo"
-      params={{ listingNo: listing.listing_no }}
+      params={{ listingNo: publicPropertyNo(listing) }}
+      search={{ deal: listing.deal_type === "rent" ? "rent" : "sale" }}
       className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">
         <AppImage
           src={img}
-          alt={listing.title_zh}
+          alt={publicPropertyTitle(listing)}
           width={400}
           height={300}
           className="h-full w-full object-cover transition-transform group-hover:scale-105"
         />
       </div>
       <div className="p-3">
-        <p className="line-clamp-1 text-sm font-medium">{listing.title_zh}</p>
+        <p className="line-clamp-1 text-sm font-medium">{publicPropertyTitle(listing)}</p>
         <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           {listing.bedrooms !== null ? (
             <>

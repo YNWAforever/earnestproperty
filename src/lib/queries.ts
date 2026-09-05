@@ -1,3 +1,4 @@
+import type { PublicOffering } from "./property-public";
 import {
   fetchNeonArticleBySlug,
   fetchNeonCmsVideos,
@@ -72,6 +73,9 @@ export type EstateSummary = {
 };
 
 export type FeaturedProperty = {
+  public_listing_no?: string;
+  listing_aliases?: string[];
+  offerings?: PublicOffering[];
   id: string;
   listing_no: string;
   canonical_property_no: string | null;
@@ -241,6 +245,9 @@ export type ListingRow = Pick<
   | "id"
   | "listing_no"
   | "canonical_property_no"
+  | "public_listing_no"
+  | "listing_aliases"
+  | "offerings"
   | "title_zh"
   | "deal_type"
   | "price"
@@ -307,57 +314,24 @@ export function emptyCorridorInventory(): CorridorInventory {
   };
 }
 
-/**
- * De-duplicates listing rows by (canonical_property_no, deal_type) -- the
- * identity the MLS import pipeline already establishes at write time
- * (src/lib/mls/match.mjs's EXACT_LINK_REASON is itself keyed on
- * property_no + deal_type, never property_no alone). A re-scraped row for
- * the same physical unit AND deal type under a second listing_no otherwise
- * renders twice on the same page (DR-3).
- *
- * The key is deal-type-aware because canonical_property_no alone is NOT a
- * safe merge key: one physical unit can legitimately have both an active
- * sale row and an active rent row sharing the same canonical_property_no --
- * normalizeListingDetail emits exactly this pair for a dual-priced listing
- * (src/lib/mls/mls-fixtures.test.mjs: "a listing with both a sale and a rent
- * price emits two rows"), and searchListings/fetchListingsForEstate query
- * with deal="all" (listingWhere only adds a deal_type predicate when
- * `input.deal !== "all"`), so both rows flow through the same result set.
- * Keying on canonical_property_no alone would silently drop one of the two,
- * making a real active listing disappear from /listings' 全部 tab, /videos,
- * and every /estate/$slug listings section.
- *
- * Falls back to `${listing_no}:${deal_type}` when canonical_property_no is
- * null OR an empty string -- the `row.canonical_property_no ? ... : ...`
- * truthiness check handles both the same way, which is deliberate: two rows
- * that both lack a canonical number (whether the column is NULL or was
- * written as "") are not known to be the same property, so keying an empty
- * string as its own shared identity would wrongly collapse unrelated
- * listings together.
- *
- * Server list queries now deduplicate before COUNT/LIMIT with the same identity.
- * This helper remains a compatibility and defensive guard for external/stale callers.
- * Keeps the first occurrence. Every call site orders its rows by
- * `featured DESC, last_seen_at DESC NULLS LAST, created_at DESC` before this
- * runs (searchListings/fetchListingsForEstate and fetchSimilarListings via
- * that same ORDER BY in public-data.server.ts; the corridor path via
- * fetchCorridorRows' ROW_NUMBER() OVER (... ORDER BY the same three columns)
- * per deal_type partition) -- so the kept row is always the freshest/most-
- * featured of any duplicate pair, never an arbitrary one.
- */
+/** The server groups verified units before pagination. Retain legacy fallback for older callers. */
 export function dedupeListings<
   T extends {
     listing_no: string;
     canonical_property_no?: string | null;
+    public_listing_no?: string;
+    listing_aliases?: string[];
     deal_type: string;
   },
 >(rows: T[]): T[] {
   const seen = new Set<string>();
   const result: T[] = [];
   for (const row of rows) {
-    const key = row.canonical_property_no
-      ? `canonical:${row.canonical_property_no}:${row.deal_type}`
-      : `listing:${row.listing_no}:${row.deal_type}`;
+    const key = row.public_listing_no
+      ? `property:${row.public_listing_no}`
+      : row.canonical_property_no
+        ? `canonical:${row.canonical_property_no}:${row.deal_type}`
+        : `listing:${row.listing_no}:${row.deal_type}`;
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(row);
@@ -493,6 +467,9 @@ export async function fetchPropertyByLegacyDetailId(oldId: string) {
 }
 
 export type SimilarListing = {
+  public_listing_no?: string;
+  listing_aliases?: string[];
+  offerings?: PublicOffering[];
   id: string;
   listing_no: string;
   canonical_property_no: string | null;

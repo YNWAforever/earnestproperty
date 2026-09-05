@@ -1,3 +1,9 @@
+import {
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -162,7 +168,7 @@ function VideosPage() {
       if (estate && listing.estates?.name_zh !== estate) return false;
       if (
         trimmedQuery &&
-        !`${listing.title_zh} ${listing.estates?.name_zh ?? ""}`
+        !`${publicPropertyTitle(listing)} ${listing.estates?.name_zh ?? ""}`
           .toLowerCase()
           .includes(trimmedQuery)
       ) {
@@ -439,16 +445,15 @@ function ListingVideoCard({ listing }: { listing: VideoListing }) {
   return (
     <VideoFrame
       videoId={listing.id}
-      title={listing.title_zh}
+      title={publicPropertyTitle(listing)}
       url={listing.video_url}
-      eyebrow={`${listing.estates?.name_zh ?? "深井 / 青山公路"} · ${
-        listing.deal_type === "rent" ? "租" : "售"
-      }`}
+      eyebrow={`${listing.estates?.name_zh ?? "深井 / 青山公路"} · ${propertyDealLabel(listing)}`}
       description={formatListingPrice(listing)}
       footer={
         <Link
           to="/property/$listingNo"
-          params={{ listingNo: listing.listing_no }}
+          params={{ listingNo: publicPropertyNo(listing) }}
+          search={{ deal: listing.deal_type === "rent" ? "rent" : "sale" }}
           className="mt-4 inline-flex text-sm font-semibold text-primary hover:underline"
         >
           查看樓盤詳情
@@ -595,8 +600,5 @@ function VideoFrame({
 }
 
 function formatListingPrice(listing: VideoListing) {
-  if (listing.deal_type === "rent") {
-    return listing.rent ? `月租 HK$${listing.rent.toLocaleString()}` : "租金請查詢";
-  }
-  return listing.price ? `售價 HK$${(listing.price / 10000).toLocaleString()}萬` : "售價請查詢";
+  return propertyPriceSummary(listing);
 }

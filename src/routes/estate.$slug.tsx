@@ -1,3 +1,9 @@
+import {
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import {
   Accordion,
@@ -683,24 +689,18 @@ function EstatePage() {
 }
 
 function EstateListingCard({ listing }: { listing: ListingRow }) {
-  const isRent = listing.deal_type === "rent";
-  const price = isRent
-    ? listing.rent
-      ? `HK$${listing.rent.toLocaleString()}/月`
-      : "查詢租金"
-    : listing.price
-      ? `HK$${(listing.price / 1_000_000).toFixed(2)}M`
-      : "查詢售價";
+  const price = propertyPriceSummary(listing);
   return (
     <Link
       to="/property/$listingNo"
-      params={{ listingNo: listing.listing_no }}
+      params={{ listingNo: publicPropertyNo(listing) }}
+      search={{ deal: listing.deal_type === "rent" ? "rent" : "sale" }}
       className="overflow-hidden rounded-lg border bg-card transition hover:shadow-card"
     >
       <div className="aspect-[4/3] bg-muted">
         <AppImage
           src={listing.images?.[0]}
-          alt={listing.title_zh}
+          alt={publicPropertyTitle(listing)}
           width={400}
           height={300}
           className="h-full w-full object-cover"
@@ -708,7 +708,7 @@ function EstateListingCard({ listing }: { listing: ListingRow }) {
       </div>
       <div className="p-4">
         <p className="text-lg font-bold text-primary">{price}</p>
-        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{listing.title_zh}</h3>
+        <h3 className="mt-1 line-clamp-1 text-sm font-semibold">{publicPropertyTitle(listing)}</h3>
         <p className="mt-2 text-xs text-muted-foreground">
           {listing.saleable_area ? `${listing.saleable_area} 呎 · ` : ""}
           {listing.bedrooms ?? "-"} 房

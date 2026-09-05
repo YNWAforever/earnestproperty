@@ -391,7 +391,7 @@ test("both card layouts get a share button reusing lib/share.ts's shareUrl (the 
   ]) {
     assert.match(
       body,
-      /onClick={\(\) => handleCardShare\(safeTitle, p\.listing_no\)}/,
+      /onClick={\(\) => handleCardShare\(safeTitle, publicPropertyNo\(p\)\)}/,
       `expected ${name} to wire a share button to handleCardShare`,
     );
     // The share <button> must be a SIBLING of <Link>, not nested inside it
@@ -399,7 +399,9 @@ test("both card layouts get a share button reusing lib/share.ts's shareUrl (the 
     // reader unable to tell which element a click activates. Proven here by
     // checking the button's onClick appears AFTER the matching </Link>.
     const linkCloseIndex = body.indexOf("</Link>");
-    const buttonIndex = body.indexOf("onClick={() => handleCardShare(safeTitle, p.listing_no)}");
+    const buttonIndex = body.indexOf(
+      "onClick={() => handleCardShare(safeTitle, publicPropertyNo(p))}",
+    );
     assert.ok(linkCloseIndex !== -1, `expected ${name} to render a <Link>`);
     assert.ok(
       buttonIndex > linkCloseIndex,

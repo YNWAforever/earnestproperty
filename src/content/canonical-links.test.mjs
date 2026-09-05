@@ -66,7 +66,7 @@ test("every public route emits a canonical link", () => {
   );
   assert.match(
     read("src/routes/property.$listingNo.tsx"),
-    /canonicalLink\(`\/property\/\$\{p\.listing_no\}`\)/,
+    /canonicalLink\(`\/property\/\$\{publicPropertyNo\(p\)\}`\)/,
   );
 });
 

@@ -1,3 +1,9 @@
+import {
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -39,7 +45,7 @@ import { Container } from "@/components/layout/Container";
 import { PageHero } from "@/components/site/PageHero";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
-import { formatHkd, formatSaleDisplay, sanitizeListingText } from "@/lib/format";
+import { sanitizeListingText } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
 import { buildContext, track } from "@/lib/analytics/events";
 import {
@@ -1260,17 +1266,8 @@ function ListingsPage() {
 
 function deriveListingCardData(p: ListingRow) {
   const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
-  const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
-  const rentDisplay = formatHkd(p.rent);
-  const saleDisplay = formatSaleDisplay(p.price);
-  const price =
-    p.deal_type === "rent"
-      ? rentDisplay
-        ? `HK${rentDisplay}/月`
-        : "—"
-      : saleDisplay
-        ? `HK${saleDisplay}`
-        : "—";
+  const safeTitle = sanitizeListingText(publicPropertyTitle(p)) ?? p.title_zh;
+  const price = propertyPriceSummary(p);
   return { cover, safeTitle, price };
 }
 
@@ -1284,11 +1281,15 @@ function handleCardShare(title: string, listingNo: string) {
 
 function ListingCard({ p }: { p: ListingRow }) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
-  const { favourited, toggle } = useFavourite(p.listing_no);
+  const { favourited, toggle } = useFavourite(publicPropertyNo(p), p.listing_aliases);
 
   return (
     <li className="group relative overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
-      <Link to="/property/$listingNo" params={{ listingNo: p.listing_no }}>
+      <Link
+        to="/property/$listingNo"
+        params={{ listingNo: publicPropertyNo(p) }}
+        search={{ deal: p.deal_type === "rent" ? "rent" : "sale" }}
+      >
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
           <AppImage
             src={cover}
@@ -1298,7 +1299,7 @@ function ListingCard({ p }: { p: ListingRow }) {
             className="h-full w-full object-cover transition group-hover:scale-105"
           />
           <span className="absolute left-2 top-2 rounded bg-background/90 px-2 py-0.5 text-[11px] font-medium">
-            {p.deal_type === "rent" ? "租" : "售"}
+            {propertyDealLabel(p)}
           </span>
         </div>
         <div className="p-4">
@@ -1348,7 +1349,7 @@ function ListingCard({ p }: { p: ListingRow }) {
       </button>
       <button
         type="button"
-        onClick={() => handleCardShare(safeTitle, p.listing_no)}
+        onClick={() => handleCardShare(safeTitle, publicPropertyNo(p))}
         aria-label={`分享：${safeTitle}`}
         className="absolute right-2 top-2 z-10 rounded-full bg-background/90 p-1.5 text-foreground shadow-sm transition hover:bg-background"
       >
@@ -1363,14 +1364,15 @@ function ListingCard({ p }: { p: ListingRow }) {
 // deriveListingCardData() rather than re-deriving price itself.
 function ListingCardRow({ p }: { p: ListingRow }) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
-  const { favourited, toggle } = useFavourite(p.listing_no);
+  const { favourited, toggle } = useFavourite(publicPropertyNo(p), p.listing_aliases);
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
       <div className="flex gap-4 p-3 sm:p-4">
         <Link
           to="/property/$listingNo"
-          params={{ listingNo: p.listing_no }}
+          params={{ listingNo: publicPropertyNo(p) }}
+          search={{ deal: p.deal_type === "rent" ? "rent" : "sale" }}
           className="flex min-w-0 flex-1 gap-4"
         >
           <div className="relative aspect-[4/3] w-28 flex-shrink-0 overflow-hidden rounded-md bg-muted sm:w-44">
@@ -1382,7 +1384,7 @@ function ListingCardRow({ p }: { p: ListingRow }) {
               className="h-full w-full object-cover transition group-hover:scale-105"
             />
             <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
-              {p.deal_type === "rent" ? "租" : "售"}
+              {propertyDealLabel(p)}
             </span>
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-center">
@@ -1431,7 +1433,7 @@ function ListingCardRow({ p }: { p: ListingRow }) {
           </button>
           <button
             type="button"
-            onClick={() => handleCardShare(safeTitle, p.listing_no)}
+            onClick={() => handleCardShare(safeTitle, publicPropertyNo(p))}
             aria-label={`分享：${safeTitle}`}
             className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-accent hover:text-foreground"
           >

@@ -1,5 +1,13 @@
+import {
+  activePropertyOfferings,
+  selectPropertyOffering,
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import { useState } from "react";
-import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, redirect, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
 import { toast } from "sonner";
 import {
@@ -78,7 +86,16 @@ type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListi
 type PropertyHeadData = {
   property?: Pick<
     PropertyDetail,
-    "listing_no" | "title_zh" | "deal_type" | "rent" | "price" | "description" | "images" | "status"
+    | "public_listing_no"
+    | "offerings"
+    | "listing_no"
+    | "title_zh"
+    | "deal_type"
+    | "rent"
+    | "price"
+    | "description"
+    | "images"
+    | "status"
   >;
 };
 
@@ -100,6 +117,7 @@ function formatDealPrice(isRent: boolean, rent: number | null, price: number | n
 }
 
 export const Route = createFileRoute("/property/$listingNo")({
+  validateSearch: z.object({ deal: z.enum(["sale", "rent"]).optional() }),
   loader: async ({ params }) => {
     const property = await fetchPropertyByListingNo(params.listingNo);
     // offline/inactive/draft never was, or no longer is, genuinely public --
@@ -107,6 +125,22 @@ export const Route = createFileRoute("/property/$listingNo")({
     // through to the normal branch below and gets its own real state.
     if (!property || (!UNAVAILABLE_STATUSES.has(property.status) && property.status !== "active")) {
       throw notFound();
+    }
+    if (property.public_listing_no && params.listingNo !== property.public_listing_no) {
+      throw redirect({
+        to: "/property/$listingNo",
+        params: { listingNo: property.public_listing_no },
+        statusCode: 301,
+        search: (previous) => ({
+          ...previous,
+          deal:
+            previous.deal === "sale" || previous.deal === "rent"
+              ? previous.deal
+              : params.listingNo.endsWith("-R")
+                ? "rent"
+                : "sale",
+        }),
+      });
     }
     const [similar, txns, branches] = await Promise.all([
       property.estate_id
@@ -128,18 +162,9 @@ export const Route = createFileRoute("/property/$listingNo")({
   head: ({ loaderData }) => {
     const p = (loaderData as PropertyHeadData | undefined)?.property;
     if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
-    const canonical = canonicalLink(`/property/${p.listing_no}`);
-    const rentDisplay = formatHkd(Number(p.rent));
-    const saleDisplay = formatSaleDisplay(Number(p.price));
-    const priceStr =
-      p.deal_type === "rent"
-        ? rentDisplay
-          ? `月租 ${rentDisplay}`
-          : ""
-        : saleDisplay
-          ? `售 ${saleDisplay}`
-          : "";
-    const safeTitle = sanitizeListingText(p.title_zh) ?? p.title_zh;
+    const canonical = canonicalLink(`/property/${publicPropertyNo(p)}`);
+    const priceStr = propertyPriceSummary(p);
+    const safeTitle = sanitizeListingText(publicPropertyTitle(p)) ?? p.title_zh;
     const title = `${safeTitle}｜${priceStr}｜晉誠地產`;
     const safeDescription = sanitizeListingText(p.description);
     const desc = (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
@@ -217,19 +242,30 @@ function toEmbed(u: string) {
 }
 
 function PropertyPage() {
-  const { property, similar, txns, branches } = Route.useLoaderData() as {
+  const {
+    property: baseProperty,
+    similar,
+    txns,
+    branches,
+  } = Route.useLoaderData() as {
     property: PropertyDetail;
     similar: SimilarListing[];
     txns: EstateTransaction[];
     branches: NeonBranchRecord[];
   };
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const selectedDeal = search.deal ?? baseProperty.deal_type;
+  const offerings = activePropertyOfferings(baseProperty);
+  const selectedOffering = selectPropertyOffering(baseProperty, selectedDeal);
+  const property = selectedOffering ? { ...baseProperty, ...selectedOffering } : baseProperty;
   // Imported listing text can arrive malformed (raw CSV artifacts, stray
   // quotes, exact "NaN"/"null"/"$0" tokens) -- sanitize once here and reuse
   // the sanitized values everywhere below rather than re-sanitizing at every
   // interpolation site. Title falls back to the raw value so a listing never
   // shows a fully blank title; description/address can legitimately end up
   // null and are guarded at their render sites instead.
-  const safeTitle = sanitizeListingText(property.title_zh) ?? property.title_zh;
+  const safeTitle = sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh;
   const safeDescription = sanitizeListingText(property.description);
   const safeAddress = sanitizeListingText(property.address);
 
@@ -239,7 +275,10 @@ function PropertyPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
-  const { favourited, toggle: toggleFavourited } = useFavourite(property.listing_no);
+  const { favourited, toggle: toggleFavourited } = useFavourite(
+    publicPropertyNo(property),
+    property.listing_aliases,
+  );
   // The breadcrumb shows the short id the title already uses (#C024131); the
   // full "C024131-6714584-S" wrapped onto a second line on phones and is
   // repeated verbatim in the badge row just below.
@@ -291,7 +330,7 @@ function PropertyPage() {
   const hasMap = !!(estate?.lat && estate?.lng) || !!property.address;
 
   async function handleShare() {
-    const url = typeof window !== "undefined" ? window.location.href : "";
+    const url = `${SITE_URL}/property/${publicPropertyNo(property)}`;
     await shareUrl(safeTitle, url);
     track(
       { name: "listing_share", payload: { listingNo: property.listing_no } },
@@ -378,15 +417,20 @@ function PropertyPage() {
         "@type": "RealEstateListing",
         name: safeTitle,
         description: safeDescription ?? undefined,
-        url: `${SITE_URL}/property/${property.listing_no}`,
+        url: `${SITE_URL}/property/${publicPropertyNo(property)}`,
         image: images,
         datePosted: property.created_at,
-        offers: {
+        offers: offerings.map((offer) => ({
           "@type": "Offer",
-          price: isRent ? property.rent : property.price,
+          price: offer.deal_type === "rent" ? offer.rent : offer.price,
           priceCurrency: "HKD",
+          businessFunction:
+            offer.deal_type === "rent"
+              ? "http://purl.org/goodrelations/v1#LeaseOut"
+              : "http://purl.org/goodrelations/v1#Sell",
           availability: "https://schema.org/InStock",
-        },
+          url: `${SITE_URL}/property/${publicPropertyNo(property)}`,
+        })),
       },
       {
         "@type": "Residence",
@@ -422,7 +466,7 @@ function PropertyPage() {
             "@type": "ListItem",
             position: estate ? 4 : 3,
             name: safeTitle,
-            item: `${SITE_URL}/property/${property.listing_no}`,
+            item: `${SITE_URL}/property/${publicPropertyNo(property)}`,
           },
         ],
       },
@@ -465,10 +509,14 @@ function PropertyPage() {
 
       <section aria-labelledby="property-title">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={isRent ? "secondary" : "default"}>{isRent ? "租盤" : "售盤"}</Badge>
+          <Badge variant={isRent ? "secondary" : "default"}>
+            {propertyDealLabel(baseProperty)}
+          </Badge>
           {property.featured ? <Badge variant="outline">精選</Badge> : null}
           {isUnavailable ? <Badge variant="destructive">{unavailableLabel}</Badge> : null}
-          <span className="text-xs text-muted-foreground">編號 {property.listing_no}</span>
+          <span className="text-xs text-muted-foreground">
+            物業編號 {publicPropertyNo(property)}
+          </span>
           <FreshnessStamp updatedAt={property.updated_at} />
         </div>
         <h1 id="property-title" className="mt-3 text-3xl font-bold tracking-tight">
@@ -480,6 +528,21 @@ function PropertyPage() {
             {safeAddress}
           </p>
         ) : null}
+        {offerings.length > 1 && (
+          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="選擇買樓或租樓查詢">
+            {offerings.map((offer) => (
+              <Button
+                key={offer.id}
+                type="button"
+                variant={property.id === offer.id ? "default" : "outline"}
+                aria-pressed={property.id === offer.id}
+                onClick={() => void navigate({ search: { deal: offer.deal_type }, replace: true })}
+              >
+                {propertyPriceSummary({ ...offer, offerings: [offer] })}
+              </Button>
+            ))}
+          </div>
+        )}
         <p className="mt-4 text-3xl font-bold text-primary">
           {priceLabel}
           {/* psf/grossPsf guard the raw value, not formatHkd's return -- a negative
@@ -1006,13 +1069,13 @@ function Spec({
 
 function SimilarCard({ listing }: { listing: SimilarListing }) {
   const img = listing.images?.[0] ?? "https://placehold.co/600x400/e5e7eb/64748b?text=No+Image";
-  const isRent = listing.deal_type === "rent";
-  const price = formatDealPrice(isRent, Number(listing.rent), Number(listing.price));
-  const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
+  const price = propertyPriceSummary(listing);
+  const safeTitle = sanitizeListingText(publicPropertyTitle(listing)) ?? listing.title_zh;
   return (
     <Link
       to="/property/$listingNo"
-      params={{ listingNo: listing.listing_no }}
+      params={{ listingNo: publicPropertyNo(listing) }}
+      search={{ deal: listing.deal_type === "rent" ? "rent" : "sale" }}
       className="group block overflow-hidden rounded-lg border transition-shadow hover:shadow-md"
     >
       <div className="aspect-[4/3] overflow-hidden bg-muted">

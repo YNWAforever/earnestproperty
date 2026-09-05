@@ -1,3 +1,9 @@
+import {
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import {
@@ -197,10 +203,10 @@ function HomePage() {
       .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
       .map((p: FeaturedProperty) => ({
         key: `listing-${p.id}`,
-        title: p.title_zh,
+        title: publicPropertyTitle(p),
         url: p.video_url as string,
-        eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${p.deal_type === "rent" ? "租" : "售"}`,
-        listingNo: p.listing_no,
+        eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${propertyDealLabel(p)}`,
+        listingNo: publicPropertyNo(p),
       })),
     ...cmsVideos.map((video: CmsVideo) => ({
       key: `cms-${video.id}`,
@@ -983,6 +989,8 @@ function HomeVideoCard({ video }: { video: HomeVideo }) {
 }
 
 type PropertyItem = {
+  public_listing_no?: string;
+  offerings?: import("@/lib/property-public").PublicOffering[];
   id: string;
   listing_no: string;
   title_zh: string;
@@ -1006,9 +1014,7 @@ type PropertyItem = {
 
 function PropertyCard({ property }: { property: PropertyItem }) {
   const isRent = property.deal_type === "rent";
-  const priceDisplay = isRent
-    ? `$${((property.rent ?? 0) / 1000).toFixed(0)}K`
-    : `$${((property.price ?? 0) / 10000).toFixed(0)}萬`;
+  const priceDisplay = propertyPriceSummary(property);
   const psf =
     !isRent && property.price && property.saleable_area
       ? Math.round(property.price / property.saleable_area)
@@ -1036,14 +1042,15 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           shouldn't have) its own focus stop or announced name. */}
       <Link
         to="/property/$listingNo"
-        params={{ listingNo: property.listing_no }}
+        params={{ listingNo: publicPropertyNo(property) }}
+        search={{ deal: property.deal_type === "rent" ? "rent" : "sale" }}
         tabIndex={-1}
         aria-hidden="true"
         className="relative block h-48 overflow-hidden bg-gradient-to-br from-primary/40 to-primary"
       >
         <AppImage
           src={cover}
-          alt={`${property.title_zh} 相片`}
+          alt={`${publicPropertyTitle(property)} 相片`}
           width={640}
           height={480}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
@@ -1058,7 +1065,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
           <span className="rounded-full bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background">
-            {isRent ? "租 Rent" : "售 Sale"}
+            {propertyDealLabel(property)}
           </span>
           {/* Opaque: this used to be bg-card/90 over a fixed gradient, but now
               sits over an arbitrary photo, where the 90%-alpha fill could drop
@@ -1110,10 +1117,11 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         <h3 className="text-base font-semibold text-primary">
           <Link
             to="/property/$listingNo"
-            params={{ listingNo: property.listing_no }}
+            params={{ listingNo: publicPropertyNo(property) }}
+            search={{ deal: property.deal_type === "rent" ? "rent" : "sale" }}
             className="rounded-sm underline decoration-primary/40 underline-offset-4 hover:decoration-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {property.title_zh}
+            {publicPropertyTitle(property)}
           </Link>
         </h3>
         {property.source_site && (
@@ -1125,7 +1133,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
             {/* `psf ?` guards the raw number, not formatHkd's return -- a negative
                 property.price (no DB CHECK stops one; see 872c338/f9eeeb2) would
                 make formatHkd(psf) return null, rendering the literal text "null". */}
-            {isRent ? "/月" : psf ? ` · 實呎 ${formatHkd(psf)}` : ""}
+            {!isRent && psf ? ` · 實呎 ${formatHkd(psf)}` : ""}
           </span>
         </div>
         <div className="mt-4 flex items-center gap-4 border-t border-border pt-4 text-sm text-muted-foreground">
@@ -1140,7 +1148,9 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           </span>
         </div>
         <a
-          href={whatsappUrl(`你好，我想查詢樓盤 ${property.listing_no} (${property.title_zh})`)}
+          href={whatsappUrl(
+            `你好，我想查詢樓盤 ${property.listing_no} (${publicPropertyTitle(property)})`,
+          )}
           target="_blank"
           rel="noopener noreferrer"
           className="mt-4"
