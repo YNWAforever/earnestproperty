@@ -41,6 +41,7 @@ import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
+import responsiveImages from "@/lib/media/responsive-images.generated.json";
 import logoMark from "@/assets/logo-earnest-mark.png";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import {
@@ -228,6 +229,9 @@ function HomePage() {
         <div className="absolute inset-0 -z-10">
           <AppImage
             src={heroImage}
+            srcSet={responsiveImages["/hero-front.jpg"].srcSet}
+            // The tall mobile hero crops a landscape image: its source width exceeds the viewport.
+            sizes="(max-width: 1023px) 1440px, 100vw"
             alt="深井海岸線及屋苑景觀"
             className="h-full w-full object-cover"
             width={2048}
@@ -565,6 +569,8 @@ function HomePage() {
               >
                 <AppImage
                   src={branch.photo}
+                  loading="lazy"
+                  sizes="(min-width: 1280px) 400px, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                   alt={`${branch.name}舖面`}
                   // photoWidth/photoHeight are optional in SiteBranch (a branch may
                   // ship without a photo at all) -- AppImage's width/height are
@@ -735,7 +741,7 @@ function CoreEstateGrid({
   return (
     <>
       <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {visible.map((estate, index) => {
+        {visible.map((estate) => {
           const dbRow = live.get(estate.slug);
           const units = dbRow?.total_units ?? estate.units;
           const psf = dbRow ? Number(dbRow.avg_saleable_psf) : estate.avgPsf;
@@ -759,8 +765,9 @@ function CoreEstateGrid({
                   alt={`${estate.name} ${districtLabel} 放盤`}
                   width={1600}
                   height={900}
-                  // The first row is above the fold on desktop; the rest are not.
-                  loading={index < 4 ? "eager" : "lazy"}
+                  // This directory follows hero and featured inventory, so every card is below the fold.
+                  loading="lazy"
+                  sizes="(min-width: 1280px) 296px, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
                   className="h-full w-full object-cover"
                   // No src (or a runtime error) must let the parent's per-estate
                   // ESTATE_GRADIENTS background show through -- AppImage's opaque

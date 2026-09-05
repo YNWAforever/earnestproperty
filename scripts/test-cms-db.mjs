@@ -380,7 +380,7 @@ try {
     async () => {
       const id = randomUUID();
       await query(
-        "INSERT INTO estates(id,slug,name_zh,district_slug,aliases,facilities,published,lat,description) VALUES($1,$1::text,'Before','district',NULL,NULL,true,22.4,' Body ')",
+        "INSERT INTO estates(id,slug,name_zh,district_slug,aliases,facilities,published,lat,description) VALUES($1::uuid,$1::text,'Before','district',NULL,NULL,true,22.4,' Body ')",
         [id],
       );
       const before = (

@@ -335,6 +335,8 @@ export function emptyCorridorInventory(): CorridorInventory {
  * string as its own shared identity would wrongly collapse unrelated
  * listings together.
  *
+ * Server list queries now deduplicate before COUNT/LIMIT with the same identity.
+ * This helper remains a compatibility and defensive guard for external/stale callers.
  * Keeps the first occurrence. Every call site orders its rows by
  * `featured DESC, last_seen_at DESC NULLS LAST, created_at DESC` before this
  * runs (searchListings/fetchListingsForEstate and fetchSimilarListings via

@@ -1882,7 +1882,7 @@ export async function fetchAdminCmsVideos() {
       `
     SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, category
     FROM cms_videos
-    ORDER BY sort_order ASC, created_at DESC
+    ORDER BY sort_order ASC, created_at DESC, id DESC LIMIT 50
     `,
     );
   } catch (error) {
@@ -2163,7 +2163,7 @@ export async function fetchAdminMediaAssets() {
   const rows = await queryRows(
     `SELECT id, url, pathname, content_type, size_bytes, alt_text, owner_type, owner_id, created_at
      FROM media_assets
-     ORDER BY created_at DESC`,
+     ORDER BY created_at DESC, id DESC LIMIT 50`,
   );
   return rows.map((row) => ({
     id: stringOrEmpty(row.id),
@@ -2219,7 +2219,7 @@ export async function listAdminLeads(actor?: StaffAccess): Promise<AdminLeadRow[
     LEFT JOIN properties p ON p.id = l.property_id
     ${where}
     ORDER BY l.updated_at DESC, l.created_at DESC
-    LIMIT 100
+    LIMIT 50
     `,
     params,
   );
@@ -2763,14 +2763,18 @@ export async function listAdminConversations(actor?: StaffAccess): Promise<Admin
     ) m ON true
     ${where}
     ORDER BY wc.last_message_at DESC NULLS LAST, wc.updated_at DESC
-    LIMIT 100
+    LIMIT 50
     `,
     params,
   );
   return rows;
 }
 
-export async function fetchAdminConversation(id: string, actor?: StaffAccess) {
+export async function fetchAdminConversation(
+  id: string,
+  actor?: StaffAccess,
+  includeMessages = true,
+) {
   const params: unknown[] = [id];
   const scope = actor ? agentScope(actor) : null;
   const scopeClause =
@@ -2807,20 +2811,22 @@ export async function fetchAdminConversation(id: string, actor?: StaffAccess) {
   const conversation = rows[0];
   if (!conversation) return null;
 
-  const messages = await queryRows(
-    `
+  const messages = includeMessages
+    ? await queryRows(
+        `
     SELECT id, direction, message_type, text, status, error, created_at
     FROM (
       SELECT id, direction, message_type, text, status, error, created_at
       FROM whatsapp_messages
       WHERE conversation_id = $1
-      ORDER BY created_at DESC
-      LIMIT 100
+      ORDER BY created_at DESC, id DESC
+      LIMIT 50
     ) latest
-    ORDER BY created_at ASC
+    ORDER BY created_at ASC, id ASC
     `,
-    [id],
-  );
+        [id],
+      )
+    : [];
 
   return {
     id: stringOrEmpty(conversation.id),

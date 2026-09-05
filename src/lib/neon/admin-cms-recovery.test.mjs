@@ -103,6 +103,7 @@ function fixture({
   };
   const exports = {};
   const modules = {
+    "./public-estate-options-cache": { invalidatePublicEstateOptions() {} },
     "./auth.server": {
       requireStaffAccess: async (_request, allowed) => {
         if (!roles.some((role) => allowed.includes(role))) throw new Error("FORBIDDEN");

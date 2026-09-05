@@ -179,6 +179,8 @@ function ContactPage() {
               >
                 <AppImage
                   src={branch.photo}
+                  loading="lazy"
+                  sizes="(min-width: 1280px) 400px, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                   alt={`${branch.name}舖面`}
                   // photoWidth/photoHeight are optional in SiteBranch (a branch may
                   // ship without a photo at all) -- AppImage's width/height are

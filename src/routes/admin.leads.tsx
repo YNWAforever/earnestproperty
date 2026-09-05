@@ -50,7 +50,7 @@ import {
   fetchAdminAgents,
   fetchAdminLead,
   fetchAdminLeadAiProfile,
-  fetchAdminLeads,
+  fetchAdminPage,
   rejectAdminAiTag,
   bulkUpdateAdminLeads,
   updateAdminLead,
@@ -70,6 +70,7 @@ type LeadFilters = {
   /** Lead id of the open detail panel. Not a filter, but it shares the search
    * schema so one navigate() call can change both. */
   lead?: string;
+  cursor?: string;
   stage: string;
   intent: string;
   source: string;
@@ -164,6 +165,7 @@ function parseLeadFilters(search: Record<string, unknown>): Partial<LeadFilters>
   if (typeof search.lead === "string" && search.lead.trim()) {
     result.lead = search.lead;
   }
+  if (typeof search.cursor === "string") result.cursor = search.cursor;
   return result;
 }
 
@@ -178,12 +180,13 @@ export const Route = createFileRoute("/admin/leads")({
 // Mirrors the `LIMIT 100` in `listAdminLeads` (src/lib/neon/admin-data.server.ts).
 // Only used to label the row count honestly -- raising it here alone changes
 // nothing, the query is the source of truth.
-const LEAD_ROW_LIMIT = 100;
 
 function AdminLeads() {
   const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [totalRows, setTotalRows] = useState(0);
   const [rows, setRows] = useState<AdminLeadRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const filters: LeadFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
@@ -216,6 +219,12 @@ function AdminLeads() {
     options: { replace?: boolean } = {},
   ) {
     const next = typeof updater === "function" ? updater(filters) : updater;
+    if (
+      ["stage", "intent", "source", "agent_id", "optIn", "query"].some(
+        (key) => next[key as keyof LeadFilters] !== filters[key as keyof LeadFilters],
+      )
+    )
+      delete next.cursor;
     void navigate({
       search: parseLeadFilters(next),
       resetScroll: false,
@@ -270,9 +279,22 @@ function AdminLeads() {
     listRequestRef.current = requestId;
     setLoadingRows(true);
     try {
-      const data = await fetchAdminLeads();
+      const data = await fetchAdminPage({
+        data: {
+          resource: "leads",
+          cursor: filters.cursor,
+          q: filters.query,
+          stage: filters.stage,
+          intent: filters.intent,
+          source: filters.source,
+          agentId: filters.agent_id,
+          optIn: filters.optIn,
+        },
+      });
       if (requestId !== listRequestRef.current) return;
-      setRows(data as AdminLeadRow[]);
+      setRows(data.rows);
+      setNextCursor(data.nextCursor);
+      setTotalRows(data.total);
       setError(null);
     } catch (err) {
       if (requestId !== listRequestRef.current) return;
@@ -280,7 +302,16 @@ function AdminLeads() {
     } finally {
       if (requestId === listRequestRef.current) setLoadingRows(false);
     }
-  }, [user]);
+  }, [
+    user,
+    filters.cursor,
+    filters.query,
+    filters.stage,
+    filters.intent,
+    filters.source,
+    filters.agent_id,
+    filters.optIn,
+  ]);
 
   const loadLeadAiProfile = useCallback(
     async (id: string) => {
@@ -390,7 +421,7 @@ function AdminLeads() {
 
   const intentOptions = useMemo(() => uniqueValues(rows, "intent"), [rows]);
   const sourceOptions = useMemo(() => uniqueValues(rows, "source"), [rows]);
-  const filteredRows = useMemo(() => filterLeads(rows ?? [], filters), [filters, rows]);
+  const filteredRows = useMemo(() => rows ?? [], [rows]);
 
   // Selection is pruned to what is currently visible, so a filter change cannot
   // leave rows selected that the operator can no longer see -- and then act on
@@ -735,33 +766,31 @@ function AdminLeads() {
               </SelectContent>
             </Select>
 
-            <Select value={filters.intent} onValueChange={(value) => setFilter("intent", value)}>
-              <SelectTrigger className="h-11 w-[8rem] lg:h-9" aria-label="意圖">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部意圖</SelectItem>
-                {intentOptions.map((intent) => (
-                  <SelectItem key={intent} value={intent}>
-                    {formatIntent(intent)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={filters.source} onValueChange={(value) => setFilter("source", value)}>
-              <SelectTrigger className="h-11 w-[8rem] lg:h-9" aria-label="來源">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部來源</SelectItem>
-                {sourceOptions.map((source) => (
-                  <SelectItem key={source} value={source}>
-                    {formatSource(source)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              className="h-11 w-36 lg:h-9"
+              aria-label="意圖篩選"
+              placeholder="全部意圖"
+              list="lead-intent-options"
+              value={filters.intent === "all" ? "" : filters.intent}
+              onChange={(event) => setFilter("intent", event.target.value || "all")}
+            />
+            <datalist id="lead-intent-options">
+              {intentOptions.map((value) => (
+                <option key={value} value={value} />
+              ))}
+            </datalist>
+            <Input
+              aria-label="來源篩選"
+              placeholder="全部來源"
+              list="lead-source-options"
+              value={filters.source === "all" ? "" : filters.source}
+              onChange={(event) => setFilter("source", event.target.value || "all")}
+            />
+            <datalist id="lead-source-options">
+              {sourceOptions.map((value) => (
+                <option key={value} value={value} />
+              ))}
+            </datalist>
 
             <Select
               value={filters.agent_id}
@@ -818,25 +847,34 @@ function AdminLeads() {
                 deleted older leads. Say what the number actually is, and admit
                 the cap when we are sitting on it. */}
             <Badge variant="secondary" className="h-11 rounded-md px-3 lg:h-9">
-              顯示 {filteredRows.length} 筆
-              {(rows?.length ?? 0) >= LEAD_ROW_LIMIT ? `（最近 ${LEAD_ROW_LIMIT} 筆內）` : ""}
+              顯示 {filteredRows.length} 筆 / 共 {totalRows} 筆
             </Badge>
           </>
         }
       />
 
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          disabled={!filters.cursor || loadingRows}
+          onClick={() => setFilters((current) => ({ ...current, cursor: undefined }))}
+        >
+          第一頁
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!nextCursor || loadingRows}
+          onClick={() => setFilters((current) => ({ ...current, cursor: nextCursor ?? undefined }))}
+        >
+          下一頁
+        </Button>
+      </div>
       {error ? <AdminError message={error} /> : null}
       {loadingRows && !rows ? <Skeleton className="h-72 w-full" /> : null}
       {rows && filteredRows.length === 0 ? (
         <AdminEmptyState
           title={rows.length === 0 ? "未有 Leads" : "已載入的 Leads 中沒有符合條件的項目"}
-          description={
-            rows.length === 0
-              ? "新的網站查詢會在這裡出現。"
-              : rows.length >= LEAD_ROW_LIMIT
-                ? `篩選只涵蓋最近更新的 ${LEAD_ROW_LIMIT} 筆 Lead，較舊的未有載入。請調整條件，或改用搜尋。`
-                : "調整篩選條件再查看。"
-          }
+          description="沒有符合目前搜尋或篩選條件的 Leads。"
           action={
             rows.length > 0 ? (
               <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>
@@ -1538,44 +1576,6 @@ function uniqueValues(rows: AdminLeadRow[] | null, key: "intent" | "source") {
   return Array.from(new Set((rows ?? []).map((row) => row[key]).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b),
   );
-}
-
-function filterLeads(rows: AdminLeadRow[], filters: LeadFilters) {
-  const query = filters.query.trim().toLowerCase();
-
-  return rows.filter((lead) => {
-    if (filters.stage !== "all" && lead.stage !== filters.stage) return false;
-    if (filters.intent !== "all" && lead.intent !== filters.intent) return false;
-    if (filters.source !== "all" && lead.source !== filters.source) return false;
-    if (filters.optIn === "yes" && lead.opt_in_whatsapp !== true) return false;
-    if (filters.optIn === "no" && lead.opt_in_whatsapp === true) return false;
-
-    if (filters.agent_id !== "all") {
-      if (filters.agent_id === "unassigned") {
-        if (lead.assigned_agent_id !== null) return false;
-      } else if (lead.assigned_agent_id !== filters.agent_id) {
-        return false;
-      }
-    }
-
-    if (!query) return true;
-
-    return [
-      lead.name,
-      lead.phone,
-      lead.email,
-      lead.intent,
-      lead.source,
-      lead.note,
-      lead.listing_no,
-      lead.property_title,
-      stageLabels[lead.stage],
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-      .includes(query);
-  });
 }
 
 function leadToDraft(lead: AdminLeadDetail): LeadDraft {

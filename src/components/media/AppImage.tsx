@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import responsiveImages from "@/lib/media/responsive-images.generated.json";
 
 export interface AppImageProps extends Omit<
   React.ImgHTMLAttributes<HTMLImageElement>,
@@ -25,6 +26,8 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
       decoding = "async",
       className,
       fallback,
+      srcSet,
+      sizes,
       onError,
       ...props
     },
@@ -51,10 +54,13 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
       );
     }
 
+    const responsive = (responsiveImages as Record<string, { srcSet: string }>)[src];
     return (
       <img
         ref={ref}
         src={src}
+        srcSet={srcSet ?? responsive?.srcSet}
+        sizes={sizes ?? (responsive ? "100vw" : undefined)}
         alt={alt}
         width={width}
         height={height}

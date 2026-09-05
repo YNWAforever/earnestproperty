@@ -50,6 +50,7 @@ import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
 import { Route as AdminEstatesRouteImport } from './routes/admin.estates'
 import { Route as AdminCmsRouteImport } from './routes/admin.cms'
 import { Route as AdminBlastsRouteImport } from './routes/admin.blasts'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as AdminAgentsRouteImport } from './routes/admin.agents'
 import { Route as AccountPathnameRouteImport } from './routes/account.$pathname'
 import { Route as ApiYoutubeSyncFullRouteImport } from './routes/api.youtube-sync.full'
@@ -288,6 +289,11 @@ const AdminBlastsRoute = AdminBlastsRouteImport.update({
   path: '/blasts',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAgentsRoute = AdminAgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
@@ -480,6 +486,7 @@ export interface FileRoutesByFullPath {
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/admin/agents': typeof AdminAgentsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/estates': typeof AdminEstatesRoute
@@ -553,6 +560,7 @@ export interface FileRoutesByTo {
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/admin/agents': typeof AdminAgentsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/estates': typeof AdminEstatesRoute
@@ -629,6 +637,7 @@ export interface FileRoutesById {
   '/videos': typeof VideosRoute
   '/account/$pathname': typeof AccountPathnameRoute
   '/admin/agents': typeof AdminAgentsRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/blasts': typeof AdminBlastsRoute
   '/admin/cms': typeof AdminCmsRoute
   '/admin/estates': typeof AdminEstatesRoute
@@ -706,6 +715,7 @@ export interface FileRouteTypes {
     | '/videos'
     | '/account/$pathname'
     | '/admin/agents'
+    | '/admin/analytics'
     | '/admin/blasts'
     | '/admin/cms'
     | '/admin/estates'
@@ -779,6 +789,7 @@ export interface FileRouteTypes {
     | '/videos'
     | '/account/$pathname'
     | '/admin/agents'
+    | '/admin/analytics'
     | '/admin/blasts'
     | '/admin/cms'
     | '/admin/estates'
@@ -854,6 +865,7 @@ export interface FileRouteTypes {
     | '/videos'
     | '/account/$pathname'
     | '/admin/agents'
+    | '/admin/analytics'
     | '/admin/blasts'
     | '/admin/cms'
     | '/admin/estates'
@@ -1248,6 +1260,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminBlastsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/agents': {
       id: '/admin/agents'
       path: '/agents'
@@ -1477,6 +1496,7 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteChildren {
   AdminAgentsRoute: typeof AdminAgentsRoute
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminBlastsRoute: typeof AdminBlastsRoute
   AdminCmsRoute: typeof AdminCmsRoute
   AdminEstatesRoute: typeof AdminEstatesRoute
@@ -1501,6 +1521,7 @@ interface AdminRouteChildren {
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAgentsRoute: AdminAgentsRoute,
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminBlastsRoute: AdminBlastsRoute,
   AdminCmsRoute: AdminCmsRoute,
   AdminEstatesRoute: AdminEstatesRoute,

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import ts from "typescript";
 
 import { ANALYTICS_EVENT_NAMES, buildContext, collectUtmParams } from "./events.ts";
 
@@ -60,67 +59,12 @@ test("buildContext never invents a districtSlug/estateSlug/agentSlug the caller 
   assert.equal("agentSlug" in context, false);
 });
 
-// --- track() DEV-gating -----------------------------------------------------
-//
-// track() reads import.meta.env.DEV, which only exists under Vite (same
-// constraint documented in src/config/site.test.mjs for whatsappUrl()) -- so
-// this slices out just the function body, replaces the one import.meta.env
-// reference with a literal, and evaluates it directly rather than importing
-// the whole module (which also pulls in React, unneeded for this one check).
-
+// The strict dispatcher tests replace the old unvalidated DEV console transport.
+test("disabled analytics has no development console transport", () => {
+  const source = readFileSync(new URL("./events.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /console\.(debug|log)/);
+});
 const source = readFileSync(new URL("./events.ts", import.meta.url), "utf8");
-
-function loadTrackWithInjectedDev(devValue, calls, moduleSource = source) {
-  // Git checkouts can use CRLF. Normalize before locating the function boundary.
-  const normalizedSource = moduleSource.replace(/\r\n/g, "\n");
-  const start = normalizedSource.indexOf("export function track(");
-  assert.notEqual(start, -1, "track must exist in events.ts");
-  const end = normalizedSource.indexOf("\n}\n", start);
-  assert.notEqual(end, -1, "track's closing brace must be found");
-  const body = normalizedSource
-    .slice(start, end + 2)
-    .replace("import.meta.env.DEV", String(devValue))
-    .replace("export function track", "function track");
-  const { outputText } = ts.transpileModule(`${body}\nexports.track = track;`, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  });
-  const exportsObj = {};
-  new Function("exports", "console", outputText)(exportsObj, {
-    debug: (...args) => calls.push(args),
-  });
-  return exportsObj.track;
-}
-
-for (const [label, lineEnding] of [
-  ["LF", "\n"],
-  ["CRLF", "\r\n"],
-]) {
-  const moduleSource = source.replace(/\r?\n/g, lineEnding);
-
-  test(`track() calls console.debug in DEV, with the event name and merged payload/context (${label})`, () => {
-    const calls = [];
-    const track = loadTrackWithInjectedDev(true, calls, moduleSource);
-    track(
-      { name: "listing_view", payload: { listingNo: "L1", dealType: "sale" } },
-      { route: "/property/L1" },
-    );
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0][0], "[analytics]");
-    assert.equal(calls[0][1], "listing_view");
-    assert.deepEqual(calls[0][2], { listingNo: "L1", dealType: "sale", route: "/property/L1" });
-  });
-
-  test(`track() is a real no-op outside DEV -- never calls console.debug (${label})`, () => {
-    const calls = [];
-    const track = loadTrackWithInjectedDev(false, calls, moduleSource);
-    track(
-      { name: "listing_view", payload: { listingNo: "L1", dealType: "sale" } },
-      { route: "/property/L1" },
-    );
-    assert.equal(calls.length, 0);
-  });
-}
-
 test("no event payload/context field is a name/phone/email -- no PII in the taxonomy source", () => {
   const eventsBlock = source.slice(
     source.indexOf("export interface ListingSearchPayload"),

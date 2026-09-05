@@ -1,0 +1,306 @@
+{
+  "scope": "local process; not deployed provider configuration",
+  "configuration": [
+    {
+      "capability": "neon.database",
+      "variables": [
+        {
+          "name": "DATABASE_URL_UNPOOLED",
+          "source": "Neon project / branch connection settings",
+          "present": false
+        },
+        {
+          "name": "DATABASE_URL",
+          "source": "Neon project / branch connection settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "neon.auth",
+      "variables": [
+        {
+          "name": "NEON_AUTH_BASE_URL",
+          "source": "Neon Auth project settings",
+          "present": false
+        },
+        {
+          "name": "VITE_NEON_AUTH_URL",
+          "source": "Neon Auth project settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "woztell.bot",
+      "variables": [
+        {
+          "name": "WOZTELL_BOT_ACCESS_TOKEN",
+          "source": "WozTell channel and Bot API settings",
+          "present": false
+        },
+        {
+          "name": "WOZTELL_CHANNEL_ID",
+          "source": "WozTell channel and Bot API settings",
+          "present": false
+        },
+        {
+          "name": "WOZTELL_CHANNEL_SECRET",
+          "source": "WozTell channel and Bot API settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "woztell.history",
+      "variables": [
+        {
+          "name": "WOZTELL_OPEN_API_TOKEN",
+          "source": "WozTell Open API settings",
+          "present": false
+        },
+        {
+          "name": "WOZTELL_CHANNEL_ID",
+          "source": "WozTell Open API settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "blob",
+      "variables": [
+        {
+          "name": "BLOB_READ_WRITE_TOKEN",
+          "source": "Vercel Blob store token",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "mls.r2",
+      "variables": [
+        {
+          "name": "CLOUDFLARE_ACCOUNT_ID",
+          "source": "Cloudflare account and restricted R2 API token",
+          "present": false
+        },
+        {
+          "name": "MLS_EVIDENCE_BUCKET",
+          "source": "Cloudflare account and restricted R2 API token",
+          "present": false
+        },
+        {
+          "name": "MLS_R2_ACCESS_KEY_ID",
+          "source": "Cloudflare account and restricted R2 API token",
+          "present": false
+        },
+        {
+          "name": "MLS_R2_SECRET_ACCESS_KEY",
+          "source": "Cloudflare account and restricted R2 API token",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "mls.publication",
+      "variables": [
+        {
+          "name": "MLS_PUBLISH_ENABLED",
+          "source": "Operator media-rights and publication approval",
+          "present": false
+        },
+        {
+          "name": "MLS_MEDIA_RIGHTS_CONFIRMED",
+          "source": "Operator media-rights and publication approval",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "youtube",
+      "variables": [
+        {
+          "name": "YOUTUBE_API_KEY",
+          "source": "Google Cloud YouTube API credential",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "ai.gateway",
+      "variables": [
+        {
+          "name": "AI_GATEWAY_API_KEY",
+          "source": "AI Gateway project settings",
+          "present": false
+        },
+        {
+          "name": "AI_GATEWAY_MODEL",
+          "source": "AI Gateway project settings",
+          "present": false
+        },
+        {
+          "name": "AI_GATEWAY_EMBEDDING_MODEL",
+          "source": "AI Gateway project settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "ai.copilot",
+      "variables": [
+        {
+          "name": "OPENCODE_GO_API_KEY",
+          "source": "OpenCode Go provider settings",
+          "present": false
+        },
+        {
+          "name": "OPENCODE_GO_BASE_URL",
+          "source": "OpenCode Go provider settings",
+          "present": false
+        },
+        {
+          "name": "OPENCODE_GO_MODEL",
+          "source": "OpenCode Go provider settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "ai.research",
+      "variables": [
+        {
+          "name": "TAVILY_API_KEY",
+          "source": "Tavily provider settings",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "analytics.ga4",
+      "variables": [
+        {
+          "name": "VITE_GA4_MEASUREMENT_ID",
+          "source": "GA4 web data stream measurement ID",
+          "present": false
+        },
+        {
+          "name": "VITE_GA4_MANUAL_EVENTS_CONFIRMED",
+          "source": "GA4 web data stream measurement ID",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    },
+    {
+      "capability": "operations",
+      "variables": [
+        {
+          "name": "CRON_SECRET",
+          "source": "Server-only cron and approval configuration",
+          "present": false
+        },
+        {
+          "name": "CONTROL_PLANE_APPROVAL_SECRET",
+          "source": "Server-only cron and approval configuration",
+          "present": false
+        }
+      ],
+      "configured": false,
+      "enabled": false,
+      "verification": "unverified"
+    }
+  ],
+  "release": {
+    "ready": false,
+    "productionAuthorized": false,
+    "missing": [
+      "commit",
+      "ci.passed",
+      "ci.exactCommit",
+      "ci.evidenceUrl",
+      "preview.passed",
+      "preview.exactCommit",
+      "preview.evidenceUrl",
+      "backupRestoreProof.passed",
+      "backupRestoreProof.exactCommit",
+      "backupRestoreProof.evidenceUrl",
+      "acceptance.emptySchema.passed",
+      "acceptance.emptySchema.exactCommit",
+      "acceptance.emptySchema.evidenceUrl",
+      "acceptance.previousSchema.passed",
+      "acceptance.previousSchema.exactCommit",
+      "acceptance.previousSchema.evidenceUrl",
+      "acceptance.staffScope.passed",
+      "acceptance.staffScope.exactCommit",
+      "acceptance.staffScope.evidenceUrl",
+      "acceptance.draftIsolation.passed",
+      "acceptance.draftIsolation.exactCommit",
+      "acceptance.draftIsolation.evidenceUrl",
+      "acceptance.leadLinks.passed",
+      "acceptance.leadLinks.exactCommit",
+      "acceptance.leadLinks.evidenceUrl",
+      "acceptance.providerFailures.passed",
+      "acceptance.providerFailures.exactCommit",
+      "acceptance.providerFailures.evidenceUrl",
+      "acceptance.providerCapabilities.passed",
+      "acceptance.providerCapabilities.exactCommit",
+      "acceptance.providerCapabilities.evidenceUrl",
+      "acceptance.syncFreshness.passed",
+      "acceptance.syncFreshness.exactCommit",
+      "acceptance.syncFreshness.evidenceUrl",
+      "acceptance.publicBrowser.passed",
+      "acceptance.publicBrowser.exactCommit",
+      "acceptance.publicBrowser.evidenceUrl",
+      "acceptance.staffBrowser.passed",
+      "acceptance.staffBrowser.exactCommit",
+      "acceptance.staffBrowser.evidenceUrl",
+      "acceptance.performance.passed",
+      "acceptance.performance.exactCommit",
+      "acceptance.performance.evidenceUrl",
+      "acceptance.migrationDrift.passed",
+      "acceptance.migrationDrift.exactCommit",
+      "acceptance.migrationDrift.evidenceUrl",
+      "databaseTarget",
+      "testRecipients",
+      "monitoringOwner",
+      "rollbackAction",
+      "migrations"
+    ]
+  }
+}

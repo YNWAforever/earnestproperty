@@ -62,7 +62,6 @@ import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
   archiveAdminCmsResource,
   fetchAdminCmsEditor,
-  fetchAdminCmsCategory,
   publishAdminCmsRevision,
   restoreAdminCmsRevision,
   saveAdminCmsDraft,
@@ -76,10 +75,8 @@ import type {
 import {
   checkAdminFaqConflicts,
   deleteAdminFaq,
-  fetchAdminCms,
+  fetchAdminPage,
   fetchAdminAiKnowledgeStatus,
-  fetchAdminCmsVideos,
-  fetchAdminMediaAssets,
   rebuildAdminAiKnowledge,
   saveAdminCmsVideo,
   saveAdminFaq,
@@ -128,7 +125,7 @@ type EditingMediaAsset = Pick<
 // Mirrors the LIMITs in listAdminCms() (admin-data.server.ts). Kept here so the
 // tables can state the cap rather than presenting a truncated page as the whole
 // dataset.
-const CMS_ROW_LIMITS = { estates: 40, articles: 40, faqs: 120 } as const;
+const CMS_ROW_LIMITS = { estates: 50, articles: 50, faqs: 50 } as const;
 
 const emptyEstate: AdminEstateInput = {
   slug: "",
@@ -266,20 +263,68 @@ function AdminCms() {
   const mediaFileInputRef = useRef<HTMLInputElement>(null);
   const [mediaUploading, setMediaUploading] = useState(false);
 
-  const refreshCmsData = useCallback(async () => {
-    const [cms, media, videos, estates, articles] = await Promise.all([
-      fetchAdminCms(),
-      fetchAdminMediaAssets(),
-      fetchAdminCmsVideos(),
-      fetchAdminCmsCategory({ data: { resourceType: "estate" } }),
-      fetchAdminCmsCategory({ data: { resourceType: "article" } }),
-    ]);
-    setDraftRows([...estates.rows, ...articles.rows].filter((row) => row.state === "draft"));
-    setData(cms as AdminCmsData);
-    setMediaAssets(media as AdminMediaAssetRow[]);
-    setCmsVideos(videos as AdminCmsVideoRow[]);
-    setError(null);
-  }, []);
+  const [cmsCursor, setCmsCursor] = useState<string | null>(null);
+  const [cmsNextCursor, setCmsNextCursor] = useState<string | null>(null);
+  const [cmsTotal, setCmsTotal] = useState(0);
+  const cmsRequest = useRef(0);
+  const activeSearch = searchByTab[activeTab];
+  const refreshCmsData = useCallback(
+    async (cursor: string | null = null) => {
+      const sequence = ++cmsRequest.current;
+      const page = await fetchAdminPage({
+        data: {
+          resource: activeTab,
+          cursor,
+          q: activeSearch,
+          ...(activeTab === "faqs" ? { scope: faqScopeFilter } : {}),
+        },
+      });
+      if (sequence !== cmsRequest.current) return;
+      setCmsCursor(cursor);
+      setCmsNextCursor(page.nextCursor);
+      setCmsTotal(page.total);
+      setDraftRows(
+        (
+          page.rows as Array<{
+            id: string;
+            is_draft?: boolean;
+            draft_revision_id?: string;
+            draft_version?: number;
+            title?: string;
+            name_zh?: string;
+          }>
+        )
+          .filter((row) => row.is_draft)
+          .map((row) => ({
+            resourceType: activeTab === "estates" ? "estate" : "article",
+            resourceId: row.id,
+            title: row.title ?? row.name_zh ?? "",
+            slug: null,
+            state: "draft",
+            latestRevisionId: row.draft_revision_id!,
+            latestVersion: row.draft_version!,
+            publishedVersion: null,
+            updatedAt: "",
+            updatedBy: null,
+          })),
+      );
+      const visible = page.rows.filter((row) => !(row as { is_draft?: boolean }).is_draft);
+      if (activeTab === "media") setMediaAssets(visible as AdminMediaAssetRow[]);
+      else if (activeTab === "videos") setCmsVideos(visible as AdminCmsVideoRow[]);
+      else
+        setData(
+          (current) =>
+            ({
+              ...{ estates: [], articles: [], faqs: [], faqGroups: [] },
+              ...current,
+              [activeTab]: visible,
+            }) as AdminCmsData,
+        );
+      setData((current) => current ?? { estates: [], articles: [], faqs: [], faqGroups: [] });
+      setError(null);
+    },
+    [activeTab, activeSearch, faqScopeFilter],
+  );
 
   const refreshKnowledgeStatus = useCallback(async () => {
     if (!user) return;
@@ -300,51 +345,15 @@ function AdminCms() {
   useEffect(() => {
     if (!user) return;
     refreshCmsData().catch((err) => setError(errorText(err)));
-    void refreshKnowledgeStatus();
-  }, [refreshCmsData, refreshKnowledgeStatus, user]);
+  }, [refreshCmsData, user]);
+  useEffect(() => {
+    if (user) void refreshKnowledgeStatus();
+  }, [refreshKnowledgeStatus, user]);
 
-  const filteredEstates = useMemo(
-    () =>
-      (data?.estates ?? []).filter((estate) =>
-        matchesSearch(searchByTab.estates, [
-          estate.name_zh,
-          estate.name_en,
-          estate.slug,
-          estate.district_slug,
-          estate.seo_title,
-        ]),
-      ),
-    [data?.estates, searchByTab.estates],
-  );
-
-  const filteredArticles = useMemo(
-    () =>
-      (data?.articles ?? []).filter((article) =>
-        matchesSearch(searchByTab.articles, [
-          article.title,
-          article.slug,
-          article.category,
-          article.seo_title,
-        ]),
-      ),
-    [data?.articles, searchByTab.articles],
-  );
-
-  const filteredCmsVideos = useMemo(
-    () =>
-      (cmsVideos ?? []).filter((video) =>
-        matchesSearch(searchByTab.videos, [video.title, video.description, video.video_url]),
-      ),
-    [cmsVideos, searchByTab.videos],
-  );
-
-  const filteredMediaAssets = useMemo(
-    () =>
-      (mediaAssets ?? []).filter((asset) =>
-        matchesSearch(searchByTab.media, [asset.pathname, asset.alt_text, asset.owner_id]),
-      ),
-    [mediaAssets, searchByTab.media],
-  );
+  const filteredEstates = data?.estates ?? [];
+  const filteredArticles = data?.articles ?? [];
+  const filteredVideos = cmsVideos ?? [];
+  const filteredMediaAssets = mediaAssets ?? [];
 
   const faqScopes = useMemo(
     () => Array.from(new Set((data?.faqs ?? []).map((faq) => faq.scope))),
@@ -355,13 +364,13 @@ function AdminCms() {
     const groups = new Map<string, AdminFaqCmsRow[]>();
     for (const faq of data?.faqs ?? []) {
       if (faqScopeFilter !== "all" && faq.scope !== faqScopeFilter) continue;
-      if (!matchesSearch(searchByTab.faqs, [faq.question, faq.answer, faq.scope])) continue;
+
       const existing = groups.get(faq.scope) ?? [];
       existing.push(faq);
       groups.set(faq.scope, existing);
     }
     return Array.from(groups.entries());
-  }, [data?.faqs, faqScopeFilter, searchByTab.faqs]);
+  }, [data?.faqs, faqScopeFilter]);
 
   const parsedFaqImportRows = useMemo(
     () => parseAdminFaqImport(faqImportText, faqImportScope),
@@ -1025,6 +1034,19 @@ function AdminCms() {
               </Button>
             ))}
           </div>
+          <div className="mb-3 flex items-center gap-2">
+            <span>共 {cmsTotal} 項</span>
+            <Button variant="outline" disabled={!cmsCursor} onClick={() => void refreshCmsData()}>
+              第一頁
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!cmsNextCursor}
+              onClick={() => void refreshCmsData(cmsNextCursor)}
+            >
+              下一頁
+            </Button>
+          </div>
           <Tabs
             value={activeTab}
             onValueChange={(tab) => {
@@ -1320,7 +1342,7 @@ function AdminCms() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {filteredCmsVideos.length ? (
+                  {filteredVideos.length ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1331,7 +1353,7 @@ function AdminCms() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredCmsVideos.map((video) => (
+                        {filteredVideos.map((video) => (
                           <TableRow key={video.id}>
                             <TableCell>
                               <p className="font-medium">{video.title}</p>
@@ -1402,19 +1424,19 @@ function AdminCms() {
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Select value={faqScopeFilter} onValueChange={setFaqScopeFilter}>
-                      <SelectTrigger className="w-40" aria-label="依分組篩選">
-                        <SelectValue placeholder="全部分組" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">全部分組</SelectItem>
-                        {faqScopes.map((scope) => (
-                          <SelectItem key={scope} value={scope}>
-                            {scope}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Input
+                      aria-label="FAQ 範圍篩選"
+                      placeholder="全部範圍"
+                      list="faq-scope-options"
+                      value={faqScopeFilter === "all" ? "" : faqScopeFilter}
+                      onChange={(event) => setFaqScopeFilter(event.target.value || "all")}
+                    />
+                    <datalist id="faq-scope-options">
+                      {faqScopes.map((scope) => (
+                        <option key={scope} value={scope} />
+                      ))}
+                    </datalist>
+
                     <TableSearch
                       label="搜尋問題或答案"
                       value={searchByTab.faqs}
@@ -2613,7 +2635,7 @@ function RowCapNotice({
     <p className="border-b px-4 py-2 text-xs text-muted-foreground">
       顯示 {shown} 個{label}
       {shown !== loaded ? `（已載入 ${loaded} 個）` : ""}
-      {capped ? `，本頁上限為最近更新的 ${limit} 個，較舊的記錄未有載入` : ""}
+      {capped ? `，每頁最多 ${limit} 個；搜尋涵蓋全部記錄，可用上方按鈕翻頁` : ""}
     </p>
   );
 }
@@ -2875,11 +2897,6 @@ function nullIfBlank(value: string) {
 
 // Case/whitespace-insensitive substring match across whichever fields a tab
 // wants searchable. Blank query matches everything (no query = no filter).
-function matchesSearch(query: string, fields: Array<string | null | undefined>) {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  return fields.some((field) => (field ?? "").toLowerCase().includes(needle));
-}
 
 // Composite key for diffing an import row against an already-loaded FAQ --
 // must match the (scope, question) uniqueness the upsert's ON CONFLICT relies on.

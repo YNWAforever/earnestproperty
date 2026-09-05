@@ -952,9 +952,10 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     destinations.length,
     `duplicate sidebar destination: ${destinations.join(", ")}`,
   );
-  // 13 = the 12 approved destinations plus /admin/leads/command-center, which
+  // 14 includes the operational analytics dashboard and command-center, which
   // had no sidebar entry at all (its only way in was a button on /admin/leads).
-  assert.equal(destinations.length, 13);
+  assert.equal(destinations.length, 14);
+  assert.ok(destinations.includes("/admin/analytics"));
 
   for (const heading of ["Workspace", "Growth", "Administration"]) {
     assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
@@ -1015,7 +1016,7 @@ test("Neon Auth UI is given the absolute site origin so password-reset links ret
   // staff-identity-provider.server.ts already builds an absolute URL the same
   // way. SITE_URL is the canonical production origin, so preview deployments
   // finish the reset on production, where the same Neon Auth token is valid.
-  const root = read("src/routes/__root.tsx");
+  const root = read("src/components/auth/PrivateAuthProvider.tsx");
   assert.match(root, /import \{[^}]*\bSITE_URL\b[^}]*\} from "@\/content\/seo"/);
   assert.match(root, /<NeonAuthUIProvider[^>]*baseURL=\{SITE_URL\}/);
 });

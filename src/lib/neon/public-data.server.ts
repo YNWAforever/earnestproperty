@@ -16,6 +16,7 @@ import type {
   NeonTransactionRow,
 } from "./public-data.types";
 import { getSql } from "./db.server";
+import { cachedPublicEstateOptions } from "./public-estate-options-cache";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { isMissingBranchesTableError } from "./branches-schema";
 
@@ -107,6 +108,34 @@ const listingColumns = `
   e.lat AS estate_lat,
   e.lng AS estate_lng
 `;
+
+// Listing-card transport has no long body, full gallery, floorplan or staff biography.
+const listingCardColumns = `
+  p.id, p.listing_no, p.canonical_property_no, p.title_zh, p.deal_type,
+  p.price, p.rent, p.saleable_area, p.bedrooms, p.bathrooms, p.features,
+  p.images[1:1] AS images, p.video_url, p.estate_id, p.district_slug, p.address,
+  p.status, p.featured, p.source_site, p.last_seen_at, p.created_at, p.updated_at,
+  e.name_zh AS estate_name_zh, e.slug AS estate_slug, e.district_slug AS estate_district_slug
+`;
+function mapListingCardRow(row: DbRow): NeonPropertyRow {
+  return mapListingRow({
+    ...row,
+    description: null,
+    floorplan_url: null,
+    agent_id: null,
+    images: Array.isArray(row.images) ? row.images.slice(0, 1) : null,
+  });
+}
+// Deduplicate the filtered universe before count and LIMIT; a sale and a rent remain distinct.
+function canonicalListingCte(where: string) {
+  return `WITH canonical_candidates AS (
+    SELECT p.id, ROW_NUMBER() OVER (
+      PARTITION BY COALESCE('canonical:' || NULLIF(p.canonical_property_no, ''), 'listing:' || p.listing_no), p.deal_type
+      ORDER BY ${LISTING_FRESHNESS_ORDER}
+    ) AS canonical_rank
+    FROM properties p LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}
+  ), canonical AS (SELECT id FROM canonical_candidates WHERE canonical_rank = 1)`;
+}
 
 function sql() {
   return getSql();
@@ -357,7 +386,7 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
 // user-facing sort control, so it stays untouched by the `sort` param below --
 // only searchListings (the general /listings search path) accepts a sort.
 const LISTING_FRESHNESS_ORDER =
-  "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC";
+  "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC";
 
 // dedupeListings (src/lib/queries.ts) keeps the FIRST occurrence of a
 // duplicate pair and relies on callers pre-ordering rows by
@@ -507,17 +536,18 @@ async function fetchCorridorRows(
   // separate `LIMIT input.limit` query per deal type.
   const rows = await sql().query(
     `
+    ${canonicalListingCte(where)}
     SELECT *
     FROM (
       SELECT
-        ${listingColumns},
+        ${listingCardColumns},
         ROW_NUMBER() OVER (
           PARTITION BY p.deal_type
-          ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+          ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC
         ) AS corridor_rank
-      FROM properties p
+      FROM properties p JOIN canonical c ON c.id=p.id
       LEFT JOIN estates e ON e.id = p.estate_id
-      ${publicAgentJoin}
+
       WHERE ${where}
     ) ranked
     WHERE ranked.corridor_rank <= ${limitParam}
@@ -529,7 +559,7 @@ async function fetchCorridorRows(
   const sale: NeonPropertyRow[] = [];
   const rent: NeonPropertyRow[] = [];
   for (const row of rows) {
-    const mapped = mapListingRow(row);
+    const mapped = mapListingCardRow(row);
     if (mapped.deal_type === "rent") rent.push(mapped);
     else sale.push(mapped);
   }
@@ -545,29 +575,28 @@ export async function searchListings(
   const offset = (page - 1) * pageSize;
   const params: unknown[] = [];
   const where = listingWhere(input, params);
-  const countRows = await db.query(
-    `SELECT count(*)::int AS total FROM properties p LEFT JOIN estates e ON e.id = p.estate_id WHERE ${where}`,
-    params,
-  );
-
   const rowParams = [...params];
   const limitParam = addParam(rowParams, pageSize);
   const offsetParam = addParam(rowParams, offset);
-  const rows = await db.query(
-    `
-    SELECT ${listingColumns}
-    FROM properties p
-    LEFT JOIN estates e ON e.id = p.estate_id
-    ${publicAgentJoin}
-    WHERE ${where}
-    ORDER BY ${listingOrderBy(input.sort)}
-    LIMIT ${limitParam} OFFSET ${offsetParam}
-    `,
-    rowParams,
-  );
+  // Both reads are independent; list totals may reflect a concurrent import until the next refresh.
+  const [countRows, rows] = await Promise.all([
+    db.query(
+      `${canonicalListingCte(where)}
+      SELECT count(*)::int AS total FROM properties p JOIN canonical c ON c.id=p.id
+      LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}`,
+      params,
+    ),
+    db.query(
+      `${canonicalListingCte(where)}
+      SELECT ${listingCardColumns} FROM properties p JOIN canonical c ON c.id=p.id
+      LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}
+      ORDER BY ${listingOrderBy(input.sort)} LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      rowParams,
+    ),
+  ]);
 
   return {
-    rows: rows.map(mapListingRow),
+    rows: rows.map(mapListingCardRow),
     total: Number(countRows[0]?.total ?? 0),
   };
 }
@@ -586,8 +615,9 @@ export async function fetchCorridorInventory(
   const [countRows, rows] = await Promise.all([
     sql().query(
       `
+      ${canonicalListingCte(countWhere)}
       SELECT p.deal_type, count(*)::int AS total
-      FROM properties p
+      FROM properties p JOIN canonical c ON c.id=p.id
       LEFT JOIN estates e ON e.id = p.estate_id
       WHERE ${countWhere}
       GROUP BY p.deal_type
@@ -618,17 +648,18 @@ export async function fetchFeaturedProperties(limit: number): Promise<NeonProper
   // never shows fewer than `limit` cards while any active listings exist.
   const rows = await sql().query(
     `
-    SELECT ${listingColumns}
-    FROM properties p
+    ${canonicalListingCte("p.status = 'active'")}
+    SELECT ${listingCardColumns}
+    FROM properties p JOIN canonical c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
-    ${publicAgentJoin}
+
     WHERE p.status = 'active'
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC
     LIMIT $1
     `,
     [pageSize],
   );
-  return rows.map(mapListingRow);
+  return rows.map(mapListingCardRow);
 }
 
 export async function fetchListingsForEstate(input: {
@@ -705,20 +736,28 @@ export async function fetchSimilarListings(
 ): Promise<NeonPropertyRow[]> {
   const rows = await sql().query(
     `
-    SELECT ${listingColumns}
-    FROM properties p
+    ${canonicalListingCte(`p.status = 'active' AND p.estate_id = $1 AND p.deal_type = $2::deal_type AND p.id <> $3
+      AND NOT EXISTS (
+        SELECT 1 FROM properties current_offering
+        WHERE current_offering.id = $3
+          AND current_offering.deal_type = p.deal_type
+          AND COALESCE('canonical:' || NULLIF(current_offering.canonical_property_no, ''), 'listing:' || current_offering.listing_no)
+            = COALESCE('canonical:' || NULLIF(p.canonical_property_no, ''), 'listing:' || p.listing_no)
+      )`)}
+    SELECT ${listingCardColumns}
+    FROM properties p JOIN canonical c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
-    ${publicAgentJoin}
+
     WHERE p.status = 'active'
       AND p.estate_id = $1
       AND p.deal_type = $2::deal_type
       AND p.id <> $3
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC
+    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC
     LIMIT $4
     `,
     [input.estateId, input.dealType, input.excludeId, input.limit],
   );
-  return rows.map(mapListingRow);
+  return rows.map(mapListingCardRow);
 }
 
 export async function listPublicAgentProfiles(): Promise<NeonPublicAgentProfile[]> {
@@ -825,8 +864,9 @@ export async function listBranches(): Promise<NeonBranchRecord[]> {
 export async function fetchListingCountsByEstate(): Promise<Record<string, number>> {
   const rows = await sql().query(
     `
+    ${canonicalListingCte("p.status = 'active'")}
     SELECT e.slug AS estate_slug, count(*)::int AS count
-    FROM properties p
+    FROM properties p JOIN canonical c ON c.id=p.id
     INNER JOIN estates e ON e.id = p.estate_id
     WHERE p.status = 'active'
     GROUP BY e.slug
@@ -836,13 +876,15 @@ export async function fetchListingCountsByEstate(): Promise<Record<string, numbe
 }
 
 export async function fetchEstateOptions(): Promise<NeonEstateOption[]> {
-  const rows = await sql().query(
-    "SELECT slug, name_zh FROM estates WHERE COALESCE((to_jsonb(estates)->>'published')::boolean, true) ORDER BY name_zh",
-  );
-  return rows.map((row) => ({
-    slug: stringOrEmpty(row.slug),
-    name_zh: stringOrEmpty(row.name_zh),
-  }));
+  return cachedPublicEstateOptions(async () => {
+    const rows = await sql().query(
+      "SELECT slug, name_zh FROM estates WHERE COALESCE((to_jsonb(estates)->>'published')::boolean, true) ORDER BY name_zh",
+    );
+    return rows.map((row) => ({
+      slug: stringOrEmpty(row.slug),
+      name_zh: stringOrEmpty(row.name_zh),
+    }));
+  });
 }
 
 export async function fetchEstates(input: { districtSlug?: string } = {}) {

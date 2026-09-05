@@ -110,11 +110,7 @@ describe("AppImage", () => {
         alt: "a",
         width: 1,
         height: 1,
-        fallback: createElement(
-          "span",
-          { "data-testid": "custom-fallback" },
-          "無相片",
-        ),
+        fallback: createElement("span", { "data-testid": "custom-fallback" }, "無相片"),
       }),
     );
     expect($('[data-testid="custom-fallback"]').text()).toBe("無相片");
@@ -148,4 +144,61 @@ describe("AppImage", () => {
     );
     expect($("img").attr("fetchpriority")).toBe("high");
   });
+});
+
+describe("responsive local media", () => {
+  test("known originals get width candidates and explicit layout sizes", () => {
+    const $ = render(
+      createElement(AppImage, {
+        src: "/estates/bellagio.jpg",
+        alt: "碧堤半島",
+        width: 1600,
+        height: 900,
+        sizes: "(min-width: 1024px) 25vw, 100vw",
+      }),
+    );
+    expect($("img").attr("srcset")).toContain("320w");
+    expect($("img").attr("srcset")).toContain("960w");
+    expect($("img").attr("sizes")).toBe("(min-width: 1024px) 25vw, 100vw");
+    expect($("img").attr("alt")).toBe("碧堤半島");
+    expect($("img").attr("loading")).toBe("lazy");
+  });
+  test("explicit srcSet survives and remote sources never invent variants", () => {
+    const $ = render(
+      createElement(AppImage, {
+        src: "https://example.com/remote.jpg",
+        alt: "remote",
+        width: 1600,
+        height: 900,
+      }),
+    );
+    expect($("img").attr("srcset")).toBeUndefined();
+    const custom = render(
+      createElement(AppImage, {
+        src: "/estates/bellagio.jpg",
+        srcSet: "/custom.webp 320w",
+        alt: "custom",
+        width: 1600,
+        height: 900,
+      }),
+    );
+    expect(custom("img").attr("srcset")).toBe("/custom.webp 320w");
+  });
+});
+
+test("generated candidates exist, match width descriptors and preserve aspect ratio without upscaling", async () => {
+  const { default: manifest } = await import("../../lib/media/responsive-images.generated.json");
+  const { default: sharp } = await import("sharp");
+  for (const image of Object.values(manifest)) {
+    for (const candidate of image.srcSet.split(", ")) {
+      const [src, descriptor] = candidate.split(" ");
+      const width = Number(descriptor.slice(0, -1));
+      const metadata = await sharp(`${process.cwd()}/public${src}`).metadata();
+      expect(metadata.width).toBe(width);
+      expect(width).toBeLessThanOrEqual(image.width);
+      expect(
+        Math.abs((metadata.height ?? 0) - (width * image.height) / image.width),
+      ).toBeLessThanOrEqual(1);
+    }
+  }
 });

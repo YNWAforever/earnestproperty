@@ -71,6 +71,8 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260905140000_media_upload_intents.sql",
   "20260905150000_inquiry_submission_identity.sql",
   "20260905151000_consent_evidence.sql",
+  "20260905180000_admin_message_paging.sql",
+  "20260905181000_cms_browse_order.sql",
 ]);
 
 /**

@@ -1,0 +1,44 @@
+{
+  "branch": "br-quiet-hat-aoxbj2ue",
+  "databases": [
+    {
+      "database": "neondb",
+      "applied": 38,
+      "pending": [],
+      "counts": {
+        "properties": 1067,
+        "estates": 22,
+        "leads": 1,
+        "linked_inquiries": 0,
+        "unvalidated_constraints": 0
+      }
+    },
+    {
+      "database": "astra_empty_20260905",
+      "applied": 38,
+      "pending": [],
+      "counts": {
+        "properties": 0,
+        "estates": 22,
+        "leads": 0,
+        "linked_inquiries": 0,
+        "unvalidated_constraints": 0
+      }
+    }
+  ],
+  "operationalReporting": {
+    "days": 5,
+    "keys": [
+      "day",
+      "inquiries",
+      "linkedLeads",
+      "unassignedInquiries",
+      "leads",
+      "unassignedLeads",
+      "conversations",
+      "unassignedConversations",
+      "openConversations"
+    ],
+    "nonnegative": true
+  }
+}

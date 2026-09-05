@@ -1,0 +1,97 @@
+{
+  "/hero-front.jpg": {
+    "width": 2048,
+    "height": 1370,
+    "srcSet": "/responsive/hero-front-2b0f006c1f-320.webp 320w, /responsive/hero-front-2b0f006c1f-640.webp 640w, /responsive/hero-front-2b0f006c1f-960.webp 960w, /responsive/hero-front-2b0f006c1f-1440.webp 1440w, /responsive/hero-front-2b0f006c1f-1920.webp 1920w"
+  },
+  "/estates/bellagio.jpg": {
+    "width": 1200,
+    "height": 900,
+    "srcSet": "/responsive/estates-bellagio-30d4f308bb-320.webp 320w, /responsive/estates-bellagio-30d4f308bb-640.webp 640w, /responsive/estates-bellagio-30d4f308bb-960.webp 960w, /responsive/estates-bellagio-30d4f308bb-1200.webp 1200w"
+  },
+  "/estates/chun-wong-kui.jpg": {
+    "width": 900,
+    "height": 1200,
+    "srcSet": "/responsive/estates-chun-wong-kui-ed84b4c2f2-320.webp 320w, /responsive/estates-chun-wong-kui-ed84b4c2f2-640.webp 640w, /responsive/estates-chun-wong-kui-ed84b4c2f2-900.webp 900w"
+  },
+  "/estates/hoi-wan-hin.jpg": {
+    "width": 900,
+    "height": 1200,
+    "srcSet": "/responsive/estates-hoi-wan-hin-918b92179b-320.webp 320w, /responsive/estates-hoi-wan-hin-918b92179b-640.webp 640w, /responsive/estates-hoi-wan-hin-918b92179b-900.webp 900w"
+  },
+  "/estates/hoi-wan-toi.jpg": {
+    "width": 900,
+    "height": 1200,
+    "srcSet": "/responsive/estates-hoi-wan-toi-1e1db16404-320.webp 320w, /responsive/estates-hoi-wan-toi-1e1db16404-640.webp 640w, /responsive/estates-hoi-wan-toi-1e1db16404-900.webp 900w"
+  },
+  "/estates/lido-garden.jpg": {
+    "width": 900,
+    "height": 1200,
+    "srcSet": "/responsive/estates-lido-garden-f80b0b9a39-320.webp 320w, /responsive/estates-lido-garden-f80b0b9a39-640.webp 640w, /responsive/estates-lido-garden-f80b0b9a39-900.webp 900w"
+  },
+  "/estates/mun-ming-shan.jpg": {
+    "width": 1200,
+    "height": 1200,
+    "srcSet": "/responsive/estates-mun-ming-shan-ba9487e80b-320.webp 320w, /responsive/estates-mun-ming-shan-ba9487e80b-640.webp 640w, /responsive/estates-mun-ming-shan-ba9487e80b-960.webp 960w, /responsive/estates-mun-ming-shan-ba9487e80b-1200.webp 1200w"
+  },
+  "/estates/oi-kam-hoi-ngon.jpg": {
+    "width": 1200,
+    "height": 900,
+    "srcSet": "/responsive/estates-oi-kam-hoi-ngon-2782056d65-320.webp 320w, /responsive/estates-oi-kam-hoi-ngon-2782056d65-640.webp 640w, /responsive/estates-oi-kam-hoi-ngon-2782056d65-960.webp 960w, /responsive/estates-oi-kam-hoi-ngon-2782056d65-1200.webp 1200w"
+  },
+  "/estates/rhine-garden.jpg": {
+    "width": 1200,
+    "height": 900,
+    "srcSet": "/responsive/estates-rhine-garden-07a0ba64d5-320.webp 320w, /responsive/estates-rhine-garden-07a0ba64d5-640.webp 640w, /responsive/estates-rhine-garden-07a0ba64d5-960.webp 960w, /responsive/estates-rhine-garden-07a0ba64d5-1200.webp 1200w"
+  },
+  "/estates/sea-crest-villa.jpg": {
+    "width": 600,
+    "height": 357,
+    "srcSet": "/responsive/estates-sea-crest-villa-b5fb29969d-320.webp 320w, /responsive/estates-sea-crest-villa-b5fb29969d-600.webp 600w"
+  },
+  "/estates/seong-yuen.jpg": {
+    "width": 1200,
+    "height": 800,
+    "srcSet": "/responsive/estates-seong-yuen-5655a66ffd-320.webp 320w, /responsive/estates-seong-yuen-5655a66ffd-640.webp 640w, /responsive/estates-seong-yuen-5655a66ffd-960.webp 960w, /responsive/estates-seong-yuen-5655a66ffd-1200.webp 1200w"
+  },
+  "/estates/sing-tai.jpg": {
+    "width": 1200,
+    "height": 900,
+    "srcSet": "/responsive/estates-sing-tai-67dd3cea91-320.webp 320w, /responsive/estates-sing-tai-67dd3cea91-640.webp 640w, /responsive/estates-sing-tai-67dd3cea91-960.webp 960w, /responsive/estates-sing-tai-67dd3cea91-1200.webp 1200w"
+  },
+  "/estates/tai-tou-waan.jpg": {
+    "width": 1200,
+    "height": 900,
+    "srcSet": "/responsive/estates-tai-tou-waan-92bb3e9405-320.webp 320w, /responsive/estates-tai-tou-waan-92bb3e9405-640.webp 640w, /responsive/estates-tai-tou-waan-92bb3e9405-960.webp 960w, /responsive/estates-tai-tou-waan-92bb3e9405-1200.webp 1200w"
+  },
+  "/estates/tai-wah-hin.jpg": {
+    "width": 900,
+    "height": 1200,
+    "srcSet": "/responsive/estates-tai-wah-hin-11242d4b36-320.webp 320w, /responsive/estates-tai-wah-hin-11242d4b36-640.webp 640w, /responsive/estates-tai-wah-hin-11242d4b36-900.webp 900w"
+  },
+  "/estates/the-carmel.jpg": {
+    "width": 1200,
+    "height": 779,
+    "srcSet": "/responsive/estates-the-carmel-901d3797de-320.webp 320w, /responsive/estates-the-carmel-901d3797de-640.webp 640w, /responsive/estates-the-carmel-901d3797de-960.webp 960w, /responsive/estates-the-carmel-901d3797de-1200.webp 1200w"
+  },
+  "/estates/wong-gam-hoi-ngon.jpg": {
+    "width": 1200,
+    "height": 900,
+    "srcSet": "/responsive/estates-wong-gam-hoi-ngon-8b9effe63d-320.webp 320w, /responsive/estates-wong-gam-hoi-ngon-8b9effe63d-640.webp 640w, /responsive/estates-wong-gam-hoi-ngon-8b9effe63d-960.webp 960w, /responsive/estates-wong-gam-hoi-ngon-8b9effe63d-1200.webp 1200w"
+  },
+  "/branches/hong-kong-garden.jpg": {
+    "width": 1200,
+    "height": 1600,
+    "srcSet": "/responsive/branches-hong-kong-garden-c86d414b62-320.webp 320w, /responsive/branches-hong-kong-garden-c86d414b62-640.webp 640w, /responsive/branches-hong-kong-garden-c86d414b62-960.webp 960w, /responsive/branches-hong-kong-garden-c86d414b62-1200.webp 1200w"
+  },
+  "/branches/lido.jpg": {
+    "width": 1600,
+    "height": 1200,
+    "srcSet": "/responsive/branches-lido-314203b3a3-320.webp 320w, /responsive/branches-lido-314203b3a3-640.webp 640w, /responsive/branches-lido-314203b3a3-960.webp 960w, /responsive/branches-lido-314203b3a3-1440.webp 1440w, /responsive/branches-lido-314203b3a3-1600.webp 1600w"
+  },
+  "/branches/rhine.jpg": {
+    "width": 1200,
+    "height": 1600,
+    "srcSet": "/responsive/branches-rhine-a55a0e541b-320.webp 320w, /responsive/branches-rhine-a55a0e541b-640.webp 640w, /responsive/branches-rhine-a55a0e541b-960.webp 960w, /responsive/branches-rhine-a55a0e541b-1200.webp 1200w"
+  }
+}

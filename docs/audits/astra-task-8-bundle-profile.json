@@ -1,0 +1,80 @@
+{
+  "method": "Existing last-built bundle, raw and gzip file bytes; not browser transfer",
+  "entry": "/assets/index-CItuLjgA.js",
+  "rootPreloads": [
+    "/assets/index-CItuLjgA.js"
+  ],
+  "homePreloads": [
+    "/assets/index-CJAtm-gg.js",
+    "/assets/badge-aEYRRwiN.js",
+    "/assets/select-DFdxwLP2.js",
+    "/assets/OwnerValuationPanel-Bxdd9DNV.js",
+    "/assets/EmptyState-XijddBNw.js",
+    "/assets/FreshnessStamp-DN3xgQtS.js",
+    "/assets/core-estates-DxgclU5n.js",
+    "/assets/contact-links-CbgJD3QV.js",
+    "/assets/faq-BXaVBT4D.js",
+    "/assets/youtube-video-url-CdtR6CuF.js",
+    "/assets/users-Dx-LpRH_.js",
+    "/assets/arrow-right-CWVWcCQS.js",
+    "/assets/search-DjWeEays.js",
+    "/assets/building-2-BKypgZeQ.js",
+    "/assets/shield-check-BqeSAwQe.js",
+    "/assets/house-CkGbmcFa.js",
+    "/assets/user-round-C0rJ3DcM.js",
+    "/assets/trending-up-B-saGOkm.js",
+    "/assets/store-DUxmtOQ0.js",
+    "/assets/video-CupqThrX.js",
+    "/assets/bed-DwIS8UYB.js",
+    "/assets/bath-BiPZ35yd.js",
+    "/assets/maximize-DXVnXY1f.js",
+    "/assets/circle-play-BqSJ4VYX.js",
+    "/assets/index-vZyMR3hZ.js",
+    "/assets/key-round-jEYpBpYr.js",
+    "/assets/label-BblCgoL0.js",
+    "/assets/textarea-ChFCc_YU.js",
+    "/assets/index-ByIChKh8.js"
+  ],
+  "largestJavaScript": [
+    {
+      "file": "index-CItuLjgA.js",
+      "bytes": 1504587,
+      "gzipBytes": 445796
+    },
+    {
+      "file": "TrustProofPanel-BwHd1UXT.js",
+      "bytes": 437764,
+      "gzipBytes": 120700
+    },
+    {
+      "file": "admin.cms-D9PiAM_s.js",
+      "bytes": 47560,
+      "gzipBytes": 13174
+    },
+    {
+      "file": "AdminContentCopilot-zpSPJV9x.js",
+      "bytes": 33722,
+      "gzipBytes": 11761
+    },
+    {
+      "file": "listings-CrAeuNX3.js",
+      "bytes": 31920,
+      "gzipBytes": 9952
+    },
+    {
+      "file": "admin.operations-D85fuXsb.js",
+      "bytes": 31796,
+      "gzipBytes": 10061
+    },
+    {
+      "file": "admin.whatsapp-sFGlWqld.js",
+      "bytes": 29700,
+      "gzipBytes": 10586
+    },
+    {
+      "file": "admin.team-CE6h9duv.js",
+      "bytes": 28716,
+      "gzipBytes": 9443
+    }
+  ]
+}

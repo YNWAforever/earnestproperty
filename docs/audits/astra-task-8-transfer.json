@@ -1,0 +1,96 @@
+{
+  "method": {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "throttling": "none",
+    "freshContext": true,
+    "completion": "networkidle",
+    "bytes": "sum resource.transferSize excluding document and opaque cross-origin",
+    "database": "Preview br-quiet-hat-aoxbj2ue"
+  },
+  "samples": [
+    {
+      "label": "baseline",
+      "sample": 1,
+      "status": 200,
+      "bytes": 6528165,
+      "resources": 107,
+      "overflow": false
+    },
+    {
+      "label": "baseline",
+      "sample": 2,
+      "status": 200,
+      "bytes": 6528165,
+      "resources": 107,
+      "overflow": false
+    },
+    {
+      "label": "baseline",
+      "sample": 3,
+      "status": 200,
+      "bytes": 6528165,
+      "resources": 107,
+      "overflow": false
+    },
+    {
+      "label": "current",
+      "sample": 1,
+      "status": 200,
+      "bytes": 3131530,
+      "resources": 78,
+      "overflow": false,
+      "hero": "hero-front-2b0f006c1f-1440.webp"
+    },
+    {
+      "label": "current",
+      "sample": 2,
+      "status": 200,
+      "bytes": 3131530,
+      "resources": 78,
+      "overflow": false,
+      "hero": "hero-front-2b0f006c1f-1440.webp"
+    },
+    {
+      "label": "current",
+      "sample": 3,
+      "status": 200,
+      "bytes": 3131530,
+      "resources": 78,
+      "overflow": false,
+      "hero": "hero-front-2b0f006c1f-1440.webp"
+    }
+  ],
+  "beforeVariableFont": [
+    {
+      "label": "current",
+      "sample": 1,
+      "status": 200,
+      "bytes": 3955552,
+      "resources": 111,
+      "overflow": false
+    },
+    {
+      "label": "current",
+      "sample": 2,
+      "status": 200,
+      "bytes": 3955552,
+      "resources": 111,
+      "overflow": false
+    },
+    {
+      "label": "current",
+      "sample": 3,
+      "status": 200,
+      "bytes": 3955552,
+      "resources": 111,
+      "overflow": false
+    }
+  ],
+  "matchedReduction": 0.5203047104354745,
+  "historicalBaseline": 4880833,
+  "historicalReduction": 0.35840255136776855,
+  "caveat": "Historical live baseline differs in hosting and data; matched local comparison is causal, neither establishes field vitals."
+}
