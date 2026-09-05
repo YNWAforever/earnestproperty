@@ -232,7 +232,7 @@ test("OpenCode client keeps malformed provider responses behind a stable error",
   assert.equal(result.error, "OPENCODE_GO_RESPONSE_INVALID");
 });
 
-test("DeepSeek editorial requests disable default thinking and cap output", async () => {
+test("OpenCode Go DeepSeek requests disable reasoning using the gateway parameter", async () => {
   let body;
   const client = createOpenCodeGoClient({
     config: { ...enabledConfig, model: "deepseek-v4-flash" },
@@ -244,7 +244,7 @@ test("DeepSeek editorial requests disable default thinking and cap output", asyn
     },
   });
   await client.generateProposal({ system: "rules", prompt: "record" });
-  assert.deepEqual(body.thinking, { type: "disabled" });
+  assert.equal(body.reasoning_effort, "none");
   assert.equal(body.max_tokens, 8192);
 });
 

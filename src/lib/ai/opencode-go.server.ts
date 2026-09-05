@@ -63,11 +63,9 @@ export function createOpenCodeGoClient({
               temperature: 0.1,
               stream: false,
               max_tokens: 8192,
-              // DeepSeek V4 defaults to high-effort thinking; short editorial patches
-              // need direct output. Do not send model-specific options to other models.
-              ...(config.model.startsWith("deepseek-v4-")
-                ? { thinking: { type: "disabled" } }
-                : {}),
+              // OpenCode Go ignores DeepSeek's native thinking toggle. Its gateway
+              // requires reasoning_effort=none to avoid lengthy reasoning for copy edits.
+              ...(config.model.startsWith("deepseek-v4-") ? { reasoning_effort: "none" } : {}),
               response_format: { type: "json_object" },
             }),
           },
