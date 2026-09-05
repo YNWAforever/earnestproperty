@@ -662,6 +662,7 @@ export async function fetchAdminCampaigns() {
 
 const websiteInquirySchema = z
   .object({
+    submissionId: z.string().uuid(),
     name: z.string().trim().min(1).max(120),
     // Mirrors the identical client-side constraint in contact.tsx and
     // property.$listingNo.tsx. The server previously accepted any string up to
@@ -683,7 +684,7 @@ const websiteInquirySchema = z
   // Public, untrusted path: never accept a caller-supplied agent assignment.
   .strip();
 
-export type WebsiteInquiryInput = z.infer<typeof websiteInquirySchema>;
+export type WebsiteInquiryInput = Omit<z.infer<typeof websiteInquirySchema>, "submissionId">;
 
 // Public, unauthenticated write path -- the only server fn in this file with no
 // requireStaff() gate. Every submission inserts a crm_contacts row, a crm_leads
@@ -693,7 +694,7 @@ const WEBSITE_INQUIRY_RATE_LIMIT_PER_IP = 5;
 const WEBSITE_INQUIRY_RATE_LIMIT_PER_IP_PHONE = 3;
 const WEBSITE_INQUIRY_RATE_WINDOW_SECONDS = 60;
 
-export const createWebsiteInquiry = createServerFn({ method: "POST" })
+const createWebsiteInquiryServer = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => websiteInquirySchema.parse(data))
   .handler(async ({ data }) => {
     const { clientIpFromRequest, enforceRateLimit } = await import("@/lib/ratelimit.server");
@@ -730,6 +731,10 @@ export const createWebsiteInquiry = createServerFn({ method: "POST" })
 // validated /listings search-params object, spread as-is by the caller --
 // bounded below so an unauthenticated caller can't attach an arbitrarily
 // large JSON blob to a row.
+export async function createWebsiteInquiry(options: { data: WebsiteInquiryInput }) {
+  const { submitWithInquiryIdentity } = await import("../inquiry-submission");
+  return submitWithInquiryIdentity(options.data, (data) => createWebsiteInquiryServer({ data }));
+}
 const listingAlertFiltersSchema = z
   .record(z.string(), z.unknown())
   .refine((value) => JSON.stringify(value).length <= 2000, {
@@ -1265,9 +1270,7 @@ export async function updateAdminConversation(options: { data: AdminConversation
   );
 }
 
-// admin/manager only: clearing an opt-out re-enables marketing messages to a
-// real person, so it is a deliberately narrower grant than the rest of the
-// conversation surface (which agents can use).
+// Retained for stale clients only. The server returns evidence-workflow guidance and writes nothing.
 const clearContactWhatsappOptOutServer = createServerFn({ method: "POST" })
   .inputValidator((data: { contactId: string; reason: string }) =>
     z
@@ -1288,8 +1291,34 @@ export async function clearContactWhatsappOptOut(options: {
   );
 }
 
+const setWhatsappMarketingConsentServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: {
+      contactId: string;
+      optedIn: boolean;
+      evidenceSource: "written_confirmation" | "recorded_call" | "customer_opt_out";
+      evidenceRef: string;
+    }) => data,
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    return (await import("./whatsapp-consent.server")).setWhatsappMarketingConsent(data, staff);
+  });
+
+export async function setWhatsappMarketingConsent(options: {
+  data: {
+    contactId: string;
+    optedIn: boolean;
+    evidenceSource: "written_confirmation" | "recorded_call" | "customer_opt_out";
+    evidenceRef: string;
+  };
+}) {
+  return callStaffServerFn(async () =>
+    setWhatsappMarketingConsentServer(await withStaffAuthHeaders(options)),
+  );
+}
 export async function sendAdminConversationReply(options: {
-  data: { conversationId: string; text: string };
+  data: { conversationId: string; text: string; requestId: string };
 }) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
@@ -1311,7 +1340,7 @@ export async function sendAdminConversationReply(options: {
 }
 
 export async function sendAdminConversationTemplate(options: {
-  data: { conversationId: string; templateId: string };
+  data: { conversationId: string; templateId: string; requestId: string };
 }) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },

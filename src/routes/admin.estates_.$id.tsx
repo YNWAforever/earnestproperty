@@ -8,10 +8,8 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { fetchAdminCms } from "@/lib/neon/admin-data";
-import type { AdminCmsData } from "@/lib/neon/admin-data.types";
 import { fetchAdminCmsEditor } from "@/lib/neon/admin-cms";
-import type { CmsPayloadValue } from "@/lib/neon/admin-cms.types";
+import type { CmsEditorResult } from "@/lib/neon/admin-cms.types";
 
 export const Route = createFileRoute("/admin/estates_/$id")({
   head: () => ({
@@ -23,9 +21,7 @@ export const Route = createFileRoute("/admin/estates_/$id")({
 function EditAdminEstate() {
   const { id } = Route.useParams();
   const { user, loading } = useNeonAuth();
-  const [payload, setPayload] = useState<Record<string, CmsPayloadValue> | null | undefined>(
-    undefined,
-  );
+  const [editor, setEditor] = useState<CmsEditorResult | null>(null);
   const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
@@ -37,23 +33,13 @@ function EditAdminEstate() {
     let cancelled = false;
     setFetching(true);
     fetchAdminCmsEditor({ data: { resourceType: "estate", resourceId: id } })
-      .then(async (result) => {
-        if (cancelled) return;
-        if (result.payload) {
-          setPayload(result.payload);
-          return;
-        }
-        // Defensive fallback: every estate should have a revision row since
-        // the 2026-07-11 backfill migration, but if one somehow doesn't yet,
-        // fall back to the live table rather than showing a blank editor.
-        const cms = await fetchAdminCms();
-        const live = (cms as AdminCmsData).estates.find((estate) => estate.id === id);
-        setPayload(live ? { ...live } : null);
+      .then((result) => {
+        if (!cancelled) setEditor(result);
       })
       .catch((err) => {
         if (!cancelled) {
           toast.error(err instanceof Error ? err.message : "未能載入屋苑資料");
-          setPayload(null);
+          setEditor(null);
         }
       })
       .finally(() => {
@@ -74,7 +60,7 @@ function EditAdminEstate() {
           </Link>
         </Button>
         {loading || fetching ? <Skeleton className="h-96 w-full" /> : null}
-        {!loading && !fetching && payload === null ? (
+        {!loading && !fetching && !editor?.editState ? (
           <div className="border-y py-10 text-center">
             <p className="text-sm text-muted-foreground">找不到此屋苑資料。</p>
             <Button asChild variant="link" className="mt-3">
@@ -82,8 +68,14 @@ function EditAdminEstate() {
             </Button>
           </div>
         ) : null}
-        {!loading && !fetching && payload !== null && payload !== undefined ? (
-          <AdminEstateEditorForm resourceId={id} payload={payload} onSaved={() => undefined} />
+        {!loading && !fetching && editor?.editState ? (
+          <AdminEstateEditorForm
+            key={id}
+            resourceId={id}
+            payload={editor.payload}
+            editState={editor.editState}
+            onSaved={() => undefined}
+          />
         ) : null}
       </div>
     </AdminShell>

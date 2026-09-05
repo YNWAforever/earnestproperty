@@ -354,3 +354,21 @@ test("deactivation requires admin, a different person, and a successor when they
     { allowed: true },
   );
 });
+
+test("bootstrap eligibility never overrides an existing bound or privileged identity", () => {
+  const input = {
+    email: "owner@example.test",
+    allowlistedEmails: new Set(["owner@example.test"]),
+    access: null,
+    staffRows: [],
+  };
+  for (const row of [
+    { authUserId: "disabled-owner", roles: [] },
+    { authUserId: null, roles: ["viewer"] },
+    { authUserId: "owner", roles: ["admin"] },
+  ]) {
+    assert.equal(shouldBootstrapFirstAdmin({ ...input, staffRows: [row] }), false);
+  }
+  assert.equal(shouldBootstrapFirstAdmin({ ...input, email: "unlisted@example.test" }), false);
+  assert.equal(shouldBootstrapFirstAdmin({ ...input, allowlistedEmails: new Set() }), false);
+});

@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { boundedProviderFetch } from "./provider-fetch.ts";
 
 // Explicit .ts extension so `node --test` can import this module directly from
 // the .mjs suite -- the same reason campaign-delivery.server.ts is imported
@@ -232,29 +233,31 @@ export async function fetchWoztellHistoryPage(input: {
   const pageSize = Math.min(Math.max(1, input.pageSize ?? MAX_PAGE_SIZE), MAX_PAGE_SIZE);
   const forward = mode === "forward";
 
-  const res = await doFetch(OPEN_API_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${input.token}`,
-    },
-    body: JSON.stringify({
-      query: HISTORY_QUERY,
-      variables: {
-        channelId: input.channelId ?? null,
-        // Send exactly one direction's pair. Passing both first and last at once
-        // is not documented as valid and risks a server-side validation error.
-        first: forward ? pageSize : null,
-        after: forward ? (input.cursor ?? null) : null,
-        last: forward ? null : pageSize,
-        before: forward ? null : (input.cursor ?? null),
-        from: input.from ?? null,
-        to: input.to ?? null,
+  const { response: res, text: rawBody } = await boundedProviderFetch(
+    OPEN_API_ENDPOINT,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${input.token}`,
       },
-    }),
-  });
-
-  const rawBody = await res.text();
+      body: JSON.stringify({
+        query: HISTORY_QUERY,
+        variables: {
+          channelId: input.channelId ?? null,
+          // Send exactly one direction's pair. Passing both first and last at once
+          // is not documented as valid and risks a server-side validation error.
+          first: forward ? pageSize : null,
+          after: forward ? (input.cursor ?? null) : null,
+          last: forward ? null : pageSize,
+          before: forward ? null : (input.cursor ?? null),
+          from: input.from ?? null,
+          to: input.to ?? null,
+        },
+      }),
+    },
+    { fetchImpl: doFetch, maxBytes: 2_097_152 },
+  );
   let body: Record<string, unknown> = {};
   if (rawBody.trim()) {
     try {

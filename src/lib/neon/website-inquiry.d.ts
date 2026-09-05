@@ -20,6 +20,7 @@ export const WEBSITE_LISTING_NO_PATTERN: RegExp;
 export function isValidWebsiteListingNo(value: unknown): value is string;
 
 export type WebsiteInquiryPersistenceInput = {
+  submissionId?: string;
   name: string;
   phone: string;
   normalizedPhone: string | null;

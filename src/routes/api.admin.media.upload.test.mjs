@@ -11,7 +11,7 @@ test("admin media upload preserves staff authorization and the public response c
   assert.match(source, /\{ ok: false, error: "file is required" \}/);
   assert.match(source, /\{ ok: false, error: "EMPTY_FILE" \}/);
   assert.match(source, /\{ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_UPLOAD_BYTES \}/);
-  assert.match(source, /\{ ok: true, url: blob\.url, pathname: blob\.pathname \}/);
+  assert.match(source, /Response.json\(result/);
 });
 
 test("admin media upload retains its MIME, size, owner, and database boundaries", () => {
@@ -24,8 +24,9 @@ test("admin media upload retains its MIME, size, owner, and database boundaries"
   for (const ownerType of ["property", "estate", "article", "agent", "cms"]) {
     assert.match(source, new RegExp(`"${ownerType}"`));
   }
-  assert.match(source, /INSERT INTO media_assets/);
-  assert.match(source, /owner_type, created_by/);
+  const repository = readFileSync("src/lib/media/media-upload-repository.server.ts", "utf8");
+  assert.match(repository, /INSERT INTO media_assets/);
+  assert.match(repository, /owner_type,created_by/);
   assert.match(source, /staff\.staffId/);
 });
 
@@ -34,7 +35,7 @@ test("admin media upload delegates only object storage to the shared Vercel adap
 
   assert.match(source, /import \{ createVercelBlobStore \} from "@\/lib\/media\/vercel-blob\.mjs"/);
   assert.match(source, /createVercelBlobStore\(\{/);
-  assert.match(source, /blobStore\.put\(\{/);
+  assert.match(source, /put: blobStore\.put/);
   assert.doesNotMatch(source, /async function putPublicBlob/);
   assert.doesNotMatch(source, /\bfetch\(/);
 });

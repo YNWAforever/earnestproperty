@@ -1,3 +1,4 @@
+import { uploadAdminMedia } from "@/lib/admin/media-upload";
 import { type Dispatch, type SetStateAction, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -59,24 +60,11 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
     const failed: string[] = [];
     for (let i = 0; i < valid.length; i++) {
       const file = valid[i];
-      const body = new FormData();
-      body.set("file", file);
-      body.set("ownerType", ownerType);
       try {
-        const res = await fetch("/api/admin/media/upload", { method: "POST", body });
-        const data = (await res.json().catch(() => null)) as {
-          url?: string;
-          error?: string;
-        } | null;
-        if (!res.ok || !data?.url) {
-          failed.push(file.name);
-        } else {
-          uploaded.push(data.url);
-        }
-      } catch {
-        // A dropped connection mid-batch previously threw out of handleFiles,
-        // leaving `uploading` stuck true and the button disabled forever.
-        failed.push(file.name);
+        const data = await uploadAdminMedia(file, ownerType);
+        uploaded.push(data.url);
+      } catch (error) {
+        failed.push(`${file.name}：${error instanceof Error ? error.message : "上載未完成"}`);
       }
       setProgress({ done: i + 1, total: valid.length });
     }

@@ -324,12 +324,96 @@ export async function cancelJob(input: {
 }
 
 export async function recoverExpiredLeases() {
-  const { queryRows } = await import("../neon/db.server.ts");
-  return queryRows<JobRow>(
+  const { queryRows, transactionRows } = await import("../neon/db.server.ts");
+
+  // Discover without taking job locks. Campaign dispatch/cancellation lock the campaign first.
+  // Recheck job ownership in a fresh statement after obtaining that same campaign lock.
+  const terminalCandidates = await queryRows<JobRow & { previous_worker: string | null }>(
+    `/* terminal_campaign_candidates */
+     SELECT j.*, COALESCE(j.lease_owner, a.worker_id) AS previous_worker
+     FROM ops_jobs j LEFT JOIN ops_job_attempts a ON a.job_id=j.id AND a.attempt_number=j.attempt_count
+     WHERE j.job_type='woztell.campaign.deliver' AND j.attempt_count >= j.max_attempts
+       AND ((j.status='running' AND j.lease_expires_at < clock_timestamp()) OR
+         (j.status='failed' AND j.last_error_code='LEASE_EXPIRED' AND a.error_code='LEASE_EXPIRED'
+           AND EXISTS(SELECT 1 FROM whatsapp_campaign_recipients r WHERE r.status='sending'
+             AND r.claim_job_id=j.id AND r.claim_worker_id=a.worker_id AND r.claim_attempt=j.attempt_count)))
+     ORDER BY j.id LIMIT 100`,
+  );
+  const terminalRecovered: JobRow[] = [];
+  for (const candidate of terminalCandidates) {
+    const params = [candidate.id, candidate.previous_worker, candidate.attempt_count];
+    const results = await transactionRows([
+      {
+        statement: `SELECT c.id FROM whatsapp_campaigns c JOIN ops_jobs j
+          ON c.id::text=j.payload->>'campaignId' WHERE j.id=$1::uuid FOR UPDATE OF c`,
+        params: [candidate.id],
+      },
+      {
+        statement: `WITH candidate AS (
+          SELECT j.id, $2::text AS previous_worker FROM ops_jobs j
+          WHERE j.id=$1::uuid AND j.job_type='woztell.campaign.deliver'
+            AND j.attempt_count = $3 AND j.attempt_count >= j.max_attempts
+            AND ((j.status='running' AND j.lease_owner=$2 AND j.lease_expires_at < clock_timestamp())
+              OR (j.status='failed' AND j.last_error_code='LEASE_EXPIRED' AND EXISTS (
+                SELECT 1 FROM ops_job_attempts a WHERE a.job_id=j.id AND a.attempt_number=$3
+                  AND a.worker_id=$2 AND a.error_code='LEASE_EXPIRED')))
+          FOR UPDATE OF j
+        ), recovered AS (
+          UPDATE ops_jobs j SET status='failed', lease_owner=NULL, lease_expires_at=NULL,
+            last_error_code='LEASE_EXPIRED', last_error_summary='The worker lease expired before completion.', updated_at=now()
+          FROM candidate WHERE j.id=candidate.id RETURNING j.*,candidate.previous_worker
+        ), recipients AS (
+          UPDATE whatsapp_campaign_recipients r
+          SET status=CASE WHEN r.dispatch_started_at IS NULL AND c.status='cancelled' THEN 'cancelled' ELSE 'failed' END,
+            error=CASE WHEN r.dispatch_started_at IS NOT NULL THEN 'WOZTELL_DELIVERY_UNKNOWN'
+              WHEN c.status='cancelled' THEN 'WOZTELL_CAMPAIGN_CANCELLED'
+              ELSE 'WOZTELL_DELIVERY_ATTEMPTS_EXHAUSTED' END
+          FROM recovered, whatsapp_campaigns c
+          WHERE r.campaign_id=c.id AND c.id::text=recovered.payload->>'campaignId'
+            AND r.status='sending' AND r.claim_job_id = recovered.id
+            AND r.claim_worker_id = recovered.previous_worker AND r.claim_attempt = recovered.attempt_count
+            AND (r.dispatch_started_at IS NULL OR (r.dispatch_job_id=recovered.id
+              AND r.dispatch_worker_id=recovered.previous_worker AND r.dispatch_attempt=recovered.attempt_count))
+          RETURNING r.id,r.campaign_id,r.status,r.error,r.dispatch_started_at,recovered.id AS job_id,recovered.attempt_count
+        ), recipient_audit AS (
+          INSERT INTO audit_logs(action,subject_type,subject_id,metadata)
+          SELECT 'campaign.lease_recovered','campaign_recipient',id,
+            jsonb_build_object('campaignId',campaign_id,'jobId',job_id,'attempt',attempt_count,
+              'status',status,'error',error,'reserved',dispatch_started_at IS NOT NULL)
+          FROM recipients RETURNING id
+        ), attempt AS (
+          INSERT INTO ops_job_attempts(job_id,attempt_number,worker_id,outcome,error_code,error_summary,finished_at)
+          SELECT id,attempt_count,COALESCE(previous_worker,'expired-worker'),'failed','LEASE_EXPIRED',
+            'The worker lease expired before completion.',now() FROM recovered
+          ON CONFLICT(job_id,attempt_number) DO NOTHING RETURNING id
+        ) SELECT * FROM recovered`,
+        params,
+      },
+      {
+        // Read counts only after the recipient writes. Do not overwrite cancellation or
+        // another queued/live job's campaign. No handler/provider dispatch is invoked.
+        statement: `UPDATE whatsapp_campaigns c SET status='failed',updated_at=now()
+          FROM ops_jobs j WHERE j.id=$1::uuid AND c.id::text=j.payload->>'campaignId'
+            AND j.status='failed' AND j.last_error_code='LEASE_EXPIRED' AND j.attempt_count=$3
+            AND c.status IN ('queued','sending')
+            AND EXISTS(SELECT 1 FROM ops_job_attempts a WHERE a.job_id=j.id AND a.attempt_number=$3
+              AND a.worker_id=$2 AND a.error_code='LEASE_EXPIRED')
+            AND NOT EXISTS(SELECT 1 FROM ops_jobs other WHERE other.id<>j.id
+              AND other.job_type='woztell.campaign.deliver' AND other.payload->>'campaignId'=c.id::text
+              AND (other.status='queued' OR (other.status='running' AND other.lease_expires_at>clock_timestamp())))
+            AND NOT EXISTS(SELECT 1 FROM whatsapp_campaign_recipients r WHERE r.campaign_id=c.id AND r.status='sending')
+          RETURNING c.id`,
+        params,
+      },
+    ]);
+    terminalRecovered.push(...(results[1] as JobRow[]));
+  }
+  const recovered = await queryRows<JobRow>(
     `WITH expired AS (
        SELECT id, lease_owner
        FROM ops_jobs
        WHERE status = 'running' AND lease_expires_at < now()
+         AND NOT (job_type='woztell.campaign.deliver' AND attempt_count >= max_attempts)
        FOR UPDATE SKIP LOCKED
      ), recovered AS (
        UPDATE ops_jobs AS job
@@ -357,6 +441,7 @@ export async function recoverExpiredLeases() {
             idempotency_key, actor_staff_id, created_at, updated_at
      FROM recovered`,
   );
+  return [...terminalRecovered, ...recovered];
 }
 
 type JobListCursor = { createdAt: string; id: string };
@@ -586,6 +671,7 @@ export async function runClaimedJobs(input: {
       await registered.handler.run(registered.payload, {
         jobId: job.id,
         attempt: job.attempt_count,
+        workerId: input.workerId,
         checkpoint: heartbeat.checkpoint,
       });
       const leaseOwned = await heartbeat.stop();
@@ -597,6 +683,20 @@ export async function runClaimedJobs(input: {
       else counts.cancelled += 1;
     } catch (error) {
       await heartbeat.stop();
+      if (error && typeof error === "object" && "code" in error && error.code === "JOB_DEFERRED") {
+        const { queryRows } = await import("../neon/db.server.ts");
+        const deferred = await queryRows(
+          `UPDATE ops_jobs SET status='queued', run_after=now()+interval '60 seconds',
+             attempt_count=GREATEST(attempt_count-1,0), lease_owner=NULL, lease_expires_at=NULL,
+             last_error_code='JOB_DEFERRED', last_error_summary='Waiting for another live delivery lease.', updated_at=now()
+           WHERE id=$1::uuid AND status='running' AND lease_owner=$2 AND lease_expires_at>=now()
+           RETURNING id`,
+          [job.id, input.workerId],
+        );
+        if (deferred[0]) counts.retried += 1;
+        else counts.cancelled += 1;
+        continue;
+      }
       const failed = await failJob({
         jobId: job.id,
         workerId: input.workerId,

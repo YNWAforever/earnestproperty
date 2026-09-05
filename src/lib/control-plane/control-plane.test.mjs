@@ -745,3 +745,130 @@ test("keyset cursors carry microsecond precision, not truncated ISO strings", ()
   assert.doesNotMatch(audit, /encodeAuditCursor\(\{ createdAt: last\.created_at,/);
   assert.doesNotMatch(jobs, /encodeJobCursor\(\{ createdAt: last\.createdAt,/);
 });
+function injectedLeaseRecovery({ renewed = false, fail = false, alreadyFailed = false } = {}) {
+  const job = {
+    id: "job",
+    job_type: "woztell.campaign.deliver",
+    payload: { campaignId: "campaign" },
+    status: alreadyFailed ? "failed" : "running",
+    attempt_count: 5,
+    max_attempts: 5,
+    lease_owner: alreadyFailed ? null : "worker",
+    previous_worker: "worker",
+  };
+  const recipients = [
+    {
+      id: "reserved",
+      status: "sending",
+      claim_job_id: "job",
+      claim_worker_id: "worker",
+      claim_attempt: 5,
+      dispatch_started_at: "reserved",
+    },
+    {
+      id: "undispatched",
+      status: "sending",
+      claim_job_id: "job",
+      claim_worker_id: "worker",
+      claim_attempt: 5,
+      dispatch_started_at: null,
+    },
+    {
+      id: "new-owner",
+      status: "sending",
+      claim_job_id: "job",
+      claim_worker_id: "worker",
+      claim_attempt: 6,
+      dispatch_started_at: null,
+    },
+  ];
+  const calls = [];
+  let audits = 0;
+  const db = {
+    queryRows: async (sql) => {
+      calls.push(sql);
+      return sql.includes("terminal_campaign_candidates") ? [job] : [];
+    },
+    transactionRows: async (statements) => {
+      calls.push(statements);
+      assert.match(statements[0].statement, /whatsapp_campaigns[\s\S]*FOR UPDATE/);
+      const recovery = statements[1].statement;
+      assert.match(recovery, /claim_job_id = recovered.id/);
+      assert.match(recovery, /claim_worker_id = recovered.previous_worker/);
+      assert.match(recovery, /claim_attempt = recovered.attempt_count/);
+      assert.match(recovery, /lease_expires_at < clock_timestamp\(\)/);
+      assert.match(recovery, /attempt_count = \$3/);
+      if (renewed) return [[], [], []];
+      if (fail) throw Error("injected_audit_failure");
+      for (const r of recipients)
+        if (r.claim_attempt === 5) {
+          r.status = "failed";
+          r.error = r.dispatch_started_at
+            ? "WOZTELL_DELIVERY_UNKNOWN"
+            : "WOZTELL_DELIVERY_ATTEMPTS_EXHAUSTED";
+          audits++;
+        }
+      job.status = "failed";
+      return [[], [{ ...job }], []];
+    },
+  };
+  const source = jobsServer.recoverExpiredLeases
+    .toString()
+    .replace('await import("../neon/db.server.ts")', "db");
+  const run = new Function("db", `return (${source})`)(db);
+  return {
+    run,
+    recipients,
+    calls,
+    job,
+    get audits() {
+      return audits;
+    },
+  };
+}
+test("exhausted campaign lease recovery terminates reserved and undispatched exact claims without another handler", async () => {
+  const fixture = injectedLeaseRecovery();
+  await fixture.run();
+  assert.equal(fixture.recipients[0].error, "WOZTELL_DELIVERY_UNKNOWN");
+  assert.equal(fixture.recipients[1].error, "WOZTELL_DELIVERY_ATTEMPTS_EXHAUSTED");
+  assert.equal(fixture.recipients[2].status, "sending");
+  assert.equal(fixture.audits, 2);
+});
+test("campaign terminal cleanup also reconciles already failed expired jobs", async () => {
+  const fixture = injectedLeaseRecovery({ alreadyFailed: true });
+  await fixture.run();
+  assert.equal(fixture.recipients[0].status, "failed");
+  assert.equal(fixture.recipients[1].status, "failed");
+});
+test("lease renewed after recovery discovery leaves recipient claims untouched", async () => {
+  const fixture = injectedLeaseRecovery({ renewed: true });
+  await fixture.run();
+  assert.ok(fixture.recipients.every((r) => r.status === "sending"));
+  assert.equal(fixture.audits, 0);
+});
+test("terminal cleanup audit failure propagates without partial successful recovery", async () => {
+  const fixture = injectedLeaseRecovery({ fail: true });
+  await assert.rejects(fixture.run(), /injected_audit_failure/);
+  assert.equal(fixture.job.status, "running");
+  assert.ok(fixture.recipients.every((r) => r.status === "sending"));
+});
+
+test("terminal campaign recovery preserves lock order, dispatched ambiguity, and generic retry isolation", () => {
+  const source = jobsServer.recoverExpiredLeases.toString();
+  assert.ok(
+    source.indexOf("SELECT c.id FROM whatsapp_campaigns") < source.indexOf("FOR UPDATE OF j"),
+  );
+  assert.match(source, /dispatch_job_id=recovered.id/);
+  assert.match(source, /dispatch_worker_id=recovered.previous_worker/);
+  assert.match(source, /dispatch_attempt=recovered.attempt_count/);
+  assert.match(
+    source,
+    /AND NOT \(job_type='woztell.campaign.deliver' AND attempt_count >= max_attempts\)/,
+  );
+  assert.match(source, /INSERT INTO audit_logs/);
+  assert.match(source, /FROM recipients RETURNING id/);
+  assert.match(source, /other.status='queued'/);
+  assert.match(source, /r.status='sending'/);
+  assert.doesNotMatch(source, /sendWoztellResponse|deliverWoztellCampaign/);
+  assert.doesNotMatch(source, /SET[\s\S]*dispatch_started_at\s*=/);
+});

@@ -4,7 +4,7 @@ export type JobHandler<T = unknown> = {
   parsePayload(input: unknown): T;
   run(
     payload: T,
-    context: { jobId: string; attempt: number; checkpoint: () => Promise<void> },
+    context: { jobId: string; attempt: number; workerId?: string; checkpoint: () => Promise<void> },
   ): Promise<{ summary: Record<string, number> }>;
 };
 
@@ -193,7 +193,10 @@ export function createWoztellCampaignDeliveryHandler(
   deps: {
     deliverCampaign?: (
       campaignId: string,
-      options: { checkpoint: () => Promise<void> },
+      options: {
+        checkpoint: () => Promise<void>;
+        job?: { jobId: string; workerId: string; attempt: number };
+      },
     ) => Promise<WoztellCampaignDeliveryResult>;
   } = {},
 ): JobHandler<WoztellCampaignDeliveryPayload> {
@@ -205,11 +208,22 @@ export function createWoztellCampaignDeliveryHandler(
       try {
         const deliver =
           deps.deliverCampaign ??
-          (async (campaignId: string, options: { checkpoint: () => Promise<void> }) => {
+          (async (
+            campaignId: string,
+            options: {
+              checkpoint: () => Promise<void>;
+              job?: { jobId: string; workerId: string; attempt: number };
+            },
+          ) => {
             const module = await import("../woztell/campaign-delivery.server.ts");
-            return module.deliverWoztellCampaign(campaignId, { checkpoint: options.checkpoint });
+            return module.deliverWoztellCampaign(campaignId, options);
           });
-        const result = await deliver(payload.campaignId, { checkpoint: context.checkpoint });
+        const result = await deliver(payload.campaignId, {
+          checkpoint: context.checkpoint,
+          job: context.workerId
+            ? { jobId: context.jobId, workerId: context.workerId, attempt: context.attempt }
+            : undefined,
+        });
         if (result.failed > 0) {
           throw Object.assign(new Error("One or more campaign recipients were rejected."), {
             code: "WOZTELL_CAMPAIGN_REJECTED",
@@ -232,3 +246,66 @@ export function createWoztellCampaignDeliveryHandler(
 export const woztellCampaignDeliveryHandler = registerJobHandler(
   createWoztellCampaignDeliveryHandler(),
 );
+
+export const woztellReplyDeliveryHandler = registerJobHandler<{ intentId: string }>({
+  jobType: "woztell.reply.deliver",
+  payloadVersion: 1,
+  parsePayload(input) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).length !== 1 ||
+      !("intentId" in input) ||
+      typeof input.intentId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(input.intentId)
+    )
+      throw Object.assign(new Error("Reply intent payload is invalid."), {
+        code: "VALIDATION_ERROR",
+      });
+    return { intentId: input.intentId };
+  },
+  async run(payload, context) {
+    const { deliverOutboundIntent } = await import("../woztell/outbound-intent.server.ts");
+    const summary = await deliverOutboundIntent(payload.intentId, {
+      checkpoint: context.checkpoint,
+      job: context.workerId ? { jobId: context.jobId, workerId: context.workerId } : undefined,
+    });
+    return { summary };
+  },
+});
+
+export const woztellHistoryImportHandler = registerJobHandler<
+  import("../woztell/history-import.server.ts").HistoryJobPayload
+>({
+  jobType: "woztell.history.import",
+  payloadVersion: 1,
+  parsePayload(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input))
+      throw new Error("Invalid history job");
+    const p = input as Record<string, unknown>;
+    if (
+      Object.keys(p).length !== 4 ||
+      typeof p.importId !== "string" ||
+      !/^[a-f0-9]{64}$/.test(p.importId) ||
+      (p.cursor !== null && (typeof p.cursor !== "string" || p.cursor.length > 4096)) ||
+      (p.mode !== "forward" && p.mode !== "backward") ||
+      typeof p.channelId !== "string" ||
+      !p.channelId ||
+      p.channelId.length > 512
+    )
+      throw new Error("Invalid history job");
+    return { importId: p.importId, cursor: p.cursor, mode: p.mode, channelId: p.channelId };
+  },
+  async run(payload, context) {
+    const { runHistoryImportPage } = await import("../woztell/history-import.server.ts");
+    try {
+      return { summary: await runHistoryImportPage(payload, context.checkpoint) };
+    } catch {
+      throw retryableJobError(
+        "WOZTELL_HISTORY_IMPORT_RETRYABLE",
+        "History import paused; retry resumes its persisted cursor.",
+      );
+    }
+  },
+});

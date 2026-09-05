@@ -20,15 +20,19 @@ export type CmsCategoryResult = { rows: CmsHubRow[]; unavailableReason?: string 
 export type CmsDraftSaveInput = {
   resourceType: CmsResourceType;
   resourceId?: string;
+  draftRevisionId?: string | null;
   payload: Record<string, unknown>;
   basePublishedVersion?: number | null;
   restoredFromRevisionId?: string | null;
+  draftEditVersion?: number | null;
 };
 
 export type CmsPublishInput = {
   resourceType: CmsResourceType;
   resourceId: string;
   revisionId: string;
+  basePublishedVersion?: number | null;
+  draftEditVersion?: number | null;
 };
 export type CmsRestoreInput = { revisionId: string };
 export type CmsArchiveInput = { resourceType: CmsResourceType; resourceId: string };
@@ -38,7 +42,20 @@ export type CmsArchiveInput = { resourceType: CmsResourceType; resourceId: strin
  * createServerFn return type rejects `Record<string, unknown>`. */
 export type CmsPayloadValue = string | number | boolean | string[] | null;
 
+export type CmsEditState<TPayload> = {
+  resourceId: string;
+  draftRevisionId: string | null;
+  draftVersion: number | null;
+  draftEditVersion: number | null;
+  currentPublishedVersion: number | null;
+  basePublishedVersion: number | null;
+  payload: TPayload;
+  restoredFromRevisionId: string | null;
+};
+
 export type CmsEditorResult = {
+  publishedPayload: Record<string, CmsPayloadValue> | null;
+  editState: CmsEditState<Record<string, CmsPayloadValue>> | null;
   row: CmsHubRow | null;
   revisions: CmsRevisionSummary[];
   /** The latest revision's raw payload -- needed to populate a comprehensive

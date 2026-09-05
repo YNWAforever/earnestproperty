@@ -92,6 +92,9 @@ test("CI runs every test script that does not need a database or browser server"
   );
   const environmentDependent = new Set([
     "test:a11y",
+    "test:cms:db",
+    "test:crm:db",
+    "test:woztell:db",
     "test:control-plane:db",
     "test:mls:db",
     "test:staff-bootstrap:db",

@@ -182,6 +182,9 @@ export type AdminCampaignRow = {
   /** Per-recipient delivery outcome. Without these a blast where most sends
    * failed looked identical to a clean one. */
   sent: number;
+  unknown?: number;
+  cancelled?: number;
+  dispatching?: number;
   failed: number;
   blocked: number;
   pending: number;

@@ -2836,7 +2836,7 @@ export async function fetchAdminConversation(id: string, actor?: StaffAccess) {
     assigned_agent_id: stringOrNull(conversation.assigned_agent_id),
     woztell_member_id: stringOrNull(conversation.woztell_member_id),
     // Mirrors the requireStaff(["admin","manager"]) gate on
-    // clearContactWhatsappOptOut -- this only decides whether the control is
+    // setWhatsappMarketingConsent -- this only decides whether the control is
     // rendered; the server fn enforces it for real. No actor means an internal
     // unscoped call with no UI behind it, so deny rather than assume.
     can_clear_opt_out: actor
@@ -2947,45 +2947,13 @@ export async function updateAdminConversation(
   return { ok: true };
 }
 
-/**
- * Clear a contact's WhatsApp opt-out.
- *
- * opted_out_whatsapp is written monotonically by the inbound webhook
- * (`opted_out_whatsapp = opted_out_whatsapp OR $7`), and until this existed
- * there was no code path anywhere that could set it back to false. A customer
- * mis-classified as opting out -- which the old substring matcher did to anyone
- * who wrote 「我想取消今日睇樓約會」 -- was blocked from every staff reply and every
- * campaign permanently, with no way back short of a manual SQL statement.
- *
- * Restricted to admin/manager and always audited: this re-enables marketing
- * messages to a real person, so it needs to be attributable. Agents can see the
- * 已拒收 badge but cannot clear it.
- */
+/** Legacy clients must use the evidence workflow; never reset retained marketing flags here. */
 export async function clearContactWhatsappOptOut(
-  input: { contactId: string; reason: string },
+  _input: { contactId: string; reason: string },
   actor: StaffAccess,
 ) {
-  const reason = input.reason.trim();
-  if (!reason) throw new Response("A reason is required to clear an opt-out.", { status: 400 });
-
-  const rows = await queryRows<{ id: unknown; opted_out_whatsapp: unknown }>(
-    `UPDATE crm_contacts
-        SET opted_out_whatsapp = false, updated_at = now()
-      WHERE id = $1::uuid
-        AND opted_out_whatsapp = true
-      RETURNING id, opted_out_whatsapp`,
-    [input.contactId],
-  );
-
-  if (!rows[0]) {
-    // Either no such contact, or it was not opted out to begin with. Both are
-    // no-ops from the caller's point of view; nothing was changed, so nothing
-    // is audited.
-    return { ok: false as const, error: "NOT_OPTED_OUT" };
-  }
-
-  await writeAudit(actor.staffId, "contact.optout.clear", "contact", input.contactId, { reason });
-  return { ok: true as const };
+  const { rejectLegacyWhatsappOptOutReset } = await import("./whatsapp-consent.server");
+  return rejectLegacyWhatsappOptOutReset(actor);
 }
 
 function parseConversationAiMessages(value: unknown) {
@@ -3031,9 +2999,12 @@ export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
       a.name AS audience_name,
       count(r.id)::int AS recipients,
       count(r.id) FILTER (WHERE r.status = 'sent')::int AS sent,
-      count(r.id) FILTER (WHERE r.status = 'failed')::int AS failed,
+      count(r.id) FILTER (WHERE r.status = 'failed' AND r.error IS DISTINCT FROM 'WOZTELL_DELIVERY_UNKNOWN')::int AS failed,
+      count(r.id) FILTER (WHERE r.error = 'WOZTELL_DELIVERY_UNKNOWN')::int AS unknown,
+      count(r.id) FILTER (WHERE r.status = 'cancelled')::int AS cancelled,
+      count(r.id) FILTER (WHERE r.status = 'sending' AND r.dispatch_started_at IS NOT NULL)::int AS dispatching,
       count(r.id) FILTER (WHERE r.status = 'blocked')::int AS blocked,
-      count(r.id) FILTER (WHERE r.status IN ('queued', 'sending'))::int AS pending
+      count(r.id) FILTER (WHERE r.status IN ('queued', 'sending') AND r.dispatch_started_at IS NULL)::int AS pending
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
@@ -3415,20 +3386,32 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
 }
 
 export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
-  const rows = await queryRows(
-    "UPDATE whatsapp_campaigns SET status = 'cancelled', updated_at = now() WHERE id = $1 RETURNING id",
-    [id],
-  );
-  if (!rows[0]) return { ok: false, error: "Not found" };
-  await queryRows(
-    "UPDATE whatsapp_campaign_recipients SET status = 'cancelled' WHERE campaign_id = $1 AND status = 'queued'",
-    [id],
-  );
-  await writeAudit(actor.staffId, "campaign.cancel", "campaign", id);
+  const sql = getSql();
+  const [rows] = await sql.transaction((tx) => [
+    tx.query(
+      "UPDATE whatsapp_campaigns SET status = 'cancelled', updated_at = now() WHERE id = $1::uuid RETURNING id",
+      [id],
+    ),
+    tx.query(
+      `UPDATE whatsapp_campaign_recipients
+       SET status = 'cancelled', error = 'CAMPAIGN_CANCELLED'
+       WHERE campaign_id = $1::uuid
+         AND status IN ('queued', 'sending') AND dispatch_started_at IS NULL`,
+      [id],
+    ),
+    tx.query(
+      `INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $2::uuid, 'campaign.cancel', 'campaign', id,
+         jsonb_build_object('dispatchBoundary', 'dispatch_started_at')
+       FROM whatsapp_campaigns WHERE id = $1::uuid`,
+      [id, actor.staffId],
+    ),
+  ]);
+  if (!Array.isArray(rows) || !rows[0]) return { ok: false, error: "Not found" };
   return { ok: true };
 }
-
 export async function createWebsiteInquiry(input: {
+  submissionId: string;
   name: string;
   phone: string;
   email?: string | null;
@@ -3445,6 +3428,7 @@ export async function createWebsiteInquiry(input: {
   const requestedPropertyId = input.property_id ?? null;
   const requestedListingNo = input.listingNo?.trim() || null;
   return persistWebsiteInquiry(queryRows, {
+    submissionId: input.submissionId,
     name: input.name,
     phone: input.phone,
     normalizedPhone,

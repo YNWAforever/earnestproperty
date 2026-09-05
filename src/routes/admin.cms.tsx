@@ -1,3 +1,4 @@
+import { uploadAdminMedia } from "@/lib/admin/media-upload";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
@@ -60,11 +62,17 @@ import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
   archiveAdminCmsResource,
   fetchAdminCmsEditor,
+  fetchAdminCmsCategory,
   publishAdminCmsRevision,
   restoreAdminCmsRevision,
   saveAdminCmsDraft,
 } from "@/lib/neon/admin-cms";
-import type { CmsPayloadValue, CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
+import type {
+  CmsEditState,
+  CmsHubRow,
+  CmsPayloadValue,
+  CmsRevisionSummary,
+} from "@/lib/neon/admin-cms.types";
 import {
   checkAdminFaqConflicts,
   deleteAdminFaq,
@@ -228,6 +236,15 @@ function AdminCms() {
     CmsPayloadValue
   > | null>(null);
   const [articleRevisions, setArticleRevisions] = useState<CmsRevisionSummary[] | null>(null);
+  const estateLoadSequence = useRef(0);
+  const articleLoadSequence = useRef(0);
+  const [estateEdit, setEstateEdit] = useState<CmsEditState<
+    Record<string, CmsPayloadValue>
+  > | null>(null);
+  const [articleEdit, setArticleEdit] = useState<CmsEditState<
+    Record<string, CmsPayloadValue>
+  > | null>(null);
+  const [draftRows, setDraftRows] = useState<CmsHubRow[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState<{ type: "estate" | "article"; id: string } | null>(
     null,
@@ -250,11 +267,14 @@ function AdminCms() {
   const [mediaUploading, setMediaUploading] = useState(false);
 
   const refreshCmsData = useCallback(async () => {
-    const [cms, media, videos] = await Promise.all([
+    const [cms, media, videos, estates, articles] = await Promise.all([
       fetchAdminCms(),
       fetchAdminMediaAssets(),
       fetchAdminCmsVideos(),
+      fetchAdminCmsCategory({ data: { resourceType: "estate" } }),
+      fetchAdminCmsCategory({ data: { resourceType: "article" } }),
     ]);
+    setDraftRows([...estates.rows, ...articles.rows].filter((row) => row.state === "draft"));
     setData(cms as AdminCmsData);
     setMediaAssets(media as AdminMediaAssetRow[]);
     setCmsVideos(videos as AdminCmsVideoRow[]);
@@ -394,20 +414,25 @@ function AdminCms() {
   }
 
   async function loadEstateRevisions(resourceId: string | undefined) {
+    const sequence = ++estateLoadSequence.current;
     if (!resourceId) {
       setEstateRevisions(null);
       setEstateLatestPayload(null);
+      setEstateEdit(null);
       return;
     }
     try {
-      const { revisions, payload } = await fetchAdminCmsEditor({
+      const { revisions, payload, editState } = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId },
       });
+      if (sequence !== estateLoadSequence.current) return;
+      setEstateEdit(editState);
+      if (payload)
+        setEditingEstate({ ...emptyEstate, ...payload, id: resourceId } as AdminEstateInput);
       setEstateRevisions(revisions);
       setEstateLatestPayload(payload);
     } catch {
-      setEstateRevisions(null);
-      setEstateLatestPayload(null);
+      if (sequence === estateLoadSequence.current) toast.error("未能載入完整草稿，請重試。");
     }
   }
 
@@ -423,6 +448,7 @@ function AdminCms() {
       return;
     }
 
+    const sequence = estateLoadSequence.current;
     setSaving(true);
     try {
       const result = await callCms(() =>
@@ -434,14 +460,17 @@ function AdminCms() {
             // (from editingEstate) always win for the fields it controls,
             // while the ~10 fields it has no UI for pass through unchanged.
             payload: { ...estateLatestPayload, ...editingEstate },
-            basePublishedVersion: estateRevisions?.find(
-              (revision) => revision.state === "published",
-            )?.versionNumber,
+            basePublishedVersion: estateEdit?.basePublishedVersion ?? null,
+            draftRevisionId: estateEdit?.draftRevisionId ?? null,
+            draftEditVersion: estateEdit?.draftEditVersion ?? null,
           },
         }),
       );
-      setEditingEstate({ ...editingEstate, id: result.resourceId });
-      await loadEstateRevisions(result.resourceId);
+      if (sequence === estateLoadSequence.current) {
+        setEstateEdit(result.editState);
+        setEditingEstate((current) => (current ? { ...current, id: result.resourceId } : current));
+      }
+      void refreshCmsData().catch(() => undefined);
       toast.success("草稿已儲存");
     } catch (err) {
       toast.error(errorText(err));
@@ -454,32 +483,33 @@ function AdminCms() {
     if (!editingEstate) return;
     setPublishing(true);
     try {
-      const draft = await callCms(() =>
-        saveAdminCmsDraft({
-          data: {
-            resourceType: "estate",
-            resourceId: editingEstate.id,
-            // estateLatestPayload first so this dialog's own 15 known fields
-            // (from editingEstate) always win for the fields it controls,
-            // while the ~10 fields it has no UI for pass through unchanged.
-            payload: { ...estateLatestPayload, ...editingEstate },
-            basePublishedVersion: estateRevisions?.find(
-              (revision) => revision.state === "published",
-            )?.versionNumber,
-          },
-        }),
-      );
+      if (
+        !estateEdit?.draftRevisionId ||
+        Object.entries(editingEstate).some(
+          ([key, value]) =>
+            key !== "id" &&
+            JSON.stringify(value) !==
+              JSON.stringify(
+                ({ ...emptyEstate, ...estateEdit.payload } as Record<string, unknown>)[key],
+              ),
+        )
+      ) {
+        throw new Error("請先儲存草稿並核對內容後發布。");
+      }
+      const draft = { resourceId: estateEdit.resourceId, revisionId: estateEdit.draftRevisionId };
       await callCms(() =>
         publishAdminCmsRevision({
           data: {
             resourceType: "estate",
             resourceId: draft.resourceId,
             revisionId: draft.revisionId,
+            basePublishedVersion: estateEdit.basePublishedVersion,
+            draftEditVersion: estateEdit.draftEditVersion,
           },
         }),
       );
       setEditingEstate(null);
-      await Promise.all([refreshAfterWrite("屋苑已發布"), loadEstateRevisions(draft.resourceId)]);
+      await refreshAfterWrite("屋苑已發布");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -516,17 +546,23 @@ function AdminCms() {
   }
 
   async function loadArticleRevisions(resourceId: string | undefined) {
+    const sequence = ++articleLoadSequence.current;
     if (!resourceId) {
       setArticleRevisions(null);
+      setArticleEdit(null);
       return;
     }
     try {
-      const { revisions } = await fetchAdminCmsEditor({
+      const { revisions, payload, editState } = await fetchAdminCmsEditor({
         data: { resourceType: "article", resourceId },
       });
+      if (sequence !== articleLoadSequence.current) return;
+      setArticleEdit(editState);
+      if (payload)
+        setEditingArticle({ ...emptyArticle, ...payload, id: resourceId } as AdminArticleInput);
       setArticleRevisions(revisions);
     } catch {
-      setArticleRevisions(null);
+      if (sequence === articleLoadSequence.current) toast.error("未能載入完整草稿，請重試。");
     }
   }
 
@@ -538,6 +574,7 @@ function AdminCms() {
       return;
     }
 
+    const sequence = articleLoadSequence.current;
     setSaving(true);
     try {
       const result = await callCms(() =>
@@ -546,14 +583,17 @@ function AdminCms() {
             resourceType: "article",
             resourceId: editingArticle.id,
             payload: { ...editingArticle },
-            basePublishedVersion: articleRevisions?.find(
-              (revision) => revision.state === "published",
-            )?.versionNumber,
+            basePublishedVersion: articleEdit?.basePublishedVersion ?? null,
+            draftRevisionId: articleEdit?.draftRevisionId ?? null,
+            draftEditVersion: articleEdit?.draftEditVersion ?? null,
           },
         }),
       );
-      setEditingArticle({ ...editingArticle, id: result.resourceId });
-      await loadArticleRevisions(result.resourceId);
+      if (sequence === articleLoadSequence.current) {
+        setArticleEdit(result.editState);
+        setEditingArticle((current) => (current ? { ...current, id: result.resourceId } : current));
+      }
+      void refreshCmsData().catch(() => undefined);
       toast.success("草稿已儲存");
     } catch (err) {
       toast.error(errorText(err));
@@ -566,29 +606,33 @@ function AdminCms() {
     if (!editingArticle) return;
     setPublishing(true);
     try {
-      const draft = await callCms(() =>
-        saveAdminCmsDraft({
-          data: {
-            resourceType: "article",
-            resourceId: editingArticle.id,
-            payload: { ...editingArticle },
-            basePublishedVersion: articleRevisions?.find(
-              (revision) => revision.state === "published",
-            )?.versionNumber,
-          },
-        }),
-      );
+      if (
+        !articleEdit?.draftRevisionId ||
+        Object.entries(editingArticle).some(
+          ([key, value]) =>
+            key !== "id" &&
+            JSON.stringify(value) !==
+              JSON.stringify(
+                ({ ...emptyArticle, ...articleEdit.payload } as Record<string, unknown>)[key],
+              ),
+        )
+      ) {
+        throw new Error("請先儲存草稿並核對內容後發布。");
+      }
+      const draft = { resourceId: articleEdit.resourceId, revisionId: articleEdit.draftRevisionId };
       await callCms(() =>
         publishAdminCmsRevision({
           data: {
             resourceType: "article",
             resourceId: draft.resourceId,
             revisionId: draft.revisionId,
+            basePublishedVersion: articleEdit.basePublishedVersion,
+            draftEditVersion: articleEdit.draftEditVersion,
           },
         }),
       );
       setEditingArticle(null);
-      await Promise.all([refreshAfterWrite("文章已發布"), loadArticleRevisions(draft.resourceId)]);
+      await refreshAfterWrite("文章已發布");
     } catch (err) {
       toast.error(errorText(err));
     } finally {
@@ -830,16 +874,11 @@ function AdminCms() {
     let uploaded = 0;
     try {
       for (const file of list) {
-        const body = new FormData();
-        body.set("file", file);
-        body.set("ownerType", "cms");
         try {
-          const res = await fetch("/api/admin/media/upload", { method: "POST", body });
-          const data = (await res.json().catch(() => null)) as { url?: string } | null;
-          if (!res.ok || !data?.url) failed.push(file.name);
-          else uploaded += 1;
-        } catch {
-          failed.push(file.name);
+          await uploadAdminMedia(file, "cms");
+          uploaded += 1;
+        } catch (error) {
+          failed.push(`${file.name}：${error instanceof Error ? error.message : "上載未完成"}`);
         }
       }
       await refreshCmsData();
@@ -972,6 +1011,20 @@ function AdminCms() {
             </CardContent>
           </Card>
 
+          <div className="mb-4 space-y-2" aria-label="我的草稿">
+            {draftRows.map((row) => (
+              <Button
+                key={`${row.resourceType}:${row.resourceId}`}
+                variant="outline"
+                onClick={() => {
+                  if (row.resourceType === "estate") void loadEstateRevisions(row.resourceId);
+                  else void loadArticleRevisions(row.resourceId);
+                }}
+              >
+                草稿：{row.title}
+              </Button>
+            ))}
+          </div>
           <Tabs
             value={activeTab}
             onValueChange={(tab) => {
@@ -1011,6 +1064,10 @@ function AdminCms() {
                     />
                     <Button
                       onClick={() => {
+                        setEstateEdit(null);
+                        ++estateLoadSequence.current;
+                        setEstateRevisions(null);
+                        setEstateLatestPayload(null);
                         setEditingEstate({ ...emptyEstate });
                         setEstateRevisions(null);
                         setEstateLatestPayload(null);
@@ -1060,7 +1117,6 @@ function AdminCms() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  setEditingEstate(estateToInput(estate));
                                   void loadEstateRevisions(estate.id);
                                 }}
                               >
@@ -1095,6 +1151,10 @@ function AdminCms() {
                           action={
                             <Button
                               onClick={() => {
+                                setEstateEdit(null);
+                                ++estateLoadSequence.current;
+                                setEstateRevisions(null);
+                                setEstateLatestPayload(null);
                                 setEditingEstate({ ...emptyEstate });
                                 setEstateRevisions(null);
                               }}
@@ -1130,6 +1190,9 @@ function AdminCms() {
                     />
                     <Button
                       onClick={() => {
+                        setArticleEdit(null);
+                        ++articleLoadSequence.current;
+                        setArticleRevisions(null);
                         setEditingArticle({ ...emptyArticle });
                         setArticleRevisions(null);
                       }}
@@ -1178,7 +1241,6 @@ function AdminCms() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  setEditingArticle(articleToInput(article));
                                   void loadArticleRevisions(article.id);
                                 }}
                               >
@@ -1215,6 +1277,9 @@ function AdminCms() {
                           action={
                             <Button
                               onClick={() => {
+                                setArticleEdit(null);
+                                ++articleLoadSequence.current;
+                                setArticleRevisions(null);
                                 setEditingArticle({ ...emptyArticle });
                                 setArticleRevisions(null);
                               }}
@@ -1619,7 +1684,10 @@ function AdminCms() {
             publishing={publishing}
             revisions={estateRevisions}
             onChange={setEditingEstate}
-            onClose={() => setEditingEstate(null)}
+            onClose={() => {
+              ++estateLoadSequence.current;
+              setEditingEstate(null);
+            }}
             onSubmit={handleSaveEstateDraft}
             onPublish={handlePublishEstate}
             onRestoreRevision={handleRestoreEstateRevision}
@@ -1634,7 +1702,10 @@ function AdminCms() {
             publishing={publishing}
             revisions={articleRevisions}
             onChange={setEditingArticle}
-            onClose={() => setEditingArticle(null)}
+            onClose={() => {
+              ++articleLoadSequence.current;
+              setEditingArticle(null);
+            }}
             onSubmit={handleSaveArticleDraft}
             onPublish={handlePublishArticle}
             onRestoreRevision={handleRestoreArticleRevision}
@@ -1916,6 +1987,11 @@ function EstateDialog({
           {estate ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
               <form className="grid gap-4" onSubmit={onSubmit}>
+                <CmsPublicationCompare
+                  resourceType="estate"
+                  resourceId={estate.id}
+                  localPayload={{ ...estate }}
+                />
                 <div className="grid gap-4 md:grid-cols-3">
                   <TextField
                     label="Slug"
@@ -2074,6 +2150,11 @@ function ArticleDialog({
           {article ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
               <form className="grid gap-4" onSubmit={onSubmit}>
+                <CmsPublicationCompare
+                  resourceType="article"
+                  resourceId={article.id}
+                  localPayload={{ ...article }}
+                />
                 <div className="grid gap-4 md:grid-cols-2">
                   <TextField
                     label="Slug"
@@ -2849,7 +2930,7 @@ function errorText(error: unknown) {
 }
 
 const CMS_ERROR_MESSAGES: Record<string, string> = {
-  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新，請重新載入頁面後再試一次。",
+  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用比較目前發布版本。",
   CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
   CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
   CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",

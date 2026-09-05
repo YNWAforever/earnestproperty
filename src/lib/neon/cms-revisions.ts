@@ -11,17 +11,20 @@ export function nextCmsVersion(rows: ReadonlyArray<{ version_number: number }>) 
   return (rows[0]?.version_number ?? 0) + 1;
 }
 
-export function makeRestoreDraft(revision: {
-  id: string;
-  resource_type: CmsResourceType;
-  resource_id: string;
-  version_number: number;
-  payload: Record<string, unknown>;
-}) {
+export function makeRestoreDraft(
+  revision: {
+    id: string;
+    resource_type: CmsResourceType;
+    resource_id: string;
+    version_number: number;
+    payload: Record<string, unknown>;
+  },
+  currentPublishedVersion: number | null = null,
+) {
   return {
     resourceType: revision.resource_type,
     resourceId: revision.resource_id,
-    basePublishedVersion: revision.version_number,
+    basePublishedVersion: currentPublishedVersion,
     payload: structuredClone(revision.payload),
     restoredFromRevisionId: revision.id,
   };

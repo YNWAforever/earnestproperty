@@ -4,7 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { createVercelBlobStore } from "@/lib/media/vercel-blob.mjs";
 import { requireStaffAccess } from "@/lib/neon/auth.server";
-import { queryRows } from "@/lib/neon/db.server";
+import { createMediaUploadService } from "@/lib/media/media-upload-service";
+import { mediaUploadRepository } from "@/lib/media/media-upload-repository.server";
 
 /**
  * Both uploaders in the app (ImageUploader.tsx and the CMS media picker in
@@ -25,7 +26,31 @@ export const Route = createFileRoute("/api/admin/media/upload")({
     handlers: {
       POST: async ({ request }) => {
         const staff = await requireStaffAccess(request, ["admin", "manager", "agent"]);
-        const form = await request.formData();
+        const length = Number(request.headers.get("content-length"));
+        if (length > MAX_UPLOAD_BYTES + 65536)
+          return Response.json({ ok: false, error: "FILE_TOO_LARGE" }, { status: 413 });
+        let form: FormData;
+        try {
+          const reader = request.body?.getReader();
+          if (!reader) throw new Error("EMPTY_BODY");
+          const chunks: Uint8Array<ArrayBuffer>[] = [];
+          let bytes = 0;
+          while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            bytes += next.value.byteLength;
+            if (bytes > MAX_UPLOAD_BYTES + 65536) {
+              await reader.cancel();
+              return Response.json({ ok: false, error: "FILE_TOO_LARGE" }, { status: 413 });
+            }
+            chunks.push(new Uint8Array(next.value));
+          }
+          form = await new Response(new Blob(chunks), {
+            headers: { "content-type": request.headers.get("content-type") ?? "" },
+          }).formData();
+        } catch {
+          return Response.json({ ok: false, error: "INVALID_UPLOAD_BODY" }, { status: 400 });
+        }
         const file = form.get("file");
         const requestedOwnerType = String(form.get("ownerType") ?? "property");
         const ownerType = ALLOWED_OWNER_TYPES.includes(requestedOwnerType)
@@ -56,28 +81,36 @@ export const Route = createFileRoute("/api/admin/media/upload")({
           );
         }
 
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+        const uploadId = String(form.get("uploadId") ?? "");
+        if (
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uploadId)
+        ) {
+          return Response.json({ ok: false, error: "UPLOAD_ID_REQUIRED" }, { status: 400 });
+        }
         const token = process.env.BLOB_READ_WRITE_TOKEN;
-        if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not configured");
-        const storeId = token.split("_")[3];
-        if (!storeId) throw new Error("BLOB_READ_WRITE_TOKEN is invalid");
-        // The shared adapter owns the existing https://vercel.com/api/blob endpoint and headers.
-        const blobStore = createVercelBlobStore({ token });
-        const blob = await blobStore.put({
-          pathname: `${ownerType}/${staff.staffId}/${crypto.randomUUID()}-${safeName}`,
-          body: file,
-          contentType: file.type,
-        });
-
-        await queryRows(
-          `
-          INSERT INTO media_assets (url, pathname, content_type, size_bytes, owner_type, created_by)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          `,
-          [blob.url, blob.pathname, file.type, file.size, ownerType, staff.staffId],
-        );
-
-        return Response.json({ ok: true, url: blob.url, pathname: blob.pathname });
+        if (!token || !token.split("_")[3])
+          return Response.json({ ok: false, error: "UPLOAD_UNAVAILABLE" }, { status: 503 });
+        try {
+          const blobStore = createVercelBlobStore({ token });
+          const upload = createMediaUploadService({
+            repo: mediaUploadRepository,
+            put: blobStore.put,
+            secret: token,
+          });
+          const result = await upload({
+            file,
+            ownerType,
+            staffId: staff.staffId,
+            uploadId,
+            receipt: String(form.get("receipt") ?? ""),
+          });
+          return Response.json(result, { status: result.ok ? 200 : result.status });
+        } catch {
+          return Response.json(
+            { ok: false, error: "UPLOAD_UNAVAILABLE", uploadId },
+            { status: 503 },
+          );
+        }
       },
     },
   },
