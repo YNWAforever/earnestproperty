@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { History, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 
+import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ import {
   restoreAdminCmsRevision,
   saveAdminCmsDraft,
 } from "@/lib/neon/admin-cms";
-import type { CmsPayloadValue, CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
+import type { CmsEditState, CmsPayloadValue, CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
 import { EstatePreviewCard } from "./EstatePreviewCard";
 
 type DistrictOption = { id: string; slug: string; name_zh: string };
@@ -94,8 +95,11 @@ function parseNullableNumber(value: string) {
 /** Builds the CMS draft payload from form state -- every estate field, not
  * just the ones this form's own UI exposes, since it always starts from a
  * full fetched payload (see createInitialForm) and only overlays edits. */
-function buildPayload(form: FormState): Record<string, unknown> {
-  return {
+function buildPayload(
+  form: FormState,
+  original?: Record<string, CmsPayloadValue> | null,
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {
     slug: form.slug.trim(),
     name_zh: form.name_zh.trim(),
     name_en: form.name_en.trim() || null,
@@ -122,10 +126,20 @@ function buildPayload(form: FormState): Record<string, unknown> {
     lng: parseNullableNumber(form.lng),
     verified_at: form.verified_at,
   };
+  if (!original) return normalized;
+  const initial = createInitialForm(original, form.id);
+  return {
+    ...original,
+    ...Object.fromEntries(
+      Object.entries(normalized).filter(
+        ([key]) => form[key as keyof FormState] !== initial[key as keyof FormState],
+      ),
+    ),
+  };
 }
 
 const CMS_ERROR_MESSAGES: Record<string, string> = {
-  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新，請重新載入頁面後再試一次。",
+  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用比較目前發布版本。",
   CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
   CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
   CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
@@ -170,9 +184,11 @@ const REVISION_STATE_LABELS: Record<string, string> = {
 export function AdminEstateEditorForm({
   resourceId,
   payload,
+  editState,
   onSaved,
 }: {
   resourceId?: string;
+  editState?: CmsEditState<Record<string, CmsPayloadValue>> | null;
   payload?: Record<string, CmsPayloadValue> | null;
   onSaved: (resourceId: string) => void;
 }) {
@@ -182,6 +198,7 @@ export function AdminEstateEditorForm({
   // used to discard all of it silently; PropertyForm and AgentProfileForm
   // already guard the same way.
   const [pristine, setPristine] = useState<FormState>(() => createInitialForm(payload, resourceId));
+  const [reviewed, setReviewed] = useState(editState ?? null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -260,9 +277,17 @@ export function AdminEstateEditorForm({
     try {
       const result = await callCms(() =>
         saveAdminCmsDraft({
-          data: { resourceType: "estate", resourceId: form.id, payload: buildPayload(form) },
+          data: {
+            resourceType: "estate",
+            resourceId: form.id,
+            payload: buildPayload(form, reviewed?.payload ?? payload),
+            basePublishedVersion: reviewed?.basePublishedVersion ?? null,
+            draftRevisionId: reviewed?.draftRevisionId ?? null,
+            draftEditVersion: reviewed?.draftEditVersion ?? null,
+          },
         }),
       );
+      setReviewed(result.editState);
       set("id", result.resourceId);
       setPristine({ ...form, id: result.resourceId });
       onSaved(result.resourceId);
@@ -284,21 +309,24 @@ export function AdminEstateEditorForm({
     }
     setPublishing(true);
     try {
-      const draft = await callCms(() =>
-        saveAdminCmsDraft({
-          data: { resourceType: "estate", resourceId: form.id, payload: buildPayload(form) },
-        }),
-      );
+      if (!reviewed?.draftRevisionId || isDirty) throw new Error("請先儲存草稿並核對內容後發布。");
+      const draft = { resourceId: reviewed.resourceId, revisionId: reviewed.draftRevisionId };
       await callCms(() =>
         publishAdminCmsRevision({
           data: {
             resourceType: "estate",
             resourceId: draft.resourceId,
             revisionId: draft.revisionId,
+            basePublishedVersion: reviewed.basePublishedVersion,
+            draftEditVersion: reviewed.draftEditVersion,
           },
         }),
       );
       set("id", draft.resourceId);
+      const editor = await fetchAdminCmsEditor({
+        data: { resourceType: "estate", resourceId: draft.resourceId },
+      });
+      setReviewed(editor.editState);
       onSaved(draft.resourceId);
       await refreshRevisions(draft.resourceId);
       toast.success("屋苑已發布");
@@ -316,6 +344,7 @@ export function AdminEstateEditorForm({
       const editor = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId: result.resourceId },
       });
+      setReviewed(editor.editState);
       const restored = createInitialForm(editor.payload, result.resourceId);
       setForm(restored);
       setPristine(restored);
@@ -389,6 +418,11 @@ export function AdminEstateEditorForm({
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
       <form onSubmit={handleSaveDraft} className="space-y-7" noValidate>
+        <CmsPublicationCompare
+          resourceType="estate"
+          resourceId={form.id}
+          localPayload={buildPayload(form, reviewed?.payload ?? payload)}
+        />
         <section>
           <h2 className="mb-3 text-sm font-semibold text-muted-foreground">基本資料</h2>
           <div className="grid gap-4 sm:grid-cols-2">

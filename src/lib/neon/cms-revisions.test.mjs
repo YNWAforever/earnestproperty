@@ -25,12 +25,12 @@ test("restore creates a new draft without rewriting the source revision", () => 
       meta: { slug: "lido-garden" },
     },
   };
-  const restored = makeRestoreDraft(revision);
+  const restored = makeRestoreDraft(revision, 9);
 
   assert.deepEqual(restored, {
     resourceType: "estate",
     resourceId: "estate-1",
-    basePublishedVersion: 4,
+    basePublishedVersion: 9,
     payload: {
       name_zh: "Lido Garden",
       meta: { slug: "lido-garden" },

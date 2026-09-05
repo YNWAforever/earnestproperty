@@ -65,6 +65,12 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260901110000_estate_expansion_publish.sql",
   "20260902100000_estate_expansion_school_net_correction.sql",
   "20260902110000_estate_expansion_facts_resolution.sql",
+  "20260905110000_cms_atomic_mutations.sql",
+  "20260905120000_campaign_dispatch_boundary.sql",
+  "20260905130000_outbound_intents.sql",
+  "20260905140000_media_upload_intents.sql",
+  "20260905150000_inquiry_submission_identity.sql",
+  "20260905151000_consent_evidence.sql",
 ]);
 
 /**

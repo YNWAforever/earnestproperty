@@ -14,30 +14,12 @@ import type {
   CmsRestoreInput,
 } from "./admin-cms.types";
 import { requireStaffAccess, type StaffAccess } from "./auth.server";
-import { dateOrNull, getSql, queryRows, stringOrEmpty, stringOrNull } from "./db.server";
-import {
-  CMS_RESOURCE_TYPES,
-  makeRestoreDraft,
-  type CmsResourceType,
-  type CmsRevisionState,
-} from "./cms-revisions";
+import { dateOrNull, queryRows, stringOrEmpty, stringOrNull } from "./db.server";
+import { CMS_RESOURCE_TYPES, type CmsResourceType, type CmsRevisionState } from "./cms-revisions";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
-import { writeAudit } from "./admin-data.server";
 
 const ALL_CMS_ROLES = ["admin", "manager", "agent"] as const;
 const PUBLISH_ROLES = ["admin", "manager"] as const;
-
-type RevisionRow = {
-  id: unknown;
-  resource_type: unknown;
-  resource_id: unknown;
-  version_number: unknown;
-  state: unknown;
-  payload: unknown;
-  base_published_version: unknown;
-  created_at: unknown;
-  created_by: unknown;
-};
 
 function isResourceType(value: unknown): value is CmsResourceType {
   return typeof value === "string" && CMS_RESOURCE_TYPES.includes(value as CmsResourceType);
@@ -106,7 +88,7 @@ async function listHubRows(
   },
   actor: StaffAccess,
 ) {
-  const params: unknown[] = [];
+  const params: unknown[] = [actor.staffId];
   const filters: string[] = [];
   if (input.resourceType) {
     params.push(input.resourceType);
@@ -134,7 +116,8 @@ async function listHubRows(
       SELECT DISTINCT ON (r.resource_type, r.resource_id)
         r.*
       FROM cms_content_revisions r
-      ORDER BY r.resource_type, r.resource_id, r.version_number DESC
+      WHERE r.draft_retired_at IS NULL AND (r.state <> 'draft' OR r.created_by = $1::uuid)
+      ORDER BY r.resource_type, r.resource_id, (r.state = 'draft') DESC, r.version_number DESC
     )
     SELECT
       latest.resource_type,
@@ -189,44 +172,86 @@ export async function fetchAdminCmsCategory(input: {
 export async function fetchAdminCmsEditor(input: {
   resourceType: CmsResourceType;
   resourceId: string;
+  reviewDraftRevisionId?: string;
 }): Promise<CmsEditorResult> {
   assertResourceType(input.resourceType);
-  await staffForRead();
-  const rows = await queryRows(
-    `SELECT id, resource_type, resource_id, version_number, state, payload,
-      base_published_version, created_at, created_by
-     FROM cms_content_revisions
-     WHERE resource_type = $1 AND resource_id = $2
-     ORDER BY version_number DESC
-     LIMIT 20`,
+  const actor = await staffForRead();
+  if (input.reviewDraftRevisionId && !PUBLISH_ROLES.some((role) => actor.roles.includes(role)))
+    throw new Error("CMS_REVIEW_FORBIDDEN");
+  const selected = await queryRows(
+    `SELECT * FROM cms_content_revisions WHERE resource_type = $1 AND resource_id = $2 AND state = 'draft' AND draft_retired_at IS NULL
+       AND (($4::uuid IS NULL AND created_by = $3::uuid) OR id = $4::uuid)
+     ORDER BY version_number DESC LIMIT 1`,
+    [input.resourceType, input.resourceId, actor.staffId, input.reviewDraftRevisionId ?? null],
+  );
+  if (input.reviewDraftRevisionId && !selected[0]) throw new Error("CMS_REVISION_NOT_FOUND");
+  const publication = await queryRows(
+    `SELECT * FROM cms_content_revisions WHERE resource_type = $1 AND resource_id = $2 AND state = 'published'
+     ORDER BY version_number DESC LIMIT 1`,
     [input.resourceType, input.resourceId],
   );
-  const latest = rows[0];
-  const row = latest
-    ? hubRow({
-        ...latest,
-        title: String(
-          latest.payload && typeof latest.payload === "object"
-            ? ((latest.payload as Record<string, unknown>).title ??
-                (latest.payload as Record<string, unknown>).name_zh ??
-                (latest.payload as Record<string, unknown>).question ??
-                "Untitled")
-            : "Untitled",
-        ),
-        slug:
-          latest.payload && typeof latest.payload === "object"
-            ? (latest.payload as Record<string, unknown>).slug
-            : null,
-        latest_revision_id: latest.id,
-        latest_version: latest.version_number,
-        published_version:
-          rows.find((entry) => entry.state === "published")?.version_number ?? null,
-        updated_at: latest.created_at,
-        updated_by: latest.created_by,
-      })
+  const latest = selected[0] ?? publication[0];
+  const tables: Record<CmsResourceType, string> = {
+    estate: "estates",
+    article: "articles",
+    video: "cms_videos",
+    faq: "faqs",
+    media: "media_assets",
+  };
+  // Table names are allowlisted; never use a capped summary for edit recovery.
+  const live = latest
+    ? []
+    : await queryRows(`SELECT * FROM ${tables[input.resourceType]} WHERE id = $1`, [
+        input.resourceId,
+      ]);
+  const raw = latest?.payload ?? live[0];
+  const payload: Record<string, CmsPayloadValue> | null = raw
+    ? (Object.fromEntries(
+        Object.entries(raw as Record<string, unknown>)
+          .filter(([key]) => !["created_by", "updated_by"].includes(key))
+          .map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]),
+      ) as Record<string, CmsPayloadValue>)
     : null;
+  const currentPublishedVersion = publication[0] ? Number(publication[0].version_number) : null;
+  const rows = await queryRows(
+    `SELECT id, version_number, state, created_at, created_by FROM cms_content_revisions
+     WHERE resource_type = $1 AND resource_id = $2 AND draft_retired_at IS NULL AND (state <> 'draft' OR created_by = $3::uuid OR id = $4::uuid)
+     ORDER BY version_number DESC LIMIT 20`,
+    [input.resourceType, input.resourceId, actor.staffId, input.reviewDraftRevisionId ?? null],
+  );
   return {
-    row,
+    publishedPayload: publication[0]?.payload
+      ? (publication[0].payload as Record<string, CmsPayloadValue>)
+      : null,
+    editState: payload
+      ? {
+          resourceId: input.resourceId,
+          draftRevisionId: selected[0] ? stringOrEmpty(selected[0].id) : null,
+          draftVersion: selected[0] ? Number(selected[0].version_number) : null,
+          draftEditVersion:
+            selected[0]?.draft_edit_version == null ? null : Number(selected[0].draft_edit_version),
+          currentPublishedVersion,
+          basePublishedVersion: selected[0]
+            ? selected[0].base_published_version == null
+              ? null
+              : Number(selected[0].base_published_version)
+            : currentPublishedVersion,
+          payload,
+          restoredFromRevisionId: stringOrNull(selected[0]?.restored_from_revision_id),
+        }
+      : null,
+    row: latest
+      ? hubRow({
+          ...latest,
+          title: payload?.title ?? payload?.name_zh ?? "Untitled",
+          slug: payload?.slug,
+          latest_revision_id: latest.id,
+          latest_version: latest.version_number,
+          published_version: currentPublishedVersion,
+          updated_at: latest.created_at,
+          updated_by: latest.created_by,
+        })
+      : null,
     revisions: rows.map((revision) => ({
       id: stringOrEmpty(revision.id),
       versionNumber: Number(revision.version_number),
@@ -234,275 +259,117 @@ export async function fetchAdminCmsEditor(input: {
       createdAt: dateOrNull(revision.created_at) ?? new Date(0).toISOString(),
       createdBy: stringOrNull(revision.created_by),
     })),
-    payload:
-      latest && latest.payload && typeof latest.payload === "object"
-        ? (latest.payload as Record<string, CmsPayloadValue>)
-        : null,
+    payload,
   };
 }
 
-async function saveDraftForActor(input: CmsDraftSaveInput, actor: StaffAccess) {
+// One database invocation owns lock, checks, revision, projection and audit.
+async function mutateCms(
+  op: string,
+  input: {
+    resourceType: CmsResourceType;
+    resourceId: string;
+    payload?: Record<string, unknown>;
+    basePublishedVersion?: number | null;
+    draftEditVersion?: number | null;
+    revisionId?: string;
+    draftRevisionId?: string | null;
+  },
+  actor: StaffAccess,
+) {
+  assertResourceType(input.resourceType);
+  const rows = await queryRows(
+    "SELECT cms_mutate($1, $2, $3::uuid, $4::uuid, $5::jsonb, $6::integer, $7::integer, $8::uuid) AS revision",
+    [
+      op,
+      input.resourceType,
+      input.resourceId,
+      actor.staffId,
+      input.payload ? JSON.stringify(input.payload) : null,
+      input.basePublishedVersion ?? null,
+      input.draftEditVersion ?? null,
+      input.revisionId ?? input.draftRevisionId ?? null,
+    ],
+  );
+  const revision = rows[0]?.revision as Record<string, unknown> | undefined;
+  if (!revision?.id) throw new Error("CMS_MUTATION_FAILED");
+  return revision;
+}
+function savedResult(row: Record<string, unknown>) {
+  const resourceId = stringOrEmpty(row.resource_id);
+  return {
+    resourceId,
+    revisionId: stringOrEmpty(row.id),
+    versionNumber: Number(row.version_number),
+    savedAt: dateOrNull(row.created_at)!,
+    editState: {
+      resourceId,
+      draftRevisionId: stringOrEmpty(row.id),
+      draftVersion: Number(row.version_number),
+      draftEditVersion: Number(row.draft_edit_version),
+      currentPublishedVersion:
+        row.current_published_version == null ? null : Number(row.current_published_version),
+      basePublishedVersion:
+        row.base_published_version == null ? null : Number(row.base_published_version),
+      payload: row.payload as Record<string, CmsPayloadValue>,
+      restoredFromRevisionId: stringOrNull(row.restored_from_revision_id),
+    },
+  };
+}
+export async function saveAdminCmsDraft(input: CmsDraftSaveInput, request: Request) {
+  const actor = await requireStaffAccess(request, ["admin", "manager", "agent"]);
   assertResourceType(input.resourceType);
   const payload = payloadRecord(input.payload);
   validatePayload(input.resourceType, payload);
-  const resourceIdRows = input.resourceId
-    ? [{ id: input.resourceId }]
-    : await queryRows("SELECT gen_random_uuid() AS id");
-  const resourceId = stringOrEmpty(resourceIdRows[0]?.id);
-  const existing = await queryRows(
-    `SELECT id, version_number FROM cms_content_revisions
-     WHERE resource_type = $1 AND resource_id = $2 AND state = 'draft' AND created_by = $3
-     ORDER BY version_number DESC LIMIT 1`,
-    [input.resourceType, resourceId, actor.staffId],
-  );
-  const payloadJson = JSON.stringify(payload);
-  const rows = existing[0]
-    ? await queryRows(
-        `UPDATE cms_content_revisions
-         SET payload = $1::jsonb, validation_summary = '{}'::jsonb,
-           base_published_version = $2, restored_from_revision_id = $3, created_at = now()
-         WHERE id = $4
-         RETURNING id, version_number, created_at`,
-        [
-          payloadJson,
-          input.basePublishedVersion ?? null,
-          input.restoredFromRevisionId ?? null,
-          existing[0].id,
-        ],
-      )
-    : await queryRows(
-        `INSERT INTO cms_content_revisions (
-           resource_type, resource_id, version_number, state, payload,
-           base_published_version, created_by, restored_from_revision_id
-         )
-         SELECT $1, $2, COALESCE(MAX(version_number), 0) + 1, 'draft', $3::jsonb,
-           $4, $5, $6
-         FROM cms_content_revisions
-         WHERE resource_type = $1 AND resource_id = $2
-         RETURNING id, version_number, created_at`,
-        [
-          input.resourceType,
-          resourceId,
-          payloadJson,
-          input.basePublishedVersion ?? null,
-          actor.staffId,
-          input.restoredFromRevisionId ?? null,
-        ],
-      );
-  const saved = rows[0];
-  await writeAudit(actor.staffId, "cms_draft_saved", input.resourceType, resourceId, {
-    revisionId: stringOrEmpty(saved?.id),
-  });
-  return {
-    resourceId,
-    revisionId: stringOrEmpty(saved?.id),
-    versionNumber: Number(saved?.version_number ?? existing[0]?.version_number ?? 1),
-    savedAt: dateOrNull(saved?.created_at) ?? new Date().toISOString(),
-  };
+  if (input.restoredFromRevisionId) throw new Error("CMS_USE_RESTORE_OPERATION");
+  const resourceId =
+    input.resourceId ?? stringOrEmpty((await queryRows("SELECT gen_random_uuid() AS id"))[0]?.id);
+  return savedResult(await mutateCms("save", { ...input, resourceId, payload }, actor));
 }
-
-export async function saveAdminCmsDraft(input: CmsDraftSaveInput, request: Request) {
-  const actor = await requireStaffAccess(request, ["admin", "manager", "agent"]);
-  return saveDraftForActor(input, actor);
-}
-
-function projectorSql(resourceType: CmsResourceType) {
-  const common = `
-    WITH draft AS (
-      SELECT * FROM cms_content_revisions
-      WHERE id = $1 AND resource_type = $2 AND resource_id = $3 AND state = 'draft'
-      FOR UPDATE
-    ), current_published AS (
-      SELECT version_number FROM cms_content_revisions
-      WHERE resource_type = $2 AND resource_id = $3 AND state = 'published'
-      ORDER BY version_number DESC LIMIT 1 FOR UPDATE
-    ), eligible AS (
-      SELECT draft.* FROM draft
-      WHERE COALESCE(draft.base_published_version, 0) = COALESCE((SELECT version_number FROM current_published), 0)
-    ), superseded AS (
-      UPDATE cms_content_revisions SET state = 'superseded'
-      WHERE resource_type = $2 AND resource_id = $3 AND state = 'published'
-        AND EXISTS (SELECT 1 FROM eligible)
-    ), published AS (
-      UPDATE cms_content_revisions SET state = 'published', published_at = now()
-      WHERE id = $1 AND EXISTS (SELECT 1 FROM eligible)
-      RETURNING id
-    )`;
-  if (resourceType === "estate")
-    return `${common}
-    INSERT INTO estates (id, slug, name_zh, name_en, district_slug, developer, year_completed,
-      phases, total_units, area_min, area_max, description, hero_image, facilities,
-      seo_title, seo_description, aliases, address, blocks, school_net_code, transport_note,
-      verified_at, district_id, avg_saleable_psf, lat, lng, published)
-    SELECT resource_id, payload->>'slug', payload->>'name_zh', payload->>'name_en',
-      payload->>'district_slug', payload->>'developer', (payload->>'year_completed')::int,
-      (payload->>'phases')::int, (payload->>'total_units')::int, (payload->>'area_min')::int,
-      (payload->>'area_max')::int, payload->>'description', payload->>'hero_image',
-      ARRAY(SELECT jsonb_array_elements_text(COALESCE(payload->'facilities', '[]'::jsonb))),
-      payload->>'seo_title', payload->>'seo_description',
-      ARRAY(SELECT jsonb_array_elements_text(COALESCE(payload->'aliases', '[]'::jsonb))),
-      payload->>'address', (payload->>'blocks')::int, payload->>'school_net_code',
-      payload->>'transport_note', NULLIF(payload->>'verified_at', '')::timestamptz,
-      NULLIF(payload->>'district_id', '')::uuid, (payload->>'avg_saleable_psf')::numeric,
-      (payload->>'lat')::numeric, (payload->>'lng')::numeric, true
-    FROM eligible
-    ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug, name_zh=EXCLUDED.name_zh,
-      name_en=EXCLUDED.name_en, district_slug=EXCLUDED.district_slug, developer=EXCLUDED.developer,
-      year_completed=EXCLUDED.year_completed, phases=EXCLUDED.phases, total_units=EXCLUDED.total_units,
-      area_min=EXCLUDED.area_min, area_max=EXCLUDED.area_max, description=EXCLUDED.description,
-      hero_image=EXCLUDED.hero_image, facilities=EXCLUDED.facilities, seo_title=EXCLUDED.seo_title,
-      seo_description=EXCLUDED.seo_description, aliases=EXCLUDED.aliases, address=EXCLUDED.address,
-      blocks=EXCLUDED.blocks, school_net_code=EXCLUDED.school_net_code,
-      transport_note=EXCLUDED.transport_note, verified_at=EXCLUDED.verified_at,
-      district_id=EXCLUDED.district_id, avg_saleable_psf=EXCLUDED.avg_saleable_psf,
-      lat=EXCLUDED.lat, lng=EXCLUDED.lng, published=true, updated_at=now() RETURNING id`;
-  if (resourceType === "article")
-    return `${common}
-    INSERT INTO articles (id, slug, title, excerpt, content, cover_image, category,
-      reading_minutes, published, published_at, seo_title, seo_description)
-    SELECT resource_id, payload->>'slug', payload->>'title', payload->>'excerpt', payload->>'content',
-      payload->>'cover_image', payload->>'category', COALESCE((payload->>'reading_minutes')::int, 5),
-      true, now(), payload->>'seo_title', payload->>'seo_description' FROM eligible
-    ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug, title=EXCLUDED.title, excerpt=EXCLUDED.excerpt,
-      content=EXCLUDED.content, cover_image=EXCLUDED.cover_image, category=EXCLUDED.category,
-      reading_minutes=EXCLUDED.reading_minutes, published=true, published_at=now(),
-      seo_title=EXCLUDED.seo_title, seo_description=EXCLUDED.seo_description, updated_at=now() RETURNING id`;
-  if (resourceType === "video")
-    return `${common}
-    INSERT INTO cms_videos (id, title, video_url, description, sort_order, published)
-    SELECT resource_id, payload->>'title', payload->>'video_url', payload->>'description',
-      COALESCE((payload->>'sort_order')::int, 0), true FROM eligible
-    ON CONFLICT (id) DO UPDATE SET title=EXCLUDED.title, video_url=EXCLUDED.video_url,
-      description=EXCLUDED.description, sort_order=EXCLUDED.sort_order, published=true, updated_at=now()
-    RETURNING id`;
-  if (resourceType === "faq")
-    return `${common}
-    INSERT INTO faqs (id, scope, question, answer, sort_order, published)
-    SELECT resource_id, payload->>'scope', payload->>'question', payload->>'answer',
-      COALESCE((payload->>'sort_order')::int, 0), true FROM eligible
-    ON CONFLICT (id) DO UPDATE SET scope=EXCLUDED.scope, question=EXCLUDED.question,
-      answer=EXCLUDED.answer, sort_order=EXCLUDED.sort_order, published=true RETURNING id`;
-  return `${common}
-    INSERT INTO media_assets (id, url, pathname, content_type, size_bytes, alt_text,
-      owner_type, owner_id, created_by, archived_at)
-    SELECT resource_id, payload->>'url', payload->>'pathname', payload->>'content_type',
-      (payload->>'size_bytes')::bigint, payload->>'alt_text', COALESCE(payload->>'owner_type', 'property'),
-      NULLIF(payload->>'owner_id', '')::uuid, created_by, null FROM eligible
-    ON CONFLICT (id) DO UPDATE SET url=EXCLUDED.url, pathname=EXCLUDED.pathname,
-      content_type=EXCLUDED.content_type, size_bytes=EXCLUDED.size_bytes, alt_text=EXCLUDED.alt_text,
-      owner_type=EXCLUDED.owner_type, owner_id=EXCLUDED.owner_id, archived_at=null RETURNING id`;
-}
-
 export async function publishAdminCmsRevision(input: CmsPublishInput, request: Request) {
   const actor = await requireStaffAccess(request, ["admin", "manager"]);
-  const revisionRows = await queryRows<RevisionRow>(
-    `SELECT id, resource_type, resource_id, version_number, state, payload,
-      base_published_version, created_at, created_by
-     FROM cms_content_revisions WHERE id = $1 LIMIT 1`,
-    [input.revisionId],
-  );
-  const revision = revisionRows[0];
-  if (!revision || revision.state !== "draft") throw new Error("CMS_REVISION_NOT_FOUND");
-  assertResourceType(revision.resource_type);
-  if (
-    revision.resource_type !== input.resourceType ||
-    String(revision.resource_id) !== input.resourceId
-  ) {
-    throw new Error("CMS_REVISION_MISMATCH");
+  try {
+    const revision = await mutateCms("publish", input, actor);
+    return {
+      ok: true,
+      revisionId: input.revisionId,
+      publishedAt: dateOrNull(revision.published_at)!,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("CMS_REVISION_CONFLICT"))
+      return { ok: false, code: "CMS_REVISION_CONFLICT" as const };
+    throw error;
   }
-  validatePayload(revision.resource_type, payloadRecord(revision.payload));
-  const result = await getSql().query(projectorSql(revision.resource_type), [
-    input.revisionId,
-    input.resourceType,
-    input.resourceId,
-  ]);
-  if (!Array.isArray(result) || !result[0]) {
-    return { ok: false, code: "CMS_REVISION_CONFLICT" as const };
-  }
-  await writeAudit(actor.staffId, "cms_published", input.resourceType, input.resourceId, {
-    revisionId: input.revisionId,
-  });
-  return { ok: true, revisionId: input.revisionId, publishedAt: new Date().toISOString() };
 }
-
 export async function restoreAdminCmsRevision(input: CmsRestoreInput, request: Request) {
   const actor = await requireStaffAccess(request, ["admin", "manager"]);
-  const rows = await queryRows<RevisionRow>(
-    `SELECT id, resource_type, resource_id, version_number, state, payload,
-      base_published_version, created_at, created_by
-     FROM cms_content_revisions WHERE id = $1 LIMIT 1`,
+  // Identity only; the locked SQL operation re-reads the historical snapshot and current publication.
+  const [source] = await queryRows(
+    "SELECT resource_type, resource_id FROM cms_content_revisions WHERE id = $1 LIMIT 1",
     [input.revisionId],
   );
-  const revision = rows[0];
-  if (!revision) throw new Error("CMS_REVISION_NOT_FOUND");
-  assertResourceType(revision.resource_type);
-  const draft = makeRestoreDraft({
-    id: stringOrEmpty(revision.id),
-    resource_type: revision.resource_type,
-    resource_id: stringOrEmpty(revision.resource_id),
-    version_number: Number(revision.version_number),
-    payload: payloadRecord(revision.payload),
-  });
-  const saved = await saveDraftForActor(draft, actor);
-  await writeAudit(actor.staffId, "cms_restored", draft.resourceType, draft.resourceId, {
-    revisionId: saved.revisionId,
-    restoredFromRevisionId: input.revisionId,
-  });
-  return saved;
-}
-
-async function mediaIsReferenced(resourceId: string) {
-  const rows = await queryRows(
-    `SELECT EXISTS (
-       SELECT 1 FROM media_assets media
-       WHERE media.id = $1 AND (
-         EXISTS (SELECT 1 FROM estates WHERE hero_image = media.url)
-         OR EXISTS (SELECT 1 FROM articles WHERE cover_image = media.url)
-         OR EXISTS (SELECT 1 FROM properties WHERE media.url = ANY(images))
-       )
-     ) AS referenced`,
-    [resourceId],
+  if (!source) throw new Error("CMS_REVISION_NOT_FOUND");
+  assertResourceType(source.resource_type);
+  return savedResult(
+    await mutateCms(
+      "restore",
+      {
+        resourceType: source.resource_type,
+        resourceId: stringOrEmpty(source.resource_id),
+        revisionId: input.revisionId,
+      },
+      actor,
+    ),
   );
-  return rows[0]?.referenced === true;
 }
-
 export async function archiveAdminCmsResource(input: CmsArchiveInput, request: Request) {
   const actor = await requireStaffAccess(request, ["admin", "manager"]);
-  assertResourceType(input.resourceType);
-  if (input.resourceType === "media" && (await mediaIsReferenced(input.resourceId))) {
-    return { ok: false, code: "CMS_MEDIA_IN_USE" as const };
+  try {
+    await mutateCms("archive", input, actor);
+    return { ok: true };
+  } catch (error) {
+    for (const code of ["CMS_MEDIA_IN_USE", "CMS_RESOURCE_NOT_FOUND"] as const)
+      if (error instanceof Error && error.message.includes(code)) return { ok: false, code };
+    throw error;
   }
-  const sourceRows = await queryRows<RevisionRow>(
-    `SELECT id, resource_type, resource_id, version_number, state, payload,
-      base_published_version, created_at, created_by
-     FROM cms_content_revisions
-     WHERE resource_type = $1 AND resource_id = $2
-     ORDER BY version_number DESC LIMIT 1`,
-    [input.resourceType, input.resourceId],
-  );
-  const source = sourceRows[0];
-  if (!source) return { ok: false, code: "CMS_RESOURCE_NOT_FOUND" as const };
-  await queryRows(
-    `INSERT INTO cms_content_revisions (
-       resource_type, resource_id, version_number, state, payload, created_by
-     )
-     SELECT $1, $2, COALESCE(MAX(version_number), 0) + 1, 'archived', $3::jsonb, $4
-     FROM cms_content_revisions WHERE resource_type = $1 AND resource_id = $2`,
-    [input.resourceType, input.resourceId, JSON.stringify(source.payload), actor.staffId],
-  );
-  const visibilitySql: Record<CmsResourceType, string> = {
-    estate: "UPDATE estates SET published = false, updated_at = now() WHERE id = $1",
-    article: "UPDATE articles SET published = false, updated_at = now() WHERE id = $1",
-    video: "UPDATE cms_videos SET published = false, updated_at = now() WHERE id = $1",
-    faq: "UPDATE faqs SET published = false WHERE id = $1",
-    media: "UPDATE media_assets SET archived_at = now() WHERE id = $1",
-  };
-  await queryRows(visibilitySql[input.resourceType], [input.resourceId]);
-  await queryRows(
-    `UPDATE cms_content_revisions SET state = 'superseded'
-     WHERE resource_type = $1 AND resource_id = $2 AND state = 'published'`,
-    [input.resourceType, input.resourceId],
-  );
-  await writeAudit(actor.staffId, "cms_archived", input.resourceType, input.resourceId);
-  return { ok: true };
 }

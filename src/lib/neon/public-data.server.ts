@@ -275,6 +275,11 @@ function normalizeKeyword(value: string | undefined) {
 function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   const where = ["p.status = 'active'"];
 
+  // Filter before COUNT/LIMIT so older video listings are not lost behind
+  // newer listings without video. A non-space character excludes null,
+  // empty strings, and whitespace-only values (including tabs/newlines).
+  if (input.hasVideo === true) where.push("p.video_url ~ '[^[:space:]]'");
+
   if (input.deal !== "all") {
     where.push(`p.deal_type = ${addParam(params, input.deal)}::deal_type`);
   }

@@ -134,26 +134,37 @@ test("persistValuationLead awaits and propagates an injected query failure", asy
   assert.equal(calls, 1);
 });
 
-test("createValuationLead delegates to persistValuationLead with the server's own consent constants, through one queryRows call", () => {
-  const source = readFileSync(new URL("./admin-data.server.ts", import.meta.url), "utf8");
-  const start = source.indexOf("export async function createValuationLead");
-  assert.notEqual(start, -1, "createValuationLead must exist in admin-data.server.ts");
-  const end = source.indexOf("\n}\n", start);
-  const fnSource = source.slice(start, end);
+for (const [label, lineEnding] of [
+  ["LF", "\n"],
+  ["CRLF", "\r\n"],
+]) {
+  test(`createValuationLead delegates to persistValuationLead with the server's own consent constants, through one queryRows call (${label})`, () => {
+    const moduleSource = readFileSync(
+      new URL("./admin-data.server.ts", import.meta.url),
+      "utf8",
+    ).replace(/\r?\n/g, lineEnding);
+    // Normalize checkout line endings so the slice cannot include the next function.
+    const source = moduleSource.replace(/\r\n/g, "\n");
+    const start = source.indexOf("export async function createValuationLead");
+    assert.notEqual(start, -1, "createValuationLead must exist in admin-data.server.ts");
+    const end = source.indexOf("\n}\n", start);
+    assert.notEqual(end, -1, "createValuationLead's closing brace must be found");
+    const fnSource = source.slice(start, end + 2);
 
-  assert.match(fnSource, /persistValuationLead/);
-  assert.equal((fnSource.match(/queryRows/g) ?? []).length, 1);
-  // Consent text/version must come from the module's own constants, never
-  // from `input` (which is caller-controlled, unauthenticated data). Also
-  // guard against the exact hostile-input shape this plan calls out: a
-  // client payload that also tries to forge consentText/consentedAt.
-  assert.match(fnSource, /consentText:\s*VALUATION_CONSENT_TEXT/);
-  assert.match(fnSource, /consentVersion:\s*VALUATION_CONSENT_VERSION/);
-  assert.match(fnSource, /consentedAt:\s*new Date\(\)\.toISOString\(\)/);
-  assert.doesNotMatch(fnSource, /consentText:\s*input\./);
-  assert.doesNotMatch(fnSource, /consentVersion:\s*input\./);
-  assert.doesNotMatch(fnSource, /consentedAt:\s*input\./);
-});
+    assert.match(fnSource, /persistValuationLead/);
+    assert.equal((fnSource.match(/queryRows/g) ?? []).length, 1);
+    // Consent text/version must come from the module's own constants, never
+    // from `input` (which is caller-controlled, unauthenticated data). Also
+    // guard against the exact hostile-input shape this plan calls out: a
+    // client payload that also tries to forge consentText/consentedAt.
+    assert.match(fnSource, /consentText:\s*VALUATION_CONSENT_TEXT/);
+    assert.match(fnSource, /consentVersion:\s*VALUATION_CONSENT_VERSION/);
+    assert.match(fnSource, /consentedAt:\s*new Date\(\)\.toISOString\(\)/);
+    assert.doesNotMatch(fnSource, /consentText:\s*input\./);
+    assert.doesNotMatch(fnSource, /consentVersion:\s*input\./);
+    assert.doesNotMatch(fnSource, /consentedAt:\s*input\./);
+  });
+}
 
 test("createValuationLead's public server fn requires consent === true, strips forged consent fields, and is rate-limited like createListingAlert", () => {
   const source = readFileSync(new URL("./admin-data.ts", import.meta.url), "utf8");

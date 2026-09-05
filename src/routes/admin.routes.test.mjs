@@ -264,7 +264,10 @@ test("Blob upload route avoids SDK imports to keep SSR boot clean", () => {
   const mediaUpload = read("src/routes/api.admin.media.upload.ts");
   assert.doesNotMatch(mediaUpload, /import\s+\{\s*put\s*\}\s+from\s+["']@vercel\/blob["']/);
   assert.doesNotMatch(mediaUpload, /@vercel\/blob/);
-  assert.match(mediaUpload, /https:\/\/vercel\.com\/api\/blob/);
+  assert.match(mediaUpload, /createVercelBlobStore/);
+  const adapter = read("src/lib/media/vercel-blob.mjs");
+  assert.doesNotMatch(adapter, /@vercel\/blob/);
+  assert.match(adapter, /https:\/\/vercel\.com\/api\/blob/);
   assert.match(mediaUpload, /BLOB_READ_WRITE_TOKEN/);
 });
 
@@ -560,10 +563,10 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   const campaignDelivery = read("src/lib/woztell/campaign-delivery.server.ts");
   for (const text of [
     "claimCampaignRecipients",
-    "FOR UPDATE SKIP LOCKED",
+    "FOR UPDATE OF recipient SKIP LOCKED",
     "RETURNING",
     "status = 'sending'",
-    "queued_at = now()",
+    "queued_at\\s*=\\s*now",
     "isBlastRecipientAllowed",
     "opt_in_whatsapp",
     "opted_out_whatsapp",
@@ -772,30 +775,19 @@ test("Operations route is present in the generated route tree", () => {
 // sibling conversation path in admin-data.server.ts filters on
 // assigned_agent_id. The blast radius is a customer receiving a message from an
 // agent who is not allowed to read their thread.
-test("WhatsApp send route scopes the conversation lookup to the acting agent", () => {
-  const route = read("src/routes/api.admin.woztell.send.ts");
-
-  assert.match(route, /import \{ agentScope \} from "@\/lib\/neon\/admin-data\.server"/);
-  assert.match(route, /const scope = agentScope\(staff\)/);
-  assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
-  assert.match(route, /\[conversationId, scope\]/);
-});
-
-// Same blast radius as the test above, for the template-send path added
-// alongside it.
-test("WhatsApp template send route scopes the conversation lookup to the acting agent", () => {
-  const route = read("src/routes/api.admin.woztell.send-template.ts");
-
-  assert.match(route, /import \{ agentScope \} from "@\/lib\/neon\/admin-data\.server"/);
-  assert.match(route, /const scope = agentScope\(staff\)/);
-  assert.match(route, /AND \(\$2::uuid IS NULL OR wc\.assigned_agent_id = \$2::uuid\)/);
-  assert.match(route, /\[conversationId, scope\]/);
-  assert.match(route, /status LIKE 'active%'/);
-  // A template is the only WhatsApp-compliant way to message a customer once
-  // the 24-hour window has closed, so this route must not gate on the same
-  // window check /api/admin/woztell/send uses -- that would silently recreate
-  // the exact dead end this route exists to fix.
-  assert.doesNotMatch(route, /canReplyToConversation\(/);
+test("both WhatsApp send routes preserve acting-agent scope in the durable repository", () => {
+  const intent = read("src/lib/woztell/outbound-intent.server.ts");
+  for (const name of ["send", "send-template"]) {
+    const route = read(`src/routes/api.admin.woztell.${name}.ts`);
+    assert.match(route, /requireStaffAccess/);
+    assert.match(
+      route,
+      /enqueueOutboundIntent\(\s*input,\s*staff.staffId,\s*agentScope\(staff\),?\s*\)/,
+    );
+  }
+  assert.match(intent, /wc.assigned_agent_id=\$7::uuid/);
+  assert.match(intent, /t.status LIKE 'active%'/);
+  assert.match(intent, /i.kind='text' AND wc.last_inbound_at/);
 });
 
 test("agentScope is exported once and not redefined per call site", () => {

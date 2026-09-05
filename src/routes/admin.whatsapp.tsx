@@ -1,3 +1,4 @@
+import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Clock3, History, MessageCircle, RefreshCw, Send } from "lucide-react";
@@ -24,7 +25,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
-  clearContactWhatsappOptOut,
   fetchAdminAgents,
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
@@ -152,10 +152,6 @@ function AdminWhatsapp() {
     writeStoredReplyDrafts(replyDrafts, staffUserId);
   }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
-  // Clearing an opt-out re-enables marketing messages to a real person, so it
-  // is confirmed and reason-tagged rather than a bare button.
-  const [clearOptOutOpen, setClearOptOutOpen] = useState(false);
-  const [clearOptOutReason, setClearOptOutReason] = useState("");
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const inboxQuery = search.q ?? "";
@@ -484,44 +480,6 @@ function AdminWhatsapp() {
     }
   }
 
-  async function confirmClearOptOut() {
-    const contactId = detail?.contact_id;
-    const targetId = detail?.id;
-    if (!contactId || !targetId) {
-      toast.error("此對話未連結客戶記錄");
-      return;
-    }
-
-    const reason = clearOptOutReason.trim();
-    if (!reason) {
-      toast.error("請填寫解除原因");
-      return;
-    }
-
-    setMutatingAction("optout");
-    try {
-      const result = (await clearContactWhatsappOptOut({
-        data: { contactId, reason },
-      })) as { ok: boolean; error?: string };
-
-      if (!result.ok) {
-        toast.error(
-          result.error === "NOT_OPTED_OUT" ? "此客戶並未拒收 WhatsApp" : "解除失敗，請重試",
-        );
-        return;
-      }
-
-      setClearOptOutOpen(false);
-      setClearOptOutReason("");
-      const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("已解除拒收狀態");
-    } catch (err) {
-      toast.error(errorText(err));
-    } finally {
-      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
-    }
-  }
-
   async function sendReply() {
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
@@ -547,16 +505,18 @@ function AdminWhatsapp() {
       const result = await sendAdminConversationReply({
         data: {
           conversationId: targetId,
+          requestId: stableOutboundRequestId(user?.id, targetId, "text", text),
           text,
         },
       });
       assertNoMutationError(result);
+      clearOutboundRequestId(user?.id, targetId, "text");
       setReplyDrafts((current) => ({ ...current, [targetId]: "" }));
       await refreshConversations();
       if (!canApplyConversationDetail(targetId)) return;
 
       const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("回覆已送出");
+      if (refreshed && canApplyConversationDetail(targetId)) toast.success("回覆已加入傳送佇列");
     } catch (err) {
       if (!canApplyConversationDetail(targetId)) return;
       const message = formatReplyError(errorText(err));
@@ -588,14 +548,19 @@ function AdminWhatsapp() {
     setReplyError(null);
     try {
       const result = await sendAdminConversationTemplate({
-        data: { conversationId: targetId, templateId },
+        data: {
+          conversationId: targetId,
+          templateId,
+          requestId: stableOutboundRequestId(user?.id, targetId, "template", templateId),
+        },
       });
       assertNoMutationError(result);
+      clearOutboundRequestId(user?.id, targetId, "template");
       await refreshConversations();
       if (!canApplyConversationDetail(targetId)) return;
 
       const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("範本已送出");
+      if (refreshed && canApplyConversationDetail(targetId)) toast.success("範本已加入傳送佇列");
     } catch (err) {
       if (!canApplyConversationDetail(targetId)) return;
       const message = formatReplyError(errorText(err));
@@ -676,76 +641,18 @@ function AdminWhatsapp() {
     setBackfilling(true);
     const toastId = toast.loading("正在從 Woztell 匯入歷史訊息…");
 
-    // Walk one direction to exhaustion. Returns `failed` instead of throwing so
-    // the caller can decide whether a zero-row result is worth a second attempt.
-    const drain = async (mode: "forward" | "backward") => {
-      let cursor: string | null = null;
-      let imported = 0;
-      let duplicates = 0;
-      let scanned = 0;
-
-      for (let call = 0; call < 20; call += 1) {
-        const result = await runAdminWoztellBackfill({
-          data: { maxPages: 10, after: cursor, mode },
-        });
-
-        if (!result.ok) return { failed: result, imported, duplicates, scanned, done: true };
-
-        imported += result.ingested ?? 0;
-        duplicates += result.duplicates ?? 0;
-        scanned += result.rows ?? 0;
-        cursor = result.nextCursor ?? null;
-
-        if (result.reachedEnd || !cursor) {
-          return { failed: null, imported, duplicates, scanned, done: true };
-        }
-
-        toast.loading(`已處理 ${scanned} 則訊息…`, { id: toastId });
-      }
-
-      return { failed: null, imported, duplicates, scanned, done: false };
-    };
-
     try {
-      let outcome = await drain("forward");
-
-      // Woztell documents forward pagination (first/after) but their own shipped
-      // n8n node only ever uses the backward form (last/before), and the default
-      // sort order is undocumented with no sortBy argument to pin it. So a
-      // zero-row forward result is genuinely ambiguous: it means either "no
-      // history" or "this server ignores the direction we asked for". Retrying
-      // the other way turns that ambiguity into an answer, instead of reporting
-      // an empty inbox that may not be empty. Costs one wasted call in the
-      // genuinely-empty case, which is the cheap side of the trade.
-      if (!outcome.failed && outcome.scanned === 0) {
-        toast.loading("改用反向讀取重試…", { id: toastId });
-        outcome = await drain("backward");
-      }
-
-      if (outcome.failed) {
-        // The 503 carries a hint naming the exact env var and scope to set;
-        // dropping it would leave an admin with "匯入失敗" and nowhere to go.
-        const { error, hint } = outcome.failed;
-        toast.error(hint ? `${error} — ${hint}` : (error ?? "匯入失敗"), {
-          id: toastId,
-          duration: 12_000,
-        });
+      const result = await runAdminWoztellBackfill({ data: { mode: "forward" } });
+      if (!result.ok) {
+        toast.error(result.hint ?? result.error ?? "匯入失敗", { id: toastId });
         return;
       }
-
-      if (!outcome.done) {
-        toast.info(
-          `已匯入 ${outcome.imported} 則訊息，仍有更多記錄 — 可再次按「匯入歷史訊息」繼續`,
-          { id: toastId, duration: 10_000 },
-        );
-      } else {
-        toast.success(
-          outcome.scanned === 0
-            ? "Woztell 沒有回傳任何訊息記錄"
-            : `匯入完成：新增 ${outcome.imported} 則，已存在 ${outcome.duplicates} 則`,
-          { id: toastId },
-        );
-      }
+      toast.success(
+        result.reachedEnd
+          ? "歷史匯入已完成"
+          : "歷史匯入已加入背景工作，進度會自動保存；可於操作中心查看。",
+        { id: toastId },
+      );
 
       await refreshConversations();
     } catch (err) {
@@ -889,7 +796,9 @@ function AdminWhatsapp() {
               onReplyBodyChange={setReplyBody}
               onSendReply={sendReply}
               onSendTemplate={sendTemplate}
-              onRequestClearOptOut={() => setClearOptOutOpen(true)}
+              onConsentSaved={() => {
+                if (selectedIdRef.current) void loadConversationDetail(selectedIdRef.current);
+              }}
               onStatusChange={(status) =>
                 detail
                   ? saveConversationUpdate({
@@ -936,7 +845,9 @@ function AdminWhatsapp() {
           onReplyBodyChange={setReplyBody}
           onSendReply={sendReply}
           onSendTemplate={sendTemplate}
-          onRequestClearOptOut={() => setClearOptOutOpen(true)}
+          onConsentSaved={() => {
+            if (selectedIdRef.current) void loadConversationDetail(selectedIdRef.current);
+          }}
           onStatusChange={(status) =>
             detail
               ? saveConversationUpdate({
@@ -955,50 +866,6 @@ function AdminWhatsapp() {
           }
         />
       </AdminDetailPanel>
-
-      <AdminConfirmDialog
-        open={clearOptOutOpen}
-        title="解除拒收狀態？"
-        description="解除後，此客戶會重新收到 WhatsApp 回覆及群發訊息。請只在確認客戶並非有意拒收時使用。"
-        confirmLabel="確認解除"
-        confirmVariant="destructive"
-        isPending={mutatingAction === "optout"}
-        onOpenChange={(open) => {
-          if (mutatingAction === "optout") return;
-          setClearOptOutOpen(open);
-          if (!open) setClearOptOutReason("");
-        }}
-        onConfirm={() => void confirmClearOptOut()}
-      >
-        <div className="space-y-3 text-sm">
-          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3">
-            <div className="flex flex-wrap justify-between gap-2">
-              <dt className="text-muted-foreground">客戶</dt>
-              <dd className="font-medium">{detail?.name ?? "WhatsApp 客戶"}</dd>
-            </div>
-            <div className="flex flex-wrap justify-between gap-2">
-              <dt className="text-muted-foreground">電話</dt>
-              <dd className="tabular-nums">{detail?.phone ?? "未有電話"}</dd>
-            </div>
-          </dl>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="clear-optout-reason">
-              解除原因
-            </label>
-            <Textarea
-              id="clear-optout-reason"
-              value={clearOptOutReason}
-              onChange={(event) => setClearOptOutReason(event.target.value)}
-              placeholder="例如：客戶來電確認只想取消睇樓，並非拒收訊息"
-              rows={3}
-              maxLength={500}
-            />
-            {/* Recorded in ops_audit_logs so a re-enabled contact is always
-                traceable to a person and a stated reason. */}
-            <p className="text-xs text-muted-foreground">原因會記錄在審計記錄中。</p>
-          </div>
-        </div>
-      </AdminConfirmDialog>
     </AdminShell>
   );
 }
@@ -1199,7 +1066,7 @@ function ConversationWorkspace({
   onSendTemplate,
   onStatusChange,
   onAgentChange,
-  onRequestClearOptOut,
+  onConsentSaved,
 }: {
   detail: AdminConversationDetail | null;
   agents: AdminAgentRow[];
@@ -1221,7 +1088,7 @@ function ConversationWorkspace({
   onSendTemplate: (templateId: string) => Promise<void>;
   onStatusChange: (status: string) => void;
   onAgentChange: (assignedAgentId: string | null) => void;
-  onRequestClearOptOut: () => void;
+  onConsentSaved: () => void;
 }) {
   if (loading && !detail) return <Skeleton className="h-[32rem] w-full rounded-none" />;
   if (error)
@@ -1263,20 +1130,12 @@ function ConversationWorkspace({
               <h2 className="truncate text-base font-semibold">{detail.name ?? "WhatsApp 客戶"}</h2>
               <StatusBadge status={detail.status} />
               {detail.opted_out_whatsapp ? <Badge variant="destructive">已拒收</Badge> : null}
-              {/* An opt-out used to be a one-way door: the inbound webhook only
-                  ever OR-ed the flag true, so a customer mis-read as opting out
-                  (「我想取消今日睇樓約會」) was blocked from replies and campaigns
-                  forever. admin/manager can undo it; the server re-checks. */}
-              {detail.opted_out_whatsapp && detail.can_clear_opt_out && detail.contact_id ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={onRequestClearOptOut}
-                  disabled={disabled}
-                >
-                  解除拒收
-                </Button>
+              {detail.can_clear_opt_out && detail.contact_id ? (
+                <WhatsappConsentDialog
+                  key={detail.contact_id}
+                  contactId={detail.contact_id}
+                  onSaved={onConsentSaved}
+                />
               ) : null}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{detail.phone ?? "未有電話"}</p>
@@ -1773,6 +1632,11 @@ function statusLabel(status: string) {
 }
 
 function messageStatusLabel(status: string) {
+  if (status === "queued") return "等待傳送";
+  if (status === "dispatching") return "傳送中（未確認）";
+  if (status === "accepted") return "供應商已接受";
+  if (status === "unknown") return "傳送結果未明，請核對，勿重發";
+  if (status === "cancelled") return "已取消";
   return messageStatusLabels[status] ?? status;
 }
 
@@ -1882,4 +1746,30 @@ function writeStoredReplyDrafts(drafts: Record<string, string>, userId: string |
   } catch {
     // Quota or private-mode failure: the draft simply is not persisted.
   }
+}
+
+// Persist before POST. Storage failure blocks dispatch so page recovery cannot mint a duplicate.
+function outboundStorageKey(userId: string | undefined, conversationId: string, kind: string) {
+  if (!userId) throw new Error("STAFF_IDENTITY_REQUIRED");
+  return `earnest:outbound:${userId}:${conversationId}:${kind}`;
+}
+function stableOutboundRequestId(
+  userId: string | undefined,
+  conversationId: string,
+  kind: string,
+  value: string,
+) {
+  const key = outboundStorageKey(userId, conversationId, kind);
+  const raw = sessionStorage.getItem(key);
+  if (raw) {
+    const saved = JSON.parse(raw) as { requestId: string; value: string };
+    if (saved.value === value && typeof saved.requestId === "string") return saved.requestId;
+    throw new Error("尚有未確認的傳送要求，請先恢復原訊息並確認狀態。");
+  }
+  const requestId = crypto.randomUUID();
+  sessionStorage.setItem(key, JSON.stringify({ requestId, value }));
+  return requestId;
+}
+function clearOutboundRequestId(userId: string | undefined, conversationId: string, kind: string) {
+  sessionStorage.removeItem(outboundStorageKey(userId, conversationId, kind));
 }

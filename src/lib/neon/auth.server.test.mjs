@@ -30,7 +30,8 @@ function fixture({
       if (statement.includes("FROM staff_users s") && statement.includes("s.active = true")) {
         return staffRow ? [staffRow] : [];
       }
-      if (statement.includes('"emailVerified"')) return [{ email_verified: emailVerified }];
+      if (statement.includes('"emailVerified"'))
+        return [{ id: session.user.id, email: session.user.email, email_verified: emailVerified }];
       return [];
     },
     getSession,
@@ -125,3 +126,178 @@ test("a bound member without one of the allowed roles is Forbidden", async () =>
     body: "Forbidden",
   });
 });
+
+test("an unverified allowlisted identity cannot bootstrap or write staff rows", async () => {
+  process.env.ADMIN_BOOTSTRAP_EMAILS = session.user.email;
+  const writes = [];
+  const resolver = createStaffAccessResolver({
+    getSession: async () => session,
+    queryRows: async (statement, params = []) => {
+      if (/INSERT|UPDATE/.test(statement)) {
+        writes.push({ statement, params });
+        return [{ id: staffId, auth_user_id: session.user.id, email: session.user.email }];
+      }
+      if (statement.includes('"emailVerified"')) return [{ email_verified: false }];
+      return [];
+    },
+  });
+  try {
+    const result = await resolver.requireStaffAccess(request).then(
+      (access) => access,
+      (error) => error,
+    );
+    assert.equal(result instanceof Response ? result.status : result.roles.join(","), 403);
+    assert.deepEqual(writes, []);
+  } finally {
+    process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+  }
+});
+
+function bootstrapFixture({
+  verified = true,
+  providerId = session.user.id,
+  providerEmail = session.user.email,
+  providerMissing = false,
+  providerError = false,
+  staffRow = null,
+  staffRows = [],
+  allowlisted = true,
+  raceLost = false,
+} = {}) {
+  process.env.ADMIN_BOOTSTRAP_EMAILS = allowlisted ? session.user.email : "other@example.test";
+  const writes = [];
+  const queryRows = async (statement, params = []) => {
+    if (/INSERT|UPDATE/.test(statement)) {
+      writes.push({ statement, params });
+      return [{ id: staffId, auth_user_id: session.user.id, email: session.user.email }];
+    }
+    if (statement.includes('"emailVerified"')) {
+      if (providerError) throw new Error("synthetic provider lookup failure");
+      return providerMissing
+        ? []
+        : [{ id: providerId, email: providerEmail, email_verified: verified }];
+    }
+    if (statement.includes("s.active = true")) return staffRow ? [staffRow] : [];
+    if (statement.includes("FROM staff_users s")) return staffRows;
+    return [];
+  };
+  return {
+    writes,
+    resolver: createStaffAccessResolver({
+      getSession: async () => session,
+      queryRows,
+      transactionRows: async (statements) => {
+        writes.push(...statements);
+        return [
+          [],
+          raceLost
+            ? []
+            : [{ id: staffId, auth_user_id: session.user.id, email: session.user.email }],
+        ];
+      },
+    }),
+  };
+}
+
+for (const [label, options] of [
+  ["unverified", { verified: false }],
+  ["missing verification", { verified: undefined, providerMissing: true }],
+  ["provider unavailable", { providerError: true }],
+  ["mismatched provider identity", { providerId: "another-account" }],
+  ["mismatched provider email", { providerEmail: "another@example.test" }],
+  ["not allowlisted", { allowlisted: false }],
+  [
+    "existing admin elsewhere",
+    { staffRows: [{ auth_user_id: "existing-admin", roles: ["admin"] }] },
+  ],
+  ["disabled bound staff", { staffRows: [{ auth_user_id: session.user.id, roles: ["agent"] }] }],
+]) {
+  test(`bootstrap rejects ${label} with no staff or role writes`, async () => {
+    const { resolver, writes } = bootstrapFixture(options);
+    try {
+      assert.equal((await denial(resolver.requireStaffAccess(request))).status, 403);
+      assert.deepEqual(writes, []);
+    } finally {
+      process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+    }
+  });
+}
+
+test("verified allowlisted owner bootstraps through one locked transaction", async () => {
+  const { resolver, writes } = bootstrapFixture();
+  try {
+    const access = await resolver.requireStaffAccess(request);
+    assert.equal(access.bootstrap, true);
+    assert.deepEqual(access.roles, ["admin"]);
+    assert.equal(writes.length, 2);
+    assert.match(
+      writes[0].statement,
+      /LOCK TABLE staff_users, staff_roles IN SHARE ROW EXCLUSIVE MODE/,
+    );
+    assert.match(writes[1].statement, /INSERT INTO staff_roles/);
+  } finally {
+    process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+  }
+});
+
+test("profile-only owner binding is deferred into the bootstrap transaction", async () => {
+  const { resolver, writes } = bootstrapFixture({
+    staffRow: { ...invitedRow, roles: [] },
+    staffRows: [{ auth_user_id: null, roles: [] }],
+  });
+  try {
+    assert.equal((await resolver.requireStaffAccess(request)).bootstrap, true);
+    assert.equal(writes.length, 2, "no pre-transaction staff bind");
+  } finally {
+    process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+  }
+});
+
+test("a bootstrap race loser receives no fabricated admin access", async () => {
+  const { resolver } = bootstrapFixture({ raceLost: true });
+  try {
+    assert.equal((await denial(resolver.requireStaffAccess(request))).status, 403);
+  } finally {
+    process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+  }
+});
+
+test("an existing bound admin keeps access without provider verification or writes", async () => {
+  const { resolver, writes } = bootstrapFixture({
+    verified: false,
+    staffRow: { ...invitedRow, auth_user_id: session.user.id },
+    staffRows: [{ auth_user_id: session.user.id, roles: ["admin"] }],
+  });
+  try {
+    assert.deepEqual((await resolver.requireStaffAccess(request)).roles, ["admin"]);
+    assert.deepEqual(writes, []);
+  } finally {
+    process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+  }
+});
+
+test("unverified allowlisted profile never binds before bootstrap denial", async () => {
+  const { resolver, writes } = bootstrapFixture({
+    verified: false,
+    staffRow: { ...invitedRow, roles: [] },
+    staffRows: [{ auth_user_id: null, roles: [] }],
+  });
+  try {
+    assert.equal((await denial(resolver.requireStaffAccess(request))).status, 403);
+    assert.deepEqual(writes, []);
+  } finally {
+    process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+  }
+});
+
+for (const verified of [null, "true", 1]) {
+  test(`non-boolean provider verification ${JSON.stringify(verified)} cannot bootstrap`, async () => {
+    const { resolver, writes } = bootstrapFixture({ verified });
+    try {
+      assert.equal((await denial(resolver.requireStaffAccess(request))).status, 403);
+      assert.deepEqual(writes, []);
+    } finally {
+      process.env.ADMIN_BOOTSTRAP_EMAILS = "";
+    }
+  });
+}

@@ -367,6 +367,7 @@ function ContactPage() {
             </Button>
             <p className="text-xs text-muted-foreground">
               按提交即表示同意我們透過上述聯絡方式回覆查詢。
+              如你已曾登記，提交查詢不會更改現有推廣訊息設定；職員會另行確認你的要求。
             </p>
           </form>
         </div>

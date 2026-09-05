@@ -1382,6 +1382,13 @@ function CampaignDeliveryCell({ campaign }: { campaign: AdminCampaignRow }) {
   return (
     <div className="space-y-1 text-sm tabular-nums">
       <div>已發送 {sent}</div>
+      {(campaign.dispatching ?? 0) > 0 ? <div>已開始傳送 {campaign.dispatching}</div> : null}
+      {(campaign.cancelled ?? 0) > 0 ? <div>已取消 {campaign.cancelled}</div> : null}
+      {(campaign.unknown ?? 0) > 0 ? (
+        <div className="font-semibold text-destructive">
+          結果未明（請先核實，勿重發）{campaign.unknown}
+        </div>
+      ) : null}
       {failed > 0 ? <div className="font-semibold text-destructive">失敗 {failed}</div> : null}
       {blocked > 0 ? <div className="text-muted-foreground">封鎖 {blocked}</div> : null}
       {pending > 0 ? <div className="text-muted-foreground">待發送 {pending}</div> : null}

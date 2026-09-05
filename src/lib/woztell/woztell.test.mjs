@@ -41,7 +41,9 @@ async function runSingleRecipientCampaign(sendResponse) {
       claimCount += 1;
       return claimCount === 1 ? [campaignRecipient] : [];
     },
+    beginDispatch: async () => campaignRecipient,
     updateRecipient: async (...args) => updates.push(args),
+    hasPendingRecipients: async () => false,
     refreshStatus: async () => {},
     sendResponse,
   });
@@ -230,7 +232,9 @@ test("campaign delivery checkpoints before claims and every recipient send", asy
             { ...campaignRecipient, id: "33333333-3333-4333-8333-333333333333" },
           ];
         },
+        beginDispatch: async () => campaignRecipient,
         updateRecipient: async () => {},
+        hasPendingRecipients: async () => false,
         refreshStatus: async () => {},
         sendResponse: async () => {
           sends += 1;
@@ -248,7 +252,8 @@ test("campaign reconciliation makes stale sending recipients terminal without re
   const source = read("src/lib/woztell/campaign-delivery.server.ts");
   assert.match(source, /status = 'failed', error = 'WOZTELL_DELIVERY_UNKNOWN'/);
   assert.match(source, /status = 'sending'/);
-  assert.match(source, /now\(\) - interval '15 minutes'/);
+  assert.match(source, /j\.lease_owner=r\.dispatch_worker_id/);
+  assert.match(source, /j\.attempt_count=r\.dispatch_attempt/);
   assert.doesNotMatch(source, /OR\s*\(\s*recipient\.status = 'sending'/);
 });
 test("blast and service-window guards enforce WhatsApp safety defaults", () => {
@@ -278,38 +283,21 @@ test("blast and service-window guards enforce WhatsApp safety defaults", () => {
   assert.equal(isBlastRecipientAllowed({ optedIn: true, optedOut: true }), false);
 });
 
-test("admin send route gates replies through a fetched conversation", () => {
-  const sendRoute = read("src/routes/api.admin.woztell.send.ts");
-
+test("admin replies enqueue an authorized durable intent before provider work", () => {
+  const route = read("src/routes/api.admin.woztell.send.ts"),
+    intent = read("src/lib/woztell/outbound-intent.server.ts");
+  assert.match(route, /requireStaffAccess/);
+  assert.match(route, /parseOutboundIntent/);
+  assert.match(route, /enqueueOutboundIntent/);
+  assert.doesNotMatch(route, /sendWoztellResponse/);
   for (const text of [
-    "canReplyToConversation",
-    "woztellEnabled",
-    "conversationId",
     "last_inbound_at",
     "opted_out_whatsapp",
-    "woztell_member_id",
-    "memberId",
-    "let result",
-    "try",
-    "catch",
-    "sendError",
-  ]) {
-    assert.match(sendRoute, new RegExp(text));
-  }
-
-  assert.match(sendRoute, /SELECT[\s\S]+FROM whatsapp_conversations/);
-  assert.match(sendRoute, /try\s*\{[\s\S]*sendWoztellResponse[\s\S]*\}\s*catch/);
-  assert.match(sendRoute, /catch\s*\([^)]*\)\s*\{[\s\S]*ok:\s*false[\s\S]*error:/);
-  assert.match(sendRoute, /status,\s*payload/);
-  assert.match(sendRoute, /result\.ok \? "sent" : "failed"/);
-  assert.doesNotMatch(sendRoute, /recipientId/);
-  assert.match(sendRoute, /status,\s*payload/);
-  assert.match(sendRoute, /'sending'/);
-  assert.match(sendRoute, /RETURNING id/);
-  assert.match(sendRoute, /UPDATE whatsapp_messages[\s\S]*SET status/);
-  assert.match(sendRoute, /status = \$2/);
-  assert.match(sendRoute, /payload = \$3::jsonb/);
-  assert.match(sendRoute, /WHERE id = \$1/);
+    "ops_jobs",
+    "payload_hash",
+    "dispatch_started_at",
+  ])
+    assert.ok(intent.includes(text));
 });
 
 test("webhook validates the raw body before parsing", () => {
@@ -338,7 +326,8 @@ test("event ingestion deduplicates messages and matches contacts member-id first
 
   assert.match(ingest, /external_message_id/);
   assert.match(ingest, /ON CONFLICT \(external_message_id\) DO NOTHING/);
-  assert.match(ingest, /ORDER BY \(whatsapp_member_id = \$2\)/);
+  assert.match(ingest, /pg_advisory_xact_lock/);
+  assert.match(ingest, /WOZTELL_IDENTITY_CONFLICT/);
 });
 
 // A backfill replays OLD messages. Plain assignment (or COALESCE, which takes
@@ -348,9 +337,9 @@ test("event ingestion deduplicates messages and matches contacts member-id first
 test("recency columns never move backwards when old history is replayed", () => {
   const ingest = read("src/lib/woztell/woztell-ingest.server.ts");
 
-  assert.match(ingest, /last_message_at = GREATEST\(last_message_at, \$4\)/);
-  assert.match(ingest, /last_inbound_at = GREATEST\(last_inbound_at, \$5\)/);
-  assert.match(ingest, /last_inbound_at = GREATEST\(last_inbound_at, \$8\)/);
+  assert.match(ingest, /last_message_at=GREATEST\(wc.last_message_at,\$8/);
+  assert.match(ingest, /last_inbound_at=GREATEST\(wc.last_inbound_at,\$6/);
+  assert.match(ingest, /last_inbound_at=GREATEST\(c.last_inbound_at,\$6/);
   assert.doesNotMatch(
     ingest,
     /last_message_at = \$\d/,
@@ -457,20 +446,24 @@ test("ordinary sentences containing an opt-out stem are not opt-outs", async () 
   assert.equal(isOptOutText(undefined), false);
 });
 
-test("an opt-out can be cleared by admin/manager, with a reason and an audit row", () => {
+test("legacy opt-out reset fails closed and the inbox uses evidence-based consent", () => {
   const server = read("src/lib/neon/admin-data.server.ts");
   const client = read("src/lib/neon/admin-data.ts");
-
-  // The only write that sets the flag back to false.
-  assert.match(server, /export async function clearContactWhatsappOptOut/);
-  assert.match(server, /SET opted_out_whatsapp = false/);
-  assert.match(server, /AND opted_out_whatsapp = true/);
-  assert.match(server, /writeAudit\(actor\.staffId, "contact\.optout\.clear"/);
-
-  // Narrower than the rest of the conversation surface: agents cannot clear.
+  const inbox = read("src/routes/admin.whatsapp.tsx");
+  const legacy = server.slice(
+    server.indexOf("export async function clearContactWhatsappOptOut"),
+    server.indexOf("function parseConversationAiMessages"),
+  );
+  assert.match(legacy, /rejectLegacyWhatsappOptOutReset/);
+  assert.doesNotMatch(legacy, /UPDATE crm_contacts|writeAudit/);
   assert.match(
     client,
     /clearContactWhatsappOptOutServer[\s\S]{0,400}requireStaff\(\["admin", "manager"\]\)/,
+  );
+  assert.match(inbox, /<WhatsappConsentDialog/);
+  assert.doesNotMatch(
+    inbox,
+    /clearContactWhatsappOptOut|confirmClearOptOut|clearOptOutReason|解除拒收/,
   );
 });
 
@@ -560,7 +553,7 @@ test("ingest reconciles pre-digest rows without re-dropping their lost twins", (
   assert.match(ingest, /NOT EXISTS/);
   // The body comparison, and specifically the NULL-safe form -- `=` would never
   // match the NULL text a media message carries, disabling the guard for them.
-  assert.match(ingest, /text IS NOT DISTINCT FROM \$5::text/);
+  assert.match(ingest, /text IS NOT DISTINCT FROM \$11::text/);
   // The new-id dedupe has to survive alongside it.
   assert.match(ingest, /ON CONFLICT \(external_message_id\) DO NOTHING/);
 });
@@ -697,4 +690,13 @@ test("a rejected webhook says so, and says which of the three causes it is", () 
   // neither belongs in a log line.
   assert.doesNotMatch(route, /console\.warn\([\s\S]{0,400}\$\{raw\}/);
   assert.doesNotMatch(route, /console\.warn\([\s\S]{0,400}\$\{config\.channelSecret\}/);
+});
+
+test("HTTP 200 without numeric ok:1 is ambiguous, never provider acceptance", async () => {
+  for (const body of [undefined, {}, null, { ok: false }, { ok: true }, { ok: "1" }]) {
+    const result = await captureSend(200, body);
+    assert.equal(result.ok, false, `must not accept ${JSON.stringify(body)}`);
+    assert.notEqual(result.refused, true);
+    assert.equal(result.error, "WOZTELL_AMBIGUOUS_RESPONSE");
+  }
 });

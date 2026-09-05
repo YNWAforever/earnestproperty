@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import {
   queryRows as defaultQueryRows,
+  transactionRows as defaultTransactionRows,
   stringOrEmpty,
   stringOrNull,
   type DbRow,
@@ -52,6 +53,7 @@ type QueryRows = <T extends DbRow = DbRow>(statement: string, params?: unknown[]
 
 export type StaffAccessResolverDependencies = {
   queryRows?: QueryRows;
+  transactionRows?: typeof defaultTransactionRows;
   getSession?: (request: Request) => Promise<NeonSession | null>;
 };
 
@@ -303,13 +305,14 @@ export function isProtectedStaffEmail(email: string | null | undefined) {
 }
 
 /**
- * The staff-access boundary behind every admin server function, with its two
- * external dependencies injectable so the binding rules can be unit-tested
+ * The staff-access boundary behind every admin server function, with its external
+ * dependencies injectable so the binding rules can be unit-tested
  * (auth.server.test.mjs). The default instance below is what production uses;
  * every SQL statement is identical either way.
  */
 export function createStaffAccessResolver(dependencies: StaffAccessResolverDependencies = {}) {
   const queryRows = dependencies.queryRows ?? defaultQueryRows;
+  const transactionRows = dependencies.transactionRows ?? defaultTransactionRows;
   const getSession = dependencies.getSession ?? createNeonSessionReader(queryRows);
 
   async function bootstrapStaffRows() {
@@ -339,21 +342,28 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
    *
    * Returns false rather than throwing when the column or row cannot be read:
    * this decides whether to hand out staff roles, so an unreadable answer must
-   * fail closed. auth_user_id matches are unaffected -- only first-time binding
-   * by email needs the check.
+   * fail closed. auth_user_id matches are unaffected -- first-time binding
+   * by email and owner bootstrap both require the same provider ID and email.
    */
-  async function isNeonAuthEmailVerified(authUserId: string) {
+  async function isNeonAuthEmailVerified(authUserId: string, email: string | null) {
     try {
       const rows = await queryRows(
         `
-        SELECT "emailVerified" AS email_verified
+        SELECT id::text AS id, email, "emailVerified" AS email_verified
         FROM neon_auth."user"
         WHERE id::text = $1
         LIMIT 1
         `,
         [authUserId],
       );
-      return rows[0]?.email_verified === true;
+      const user = rows[0];
+      return (
+        user?.email_verified === true &&
+        user.id === authUserId &&
+        typeof user.email === "string" &&
+        Boolean(email?.trim()) &&
+        user.email.trim().toLowerCase() === email?.trim().toLowerCase()
+      );
     } catch (error) {
       // Fail closed, but LOUDLY. If neon_auth."user"."emailVerified" is ever
       // absent or renamed, every first-time staff activation by email stops
@@ -369,7 +379,11 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
     }
   }
 
-  async function findStaff(authUserId: string, email: string | null): Promise<StaffLookupResult> {
+  async function findStaff(
+    authUserId: string,
+    email: string | null,
+    deferProfileBind = false,
+  ): Promise<StaffLookupResult> {
     const rows = await queryRows(
       `
       SELECT
@@ -404,7 +418,7 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
       // email and a blank auth_user_id meant anyone who knew a not-yet-activated
       // staff address could register it and permanently inherit that row's
       // roles, up to admin.
-      if (!(await isNeonAuthEmailVerified(authUserId))) {
+      if (!(await isNeonAuthEmailVerified(authUserId, email))) {
         // Neon Auth does not verify emails unless the project enables it, so
         // this is where every invited member lands by default. Say so: the
         // denial reason reaches the member's screen, and the admin's Team page
@@ -418,15 +432,16 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
         return { staff: null, denial: STAFF_EMAIL_UNVERIFIED };
       }
 
-      await queryRows(
-        `
+      if (!deferProfileBind)
+        await queryRows(
+          `
         UPDATE staff_users
         SET auth_user_id = $1, updated_at = now()
         WHERE id = $2
           AND auth_user_id IS NULL
         `,
-        [authUserId, row.id],
-      ).catch(() => []);
+          [authUserId, row.id],
+        ).catch(() => []);
     }
     return {
       staff: {
@@ -446,27 +461,57 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
     authUserId: string;
     email: string | null;
     name: string | null;
-  }): Promise<StaffAccess> {
-    const rows = await queryRows(
-      `
-      INSERT INTO staff_users (auth_user_id, email, name_en, active)
-      VALUES ($1, $2, $3, true)
-      ON CONFLICT (auth_user_id) DO UPDATE SET
-        email = COALESCE(EXCLUDED.email, staff_users.email),
-        updated_at = now()
-      RETURNING id, auth_user_id, email, COALESCE(name_zh, name_en) AS name
-      `,
-      [input.authUserId, input.email, input.name],
+  }): Promise<StaffAccess | null> {
+    // Lock in a separate statement: READ COMMITTED takes a fresh snapshot after
+    // a competing bootstrap commits. Table locks also serialize ordinary staff
+    // writers, which do not participate in a bootstrap-only advisory lock.
+    const results = await transactionRows(
+      [
+        { statement: "LOCK TABLE staff_users, staff_roles IN SHARE ROW EXCLUSIVE MODE" },
+        {
+          statement: `
+        WITH eligible AS MATERIALIZED (
+          SELECT 1
+          WHERE NOT EXISTS (
+            SELECT 1 FROM staff_users WHERE NULLIF(btrim(auth_user_id), '') IS NOT NULL
+          )
+          AND NOT EXISTS (SELECT 1 FROM staff_roles)
+          AND NOT EXISTS (
+            SELECT 1 FROM staff_users WHERE lower(btrim(email)) = lower(btrim($2::text)) AND active = false
+          )
+          AND EXISTS (
+            SELECT 1 FROM neon_auth."user"
+            WHERE id::text = $1 AND lower(btrim(email)) = lower(btrim($2::text)) AND "emailVerified" = true
+          )
+        ), bound AS (
+          UPDATE staff_users SET auth_user_id = $1, updated_at = now()
+          WHERE id = (
+            SELECT id FROM staff_users
+            WHERE active = true AND auth_user_id IS NULL AND lower(btrim(email)) = lower(btrim($2::text))
+            ORDER BY id LIMIT 1
+          ) AND EXISTS (SELECT 1 FROM eligible)
+          RETURNING id, auth_user_id, email, COALESCE(name_zh, name_en) AS name
+        ), created AS (
+          INSERT INTO staff_users (auth_user_id, email, name_en, active)
+          SELECT $1, $2, $3, true FROM eligible
+          WHERE NOT EXISTS (SELECT 1 FROM bound)
+          RETURNING id, auth_user_id, email, COALESCE(name_zh, name_en) AS name
+        ), owner AS (
+          SELECT * FROM bound UNION ALL SELECT * FROM created
+        ), granted AS (
+          INSERT INTO staff_roles (staff_user_id, role)
+          SELECT id, 'admin' FROM owner
+          RETURNING staff_user_id
+        )
+        SELECT owner.* FROM owner JOIN granted ON granted.staff_user_id = owner.id
+        `,
+          params: [input.authUserId, input.email, input.name],
+        },
+      ],
+      { isolationLevel: "ReadCommitted" },
     );
-    const staff = rows[0];
-    await queryRows(
-      `
-      INSERT INTO staff_roles (staff_user_id, role)
-      VALUES ($1, 'admin')
-      ON CONFLICT DO NOTHING
-      `,
-      [staff.id],
-    );
+    const staff = results[1]?.[0];
+    if (!staff) return null;
     return {
       staffId: stringOrEmpty(staff.id),
       authUserId: stringOrEmpty(staff.auth_user_id),
@@ -484,7 +529,17 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
     const email = session.user.email?.trim().toLowerCase() ?? "";
     const allowlist = bootstrapAllowlist();
     const bootstrapRows = email && allowlist.has(email) ? await bootstrapStaffRows() : [];
-    const { staff, denial } = await findStaff(session.user.id, session.user.email);
+    const bootstrapEligible = shouldBootstrapFirstAdmin({
+      email,
+      allowlistedEmails: allowlist,
+      access: null,
+      staffRows: bootstrapRows,
+    });
+    const { staff, denial } = await findStaff(
+      session.user.id,
+      session.user.email,
+      bootstrapEligible,
+    );
     let access: StaffAccess | null = staff;
     if (
       shouldBootstrapFirstAdmin({
@@ -494,6 +549,9 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
         staffRows: bootstrapRows,
       })
     ) {
+      if (!(await isNeonAuthEmailVerified(session.user.id, session.user.email))) {
+        throw new Response(STAFF_EMAIL_UNVERIFIED, { status: 403 });
+      }
       access = await bootstrapFirstStaff({
         authUserId: session.user.id,
         email: session.user.email,

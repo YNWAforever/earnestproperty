@@ -18,10 +18,10 @@ test("admin CMS server guards draft and publication operations", () => {
 });
 
 test("the estate projector persists P4's pending fields (aliases, geo, PSF, district_id)", () => {
-  const source = read("src/lib/neon/admin-cms.server.ts");
+  const source = read("neon/migrations/20260905110000_cms_atomic_mutations.sql");
   const start = source.indexOf("INSERT INTO estates");
   assert.notEqual(start, -1);
-  const end = source.indexOf('if (resourceType === "article")', start);
+  const end = source.indexOf("ELSIF p_type='article'", start);
   const estateProjector = source.slice(start, end);
   for (const column of ["aliases", "district_id", "avg_saleable_psf", "lat", "lng"]) {
     assert.match(

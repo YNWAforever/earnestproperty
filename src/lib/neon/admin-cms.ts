@@ -42,10 +42,13 @@ export const fetchAdminCmsCategory = async (options: {
 }) => unwrapServerFnResponse(fetchAdminCmsCategoryServer(await withStaffAuthHeaders(options)));
 
 const fetchAdminCmsEditorServer = createServerFn({ method: "GET" })
-  .inputValidator((data: { resourceType: CmsResourceType; resourceId: string }) => data)
+  .inputValidator(
+    (data: { resourceType: CmsResourceType; resourceId: string; reviewDraftRevisionId?: string }) =>
+      data,
+  )
   .handler(async ({ data }) => (await cmsServer()).fetchAdminCmsEditor(data));
 export const fetchAdminCmsEditor = async (options: {
-  data: { resourceType: CmsResourceType; resourceId: string };
+  data: { resourceType: CmsResourceType; resourceId: string; reviewDraftRevisionId?: string };
 }) => unwrapServerFnResponse(fetchAdminCmsEditorServer(await withStaffAuthHeaders(options)));
 
 const saveAdminCmsDraftServer = createServerFn({ method: "POST" })

@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import crypto from "node:crypto";
+import { boundedProviderFetch } from "./provider-fetch.ts";
 
 export type NormalizedWoztellEvent = {
   direction: "inbound" | "outbound";
@@ -314,6 +315,40 @@ export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEven
   };
 }
 
+/** Only real-ID outbound events with a supported content shape can confirm a local intent. */
+export function outboundWoztellEvidence(
+  event: NormalizedWoztellEvent,
+): Record<string, unknown> | null {
+  if (
+    event.direction !== "outbound" ||
+    event.legacyExternalMessageId !== null ||
+    !event.externalMessageId ||
+    !event.woztellMemberId ||
+    !event.channelId
+  )
+    return null;
+  if (event.messageType === "TEXT" && typeof event.text === "string")
+    return { type: "TEXT", text: event.text };
+  if (event.messageType !== "TEMPLATE") return null;
+  const wrapped = record(event.payload.messageEvent);
+  const source = Object.keys(wrapped).length > 0 ? wrapped : event.payload;
+  const data = record(source.data);
+  if (
+    typeof data.elementName !== "string" ||
+    !data.elementName ||
+    typeof data.languageCode !== "string" ||
+    !data.languageCode ||
+    (data.components !== undefined && !Array.isArray(data.components))
+  )
+    return null;
+  return {
+    type: "TEMPLATE",
+    elementName: data.elementName,
+    languageCode: data.languageCode,
+    components: data.components ?? [],
+  };
+}
+
 export function woztellEnabled() {
   return process.env.WOZTELL_ENABLED === "true";
 }
@@ -339,7 +374,7 @@ export async function sendWoztellResponse(input: {
     return { ok: false, error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID" };
   }
 
-  const res = await fetch(
+  const { response: res, text: rawBody } = await boundedProviderFetch(
     `https://bot.api.woztell.com/sendResponses?accessToken=${encodeURIComponent(config.accessToken)}`,
     {
       method: "POST",
@@ -352,7 +387,6 @@ export async function sendWoztellResponse(input: {
     },
   );
 
-  const rawBody = await res.text();
   let body: unknown = {};
   if (rawBody.trim()) {
     try {
@@ -369,7 +403,16 @@ export async function sendWoztellResponse(input: {
   // status alone would stamp a 2xx carrying ok:0 as 'sent' and show staff a
   // reply that never left the building.
   const refused = envelope.ok === 0;
-  if (res.ok && !refused) return { ok: true, body, status: res.status };
+  if (res.ok && envelope.ok === 1) return { ok: true, body, status: res.status };
+  if (res.ok && !refused) {
+    return {
+      ok: false,
+      error: "WOZTELL_AMBIGUOUS_RESPONSE",
+      body,
+      status: res.status,
+      refused: false,
+    };
+  }
 
   // WOZTELL puts the reason in `err`, with `err_code` on some failures:
   //   { "ok": 0, "err": "User is not authorized." }

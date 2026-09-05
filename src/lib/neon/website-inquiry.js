@@ -20,33 +20,57 @@ export function isValidWebsiteListingNo(value) {
   return typeof value === "string" && WEBSITE_LISTING_NO_PATTERN.test(value);
 }
 
-/**
- * KNOWN GAP -- needs a product decision, do not assume it is handled.
- *
- * Because the ON CONFLICT branch below carries name/email/opt_in_whatsapp over
- * unchanged, an EXISTING contact cannot change any of them through the public
- * form. For consent specifically that is a one-way door today: there is no
- * admin screen and no server fn anywhere that sets crm_contacts.opt_in_whatsapp,
- * so the only remaining way for it to become true is the customer sending an
- * inbound WhatsApp message (api.woztell.webhook.ts, `opt_in_whatsapp OR $6`).
- *
- * Concretely: a customer who submits once WITHOUT ticking the consent box, and
- * later returns and ticks it, has that consent silently discarded, and the form
- * still reports success.
- *
- * Deliberately left as-is rather than papered over: allowing the public form to
- * raise consent is exactly the forgery this guards against. The fix is a
- * staff-side, audited mutation (mirror clearContactWhatsappOptOut in
- * admin-data.server.ts) plus a control in the admin -- not a change here.
- */
+/** Atomic intake; existing customer consent is never changed by phone-only requests. */
 export async function persistWebsiteInquiry(query, input) {
   const { name, phone, normalizedPhone, email, message, listingNo, propertyId, consentWhatsapp } =
     input;
+  const submissionId = input.submissionId;
+  if (
+    submissionId &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(submissionId)
+  ) {
+    throw Object.assign(new Error("Invalid submission identity"), {
+      code: "INQUIRY_SUBMISSION_INVALID",
+    });
+  }
+  const payloadHash = submissionId
+    ? Array.from(
+        new Uint8Array(
+          await crypto.subtle.digest(
+            "SHA-256",
+            new TextEncoder().encode(
+              JSON.stringify([
+                name,
+                phone,
+                normalizedPhone,
+                email,
+                message,
+                consentWhatsapp === true,
+                propertyId || null,
+                listingNo || null,
+              ]),
+            ),
+          ),
+        ),
+        (byte) => byte.toString(16).padStart(2, "0"),
+      ).join("")
+    : null;
+  const submissionCte = submissionId
+    ? `submission AS (
+      INSERT INTO website_inquiry_submissions (submission_id, payload_hash)
+      VALUES ($9::uuid, $10)
+      ON CONFLICT (submission_id) DO NOTHING
+      RETURNING inquiry_id
+    ),`
+    : "";
+  const contactValues = submissionId
+    ? "SELECT $1, $2, $3, $4, 'website', $6 FROM submission WHERE true"
+    : "VALUES ($1, $2, $3, $4, 'website', $6)";
   const contactCte = normalizedPhone
     ? `
       contact AS (
         INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        VALUES ($1, $2, $3, $4, 'website', $6)
+        ${contactValues}
         ON CONFLICT (normalized_phone) DO UPDATE SET
           -- Existing values win. This endpoint is unauthenticated: the only
           -- thing a submitter proves is that they typed a phone number, so
@@ -66,7 +90,7 @@ export async function persistWebsiteInquiry(query, input) {
     : `
       contact AS (
         INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        VALUES ($1, $2, $3, $4, 'website', $6)
+        ${contactValues}
         RETURNING id
       )`;
 
@@ -93,6 +117,7 @@ export async function persistWebsiteInquiry(query, input) {
       SELECT NULL::uuid, NULL::uuid, 'buyer'::text
       WHERE NOT EXISTS (SELECT 1 FROM resolved_listing)
     ),
+    ${submissionCte}
     ${contactCte},
     new_lead AS (
       INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note)
@@ -100,11 +125,14 @@ export async function persistWebsiteInquiry(query, input) {
         'new', routing.intent, 'website', $5
       FROM contact
       CROSS JOIN routing
+      RETURNING id
     )
     INSERT INTO inquiries (
+${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_version," : ""}
       source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id
     )
-    SELECT 'website', routing.property_id, routing.intent, $1, $2, $4, $5,
+    SELECT ${submissionId ? "(SELECT inquiry_id FROM submission), (SELECT id FROM new_lead), $6, 'website-whatsapp-v1'," : ""}
+      'website', routing.property_id, routing.intent, $1, $2, $4, $5,
       routing.assigned_agent_id, contact.id
     FROM contact
     CROSS JOIN routing
@@ -119,8 +147,32 @@ export async function persistWebsiteInquiry(query, input) {
       consentWhatsapp === true,
       propertyId || null,
       listingNo || null,
+      ...(submissionId ? [submissionId, payloadHash] : []),
     ],
   );
 
+  if (submissionId && !rows[0]) {
+    // A concurrent ON CONFLICT wait uses the statement's old snapshot. Resolve
+    // the committed original in a fresh read, never retry the intake insert.
+    const existing = await query(
+      `SELECT i.id, s.payload_hash, s.created_at > now() - interval '72 hours' AS replayable
+       FROM website_inquiry_submissions s JOIN inquiries i ON i.id = s.inquiry_id
+       WHERE s.submission_id = $1::uuid AND $2::text IS NOT NULL`,
+      [submissionId, payloadHash],
+    );
+    const prior = existing[0];
+    if (!prior || prior.payload_hash !== payloadHash) {
+      throw Object.assign(new Error("Submission identity has already been used."), {
+        code: "INQUIRY_SUBMISSION_CONFLICT",
+      });
+    }
+    if (!prior.replayable) {
+      throw Object.assign(
+        new Error("Submission replay window expired; contact staff to verify the earlier enquiry."),
+        { code: "INQUIRY_REPLAY_EXPIRED" },
+      );
+    }
+    return { id: String(prior.id) };
+  }
   return { id: rows[0]?.id == null ? "" : String(rows[0].id) };
 }

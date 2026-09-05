@@ -88,3 +88,18 @@ export async function withStaffAuthHeaders(
     headers,
   };
 }
+
+/** Read identity and credential from one session snapshot for actor-scoped recovery. */
+export async function withStaffUploadIdentity(): Promise<{ actorId: string; headers: Headers }> {
+  const client = authClient as NeonAuthClientWithStaffToken;
+  const value = await client.getSession?.().catch(() => null);
+  const record = asRecord(value);
+  const data = asRecord(record?.data);
+  const user = asRecord(record?.user) ?? asRecord(data?.user);
+  const actorId = stringToken(user?.id);
+  if (!actorId) throw new Error("請重新登入後再上載。");
+  const headers = new Headers();
+  const token = sessionTokenFromValue(value);
+  if (token) headers.set("authorization", `Bearer ${token}`);
+  return { actorId, headers };
+}

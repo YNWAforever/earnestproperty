@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 // The corridor registry is plain data with no imports, so it can be loaded
 // directly under Node's native type stripping (>= 22.18). Importing it means the
@@ -237,7 +238,7 @@ test("retired zone URLs 301 to a surviving zone and are never canonical", () => 
 });
 
 test("nothing in src links into a retired corridor URL", () => {
-  const dir = new URL("../../src", import.meta.url).pathname;
+  const dir = fileURLToPath(new URL("../../src", import.meta.url));
   const offenders = [];
 
   for (const file of collectFiles(dir)) {
