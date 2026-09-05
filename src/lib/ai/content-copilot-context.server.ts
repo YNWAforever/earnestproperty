@@ -40,12 +40,22 @@ export function createContentCopilotContextLoader(deps: ContentCopilotContextDep
 
       const resource = mapResource(parsed.data.resourceType, row);
       const query = buildSearchQuery(parsed.data.resourceType, resource);
-      let internalEvidence: ContentCopilotEvidence[] = [];
+      // The allowlisted saved record is itself an internal source. Keep it citable
+      // even when the optional knowledge search has no matching documents.
+      const internalEvidence: ContentCopilotEvidence[] = [
+        {
+          id: "internal-resource",
+          type: "internal",
+          title: "目前已儲存內容",
+          url: null,
+          excerpt: JSON.stringify(resource).slice(0, 1000),
+        },
+      ];
       try {
         const chunks = await searchPublicKnowledge({ query, limit: 6 });
-        internalEvidence = mapKnowledgeEvidence(chunks);
+        internalEvidence.push(...mapKnowledgeEvidence(chunks));
       } catch {
-        internalEvidence = [];
+        // Saved-record evidence remains available when search fails.
       }
 
       return { resource, internalEvidence, query };

@@ -356,3 +356,57 @@ test("decision rejects stale fingerprints before recording applied status", asyn
   assert.equal(result.error, "COPILOT_STALE_PROPOSAL");
   assert.equal(decisionWritten, false);
 });
+
+for (const unavailable of [false, true]) {
+  test(`saved resource remains citable when knowledge search is ${unavailable ? "unavailable" : "empty"}`, async () => {
+    const loader = createContentCopilotContextLoader({
+      queryRows: async () => [
+        {
+          id: articleRequest.resourceId,
+          title: "Sham Tseng guide",
+          content: "Saved public estate information",
+          private_note: "must not enter evidence",
+        },
+      ],
+      searchPublicKnowledge: async () => {
+        if (unavailable) throw Error("search unavailable");
+        return [];
+      },
+    });
+    const context = await loader.load(articleRequest, managerActor);
+    assert.equal(context.internalEvidence[0]?.id, "internal-resource");
+    assert.match(context.internalEvidence[0].excerpt, /Saved public estate information/);
+    assert.doesNotMatch(
+      context.internalEvidence[0].excerpt,
+      /private_note|must not enter evidence/,
+    );
+    const service = createContentCopilotService(
+      makeServiceDeps({
+        loadContext: async () => context,
+        generate: async () => ({
+          ok: true,
+          value: {
+            patches: [
+              {
+                field: "title",
+                before: "Sham Tseng guide",
+                after: "Sham Tseng estate guide",
+                reason: "Clarify the saved subject",
+                confidence: "high",
+                evidenceIds: ["internal-resource"],
+                unsupportedClaims: [],
+                claimType: "factual_internal",
+              },
+            ],
+            warnings: [],
+          },
+          model: "go-content",
+          latencyMs: 10,
+          usageMetadata: {},
+          error: null,
+        }),
+      }),
+    );
+    assert.equal((await service.generateContentProposal(articleRequest, managerActor)).ok, true);
+  });
+}
