@@ -38,6 +38,7 @@ test("OpenCode client posts to normalized chat completions endpoint", async () =
     ],
     temperature: 0.1,
     stream: false,
+    max_tokens: 8192,
     response_format: { type: "json_object" },
   });
   assert.deepEqual(result.value, { patches: [{ claimType: "subjective" }] });
@@ -119,7 +120,7 @@ test("OpenCode client retries network failures twice", async () => {
   assert.equal(attempts, 3);
 });
 
-test("OpenCode client gives slow provider generations a full minute", async () => {
+test("OpenCode client bounds provider generation to thirty seconds", async () => {
   const observedTimeouts = [];
   const originalTimeout = AbortSignal.timeout;
   AbortSignal.timeout = (milliseconds) => {
@@ -140,7 +141,7 @@ test("OpenCode client gives slow provider generations a full minute", async () =
     const result = await client.generateProposal({ system: "rules", prompt: "record" });
 
     assert.equal(result.ok, true);
-    assert.deepEqual(observedTimeouts, [60_000]);
+    assert.deepEqual(observedTimeouts, [30_000]);
   } finally {
     AbortSignal.timeout = originalTimeout;
   }
@@ -229,4 +230,52 @@ test("OpenCode client keeps malformed provider responses behind a stable error",
   assert.deepEqual(result.usageMetadata, {});
   assert.equal(result.value, null);
   assert.equal(result.error, "OPENCODE_GO_RESPONSE_INVALID");
+});
+
+test("DeepSeek editorial requests disable default thinking and cap output", async () => {
+  let body;
+  const client = createOpenCodeGoClient({
+    config: { ...enabledConfig, model: "deepseek-v4-flash" },
+    fetchImpl: async (_, init) => {
+      body = JSON.parse(init.body);
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
+      );
+    },
+  });
+  await client.generateProposal({ system: "rules", prompt: "record" });
+  assert.deepEqual(body.thinking, { type: "disabled" });
+  assert.equal(body.max_tokens, 8192);
+});
+
+test("retries share one deadline rather than starting another full wait", async () => {
+  const signals = [];
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    sleepImpl: async () => {},
+    fetchImpl: async (_, init) => {
+      signals.push(init.signal);
+      return signals.length < 3
+        ? new Response("", { status: 503 })
+        : new Response(JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }));
+    },
+  });
+  await client.generateProposal({ system: "rules", prompt: "record" });
+  assert.equal(signals.length, 3);
+  assert.equal(signals[0], signals[1]);
+  assert.equal(signals[1], signals[2]);
+});
+
+test("body read timeouts retain the actionable timeout code", async () => {
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    fetchImpl: async () => ({
+      ok: true,
+      text: async () => {
+        throw new DOMException("deadline", "TimeoutError");
+      },
+    }),
+  });
+  const result = await client.generateProposal({ system: "rules", prompt: "record" });
+  assert.equal(result.error, "OPENCODE_GO_TIMEOUT");
 });

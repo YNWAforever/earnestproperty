@@ -3,7 +3,7 @@ import "@tanstack/react-start/server-only";
 import { extractStructuredJson } from "./content-copilot.ts";
 import type { ContentCopilotConfig } from "./content-copilot-config.server.ts";
 
-const OPENCODE_GO_TIMEOUT_MS = 60_000;
+const OPENCODE_GO_TIMEOUT_MS = 30_000;
 const OPENCODE_GO_MAX_RETRIES = 2;
 const OPENCODE_GO_RETRY_BASE_DELAY_MS = 300;
 const OPENCODE_GO_MAX_RESPONSE_CHARS = 120_000;
@@ -62,6 +62,12 @@ export function createOpenCodeGoClient({
               ],
               temperature: 0.1,
               stream: false,
+              max_tokens: 8192,
+              // DeepSeek V4 defaults to high-effort thinking; short editorial patches
+              // need direct output. Do not send model-specific options to other models.
+              ...(config.model.startsWith("deepseek-v4-")
+                ? { thinking: { type: "disabled" } }
+                : {}),
               response_format: { type: "json_object" },
             }),
           },
@@ -110,12 +116,14 @@ async function fetchWithRetry(
   fetchImpl: FetchImpl,
   sleepImpl: SleepImpl,
 ): Promise<Response> {
+  const signal = AbortSignal.timeout(OPENCODE_GO_TIMEOUT_MS);
   let lastError: unknown = null;
   for (let attempt = 0; attempt <= OPENCODE_GO_MAX_RETRIES; attempt += 1) {
     try {
+      signal.throwIfAborted();
       const response = await fetchImpl(url, {
         ...init,
-        signal: AbortSignal.timeout(OPENCODE_GO_TIMEOUT_MS),
+        signal,
       });
       if (isRetryableStatus(response.status) && attempt < OPENCODE_GO_MAX_RETRIES) {
         await cancelResponseBody(response);
@@ -151,7 +159,8 @@ async function parseProviderResponse(response: Response) {
     if (value === null) return null;
 
     return { value, usageMetadata: extractUsageMetadata(providerBody.usage) };
-  } catch {
+  } catch (error) {
+    if (isTimeoutError(error)) throw error;
     return null;
   }
 }

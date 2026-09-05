@@ -2076,7 +2076,7 @@ function EstateDialog({
                 </div>
                 <TextAreaField
                   label="設施"
-                  value={estate.facilities.join("\n")}
+                  value={estate.facilities?.join("\n") ?? ""}
                   onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
                   rows={4}
                 />
