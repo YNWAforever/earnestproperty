@@ -110,10 +110,12 @@ export const Route = createFileRoute("/property/$listingNo")({
     }
     const [similar, txns, branches] = await Promise.all([
       property.estate_id
-        ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4)
+        ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4).catch(
+            () => [] as SimilarListing[],
+          )
         : Promise.resolve([] as SimilarListing[]),
       property.estate_id
-        ? fetchEstateTransactions(property.estate_id, 8)
+        ? fetchEstateTransactions(property.estate_id, 8).catch(() => [] as EstateTransaction[])
         : Promise.resolve([] as EstateTransaction[]),
       // Non-essential: resolves property.profiles' branch_id to a real
       // branches.name (see agentBranchName in src/lib/agent-directory.ts) --

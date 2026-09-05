@@ -139,6 +139,14 @@ const navGroups = [
         roles: EDITORS,
       },
       {
+        to: "/admin/analytics",
+        label: "營運與轉換",
+        icon: ServerCog,
+        activeExact: true,
+        includeSearch: false,
+        roles: EDITORS,
+      },
+      {
         to: "/admin/operations",
         label: "系統營運",
         icon: ServerCog,

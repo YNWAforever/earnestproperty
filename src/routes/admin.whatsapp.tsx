@@ -1,5 +1,14 @@
+import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle, Clock3, History, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +37,7 @@ import {
   fetchAdminAgents,
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
-  fetchAdminConversations,
+  fetchAdminPage,
   fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
   runAdminWoztellBackfill,
@@ -114,6 +123,14 @@ function AdminWhatsapp() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const isDesktop = useDesktopBreakpoint();
+  const [listCursor, setListCursor] = useState<string | null>(null);
+  const [nextListCursor, setNextListCursor] = useState<string | null>(null);
+  const [listTotal, setListTotal] = useState(0);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const messageCursors = useRef<{ id: string; older: string | null; newest: string | null } | null>(
+    null,
+  );
   const [rows, setRows] = useState<AdminConversationRow[] | null>(null);
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const [templates, setTemplates] = useState<AdminWhatsappTemplateRow[]>([]);
@@ -124,6 +141,9 @@ function AdminWhatsapp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminConversationDetail | null>(null);
   const [aiAssist, setAiAssist] = useState<AdminConversationAiAssist | null>(null);
+  const visibleMessagesRef = useRef(detail?.messages ?? []);
+  visibleMessagesRef.current = detail?.messages ?? [];
+  const messageRefreshOffset = useRef(0);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -198,25 +218,36 @@ function AdminWhatsapp() {
     return selectedIdRef.current === id;
   }, []);
 
-  const refreshConversations = useCallback(async () => {
-    if (!user) return;
+  const listCursorRef = useRef<string | null>(null);
+  const olderPending = useRef(false);
+  const refreshConversations = useCallback(
+    async (cursor: string | null = listCursorRef.current) => {
+      if (!user) return;
 
-    const requestId = listRequestRef.current + 1;
-    listRequestRef.current = requestId;
-    setLoadingRows(true);
-    try {
-      const data = await fetchAdminConversations();
-      if (requestId !== listRequestRef.current) return;
-      setRows(data as AdminConversationRow[]);
-      setListUpdatedAt(Date.now());
-      setError(null);
-    } catch (err) {
-      if (requestId !== listRequestRef.current) return;
-      setError(errorText(err));
-    } finally {
-      if (requestId === listRequestRef.current) setLoadingRows(false);
-    }
-  }, [user]);
+      const requestId = listRequestRef.current + 1;
+      listRequestRef.current = requestId;
+      setLoadingRows(true);
+      try {
+        const data = await fetchAdminPage({
+          data: { resource: "conversations", cursor, q: inboxQuery, status: inboxStatus },
+        });
+        if (requestId !== listRequestRef.current) return;
+        setRows(data.rows);
+        setListCursor(cursor);
+        listCursorRef.current = cursor;
+        setNextListCursor(data.nextCursor);
+        setListTotal(data.total);
+        setListUpdatedAt(Date.now());
+        setError(null);
+      } catch (err) {
+        if (requestId !== listRequestRef.current) return;
+        setError(errorText(err));
+      } finally {
+        if (requestId === listRequestRef.current) setLoadingRows(false);
+      }
+    },
+    [user, inboxQuery, inboxStatus],
+  );
 
   const loadConversationAiAssist = useCallback(
     async (id: string, options: { background?: boolean } = {}) => {
@@ -254,6 +285,7 @@ function AdminWhatsapp() {
       id: string,
       options: { resetReply?: boolean; background?: boolean; silent?: boolean } = {},
     ) => {
+      if (options.background && olderPending.current) return null;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
       // A background poll must not flip the pane into its loading state or wipe
@@ -264,12 +296,49 @@ function AdminWhatsapp() {
       }
 
       try {
-        const data = await fetchAdminConversation({ data: { id } });
+        const incremental = options.background && messageCursors.current?.id === id;
+        const outbound = incremental
+          ? visibleMessagesRef.current.filter((message) => message.direction === "outbound")
+          : [];
+        const offset = outbound.length ? messageRefreshOffset.current % outbound.length : 0;
+        const refreshIds = [...outbound.slice(offset), ...outbound.slice(0, offset)]
+          .slice(0, 50)
+          .map((message) => message.id);
+        messageRefreshOffset.current = offset + refreshIds.length;
+        const [data, messagePage, statusPage] = await Promise.all([
+          fetchAdminConversation({ data: { id, includeMessages: false } }),
+          fetchAdminPage({
+            data: {
+              resource: "messages",
+              conversationId: id,
+              cursor: incremental ? messageCursors.current?.newest : null,
+              direction: incremental ? "newer" : "older",
+            },
+          }),
+          refreshIds.length
+            ? fetchAdminPage({
+                data: { resource: "messages", conversationId: id, messageIds: refreshIds },
+              })
+            : Promise.resolve({ rows: [] }),
+        ]);
         if (requestId !== detailRequestRef.current || !canApplyConversationDetail(id)) return null;
         if (!data) throw new Error("找不到 WhatsApp 對話");
 
         const conversation = data as AdminConversationDetail;
-        setDetail(conversation);
+        setDetail((current) => ({
+          ...conversation,
+          messages: mergeMessagePages(incremental && current?.id === id ? current.messages : [], [
+            ...messagePage.rows,
+            ...statusPage.rows,
+          ]),
+        }));
+        const previous = messageCursors.current?.id === id ? messageCursors.current : null;
+        messageCursors.current = {
+          id,
+          older: incremental ? (previous?.older ?? null) : messagePage.nextCursor,
+          newest: messagePage.newestCursor ?? previous?.newest ?? null,
+        };
+        setOlderCursor(messageCursors.current.older);
         setDetailError(null);
         loadConversationAiAssist(id, { background: options.background });
         if (options.resetReply) {
@@ -299,9 +368,40 @@ function AdminWhatsapp() {
     [canApplyConversationDetail, loadConversationAiAssist],
   );
 
+  async function loadOlderMessages() {
+    const state = messageCursors.current;
+    if (!state || !state.older || olderPending.current) return;
+    olderPending.current = true;
+    const epoch = detailRequestRef.current;
+    setLoadingOlder(true);
+    try {
+      const page = await fetchAdminPage({
+        data: {
+          resource: "messages",
+          conversationId: state.id,
+          cursor: state.older,
+          direction: "older",
+        },
+      });
+      if (!canApplyConversationDetail(state.id) || epoch !== detailRequestRef.current) return;
+      setDetail((current) =>
+        current?.id === state.id
+          ? { ...current, messages: mergeMessagePages(current.messages, page.rows) }
+          : current,
+      );
+      if (messageCursors.current?.id === state.id) messageCursors.current.older = page.nextCursor;
+      setOlderCursor(page.nextCursor);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      olderPending.current = false;
+      setLoadingOlder(false);
+    }
+  }
+
   useEffect(() => {
     if (!user) return;
-    refreshConversations();
+    void refreshConversations(null);
   }, [refreshConversations, user]);
 
   useEffect(() => {
@@ -350,7 +450,7 @@ function AdminWhatsapp() {
 
   useEffect(() => {
     if (!selectedId) return;
-    loadConversationDetail(selectedId, { resetReply: true });
+    loadConversationDetail(selectedId);
   }, [loadConversationDetail, selectedId]);
 
   useEffect(() => {
@@ -396,6 +496,8 @@ function AdminWhatsapp() {
     detailRequestRef.current += 1;
     aiAssistRequestRef.current += 1;
     setDetail(null);
+    messageCursors.current = null;
+    setOlderCursor(null);
     setAiAssist(null);
     setAiAssistLoading(false);
     setDetailError(null);
@@ -451,8 +553,15 @@ function AdminWhatsapp() {
       setLoadingRows(true);
       let refreshedRows: AdminConversationRow[] = [];
       try {
-        refreshedRows = (await fetchAdminConversations()) as AdminConversationRow[];
+        const page = await fetchAdminPage({
+          data: { resource: "conversations", q: inboxQuery, status: inboxStatus },
+        });
+        refreshedRows = page.rows;
         if (listRequestId === listRequestRef.current) {
+          setListCursor(null);
+          listCursorRef.current = null;
+          setNextListCursor(page.nextCursor);
+          setListTotal(page.total);
           setRows(refreshedRows);
           setListUpdatedAt(Date.now());
         }
@@ -465,7 +574,7 @@ function AdminWhatsapp() {
       // the follow-up detail read 404s. That used to run through the error path
       // and answer a successful handoff with a red 「找不到 WhatsApp 對話」 and a
       // blank pane, so the agent reassigned again or escalated to support.
-      if (!refreshedRows.some((row) => row.id === targetId)) {
+      if (!(await fetchAdminConversation({ data: { id: targetId, includeMessages: false } }))) {
         toast.success("對話已轉交，並已移出你的收件匣");
         clearSelectedConversation();
         return;
@@ -577,28 +686,7 @@ function AdminWhatsapp() {
   // The inbox had no search and no status filter at all -- the toolbar's filter
   // slot held two static badges -- so finding a conversation meant scrolling a
   // silently-capped list of 100.
-  const filteredRows = useMemo(() => {
-    if (!rows) return null;
-    const needle = inboxQuery.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (inboxStatus === "awaiting") {
-        if (
-          !conversationAttention({
-            lastDirection: row.last_direction,
-            lastInboundAt: row.last_inbound_at,
-          }).awaitingReply
-        ) {
-          return false;
-        }
-      } else if (inboxStatus !== "all" && row.status !== inboxStatus) {
-        return false;
-      }
-      if (!needle) return true;
-      return [row.name, row.phone, row.last_text].some((value) =>
-        (value ?? "").toLowerCase().includes(needle),
-      );
-    });
-  }, [inboxQuery, inboxStatus, rows]);
+  const filteredRows = rows;
   const hasInboxFilters = inboxQuery.trim() !== "" || inboxStatus !== "all";
 
   // Counted over every loaded conversation rather than the filtered view: this
@@ -752,6 +840,22 @@ function AdminWhatsapp() {
         }
       />
 
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          disabled={!listCursor || loadingRows}
+          onClick={() => void refreshConversations(null)}
+        >
+          第一頁
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!nextListCursor || loadingRows}
+          onClick={() => void refreshConversations(nextListCursor)}
+        >
+          下一頁
+        </Button>
+      </div>
       {error ? <AdminError message={error} /> : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(18rem,24rem)_1fr]">
@@ -759,7 +863,7 @@ function AdminWhatsapp() {
           <CardContent className="p-0">
             <ConversationList
               rows={filteredRows}
-              totalLoaded={rows?.length ?? 0}
+              totalLoaded={listTotal}
               awaitingCount={awaitingCount}
               showingAwaitingOnly={inboxStatus === "awaiting"}
               onShowAwaiting={() => setWhatsappSearch({ status: "awaiting" })}
@@ -779,6 +883,9 @@ function AdminWhatsapp() {
           <CardContent className="p-0">
             <ConversationWorkspace
               detail={detail}
+              olderCursor={olderCursor}
+              loadingOlder={loadingOlder}
+              onLoadOlder={loadOlderMessages}
               agents={agents}
               loading={detailLoading}
               error={detailError}
@@ -828,6 +935,9 @@ function AdminWhatsapp() {
       >
         <ConversationWorkspace
           detail={detail}
+          olderCursor={olderCursor}
+          loadingOlder={loadingOlder}
+          onLoadOlder={loadOlderMessages}
           agents={agents}
           loading={detailLoading}
           error={detailError}
@@ -869,8 +979,6 @@ function AdminWhatsapp() {
     </AdminShell>
   );
 }
-
-const INBOX_ROW_LIMIT = 100;
 
 function ConversationList({
   rows,
@@ -932,7 +1040,7 @@ function ConversationList({
           className="flex w-full items-center gap-2 bg-amber-100 px-4 py-2.5 text-left text-sm font-semibold text-amber-950 transition hover:bg-amber-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring dark:bg-amber-950/50 dark:text-amber-100 dark:hover:bg-amber-950/80"
         >
           <MessageCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>{awaitingCount} 個對話待回覆</span>
+          <span>本頁 {awaitingCount} 個對話待回覆</span>
           <span className="ml-auto text-xs font-medium underline">只看待回覆</span>
         </button>
       ) : null}
@@ -940,9 +1048,7 @@ function ConversationList({
           looked identical to a quiet one and older conversations simply did not
           exist as far as the UI was concerned. */}
       <p className="px-4 py-2 text-xs text-muted-foreground">
-        顯示 {rows.length} 個對話
-        {hasFilters ? `（已載入 ${totalLoaded} 個）` : ""}
-        {totalLoaded >= INBOX_ROW_LIMIT ? `，收件匣上限為最近 ${INBOX_ROW_LIMIT} 個` : ""}
+        顯示 {rows.length} 個對話 / 共 {totalLoaded} 個符合條件
       </p>
       {rows.map((conversation) => {
         const attention = conversationAttention({
@@ -1047,6 +1153,9 @@ function ConversationList({
 
 function ConversationWorkspace({
   detail,
+  olderCursor,
+  loadingOlder,
+  onLoadOlder,
   agents,
   loading,
   error,
@@ -1069,6 +1178,9 @@ function ConversationWorkspace({
   onConsentSaved,
 }: {
   detail: AdminConversationDetail | null;
+  olderCursor: string | null;
+  loadingOlder: boolean;
+  onLoadOlder: () => Promise<void>;
   agents: AdminAgentRow[];
   loading: boolean;
   error: string | null;
@@ -1181,7 +1293,13 @@ function ConversationWorkspace({
         ) : null}
       </div>
 
-      <MessageTimeline messages={detail.messages} />
+      <MessageTimeline
+        key={detail.id}
+        messages={detail.messages}
+        olderCursor={olderCursor}
+        loadingOlder={loadingOlder}
+        onLoadOlder={onLoadOlder}
+      />
 
       <div className="border-t p-4">
         <AiAssistPanel
@@ -1402,37 +1520,59 @@ function TemplateSendPanel({
   );
 }
 
-function MessageTimeline({ messages }: { messages: AdminConversationMessageRow[] }) {
-  const endRef = useRef<HTMLDivElement | null>(null);
-  const lastId = messages.at(-1)?.id ?? null;
-
-  // The pane opened at the top of the history, so on any conversation with more
-  // than a screenful the agent had to scroll down to find the message they were
-  // answering. Keyed on the newest id so a poll that adds a message also scrolls.
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [lastId]);
-
+function MessageTimeline({
+  messages,
+  olderCursor,
+  loadingOlder,
+  onLoadOlder,
+}: {
+  messages: AdminConversationMessageRow[];
+  olderCursor: string | null;
+  loadingOlder: boolean;
+  onLoadOlder: () => Promise<void>;
+}) {
+  const container = useRef<HTMLDivElement | null>(null);
+  const pinned = useRef(true);
+  const anchor = useRef<{ height: number; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    if (anchor.current) {
+      element.scrollTop = anchor.current.top + element.scrollHeight - anchor.current.height;
+      anchor.current = null;
+    } else if (pinned.current) element.scrollTop = element.scrollHeight;
+  }, [messages]);
+  async function older() {
+    const element = container.current;
+    if (element) anchor.current = { height: element.scrollHeight, top: element.scrollTop };
+    const captured = anchor.current;
+    await onLoadOlder();
+    requestAnimationFrame(() => {
+      if (anchor.current === captured) anchor.current = null;
+    });
+  }
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+    <div
+      ref={container}
+      onScroll={() => {
+        const e = container.current;
+        if (e) pinned.current = e.scrollHeight - e.scrollTop - e.clientHeight < 80;
+      }}
+      className="min-h-0 flex-1 overflow-y-auto p-4"
+      style={{ overflowAnchor: "none" }}
+    >
+      {olderCursor ? (
+        <Button variant="outline" disabled={loadingOlder} onClick={() => void older()}>
+          {loadingOlder ? "載入中…" : "載入較早訊息"}
+        </Button>
+      ) : null}
       {messages.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          未有訊息紀錄
-        </div>
+        <p className="p-6 text-center text-sm text-muted-foreground">未有訊息紀錄</p>
       ) : (
         <div className="space-y-3">
-          {/* The server returns the most recent 100 messages and drops the rest
-              silently, so a long-running conversation looked like it began
-              mid-sentence. */}
-          {messages.length >= MESSAGE_HISTORY_LIMIT ? (
-            <p className="rounded-md border border-dashed p-2 text-center text-xs text-muted-foreground">
-              只顯示最近 {MESSAGE_HISTORY_LIMIT} 則訊息，較早的紀錄未有載入。
-            </p>
-          ) : null}
           {messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
-          <div ref={endRef} aria-hidden="true" />
         </div>
       )}
     </div>
@@ -1515,7 +1655,6 @@ function providerErrorText(error: string) {
 }
 
 const REPLY_MAX_LENGTH = 1000;
-const MESSAGE_HISTORY_LIMIT = 100;
 
 const AI_INTENT_LABELS: Record<string, string> = {
   buyer: "買家",

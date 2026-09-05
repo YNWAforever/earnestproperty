@@ -2,7 +2,13 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, MessageCircle, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
 import { AppImage } from "@/components/media/AppImage";
 import { SiteLink } from "@/components/site/SiteLink";
 import { hrefPathname } from "@/lib/site-links";
@@ -469,6 +475,8 @@ export function SiteHeader() {
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-80 max-w-[calc(100vw-2rem)]">
+              <SheetTitle className="sr-only">主選單</SheetTitle>
+              <SheetDescription className="sr-only">瀏覽樓盤、屋苑與服務</SheetDescription>
               <div className="flex h-full flex-col">
                 <div className="mt-8 flex-1 overflow-y-auto pr-1">
                   <HeaderNavLink

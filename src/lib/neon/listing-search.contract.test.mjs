@@ -535,7 +535,7 @@ function orderByRegex(primary) {
 
 test("sort=newest uses the pre-existing default order untouched", async () => {
   const { rows } = await runSearch({ deal: "all", sort: "newest", page: 1, pageSize: 12 });
-  assert.match(rows.text, new RegExp(`ORDER BY ${FRESHNESS_TIEBREAKER}\\s*$`, "m"));
+  assert.match(rows.text, new RegExp(`ORDER BY ${FRESHNESS_TIEBREAKER}, p\\.id ASC`));
 });
 
 test("sort=price_asc orders by price ascending, then the freshness tiebreaker", async () => {
@@ -705,4 +705,73 @@ test("video listing selection retains headroom for duplicate canonical source ro
     Array.from({ length: 12 }, (_, index) => `video-${index}-a`),
     "12 distinct video units must survive two source rows per canonical property",
   );
+});
+
+test("listing cards omit detail prose and full galleries at the real mapping boundary", async (t) => {
+  const heavy = {
+    id: "1",
+    listing_no: "A",
+    canonical_property_no: "canonical",
+    deal_type: "sale",
+    title_zh: "Synthetic",
+    description: "Synthetic property description. ".repeat(40),
+    images: Array.from({ length: 12 }, (_, i) => `https://example.invalid/image-${i}.jpg`),
+    agent_id: "agent",
+    agent_bio: "Synthetic agent biography. ".repeat(20),
+  };
+  const server = await importPublicDataServerWithInjectedQuery(async (text) =>
+    /count\(\*\)/.test(text) ? [{ total: 1 }] : [heavy],
+  );
+  const result = await server.searchListings({
+    deal: "all",
+    sort: "newest",
+    page: 1,
+    pageSize: 12,
+  });
+  assert.equal(result.rows[0].description, null);
+  assert.equal(result.rows[0].profiles, null);
+  assert.equal(result.rows[0].images.length, 1);
+  const detail = await server.fetchPropertyByListingNo({ listingNo: "A" });
+  const before = Buffer.byteLength(JSON.stringify(detail)),
+    after = Buffer.byteLength(JSON.stringify(result.rows[0]));
+  t.diagnostic(
+    JSON.stringify({
+      fixture: "synthetic same-record detail vs card",
+      beforeBytes: before,
+      afterBytes: after,
+      reduction: 1 - after / before,
+    }),
+  );
+  assert.ok(after < before * 0.7);
+});
+test("canonical identity is ranked before both count and page limits and includes sale/rent", async () => {
+  const { count, rows } = await runSearch({ deal: "all", sort: "newest", page: 2, pageSize: 12 });
+  for (const call of [count, rows]) {
+    assert.match(call.text, /PARTITION BY[\s\S]*p\.deal_type/);
+    assert.match(call.text, /NULLIF\(p\.canonical_property_no, ''\)/);
+    assert.match(call.text, /canonical_rank = 1/);
+  }
+  assert.ok(rows.text.indexOf("canonical_rank = 1") < rows.text.indexOf("LIMIT"));
+  assert.match(rows.text, /p\.id ASC/);
+});
+
+test("similar listings exclude the current canonical offering before ranking", async () => {
+  let captured;
+  const server = await importPublicDataServerWithInjectedQuery(async (text, params) => {
+    captured = { text, params };
+    return [];
+  });
+  await server.fetchSimilarListings({
+    estateId: "estate",
+    dealType: "sale",
+    excludeId: "current",
+    limit: 4,
+  });
+  assert.match(captured.text, /NOT EXISTS\s*\(\s*SELECT 1 FROM properties current_offering/);
+  assert.match(captured.text, /current_offering\.id = \$3/);
+  assert.match(captured.text, /current_offering\.deal_type = p\.deal_type/);
+  assert.match(captured.text, /NULLIF\(current_offering\.canonical_property_no, ''\)/);
+  assert.match(captured.text, /'listing:' \|\| current_offering\.listing_no/);
+  assert.ok(captured.text.indexOf("NOT EXISTS") < captured.text.indexOf("canonical_rank = 1"));
+  assert.deepEqual(captured.params, ["estate", "sale", "current", 4]);
 });

@@ -46,6 +46,7 @@ function injected({ roles = ["admin"], fail = false } = {}) {
     published_at: "2026-09-05",
   };
   const modules = {
+    "./public-estate-options-cache": { invalidatePublicEstateOptions() {} },
     "@tanstack/react-start/server-only": {},
     "@tanstack/react-start/server": { getRequest: () => ({}) },
     "./auth.server": {

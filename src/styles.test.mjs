@@ -32,7 +32,10 @@ test("styles.css still keeps --coral as a working alias (not retired in P1 -- se
 test("__root.tsx self-hosts fonts via @fontsource and preloads the real Inter woff2 file", () => {
   const source = read("src/routes/__root.tsx");
   assert.match(source, /import "@fontsource\/inter\/400\.css";/);
-  assert.match(source, /import "@fontsource\/noto-sans-tc\/400\.css";/);
+  assert.match(source, /import "@fontsource-variable\/noto-sans-tc\/wght\.css";/);
+  assert.doesNotMatch(source, /import "@fontsource\/noto-sans-tc\//);
+  assert.match(read("src/styles.css"), /--font-sans: "Inter", "Noto Sans TC Variable"/);
+  assert.match(read("src/styles.css"), /--font-display: "Noto Sans TC Variable", "Inter"/);
   assert.match(
     source,
     /import interLatin400 from "@fontsource\/inter\/files\/inter-latin-400-normal\.woff2\?url";/,
@@ -59,5 +62,26 @@ test("the homepage hero headline uses text-balance and a non-breaking brand span
     heading,
     /whitespace-nowrap[^>]*>晉誠地產/,
     "晉誠地產 should not be allowed to break mid-word",
+  );
+});
+
+test("variable Noto faces cover all existing weights with local files and matching family", () => {
+  const css = read("node_modules/@fontsource-variable/noto-sans-tc/wght.css");
+  const metadata = JSON.parse(read("node_modules/@fontsource-variable/noto-sans-tc/metadata.json"));
+  assert.equal(metadata.variable.wght.min, "100");
+  assert.equal(metadata.variable.wght.max, "900");
+  const faces = css.match(/@font-face\s*\{[^}]+\}/g);
+  assert.ok(faces.length > 1);
+  for (const face of faces) {
+    assert.match(face, /font-family: 'Noto Sans TC Variable'/);
+    assert.match(face, /font-weight: 100 900/);
+    assert.match(face, /font-display: swap/);
+    assert.match(face, /src: url\(\.\/files\/[^)]+\.woff2\)/);
+    assert.match(face, /unicode-range:/);
+    assert.doesNotMatch(face, /https?:/);
+  }
+  assert.equal(
+    JSON.parse(read("package.json")).dependencies["@fontsource-variable/noto-sans-tc"],
+    "5.3.0",
   );
 });

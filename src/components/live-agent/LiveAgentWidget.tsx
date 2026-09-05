@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { LoaderCircle, MessageCircle, Phone, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,8 +24,8 @@ const initialMessages: Message[] = [
   },
 ];
 
-export function LiveAgentWidget() {
-  const [open, setOpen] = useState(false);
+export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boolean } = {}) {
+  const [open, setOpen] = useState(initiallyOpen);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -33,6 +34,7 @@ export function LiveAgentWidget() {
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const showHandoffPanel = messages.some(
@@ -137,130 +139,138 @@ export function LiveAgentWidget() {
     }
   }
 
-  if (!open) {
-    return (
-      <Button
-        className="fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"
-        onClick={() => setOpen(true)}
-        type="button"
-      >
-        <MessageCircle className="mr-2 h-5 w-5" />
-        問樓助手
-      </Button>
-    );
-  }
-
   return (
-    <div
-      aria-label="晉誠地產即時客服"
-      className="fixed bottom-3 right-3 z-50 flex h-[min(520px,calc(100vh-1.5rem))] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl sm:bottom-5 sm:right-5"
-      role="dialog"
-    >
-      <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-foreground">Earnest 問樓助手</p>
-          <p className="truncate text-xs text-muted-foreground">公開物業資料查詢</p>
-        </div>
+    <DialogPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
+      <DialogPrimitive.Trigger asChild>
         <Button
-          aria-label="關閉即時客服"
-          onClick={() => setOpen(false)}
-          size="icon"
+          className="fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"
           type="button"
-          variant="ghost"
         >
-          <X className="h-4 w-4" />
+          <MessageCircle className="mr-2 h-5 w-5" />
+          問樓助手
         </Button>
-      </div>
-
-      <div aria-live="polite" className="flex-1 space-y-3 overflow-y-auto p-3">
-        <div className="flex flex-wrap gap-2">
-          {["買樓", "租樓", "放盤估價", "問屋苑"].map((choice) => (
+      </DialogPrimitive.Trigger>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Content
+          className="fixed bottom-3 right-3 z-50 flex h-[min(520px,calc(100dvh-1.5rem))] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl sm:bottom-5 sm:right-5"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus();
+          }}
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <div className="flex items-center justify-between gap-3 border-b px-3 py-2.5">
+            <div className="min-w-0">
+              <DialogPrimitive.Title className="truncate text-sm font-semibold text-foreground">
+                Earnest 問樓助手
+              </DialogPrimitive.Title>
+              <DialogPrimitive.Description className="truncate text-xs text-muted-foreground">
+                公開物業資料查詢
+              </DialogPrimitive.Description>
+            </div>
             <Button
-              disabled={loading}
-              key={choice}
-              onClick={() => sendMessage(choice)}
-              size="sm"
+              aria-label="關閉即時客服"
+              onClick={() => setOpen(false)}
+              size="icon"
               type="button"
-              variant="outline"
+              variant="ghost"
             >
-              {choice}
+              <X className="h-4 w-4" />
             </Button>
-          ))}
-        </div>
-
-        {messages.map((message, index) => (
-          <div
-            className={
-              message.role === "visitor"
-                ? "ml-8 whitespace-pre-wrap rounded-lg bg-primary p-3 text-sm text-primary-foreground"
-                : "mr-8 whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm text-foreground"
-            }
-            key={`${message.role}-${index}`}
-          >
-            {message.text}
           </div>
-        ))}
 
-        {loading ? (
-          <div className="mr-8 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-            回覆中
-          </div>
-        ) : null}
-        {showHandoffPanel ? (
-          <div className="space-y-2 border-t pt-3">
-            <Input
-              value={handoffPhone}
-              onChange={(event) => setHandoffPhone(event.target.value)}
-              placeholder="WhatsApp 電話"
-              aria-label="轉接 WhatsApp 電話"
-              autoComplete="tel"
-            />
-            <label className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-              <Checkbox
-                checked={handoffConsent}
-                onCheckedChange={(checked) => setHandoffConsent(checked === true)}
-                aria-label="同意 WhatsApp 跟進聯絡"
-              />
-              <span>我同意 Earnest Property 透過 WhatsApp 聯絡我跟進今次查詢。</span>
-            </label>
-            <Button
-              onClick={requestHandoff}
-              type="button"
-              variant="outline"
-              disabled={handoffLoading}
-            >
-              {handoffLoading ? (
+          <div aria-live="polite" className="flex-1 space-y-3 overflow-y-auto p-3">
+            <div className="flex flex-wrap gap-2">
+              {["買樓", "租樓", "放盤估價", "問屋苑"].map((choice) => (
+                <Button
+                  disabled={loading}
+                  key={choice}
+                  onClick={() => sendMessage(choice)}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  {choice}
+                </Button>
+              ))}
+            </div>
+
+            {messages.map((message, index) => (
+              <div
+                className={
+                  message.role === "visitor"
+                    ? "ml-8 whitespace-pre-wrap rounded-lg bg-primary p-3 text-sm text-primary-foreground"
+                    : "mr-8 whitespace-pre-wrap rounded-lg bg-muted p-3 text-sm text-foreground"
+                }
+                key={`${message.role}-${index}`}
+              >
+                {message.text}
+              </div>
+            ))}
+
+            {loading ? (
+              <div className="mr-8 flex items-center gap-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Phone className="h-4 w-4" />
-              )}
-              轉介代理
-            </Button>
+                回覆中
+              </div>
+            ) : null}
+            {showHandoffPanel ? (
+              <div className="space-y-2 border-t pt-3">
+                <Input
+                  value={handoffPhone}
+                  onChange={(event) => setHandoffPhone(event.target.value)}
+                  placeholder="WhatsApp 電話"
+                  aria-label="轉接 WhatsApp 電話"
+                  autoComplete="tel"
+                />
+                <label className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+                  <Checkbox
+                    checked={handoffConsent}
+                    onCheckedChange={(checked) => setHandoffConsent(checked === true)}
+                    aria-label="同意 WhatsApp 跟進聯絡"
+                  />
+                  <span>我同意 Earnest Property 透過 WhatsApp 聯絡我跟進今次查詢。</span>
+                </label>
+                <Button
+                  onClick={requestHandoff}
+                  type="button"
+                  variant="outline"
+                  disabled={handoffLoading}
+                >
+                  {handoffLoading ? (
+                    <LoaderCircle className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Phone className="h-4 w-4" />
+                  )}
+                  轉介代理
+                </Button>
+              </div>
+            ) : null}
+            <div ref={scrollRef} />
           </div>
-        ) : null}
-        <div ref={scrollRef} />
-      </div>
 
-      <form
-        className="flex gap-2 border-t p-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          sendMessage();
-        }}
-      >
-        <Input
-          aria-label="即時客服訊息"
-          autoComplete="off"
-          onChange={(event) => setInput(event.target.value)}
-          placeholder="輸入問題..."
-          value={input}
-        />
-        <Button disabled={loading || !input.trim()} size="icon" type="submit" aria-label="傳送">
-          <Send className="h-4 w-4" />
-        </Button>
-      </form>
-    </div>
+          <form
+            className="flex gap-2 border-t p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendMessage();
+            }}
+          >
+            <Input
+              ref={inputRef}
+              aria-label="即時客服訊息"
+              autoComplete="off"
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="輸入問題..."
+              value={input}
+            />
+            <Button disabled={loading || !input.trim()} size="icon" type="submit" aria-label="傳送">
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   );
 }
 

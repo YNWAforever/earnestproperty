@@ -1,3 +1,10 @@
+import {
+  parseAdminPageInput,
+  type AdminPageInput,
+  type AdminPageResource,
+  type AdminPageRows,
+  type CursorPage,
+} from "./admin-pagination";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
@@ -733,7 +740,18 @@ const createWebsiteInquiryServer = createServerFn({ method: "POST" })
 // large JSON blob to a row.
 export async function createWebsiteInquiry(options: { data: WebsiteInquiryInput }) {
   const { submitWithInquiryIdentity } = await import("../inquiry-submission");
-  return submitWithInquiryIdentity(options.data, (data) => createWebsiteInquiryServer({ data }));
+  const result = await submitWithInquiryIdentity(options.data, (data) =>
+    createWebsiteInquiryServer({ data }),
+  );
+  if (result.id && typeof window !== "undefined") {
+    try {
+      const { trackInquiryConversion } = await import("../analytics/events");
+      trackInquiryConversion(result.id);
+    } catch {
+      /* Measurement cannot suppress a persisted enquiry's success UI. */
+    }
+  }
+  return result;
 }
 const listingAlertFiltersSchema = z
   .record(z.string(), z.unknown())
@@ -1226,14 +1244,16 @@ export async function createAdminLeadActivity(options: { data: AdminLeadActivity
 }
 
 const fetchAdminConversationServer = createServerFn({ method: "GET" })
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { id: string; includeMessages?: boolean }) => data)
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
-    return adminData.fetchAdminConversation(data.id, staff);
+    return adminData.fetchAdminConversation(data.id, staff, data.includeMessages ?? true);
   });
 
-export async function fetchAdminConversation(options: { data: { id: string } }) {
+export async function fetchAdminConversation(options: {
+  data: { id: string; includeMessages?: boolean };
+}) {
   return callStaffServerFn(async () =>
     fetchAdminConversationServer(await withStaffAuthHeaders(options)),
   );
@@ -1548,4 +1568,18 @@ export async function cancelAdminCampaign(options: { data: { id: string } }) {
   return callStaffServerFn(async () =>
     cancelAdminCampaignServer(await withStaffAuthHeaders(options)),
   );
+}
+
+const fetchAdminPageServer = createServerFn({ method: "GET" })
+  .inputValidator(parseAdminPageInput)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    return (await import("./admin-pagination.server")).readAdminPage(data, staff);
+  });
+export async function fetchAdminPage<R extends AdminPageResource>(options: {
+  data: AdminPageInput & { resource: R };
+}): Promise<CursorPage<AdminPageRows[R]>> {
+  return (await callStaffServerFn(async () =>
+    fetchAdminPageServer(await withStaffAuthHeaders(options)),
+  )) as CursorPage<AdminPageRows[R]>;
 }

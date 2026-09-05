@@ -5,31 +5,31 @@ import {
   HeadContent,
   Scripts,
   useLocation,
+  redirect,
 } from "@tanstack/react-router";
-import { NeonAuthUIProvider } from "@neondatabase/auth-ui";
+import { lazy, Suspense } from "react";
+import { AnalyticsProvider } from "@/components/analytics/AnalyticsProvider";
+import { isAnalyticsPrivatePath } from "@/lib/analytics/attribution";
+import { requiresDocumentIsolation } from "@/lib/route-isolation";
+const PrivateAuthProvider = lazy(() => import("@/components/auth/PrivateAuthProvider"));
+const documentEntryPath = typeof window === "undefined" ? null : window.location.pathname;
 
 import appCss from "../styles.css?url";
-// Self-hosted fonts (P7c) -- replaces the Google Fonts CDN <link> tags that
-// used to sit in head() below. Only the weights styles.css's --font-sans/
-// --font-display actually reference (Inter 400/500/600/700, Noto Sans TC
-// 400/500/700/900), matching the old Google Fonts URL's own weight list
-// exactly, not fontsource's full 100-900 range.
+// Self-hosted fonts: one Noto Sans TC variable slice supports weights 100–900.
+// Keep Inter static weights and the existing local Latin preload.
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
-import "@fontsource/noto-sans-tc/400.css";
-import "@fontsource/noto-sans-tc/500.css";
-import "@fontsource/noto-sans-tc/700.css";
-import "@fontsource/noto-sans-tc/900.css";
+import "@fontsource-variable/noto-sans-tc/wght.css";
 // The one file worth a real preload hint: Inter's Latin subset at the
 // default body weight, used by nearly every ASCII character on the page.
 // Noto Sans TC's CJK glyphs are split across many unicode-range chunks
 // (fontsource's own subsetting) with no single "primary" file to preload
 // correctly, so this doesn't guess one.
 import interLatin400 from "@fontsource/inter/files/inter-latin-400-normal.woff2?url";
-import { authClient } from "@/auth";
-import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
+
+import { LiveAgentLauncher } from "@/components/live-agent/LiveAgentLauncher";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
@@ -70,6 +70,14 @@ function NotFoundComponent() {
 }
 
 export const Route = createRootRoute({
+  beforeLoad: ({ location, preload }) => {
+    if (
+      documentEntryPath !== null &&
+      requiresDocumentIsolation(documentEntryPath, location.pathname, preload)
+    ) {
+      throw redirect({ href: location.href, reloadDocument: true });
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -128,13 +136,8 @@ function RootComponent() {
   const showStickyWhatsAppBar = shouldShowStickyWhatsAppBar(location.pathname);
   const showSiteChrome = isPublicSitePath(location.pathname);
 
-  return (
-    // baseURL: the absolute origin Neon Auth sends people back to from emailed
-    // links (password reset first of all). Left empty, the built-in 忘記密碼
-    // form sent a relative "/auth/reset-password", which an auth server on
-    // Neon's domain resolves against ITS origin, not ours. SITE_URL rather than
-    // window.location.origin so server and client render the same value.
-    <NeonAuthUIProvider authClient={authClient} baseURL={SITE_URL} defaultTheme="light">
+  const content = (
+    <>
       {/* The sticky WhatsApp bar is `fixed` at bottom-16 (above the 問樓助手
           bubble) and ~52px tall, so the page needs ~116px reserved -- pb-16
           only cleared the offset, leaving the footer's last lines under the
@@ -155,8 +158,18 @@ function RootComponent() {
         {showSiteChrome ? <SiteFooter /> : null}
       </div>
       {showStickyWhatsAppBar ? <StickyWhatsAppBar /> : null}
-      {showLiveAgentWidget ? <LiveAgentWidget /> : null}
-    </NeonAuthUIProvider>
+      {showLiveAgentWidget ? <LiveAgentLauncher /> : null}
+      {!isAnalyticsPrivatePath(location.pathname) ? (
+        <AnalyticsProvider pathname={location.pathname} documentIsolationApproved />
+      ) : null}
+    </>
+  );
+  return isAnalyticsPrivatePath(location.pathname) ? (
+    <Suspense fallback={<main aria-busy="true">載入中…</main>}>
+      <PrivateAuthProvider>{content}</PrivateAuthProvider>
+    </Suspense>
+  ) : (
+    content
   );
 }
 

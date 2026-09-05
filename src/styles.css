@@ -19,8 +19,8 @@
  */
 
 @theme inline {
-  --font-sans: "Inter", "Noto Sans TC", system-ui, sans-serif;
-  --font-display: "Noto Sans TC", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", "Noto Sans TC Variable", system-ui, sans-serif;
+  --font-display: "Noto Sans TC Variable", "Inter", system-ui, sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

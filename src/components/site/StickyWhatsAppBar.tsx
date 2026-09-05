@@ -16,7 +16,8 @@ export function StickyWhatsAppBar() {
   const href = whatsappUrl("你好，我想查詢深井／青山公路／汀九物業");
 
   return (
-    <div
+    <aside
+      aria-label="WhatsApp 即時查詢"
       className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 px-3 py-2 shadow-lg backdrop-blur lg:hidden"
       data-sticky-whatsapp-bar
     >
@@ -27,11 +28,11 @@ export function StickyWhatsAppBar() {
         onClick={() =>
           track({ name: "whatsapp_cta_click", payload: { source: "sticky-bar" } }, buildContext())
         }
-        className="mx-auto flex max-w-6xl items-center justify-center gap-2 rounded-md bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#1ebe57]"
+        className="mx-auto flex max-w-6xl items-center justify-center gap-2 rounded-md bg-[#08783f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#066333]"
       >
         <MessageCircle className="h-4 w-4" />
         WhatsApp 即時查詢
       </a>
-    </div>
+    </aside>
   );
 }

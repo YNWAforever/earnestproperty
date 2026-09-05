@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "status": "NO_GO",
+  "productionAuthorized": false,
+  "preparedAt": "2026-09-06",
+  "commit": null,
+  "ci": {
+    "status": "unverified",
+    "commit": null,
+    "url": null
+  },
+  "preview": {
+    "status": "unverified",
+    "commit": null,
+    "url": null
+  },
+  "databaseTarget": null,
+  "migrations": [],
+  "testRecipients": null,
+  "monitoringOwner": null,
+  "backupRestoreProof": {
+    "status": "unverified",
+    "commit": null,
+    "url": null
+  },
+  "rollbackAction": null,
+  "acceptance": {
+    "emptySchema": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "previousSchema": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "staffScope": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "draftIsolation": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "leadLinks": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "providerFailures": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "providerCapabilities": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "syncFreshness": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "publicBrowser": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "staffBrowser": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "performance": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    },
+    "migrationDrift": {
+      "status": "unverified",
+      "commit": null,
+      "url": null
+    }
+  },
+  "developmentObservations": {
+    "provenance": "Coordinating runner reported verified disposable results; not immutable release evidence.",
+    "projectId": "dawn-meadow-79190048",
+    "branchId": "br-quiet-hat-aoxbj2ue",
+    "databases": {
+      "upgradedPreview": "neondb",
+      "empty": "astra_empty_20260905"
+    },
+    "appliedMigrationCountPerDatabase": 38,
+    "observedMigrationManifest": [
+      "20260622060000_public_content.sql",
+      "20260623090000_neon_admin_crm_whatsapp.sql",
+      "20260624110000_ai_crm_live_agent.sql",
+      "20260626120000_live_agent_security.sql",
+      "20260626120100_crm_ai_profile_status.sql",
+      "20260626120200_woztell_member_identity.sql",
+      "20260709090000_cms_videos.sql",
+      "20260710090000_agent_profiles.sql",
+      "20260711090000_cms_content_revisions.sql",
+      "20260712120000_ai_content_proposals.sql",
+      "20260714180000_backend_control_plane.sql",
+      "20260801090000_staff_public_slug_unique.sql",
+      "20260802090000_listing_search_indexes.sql",
+      "20260802100000_agent_specialties.sql",
+      "20260816120000_staff_identity_actions.sql",
+      "20260817120000_dual_source_listing_sync.sql",
+      "20260817130000_youtube_channel_sync.sql",
+      "20260822120000_whatsapp_audience_segment_link.sql",
+      "20260830120000_listing_alerts.sql",
+      "20260830130000_estate_expansion.sql",
+      "20260830140000_transaction_provenance.sql",
+      "20260830150000_agent_languages.sql",
+      "20260830160000_branches_entity.sql",
+      "20260830170000_valuation_leads.sql",
+      "20260831090000_staff_viewer_role.sql",
+      "20260831180000_video_category.sql",
+      "20260901100000_estate_expansion_facts.sql",
+      "20260901110000_estate_expansion_publish.sql",
+      "20260902100000_estate_expansion_school_net_correction.sql",
+      "20260902110000_estate_expansion_facts_resolution.sql",
+      "20260905110000_cms_atomic_mutations.sql",
+      "20260905120000_campaign_dispatch_boundary.sql",
+      "20260905130000_outbound_intents.sql",
+      "20260905140000_media_upload_intents.sql",
+      "20260905150000_inquiry_submission_identity.sql",
+      "20260905151000_consent_evidence.sql",
+      "20260905180000_admin_message_paging.sql",
+      "20260905181000_cms_browse_order.sql"
+    ],
+    "fixtures": {
+      "bootstrap": {
+        "passed": 1
+      },
+      "crm": {
+        "passed": 1
+      },
+      "cms": {
+        "passedGroups": 16
+      },
+      "outbound": {
+        "passed": 3
+      },
+      "largePaging": {
+        "status": "passed",
+        "count": null
+      },
+      "publicQueries": {
+        "passed": 1
+      }
+    },
+    "chatKeyboardChromium": {
+      "passed": 2,
+      "viewportWidths": [
+        390,
+        1440
+      ]
+    },
+    "releaseCommit": null,
+    "evidenceUrls": []
+  },
+  "excludedHistoricalEvidence": {
+    "pullRequest": 112,
+    "baselineShortCommit": "6d5c016",
+    "reason": "Prior CI/Vercel success does not verify current uncommitted work."
+  },
+  "blockers": [
+    "Exact release commit, CI and Preview proof unavailable",
+    "Staff staging URL and accounts unanswered",
+    "GA4 ID and manual-events confirmation not supplied",
+    "Positive provider tests and approved recipients not supplied",
+    "MLS/YouTube freshness not supplied",
+    "Production target and migration delta not approved",
+    "Monitoring owner and backup/restore proof not supplied",
+    "Exact rollback action/artifact not supplied",
+    "Full acceptance evidence not linked to an immutable release commit"
+  ],
+  "runbook": "docs/audits/astra-task-11-runbook.md"
+}

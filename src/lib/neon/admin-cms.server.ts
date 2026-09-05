@@ -1,3 +1,4 @@
+import { invalidatePublicEstateOptions } from "./public-estate-options-cache";
 import "@tanstack/react-start/server-only";
 
 import { getRequest } from "@tanstack/react-start/server";
@@ -330,6 +331,7 @@ export async function publishAdminCmsRevision(input: CmsPublishInput, request: R
   const actor = await requireStaffAccess(request, ["admin", "manager"]);
   try {
     const revision = await mutateCms("publish", input, actor);
+    if (input.resourceType === "estate") invalidatePublicEstateOptions();
     return {
       ok: true,
       revisionId: input.revisionId,
@@ -366,6 +368,7 @@ export async function archiveAdminCmsResource(input: CmsArchiveInput, request: R
   const actor = await requireStaffAccess(request, ["admin", "manager"]);
   try {
     await mutateCms("archive", input, actor);
+    if (input.resourceType === "estate") invalidatePublicEstateOptions();
     return { ok: true };
   } catch (error) {
     for (const code of ["CMS_MEDIA_IN_USE", "CMS_RESOURCE_NOT_FOUND"] as const)

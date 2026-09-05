@@ -112,10 +112,14 @@ test("property public data only joins assigned agents that are active and publis
     server,
     /const publicAgentJoin =\s*`LEFT JOIN staff_users s ON s\.id = p\.agent_id[\s\S]*?to_jsonb\(s\)\s*->>\s*'show_on_website'/,
   );
-  assert.ok(
-    (server.match(/\$\{publicAgentJoin\}/g) ?? []).length >= 5,
-    "every public property query must use the published-agent join",
+  const detail = server.slice(
+    server.indexOf("export async function fetchPropertyByListingNo"),
+    server.indexOf("export async function fetchPropertyByLegacyDetailId"),
   );
+  assert.match(detail, /\$\{publicAgentJoin\}/);
+  const card = server.match(/const listingCardColumns = `([\s\S]*?)`;/)?.[1] ?? "";
+  assert.doesNotMatch(card, /agent_bio|staff_users|s\.bio/);
+  assert.match(server, /function mapListingCardRow[\s\S]*?agent_id:\s*null/);
 });
 
 test("public agent list and detail only hide recognized profile-column rollout errors", async () => {

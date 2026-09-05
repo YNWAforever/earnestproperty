@@ -1,4 +1,7 @@
 import { useEffect, useRef } from "react";
+import { captureFirstTouch, safeCampaignParams, safePublicPath } from "./attribution.ts";
+import { validateAnalytics } from "./privacy.ts";
+import type { ValidatedAnalyticsEvent, ValidatedAnalyticsContext } from "./privacy.ts";
 
 /**
  * Shared context every event carries. `route` is always the current pathname;
@@ -13,41 +16,41 @@ export interface AnalyticsContext {
   listingNo?: string;
   agentSlug?: string;
   utm?: Record<string, string>;
+  landingPath?: string;
+  referrerHost?: string;
 }
 
-const UTM_PARAM_KEYS = [
-  "utm_source",
-  "utm_medium",
-  "utm_campaign",
-  "utm_term",
-  "utm_content",
-] as const;
-
-// Deliberately a third copy, not a shared export -- listings.tsx and
-// OwnerValuationPanel.tsx each already carry this same 5-line function with a
-// comment explaining that avoiding a shared UTM utility was a deliberate
-// choice ("cross-feature coupling for five lines of logic"). Reversing that
-// precedent for this module isn't warranted.
 export function collectUtmParams(): Record<string, string> {
   if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const utm: Record<string, string> = {};
-  for (const key of UTM_PARAM_KEYS) {
-    const value = params.get(key);
-    if (value) utm[key] = value.slice(0, 200);
-  }
-  return utm;
+  return safeCampaignParams(
+    Object.fromEntries(new URLSearchParams(window.location.search)),
+    approvedCampaignTokens,
+  );
 }
-
 export function buildContext(
   partial: Omit<AnalyticsContext, "route" | "utm"> = {},
 ): AnalyticsContext {
   const route = typeof window === "undefined" ? "" : window.location.pathname;
   const utm = collectUtmParams();
+  let firstTouch = null;
+  if (typeof window !== "undefined" && analyticsEnabled() && safePublicPath(route)) {
+    try {
+      firstTouch = captureFirstTouch({
+        enabled: true,
+        pathname: route,
+        search: window.location.search,
+        referrer: document.referrer,
+        storage: window.sessionStorage,
+        approvedTokens: approvedCampaignTokens,
+      });
+    } catch {
+      /* blocked browser storage */
+    }
+  }
   return {
     route,
     ...partial,
-    ...(Object.keys(utm).length > 0 ? { utm } : {}),
+    ...(firstTouch ?? (Object.keys(utm).length > 0 ? { utm } : {})),
   };
 }
 
@@ -184,18 +187,58 @@ export const ANALYTICS_EVENT_NAMES: AnalyticsEvent["name"][] = [
   "video_click",
 ];
 
-/**
- * Provider-agnostic sink. No analytics provider has been chosen yet (master
- * plan open input #11), so this stays a real no-op in production. The
- * DEV-only console line is the only way to verify wiring locally until a
- * provider exists -- it never runs in a production build.
- */
-export function track(event: AnalyticsEvent, context: AnalyticsContext): void {
-  if (import.meta.env.DEV) {
-    console.debug("[analytics]", event.name, { ...event.payload, ...context });
-  }
+export type AnalyticsConfiguration = {
+  enabled?: boolean;
+  sink?: (event: ValidatedAnalyticsEvent, context: ValidatedAnalyticsContext) => unknown;
+  getPath?: () => string;
+  approvedCampaignTokens?: readonly string[];
+};
+export function createAnalyticsDispatcher(config: AnalyticsConfiguration = {}) {
+  const enabled = config.enabled === true && typeof config.sink === "function";
+  return {
+    enabled,
+    track(event: unknown, context: unknown): boolean {
+      try {
+        if (!enabled) return false;
+        const currentPath =
+          config.getPath?.() ?? (typeof window === "undefined" ? "" : window.location.pathname);
+        if (!validateAnalytics({ name: "page_view", payload: {} }, { route: currentPath }))
+          return false;
+        const clean = validateAnalytics(event, context, config.approvedCampaignTokens);
+        if (!clean) return false;
+        void Promise.resolve(config.sink!(clean.event, clean.context)).catch(() => undefined);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
 }
-
+let approvedCampaignTokens: readonly string[] = [];
+let dispatcher = createAnalyticsDispatcher();
+const readinessListeners = new Set<() => void>();
+/** Explicit injected adapter only; no provider or environment-based auto-enablement. */
+export function configureAnalytics(config: AnalyticsConfiguration = {}): void {
+  approvedCampaignTokens = config.approvedCampaignTokens ?? [];
+  dispatcher = createAnalyticsDispatcher(config);
+  if (dispatcher.enabled)
+    for (const notify of readinessListeners) {
+      try {
+        notify();
+      } catch {
+        /* Optional observers cannot break configuration. */
+      }
+    }
+}
+export function analyticsEnabled(): boolean {
+  return dispatcher.enabled;
+}
+export function track(event: AnalyticsEvent, context: AnalyticsContext): void {
+  dispatcher.track(event, context);
+}
+export function trackMeasurement(event: unknown, context: unknown): boolean {
+  return dispatcher.track(event, context);
+}
 /**
  * Fires a view event once per mount (not once per re-render). `build`
  * returning null skips the event -- e.g. while loader data hasn't resolved
@@ -207,11 +250,76 @@ export function useTrackPageView(
 ): void {
   const fired = useRef(false);
   useEffect(() => {
-    if (fired.current) return;
-    const result = build();
-    if (!result) return;
-    fired.current = true;
-    track(result.event, result.context);
+    const attempt = () => {
+      if (fired.current || !dispatcher.enabled) return;
+      const result = build();
+      if (!result || !dispatcher.track(result.event, result.context)) return;
+      fired.current = true;
+      readinessListeners.delete(attempt);
+    };
+    // A page effect may run before the sibling provider enables analytics.
+    // Keep only this mounted hook's callback; cleanup discards obsolete views.
+    readinessListeners.add(attempt);
+    attempt();
+    return () => {
+      readinessListeners.delete(attempt);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
+}
+
+const CONVERSION_KEY = "earnest:analytics:inquiry-conversions:v1";
+const inquiryId = (value: unknown): value is string =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+/** IDs remain only in the bounded local replay ledger, never in analytics payloads. */
+export function createInquiryConversionTracker(input: {
+  storage: Pick<Storage, "getItem" | "setItem"> | null;
+  emit: () => boolean;
+  getPath: () => string;
+  enabled: () => boolean;
+}) {
+  const seen = new Set<string>();
+  return (id: unknown): boolean => {
+    try {
+      if (!input.enabled() || !safePublicPath(input.getPath()) || !inquiryId(id) || !input.storage)
+        return false;
+      const canonicalId = id.toLowerCase();
+      if (seen.has(canonicalId)) return false;
+      const raw = input.storage.getItem(CONVERSION_KEY);
+      // A corrupt ledger cannot prove an ID was not previously sent: fail closed.
+      const stored: unknown = raw === null ? [] : raw.length <= 20000 ? JSON.parse(raw) : null;
+      if (!Array.isArray(stored) || stored.length >= 500 || !stored.every(inquiryId)) return false;
+      if (stored.some((value) => value.toLowerCase() === canonicalId)) {
+        seen.add(canonicalId);
+        return false;
+      }
+      input.storage.setItem(CONVERSION_KEY, JSON.stringify([...stored, canonicalId]));
+      seen.add(canonicalId);
+      return input.emit();
+    } catch {
+      return false;
+    }
+  };
+}
+let conversionTracker: ReturnType<typeof createInquiryConversionTracker> | undefined;
+/** Call only after the server returned the durable inquiry ID. Analytics cannot break success UI. */
+export function trackInquiryConversion(id: unknown): boolean {
+  try {
+    if (
+      typeof window === "undefined" ||
+      !analyticsEnabled() ||
+      !safePublicPath(window.location.pathname)
+    )
+      return false;
+    conversionTracker ??= createInquiryConversionTracker({
+      storage: window.sessionStorage,
+      enabled: analyticsEnabled,
+      getPath: () => window.location.pathname,
+      emit: () => trackMeasurement({ name: "inquiry_conversion", payload: {} }, buildContext()),
+    });
+    return conversionTracker(id);
+  } catch {
+    return false;
+  }
 }

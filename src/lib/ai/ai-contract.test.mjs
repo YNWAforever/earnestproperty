@@ -234,7 +234,8 @@ test("LiveAgentWidget aria-labels are zh-HK, not English", () => {
     widget,
     /aria-label="(?:Earnest Property live agent|Close live agent|WhatsApp phone for handoff|Consent to WhatsApp follow-up|Live agent message|Send)"/,
   );
-  assert.match(widget, /aria-label="晉誠地產即時客服"/);
+  assert.match(widget, /DialogPrimitive.Title/);
+  assert.match(widget, /Earnest 問樓助手/);
   assert.match(widget, /aria-label="關閉即時客服"/);
   assert.match(widget, /aria-label="轉接 WhatsApp 電話"/);
   assert.match(widget, /aria-label="同意 WhatsApp 跟進聯絡"/);

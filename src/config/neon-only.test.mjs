@@ -33,6 +33,7 @@ test("Neon auth remains the only auth provider", () => {
 
   assert.match(auth, /createAuthClient/);
   assert.match(auth, /VITE_NEON_AUTH_URL/);
-  assert.match(rootRoute, /NeonAuthUIProvider/);
+  assert.match(rootRoute, /PrivateAuthProvider/);
+  assert.match(read("src/components/auth/PrivateAuthProvider.tsx"), /NeonAuthUIProvider/);
   assert.doesNotMatch(rootRoute, /supabase/i);
 });

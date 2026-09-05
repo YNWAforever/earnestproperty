@@ -443,3 +443,29 @@ test("the property page renders a nearby-transport card only when the district r
   assert.match(cardBody, /to="\/castle-peak-road\/\$segment"/);
   assert.match(cardBody, /params={{ segment: transportSegment\.slug }}/);
 });
+
+test("loader: optional similar listings and transactions fail independently without losing the primary listing", async () => {
+  const loader = buildLoader();
+  const property = { status: "active", estate_id: "estate-1", deal_type: "sale", id: "prop-1" };
+  for (const failed of ["similar", "transactions"]) {
+    const result = await loader(
+      { listingNo: "X1" },
+      {
+        fetchPropertyByListingNo: async () => property,
+        notFound: () => Error("unexpected"),
+        fetchSimilarListings: async () => {
+          if (failed === "similar") throw Error("optional failure");
+          return [{ id: "similar" }];
+        },
+        fetchEstateTransactions: async () => {
+          if (failed === "transactions") throw Error("optional failure");
+          return [{ unit: "synthetic" }];
+        },
+        fetchNeonBranches: async () => [],
+      },
+    );
+    assert.equal(result.property, property);
+    assert.deepEqual(failed === "similar" ? result.similar : result.txns, []);
+    assert.equal((failed === "similar" ? result.txns : result.similar).length, 1);
+  }
+});
