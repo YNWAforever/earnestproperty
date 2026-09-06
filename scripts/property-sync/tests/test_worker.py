@@ -437,3 +437,31 @@ class AdvertisedDiagnosticTests(unittest.TestCase):
         self.assertTrue(payload["meta"]["crawl_complete"])
         self.assertTrue(w.gate(payload, None)["allowed"])
         self.assertEqual([page["advertised_total"] for page in payload["meta"]["pages"] if page["scope"] == "sale"], [1, 2, 1])
+
+class Live28StructureTests(unittest.TestCase):
+    def test_verified_full_company_and_absolute_same_origin_links(self):
+        head='<h1>晉誠地產代理有限公司 Earnest Property Agency Ltd</h1><p>C-018613</p><p>共有 1 個放售樓盤</p>'
+        rows, terminal, total=w.parse_28_index(head+'<a href="https://www.28hse.com/buy/apartment/property-4003829">Listing</a>', 'sale')
+        self.assertEqual(rows[0]['property_id'],'4003829')
+        self.assertFalse(terminal)
+        with self.assertRaises(w.WorkerError):
+            w.parse_28_index(head.replace('C-018613','C-000000')+'<a href="/buy/apartment/property-4003829">Listing</a>','sale')
+        with self.assertRaises(w.WorkerError):
+            w.parse_28_index(head+'<a href="https://evil.example/buy/apartment/property-4003829">Listing</a>','sale')
+    def test_real_sale_and_rent_table_structures(self):
+        for deal, ident, amount, area in [('sale','4003829','7200000','617'),('rent','3998335','24800','712')]:
+            html=(Path(__file__).parent/'fixtures'/f'28hse-live-{deal}-structure.html').read_text(encoding='utf-8')
+            r=w.parse_28_detail(html,{'property_id':ident,'deal_type':deal,'title':'Listing'})
+            self.assertEqual(r['price' if deal=='sale' else 'rent'],amount)
+            self.assertEqual(r['saleable_area'],area)
+            self.assertIsNone(r['unit'])
+            if deal=='rent':self.assertEqual(r['bedrooms'],4);self.assertEqual(r['bathrooms'],2)
+            with self.assertRaises(w.WorkerError):
+                w.parse_28_detail(html,{'property_id':'999','deal_type':deal})
+
+    def test_live_duplicate_derived_fields_reject_conflicts(self):
+        html=(Path(__file__).parent/'fixtures'/'28hse-live-rent-structure.html').read_text(encoding='utf-8')
+        extra='<tr><td class="table_left">房間及浴室</td><td class="table_right"><div class="pairValue">9 房 8 浴室</div></td></tr>'
+        html=html.replace('</tbody>',extra+'</tbody>')
+        with self.assertRaisesRegex(w.WorkerError,'contradictory_detail'):
+            w.parse_28_detail(html,{'property_id':'3998335','deal_type':'rent'})
