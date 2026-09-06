@@ -254,6 +254,55 @@ test(
             receipts,
           );
           assert.deepEqual(await q("SELECT * FROM mls_ingestion_scopes"), scopes);
+          // Explicit terminal evidence must supersede a prior absence before any later active observation.
+          rows[1].price = 5380000;
+          rows.push(
+            row("834", { unit: "04", source_status: "delisted", source_status_reason: "sold" }),
+          );
+          await q(
+            "UPDATE property_sync_fields SET active_override=true WHERE field_name='status' AND property_id=(SELECT property_id FROM mls_source_state WHERE external_listing_id='834')",
+          );
+          await ingestSnapshot(batch(rows, "2026-09-09T00:00:00Z"), options);
+          const reason = async () =>
+            (
+              await q(
+                "SELECT ps.inactive_reason FROM property_sync_state ps JOIN mls_source_state s ON s.property_id=ps.property_id WHERE s.external_listing_id='834'",
+              )
+            )[0].inactive_reason;
+          assert.equal(await reason(), "accepted_full_28hse_absence");
+          await q(
+            "UPDATE property_sync_fields SET active_override=false WHERE field_name='status' AND property_id=(SELECT property_id FROM mls_source_state WHERE external_listing_id='834')",
+          );
+          const stable = await q("SELECT id,status,updated_at FROM properties ORDER BY id");
+          const escalated = await ingestSnapshot(batch(rows, "2026-09-10T00:00:00Z"), options);
+          assert.equal(await reason(), "explicit_source_sold");
+          assert.deepEqual(
+            await q("SELECT id,status,updated_at FROM properties ORDER BY id"),
+            stable,
+          );
+          assert.equal(escalated.summary.properties_changed, 0);
+          assert.equal(escalated.summary.fields_changed, 0);
+          assert.equal(
+            (
+              await q(
+                "SELECT e.* FROM listing_change_events e JOIN mls_ingestion_receipts r ON r.run_id=e.run_id WHERE r.id=$1",
+                [escalated.receipt_id],
+              )
+            ).length,
+            0,
+          );
+          rows.at(-1).source_status = "active";
+          rows.at(-1).source_status_reason = null;
+          await ingestSnapshot(batch(rows, "2026-09-11T00:00:00Z"), options);
+          assert.equal(
+            (
+              await q(
+                "SELECT p.status FROM properties p JOIN mls_source_state s ON s.property_id=p.id WHERE s.external_listing_id='834'",
+              )
+            )[0].status,
+            "inactive",
+          );
+          assert.equal(await reason(), "explicit_source_sold");
         },
       );
       await t.test(

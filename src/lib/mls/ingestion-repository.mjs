@@ -606,6 +606,32 @@ export async function applyIngestion(client, payload, options = {}) {
             },
           });
       }
+      // Stronger observed terminal evidence replaces an inferred absence even when
+      // the canonical status is already inactive. Keep staff ownership and the
+      // original inactive time; this metadata change must not UPDATE properties.
+      if (
+        property.status === "inactive" &&
+        selected.lifecycle === "inactive" &&
+        inactiveReason.startsWith("explicit_source_")
+      ) {
+        const owned = fields.find((f) => f.field_name === "status");
+        if (
+          owned &&
+          !owned.active_override &&
+          owned.selection_reason !== "manual_override" &&
+          same(property.status, owned.last_published_value)
+        ) {
+          const escalated = await q(
+            "UPDATE property_sync_state SET inactive_reason=$3,last_evaluated_run_id=$2 WHERE property_id=$1 AND inactive_reason='accepted_full_28hse_absence' RETURNING property_id",
+            [propertyId, runId, inactiveReason],
+          );
+          if (escalated.length)
+            await q(
+              "UPDATE property_sync_fields SET winning_observation_id=$2,selection_reason=$3,updated_at=now() WHERE property_id=$1 AND field_name='status'",
+              [propertyId, terminalPrimary.observation_id, inactiveReason],
+            );
+        }
+      }
       if (proposals.length) {
         const changed = proposals.filter(
           (p) => !same(property[p.column], p.value, NUMBER_FIELDS.has(p.column)),
