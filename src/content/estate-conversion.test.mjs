@@ -371,7 +371,7 @@ test("homepage featured listings show real media and link to the listing", () =>
   // build the video carousel above.
   assert.match(home, /const hasVideo = isYouTubeVideoUrl\(property\.video_url\)/);
   assert.match(home, /to="\/property\/\$listingNo"/);
-  assert.match(home, /params=\{\{ listingNo: property\.listing_no \}\}/);
+  assert.match(home, /params=\{\{ listingNo: publicPropertyNo\(property\) \}\}/);
 
   // Media count badges must not depend on hover -- they carry the count, and
   // there is no hover on touch. Only the "查看更多" hint is hover-revealed.
