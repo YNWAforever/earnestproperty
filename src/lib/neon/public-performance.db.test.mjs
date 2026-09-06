@@ -262,6 +262,9 @@ test(
       await query(`UPDATE properties SET status='inactive' WHERE id='market-new'`);
       const withdrawn=await server.fetchEstateBySlug({slug:'market-estate'});
       assert.equal(withdrawn.avg_saleable_psf,null,"withdrawn current offering cannot resurrect historic price");
+      await query(`UPDATE estates SET published=false WHERE id='market-estate'`);
+      assert.equal(await server.fetchEstateBySlug({slug:'market-estate'}),null);
+      assert.deepEqual(await server.fetchEstates({districtSlug:'market-district'}),[]);
 
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
