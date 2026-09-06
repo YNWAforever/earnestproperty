@@ -322,7 +322,7 @@ test("estate head() prefers estate.seo_title/seo_description over the estateSeo 
     },
   });
   assert.equal(fallsBackToDefault.meta[0].title, "測試屋苑｜晉誠地產屋苑專頁");
-  assert.match(fallsBackToDefault.meta[1].content, /測試屋苑 88 個單位，平均實呎 \$9000/);
+  assert.match(fallsBackToDefault.meta[1].content, /測試屋苑 屋苑資料、現有放盤叫價/);
 });
 
 test("public search and homepage expose lead capture paths", () => {

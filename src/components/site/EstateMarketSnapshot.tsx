@@ -51,8 +51,16 @@ export function EstateMarketSnapshot({
   listings: ListingRow[];
   transactions: EstateTransaction[];
 }) {
-  const saleCount = listings.filter((listing) => listing.deal_type === "sale").length;
-  const rentCount = listings.filter((listing) => listing.deal_type === "rent").length;
+  const saleCount = listings.filter(
+    (listing) =>
+      listing.offerings?.some((offer) => offer.deal_type === "sale") ??
+      listing.deal_type === "sale",
+  ).length;
+  const rentCount = listings.filter(
+    (listing) =>
+      listing.offerings?.some((offer) => offer.deal_type === "rent") ??
+      listing.deal_type === "rent",
+  ).length;
   // An unknown fact reads as "—" (and the whole stat collapses to a single
   // "—" when both halves are unknown) rather than a placeholder word that
   // read like copy -- the estate page's DataNote already carries the
@@ -67,7 +75,10 @@ export function EstateMarketSnapshot({
     <Container className="py-10">
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
-          <Stat label="平均實呎" value={avgPsf ? `$${avgPsf.toLocaleString()}` : "查詢"} />
+          <Stat
+            label="平均放盤實呎"
+            value={avgPsf ? `$${avgPsf.toLocaleString()}` : "暫無售盤呎價"}
+          />
           <Stat label="最新顯示售盤" value={`${saleCount} 個`} />
           <Stat label="最新顯示租盤" value={`${rentCount} 個`} />
           <Stat label="單位 / 期數" value={unitsAndPhasesLabel} />
@@ -77,7 +88,7 @@ export function EstateMarketSnapshot({
             <div>
               <h2 className="text-xl font-bold text-primary">成交及呎價快照</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                成交資料按現有公開/資料庫紀錄整理，最新估價請 WhatsApp 查詢。
+                平均放盤實呎按現有售盤叫價計算，並非成交價或估值；實際供應以最新確認為準。
               </p>
             </div>
             {year ? <span className="text-xs text-muted-foreground">{year} 年落成</span> : null}

@@ -249,6 +249,23 @@ test(
       const disputed = await server.fetchPropertyByListingNo({ listingNo: "C4" });
       assert.equal(disputed.floor, null, "do not invent a fallback from conflicting floors");
       assert.equal(disputed.saleable_area, null, "do not choose the maximum conflicting area");
+      await query(`ALTER TABLE estates ADD COLUMN published boolean DEFAULT true, ADD COLUMN avg_saleable_psf numeric, ADD COLUMN hero_image text`);
+      await query(`INSERT INTO estates(id,slug,name_zh,district_slug,avg_saleable_psf) VALUES('market-estate','market-estate','Synthetic','market-district',99999)`);
+      await query(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,status,estate_id,price,saleable_area,images,source_updated_at)
+        VALUES('market-old','market-old','market','sale','active','market-estate',1000000,500,ARRAY['https://example.com/old.jpg'],'2026-01-01'),
+        ('market-new','market-new','market','sale','active','market-estate',3000000,500,ARRAY['https://example.com/new.jpg'],'2026-02-01')`);
+      await query(`INSERT INTO property_public_groups VALUES('market')`);
+      await query(`INSERT INTO property_public_members VALUES('market-old','market'),('market-new','market')`);
+      const market=await server.fetchEstateBySlug({slug:'market-estate'});
+      assert.equal(Number(market.avg_saleable_psf),6000,"current asking PSF replaces stale manual value and deduplicates history");
+      assert.equal(market.hero_image,'https://example.com/new.jpg');
+      await query(`UPDATE properties SET status='inactive' WHERE id='market-new'`);
+      const withdrawn=await server.fetchEstateBySlug({slug:'market-estate'});
+      assert.equal(withdrawn.avg_saleable_psf,null,"withdrawn current offering cannot resurrect historic price");
+      await query(`UPDATE estates SET published=false WHERE id='market-estate'`);
+      assert.equal(await server.fetchEstateBySlug({slug:'market-estate'}),null);
+      assert.deepEqual(await server.fetchEstates({districtSlug:'market-district'}),[]);
+
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     }

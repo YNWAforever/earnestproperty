@@ -750,8 +750,9 @@ function CoreEstateGrid({
         {visible.map((estate) => {
           const dbRow = live.get(estate.slug);
           const units = dbRow?.total_units ?? estate.units;
-          const psf = dbRow ? Number(dbRow.avg_saleable_psf) : estate.avgPsf;
-          const listingCount = dbRow ? counts[estate.slug] : estate.listingCount;
+          const psf = dbRow?.avg_saleable_psf == null ? null : Number(dbRow.avg_saleable_psf);
+          const photo = estate.photo ?? dbRow?.hero_image;
+          const listingCount = dbRow ? (counts[estate.slug] ?? 0) : estate.listingCount;
           const meta = [estate.district, `${estateFigure(units)} 個單位`]
             .filter(Boolean)
             .join(" · ");
@@ -761,13 +762,13 @@ function CoreEstateGrid({
               <div
                 className="relative h-48 overflow-hidden"
                 style={
-                  estate.photo
+                  photo
                     ? undefined
                     : { background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio }
                 }
               >
                 <AppImage
-                  src={estate.photo}
+                  src={photo}
                   alt={`${estate.name} ${districtLabel} 放盤`}
                   width={1600}
                   height={900}
@@ -794,7 +795,7 @@ function CoreEstateGrid({
               </div>
               <div className="grid grid-cols-2 gap-3 p-5">
                 <div>
-                  <p className="text-[11px] text-muted-foreground">平均實呎</p>
+                  <p className="text-[11px] text-muted-foreground">平均放盤實呎</p>
                   <p className="text-base font-semibold text-primary">
                     {psf === null || psf === undefined || !Number.isFinite(psf)
                       ? "—"

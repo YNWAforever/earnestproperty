@@ -123,7 +123,7 @@ export function buildComparisonRowDefs(): ComparisonRowDef[] {
   return [
     {
       key: "avgPsf",
-      label: "平均實呎",
+      label: "平均放盤實呎",
       formatCell: (estate) => comparisonPsfFigure(estate.avgPsf),
     },
     {
