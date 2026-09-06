@@ -12,6 +12,13 @@ test("T28 dry run validates without accessing a database or connection factory",
   assert.equal(result.status, "dry_run");
   assert.equal(result.receipt_id, null);
   assert.equal(result.summary.advertisement_count, 1);
+  for (const key of [
+    "properties_created",
+    "properties_changed",
+    "fields_changed",
+    "unchanged_properties",
+  ])
+    assert.equal(result.summary[key], 0);
 });
 test("dry run refuses invalid source and incomplete snapshots", async () => {
   const { ingestSnapshot } = await import("./ingestion-service.mjs");
