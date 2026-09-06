@@ -1,3 +1,4 @@
+import { EstateDirectory } from "./EstateDirectory";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, MessageCircle, Menu } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -425,6 +426,17 @@ export function SiteHeader() {
                 ]
                   .filter(Boolean)
                   .join(" ")}
+                onKeyDown={(event) => {
+                  if (menu.id === "districts" && event.key === "ArrowDown") {
+                    event.preventDefault();
+                    setActiveMegaMenu("districts");
+                    requestAnimationFrame(() =>
+                      headerRef.current
+                        ?.querySelector<HTMLInputElement>("#mega-menu-districts input")
+                        ?.focus(),
+                    );
+                  }
+                }}
                 onClick={() => setActiveMegaMenu(activeMegaMenu === menu.id ? null : menu.id)}
               >
                 {menu.label}
@@ -445,7 +457,9 @@ export function SiteHeader() {
             onClick={() => setActiveMegaMenu(null)}
             className="whitespace-nowrap"
           />
-          {activeMenu ? <MegaMenuPanel menu={activeMenu} onLinkClick={closeMegaMenu} /> : null}
+          {activeMenu && activeMenu.id !== "districts" ? (
+            <MegaMenuPanel menu={activeMenu} onLinkClick={closeMegaMenu} />
+          ) : null}
         </nav>
 
         <div className="flex items-center gap-2">
@@ -495,13 +509,17 @@ export function SiteHeader() {
                           {menu.label}
                         </h2>
                         <div className="mt-2 grid gap-1">
-                          {menuMobileItems(menu).map((item) => (
-                            <MegaMenuLink
-                              key={`${menu.id}-${itemKey(item)}`}
-                              item={item}
-                              onClick={() => setOpen(false)}
-                            />
-                          ))}
+                          {menu.id === "districts" ? (
+                            <EstateDirectory mobile onLinkClick={() => setOpen(false)} />
+                          ) : (
+                            menuMobileItems(menu).map((item) => (
+                              <MegaMenuLink
+                                key={`${menu.id}-${itemKey(item)}`}
+                                item={item}
+                                onClick={() => setOpen(false)}
+                              />
+                            ))
+                          )}
                         </div>
                       </section>
                     ))}
@@ -530,6 +548,14 @@ export function SiteHeader() {
           </Sheet>
         </div>
       </div>
+      {activeMegaMenu === "districts" && (
+        <div
+          id={getMegaMenuId("districts")}
+          className="absolute left-1/2 top-full z-50 mt-2 hidden w-[min(1120px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-border/70 bg-background shadow-xl lg:block"
+        >
+          <EstateDirectory onLinkClick={closeMegaMenu} />
+        </div>
+      )}
     </header>
   );
 }

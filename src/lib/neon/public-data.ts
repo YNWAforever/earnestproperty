@@ -157,3 +157,8 @@ export const fetchNeonArticleBySlug = createServerFn({ method: "GET" })
     const neonData = await import("./public-data.server");
     return neonData.fetchArticleBySlug(data);
   });
+
+export const fetchNeonEstateDirectory = createServerFn({ method: "GET" }).handler(async () => {
+  const neonData = await import("./public-data.server");
+  return neonData.fetchEstateDirectory();
+});
