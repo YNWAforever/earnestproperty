@@ -120,9 +120,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$(python -c 'import json; print(str(json.load(open("replay-result.json")).get("baseline_advanced", False)).lower())')" != true ]; then exit 0; fi
           receipt=$(python -c 'import json; print(json.load(open("replay-result.json"))["receipt_path"])')
           python scripts/property-sync/daily_artifacts.py baseline --request "$PAYLOAD" --receipt "$receipt" --destination baseline
+          if [ "$(python -c 'import json; print(str(json.load(open("replay-result.json")).get("baseline_advanced", False)).lower())')" != true ]; then exit 0; fi
           tar -czf "accepted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" baseline
           gh release upload property-sync-evidence "accepted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
       - name: Compress evidence even after failure
