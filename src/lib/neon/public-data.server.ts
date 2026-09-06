@@ -814,10 +814,10 @@ export async function fetchPropertyByListingNo(input: {
     FROM c JOIN properties p ON p.id = c.id
     LEFT JOIN estates e ON e.id = p.estate_id
     LEFT JOIN LATERAL (
-      SELECT MAX(member_property.saleable_area) AS saleable_area,
-        MAX(member_property.gross_area) AS gross_area,
-        MAX(member_property.bedrooms) AS bedrooms,
-        MAX(member_property.floor) AS floor
+      SELECT CASE WHEN COUNT(DISTINCT member_property.saleable_area) = 1 THEN MAX(member_property.saleable_area) END AS saleable_area,
+        CASE WHEN COUNT(DISTINCT member_property.gross_area) = 1 THEN MAX(member_property.gross_area) END AS gross_area,
+        CASE WHEN COUNT(DISTINCT member_property.bedrooms) = 1 THEN MAX(member_property.bedrooms) END AS bedrooms,
+        CASE WHEN COUNT(DISTINCT member_property.floor) = 1 THEN MAX(member_property.floor) END AS floor
       FROM property_public_members group_member
       JOIN properties member_property ON member_property.id = group_member.property_id
       WHERE group_member.public_listing_no = c.public_listing_no

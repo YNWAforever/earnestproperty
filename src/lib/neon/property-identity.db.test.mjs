@@ -37,7 +37,7 @@ function splitSqlStatements(query) {
 }
 
 const databaseUrl = process.env.ASTRA_TEST_DATABASE_URL;
-test("disposable PostgreSQL keeps offerings, groups consistent aliases, and isolates conflicts", { skip: !databaseUrl }, async () => {
+test("disposable PostgreSQL keeps offerings, groups every canonical number despite conflicting source facts", { skip: !databaseUrl }, async () => {
   assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue", "Approved disposable Neon branch required");
   const db = neon(databaseUrl);
   const schema = `identity_${randomUUID().replaceAll("-", "")}`;
@@ -62,7 +62,7 @@ test("disposable PostgreSQL keeps offerings, groups consistent aliases, and isol
       ('00000000-0000-0000-0000-000000000002','B054645-new-R','B054645','rent','sham-tseng',515,650,2,'中','2026-01-02'),
       ('00000000-0000-0000-0000-000000000003','B054645-null-S','B054645','sale','sham-tseng',515,NULL,2,NULL,'2026-01-03'),
       ('00000000-0000-0000-0000-000000000004','B054645-high-S','B054645','sale','sham-tseng',515,650,2,'高','2026-01-04')`);
-    const statements = splitSqlStatements(migration);
+    const statements = splitSqlStatements(migration + "\n" + readFileSync("neon/migrations/20260906090000_canonical_property_identity.sql", "utf8"));
     await db.transaction((tx) => [
       tx.query("SELECT set_config('search_path',$1,true)", [`${schema},public,pg_catalog`]),
       ...statements.map((statement) => tx.query(statement)),
@@ -73,10 +73,10 @@ test("disposable PostgreSQL keeps offerings, groups consistent aliases, and isol
       JOIN property_public_groups g USING(public_listing_no) ORDER BY p.listing_no`);
     assert.equal(members.length, 4, "migration never deletes source offerings");
     assert.deepEqual(
-      members.filter((row) => row.listing_no !== "B054645-high-S").map((row) => row.public_listing_no),
-      ["B054645", "B054645", "B054645"],
+      members.map((row) => row.public_listing_no),
+      ["B054645", "B054645", "B054645", "B054645"],
     );
-    assert.equal(members.find((row) => row.listing_no === "B054645-high-S").public_listing_no, "B054645-high-S");
+    assert.equal(members.find((row) => row.listing_no === "B054645-high-S").public_listing_no, "B054645");
     assert.ok(members.every((row) => row.review_required));
 
     await inSchema(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,district_slug,saleable_area,gross_area,bedrooms,floor)
@@ -84,7 +84,7 @@ test("disposable PostgreSQL keeps offerings, groups consistent aliases, and isol
     assert.equal((await inSchema(`SELECT public_listing_no FROM property_public_members WHERE property_id='00000000-0000-0000-0000-000000000005'`))[0].public_listing_no, "B054645");
 
     await inSchema(`UPDATE properties SET floor='低' WHERE id='00000000-0000-0000-0000-000000000005'`);
-    assert.equal((await inSchema(`SELECT public_listing_no FROM property_public_members WHERE property_id='00000000-0000-0000-0000-000000000005'`))[0].public_listing_no, "B054645-future-R");
+    assert.equal((await inSchema(`SELECT public_listing_no FROM property_public_members WHERE property_id='00000000-0000-0000-0000-000000000005'`))[0].public_listing_no, "B054645");
 
     await inSchema(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,district_slug,saleable_area)
       VALUES ('00000000-0000-0000-0000-000000000006','A-stable','A','sale','sham-tseng',400)`);
