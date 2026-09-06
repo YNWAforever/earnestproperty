@@ -43,7 +43,7 @@ def test_unpack_rejects_traversal_and_unexpected_files(tmp_path):
     assert not (tmp_path/'escape').exists()
 
 def test_latest_accepted_only_orders_attempts_numerically():
-    assert m.latest_accepted(['unresolved-999-1.tar.gz','accepted-9-12.tar.gz','accepted-9-2.tar.gz','request-999-1.json']) == 'accepted-9-12.tar.gz'
+    assert m.latest_accepted(['unresolved-999-1.tar.gz','accepted-20260907T000000000000Z-9-12.tar.gz','accepted-20260907T000000000000Z-9-2.tar.gz','request-999-1.json']) == 'accepted-20260907T000000000000Z-9-12.tar.gz'
 
 def test_archive_keeps_exact_failed_request_and_receipt(tmp_path):
     import tarfile
@@ -55,3 +55,33 @@ def test_archive_keeps_exact_failed_request_and_receipt(tmp_path):
         with tarfile.open(tmp_path/'archives'/filename) as bundle:
             assert bundle.extractfile('replays/run/request.json').read()==request
             assert bundle.extractfile('replays/run/receipt.json').read()==receipt
+
+
+def test_old_workflow_rerun_newer_snapshot_wins():
+    assert m.latest_accepted(['accepted-20260907T000000000000Z-999-1.tar.gz', 'accepted-20260908T000000000000Z-9-2.tar.gz']) == 'accepted-20260908T000000000000Z-9-2.tar.gz'
+    with pytest.raises(ValueError): m.latest_accepted(['accepted-999-1.tar.gz'])
+
+def test_selected_asset_timestamp_bound_to_payload(tmp_path):
+    import tarfile
+    request=tmp_path/'request.json'; request.write_text(json.dumps(payload()))
+    receipt=tmp_path/'receipt.json'; receipt.write_text(json.dumps({'success':True,'status':'success','full_snapshot':True,'receipt_id':'r'}))
+    baseline=tmp_path/'baseline'; m.make_baseline(request,receipt,baseline)
+    asset=tmp_path/m.accepted_name(request,'9','2')
+    assert asset.name == 'accepted-20260907T000000000000Z-9-2.tar.gz'
+    with tarfile.open(asset,'w:gz') as out: out.add(baseline,arcname='baseline')
+    m.unpack_baseline(asset,tmp_path/'valid')
+    bad=tmp_path/'accepted-20260908T000000000000Z-9-2.tar.gz'; bad.write_bytes(asset.read_bytes())
+    with pytest.raises(ValueError): m.unpack_baseline(bad,tmp_path/'invalid')
+    assert not (tmp_path/'invalid/baseline/request.json').exists()
+
+def test_compact_archive_retains_transient_then_success_attempts(tmp_path):
+    import tarfile
+    root=tmp_path/'output'; replay=root/'replays/run'; attempts=replay/'attempts'; attempts.mkdir(parents=True)
+    first=b'{"success":false,"http_status":503}'; second=b'{"success":true,"status":"success"}'
+    (attempts/'1.json').write_bytes(first); (attempts/'2.json').write_bytes(second)
+    (replay/'receipt.json').write_bytes(second)
+    m.archive(root,tmp_path/'archives')
+    with tarfile.open(tmp_path/'archives/compact.tar.gz') as bundle:
+        assert bundle.extractfile('replays/run/attempts/1.json').read()==first
+        assert bundle.extractfile('replays/run/attempts/2.json').read()==second
+        assert bundle.extractfile('replays/run/receipt.json').read()==second

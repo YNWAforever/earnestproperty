@@ -30,3 +30,10 @@ test('database credential exists only on the gated apply step', async () => {
   assert.equal(steps.find(step => step.name === 'Pin unresolved evidence independently of artifact expiry').if, 'failure()');
   assert.match(steps.find(step => step.name === 'Restore last accepted full baseline').run, /daily_artifacts.py unpack/);
 });
+
+test('accepted asset names derive from immutable snapshot chronology', () => {
+  const y = readFileSync(path,'utf8');
+  assert.match(y, /daily_artifacts\.py name --request "\$PAYLOAD" --run-id "\$GITHUB_RUN_ID" --attempt "\$GITHUB_RUN_ATTEMPT"/);
+  assert.match(y, /tar -czf "\$asset" baseline/);
+  assert.ok(!y.includes('tar -czf "accepted-$GITHUB_RUN_ID'));
+});

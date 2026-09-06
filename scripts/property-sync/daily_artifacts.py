@@ -1,6 +1,8 @@
 """Restricted daily evidence bundles. The database remains the authority for ingestion."""
 import argparse
 import hashlib
+import re
+from datetime import datetime
 import json
 from pathlib import Path
 import shutil
@@ -48,15 +50,36 @@ def archive(root, destination):
             for path in sorted(root.rglob('*')):
                 if path.is_file() and not path.is_symlink():
                     raw.add(path, arcname=str(path.relative_to(root)), recursive=False)
-                    if path.name in {'request.json', 'receipt.json', 'manifest.json', 'baseline.json', 'summary.json', 'gate.json'} or path.name.startswith('receipt-attempt'):
+                    if path.name in {'request.json', 'receipt.json', 'manifest.json', 'baseline.json', 'summary.json', 'gate.json'} or path.name.startswith('receipt-attempt') or (path.parent.name == 'attempts' and path.suffix == '.json' and path.stem.isdigit()):
                         compact.add(path, arcname=str(path.relative_to(root)), recursive=False)
 
 
-def latest_accepted(names):
-    import re
-    candidates = [(int(m[1]), int(m[2]), name) for name in names if (m := re.fullmatch(r'accepted-([0-9]+)-([0-9]+)\.tar\.gz', name))]
-    return max(candidates)[2] if candidates else ''
+def snapshot_stamp(data):
+    value = data.get('scraped_at', '')
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)', value):
+        raise ValueError('Baseline requires an exact UTC snapshot timestamp')
+    return datetime.fromisoformat(value.replace('Z', '+00:00')).strftime('%Y%m%dT%H%M%S%fZ')
 
+
+def accepted_parts(name):
+    match = re.fullmatch(r'accepted-(\d{8}T\d{12}Z)-([0-9]+)-([0-9]+)\.tar\.gz', name)
+    if not match:
+        raise ValueError('Unversioned or invalid accepted asset requires operator reconciliation')
+    datetime.strptime(match[1], '%Y%m%dT%H%M%S%fZ')
+    return match[1], int(match[2]), int(match[3])
+
+
+def accepted_name(request, run_id, attempt):
+    data = json.loads(request.read_bytes())
+    validate_request(data)
+    name = f'accepted-{snapshot_stamp(data)}-{run_id}-{attempt}.tar.gz'
+    accepted_parts(name)
+    return name
+
+
+def latest_accepted(names):
+    candidates = [(*accepted_parts(name), name) for name in names if name.startswith('accepted-')]
+    return max(candidates)[3] if candidates else ''
 
 def unpack_baseline(path, destination):
     allowed = {'baseline/request.json': 5 * 1024 * 1024, 'baseline/receipt.json': 1024 * 1024, 'baseline/manifest.json': 4096}
@@ -68,6 +91,10 @@ def unpack_baseline(path, destination):
         for item in files:
             if not item.isfile() or item.size > allowed[item.name]:
                 raise ValueError('Invalid baseline archive type or size')
+        expected_stamp, _, _ = accepted_parts(path.name)
+        with source.extractfile('baseline/request.json') as content:
+            if snapshot_stamp(json.loads(content.read())) != expected_stamp:
+                raise ValueError('Accepted asset timestamp does not match its snapshot')
         for item in files:
             target = destination / item.name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -76,11 +103,13 @@ def unpack_baseline(path, destination):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['validate', 'archive', 'baseline', 'restore', 'select', 'unpack', 'latest'])
+    parser.add_argument('command', choices=['validate', 'archive', 'baseline', 'restore', 'select', 'unpack', 'latest', 'name'])
     parser.add_argument('--root', type=Path, default=Path('daily-output'))
     parser.add_argument('--destination', type=Path, default=Path('daily-archives'))
     parser.add_argument('--request', type=Path)
     parser.add_argument('--receipt', type=Path)
+    parser.add_argument('--run-id')
+    parser.add_argument('--attempt')
     parser.add_argument('--scope', default='agent:540')
     parser.add_argument('--ref', default='')
     parser.add_argument('--branch', default='')
@@ -88,6 +117,7 @@ def main():
     if args.command == 'validate':
         validate_context(args.scope, args.ref, args.branch)
         if args.request: validate_request(json.loads(args.request.read_bytes()))
+    elif args.command == 'name': print(accepted_name(args.request, args.run_id, args.attempt))
     elif args.command == 'unpack': unpack_baseline(args.request, args.destination)
     elif args.command == 'latest': print(latest_accepted([a['name'] for a in json.loads(args.request.read_bytes())['assets']]))
     elif args.command == 'archive': archive(args.root, args.destination)

@@ -123,8 +123,9 @@ jobs:
           receipt=$(python -c 'import json; print(json.load(open("replay-result.json"))["receipt_path"])')
           python scripts/property-sync/daily_artifacts.py baseline --request "$PAYLOAD" --receipt "$receipt" --destination baseline
           if [ "$(python -c 'import json; print(str(json.load(open("replay-result.json")).get("baseline_advanced", False)).lower())')" != true ]; then exit 0; fi
-          tar -czf "accepted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" baseline
-          gh release upload property-sync-evidence "accepted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          asset=$(python scripts/property-sync/daily_artifacts.py name --request "$PAYLOAD" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT")
+          tar -czf "$asset" baseline
+          gh release upload property-sync-evidence "$asset"
       - name: Compress evidence even after failure
         if: always()
         run: python scripts/property-sync/daily_artifacts.py archive --root daily-output --destination daily-archives
