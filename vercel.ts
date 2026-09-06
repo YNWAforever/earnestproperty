@@ -1,5 +1,7 @@
 import importedRedirects from "./src/generated/old-site-redirects.json" with { type: "json" };
 
+import { resolveSiteOrigin } from "./scripts/site-origin.mjs";
+
 type VercelRedirect = {
   source: string;
   destination: string;
@@ -29,14 +31,9 @@ const detailRedirects = importedRedirects.map((redirect) =>
 // host. No-op while SITE_URL is still the vercel.app fallback.
 const FALLBACK_HOST = "earnestproperty.vercel.app";
 function canonicalHostRedirects(): VercelRedirect[] {
-  const raw = process.env.VITE_SITE_URL;
-  if (!raw) return [];
-  let origin: URL;
-  try {
-    origin = new URL(raw);
-  } catch {
-    return [];
-  }
+  const resolved = resolveSiteOrigin();
+  if (!resolved) return [];
+  const origin = new URL(resolved);
   if (origin.host === FALLBACK_HOST || origin.host.endsWith(".vercel.app")) return [];
   return [
     redirectEntry("/:path*", `${origin.origin}/:path*`, true, {

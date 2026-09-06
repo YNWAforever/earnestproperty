@@ -7,7 +7,19 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { nitro } from "nitro/vite";
 
+import { resolveSiteOrigin } from "./scripts/site-origin.mjs";
+
+// The production origin (canonicals, sitemap, robots, og:image, JSON-LD) is
+// resolved once at build time: VITE_SITE_URL if set, else Vercel's own
+// VERCEL_PROJECT_PRODUCTION_URL, which follows the custom domain the moment
+// one is attached. Exposed to the app as import.meta.env.VITE_SITE_URL so
+// src/content/seo.ts needs no Vercel-specific knowledge.
+const siteOrigin = resolveSiteOrigin();
+
 export default defineConfig({
   cloudflare: false,
   plugins: [nitro()],
+  vite: {
+    define: siteOrigin ? { "import.meta.env.VITE_SITE_URL": JSON.stringify(siteOrigin) } : {},
+  },
 });

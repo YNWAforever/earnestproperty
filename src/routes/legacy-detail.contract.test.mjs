@@ -41,9 +41,10 @@ test("SITE_URL is env-driven with the vercel.app origin only as a fallback", () 
   const seo = read("src/content/seo.ts");
   assert.match(seo, /VITE_SITE_URL/);
   assert.match(seo, /FALLBACK_SITE_URL = "https:\/\/earnestproperty\.vercel\.app"/);
-  assert.match(read("scripts/check-required-env.mjs"), /VITE_SITE_URL/);
+  assert.match(read("scripts/check-required-env.mjs"), /resolveSiteOrigin\(\)/);
   assert.match(read("vercel.ts"), /type: "host", value: FALLBACK_HOST/);
-  assert.match(read(".env.example"), /VITE_SITE_URL=/);
+  assert.match(read("vite.config.ts"), /"import\.meta\.env\.VITE_SITE_URL"/);
+  assert.match(read(".env.example"), /VITE_SITE_URL/);
 });
 
 // P0-4: listing detail pages belong in the sitemap.

@@ -4,10 +4,10 @@ import { getEstateEntry } from "./estate-registry.ts";
  * Production origin. Every canonical, og:image, sitemap <loc>, robots.txt
  * Sitemap line and JSON-LD url is built from this, so it must be the host
  * search engines should consolidate on -- not whichever deployment served
- * the request. Read from VITE_SITE_URL (scripts/check-required-env.mjs fails
- * a Vercel production build without it); the vercel.app origin is only the
- * fallback for local dev, previews and `node --test`, where import.meta.env
- * is undefined.
+ * the request. vite.config.ts injects import.meta.env.VITE_SITE_URL at build
+ * time from VITE_SITE_URL or Vercel's VERCEL_PROJECT_PRODUCTION_URL (see
+ * scripts/site-origin.mjs); the vercel.app origin is only the fallback for
+ * local dev and `node --test`, where import.meta.env is undefined.
  */
 const FALLBACK_SITE_URL = "https://earnestproperty.vercel.app";
 

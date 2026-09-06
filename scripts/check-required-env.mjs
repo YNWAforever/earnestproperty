@@ -21,6 +21,7 @@
 // and `npm run build:dev` are unaffected.
 
 import { whatsappPhoneProblem } from "../src/config/whatsapp-phone.js";
+import { resolveSiteOrigin } from "./site-origin.mjs";
 
 const REQUIRED_FOR_WHATSAPP_CTAS = [
   "VITE_CONTACT_WHATSAPP_PHONE",
@@ -35,29 +36,28 @@ const isVercelDeploy = vercelEnv === "production" || vercelEnv === "preview";
 // JSON-LD url (src/content/seo.ts). Left unset, the site canonicalises to the
 // *.vercel.app fallback and the custom domain never consolidates in search.
 // Production-only: previews legitimately run on their own generated hosts.
+// Resolution order lives in scripts/site-origin.mjs: an explicit
+// VITE_SITE_URL, else Vercel's VERCEL_PROJECT_PRODUCTION_URL (always present
+// on Vercel builds, and it follows the custom domain once one is attached), so
+// no manual project setting is needed for the common case.
 if (vercelEnv === "production") {
-  const siteUrl = process.env.VITE_SITE_URL;
-  let origin = null;
-  try {
-    origin = siteUrl ? new URL(siteUrl).origin : null;
-  } catch {
-    origin = null;
-  }
+  const origin = resolveSiteOrigin();
   if (!origin || !origin.startsWith("https://")) {
     console.error(
       [
         "",
-        `Build blocked (production): VITE_SITE_URL is ${siteUrl ? `not an https origin (${siteUrl})` : "missing"}.`,
-        "Every canonical, sitemap URL, og:image and JSON-LD url is built from it. Set it to the",
-        'live domain (e.g. "https://www.earnestproperty.com") in the Vercel project settings.',
+        `Build blocked (production): could not resolve an https production origin (VITE_SITE_URL=${process.env.VITE_SITE_URL ?? "<unset>"}, VERCEL_PROJECT_PRODUCTION_URL=${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "<unset>"}).`,
+        "Every canonical, sitemap URL, og:image and JSON-LD url is built from it. Set VITE_SITE_URL",
+        "to the live origin in the Vercel project settings.",
         "",
       ].join("\n"),
     );
     process.exit(1);
   }
+  console.log(`[check-required-env] production origin: ${origin}`);
   if (origin.endsWith(".vercel.app")) {
     console.warn(
-      `[check-required-env] VITE_SITE_URL points at a vercel.app host (${origin}); once the custom domain is attached, update it so canonicals consolidate there.`,
+      "[check-required-env] the production origin is a vercel.app host. That is correct until a custom domain is attached to the Vercel project; once one is, this resolves to it automatically.",
     );
   }
 }
