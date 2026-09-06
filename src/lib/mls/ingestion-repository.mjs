@@ -474,7 +474,10 @@ export async function applyIngestion(client, payload, options = {}) {
         continue;
       }
       const proposals = [];
-      for (const [field, rawValue] of Object.entries(selected.values)) {
+      for (const [field, rawValue] of Object.entries({
+        ...Object.fromEntries(selected.clearFields.map((field) => [field, null])),
+        ...selected.values,
+      })) {
         let value = rawValue;
         if (field === "district") {
           const source = sources.find((s) => s.source === selected.provenance[field].source);
@@ -509,6 +512,21 @@ export async function applyIngestion(client, payload, options = {}) {
           continue;
         }
         const owned = fields.find((f) => f.field_name === column);
+        // Absence of an authorized winner only clears proven imported nullable values.
+        // It never claims unknown fields or changes a value already selected manually.
+        if (
+          rawValue === null &&
+          (!owned?.winning_observation_id || owned.selection_reason === "manual_override")
+        ) {
+          if (!owned && property[column] != null && property[column] !== "")
+            await review(
+              reviewRecord,
+              "unknown_field_ownership",
+              { field: column, current: property[column] },
+              representative.observation_id,
+            );
+          continue;
+        }
         const numeric = NUMBER_FIELDS.has(column);
         if (owned?.active_override) {
           await review(

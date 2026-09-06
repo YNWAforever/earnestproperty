@@ -188,3 +188,15 @@ test("quoted source unit-price conflicts remain visible even though public PSF i
   );
   assert.equal(result.values.gross_unit_price, "100");
 });
+
+test("no authorized nullable winner emits an explicit clearing decision without erasing required fields", () => {
+  const selection = selectSourceFields([
+    { ...primary, fields: { price: "100", description: null } },
+    secondary,
+  ]);
+  assert.ok(selection.clearFields?.includes("description"));
+  assert.equal(selection.clearFields.includes("title"), false);
+  assert.equal(selection.clearFields.includes("district"), false);
+  assert.equal(selection.provenance.description.reason, "no_authorized_source");
+  assert.ok(selectSourceFields([{ ...primary, fields: {} }]).clearFields.includes("bathrooms"));
+});

@@ -505,7 +505,6 @@ def crawl(source, cfg, fixtures=None):
     for scope in ["sale", "rent"] if source == "28hse" else BRANCHES:
         fingerprints = set()
         found = set()
-        expected = None
         for page in range(1, cfg.get("max_pages", 100) + 1):
             evidence = {
                 "scope": scope,
@@ -527,17 +526,12 @@ def crawl(source, cfg, fixtures=None):
                     else parse_property_index(html, scope, cfg)
                 )
                 evidence["ids"] = sorted(set(r["property_id"] for r in rows))
+                evidence["advertised_total"] = total
                 if terminal:
-                    if expected is not None and len(found) != expected:
-                        raise WorkerError("advertised_count_mismatch")
-                    evidence.update(status="terminal", details_complete=True)
+                    evidence.update(status="terminal", details_complete=True, observed_distinct_total=len(found))
                     pages.append(evidence)
                     completed.append(scope)
                     break
-                if expected is None:
-                    expected = total
-                elif total != expected:
-                    raise WorkerError("advertised_count_changed")
                 signature = tuple(evidence["ids"])
                 if signature in fingerprints:
                     raise WorkerError("pagination_loop")
@@ -1192,3 +1186,4 @@ def advance_baseline(path, payload, receipt):
     temporary.write_bytes(frozen(payload))
     os.replace(temporary, path)
     return True
+

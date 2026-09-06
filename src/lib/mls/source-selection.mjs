@@ -1,6 +1,17 @@
 import { canonicalJson } from "./ingestion-contract.mjs";
 const PRIMARY = "28hse_agent_540";
 const FILLABLE = new Set(["gross_area", "saleable_area", "bedrooms"]);
+const NULLABLE_FIELDS = new Set([
+  "description",
+  "floor",
+  "price",
+  "rent",
+  "gross_area",
+  "saleable_area",
+  "bedrooms",
+  "bathrooms",
+  "orientation",
+]);
 const FIELDS = [
   "title",
   "description",
@@ -83,12 +94,20 @@ export function selectSourceFields(sources) {
     secondaries.length > 1 ||
     [...primaries, ...secondaries].some((s) => !["active", "delisted"].includes(s.source_status))
   )
-    return { values: {}, provenance: {}, conflicts: [], ambiguous: true, lifecycle: null };
+    return {
+      values: {},
+      clearFields: [],
+      provenance: {},
+      conflicts: [],
+      ambiguous: true,
+      lifecycle: null,
+    };
   const primary = primaries[0],
     secondary = secondaries[0],
     values = {},
     provenance = {},
-    conflicts = [];
+    conflicts = [],
+    clearFields = [];
   for (const field of FIELDS) {
     const p = primary?.fields?.[field],
       s = secondary?.fields?.[field];
@@ -105,6 +124,10 @@ export function selectSourceFields(sources) {
         reason: winner === primary || !primary ? "primary" : "fill_missing",
       };
     }
+    if (!winner && NULLABLE_FIELDS.has(field)) {
+      clearFields.push(field);
+      provenance[field] = { source: null, observationId: null, reason: "no_authorized_source" };
+    }
     if (present(p) && present(s) && canonicalJson(p) !== canonicalJson(s))
       conflicts.push({
         field,
@@ -119,6 +142,7 @@ export function selectSourceFields(sources) {
   }
   return {
     values,
+    clearFields,
     provenance,
     conflicts,
     ambiguous: false,

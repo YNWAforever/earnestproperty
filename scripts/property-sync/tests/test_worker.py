@@ -416,3 +416,24 @@ class ReviewRegressionTests(unittest.TestCase):
             self.assertIn(
                 "baseline_scope_mismatch", w.gate(current, previous)["reasons"]
             )
+
+class AdvertisedDiagnosticTests(unittest.TestCase):
+    def test_inaccurate_advertised_totals_are_only_diagnostics(self):
+        cfg, fixtures = w.synthetic_fixture("28hse")
+        for fixture in fixtures.values():
+            fixture["html"] = fixture.get("html", "").replace("共有 1 個", "共有 999 個")
+        payload, _ = w.crawl("28hse", cfg, fixtures)
+        self.assertTrue(payload["meta"]["crawl_complete"])
+        self.assertTrue(w.gate(payload, None)["allowed"])
+        self.assertTrue(any(page.get("advertised_total") == 999 for page in payload["meta"]["pages"]))
+
+    def test_changing_advertised_totals_do_not_replace_real_terminal_evidence(self):
+        cfg, fixtures = w.synthetic_fixture("28hse")
+        base = "https://www.28hse.com/agent/540?buyRent=buy&page={page}&plan_id=540&propertyDoSearchVersion=2.0"
+        fixtures[base.format(page=3)] = fixtures[base.format(page=2)]
+        fixtures[base.format(page=2)] = {"html": fixtures[base.format(page=1)]["html"].replace("共有 1 個", "共有 2 個").replace("property-100", "property-101")}
+        fixtures["https://www.28hse.com/buy/apartment/property-101"] = fixtures["https://www.28hse.com/buy/apartment/property-100"]
+        payload, _ = w.crawl("28hse", cfg, fixtures)
+        self.assertTrue(payload["meta"]["crawl_complete"])
+        self.assertTrue(w.gate(payload, None)["allowed"])
+        self.assertEqual([page["advertised_total"] for page in payload["meta"]["pages"] if page["scope"] == "sale"], [1, 2, 1])

@@ -793,6 +793,86 @@ test(
           );
         },
       );
+      await t.test(
+        "nullable source clearing handles both arrival orders removal and protected ownership",
+        async () => {
+          await q("TRUNCATE properties,listing_sync_runs CASCADE");
+          const p = (id, unit, extra = {}) => row(id, { unit, ...extra });
+          const h = (id, unit, extra = {}) =>
+            row(id, {
+              unit,
+              branch_code: "EPW",
+              source_url: `https://www.property.hk/fixture/EPW/${id}`,
+              description: "Secondary description",
+              ...extra,
+            });
+          await ingestSnapshot(batch([p("902", "B")], "2026-09-07T02:00:00Z"), options);
+          await ingestSnapshot(
+            batch([h("h901", "A"), h("h902", "B")], "2026-09-07T02:01:00Z", "propertyhk"),
+            options,
+          );
+          const property = async (id) =>
+            (
+              await q(
+                "SELECT p.* FROM properties p JOIN mls_source_state s ON s.property_id=p.id WHERE s.external_listing_id=$1",
+                [id],
+              )
+            )[0];
+          const a = await property("h901"),
+            b = await property("902");
+          assert.equal(a.description, "Secondary description");
+          assert.equal(b.description, null);
+          await ingestSnapshot(
+            batch([p("901", "A"), p("902", "B")], "2026-09-07T02:02:00Z"),
+            options,
+          );
+          assert.equal((await property("901")).description, null);
+          assert.equal((await property("902")).description, null);
+          const cleared = (
+            await q(
+              "SELECT * FROM property_sync_fields WHERE property_id=$1 AND field_name='description'",
+              [a.id],
+            )
+          )[0];
+          assert.equal(cleared.selection_reason, "no_authorized_source");
+          assert.equal(cleared.winning_observation_id, null);
+          const present = [
+            p("901", "A", { description: "Primary owned", bathrooms: 2, orientation: "East" }),
+            p("902", "B", { description: "Primary owned", bathrooms: 2, orientation: "East" }),
+          ];
+          await ingestSnapshot(batch(present, "2026-09-07T02:03:00Z"), options);
+          await q("BEGIN");
+          await q("SELECT set_config('app.admin_property_write','on',true)");
+          await q("UPDATE properties SET description='Manual text' WHERE id=$1", [a.id]);
+          await q("UPDATE properties SET orientation='Manual direction' WHERE id=$1", [b.id]);
+          await q("COMMIT");
+          await q(
+            "UPDATE property_sync_fields SET active_override=true,override_value='\"Manual text\"' WHERE property_id=$1 AND field_name='description'",
+            [a.id],
+          );
+          await q(
+            "DELETE FROM property_sync_fields WHERE property_id=$1 AND field_name='bathrooms'",
+            [a.id],
+          );
+          await ingestSnapshot(
+            batch(
+              [p("901", "A", { title: null }), p("902", "B", { title: null })],
+              "2026-09-07T02:04:00Z",
+            ),
+            options,
+          );
+          const afterA = await property("901"),
+            afterB = await property("902");
+          assert.equal(afterA.description, "Manual text");
+          assert.equal(afterB.description, null);
+          assert.equal(afterA.bathrooms, 2);
+          assert.equal(afterB.bathrooms, null);
+          assert.equal(afterA.orientation, null);
+          assert.equal(afterB.orientation, "Manual direction");
+          assert.equal(afterA.title_zh, "Source title");
+          assert.equal(afterA.district_slug, "test");
+        },
+      );
     } finally {
       await c.query("ROLLBACK");
       await c.query("RESET search_path");
