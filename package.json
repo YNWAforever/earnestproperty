@@ -28,7 +28,7 @@
     "test:mls:db": "node --test src/lib/mls/mls-db.integration.test.mjs",
     "test:listing-search": "node --test src/lib/neon/property-identity.contract.test.mjs src/lib/neon/listing-search.contract.test.mjs src/routes/listings.contract.test.mjs src/lib/neon/listing-alerts.test.mjs src/lib/neon/public-estate-options-cache.test.mjs && bun test src/lib/saved-listings.test.ts",
     "test:cron": "node --test src/routes/api.mls-sync.test.mjs",
-    "test:contact": "node --test src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs src/routes/contact.test.mjs && bun test src/lib/contact-inquiry-form.test.ts",
+    "test:contact": "node --test src/lib/estate-directory.test.mjs src/config/site.test.mjs src/lib/contact-links.test.mjs src/config/whatsapp-phone.test.mjs src/routes/contact.test.mjs && bun test src/lib/contact-inquiry-form.test.ts",
     "test:valuation": "node --test src/lib/neon/valuation-leads.test.mjs",
     "test:estate-conversion": "node --test src/content/estate-conversion.test.mjs src/content/core-estates.test.mjs src/content/castle-peak-road-estates.test.mjs src/content/estate-registry.test.mjs src/content/estate-pages.test.mjs src/content/school-nets.test.mjs src/components/site/estate-comparison.test.mjs src/routes/estate.district-driven.contract.test.mjs",
     "test:neon-auth": "node --test src/config/neon-auth.test.mjs src/config/neon-only.test.mjs",

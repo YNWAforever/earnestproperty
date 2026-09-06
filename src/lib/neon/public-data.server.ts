@@ -1339,3 +1339,41 @@ export async function fetchArticleBySlug(input: { slug: string }) {
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
   };
 }
+
+export async function fetchEstateDirectory(): Promise<
+  import("../estate-directory").EstateDirectoryData
+> {
+  const rows = await sql().query(
+    `
+ WITH ranked AS (
+   SELECT p.*,m.public_listing_no,ROW_NUMBER() OVER(
+    PARTITION BY m.public_listing_no,p.deal_type
+    ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
+      p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC
+   ) AS rank
+   FROM properties p JOIN property_public_members m ON m.property_id=p.id
+ ), current AS (SELECT * FROM ranked WHERE rank=1 AND status='active')
+ SELECT e.slug,e.name_zh,e.name_en,e.aliases,e.district_slug,
+   count(DISTINCT c.public_listing_no)::int AS total,
+   count(DISTINCT c.public_listing_no) FILTER(WHERE c.deal_type='sale')::int AS sale,
+   count(DISTINCT c.public_listing_no) FILTER(WHERE c.deal_type='rent')::int AS rent
+ FROM estates e LEFT JOIN current c ON c.estate_id=e.id
+ WHERE e.published=true
+ GROUP BY e.id,e.slug,e.name_zh,e.name_en,e.aliases,e.district_slug
+ ORDER BY e.name_zh`,
+    [],
+  );
+  return {
+    generatedAt: new Date().toISOString(),
+    rows: rows.map((row) => ({
+      slug: stringOrEmpty(row.slug),
+      nameZh: stringOrEmpty(row.name_zh),
+      nameEn: stringOrNull(row.name_en),
+      aliases: textArrayOrNull(row.aliases) ?? [],
+      districtSlug: stringOrNull(row.district_slug),
+      total: Number(row.total),
+      sale: Number(row.sale),
+      rent: Number(row.rent),
+    })),
+  };
+}
