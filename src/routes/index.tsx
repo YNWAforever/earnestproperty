@@ -48,7 +48,7 @@ import { EmptyState } from "@/components/layout/EmptyState";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
 import responsiveImages from "@/lib/media/responsive-images.generated.json";
-import logoMark from "@/assets/logo-earnest-mark.png";
+const companyLogo = "/brand/earnest-company-logo-2026.jpg";
 import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
 import {
   coreEstates,
@@ -536,13 +536,13 @@ function HomePage() {
       <section className="border-y border-border bg-card">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <AppImage
-                src={logoMark}
-                alt=""
-                width={44}
-                height={44}
-                className="h-11 w-11 object-contain"
+                src={companyLogo}
+                alt="晉誠地產 Earnest Property"
+                width={1200}
+                height={400}
+                className="h-auto w-[210px] object-contain"
               />
               <p className="text-sm font-semibold text-primary">關於晉誠地產</p>
             </div>

@@ -1,3 +1,4 @@
+import { AgentContactMedia } from "@/components/site/AgentContactMedia";
 import {
   publicPropertyNo,
   propertyPriceSummary,
@@ -200,6 +201,8 @@ function AgentProfilePage() {
             </div>
           </aside>
         </section>
+
+        <AgentContactMedia slug={profile.public_slug} onWhatsAppClick={handleWhatsAppClick} />
 
         {listings.length > 0 ? (
           <section className="py-8">

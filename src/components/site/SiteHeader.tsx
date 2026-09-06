@@ -14,7 +14,7 @@ import { AppImage } from "@/components/media/AppImage";
 import { SiteLink } from "@/components/site/SiteLink";
 import { hrefPathname } from "@/lib/site-links";
 import { whatsappUrl } from "@/config/site";
-import logoMark from "@/assets/logo-earnest-mark.png";
+const companyLogo = "/brand/earnest-company-logo-2026.jpg";
 
 type RouteTo =
   | "/about"
@@ -373,26 +373,16 @@ export function SiteHeader() {
       ref={headerRef}
       className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70"
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2.5" onClick={() => setActiveMegaMenu(null)}>
-          {/* 公司logo要大啲 (docx p1): 40px -> 56px on mobile (+40%) and 60px from sm
-              up (+50%), the range the brief asked for, set separately per breakpoint.
-              width/height carry the largest rendered size so the box is reserved
-              before CSS lands — the header grows a little but nothing shifts. */}
           <AppImage
-            src={logoMark}
-            alt=""
-            width={60}
-            height={60}
+            src={companyLogo}
+            alt="晉誠地產 Earnest Property 主頁"
+            width={1200}
+            height={400}
             loading="eager"
-            className="h-14 w-14 object-contain sm:h-[60px] sm:w-[60px]"
+            className="h-auto w-[180px] shrink-0 object-contain sm:w-[210px]"
           />
-          <div className="flex flex-col leading-none">
-            <span className="text-base font-bold tracking-tight text-primary">晉誠地產</span>
-            <span className="text-[10px] font-medium tracking-widest text-muted-foreground">
-              EARNEST PROPERTY
-            </span>
-          </div>
         </Link>
 
         <nav className="relative hidden items-center gap-1 lg:flex" aria-label="主選單">

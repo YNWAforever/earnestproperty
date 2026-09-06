@@ -9,14 +9,13 @@ export const SITE_BRANCHES = [
     whatsapp: null,
     estateSlugs: ["bellagio", "sea-crest-villa", "lido-garden"],
     districtSlugs: ["sham-tseng"],
-    // TODO(client): 麗都舖轉相 (docx p40) — the replacement shopfront photo has not
-    // been supplied, so the original ships until it arrives.
-    photo: "/branches/lido.jpg",
+    // Client-supplied shopfront photograph, September 2026.
+    photo: "/branches/lido-2026-09.jpeg",
     // Intrinsic pixel size of the file above. The shopfront photos are not all the
     // same orientation, so a single hardcoded width/height in the cards reserved an
     // inverted box for the two portrait ones before the stylesheet landed.
-    photoWidth: 1600,
-    photoHeight: 1200,
+    photoWidth: 1100,
+    photoHeight: 848,
     // TODO: confirm opening hours with client (`hours`).
     // TODO: confirm Google Maps link with client (`mapUrl`).
   },
