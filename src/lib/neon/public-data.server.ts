@@ -843,7 +843,12 @@ export async function fetchPropertyByListingNo(input: {
     // Presence, rather than COALESCE, preserves an intentional null/empty edit.
     if (override) row = { ...row, description: override.description };
   }
-  return mapListingRow(row);
+  const metadata = await import("../mls/public-source-metadata.mjs");
+  const sourceMetadata = await metadata.readPublicSourceMetadata(
+    (statement, params) => sql().query(statement, params),
+    String(row.id),
+  );
+  return { ...mapListingRow(row), ...sourceMetadata };
 }
 export async function fetchPropertyByLegacyDetailId(input: {
   oldId: string;

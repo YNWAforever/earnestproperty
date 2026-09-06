@@ -12,6 +12,8 @@ const FIELDS = [
   "unit",
   "price",
   "rent",
+  "gross_unit_price",
+  "saleable_unit_price",
   "gross_area",
   "saleable_area",
   "bedrooms",

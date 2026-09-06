@@ -129,6 +129,13 @@ jobs:
       - run: npm run test:videos
       - run: npm run test:homepage
       - run: npm run test:mls
+      - run: npm run test:property-sync
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m venv scripts/property-sync/.venv
+      - run: scripts/property-sync/.venv/bin/python -m pip install -r scripts/property-sync/requirements.txt
+      - run: npm run test:property-sync:python
       - run: npm run test:listing-search
       - run: npm run test:cron
 

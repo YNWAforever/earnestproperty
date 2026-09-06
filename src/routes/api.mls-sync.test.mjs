@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { latestRunPublisher } from "../lib/mls/status-publisher.mjs";
 
 const source = readFileSync(new URL("./api.mls-sync.ts", import.meta.url), "utf8");
 const vercel = readFileSync(new URL("../../vercel.ts", import.meta.url), "utf8");
@@ -16,8 +17,21 @@ test("mls route is protected and read-only", () => {
   assert.doesNotMatch(source, /createMlsImporter|\.sync\s*\(/);
 });
 
-test("protected status identifies the Cloudflare Container publisher", () => {
-  assert.match(source, /publisher:\s*["']cloudflare-container["']/);
+test("protected status identifies the actual run publisher with legacy compatibility", () => {
+  assert.match(source, /publisher: latestRunPublisher\(latestRun\)/);
+  assert.equal(latestRunPublisher(null), "cloudflare-container");
+  assert.equal(
+    latestRunPublisher({ sourceStatus: { old_site: { status: "healthy" } } }),
+    "cloudflare-container",
+  );
+  assert.equal(
+    latestRunPublisher({
+      sourceStatus: {
+        propertyhk: { policy_version: "no-hermes-v2", publisher: "python-snapshot-v2" },
+      },
+    }),
+    "python-snapshot-v2",
+  );
   assert.doesNotMatch(source, /publisher:\s*["']vps["']/);
   assert.doesNotMatch(source, /\bPOST\b|\bPUT\b|\bDELETE\b/);
 });

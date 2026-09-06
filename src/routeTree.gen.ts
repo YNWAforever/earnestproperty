@@ -58,6 +58,7 @@ import { Route as ApiWoztellWebhookRouteImport } from './routes/api.woztell.webh
 import { Route as ApiLiveAgentSessionRouteImport } from './routes/api.live-agent.session'
 import { Route as ApiLiveAgentMessageRouteImport } from './routes/api.live-agent.message'
 import { Route as ApiLiveAgentHandoffRouteImport } from './routes/api.live-agent.handoff'
+import { Route as ApiAdminPropertyhkSyncRouteImport } from './routes/api.admin.propertyhk-sync'
 import { Route as AdminTransactionsNewRouteImport } from './routes/admin.transactions_.new'
 import { Route as AdminTransactionsIdRouteImport } from './routes/admin.transactions_.$id'
 import { Route as AdminListingsNewRouteImport } from './routes/admin.listings_.new'
@@ -329,6 +330,11 @@ const ApiLiveAgentHandoffRoute = ApiLiveAgentHandoffRouteImport.update({
   path: '/api/live-agent/handoff',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminPropertyhkSyncRoute = ApiAdminPropertyhkSyncRouteImport.update({
+  id: '/api/admin/propertyhk-sync',
+  path: '/api/admin/propertyhk-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminTransactionsNewRoute = AdminTransactionsNewRouteImport.update({
   id: '/transactions_/new',
   path: '/transactions/new',
@@ -521,6 +527,7 @@ export interface FileRoutesByFullPath {
   '/admin/listings/new': typeof AdminListingsNewRoute
   '/admin/transactions/$id': typeof AdminTransactionsIdRoute
   '/admin/transactions/new': typeof AdminTransactionsNewRoute
+  '/api/admin/propertyhk-sync': typeof ApiAdminPropertyhkSyncRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -595,6 +602,7 @@ export interface FileRoutesByTo {
   '/admin/listings/new': typeof AdminListingsNewRoute
   '/admin/transactions/$id': typeof AdminTransactionsIdRoute
   '/admin/transactions/new': typeof AdminTransactionsNewRoute
+  '/api/admin/propertyhk-sync': typeof ApiAdminPropertyhkSyncRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -672,6 +680,7 @@ export interface FileRoutesById {
   '/admin/listings_/new': typeof AdminListingsNewRoute
   '/admin/transactions_/$id': typeof AdminTransactionsIdRoute
   '/admin/transactions_/new': typeof AdminTransactionsNewRoute
+  '/api/admin/propertyhk-sync': typeof ApiAdminPropertyhkSyncRoute
   '/api/live-agent/handoff': typeof ApiLiveAgentHandoffRoute
   '/api/live-agent/message': typeof ApiLiveAgentMessageRoute
   '/api/live-agent/session': typeof ApiLiveAgentSessionRoute
@@ -750,6 +759,7 @@ export interface FileRouteTypes {
     | '/admin/listings/new'
     | '/admin/transactions/$id'
     | '/admin/transactions/new'
+    | '/api/admin/propertyhk-sync'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -824,6 +834,7 @@ export interface FileRouteTypes {
     | '/admin/listings/new'
     | '/admin/transactions/$id'
     | '/admin/transactions/new'
+    | '/api/admin/propertyhk-sync'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -900,6 +911,7 @@ export interface FileRouteTypes {
     | '/admin/listings_/new'
     | '/admin/transactions_/$id'
     | '/admin/transactions_/new'
+    | '/api/admin/propertyhk-sync'
     | '/api/live-agent/handoff'
     | '/api/live-agent/message'
     | '/api/live-agent/session'
@@ -953,6 +965,7 @@ export interface RootRouteChildren {
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
   EstateSlugRoute: typeof EstateSlugRoute
   PropertyListingNoRoute: typeof PropertyListingNoRoute
+  ApiAdminPropertyhkSyncRoute: typeof ApiAdminPropertyhkSyncRoute
   ApiLiveAgentHandoffRoute: typeof ApiLiveAgentHandoffRoute
   ApiLiveAgentMessageRoute: typeof ApiLiveAgentMessageRoute
   ApiLiveAgentSessionRoute: typeof ApiLiveAgentSessionRoute
@@ -1316,6 +1329,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiLiveAgentHandoffRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/propertyhk-sync': {
+      id: '/api/admin/propertyhk-sync'
+      path: '/api/admin/propertyhk-sync'
+      fullPath: '/api/admin/propertyhk-sync'
+      preLoaderRoute: typeof ApiAdminPropertyhkSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/transactions_/new': {
       id: '/admin/transactions_/new'
       path: '/transactions/new'
@@ -1637,6 +1657,7 @@ const rootRouteChildren: RootRouteChildren = {
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
   EstateSlugRoute: EstateSlugRoute,
   PropertyListingNoRoute: PropertyListingNoRoute,
+  ApiAdminPropertyhkSyncRoute: ApiAdminPropertyhkSyncRoute,
   ApiLiveAgentHandoffRoute: ApiLiveAgentHandoffRoute,
   ApiLiveAgentMessageRoute: ApiLiveAgentMessageRoute,
   ApiLiveAgentSessionRoute: ApiLiveAgentSessionRoute,

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import ts from "typescript";
+import { pathToFileURL } from "node:url";
 
 // Same harness as agent-profiles.contract.test.mjs: public-data.server.ts is
 // loaded as a data: URL module with getSql() stubbed to a recorder, so these
@@ -40,7 +41,11 @@ async function importPublicDataServerWithInjectedQuery(query) {
   const executable = inlineRelativeImports(
     transpile(read("src/lib/neon/public-data.server.ts"))
       .replace('import "@tanstack/react-start/server-only";', "")
-      .replace('from "./db.server"', `from "${dbUrl}"`),
+      .replace('from "./db.server"', `from "${dbUrl}"`)
+      .replace(
+        'import("../mls/public-source-metadata.mjs")',
+        `import("${pathToFileURL(join(root, "src/lib/mls/public-source-metadata.mjs")).href}")`,
+      ),
     "src/lib/neon",
   );
 
@@ -660,7 +665,10 @@ test("video filtering precedes bounded candidate selection and retains public vi
     pageSize: 12,
   });
   for (const call of [count, rows]) {
-    assert.match(call.text, /current_offerings[\s\S]*WHERE p\.status = 'active' AND p\.status = 'active' AND p\.video_url/);
+    assert.match(
+      call.text,
+      /current_offerings[\s\S]*WHERE p\.status = 'active' AND p\.status = 'active' AND p\.video_url/,
+    );
   }
   assert.match(
     rows.text,
@@ -769,6 +777,9 @@ test("similar listings exclude the current public group before ranking", async (
   });
   assert.match(captured.text, /SELECT 1 FROM property_public_members current_member/);
   assert.match(captured.text, /current_member\.property_id = \$3/);
-  assert.match(captured.text, /current_member\.public_listing_no = current_offerings\.public_listing_no/);
+  assert.match(
+    captured.text,
+    /current_member\.public_listing_no = current_offerings\.public_listing_no/,
+  );
   assert.deepEqual(captured.params, ["estate", "sale", "current", 4]);
 });

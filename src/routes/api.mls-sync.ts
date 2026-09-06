@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
+import { latestRunPublisher } from "@/lib/mls/status-publisher.mjs";
 
 function hasValidAuthorization(request: Request, expectedSecret: string) {
   const actual = request.headers.get("authorization") ?? "";
@@ -36,7 +37,7 @@ export const Route = createFileRoute("/api/mls-sync")({
 
         return Response.json({
           ok: true,
-          publisher: "cloudflare-container",
+          publisher: latestRunPublisher(latestRun),
           latestRun,
         });
       },

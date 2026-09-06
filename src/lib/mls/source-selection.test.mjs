@@ -166,3 +166,25 @@ test("review: lifecycle and contacts require recognized positive evidence", () =
     );
   }
 });
+
+test("quoted source unit-price conflicts remain visible even though public PSF is derived", () => {
+  const result = selectSourceFields([
+    {
+      source: "28hse_agent_540",
+      source_status: "active",
+      observation_id: "p",
+      fields: { gross_unit_price: "100", saleable_unit_price: "200" },
+    },
+    {
+      source: "propertyhk",
+      source_status: "active",
+      observation_id: "s",
+      fields: { gross_unit_price: "101", saleable_unit_price: "201" },
+    },
+  ]);
+  assert.deepEqual(
+    result.conflicts.map((c) => c.field),
+    ["gross_unit_price", "saleable_unit_price"],
+  );
+  assert.equal(result.values.gross_unit_price, "100");
+});
