@@ -377,3 +377,42 @@ class RecoveryTests(unittest.TestCase):
                     },
                 )
             )
+
+
+class ReviewRegressionTests(unittest.TestCase):
+    def test_zero_count_requires_normal_empty_marker(self):
+        html = "<h1>晉誠地產</h1><p>C-018613</p><p>共有 0 個放租樓盤</p><section>Unknown changed listing template</section>"
+        with self.assertRaises(w.WorkerError):
+            w.parse_28_index(html, "rent")
+        rows, terminal, total = w.parse_28_index(
+            html + "<p>沒有找到任何資料</p>", "rent"
+        )
+        self.assertTrue(terminal)
+        self.assertEqual(rows, [])
+
+    def test_detail_unit_prices_preserve_raw_and_normalized(self):
+        html = "<main data-listing-detail><table><tr><td>售價</td><td>500萬</td></tr><tr><td>建築呎價</td><td>10,000</td></tr><tr><td>實用呎價</td><td>12,000</td></tr></table></main>"
+        record = w.parse_28_detail(
+            html, {"property_id": "123", "title": "title", "deal_type": "sale"}
+        )
+        self.assertEqual(record.get("gross_unit_price"), "10000")
+        self.assertEqual(record.get("saleable_unit_price"), "12000")
+        self.assertEqual(
+            record["raw_payload"]["detail_fields"]["gross_unit_price"], "10,000"
+        )
+        self.assertEqual(
+            record["raw_payload"]["detail_fields"]["saleable_unit_price"], "12,000"
+        )
+
+    def test_baseline_policy_and_id_domain_must_match(self):
+        cfg, fixtures = w.synthetic_fixture("propertyhk")
+        current, _ = w.crawl("propertyhk", cfg, fixtures)
+        for change in ["policy", "id_scope"]:
+            previous = json.loads(json.dumps(current))
+            if change == "policy":
+                previous["meta"]["policy_version"] = "prior-policy"
+            else:
+                previous["id_scope"] = "branch"
+            self.assertIn(
+                "baseline_scope_mismatch", w.gate(current, previous)["reasons"]
+            )

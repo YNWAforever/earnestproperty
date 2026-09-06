@@ -309,7 +309,7 @@ def parse_28_index(html, deal):
     if any(not r["title"] for r in links.values()):
         raise WorkerError("missing_title")
     # v2 requires an actual empty endpoint, even when advertised total was reached.
-    terminal = not links and (total == 0 or "沒有找到任何資料" in s.get_text())
+    terminal = not links and "沒有找到任何資料" in s.get_text()
     if not links and not terminal:
         raise WorkerError("unknown_empty")
     return list(links.values()), terminal, total
@@ -330,6 +330,8 @@ def parse_28_detail(html, record):
         "usable area": "saleable_area",
         "建築面積": "gross_area",
         "gross area": "gross_area",
+        "建築呎價": "gross_unit_price",
+        "實用呎價": "saleable_unit_price",
         "間隔": "bedrooms",
         "間格": "bedrooms",
         "rooms": "bedrooms",
@@ -366,7 +368,7 @@ def parse_28_detail(html, record):
         "raw_payload": {"detail_fields": raw},
     }
     for k, v in raw.items():
-        if k in ("price", "rent"):
+        if k in ("price", "rent", "gross_unit_price", "saleable_unit_price"):
             r[k] = number(v, "money")
         elif k.endswith("_area"):
             r[k] = number(v, "area")
@@ -667,6 +669,11 @@ def gate(payload, baseline):
             baseline["meta"]["scope_id"] != m["scope_id"]
             or baseline["source"] != payload["source"]
             or baseline["meta"]["parser_version"] != m["parser_version"]
+            or baseline["meta"].get("policy_version") != m.get("policy_version")
+            or (
+                payload["source"] == "propertyhk"
+                and baseline.get("id_scope") != payload.get("id_scope")
+            )
         ):
             reasons.append("baseline_scope_mismatch")
         previous = len(ad_keys(baseline))
