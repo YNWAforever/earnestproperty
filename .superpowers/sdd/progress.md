@@ -10,3 +10,8 @@
 - Task 8: complete (commit fee0070, CMS contract tests passed, current fingerprint snapshots wired)
 - Task 9: complete (commit 8d6422d, listing helper tests 4/4, admin data contract tests 3/3)
 - Task 10: complete (commits 5f1801f..e3b3833, activation guide and focused test script added)
+No-Hermes WP1: complete f1bb685..be03c23 contracts/schema reviewed; selection reviewed 9 tests. WP2: de2eb26..d61b8b7 fix review pending. WP3: next atomic service.
+
+No-Hermes WP2: complete de2eb26..d61b8b7, scoped review approved, Python28/28.
+No-Hermes WP3: complete 8e27e4d, scoped review approved, disposableDB28/28.
+No-Hermes WP4/WP5: API/public core reviewed, Node57/57 and publicSQL1/1; wholebranch review pending.

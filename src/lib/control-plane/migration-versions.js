@@ -81,6 +81,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260906100000_whatsapp_inbound_leads.sql",
   "20260906110000_estate_listing_links.sql",
   "20260906120000_admin_property_management.sql",
+  "20260907120000_propertyhk_ingestion_v2.sql",
 ]);
 
 /**

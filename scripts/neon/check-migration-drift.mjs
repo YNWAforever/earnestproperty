@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url";
 /**
  * Fails when a migration exists in the repo but has never been applied to the
  * target database.
@@ -106,6 +107,6 @@ async function main() {
 
 // Only run when invoked directly, so the test can import the pure helpers
 // without opening a database connection.
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   await main();
 }

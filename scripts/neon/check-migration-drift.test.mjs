@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -58,4 +59,16 @@ test("empty and placeholder values are treated as unset, not as a connection str
     "postgres://real",
   );
   assert.equal(resolveDatabaseUrl({}), null);
+});
+
+test("direct CLI actually executes on Windows and fails without a configured database", () => {
+  const env = { ...process.env };
+  delete env.DATABASE_URL;
+  delete env.DATABASE_URL_UNPOOLED;
+  const result = spawnSync(process.execPath, ["scripts/neon/check-migration-drift.mjs"], {
+    env,
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /DATABASE_URL.*required/);
 });

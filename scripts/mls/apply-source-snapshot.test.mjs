@@ -1,0 +1,62 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { runSnapshotBridge } from "./apply-source-snapshot.mjs";
+import { SnapshotError } from "../../src/lib/mls/ingestion-contract.mjs";
+test("T28 bridge defaults to dry run and never loads DB credentials", async () => {
+  let options;
+  const env = new Proxy(
+    {},
+    {
+      get() {
+        assert.fail("dryrun must not inspect credentials");
+      },
+    },
+  );
+  const result = await runSnapshotBridge(["--payload", "saved.json"], {
+    env,
+    readPayload: async () => '{"source":"28hse"}',
+    ingest: async (p, o) => {
+      options = o;
+      return { success: true, status: "dry_run" };
+    },
+  });
+  assert.equal(result.status, "dry_run");
+  assert.deepEqual(options, { apply: false, expectedSource: "28hse_agent_540" });
+});
+test("apply accepts only collected 28hse payload and explicit switch", async () => {
+  let options;
+  await runSnapshotBridge(["--payload", "saved.json", "--apply"], {
+    env: { DATABASE_URL_UNPOOLED: "private" },
+    readPayload: async () => '{"source":"28hse"}',
+    ingest: async (p, o) => {
+      options = o;
+      return {};
+    },
+  });
+  assert.deepEqual(options, {
+    apply: true,
+    expectedSource: "28hse_agent_540",
+    connectionString: "private",
+  });
+  for (const args of [[], ["--payload", "x", "--crawl"], ["--payload", "x", "--apply", "--apply"]])
+    await assert.rejects(runSnapshotBridge(args), SnapshotError);
+  let calls = 0;
+  await assert.rejects(
+    runSnapshotBridge(["--payload", "x"], {
+      readPayload: async () => '{"source":"propertyhk"}',
+      ingest: () => calls++,
+    }),
+    SnapshotError,
+  );
+  assert.equal(calls, 0);
+});
+test("oversize/malformed frozen artifact never reaches ingestion", async () => {
+  for (const content of ["{", " ".repeat(5 * 1024 * 1024 + 1)])
+    await assert.rejects(
+      runSnapshotBridge(["--payload", "x"], {
+        readPayload: async () => content,
+        ingest: () => assert.fail("no ingest"),
+      }),
+      SnapshotError,
+    );
+});

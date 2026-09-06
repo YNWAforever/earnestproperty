@@ -1,3 +1,4 @@
+import type { PublicSourceMetadata } from "../mls/public-source-metadata.mjs";
 export type NeonListingSort = "newest" | "price_asc" | "price_desc" | "area" | "psf";
 
 export type NeonListingFiltersInput = {
@@ -87,6 +88,8 @@ export type PropertyOffering = {
 };
 
 export type NeonPropertyRow = {
+  source_contact?: PublicSourceMetadata["source_contact"];
+  source_freshness?: PublicSourceMetadata["source_freshness"];
   id: string;
   listing_no: string;
   public_listing_no?: string;
