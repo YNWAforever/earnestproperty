@@ -1,7 +1,7 @@
 name: Daily property collection
 on:
   schedule:
-    - cron: '17 18 * * *'
+    - cron: "17 18 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -9,14 +9,14 @@ on:
         options: [shadow, apply, replay-shadow, replay-apply]
         default: shadow
       scope:
-        default: 'agent:540'
+        default: "agent:540"
         required: true
         type: string
       replay_asset:
-        description: 'Exact request asset name from private property-sync-evidence release'
+        description: "Exact request asset name from private property-sync-evidence release"
         type: string
       bootstrap:
-        description: 'Operator confirms first approved parser/policy baseline bootstrap'
+        description: "Operator confirms first approved parser/policy baseline bootstrap"
         type: boolean
         default: false
 concurrency:
