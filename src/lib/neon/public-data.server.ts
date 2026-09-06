@@ -957,6 +957,32 @@ export async function fetchPublicAgentProfileBySlug(input: {
  * have no per-page change signal to draw on and keep sitemap.xml.ts's
  * existing shared generation timestamp instead of a fabricated one.
  */
+/**
+ * One URL per public listing group for sitemap.xml: the canonical
+ * public_listing_no (what /property/$listingNo self-canonicalises to) and
+ * the newest updated_at across the group's members. Only groups with a
+ * currently-active member are listed -- sold/rented pages are noindex'd and
+ * offline/draft ones 404, so neither belongs in the sitemap.
+ */
+export async function fetchSitemapListings(): Promise<
+  Array<{ public_listing_no: string; updated_at: string | null }>
+> {
+  const rows = await sql().query(
+    `
+    SELECT ppm.public_listing_no, MAX(p.updated_at) AS updated_at
+    FROM property_public_members ppm
+    JOIN properties p ON p.id = ppm.property_id
+    WHERE p.status = 'active'
+    GROUP BY ppm.public_listing_no
+    ORDER BY ppm.public_listing_no
+    `,
+  );
+  return rows.map((row) => ({
+    public_listing_no: stringOrEmpty(row.public_listing_no),
+    updated_at: dateOrNull(row.updated_at),
+  }));
+}
+
 export async function fetchSitemapTimestamps(): Promise<{
   estates: Record<string, string | null>;
   articles: Record<string, string | null>;

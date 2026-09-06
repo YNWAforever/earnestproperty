@@ -13,6 +13,10 @@ export const Route = createFileRoute("/blog_/editorial-standards")({
     meta: [
       { title: pageSeo.blogEditorialStandards.title },
       { name: "description", content: pageSeo.blogEditorialStandards.description },
+      { property: "og:title", content: pageSeo.blogEditorialStandards.title },
+      { property: "og:description", content: pageSeo.blogEditorialStandards.description },
+      { name: "twitter:title", content: pageSeo.blogEditorialStandards.title },
+      { name: "twitter:description", content: pageSeo.blogEditorialStandards.description },
     ],
     links: [canonicalLink(pageSeo.blogEditorialStandards.path)],
   }),

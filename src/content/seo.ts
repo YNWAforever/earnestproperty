@@ -1,6 +1,32 @@
 import { getEstateEntry } from "./estate-registry.ts";
 
-export const SITE_URL = "https://earnestproperty.vercel.app";
+/**
+ * Production origin. Every canonical, og:image, sitemap <loc>, robots.txt
+ * Sitemap line and JSON-LD url is built from this, so it must be the host
+ * search engines should consolidate on -- not whichever deployment served
+ * the request. Read from VITE_SITE_URL (scripts/check-required-env.mjs fails
+ * a Vercel production build without it); the vercel.app origin is only the
+ * fallback for local dev, previews and `node --test`, where import.meta.env
+ * is undefined.
+ */
+const FALLBACK_SITE_URL = "https://earnestproperty.vercel.app";
+
+export function normalizeSiteUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export const SITE_URL =
+  normalizeSiteUrl(
+    (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SITE_URL,
+  ) ?? FALLBACK_SITE_URL;
+export const SITE_HOST = new URL(SITE_URL).host;
 export const SITE_NAME = "晉誠地產 Earnest Property";
 export const SITE_OG_IMAGE = `${SITE_URL}/og-cover.jpg`;
 export const SITE_LOGO_URL = `${SITE_URL}/brand/earnest-company-logo-2026.jpg`;

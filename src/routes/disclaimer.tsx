@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { SITE_CONTACT } from "@/config/site";
 import { Container } from "@/components/layout/Container";
 import { PageHero } from "@/components/site/PageHero";
-import { canonicalLink, pageSeo } from "@/content/seo";
+import { SITE_HOST, canonicalLink, pageSeo } from "@/content/seo";
 
 // TODO(client/legal): reasonable template copy expanding on the existing
 // per-listing disclaimer (see property.$listingNo.tsx) into a site-wide page --
@@ -13,6 +13,10 @@ export const Route = createFileRoute("/disclaimer")({
     meta: [
       { title: pageSeo.disclaimer.title },
       { name: "description", content: pageSeo.disclaimer.description },
+      { property: "og:title", content: pageSeo.disclaimer.title },
+      { property: "og:description", content: pageSeo.disclaimer.description },
+      { name: "twitter:title", content: pageSeo.disclaimer.title },
+      { name: "twitter:description", content: pageSeo.disclaimer.description },
     ],
     links: [canonicalLink(pageSeo.disclaimer.path)],
   }),
@@ -31,7 +35,7 @@ function DisclaimerPage() {
       <Container className="py-12">
         <div className="prose prose-neutral max-w-3xl space-y-8">
           <p className="leading-7 text-muted-foreground">
-            {`本網站（earnestproperty.vercel.app）由晉誠地產 Earnest Property（牌照號 ${SITE_CONTACT.licenceNo}）營運。以下聲明適用於本網站所有頁面，包括放盤資料、屋苑資訊、成交記錄、市場分析文章及按揭計算機。`}
+            {`本網站（${SITE_HOST}）由晉誠地產 Earnest Property（牌照號 ${SITE_CONTACT.licenceNo}）營運。以下聲明適用於本網站所有頁面，包括放盤資料、屋苑資訊、成交記錄、市場分析文章及按揭計算機。`}
           </p>
 
           <div>

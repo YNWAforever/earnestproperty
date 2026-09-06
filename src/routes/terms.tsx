@@ -12,6 +12,10 @@ export const Route = createFileRoute("/terms")({
     meta: [
       { title: pageSeo.terms.title },
       { name: "description", content: pageSeo.terms.description },
+      { property: "og:title", content: pageSeo.terms.title },
+      { property: "og:description", content: pageSeo.terms.description },
+      { name: "twitter:title", content: pageSeo.terms.title },
+      { name: "twitter:description", content: pageSeo.terms.description },
     ],
     links: [canonicalLink(pageSeo.terms.path)],
   }),

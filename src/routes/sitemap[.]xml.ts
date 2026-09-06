@@ -3,7 +3,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { blogArticles } from "@/content/blog-articles";
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
 import { SITE_URL, estateSeo, pageSeo } from "@/content/seo";
-import { fetchSitemapTimestamps, listPublicAgentProfiles } from "@/lib/neon/public-data.server";
+import {
+  fetchSitemapListings,
+  fetchSitemapTimestamps,
+  listPublicAgentProfiles,
+} from "@/lib/neon/public-data.server";
 import { fetchPublishedArticlesByCategory, fetchRecentTransactions } from "@/lib/queries";
 
 const staticPaths = [
@@ -81,7 +85,7 @@ export const Route = createFileRoute("/sitemap.xml")({
         // have real rows; both routes also stamp their own noindex meta in the
         // same empty case (see their head()), so this self-heals the moment
         // data lands with no further deploy needed.
-        const [transactions, estateReviewArticles, timestamps] = await Promise.all([
+        const [transactions, estateReviewArticles, timestamps, listings] = await Promise.all([
           fetchRecentTransactions({ limit: 1 }).catch(() => []),
           fetchPublishedArticlesByCategory("屋苑開箱").catch(() => []),
           fetchSitemapTimestamps().catch(
@@ -90,6 +94,15 @@ export const Route = createFileRoute("/sitemap.xml")({
               articles: {},
             }),
           ),
+          // The listing detail pages are the site's money pages and the only
+          // ones carrying RealEstateListing JSON-LD; they were absent here.
+          fetchSitemapListings().catch((error: unknown) => {
+            console.error(
+              "[sitemap] fetchSitemapListings failed; shipping without listings",
+              error,
+            );
+            return [] as Awaited<ReturnType<typeof fetchSitemapListings>>;
+          }),
         ]);
         const conditionalPaths = [
           transactions.length > 0 ? "/transactions" : null,
@@ -125,8 +138,19 @@ export const Route = createFileRoute("/sitemap.xml")({
         // pages DO have a real updated_at (fetchSitemapTimestamps, both
         // columns already written by the admin CMS's archive/publish paths),
         // so those get their actual last-modified date instead.
+        const listingLastmod = new Map(
+          listings.map((listing) => [
+            `/property/${listing.public_listing_no}`,
+            listing.updated_at?.slice(0, 10) ?? null,
+          ]),
+        );
+        const listingPaths = Array.from(listingLastmod.keys());
+
         const generatedAt = new Date().toISOString().slice(0, 10);
         function lastmodFor(path: string): string {
+          if (listingLastmod.has(path)) {
+            return listingLastmod.get(path) ?? generatedAt;
+          }
           if (path.startsWith("/estate/")) {
             const slug = path.slice("/estate/".length);
             return timestamps.estates[slug]?.slice(0, 10) ?? generatedAt;
@@ -146,6 +170,7 @@ export const Route = createFileRoute("/sitemap.xml")({
             ...publishedArticlePaths,
             ...conditionalPaths,
             ...agentPaths,
+            ...listingPaths,
           ]).map((path) => urlXml(path, lastmodFor(path))),
           "</urlset>",
         ].join("\n");

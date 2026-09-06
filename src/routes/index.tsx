@@ -136,6 +136,11 @@ export const Route = createFileRoute("/")({
         property: "og:description",
         content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
       },
+      { name: "twitter:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
+      {
+        name: "twitter:description",
+        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
+      },
       { property: "og:image", content: HERO_OG_IMAGE },
       { name: "twitter:image", content: HERO_OG_IMAGE },
     ],

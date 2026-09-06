@@ -58,6 +58,16 @@ export const Route = createFileRoute("/videos")({
         name: "description",
         content: "晉誠地產 YouTube影片入口，集中官方頻道影片及附影片的深井、青山公路、汀九樓盤。",
       },
+      { property: "og:title", content: "YouTube影片｜晉誠地產 深井 青山公路 汀九樓盤" },
+      {
+        property: "og:description",
+        content: "晉誠地產官方頻道影片及附影片的深井、青山公路、汀九樓盤，集中一頁。",
+      },
+      { name: "twitter:title", content: "YouTube影片｜晉誠地產 深井 青山公路 汀九樓盤" },
+      {
+        name: "twitter:description",
+        content: "晉誠地產官方頻道影片及附影片的深井、青山公路、汀九樓盤，集中一頁。",
+      },
     ],
     links: [canonicalLink("/videos")],
   }),

@@ -4,11 +4,14 @@ type VercelRedirect = {
   source: string;
   destination: string;
   permanent: boolean;
-  has?: Array<{
-    type: "query";
-    key: string;
-    value: string;
-  }>;
+  has?: Array<
+    | {
+        type: "query";
+        key: string;
+        value: string;
+      }
+    | { type: "host"; value: string }
+  >;
 };
 
 type VercelConfig = {
@@ -20,6 +23,27 @@ type VercelConfig = {
 const detailRedirects = importedRedirects.map((redirect) =>
   redirectEntry(redirect.source, redirect.destination, redirect.permanent),
 );
+
+// Once VITE_SITE_URL names the custom domain, the vercel.app origin must not
+// keep serving an indexable duplicate: 301 every path there to the canonical
+// host. No-op while SITE_URL is still the vercel.app fallback.
+const FALLBACK_HOST = "earnestproperty.vercel.app";
+function canonicalHostRedirects(): VercelRedirect[] {
+  const raw = process.env.VITE_SITE_URL;
+  if (!raw) return [];
+  let origin: URL;
+  try {
+    origin = new URL(raw);
+  } catch {
+    return [];
+  }
+  if (origin.host === FALLBACK_HOST || origin.host.endsWith(".vercel.app")) return [];
+  return [
+    redirectEntry("/:path*", `${origin.origin}/:path*`, true, {
+      has: [{ type: "host", value: FALLBACK_HOST }],
+    }),
+  ];
+}
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
@@ -43,6 +67,7 @@ export const config: VercelConfig = {
     { path: "/api/youtube-sync/full", schedule: "0 21 1 * *" },
   ],
   redirects: [
+    ...canonicalHostRedirects(),
     ...detailRedirects,
     redirectEntry("/", "/", true, {
       has: [{ type: "query", key: "ln", value: "^(sc|tc)$" }],
@@ -70,7 +95,12 @@ export const config: VercelConfig = {
     ),
     redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
     redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
-    redirectEntry("/property-detail/:oldId.html", "/listings", true),
+    // /property-detail/:oldId.html is NOT redirected here: it is an app route
+    // (src/routes/property-detail.$file.ts) that looks the legacy id up in
+    // properties.legacy_detail_id and 301s to the matching /property/ page,
+    // falling back to /listings only when nothing matches. A blanket
+    // many-to-one redirect to /listings threw away every old listing's
+    // equity and reads as a soft 404 to Google.
     redirectEntry("/eng/property-detail/:oldId.html", "/property-detail/:oldId.html", true),
     redirectEntry("/eng", "/", true),
     redirectEntry("/eng/", "/", true),

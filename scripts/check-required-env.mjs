@@ -31,6 +31,37 @@ const REQUIRED_FOR_WHATSAPP_CTAS = [
 const vercelEnv = process.env.VERCEL_ENV;
 const isVercelDeploy = vercelEnv === "production" || vercelEnv === "preview";
 
+// The production origin feeds every canonical, sitemap <loc>, og:image and
+// JSON-LD url (src/content/seo.ts). Left unset, the site canonicalises to the
+// *.vercel.app fallback and the custom domain never consolidates in search.
+// Production-only: previews legitimately run on their own generated hosts.
+if (vercelEnv === "production") {
+  const siteUrl = process.env.VITE_SITE_URL;
+  let origin = null;
+  try {
+    origin = siteUrl ? new URL(siteUrl).origin : null;
+  } catch {
+    origin = null;
+  }
+  if (!origin || !origin.startsWith("https://")) {
+    console.error(
+      [
+        "",
+        `Build blocked (production): VITE_SITE_URL is ${siteUrl ? `not an https origin (${siteUrl})` : "missing"}.`,
+        "Every canonical, sitemap URL, og:image and JSON-LD url is built from it. Set it to the",
+        'live domain (e.g. "https://www.earnestproperty.com") in the Vercel project settings.',
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+  if (origin.endsWith(".vercel.app")) {
+    console.warn(
+      `[check-required-env] VITE_SITE_URL points at a vercel.app host (${origin}); once the custom domain is attached, update it so canonicals consolidate there.`,
+    );
+  }
+}
+
 if (isVercelDeploy) {
   const missing = REQUIRED_FOR_WHATSAPP_CTAS.filter((name) => !process.env[name]);
 

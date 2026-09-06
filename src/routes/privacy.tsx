@@ -15,6 +15,10 @@ export const Route = createFileRoute("/privacy")({
     meta: [
       { title: pageSeo.privacy.title },
       { name: "description", content: pageSeo.privacy.description },
+      { property: "og:title", content: pageSeo.privacy.title },
+      { property: "og:description", content: pageSeo.privacy.description },
+      { name: "twitter:title", content: pageSeo.privacy.title },
+      { name: "twitter:description", content: pageSeo.privacy.description },
     ],
     links: [canonicalLink(pageSeo.privacy.path)],
   }),
