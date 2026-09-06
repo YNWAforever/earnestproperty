@@ -3,7 +3,7 @@ import { MapPin, Phone, Mail } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
-import logoMark from "@/assets/logo-earnest-mark.png";
+const companyLogo = "/brand/earnest-company-logo-2026.jpg";
 
 export function SiteFooter() {
   return (
@@ -13,16 +13,12 @@ export function SiteFooter() {
           <div>
             <div className="flex items-center gap-2.5">
               <AppImage
-                src={logoMark}
-                alt=""
-                width={48}
-                height={48}
-                className="h-12 w-12 object-contain"
+                src={companyLogo}
+                alt="晉誠地產 Earnest Property"
+                width={1200}
+                height={400}
+                className="h-auto w-full max-w-[300px] object-contain"
               />
-              <div className="flex flex-col leading-none">
-                <span className="text-base font-bold">晉誠地產</span>
-                <span className="text-[10px] tracking-widest opacity-70">EARNEST PROPERTY</span>
-              </div>
             </div>
             <p className="mt-4 text-sm leading-relaxed opacity-80">
               深井．青山公路．汀九我哋比你更熟。

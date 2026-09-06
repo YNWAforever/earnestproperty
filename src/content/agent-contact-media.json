@@ -1,0 +1,232 @@
+{
+  "andy-hah": {
+    "name": "Andy Hah",
+    "card": "/agents/contact-cards/2026-09/andy-hah.jpg",
+    "qr": "/agents/contact-cards/2026-09/andy-hah-qr.png",
+    "whatsappUrl": "https://wa.link/t5brm0",
+    "width": 1064,
+    "height": 638,
+    "cardSha256": "0c22a1b591057da508211f7a29e692d3194bc8fc0e6648c2780e2ec851d5fbb0",
+    "qrSha256": "baffb2277751badab2f9adf45f7223da83c9674e382d52cb3093a19b93fc0b80"
+  },
+  "dickson-wong": {
+    "name": "Dickson Wong",
+    "card": "/agents/contact-cards/2026-09/dickson-wong.jpg",
+    "qr": "/agents/contact-cards/2026-09/dickson-wong-qr.png",
+    "whatsappUrl": "https://wa.link/dtzu2i",
+    "width": 1064,
+    "height": 638,
+    "cardSha256": "0647ed3c957bee99fd8c5547c1a2d047e1e69422851b696ca3e1e23a8182552f",
+    "qrSha256": "8a654ce467bfb7724e4f7d5e197414a0ba9328a07a9fb09f1ef1f53cd88d9ea1"
+  },
+  "eric-lai": {
+    "name": "Eric Lai",
+    "card": "/agents/contact-cards/2026-09/eric-lai.jpg",
+    "qr": "/agents/contact-cards/2026-09/eric-lai-qr.png",
+    "whatsappUrl": "https://wa.link/wdswno",
+    "width": 1064,
+    "height": 638,
+    "cardSha256": "f95d1956787e1c59c08c59028c36561758b8277a2baf177e42945b48f9ae3a5f",
+    "qrSha256": "3c7aabfe73f11641fdb4094ba606e9bc5e11bfe0712ed63fd40bdf75bf9d6663"
+  },
+  "eunice-yau": {
+    "name": "Eunice Yau",
+    "card": "/agents/contact-cards/2026-09/eunice-yau.jpg",
+    "qr": "/agents/contact-cards/2026-09/eunice-yau-qr.png",
+    "whatsappUrl": "https://wa.link/gsgoid",
+    "width": 1064,
+    "height": 638,
+    "cardSha256": "016303aff9d1c97a1169deb510db5d7a84e2552c2ced01fb8f286ffff9941a2c",
+    "qrSha256": "ed158ad711bfb487c8a9e4d473cec4045d7b7144164857fca0880f0d8c950c83"
+  },
+  "george-chau": {
+    "name": "George Chau",
+    "card": "/agents/contact-cards/2026-09/george-chau.jpg",
+    "qr": "/agents/contact-cards/2026-09/george-chau-qr.png",
+    "whatsappUrl": "https://wa.link/7pfoef",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "726f229080c1bf9e3e4f92bc6e969bbbf267af4692619e0e08d133a68aa2280b",
+    "qrSha256": "aa3c03bc1ad22b69131616abe4e81a2d87568a4e8956885f08658d959fb7fdc2"
+  },
+  "joanna-tang": {
+    "name": "Joanna Tang",
+    "card": "/agents/contact-cards/2026-09/joanna-tang.jpg",
+    "qr": "/agents/contact-cards/2026-09/joanna-tang-qr.png",
+    "whatsappUrl": "https://wa.link/vy7lht",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "f1b1d744174f80ed61466f55d0ea24c781885760a9ebe024c7e919c51ca231e3",
+    "qrSha256": "d163fcc8aefc043a8341f1dce9a413b21b4e08a0c7f71e7f2e7e127d79ea96ad"
+  },
+  "joe-yuen": {
+    "name": "Joe Yuen",
+    "card": "/agents/contact-cards/2026-09/joe-yuen.jpg",
+    "qr": "/agents/contact-cards/2026-09/joe-yuen-qr.png",
+    "whatsappUrl": "https://wa.link/yn3z5g",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "8dd021c43df351967ec0dca98a607811d2c41da45a75d50be59f7151d7a135e4",
+    "qrSha256": "ebfdb0cb4572dc5e66f20e3edad36482f3d1f345923620cf849d586212ddbacd"
+  },
+  "kelvin-lee": {
+    "name": "Kelvin Lee",
+    "card": "/agents/contact-cards/2026-09/kelvin-lee.jpg",
+    "qr": "/agents/contact-cards/2026-09/kelvin-lee-qr.png",
+    "whatsappUrl": "https://wa.link/nqihhg",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "ebf54eab5a7036a8af34b6b55645fc8a13256897a100e1829a3f1dad4e0e349f",
+    "qrSha256": "3b363ff0953c30ab01e31c8900bbd3f3b87caf24313cc359ca5385ba11a31698"
+  },
+  "kenneth": {
+    "name": "Kenneth Chang",
+    "card": "/agents/contact-cards/2026-09/kenneth.jpg",
+    "qr": "/agents/contact-cards/2026-09/kenneth-qr.png",
+    "whatsappUrl": "https://wa.link/rzk061",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "84342a871f941fa8d8cda03b8195b5e845b80f7fdd35000b7dadb33de67256f9",
+    "qrSha256": "61fbb858bcfd9ea23bf0baca1dad0fa13d0920108d779acb18b3ecb4b0ab552e"
+  },
+  "king-lau": {
+    "name": "King Lau",
+    "card": "/agents/contact-cards/2026-09/king-lau.jpg",
+    "qr": "/agents/contact-cards/2026-09/king-lau-qr.png",
+    "whatsappUrl": "https://wa.link/6dpddk",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "052f2f04d2c5e0f8ce5ce78b15d087763edf643c2e542140d4a79cf713c1d8cb",
+    "qrSha256": "ce3af536108d9638b3b2155aa416d5de7c1aa691ae0341e308cc2acc1bbbf26a"
+  },
+  "mike-cheung": {
+    "name": "Mike Cheung",
+    "card": "/agents/contact-cards/2026-09/mike-cheung.jpg",
+    "qr": "/agents/contact-cards/2026-09/mike-cheung-qr.png",
+    "whatsappUrl": "https://wa.link/e6xwg5",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "a95a24290c1c8d8e0b61f3f9abfe9081772554ca1eade1a1d8ca04059c02f55a",
+    "qrSha256": "e933949d445fe67e2fececc760cc9598ce71d749fb6bf38eaa64dd94a9f3b7bf"
+  },
+  "mon-lau": {
+    "name": "Mon Lau",
+    "card": "/agents/contact-cards/2026-09/mon-lau.jpg",
+    "qr": "/agents/contact-cards/2026-09/mon-lau-qr.png",
+    "whatsappUrl": "https://wa.link/6wkego",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "036b0e3e3f35b02484c3d13887ef007939950deebebb3a61a57968a8a602c65d",
+    "qrSha256": "9b8e62827bc3f811aacef8b4f35e2c78a0fc73fe875ec53897f28f030086a9b1"
+  },
+  "mun-chu": {
+    "name": "Mun Chu",
+    "card": "/agents/contact-cards/2026-09/mun-chu.jpg",
+    "qr": "/agents/contact-cards/2026-09/mun-chu-qr.png",
+    "whatsappUrl": "https://wa.link/5k0kw1",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "2d1fda85f3d97aa209ebd1e426bd67aa0b43806382df0fc480e786044a8b2949",
+    "qrSha256": "d878dca7dbf80f78c4aeb96c5de9ef95b3013bc1c340766655287c752c88af63"
+  },
+  "raymond-tam": {
+    "name": "Raymond Tam",
+    "card": "/agents/contact-cards/2026-09/raymond-tam.jpg",
+    "qr": "/agents/contact-cards/2026-09/raymond-tam-qr.png",
+    "whatsappUrl": "https://wa.link/o62nfe",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "8172086df1045b29fbe62a5ff0db05ac45d657b91d8cb519f56b9087ef2131e3",
+    "qrSha256": "dfe53ae772ef33ba5402864f42122243545dc75dbe9e887da79444372ab5d729"
+  },
+  "ruby-lee": {
+    "name": "Ruby Lee",
+    "card": "/agents/contact-cards/2026-09/ruby-lee.jpg",
+    "qr": "/agents/contact-cards/2026-09/ruby-lee-qr.png",
+    "whatsappUrl": "https://wa.link/a12ryl",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "f1f77656ea11cc76fbcd0824db29f8b1c1696370955b697eb43e4623e6055742",
+    "qrSha256": "f15d383bb019d787183edbd46a70c3740e3b4390075a9d902e99cf1e5792f9c6"
+  },
+  "sam-lee": {
+    "name": "Sam Lee",
+    "card": "/agents/contact-cards/2026-09/sam-lee.jpg",
+    "qr": "/agents/contact-cards/2026-09/sam-lee-qr.png",
+    "whatsappUrl": "https://wa.link/w36a8g",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "be948ac2b285fd16412ee5e71e745a09900ac8fe75a4fe62dc401bb5919da17a",
+    "qrSha256": "36ca88d16e68c41f4044240e33b3c232db35c7809f46f51265a94e32c001fac3"
+  },
+  "shadow-cheung": {
+    "name": "Shadow Cheung",
+    "card": "/agents/contact-cards/2026-09/shadow-cheung.jpg",
+    "qr": "/agents/contact-cards/2026-09/shadow-cheung-qr.png",
+    "whatsappUrl": "https://wa.link/6z830j",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "db63468932b34b8e0f2c5ec1d24c7f32b732790c5563551b102c17bac4d28e2a",
+    "qrSha256": "e66aa04102e5789194814210042b921bdf93b36e5ba23860bf4466e3675bc7c3"
+  },
+  "terence-tang": {
+    "name": "Terence Tang",
+    "card": "/agents/contact-cards/2026-09/terence-tang.jpg",
+    "qr": "/agents/contact-cards/2026-09/terence-tang-qr.png",
+    "whatsappUrl": "https://wa.link/lvzk7f",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "36d91cd97f7e60b77cc153f61ab245bb72ae42dd0232ce011956d31323f47163",
+    "qrSha256": "22367866bfcf7e2c63e009ff4970da0cfa9aee20dfd052484bb4020d27307b96"
+  },
+  "terry-chan": {
+    "name": "Terry Chan",
+    "card": "/agents/contact-cards/2026-09/terry-chan.jpg",
+    "qr": "/agents/contact-cards/2026-09/terry-chan-qr.png",
+    "whatsappUrl": "https://wa.link/4rbtyl",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "accedc0d12afe52284861cb53dab9807879ace1c0d0adfe28785e27adcf53aa5",
+    "qrSha256": "a6cb5f2e002f3549b1735d18e6c69aa4d6a3543a29ecc6bf5926c71bb4db559e"
+  },
+  "tommy-yiu": {
+    "name": "Tommy Yiu",
+    "card": "/agents/contact-cards/2026-09/tommy-yiu.jpg",
+    "qr": "/agents/contact-cards/2026-09/tommy-yiu-qr.png",
+    "whatsappUrl": "https://wa.link/jn7qaz",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "025d2c8955842a993de710f23321f770daef7eea722a7d228434e05c779f3ef3",
+    "qrSha256": "b54b90adb953929ec6cb6600efdcd51662c8ac5f9f289a6cec3011ba24e85a02"
+  },
+  "vincy-lam": {
+    "name": "Vincy Lam",
+    "card": "/agents/contact-cards/2026-09/vincy-lam.jpg",
+    "qr": "/agents/contact-cards/2026-09/vincy-lam-qr.png",
+    "whatsappUrl": "https://wa.link/jikuqz",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "20827d1e128e5510f5b02c68cb56ef992e4ceebc9e5558d8361ac95d0a98f4af",
+    "qrSha256": "abc8cb62731b2f1eb22c2044243f4279e06336d159dc7027601080ba6f71e225"
+  },
+  "wendy-lu": {
+    "name": "Wendy Lu",
+    "card": "/agents/contact-cards/2026-09/wendy-lu.jpg",
+    "qr": "/agents/contact-cards/2026-09/wendy-lu-qr.png",
+    "whatsappUrl": "https://wa.link/tqu5c3",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "71595a72cc92c665dd272a26a529bd332f08da8b7d218cb29be079b7f01c8595",
+    "qrSha256": "910ad88f883732732339448c37019b114c0df29eb1872579ed6569def5019ed5"
+  },
+  "winnie-cheung": {
+    "name": "Winnie Cheung",
+    "card": "/agents/contact-cards/2026-09/winnie-cheung.jpg",
+    "qr": "/agents/contact-cards/2026-09/winnie-cheung-qr.png",
+    "whatsappUrl": "https://wa.link/rz0dfz",
+    "width": 1064,
+    "height": 639,
+    "cardSha256": "e28e3aebcec3afacc42ade4885d024e2bfbb58b8967eff14c673edc9d191b1e8",
+    "qrSha256": "0e5707f6b36f984b2416fa2695bb33c2e4f19c80abd4fa91217e41fa647919a7"
+  }
+}
