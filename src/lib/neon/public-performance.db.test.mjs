@@ -243,6 +243,12 @@ test(
       const completed = await server.fetchPropertyByListingNo({ listingNo: "C4" });
       assert.equal(completed.floor, "中");
       assert.equal(completed.saleable_area, 515);
+      await query(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,status,floor,saleable_area,created_at)
+        VALUES ('conflict4','conflict4','C4','sale','inactive','高',517,'2025-01-01')`);
+      await query(`INSERT INTO property_public_members VALUES ('conflict4','C4')`);
+      const disputed = await server.fetchPropertyByListingNo({ listingNo: "C4" });
+      assert.equal(disputed.floor, null, "do not invent a fallback from conflicting floors");
+      assert.equal(disputed.saleable_area, null, "do not choose the maximum conflicting area");
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     }

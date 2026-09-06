@@ -77,6 +77,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260906021000_estate_editorial_backfill.sql",
   "20260906022000_estate_verified_details.sql",
   "20260906040000_property_public_identity.sql",
+  "20260906090000_canonical_property_identity.sql",
 ]);
 
 /**
