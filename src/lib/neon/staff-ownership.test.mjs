@@ -54,9 +54,8 @@ test("historical columns and ownership columns do not overlap", () => {
   for (const historical of STAFF_HISTORICAL_COLUMNS) {
     assert.equal(owned.has(historical), false, `${historical} cannot be both`);
   }
-  // Thirteen distinct names across nineteen FK occurrences -- several tables
-  // share a name such as `created_by`.
-  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 13);
+  assert.ok(STAFF_HISTORICAL_COLUMNS.includes("updated_by"));
+  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 14);
 });
 
 test("count SQL pairs each table with its own column, not a copy-pasted one", () => {

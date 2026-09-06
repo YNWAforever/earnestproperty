@@ -1,543 +1,291 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ExternalLink, Pencil, Plus } from "lucide-react";
-import { toast } from "sonner";
-
-import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
-import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
-import { AdminError, AdminShell } from "@/components/admin/AdminShell";
-import { AdminToolbar } from "@/components/admin/AdminToolbar";
-import { Badge } from "@/components/ui/badge";
+import { AdminShell, AdminError } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { fetchAdminAgents, fetchAdminEstateOptions } from "@/lib/neon/admin-data";
+import { fetchAdminPropertyGroups } from "@/lib/neon/admin-properties";
+import type { PropertyGroupFilters, PropertyGroupPage } from "@/lib/neon/admin-properties.types";
 import {
-  fetchAdminAgents,
-  fetchAdminEstateOptions,
-  fetchAdminListingsFiltered,
-  updateAdminPropertyStatus,
-} from "@/lib/neon/admin-data";
-import type {
-  AdminAgentRow,
-  AdminListingFiltersInput,
-  AdminListingRow,
-  AdminPropertyInput,
-} from "@/lib/neon/admin-data.types";
+  neutralPropertyTitle,
+  offeringPrice,
+  propertyStatusLabels,
+} from "@/lib/admin/property-management-ui";
 
-type Estate = { id: string; name_zh: string; district_slug: string };
-type ListingStatus = AdminPropertyInput["status"];
-type ListingFilters = {
-  q: string;
-  status: string;
-  deal_type: "all" | "sale" | "rent";
-  estate_id: string;
-  featured: "all" | "yes" | "no";
-  agent_id: string;
-  limit: number;
-};
-
-const LISTING_PAGE_SIZE = 80;
-
-const defaultFilters: ListingFilters = {
-  q: "",
-  status: "all",
-  deal_type: "all",
-  estate_id: "all",
-  featured: "all",
-  agent_id: "all",
-  limit: LISTING_PAGE_SIZE,
-};
-
-const statusLabels: Record<string, string> = {
-  all: "全部狀態",
-  draft: "草稿",
-  active: "公開",
-  sold: "已售",
-  rented: "已租",
-  offline: "下架",
-};
-
-// Filters used to live in local useState, so a reload or Back from an edit page
-// reset the agent's whole working view, and no filtered list was shareable.
-// Only non-default values are written, so a plain /admin/listings stays clean.
-function parseListingSearch(search: Record<string, unknown>): Partial<ListingFilters> {
-  const result: Partial<ListingFilters> = {};
-  for (const key of ["status", "deal_type", "estate_id", "featured", "agent_id"] as const) {
-    const value = search[key];
-    if (typeof value === "string" && value !== defaultFilters[key]) {
-      result[key] = value as never;
-    }
+function parseListingSearch(search: Record<string, unknown>): PropertyGroupFilters {
+  const result: PropertyGroupFilters = {};
+  if (typeof search.q === "string" && search.q.trim()) result.q = search.q.trim().slice(0, 200);
+  if (["all", "active", "draft", "offline", "sold", "rented"].includes(String(search.status)))
+    result.status = search.status as PropertyGroupFilters["status"];
+  const deal = search.deal ?? search.deal_type;
+  if (deal === "sale" || deal === "rent") result.deal = deal;
+  for (const [key, legacy] of [
+    ["estateId", "estate_id"],
+    ["agentId", "agent_id"],
+  ] as const) {
+    const value = search[key] ?? search[legacy];
+    if (typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value)) result[key] = value;
   }
-  if (typeof search.q === "string" && search.q.trim()) result.q = search.q;
-  const limit = Number(search.limit);
-  if (Number.isFinite(limit) && limit > LISTING_PAGE_SIZE) {
-    result.limit = Math.min(limit, 200);
-  }
+  const page = Number(search.page);
+  if (Number.isInteger(page) && page > 1) result.page = page;
   return result;
 }
-
 export const Route = createFileRoute("/admin/listings")({
   validateSearch: parseListingSearch,
   head: () => ({
-    meta: [{ title: "放盤｜Earnest Admin" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "物業管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: AdminListings,
 });
-
 function AdminListings() {
   const { user } = useNeonAuth();
-  const [rows, setRows] = useState<AdminListingRow[] | null>(null);
-  const [estates, setEstates] = useState<Estate[]>([]);
-  const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const filters: ListingFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
-
-  function setFilters(updater: (current: ListingFilters) => ListingFilters, replace = false) {
+  const [data, setData] = useState<PropertyGroupPage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const sequence = useRef(0);
+  const [query, setQuery] = useState(search.q ?? "");
+  const [estates, setEstates] = useState<{ id: string; name_zh: string }[]>([]);
+  const [agents, setAgents] = useState<{ id: string; name: string | null; email: string | null }[]>(
+    [],
+  );
+  function filter(patch: Partial<PropertyGroupFilters>) {
     void navigate({
-      search: parseListingSearch(updater(filters)),
-      replace,
+      search: parseListingSearch({ ...search, ...patch, page: 1 }),
+      replace: true,
       resetScroll: false,
     });
   }
-  const [error, setError] = useState<string | null>(null);
-  const [loadingRows, setLoadingRows] = useState(false);
-  const [mutatingId, setMutatingId] = useState<string | null>(null);
-  // The search box types into this and pushes to `filters.q` debounced, so a
-  // keystroke does not fire a server round-trip.
-  const [queryDraft, setQueryDraft] = useState(filters.q);
-  const [pendingStatusChange, setPendingStatusChange] = useState<{
-    listing: AdminListingRow;
-    status: ListingStatus;
-    successLabel: string;
-  } | null>(null);
-  const requestIdRef = useRef(0);
-
-  const refreshListings = useCallback(async () => {
-    if (!user) return;
-
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    setLoadingRows(true);
-    try {
-      const data = await fetchAdminListingsFiltered({ data: filters as AdminListingFiltersInput });
-      if (requestId !== requestIdRef.current) return;
-      setRows(data as AdminListingRow[]);
-      setError(null);
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return;
-      setError(errorText(err));
-    } finally {
-      if (requestId === requestIdRef.current) setLoadingRows(false);
-    }
-  }, [filters, user]);
-
   useEffect(() => {
-    if (!user) return;
-    Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
-      .then(([estateData, agentData]) => {
-        setEstates(estateData as Estate[]);
-        setAgents(agentData as AdminAgentRow[]);
-      })
-      .catch((err) => setError(errorText(err)));
-  }, [user]);
-
+    setQuery(search.q ?? "");
+  }, [search.q]);
   useEffect(() => {
-    refreshListings();
-  }, [refreshListings]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (filters.q === queryDraft.trim()) return;
-      setFilters(
-        (current) => ({ ...current, q: queryDraft.trim(), limit: LISTING_PAGE_SIZE }),
-        true,
-      );
+    const timer = setTimeout(() => {
+      if (query.trim() !== (search.q ?? "")) filter({ q: query });
     }, 300);
-    return () => window.clearTimeout(timer);
-    // setFilters is redeclared each render; depending on it would re-arm the
-    // timer continuously.
+    return () => clearTimeout(timer);
+    // URL changes are deliberately debounced only for the query.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, filters.q]);
-
+  }, [query, search.q]);
   useEffect(() => {
-    setQueryDraft(filters.q);
-  }, [filters.q]);
-
-  function setFilter<K extends keyof ListingFilters>(key: K, value: ListingFilters[K]) {
-    // Any filter change resets paging: keeping an expanded limit across a filter
-    // switch would silently show a different slice than the count implies.
-    setFilters((current) => ({ ...current, [key]: value, limit: LISTING_PAGE_SIZE }), true);
-  }
-
-  async function handleStatusChange() {
-    if (!pendingStatusChange) return;
-    const { listing, status, successLabel } = pendingStatusChange;
-    setMutatingId(`${listing.id}:${status}`);
-    try {
-      const result = await updateAdminPropertyStatus({ data: { id: listing.id, status } });
-      assertNoMutationError(result);
-      await refreshListings();
-      setPendingStatusChange(null);
-      toast.success(`${listing.listing_no} ${successLabel}`);
-    } catch (err) {
-      toast.error(errorText(err));
-    } finally {
-      setMutatingId(null);
-    }
-  }
-
+    if (!user) return;
+    let cancelled = false;
+    Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
+      .then(([e, a]) => {
+        if (!cancelled) {
+          setEstates(e);
+          setAgents(a);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("篩選選項未能載入，請重新整理。");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    const request = ++sequence.current;
+    setBusy(true);
+    setData(null);
+    setError(null);
+    fetchAdminPropertyGroups({ data: search })
+      .then((result) => {
+        if (sequence.current === request) setData(result);
+      })
+      .catch((e) => {
+        if (sequence.current === request) setError(e instanceof Error ? e.message : "未能載入物業");
+      })
+      .finally(() => {
+        if (sequence.current === request) setBusy(false);
+      });
+    return () => {
+      sequence.current = request + 1;
+    };
+  }, [user, search, retry]);
+  const selectClass = "h-11 min-w-0 rounded-md border bg-background px-3 text-sm";
   return (
-    <AdminShell title="樓盤管理" description="管理售盤、租盤、相片、代理及發布狀態。">
-      <AdminToolbar
-        filters={
-          <>
-            {/* The server has supported `q` end to end all along; the page just
-                never offered a box, so a listing outside the 80-row window was
-                unreachable and read as deleted. */}
-            <Input
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-              placeholder="搜尋編號、標題或屋苑"
-              aria-label="搜尋放盤"
-              className="h-11 w-full sm:w-56 lg:h-9"
-            />
-            <Select value={filters.status} onValueChange={(value) => setFilter("status", value)}>
-              <SelectTrigger className="h-11 w-[8.5rem] lg:h-9" aria-label="狀態">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {["all", "draft", "active", "sold", "rented", "offline"].map((status) => (
-                  <SelectItem key={status} value={status}>
-                    {statusLabels[status]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.deal_type}
-              onValueChange={(value) =>
-                setFilter("deal_type", value as ListingFilters["deal_type"])
-              }
-            >
-              <SelectTrigger className="h-11 w-[7rem] lg:h-9" aria-label="類型">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部類型</SelectItem>
-                <SelectItem value="sale">售盤</SelectItem>
-                <SelectItem value="rent">租盤</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.estate_id}
-              onValueChange={(value) => setFilter("estate_id", value)}
-            >
-              <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="屋苑">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部屋苑</SelectItem>
-                {estates.map((estate) => (
-                  <SelectItem key={estate.id} value={estate.id}>
-                    {estate.name_zh}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.featured}
-              onValueChange={(value) => setFilter("featured", value as ListingFilters["featured"])}
-            >
-              <SelectTrigger className="h-11 w-[8rem] lg:h-9" aria-label="精選">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部精選</SelectItem>
-                <SelectItem value="yes">只看精選</SelectItem>
-                <SelectItem value="no">非精選</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={filters.agent_id}
-              onValueChange={(value) => setFilter("agent_id", value)}
-            >
-              <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="代理">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部代理</SelectItem>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name ?? agent.email ?? "未命名代理"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-11 lg:h-9"
-              onClick={() => setFilters(() => defaultFilters, true)}
-            >
-              重設
-            </Button>
-          </>
-        }
-        actions={
-          <Button asChild size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/listings/new">
-              <Plus className="mr-2 h-4 w-4" />
-              新增放盤
-            </Link>
-          </Button>
-        }
-      />
-
-      {error ? <AdminError message={error} /> : null}
-      {loadingRows && !rows ? <Skeleton className="h-72 w-full" /> : null}
-      {rows && rows.length === 0 ? (
-        <AdminEmptyState
-          title="未有符合條件的放盤"
-          description="調整篩選或新增一個售盤 / 租盤。"
-          action={
-            <Button asChild>
-              <Link to="/admin/listings/new">新增放盤</Link>
-            </Button>
-          }
+    <AdminShell
+      title="物業管理"
+      description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
+    >
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Input
+          aria-label="搜尋物業"
+          placeholder="搜尋樓編號、舊放盤編號或屋苑"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="h-11 w-full sm:w-72"
         />
-      ) : null}
-      {rows && rows.length > 0 ? (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table className="min-w-[920px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[28%]">放盤</TableHead>
-                    <TableHead>類型</TableHead>
-                    <TableHead>屋苑</TableHead>
-                    <TableHead>代理</TableHead>
-                    <TableHead className="text-right">價格</TableHead>
-                    <TableHead>狀態</TableHead>
-                    <TableHead className="text-right">操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((listing) => (
-                    <ListingRow
-                      key={listing.id}
-                      listing={listing}
-                      mutatingId={mutatingId}
-                      onStatusChange={(listing, status, successLabel) =>
-                        setPendingStatusChange({ listing, status, successLabel })
-                      }
-                    />
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {rows && rows.length > 0 ? (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          {/* Showed at most 80 of ~398 rows with no count and no pagination, so
-              a listing further down the list read as deleted. */}
-          <p className="text-sm text-muted-foreground">
-            顯示 {rows.length} 筆
-            {rows.length >= filters.limit ? `（上限 ${filters.limit} 筆，可能還有更多）` : ""}
-          </p>
-          {rows.length >= filters.limit ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loadingRows}
-              onClick={() =>
-                setFilters(
-                  (current) => ({
-                    ...current,
-                    limit: Math.min(current.limit + LISTING_PAGE_SIZE, 200),
-                  }),
-                  true,
-                )
-              }
-            >
-              {loadingRows ? "載入中…" : "載入更多"}
-            </Button>
-          ) : null}
+        <select
+          className={selectClass}
+          aria-label="狀態"
+          value={search.status ?? "active"}
+          onChange={(e) => filter({ status: e.target.value as PropertyGroupFilters["status"] })}
+        >
+          <option value="active">目前公開</option>
+          <option value="all">全部（含已結束）</option>
+          {["draft", "offline", "sold", "rented"].map((s) => (
+            <option key={s} value={s}>
+              {propertyStatusLabels[s]}
+            </option>
+          ))}
+        </select>
+        <select
+          className={selectClass}
+          aria-label="放盤類型"
+          value={search.deal ?? "all"}
+          onChange={(e) => filter({ deal: e.target.value as "all" | "sale" | "rent" })}
+        >
+          <option value="all">出售及出租</option>
+          <option value="sale">出售</option>
+          <option value="rent">出租</option>
+        </select>
+        <select
+          className={selectClass}
+          aria-label="屋苑"
+          value={search.estateId ?? ""}
+          onChange={(e) => filter({ estateId: e.target.value || undefined })}
+        >
+          <option value="">全部屋苑</option>
+          {estates.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.name_zh}
+            </option>
+          ))}
+        </select>
+        <select
+          className={selectClass}
+          aria-label="代理"
+          value={search.agentId ?? ""}
+          onChange={(e) => filter({ agentId: e.target.value || undefined })}
+        >
+          <option value="">全部代理</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name ?? a.email ?? "未命名代理"}
+            </option>
+          ))}
+        </select>
+        <Button variant="ghost" onClick={() => void navigate({ search: {}, replace: true })}>
+          重設
+        </Button>
+        <Button asChild className="sm:ml-auto">
+          <Link to="/admin/listings/new">新增物業／放盤</Link>
+        </Button>
+      </div>
+      {error ? (
+        <div className="mb-4">
+          <AdminError message={error} />
+          <Button variant="outline" onClick={() => setRetry((v) => v + 1)}>
+            重新載入
+          </Button>
         </div>
       ) : null}
-
-      {/* 下架 and 已售／已租 used to fire on one click, sitting one button away
-          from 編輯 -- a mis-tap on a tablet pulled a live listing off the public
-          site with only a green toast as feedback and no undo control. */}
-      <AdminConfirmDialog
-        open={pendingStatusChange !== null}
-        title={
-          pendingStatusChange?.status === "offline" ? "確認下架此放盤？" : "確認更新放盤狀態？"
-        }
-        description={
-          pendingStatusChange?.status === "offline"
-            ? "下架後此放盤會即時從公開網站移除。你可以之後在編輯頁重新設為公開。"
-            : "標記為已售／已租後，此放盤會從公開搜尋結果移除。"
-        }
-        confirmLabel="確認"
-        confirmVariant="destructive"
-        isPending={mutatingId !== null}
-        onOpenChange={(open) => {
-          if (!open) setPendingStatusChange(null);
-        }}
-        onConfirm={() => void handleStatusChange()}
-      >
-        {pendingStatusChange ? (
-          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
-            <div className="flex flex-wrap justify-between gap-2">
-              <dt className="text-muted-foreground">放盤編號</dt>
-              <dd className="font-medium">{pendingStatusChange.listing.listing_no}</dd>
-            </div>
-            <div className="flex flex-wrap justify-between gap-2">
-              <dt className="text-muted-foreground">標題</dt>
-              <dd className="max-w-[60%] truncate">{pendingStatusChange.listing.title_zh}</dd>
-            </div>
-            <div className="flex flex-wrap justify-between gap-2">
-              <dt className="text-muted-foreground">新狀態</dt>
-              <dd className="font-semibold">
-                {statusLabels[pendingStatusChange.status] ?? pendingStatusChange.status}
-              </dd>
-            </div>
-          </dl>
-        ) : null}
-      </AdminConfirmDialog>
+      {busy ? (
+        <p role="status" className="p-8 text-center">
+          正在載入物業…
+        </p>
+      ) : null}
+      {data ? (
+        <>
+          <p className="mb-3 text-sm text-muted-foreground">
+            共 {data.total} 個物業 · 同一物業的租售只計一次
+          </p>
+          <div className="space-y-3">
+            {data.rows.map((row) => (
+              <article
+                key={row.propertyNo}
+                className="grid gap-4 rounded-xl border bg-card p-4 md:grid-cols-[minmax(0,2fr)_1fr_1fr_auto] md:items-center"
+              >
+                <div className="flex min-w-0 gap-3">
+                  {row.image ? (
+                    <img src={row.image} alt="" className="h-20 w-24 rounded-md object-cover" />
+                  ) : (
+                    <div className="flex h-20 w-24 shrink-0 items-center justify-center rounded-md bg-muted text-xs">
+                      暫無相片
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <Link
+                      className="font-semibold hover:underline"
+                      to="/admin/listings/$id"
+                      params={{ id: row.propertyNo }}
+                    >
+                      {neutralPropertyTitle(row.title)}
+                    </Link>
+                    <p className="break-all text-sm text-muted-foreground">#{row.propertyNo}</p>
+                    <p className="text-sm">
+                      {row.estateName ?? "未填屋苑"} ·{" "}
+                      {row.saleableArea === null ? "未填實用面積" : `${row.saleableArea} 實呎`}
+                    </p>
+                    {row.reviewRequired || row.unlinked ? (
+                      <p className="text-xs text-amber-700">
+                        {row.unlinked ? "編號待核實" : "資料有差異，待核實"}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+                {(["sale", "rent"] as const).map((deal) => (
+                  <div key={deal} className="rounded-lg bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      {deal === "sale" ? "出售" : "出租"} ·{" "}
+                      {row.offerings[deal]
+                        ? (propertyStatusLabels[row.offerings[deal]!.status] ??
+                          row.offerings[deal]!.status)
+                        : "未開放"}
+                    </p>
+                    <p className="font-semibold tabular-nums">
+                      {offeringPrice(row.offerings[deal])}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {row.offerings[deal]?.agentName ?? "—"}
+                    </p>
+                  </div>
+                ))}
+                <div className="flex gap-2 md:flex-col">
+                  <Button asChild variant="outline">
+                    <Link to="/admin/listings/$id" params={{ id: row.propertyNo }}>
+                      管理物業
+                    </Link>
+                  </Button>
+                  <Button asChild variant="ghost">
+                    <Link to="/property/$listingNo" params={{ listingNo: row.propertyNo }}>
+                      公開預覽
+                    </Link>
+                  </Button>
+                </div>
+              </article>
+            ))}
+          </div>
+          {data.rows.length === 0 ? (
+            <p className="rounded-lg border p-8 text-center">沒有符合條件的物業，請調整篩選。</p>
+          ) : null}
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <Button
+              variant="outline"
+              disabled={data.page <= 1 || busy}
+              onClick={() => void navigate({ search: { ...search, page: data.page - 1 } })}
+            >
+              上一頁
+            </Button>
+            <span className="text-sm">
+              第 {data.page}／{Math.max(1, Math.ceil(data.total / data.pageSize))} 頁
+            </span>
+            <Button
+              variant="outline"
+              disabled={data.page * data.pageSize >= data.total || busy}
+              onClick={() => void navigate({ search: { ...search, page: data.page + 1 } })}
+            >
+              下一頁
+            </Button>
+          </div>
+        </>
+      ) : null}
     </AdminShell>
   );
-}
-
-function ListingRow({
-  listing,
-  mutatingId,
-  onStatusChange,
-}: {
-  listing: AdminListingRow;
-  mutatingId: string | null;
-  onStatusChange: (listing: AdminListingRow, status: ListingStatus, successLabel: string) => void;
-}) {
-  const terminalStatus: ListingStatus = listing.deal_type === "rent" ? "rented" : "sold";
-  const terminalLabel = listing.deal_type === "rent" ? "已租" : "已售";
-  const offlineMutation = `${listing.id}:offline`;
-  const terminalMutation = `${listing.id}:${terminalStatus}`;
-  const rowMutating = mutatingId?.startsWith(`${listing.id}:`) ?? false;
-
-  return (
-    <TableRow>
-      <TableCell>
-        <Link
-          to="/admin/listings/$id"
-          params={{ id: listing.id }}
-          className="line-clamp-2 font-medium hover:underline"
-        >
-          {listing.title_zh}
-        </Link>
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-          <span>#{listing.listing_no}</span>
-          {listing.featured ? <Badge variant="outline">精選</Badge> : null}
-        </div>
-      </TableCell>
-      <TableCell>
-        <Badge variant={listing.deal_type === "rent" ? "secondary" : "default"}>
-          {listing.deal_type === "rent" ? "租" : "售"}
-        </Badge>
-      </TableCell>
-      <TableCell className="max-w-[11rem] truncate">{listing.estate_name_zh ?? "—"}</TableCell>
-      <TableCell className="max-w-[10rem] truncate">{listing.agent_name ?? "—"}</TableCell>
-      <TableCell className="whitespace-nowrap text-right">{formatPrice(listing)}</TableCell>
-      <TableCell>
-        <Badge variant={listing.status === "active" ? "default" : "outline"}>
-          {statusLabels[listing.status] ?? listing.status}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        <div className="flex flex-wrap justify-end gap-1.5">
-          <Button asChild variant="outline" size="sm" className="h-11 px-2 lg:h-8">
-            <Link to="/admin/listings/$id" params={{ id: listing.id }}>
-              <Pencil className="mr-1 h-3.5 w-3.5" />
-              編輯
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm" className="h-11 px-2 lg:h-8">
-            <Link to="/property/$listingNo" params={{ listingNo: listing.listing_no }}>
-              <ExternalLink className="mr-1 h-3.5 w-3.5" />
-              公開預覽
-            </Link>
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-11 px-2 lg:h-8"
-            disabled={listing.status === "offline" || rowMutating || mutatingId === offlineMutation}
-            onClick={() => onStatusChange(listing, "offline", "已下架")}
-          >
-            下架
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-11 px-2 lg:h-8"
-            disabled={
-              listing.status === terminalStatus || rowMutating || mutatingId === terminalMutation
-            }
-            onClick={() => onStatusChange(listing, terminalStatus, `已標記為${terminalLabel}`)}
-          >
-            {terminalLabel}
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-function formatPrice(listing: AdminListingRow) {
-  if (listing.deal_type === "rent") {
-    return listing.rent ? `$${Number(listing.rent).toLocaleString()}` : "—";
-  }
-  return listing.price ? `$${(Number(listing.price) / 1_000_000).toFixed(2)}M` : "—";
-}
-
-function assertNoMutationError(result: unknown) {
-  if (!result || typeof result !== "object") return;
-  const maybeError = (result as { error?: unknown }).error;
-  if (maybeError) throw new Error(String(maybeError));
-  if ((result as { ok?: unknown }).ok === false) throw new Error("更新失敗");
-}
-
-function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
 }

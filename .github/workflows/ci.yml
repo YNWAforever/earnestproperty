@@ -143,6 +143,7 @@ jobs:
       - run: npm run test:team
       - run: npm run test:property-experience
       - run: npm run test:content-copilot
+      - run: npm run test:admin-properties
       - run: npm run test:cms
       - run: npm run test:youtube-sync
       - run: npm run test:migration

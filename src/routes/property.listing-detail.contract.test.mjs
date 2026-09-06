@@ -506,3 +506,54 @@ test("head canonical points to the unit even when representative offering change
   });
   assert.equal(result.links[0].href, "https://example.test/property/B054645");
 });
+
+test("selected sale and rent retain shared page copy and separate sanitized notes", async () => {
+  const start = routeSource.indexOf("  const selectedDeal =");
+  const end = routeSource.indexOf("  const safeAddress =", start);
+  assert.ok(start >= 0 && end > start);
+  const formatSource = (
+    await readFile(new URL("../lib/format.ts", import.meta.url), "utf8")
+  ).replace(/export /g, "");
+  const { project } = transpileAndRun(
+    `${formatSource}\n${publicHelperSource}\nfunction project(baseProperty,search){${routeSource.slice(start, end)}\nreturn {property,safeDescription,safeOfferingDescription:typeof safeOfferingDescription==='undefined'?null:safeOfferingDescription};}\nexports.project=project;`,
+  );
+  const sale = {
+    id: "sale",
+    listing_no: "P-S",
+    deal_type: "sale",
+    price: 6700000,
+    rent: null,
+    status: "active",
+    description: "Sale A",
+  };
+  const rent = {
+    id: "rent",
+    listing_no: "P-R",
+    deal_type: "rent",
+    price: null,
+    rent: 18000,
+    status: "active",
+    description: '"Rent B"',
+  };
+  const base = { ...sale, title_zh: "Property", description: "Shared C", offerings: [sale, rent] };
+  for (const deal of ["sale", "rent"]) {
+    const view = project(base, { deal });
+    assert.equal(view.safeDescription, "Shared C");
+    assert.equal(view.property.id, deal, "inquiry retains selected offering row");
+    assert.equal(view.safeOfferingDescription, deal === "sale" ? "Sale A" : "Rent B");
+  }
+  assert.equal(project({ ...base, description: null }, { deal: "rent" }).safeDescription, null);
+  assert.equal(
+    project({ ...base, description: "Sale A" }, { deal: "sale" }).safeOfferingDescription,
+    null,
+    "matching note is not duplicated",
+  );
+  assert.equal(
+    project({ ...base, offerings: [{ ...sale, description: "NaN" }] }, { deal: "sale" })
+      .safeOfferingDescription,
+    null,
+    "malformed note is suppressed",
+  );
+  assert.match(routeSource, /safeOfferingDescription\s*&&/);
+  assert.match(routeSource, /\{safeOfferingDescription\}/);
+});

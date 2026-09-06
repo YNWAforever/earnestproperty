@@ -406,7 +406,7 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   }
 
   const expectations = [
-    ["src/routes/admin.listings.tsx", ["updateAdminPropertyStatus", "fetchAdminAgents"]],
+    ["src/routes/admin.listings.tsx", ["fetchAdminPropertyGroups", "fetchAdminAgents"]],
     [
       "src/routes/admin.leads.tsx",
       ["fetchAdminLead", "updateAdminLead", "createAdminLeadActivity"],
@@ -426,13 +426,11 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   }
 
   for (const text of [
-    "fetchAdminListingsFiltered",
-    "updateAdminPropertyStatus",
+    "fetchAdminPropertyGroups",
     "fetchAdminAgents",
     "公開預覽",
-    "下架",
-    "已售",
-    "已租",
+    "propertyStatusLabels",
+    "管理物業",
   ]) {
     assert.match(read("src/routes/admin.listings.tsx"), new RegExp(text));
   }
@@ -599,13 +597,15 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   const listingEditRoute = read("src/routes/admin.listings_.$id.tsx");
   assert.match(listingEditRoute, /let cancelled = false/);
   assert.match(listingEditRoute, /setProperty\(null\)/);
-  assert.match(listingEditRoute, /if \(cancelled\) return/);
+  assert.match(listingEditRoute, /if \(!cancelled\)/);
   assert.match(listingEditRoute, /cancelled = true/);
 
   const listingRoute = read("src/routes/admin.listings.tsx");
   assert.match(listingRoute, /useRef/);
-  assert.match(listingRoute, /requestIdRef/);
-  assert.match(listingRoute, /overflow-x-auto/);
+  assert.match(listingRoute, /sequence.current === request/);
+  assert.match(listingRoute, /md:grid-cols/);
+  assert.match(listingRoute, /data.total/);
+  assert.match(listingEditRoute, /AdminPropertyWorkspace/);
 });
 
 test("shared admin workflow components exist", () => {
