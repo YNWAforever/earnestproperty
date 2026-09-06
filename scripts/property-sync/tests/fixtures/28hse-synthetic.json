@@ -1,0 +1,29 @@
+{
+  "fixture_label": "SYNTHETIC - NOT LIVE SOURCE EVIDENCE",
+  "config": {
+    "max_pages": 3
+  },
+  "responses": {
+    "https://www.28hse.com/robots.txt": {
+      "html": "User-agent: *\nAllow: /"
+    },
+    "https://www.28hse.com/agent/540?buyRent=buy&page=1&plan_id=540&propertyDoSearchVersion=2.0": {
+      "html": "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放售樓盤</p><a href=\"/buy/apartment/property-100\">晉誠地產 Synthetic title</a>"
+    },
+    "https://www.28hse.com/agent/540?buyRent=buy&page=2&plan_id=540&propertyDoSearchVersion=2.0": {
+      "html": "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放售樓盤</p><p>沒有找到任何資料</p>"
+    },
+    "https://www.28hse.com/buy/apartment/property-100": {
+      "html": "<main data-listing-detail><table><tr><td>售價</td><td>$538萬</td></tr><tr><td>地址</td><td>測試區</td></tr><tr><td>間隔</td><td>開放式</td></tr></table></main>"
+    },
+    "https://www.28hse.com/agent/540?buyRent=rent&page=1&plan_id=540&propertyDoSearchVersion=2.0": {
+      "html": "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放租樓盤</p><a href=\"/rent/apartment/property-200\">晉誠地產 Synthetic title</a>"
+    },
+    "https://www.28hse.com/agent/540?buyRent=rent&page=2&plan_id=540&propertyDoSearchVersion=2.0": {
+      "html": "<h1>晉誠地產</h1><p>C-018613</p><p>共有 1 個放租樓盤</p><p>沒有找到任何資料</p>"
+    },
+    "https://www.28hse.com/rent/apartment/property-200": {
+      "html": "<main data-listing-detail><table><tr><td>租金</td><td>$538萬</td></tr><tr><td>地址</td><td>測試區</td></tr><tr><td>間隔</td><td>開放式</td></tr></table></main>"
+    }
+  }
+}

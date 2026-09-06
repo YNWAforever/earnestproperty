@@ -1,0 +1,62 @@
+{
+  "fixture_label": "SYNTHETIC - NOT LIVE SOURCE EVIDENCE",
+  "config": {
+    "origin": "https://www.property.hk",
+    "max_pages": 3,
+    "id_scope": "global",
+    "id_scope_verified": true,
+    "company_name": "SYNTHETIC COMPANY",
+    "company_license": "SYNTHETIC-LICENSE",
+    "allowed_paths": [
+      "/(EPW|EPS|EPT)",
+      "/detail/[0-9]+"
+    ],
+    "branch_urls": {
+      "EPW": "https://www.property.hk/EPW?page={page}",
+      "EPS": "https://www.property.hk/EPS?page={page}",
+      "EPT": "https://www.property.hk/EPT?page={page}"
+    },
+    "deal_type": "sale",
+    "selectors": {
+      "container": "main",
+      "card": "article",
+      "id": ".id",
+      "link": "a",
+      "title": "a",
+      "empty": ".empty",
+      "detail_container": "main",
+      "fields": {
+        "price": ".price",
+        "agent_name": ".agent",
+        "agent_phone": ".phone",
+        "agent_license": ".license"
+      }
+    }
+  },
+  "responses": {
+    "https://www.property.hk/robots.txt": {
+      "html": "User-agent: *\nAllow: /"
+    },
+    "https://www.property.hk/detail/100": {
+      "html": "<main><p class=\"price\">538萬</p><p class=\"agent\">Synthetic Agent</p><p class=\"phone\">+852 00000000</p><p class=\"license\">TEST-1</p></main>"
+    },
+    "https://www.property.hk/EPW?page=1": {
+      "html": "<main>SYNTHETIC COMPANY SYNTHETIC-LICENSE<article><span class=\"id\">100</span><a href=\"/detail/100\">Synthetic title</a></article></main>"
+    },
+    "https://www.property.hk/EPW?page=2": {
+      "html": "<main>SYNTHETIC COMPANY SYNTHETIC-LICENSE<p class=\"empty\">No records</p></main>"
+    },
+    "https://www.property.hk/EPS?page=1": {
+      "html": "<main>SYNTHETIC COMPANY SYNTHETIC-LICENSE<article><span class=\"id\">100</span><a href=\"/detail/100\">Synthetic title</a></article></main>"
+    },
+    "https://www.property.hk/EPS?page=2": {
+      "html": "<main>SYNTHETIC COMPANY SYNTHETIC-LICENSE<p class=\"empty\">No records</p></main>"
+    },
+    "https://www.property.hk/EPT?page=1": {
+      "html": "<main>SYNTHETIC COMPANY SYNTHETIC-LICENSE<article><span class=\"id\">100</span><a href=\"/detail/100\">Synthetic title</a></article></main>"
+    },
+    "https://www.property.hk/EPT?page=2": {
+      "html": "<main>SYNTHETIC COMPANY SYNTHETIC-LICENSE<p class=\"empty\">No records</p></main>"
+    }
+  }
+}

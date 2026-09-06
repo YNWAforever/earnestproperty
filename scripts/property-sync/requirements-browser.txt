@@ -1,0 +1,3 @@
+# Optional browser serialization; base/offline tests do not require a browser.
+# Distribution availability verified; browser runtime is a separate deployment check.
+crawl4ai==0.9.3
