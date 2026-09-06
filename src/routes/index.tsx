@@ -711,7 +711,10 @@ function CoreEstateGrid({
   // behavior: filter unreachable estates out of the grid entirely rather
   // than shipping thin, non-clickable cards next to real ones.
   const linkableEstates = staticEstates.filter((estate) => estate.hasPage && live.has(estate.slug));
-  const visible = expanded ? linkableEstates : linkableEstates.slice(0, CORE_ESTATES_PREVIEW_COUNT);
+  // Every linkable estate is rendered (so each /estate/* link is in the served
+  // HTML); the ones past the preview count carry `hidden` until 查看更多屋苑.
+  const visible = linkableEstates;
+  const isCollapsed = (index: number) => !expanded && index >= CORE_ESTATES_PREVIEW_COUNT;
 
   // Mirrors the already-established pattern for "this section has nothing
   // real to show yet" elsewhere in this codebase (estate-reviews.tsx's own
@@ -747,7 +750,7 @@ function CoreEstateGrid({
   return (
     <>
       <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {visible.map((estate) => {
+        {visible.map((estate, index) => {
           const dbRow = live.get(estate.slug);
           const units = dbRow?.total_units ?? estate.units;
           const psf = dbRow?.avg_saleable_psf == null ? null : Number(dbRow.avg_saleable_psf);
@@ -833,12 +836,13 @@ function CoreEstateGrid({
               key={estate.slug}
               to="/estate/$slug"
               params={{ slug: estate.slug }}
+              hidden={isCollapsed(index)}
               className={`${shell} transition-all hover:-translate-y-1 hover:shadow-elegant`}
             >
               {card}
             </Link>
           ) : (
-            <div key={estate.slug} className={shell}>
+            <div key={estate.slug} hidden={isCollapsed(index)} className={shell}>
               {card}
             </div>
           );

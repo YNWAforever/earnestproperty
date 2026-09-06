@@ -84,6 +84,8 @@ const listingColumns = `
   p.management_fee,
   p.features,
   p.description,
+  p.seo_title,
+  p.seo_description,
   p.images,
   p.video_url,
   p.floorplan_url,
@@ -333,6 +335,8 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
     management_fee: numberOrNull(row.management_fee),
     features: textArrayOrNull(row.features),
     description: stringOrNull(row.description),
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
     images: textArrayOrNull(row.images),
     video_url: stringOrNull(row.video_url),
     floorplan_url: stringOrNull(row.floorplan_url),
@@ -1315,7 +1319,7 @@ export async function fetchRecentTransactionsCount(
 export async function fetchPublishedArticles() {
   const rows = await sql().query(
     `
-    SELECT slug, title, excerpt, cover_image, category, reading_minutes, published_at
+    SELECT slug, title, excerpt, cover_image, category, reading_minutes, published_at, updated_at
     FROM articles
     WHERE published = true
     ORDER BY published_at DESC NULLS LAST, created_at DESC
@@ -1329,13 +1333,14 @@ export async function fetchPublishedArticles() {
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+    updated_at: dateOrNull(row.updated_at),
   }));
 }
 
 export async function fetchArticleBySlug(input: { slug: string }) {
   const rows = await sql().query(
     `
-    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at
+    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at, updated_at
     FROM articles
     WHERE slug = $1 AND published = true
     LIMIT 1
@@ -1353,6 +1358,7 @@ export async function fetchArticleBySlug(input: { slug: string }) {
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+    updated_at: dateOrNull(row.updated_at),
   };
 }
 

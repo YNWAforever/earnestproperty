@@ -5,6 +5,12 @@ import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
 const companyLogo = "/brand/earnest-company-logo-2026.jpg";
 
+// "2688 2988", matching how the same numbers are printed elsewhere on the
+// site (estate-pages.ts's contactPhones), instead of the raw "26882988".
+function displayPhone(phone: string) {
+  return /^\d{8}$/.test(phone) ? `${phone.slice(0, 4)} ${phone.slice(4)}` : phone;
+}
+
 export function SiteFooter() {
   return (
     <footer className="mt-24 border-t border-border bg-foreground text-background">
@@ -44,6 +50,11 @@ export function SiteFooter() {
               leave /estate/rhine-garden and friends with no site-wide entry point.
             */}
             <ul className="mt-4 space-y-2 text-sm">
+              <li>
+                <Link to="/listings" className="opacity-80 hover:opacity-100">
+                  搜尋全部放盤
+                </Link>
+              </li>
               <li>
                 <Link to="/district/sham-tseng" className="opacity-80 hover:opacity-100">
                   深井區買樓租樓
@@ -193,7 +204,7 @@ export function SiteFooter() {
                     className="inline-flex min-h-11 items-center gap-2"
                   >
                     <Phone className="h-4 w-4 text-brand-bright" />
-                    {branch.phone}
+                    {displayPhone(branch.phone)}
                   </a>
                 </li>
               ))}

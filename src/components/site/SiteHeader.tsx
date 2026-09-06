@@ -291,10 +291,19 @@ function MegaMenuLink({
   );
 }
 
-function MegaMenuPanel({ menu, onLinkClick }: { menu: MegaMenuGroup; onLinkClick: () => void }) {
+function MegaMenuPanel({
+  menu,
+  onLinkClick,
+  hidden = false,
+}: {
+  menu: MegaMenuGroup;
+  onLinkClick: () => void;
+  hidden?: boolean;
+}) {
   return (
     <div
       id={getMegaMenuId(menu.id)}
+      hidden={hidden}
       className="absolute left-1/2 top-full z-50 mt-3 w-[min(860px,calc(100vw-2rem))] -translate-x-1/2 rounded-md border border-border/70 bg-background shadow-xl"
     >
       <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]">
@@ -447,9 +456,21 @@ export function SiteHeader() {
             onClick={() => setActiveMegaMenu(null)}
             className="whitespace-nowrap"
           />
-          {activeMenu && activeMenu.id !== "districts" ? (
-            <MegaMenuPanel menu={activeMenu} onLinkClick={closeMegaMenu} />
-          ) : null}
+          {/* Rendered in the HTML and toggled with `hidden` rather than mounted
+              on click: the served document previously contained only three
+              header links (home, listings, about), so every page reached via
+              these panels got no header link equity. The districts panel is
+              the EstateDirectory below, whose links the footer already carries. */}
+          {megaMenus.map((menu) =>
+            menu.id === "districts" ? null : (
+              <MegaMenuPanel
+                key={menu.id}
+                menu={menu}
+                onLinkClick={closeMegaMenu}
+                hidden={activeMegaMenu !== menu.id}
+              />
+            ),
+          )}
         </nav>
 
         <div className="flex items-center gap-2">

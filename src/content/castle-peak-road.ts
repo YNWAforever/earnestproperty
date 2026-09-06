@@ -79,9 +79,9 @@ export const castlePeakRoadHub = {
   path: "/castle-peak-road",
   label: "青山公路 Castle Peak Road",
   launchName: "Core Corridor Launch",
-  title: "青山公路 Castle Peak Road 樓盤｜油柑頭、汀九、深井、青龍頭、小欖",
+  title: "青山公路 Castle Peak Road 樓盤｜汀九、深井、青龍頭",
   description:
-    "青山公路沿線買樓租樓指南：油柑頭、汀九、深井、青龍頭、小欖、掃管笏及三聖，結合晉誠地產 C-018613 全部真盤。",
+    "青山公路沿線買樓租樓指南：汀九、深井、青龍頭三個生活圈，比較交通、景觀、樓齡、校網，結合晉誠地產 C-018613 全部真盤。",
   h1: "青山公路 Castle Peak Road · 海景住宅走廊",
   intro: [
     "新界西青山公路住宅區由汀九、深井、小欖後段組成，住宅選擇橫跨鐵路生活圈、低密度海景屋、成熟大型屋苑及臨海新式屋苑。",
@@ -235,9 +235,11 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     nameZh: "深井 / 青山公路",
     nameEn: "Sham Tseng / Castle Peak Road",
     eyebrow: "青山公路深井段",
-    title: "深井・青山公路樓盤｜海景大型屋苑、青龍頭豪景花園",
+    // Targets 青山公路深井段 rather than bare 深井 -- /district/sham-tseng is
+    // the canonical 深井 page and links here as the corridor view.
+    title: "青山公路深井段・青龍頭樓盤｜海景大型屋苑、豪景花園",
     description:
-      "深井 Sham Tseng 及青山公路樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與青龍頭豪景花園，配合即時全部真盤。",
+      "青山公路深井段至青龍頭樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與豪景花園沿線比較，配合晉誠地產即時全部真盤。",
     h1: "深井 / 青山公路 · 海景大型屋苑",
     intro: [
       "深井是青山公路最成熟的海景住宅生活圈，屋苑規模、巴士小巴、餐飲和日常配套都比汀九集中。",

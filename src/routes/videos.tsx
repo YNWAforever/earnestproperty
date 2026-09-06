@@ -487,27 +487,43 @@ function AllVideoSchemas({
     })),
   ];
 
+  // One ItemList of VideoObjects instead of one <script> per card: a parser
+  // then sees the list relationship, and each node carries the thumbnailUrl
+  // Google's VideoObject guidelines require (derived from the YouTube id).
+  const videoNodes = schemas.flatMap((entry) => {
+    const embedUrl = getYouTubeEmbedUrl(entry.url);
+    const thumbnailUrl = getYouTubeThumbnailUrl(entry.url);
+    if (!embedUrl || !thumbnailUrl) return [];
+    return [
+      videoObjectSchema({
+        name: entry.name,
+        description: entry.description,
+        embedUrl,
+        thumbnailUrl,
+        contentUrl: entry.url,
+        uploadDate: entry.uploadDate,
+      }),
+    ];
+  });
+  if (videoNodes.length === 0) return null;
+
   return (
     <>
-      {schemas.map((entry) => {
-        const embedUrl = getYouTubeEmbedUrl(entry.url);
-        if (!embedUrl) return null;
-        const schema = videoObjectSchema({
-          name: entry.name,
-          description: entry.description,
-          embedUrl,
-          uploadDate: entry.uploadDate,
-        });
-        return (
-          <script
-            key={entry.key}
-            type="application/ld+json"
-            dangerouslySetInnerHTML={{
-              __html: jsonLdScript({ "@context": "https://schema.org", ...schema }),
-            }}
-          />
-        );
-      })}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            numberOfItems: videoNodes.length,
+            itemListElement: videoNodes.map((node, index) => ({
+              "@type": "ListItem",
+              position: index + 1,
+              item: node,
+            })),
+          }),
+        }}
+      />
     </>
   );
 }
@@ -589,7 +605,13 @@ function VideoFrame({
       )}
       <div className="p-5">
         <p className="text-xs font-semibold text-coral">{eyebrow}</p>
-        <h3 className="mt-2 line-clamp-2 text-lg font-semibold text-primary">{title}</h3>
+        {/* A real link to the video: the poster is a play <button>, so without
+            this the card exposed no crawlable href to the video at all. */}
+        <h3 className="mt-2 line-clamp-2 text-lg font-semibold text-primary">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+            {title}
+          </a>
+        </h3>
         {summary && (
           <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{summary}</p>
         )}

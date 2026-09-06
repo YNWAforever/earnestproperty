@@ -45,6 +45,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SITE_URL, canonicalLink } from "@/content/seo";
+import { organizationRef } from "@/lib/schema";
 import {
   fetchPropertyByListingNo,
   fetchSimilarListings,
@@ -96,6 +97,8 @@ type PropertyHeadData = {
     | "description"
     | "images"
     | "status"
+    | "seo_title"
+    | "seo_description"
   >;
 };
 
@@ -165,16 +168,26 @@ export const Route = createFileRoute("/property/$listingNo")({
     const canonical = canonicalLink(`/property/${publicPropertyNo(p)}`);
     const priceStr = propertyPriceSummary(p);
     const safeTitle = sanitizeListingText(publicPropertyTitle(p)) ?? p.title_zh;
-    const title = `${safeTitle}｜${priceStr}｜晉誠地產`;
-    const safeDescription = sanitizeListingText(p.description);
+    // The admin CMS collects seo_title/seo_description per listing; prefer a
+    // hand-written value over the derived one, exactly as estate.$slug.tsx does.
+    const seoTitle = sanitizeListingText(p.seo_title);
+    const title = seoTitle ? `${seoTitle}｜晉誠地產` : `${safeTitle}｜${priceStr}｜晉誠地產`;
+    const safeDescription =
+      sanitizeListingText(p.seo_description) ?? sanitizeListingText(p.description);
     const desc = (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
-    const img = p.images?.[0];
+    // Scrapers reject a relative og:image outright (see index.tsx); listing
+    // photos come from the CMS/blob store and are normally absolute already,
+    // but a site-relative path must be absolutised here, not passed through.
+    const rawImg = p.images?.[0];
+    const img = rawImg ? (rawImg.startsWith("http") ? rawImg : `${SITE_URL}${rawImg}`) : undefined;
     return {
       meta: [
         { title },
         { name: "description", content: desc },
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: desc },
         ...(img ? [{ property: "og:image", content: img }] : []),
         ...(img ? [{ name: "twitter:image", content: img }] : []),
         // A sold/rented listing is a permanently-gone page kept live for
@@ -274,9 +287,11 @@ function PropertyPage() {
     offeringDescription !== safeDescription ? offeringDescription : null;
   const safeAddress = sanitizeListingText(property.address);
 
-  const images: string[] = property.images?.length
-    ? property.images
-    : ["https://placehold.co/1200x800/e5e7eb/64748b?text=No+Image"];
+  // No third-party "No Image" stub: AppImage renders its branded fallback for
+  // a null src, and the JSON-LD below omits `image` rather than claiming a
+  // placeholder is a photo of the flat.
+  const images: (string | null)[] = property.images?.length ? property.images : [null];
+  const realImages = images.filter((src): src is string => Boolean(src));
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
@@ -415,31 +430,58 @@ function PropertyPage() {
     setTimeout(() => element?.focus(), 400);
   }
 
+  const propertyUrl = `${SITE_URL}/property/${publicPropertyNo(property)}`;
+  const residenceId = `${propertyUrl}#residence`;
+  // A sold/rented listing has no active offering; describe the last known
+  // deal as SoldOut rather than emitting `offers: []`, which is invalid.
+  const schemaOffers = offerings.length
+    ? offerings.map((offer) => ({
+        "@type": "Offer",
+        price: Number(offer.deal_type === "rent" ? offer.rent : offer.price) || undefined,
+        priceCurrency: "HKD",
+        businessFunction:
+          offer.deal_type === "rent"
+            ? "http://purl.org/goodrelations/v1#LeaseOut"
+            : "http://purl.org/goodrelations/v1#Sell",
+        availability: "https://schema.org/InStock",
+        url: propertyUrl,
+        seller: organizationRef(),
+        itemOffered: { "@id": residenceId },
+      }))
+    : [
+        {
+          "@type": "Offer",
+          price: Number(isRent ? property.rent : property.price) || undefined,
+          priceCurrency: "HKD",
+          availability: "https://schema.org/SoldOut",
+          url: propertyUrl,
+          seller: organizationRef(),
+          itemOffered: { "@id": residenceId },
+        },
+      ];
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
       {
         "@type": "RealEstateListing",
+        "@id": `${propertyUrl}#listing`,
         name: safeTitle,
         description: safeDescription ?? undefined,
-        url: `${SITE_URL}/property/${publicPropertyNo(property)}`,
-        image: images,
+        url: propertyUrl,
+        mainEntityOfPage: { "@type": "WebPage", "@id": propertyUrl },
+        ...(realImages.length ? { image: realImages } : {}),
         datePosted: property.created_at,
-        offers: offerings.map((offer) => ({
-          "@type": "Offer",
-          price: offer.deal_type === "rent" ? offer.rent : offer.price,
-          priceCurrency: "HKD",
-          businessFunction:
-            offer.deal_type === "rent"
-              ? "http://purl.org/goodrelations/v1#LeaseOut"
-              : "http://purl.org/goodrelations/v1#Sell",
-          availability: "https://schema.org/InStock",
-          url: `${SITE_URL}/property/${publicPropertyNo(property)}`,
-        })),
+        ...(property.updated_at ? { dateModified: property.updated_at } : {}),
+        about: { "@id": residenceId },
+        offers: schemaOffers,
+        provider: organizationRef(),
       },
       {
         "@type": "Residence",
+        "@id": residenceId,
         name: safeTitle,
+        url: propertyUrl,
+        ...(realImages.length ? { image: realImages } : {}),
         address: {
           "@type": "PostalAddress",
           streetAddress: safeAddress ?? undefined,

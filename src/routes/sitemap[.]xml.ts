@@ -42,13 +42,13 @@ function escapeXml(value: string) {
     .replaceAll(">", "&gt;");
 }
 
+// No changefreq/priority: Google ignores both, and a uniform weekly/0.7 on
+// every URL carried no information anyway. lastmod is the signal that matters.
 function urlXml(path: string, lastmod: string) {
   return [
     "  <url>",
     `    <loc>${escapeXml(`${SITE_URL}${path}`)}</loc>`,
     `    <lastmod>${lastmod}</lastmod>`,
-    "    <changefreq>weekly</changefreq>",
-    "    <priority>0.7</priority>",
     "  </url>",
   ].join("\n");
 }
@@ -111,6 +111,12 @@ export const Route = createFileRoute("/sitemap.xml")({
         const publishedEstatePaths = Object.values(estateSeo)
           .filter((estate) => estate.slug in timestamps.estates)
           .map((estate) => `/estate/${estate.slug}`);
+        // CMS-authored articles (published = true) that have no static entry in
+        // blog-articles.ts -- timestamps.articles's keys are exactly that set,
+        // so no second query.
+        const publishedArticlePaths = Object.keys(timestamps.articles).map(
+          (slug) => `/blog/${slug}`,
+        );
 
         // Most pages here (home, about, district hubs, corridor pages, ...)
         // have no tracked per-page revision history, so they share one
@@ -137,6 +143,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           ...uniquePaths([
             ...staticPaths,
             ...publishedEstatePaths,
+            ...publishedArticlePaths,
             ...conditionalPaths,
             ...agentPaths,
           ]).map((path) => urlXml(path, lastmodFor(path))),

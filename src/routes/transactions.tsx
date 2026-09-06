@@ -20,6 +20,7 @@ import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHero } from "@/components/site/PageHero";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink, SITE_URL } from "@/content/seo";
+import { jsonLdScript, organizationRef } from "@/lib/schema";
 import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
 import {
@@ -108,6 +109,16 @@ export const Route = createFileRoute("/transactions")({
         name: "description",
         content:
           "晉誠地產最新成交：深井、青山公路、汀九近期屋苑成交價、實用面積及呎價，配合前線市場資訊。",
+      },
+      { property: "og:title", content: "晉誠地產最新成交｜深井 青山公路 汀九近期成交" },
+      {
+        property: "og:description",
+        content: "深井、青山公路、汀九近期屋苑成交價、實用面積及呎價一覽。",
+      },
+      { name: "twitter:title", content: "晉誠地產最新成交｜深井 青山公路 汀九近期成交" },
+      {
+        name: "twitter:description",
+        content: "深井、青山公路、汀九近期屋苑成交價、實用面積及呎價一覽。",
       },
       // fetchRecentTransactions only ever returns published + human-verified
       // rows (see its own comment in public-data.server.ts) -- an indexed
@@ -453,8 +464,43 @@ function TransactionsPage() {
     .sort()
     .at(-1);
 
+  const transactionsJsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${SITE_URL}/transactions`,
+        url: `${SITE_URL}/transactions`,
+        name: "晉誠地產最新成交｜深井 青山公路 汀九近期成交",
+        inLanguage: "zh-HK",
+        publisher: organizationRef(),
+        ...(totalCount > 0
+          ? {
+              mainEntity: {
+                "@type": "Dataset",
+                name: "深井 青山公路 汀九近期成交",
+                description: "晉誠地產前線核實的近期屋苑成交價、實用面積及呎價。",
+                creator: organizationRef(),
+              },
+            }
+          : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "最新成交", item: `${SITE_URL}/transactions` },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(transactionsJsonLd) }}
+      />
       <PageHero
         eyebrow="晉誠地產最新成交"
         title="深井 青山公路 汀九近期成交"

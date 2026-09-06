@@ -9,7 +9,8 @@ import { PageHero } from "@/components/site/PageHero";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { getEstateEntry } from "@/content/estate-registry";
-import { canonicalLink } from "@/content/seo";
+import { SITE_URL, canonicalLink } from "@/content/seo";
+import { itemListSchema, jsonLdScript } from "@/lib/schema";
 import {
   fetchEstateOptions,
   fetchPublishedArticlesByCategory,
@@ -34,6 +35,16 @@ export const Route = createFileRoute("/estate-reviews")({
         name: "description",
         content:
           "屋苑開箱入口，集中深井、青山公路、汀九屋苑文章與屋苑頁，方便比較碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園等。",
+      },
+      { property: "og:title", content: "屋苑開箱｜深井 青山公路 汀九屋苑指南｜晉誠地產" },
+      {
+        property: "og:description",
+        content: "集中深井、青山公路、汀九屋苑開箱文章與屋苑頁，方便比較屋苑特色。",
+      },
+      { name: "twitter:title", content: "屋苑開箱｜深井 青山公路 汀九屋苑指南｜晉誠地產" },
+      {
+        name: "twitter:description",
+        content: "集中深井、青山公路、汀九屋苑開箱文章與屋苑頁，方便比較屋苑特色。",
       },
       // The page renders a graceful empty state rather than 404ing when no
       // 屋苑開箱 articles are published yet, but an indexed empty page is a
@@ -76,8 +87,33 @@ function EstateReviewsPage() {
     [estatesWithDistrict, districtFilter],
   );
 
+  const reviewsJsonLd =
+    articles.length > 0
+      ? {
+          "@context": "https://schema.org",
+          "@type": "CollectionPage",
+          "@id": `${SITE_URL}/estate-reviews`,
+          url: `${SITE_URL}/estate-reviews`,
+          name: "屋苑開箱｜深井 青山公路 汀九屋苑指南",
+          inLanguage: "zh-HK",
+          mainEntity: itemListSchema({
+            items: articles.map((article) => ({
+              url: `${SITE_URL}/blog/${article.slug}`,
+              name: article.title,
+              image: article.cover_image,
+            })),
+          }),
+        }
+      : null;
+
   return (
     <div className="bg-background">
+      {reviewsJsonLd ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(reviewsJsonLd) }}
+        />
+      ) : null}
       <PageHero
         eyebrow="屋苑開箱"
         title="深井 青山公路 汀九屋苑開箱"

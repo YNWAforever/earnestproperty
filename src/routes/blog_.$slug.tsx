@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Clock } from "lucide-react";
 
 import { Container } from "@/components/layout/Container";
@@ -14,6 +14,7 @@ import { SiteLink } from "@/components/site/SiteLink";
 import { blogArticles, EDITORIAL_AUTHOR, type BlogArticleSection } from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
+import { absoluteUrl, articleSchema } from "@/lib/schema";
 import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
@@ -27,6 +28,7 @@ type ArticleDetail = {
   category: string | null;
   reading_minutes: number | null;
   published_at: string;
+  updated_at?: string | null;
   author: string;
   reviewer: string | null;
   sourcesNote: string;
@@ -105,6 +107,7 @@ export const Route = createFileRoute("/blog_/$slug")({
           category: dbArticle?.category ?? registryArticle.category,
           reading_minutes: dbArticle?.reading_minutes ?? registryArticle.readingMinutes,
           published_at: dbArticle?.published_at ?? "2026-06-22T00:00:00.000Z",
+          updated_at: dbArticle?.updated_at ?? null,
           author: registryArticle.author,
           reviewer: registryArticle.reviewer,
           sourcesNote: registryArticle.sourcesNote,
@@ -121,6 +124,7 @@ export const Route = createFileRoute("/blog_/$slug")({
             category: dbArticle.category,
             reading_minutes: dbArticle.reading_minutes,
             published_at: dbArticle.published_at,
+            updated_at: dbArticle.updated_at,
             author: EDITORIAL_AUTHOR,
             reviewer: null,
             sourcesNote: "",
@@ -128,21 +132,34 @@ export const Route = createFileRoute("/blog_/$slug")({
           }
         : null;
 
+    // An unknown slug used to render "文章不存在" with HTTP 200 and a
+    // self-canonical -- an unbounded space of indexable soft-404s. Every
+    // other dynamic route (estate, agent, segment, property) 404s here.
+    if (!article) throw notFound();
+
     const compareEstates = await resolveCompareEstates(registryArticle?.compareEstateSlugs);
 
     return { article, compareEstates, slug: params.slug };
   },
   head: ({ loaderData }) => {
     const article = loaderData?.article;
+    if (!article) return { meta: [{ title: `文章不存在｜${SITE_NAME}` }] };
+    const title = `${article.title}｜${SITE_NAME}`;
+    const description = (article.excerpt ?? "深井 / 青山公路 / 汀九樓市分析文章。").slice(0, 155);
+    const image = absoluteUrl(article.cover_image ?? "/og-cover.jpg");
     return {
       meta: [
-        { title: article ? `${article.title}｜${SITE_NAME}` : `文章不存在｜${SITE_NAME}` },
-        {
-          name: "description",
-          content: article?.excerpt ?? "深井 / 荃灣樓市分析文章。",
-        },
+        { title },
+        { name: "description", content: description },
+        { property: "og:type", content: "article" },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { property: "og:image", content: image },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+        { name: "twitter:image", content: image },
       ],
-      links: loaderData?.slug ? [canonicalLink(`/blog/${loaderData.slug}`)] : [],
+      links: [canonicalLink(`/blog/${loaderData.slug}`)],
     };
   },
   component: BlogArticlePage,
@@ -184,13 +201,16 @@ function BlogArticlePage() {
     "@context": "https://schema.org",
     "@graph": [
       {
-        "@type": "Article",
-        headline: article.title,
-        description: article.excerpt,
-        datePublished: article.published_at,
-        author: { "@type": "Organization", name: SITE_NAME },
-        publisher: { "@type": "Organization", name: SITE_NAME },
-        mainEntityOfPage: url,
+        ...articleSchema({
+          url,
+          headline: article.title,
+          description: article.excerpt,
+          image: article.cover_image,
+          datePublished: article.published_at,
+          dateModified: article.updated_at ?? article.published_at,
+          authorName: article.author,
+          articleSection: article.category,
+        }),
         ...(article.reviewer
           ? { reviewedBy: { "@type": "Organization", name: article.reviewer } }
           : {}),

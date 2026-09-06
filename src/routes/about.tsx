@@ -4,7 +4,8 @@ import { BadgeCheck, MapPin, MessageCircle, Store, UserRound, Milestone } from "
 import { Container } from "@/components/layout/Container";
 import { AppImage } from "@/components/media/AppImage";
 import { PageHero } from "@/components/site/PageHero";
-import { canonicalLink, pageSeo } from "@/content/seo";
+import { SITE_URL, canonicalLink, pageSeo } from "@/content/seo";
+import { jsonLdScript, organizationRef } from "@/lib/schema";
 import { SITE_BRANCHES } from "@/config/site";
 import { fetchNeonBranches, fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import type { NeonBranchRecord, NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
@@ -55,11 +56,38 @@ export const Route = createFileRoute("/about")({
     meta: [
       { title: pageSeo.about.title },
       { name: "description", content: pageSeo.about.description },
+      { property: "og:title", content: pageSeo.about.title },
+      { property: "og:description", content: pageSeo.about.description },
+      { name: "twitter:title", content: pageSeo.about.title },
+      { name: "twitter:description", content: pageSeo.about.description },
     ],
     links: [canonicalLink(pageSeo.about.path)],
   }),
   component: AboutPage,
 });
+
+const aboutJsonLd = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "AboutPage",
+      "@id": `${SITE_URL}${pageSeo.about.path}`,
+      url: `${SITE_URL}${pageSeo.about.path}`,
+      name: pageSeo.about.title,
+      description: pageSeo.about.description,
+      inLanguage: "zh-HK",
+      about: organizationRef(),
+      mainEntity: organizationRef(),
+    },
+    {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
+        { "@type": "ListItem", position: 2, name: "關於晉誠", item: `${SITE_URL}/about` },
+      ],
+    },
+  ],
+};
 
 function AboutPage() {
   const { team, branches } = Route.useLoaderData();
@@ -71,6 +99,10 @@ function AboutPage() {
 
   return (
     <div className="bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(aboutJsonLd) }}
+      />
       <PageHero
         eyebrow="關於晉誠地產"
         title="深井、青山公路物業專家，全部真盤、即時回覆、持牌可靠"

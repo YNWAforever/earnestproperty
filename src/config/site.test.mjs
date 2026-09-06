@@ -272,7 +272,11 @@ test("homepage estate grid only renders estates with a live, reachable detail pa
     source,
     /const linkableEstates = staticEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
   );
-  assert.match(source, /const visible = expanded\s*\n?\s*\?\s*linkableEstates/);
+  // Every linkable estate is in the served HTML (crawlable /estate/* links);
+  // the ones past the preview count are `hidden` until 查看更多屋苑.
+  assert.match(source, /const visible = linkableEstates;/);
+  assert.match(source, /hidden=\{isCollapsed\(index\)\}/);
+  assert.match(source, /!expanded && index >= CORE_ESTATES_PREVIEW_COUNT/);
   assert.match(source, /linkableEstates\.length > CORE_ESTATES_PREVIEW_COUNT/);
   assert.doesNotMatch(
     source,

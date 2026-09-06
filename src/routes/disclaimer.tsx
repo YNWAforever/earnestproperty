@@ -24,7 +24,7 @@ function DisclaimerPage() {
     <div className="bg-background">
       <PageHero eyebrow="法律 Legal" title="免責聲明">
         <p className="mt-2 text-xs text-muted-foreground">
-          {"生效日期：[待補]　・　最後更新日期：[待補]"}
+          {"生效日期及最後更新日期：待法律顧問審閱後公布"}
         </p>
       </PageHero>
 
