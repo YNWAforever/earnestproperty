@@ -116,6 +116,7 @@ const stageOptions: { value: LeadStage; label: string }[] = [
 const stageLabels = Object.fromEntries(stageOptions.map((option) => [option.value, option.label]));
 
 const intentLabels: Record<string, string> = {
+  unknown: "待確認",
   buyer: "買樓",
   renter: "租樓",
   landlord: "放盤",
@@ -129,6 +130,7 @@ const intentOptions: { value: string; label: string }[] = Object.entries(intentL
 
 const sourceLabels: Record<string, string> = {
   website: "網站",
+  live_agent: "線上客服",
   whatsapp: "WhatsApp",
   phone: "電話",
   referral: "轉介",
