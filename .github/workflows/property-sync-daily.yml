@@ -1,0 +1,157 @@
+name: Daily property collection
+on:
+  schedule:
+    - cron: '17 18 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [shadow, apply, replay-shadow, replay-apply]
+        default: shadow
+      scope:
+        default: 'agent:540'
+        required: true
+        type: string
+      replay_asset:
+        description: 'Exact request asset name from private property-sync-evidence release'
+        type: string
+      bootstrap:
+        description: 'Operator confirms first approved parser/policy baseline bootstrap'
+        type: boolean
+        default: false
+concurrency:
+  group: property-sync-agent-540
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  daily:
+    if: github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      MODE: ${{ inputs.mode || 'apply' }}
+      SCOPE: ${{ inputs.scope || 'agent:540' }}
+      EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
+      POLICY_APPROVED: ${{ vars.PROPERTY_SYNC_POLICY_APPROVED }}
+      APPLY_ENABLED: ${{ vars.PROPERTY_SYNC_DAILY_ENABLED }}
+      REPLAY_ASSET: ${{ inputs.replay_asset }}
+      BOOTSTRAP: ${{ inputs.bootstrap || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Validate operator gates and private evidence destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/property-sync/daily_artifacts.py validate --scope "$SCOPE" --ref "$GITHUB_REF" --branch "$EXPECTED_BRANCH"
+          test "$(gh api "repos/$GH_REPO" --jq .private)" = true
+          gh release view property-sync-evidence >/dev/null
+          case "$MODE" in
+            shadow|replay-shadow) ;;
+            apply|replay-apply) test "$APPLY_ENABLED" = true; test "$POLICY_APPROVED" = python-v2.1 ;;
+            *) exit 1 ;;
+          esac
+      - name: Install collection and bridge dependencies
+        run: |
+          python -m pip install -r scripts/property-sync/requirements.txt
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Restore last accepted full baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p daily-output baseline-download
+          gh release view property-sync-evidence --json assets > baseline-assets.json
+          asset=$(python scripts/property-sync/daily_artifacts.py latest --request baseline-assets.json)
+          if [ -n "$asset" ]; then
+            gh release download property-sync-evidence --pattern "$asset" --dir baseline-download
+            python scripts/property-sync/daily_artifacts.py unpack --request "baseline-download/$asset" --destination baseline-download
+            python scripts/property-sync/daily_artifacts.py restore --destination baseline-download/baseline --root daily-output
+          elif [[ "$MODE" == *apply ]] && [ "$BOOTSTRAP" != true ]; then
+            echo 'An accepted baseline or explicit manual bootstrap is required.' >&2
+            exit 1
+          fi
+      - name: Collect without database access
+        if: ${{ !startsWith(env.MODE, 'replay-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/property-sync/run_28hse_sync.py --root daily-output --dry-run > collection-result.json
+          payload=$(python scripts/property-sync/daily_artifacts.py select --root daily-output)
+          echo "PAYLOAD=$payload" >> "$GITHUB_ENV"
+      - name: Download exact frozen replay request
+        if: startsWith(env.MODE, 'replay-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$REPLAY_ASSET" =~ ^request-[0-9]+-[0-9]+\.json$ ]]
+          mkdir -p daily-output/frozen
+          gh release download property-sync-evidence --pattern "$REPLAY_ASSET" --dir daily-output/frozen
+          payload="daily-output/frozen/$REPLAY_ASSET"
+          python scripts/property-sync/daily_artifacts.py validate --scope "$SCOPE" --ref "$GITHUB_REF" --branch "$EXPECTED_BRANCH" --request "$payload"
+          echo "PAYLOAD=$payload" >> "$GITHUB_ENV"
+      - name: Pin immutable request before database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$PAYLOAD" "request-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+          gh release upload property-sync-evidence "request-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+      - name: Validate shadow request
+        if: ${{ !endsWith(env.MODE, 'apply') }}
+        run: python scripts/property-sync/replay_28hse_sync.py --payload "$PAYLOAD" --root daily-output > replay-result.json
+      - name: Apply frozen request with bounded immutable retries
+        if: endsWith(env.MODE, 'apply')
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: python scripts/property-sync/replay_28hse_sync.py --payload "$PAYLOAD" --root daily-output --apply > replay-result.json
+      - name: Pin accepted full baseline
+        if: endsWith(env.MODE, 'apply')
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$(python -c 'import json; print(str(json.load(open("replay-result.json")).get("baseline_advanced", False)).lower())')" != true ]; then exit 0; fi
+          receipt=$(python -c 'import json; print(json.load(open("replay-result.json"))["receipt_path"])')
+          python scripts/property-sync/daily_artifacts.py baseline --request "$PAYLOAD" --receipt "$receipt" --destination baseline
+          tar -czf "accepted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" baseline
+          gh release upload property-sync-evidence "accepted-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+      - name: Compress evidence even after failure
+        if: always()
+        run: python scripts/property-sync/daily_artifacts.py archive --root daily-output --destination daily-archives
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: property-sync-raw-${{ github.run_id }}-${{ github.run_attempt }}
+          path: daily-archives/raw.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: property-sync-compact-${{ github.run_id }}-${{ github.run_attempt }}
+          path: daily-archives/compact.tar.gz
+          retention-days: 90
+          if-no-files-found: error
+      - name: Pin unresolved evidence independently of artifact expiry
+        if: failure()
+        shell: bash
+        run: |
+          cp daily-archives/raw.tar.gz "unresolved-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          gh release upload property-sync-evidence "unresolved-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+      - name: Safe job summary
+        if: always()
+        run: |
+          echo "Daily agent:540 result: ${{ job.status }}. Evidence reference: $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT." >> "$GITHUB_STEP_SUMMARY"
+          echo 'See restricted request and receipt artifacts. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
+
+
