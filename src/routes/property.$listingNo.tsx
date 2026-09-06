@@ -258,7 +258,9 @@ function PropertyPage() {
   const selectedDeal = search.deal ?? baseProperty.deal_type;
   const offerings = activePropertyOfferings(baseProperty);
   const selectedOffering = selectPropertyOffering(baseProperty, selectedDeal);
-  const property = selectedOffering ? { ...baseProperty, ...selectedOffering } : baseProperty;
+  const property = selectedOffering
+    ? { ...baseProperty, ...selectedOffering, description: baseProperty.description }
+    : baseProperty;
   // Imported listing text can arrive malformed (raw CSV artifacts, stray
   // quotes, exact "NaN"/"null"/"$0" tokens) -- sanitize once here and reuse
   // the sanitized values everywhere below rather than re-sanitizing at every
@@ -267,6 +269,9 @@ function PropertyPage() {
   // null and are guarded at their render sites instead.
   const safeTitle = sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh;
   const safeDescription = sanitizeListingText(property.description);
+  const offeringDescription = sanitizeListingText(selectedOffering?.description);
+  const safeOfferingDescription =
+    offeringDescription !== safeDescription ? offeringDescription : null;
   const safeAddress = sanitizeListingText(property.address);
 
   const images: string[] = property.images?.length
@@ -789,6 +794,16 @@ function PropertyPage() {
               </p>
             </section>
 
+            {safeOfferingDescription && (
+              <section className="mt-6">
+                <h2 className="text-xl font-semibold">
+                  {property.deal_type === "rent" ? "出租補充資料" : "出售補充資料"}
+                </h2>
+                <p className="mt-3 whitespace-pre-line text-muted-foreground">
+                  {safeOfferingDescription}
+                </p>
+              </section>
+            )}
             {/* Features */}
             {(property.features?.length ?? 0) > 0 && (
               <section className="mt-6">

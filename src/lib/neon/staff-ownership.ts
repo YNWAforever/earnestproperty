@@ -45,13 +45,14 @@ export const STAFF_OWNERSHIP_COLUMNS = [
 /**
  * Authorship and audit. These never move. Listed so tests can assert exclusion.
  *
- * Thirteen DISTINCT column names, spanning nineteen occurrences across the
- * schema -- several tables share a name such as `created_by`. Kept honest
+ * Several tables share a name such as `created_by`. Kept honest
  * against neon/migrations/*.sql by the schema-derived test in
  * staff-ownership.test.mjs (not by manual re-grepping -- that's how the
  * sixth ownership column got missed the first time).
  */
 export const STAFF_HISTORICAL_COLUMNS = [
+  // Last editor of a manual property override; attribution never transfers.
+  "updated_by",
   "actor_id",
   "actor_staff_id",
   "approved_by",
@@ -85,7 +86,18 @@ export function staffOwnershipCountSql(staffId: string) {
 /** One UPDATE per ownership column, for transactionRows. */
 export function staffReassignStatements(fromStaffId: string, toStaffId: string) {
   return STAFF_OWNERSHIP_COLUMNS.map(({ table, column }) => ({
-    statement: `UPDATE ${table} SET ${column} = $2::uuid WHERE ${column} = $1::uuid`,
+    statement:
+      table === "properties"
+        ? `WITH handover_context AS MATERIALIZED (
+          SELECT set_config('app.staff_property_handover', $2::text, true)
+        ), reassigned AS (
+          UPDATE properties SET agent_id = $2::uuid FROM handover_context
+          WHERE agent_id = $1::uuid RETURNING properties.id
+        )
+        SELECT count(*)::int AS reassigned,
+          set_config('app.staff_property_handover', '', true) AS cleared
+        FROM reassigned`
+        : `UPDATE ${table} SET ${column} = $2::uuid WHERE ${column} = $1::uuid`,
     params: [fromStaffId, toStaffId] as unknown[],
   }));
 }

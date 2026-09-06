@@ -827,7 +827,23 @@ export async function fetchPropertyByListingNo(input: {
     `,
     [input.listingNo],
   );
-  return rows[0] ? mapListingRow(rows[0]) : null;
+  if (!rows[0]) return null;
+  let row = rows[0];
+  // Shared page copy is independent of each offering's materialized note. Probe
+  // the additive table before referencing it so pre-migration public reads work.
+  const [managementSchema] = await sql().query(
+    `SELECT to_regclass('admin_property_overrides') IS NOT NULL AS available`,
+  );
+  if (managementSchema?.available === true) {
+    const [override] = await sql().query(
+      `SELECT shared->>'description' AS description FROM admin_property_overrides
+       WHERE property_no = $1 AND shared ? 'description'`,
+      [row.public_listing_no],
+    );
+    // Presence, rather than COALESCE, preserves an intentional null/empty edit.
+    if (override) row = { ...row, description: override.description };
+  }
+  return mapListingRow(row);
 }
 export async function fetchPropertyByLegacyDetailId(input: {
   oldId: string;

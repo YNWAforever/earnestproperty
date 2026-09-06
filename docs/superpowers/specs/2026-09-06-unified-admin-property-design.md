@@ -1,6 +1,6 @@
 # One property admin workspace
 
-Status: approved by user on 2026-09-06; implementation in progress.
+Status: approved by user on 2026-09-06; implementation verified locally; production rollout approval pending.
 
 ## Verified problem
 Production read-only query confirms both reported row IDs map to canonical/public listing number R075733. Latest sale is HK$6,700,000 and latest rent is HK$18,000/month, both active. The same group has eight older inactive source records. Backend listAdminListings currently reads properties rows directly and current edit/status operations address individual source row IDs. The public site already has persistent property_public_members grouping.

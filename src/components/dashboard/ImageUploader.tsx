@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Loader2, Upload, X, GripVertical } from "lucide-rea
 
 type Props = {
   ownerType?: string;
+  disabled?: boolean;
   value: string[];
   /**
    * Accepts a functional updater as well as a plain array, so an upload that
@@ -17,6 +18,7 @@ type Props = {
   onChange: Dispatch<SetStateAction<string[]>>;
   /** Lets the calling form's label point at the hidden file input. */
   inputId?: string;
+  onUploadingChange?: (uploading: boolean) => void;
 };
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -30,7 +32,14 @@ const THUMB_BUTTON_CLASS =
   // that delete a photo or change the public cover image.
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded bg-background/90 p-1 text-foreground opacity-80 transition hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30 lg:min-h-9 lg:min-w-9";
 
-export function ImageUploader({ ownerType = "property", value, onChange, inputId }: Props) {
+export function ImageUploader({
+  ownerType = "property",
+  disabled = false,
+  value,
+  onChange,
+  inputId,
+  onUploadingChange,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -38,7 +47,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
   const [failures, setFailures] = useState<string[]>([]);
 
   async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
+    if (disabled || uploading || !files || files.length === 0) return;
     const list = Array.from(files);
     const valid = list.filter((f) => {
       if (!ACCEPT.includes(f.type)) {
@@ -54,6 +63,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
     if (valid.length === 0) return;
 
     setUploading(true);
+    onUploadingChange?.(true);
     setProgress({ done: 0, total: valid.length });
     setFailures([]);
     const uploaded: string[] = [];
@@ -69,6 +79,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
       setProgress({ done: i + 1, total: valid.length });
     }
     setUploading(false);
+    onUploadingChange?.(false);
     setProgress(null);
     // Functional updater, NOT [...value, ...uploaded]: `value` is captured from
     // the render that started the batch, and remove/reorder stay enabled while
@@ -91,11 +102,13 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
   }
 
   function removeAt(idx: number) {
+    if (disabled) return;
     const next = value.filter((_, i) => i !== idx);
     onChange(next);
   }
 
   function reorder(from: number, to: number) {
+    if (disabled) return;
     if (from === to) return;
     const next = [...value];
     const [moved] = next.splice(from, 1);
@@ -110,7 +123,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
           type="button"
           variant="outline"
           onClick={() => inputRef.current?.click()}
-          disabled={uploading}
+          disabled={disabled || uploading}
         >
           {uploading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -172,7 +185,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
           {value.map((url, i) => (
             <li
               key={url}
-              draggable
+              draggable={!disabled}
               onDragStart={() => setDragIdx(i)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => {
@@ -213,7 +226,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
                 <button
                   type="button"
                   onClick={() => reorder(i, i - 1)}
-                  disabled={i === 0}
+                  disabled={disabled || i === 0}
                   className={THUMB_BUTTON_CLASS}
                   aria-label={`將相片 ${i + 1} 上移`}
                 >
@@ -222,7 +235,7 @@ export function ImageUploader({ ownerType = "property", value, onChange, inputId
                 <button
                   type="button"
                   onClick={() => reorder(i, i + 1)}
-                  disabled={i === value.length - 1}
+                  disabled={disabled || i === value.length - 1}
                   className={THUMB_BUTTON_CLASS}
                   aria-label={`將相片 ${i + 1} 下移`}
                 >

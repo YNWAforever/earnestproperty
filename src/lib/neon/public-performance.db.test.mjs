@@ -179,6 +179,22 @@ test(
         false,
         "card transport excludes long offering copy",
       );
+      assert.equal(before.description, before.offerings.find(o=>o.id===before.id).description,
+        'before migration, main description still uses representative source copy');
+      await query(`CREATE TABLE admin_property_overrides(property_no text PRIMARY KEY,shared jsonb)`);
+      await query(`INSERT INTO admin_property_overrides VALUES('C0','{"description":"Shared C"}')`);
+      const sharedDetail=await server.fetchPropertyByListingNo({listingNo:'C0'});
+      assert.equal(sharedDetail.description,'Shared C','public main description uses managed shared copy');
+      assert.equal(sharedDetail.offerings.find(o=>o.deal_type==='sale').description,'sale description');
+      assert.equal(sharedDetail.offerings.find(o=>o.deal_type==='rent').description,'rent description');
+      await query(`UPDATE admin_property_overrides SET shared='{"description":null}' WHERE property_no='C0'`);
+      assert.equal((await server.fetchPropertyByListingNo({listingNo:'R0'})).description,null,
+        'explicit shared clearing does not fall back to offering copy');
+      await query(`UPDATE admin_property_overrides SET shared='{}' WHERE property_no='C0'`);
+      assert.equal((await server.fetchPropertyByListingNo({listingNo:'C0'})).description,before.description);
+      await query(`DROP TABLE admin_property_overrides`);
+      assert.equal((await server.fetchPropertyByListingNo({listingNo:'C0'})).description,before.description,
+        'public detail remains valid when management schema is absent');
       await query(`UPDATE properties SET featured=true WHERE id='000'`);
       await query(
         `UPDATE properties SET status='inactive',source_updated_at='2026-02-01' WHERE id='dup0'`,

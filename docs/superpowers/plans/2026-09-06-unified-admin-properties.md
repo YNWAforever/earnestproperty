@@ -20,21 +20,21 @@ New src/lib/neon/admin-properties.types.ts:
 New src/lib/neon/admin-properties.ts exports fetchAdminPropertyGroups({data:filters}) -> {rows:ManagedPropertySummary[],total:number,page:number,pageSize:number}; fetchAdminManagedProperty({data:{id:string}}) -> detail|null resolves raw UUID or canonical number; saveAdminPropertyManagement({data:input})->{ok:true}.
 
 ## Task 1 Grouped read model and API
-- [ ] Create shared types and input contracts/tests first.
-- [ ] Add isolated admin-properties.server.ts read functions and wrappers in admin-properties.ts; preserve staff agent row scope, latest across all statuses before filters, unlinked visibility, exact grouped counts/page, raw aliases/history, conflicts and version token. No frontend files.
-- [ ] Unit and disposable schema SQL integration for duplicate sources/dual offers/withdrawals/agent isolation/count/page.
+- [x] Create shared types and input contracts/tests first.
+- [x] Add isolated admin-properties.server.ts read functions and wrappers in admin-properties.ts; preserve staff agent row scope, latest across all statuses before filters, unlinked visibility, exact grouped counts/page, raw aliases/history, conflicts and version token. No frontend files.
+- [x] Unit and disposable schema SQL integration for duplicate sources/dual offers/withdrawals/agent isolation/count/page.
 
 ## Task 2 Atomic management and source protection
-- [ ] Create migration with persistent group overrides and source snapshots/history boundary plus BEFORE source-row write protection. Allowlist editable fields only; never override identity/source keys. No effects before admin opt-in edits.
-- [ ] Add atomic transactional management function with group/current-member locks, version conflict and field/deal-specific staff authorization; changed shared fields apply to current offers only; sale/rental saves isolated; missing offering can be added only with permission over group. Audit in same transaction. Never alter historic rows for normal admin edits.
-- [ ] Integrate server mutation via new module; test real SQL atomicity/races, imported new aliases and status corrections preserving manual overrides, source snapshot retention, unrelated groups unaffected. No production apply.
+- [x] Create migration with persistent group overrides and source snapshots/history boundary plus BEFORE source-row write protection. Allowlist editable fields only; never override identity/source keys. No effects before admin opt-in edits.
+- [x] Add atomic transactional management function with group/current-member locks, version conflict and field/deal-specific staff authorization; changed shared fields apply to current offers only; sale/rental saves isolated; missing offering can be added only with permission over group. Audit in same transaction. Never alter historic rows for normal admin edits.
+- [x] Integrate server mutation via new module; test real SQL atomicity/races, imported new aliases and status corrections preserving manual overrides, source snapshot retention, unrelated groups unaffected. No production apply.
 
 ## Task 3 Admin list/workspace UI
-- [ ] Replace list presentation with one property row, independent prices/statuses, clear current/all filters, grouped paging, management/public canonical links.
-- [ ] Old /admin/listings/$id opens managed property workspace resolving ID and selecting its deal context. Shared data, independent offering panels and collapsed history/conflicts. Changed-field-only saves, unsaved guards, loading/retry/conflict feedback, clear per-offer status actions and explicit all-offer confirmation.
-- [ ] Preserve new listing route; after first creation old id resolves into workspace. Manual missing identity remains visible.
-- [ ] Synthetic browser and unit checks for shared conflicts, independent saves, old links, correct counts/filtering, mobile and permission denial.
+- [x] Replace list presentation with one property row, independent prices/statuses, clear current/all filters, grouped paging, management/public canonical links.
+- [x] Old /admin/listings/$id opens managed property workspace resolving ID and selecting its deal context. Shared data, independent offering panels and collapsed history/conflicts. Changed-field-only saves, unsaved guards, loading/retry/conflict feedback, clear per-offer status actions and explicit all-offer confirmation.
+- [x] Preserve new listing route; after first creation old id resolves into workspace. Manual missing identity remains visible.
+- [x] Synthetic browser and unit checks for shared conflicts, independent saves, old links, correct counts/filtering, mobile and permission denial.
 
 ## Task 4 Review and rollout
-- [ ] Relevant suites/typecheck/lint/build, independent review, migration artifact and disposable integration evidence.
+- [x] Relevant suites/typecheck/lint/build, independent review, migration artifact and disposable integration evidence.
 - [ ] Present exact schema rollout for approval if needed; never claim production completed while gated.
