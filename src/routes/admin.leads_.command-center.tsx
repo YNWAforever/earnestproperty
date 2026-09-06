@@ -28,7 +28,7 @@ const FILTERS: { key: CommandCenterFilterKey; label: string }[] = [
   { key: "all", label: "全部" },
 ];
 
-const DEFAULT_QUEUE: CommandCenterFilterKey = "today";
+const DEFAULT_QUEUE: CommandCenterFilterKey = "all";
 
 // The active queue lives in the URL, so a reload, a browser Back from a lead, or a
 // link pasted to a colleague all land on the same queue instead of silently
@@ -71,6 +71,7 @@ const REASON_LABELS: Record<string, string> = {
 // Raw DB/AI enums used to print verbatim (buyer / high / 30_days) in a Chinese
 // UI; unknown values still fall through to the raw string rather than hiding.
 const INTENT_LABELS: Record<string, string> = {
+  unknown: "待確認",
   buyer: "買家",
   renter: "租客",
   tenant: "租客",

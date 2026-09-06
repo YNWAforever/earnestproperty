@@ -65,7 +65,7 @@
     "check:mls:cloudflare": "tsc --noEmit -p workers/mls-container/tsconfig.json && wrangler deploy --dry-run --config workers/mls-container/wrangler.jsonc",
     "test:cms:db": "node scripts/test-cms-db.mjs",
     "test:woztell:db": "node --test src/lib/woztell/outbound-intent.db.test.mjs",
-    "test:crm:db": "node --test src/lib/neon/website-inquiry.db.test.mjs",
+    "test:crm:db": "node --test src/lib/neon/website-inquiry.db.test.mjs src/lib/neon/whatsapp-leads.db.test.mjs",
     "test:admin:paging:db": "node scripts/test-admin-pagination-db.mjs",
     "test:public-performance:db": "node --test src/lib/neon/public-performance.db.test.mjs src/lib/neon/property-identity.db.test.mjs",
     "ops:release-readiness": "node scripts/operations/release-readiness.mjs",
