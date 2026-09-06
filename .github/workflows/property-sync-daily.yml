@@ -153,5 +153,3 @@ jobs:
         run: |
           echo "Daily agent:540 result: ${{ job.status }}. Evidence reference: $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT." >> "$GITHUB_STEP_SUMMARY"
           echo 'See restricted request and receipt artifacts. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
-
-
