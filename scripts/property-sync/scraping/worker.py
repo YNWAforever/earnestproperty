@@ -20,6 +20,8 @@ FIELDS = [
     "saleable_area",
     "gross_unit_price",
     "saleable_unit_price",
+    "source_status",
+    "source_status_reason",
 ]
 
 
@@ -368,6 +370,7 @@ def parse_28_detail(html, record):
         "座向景觀": "orientation",
     }
     raw = {}
+    lifecycle = set()
 
     def keep(field, value):
         if field in raw and raw[field] != value:
@@ -380,6 +383,10 @@ def parse_28_detail(html, record):
             continue
         key = labels.get(text(cells[0].get_text()).rstrip(":：").lower())
         value = text(cells[1].get_text())
+        if text(cells[0].get_text()).rstrip(":：").lower() in ("狀態", "樓盤狀態", "status"):
+            if value not in ("已售", "已租"):
+                raise WorkerError("unknown_source_status")
+            lifecycle.add(value)
         if live:
             primary_value = cells[1].select_one('.pairValue')
             value = text(primary_value.get_text()) if primary_value else value
@@ -397,6 +404,14 @@ def parse_28_detail(html, record):
                 if bathrooms:
                     keep('bathrooms', bathrooms[1])
             if key in ('price','rent'):
+                price_node = primary_value or cells[1]
+                for badge in price_node.select('.label'):
+                    status_label = text(badge.get_text())
+                    if status_label not in ('已售', '已租'):
+                        raise WorkerError('unknown_source_status')
+                    lifecycle.add(status_label)
+                    badge.extract()
+                value = text(price_node.get_text())
                 value = re.sub(r'^(?:售|租)\s*','',value)
                 value = re.sub(r'\s*元$','',value)
             if key in ('gross_area','saleable_area'):
@@ -409,17 +424,22 @@ def parse_28_detail(html, record):
             keep(key, value)
     if not raw:
         raise WorkerError("detail_template")
+    if len(lifecycle) > 1 or lifecycle and next(iter(lifecycle)) != ('已售' if record['deal_type'] == 'sale' else '已租'):
+        raise WorkerError('contradictory_source_status')
+    reason = {'已售': 'sold', '已租': 'rented'}.get(next(iter(lifecycle), None))
     r = {
         **record,
+        "source_status": "delisted" if reason else "active",
+        "source_status_reason": reason,
         "block": None,
         "unit": None,
         "phase": None,
         "estate": None,
-        "raw_payload": {"detail_fields": raw},
+        "raw_payload": {"detail_fields": raw, "source_status_labels": sorted(lifecycle)},
     }
     for k, v in raw.items():
         if k in ("price", "rent", "gross_unit_price", "saleable_unit_price"):
-            r[k] = number(v, "money")
+            r[k] = None if v in ("價格面議", "租金面議") else number(v, "money")
         elif k.endswith("_area"):
             r[k] = number(v, "area")
         elif k in ("bedrooms", "bathrooms"):
@@ -670,7 +690,7 @@ def crawl(source, cfg, fixtures=None):
         "run_id": str(uuid.uuid4()),
         "scope_id": "agent:540" if source == "28hse" else "branches:EPW,EPS,EPT",
         "policy_version": "no-hermes-v2",
-        "parser_version": "python-v2.0",
+        "parser_version": "python-v2.1" if source == "28hse" else "python-v2.0",
         "crawl_complete": complete,
         "pages_failed": sum(p["status"] not in ("listings", "terminal") for p in pages),
         "worker_rejected_count": len(rejected),
@@ -1042,27 +1062,7 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
                 "baseline_advanced": False,
             }
         if source == "28hse":
-            repo = Path(__file__).resolve().parents[3]
-            command = [
-                "node",
-                str(repo / "scripts/mls/apply-source-snapshot.mjs"),
-                "--payload",
-                str((path / "request.json").resolve()),
-            ]
-            if cfg.get("publishEnabled") is True:
-                command.append("--apply")
-            process = subprocess.run(
-                command,
-                cwd=repo,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                timeout=180,
-            )
-            try:
-                receipt = json.loads(process.stdout)
-            except ValueError:
-                receipt = {"success": False, "status": "invalid_bridge_receipt"}
+            receipt = replay_bridge(path / "request.json", path, cfg.get("publishEnabled") is True)
         else:
             receipt = submit(
                 (path / "request.json").read_bytes(),
@@ -1237,3 +1237,66 @@ def advance_baseline(path, payload, receipt):
     os.replace(temporary, path)
     return True
 
+
+
+def replay_bridge(payload_path, evidence_path, apply=False, sleep=time.sleep):
+    """Retry the exact frozen artifact, including outcome-unknown commits."""
+    repo = Path(__file__).resolve().parents[3]
+    original = payload_path.read_bytes()
+    attempts = evidence_path / "attempts"
+    attempts.mkdir(exist_ok=False)
+    command = ["node", str(repo / "scripts/mls/apply-source-snapshot.mjs"), "--payload", str(payload_path.resolve())]
+    if apply:
+        command.append("--apply")
+    for attempt in range(3):
+        if payload_path.read_bytes() != original:
+            raise WorkerError("frozen_payload_changed")
+        try:
+            process = subprocess.run(command, cwd=repo, capture_output=True, text=True, encoding="utf-8", timeout=180)
+            try:
+                receipt = json.loads(process.stdout if process.returncode == 0 else process.stderr)
+                if not isinstance(receipt, dict):
+                    raise ValueError()
+            except (ValueError, UnicodeError):
+                receipt = {"success": False, "status": "invalid_bridge_receipt"}
+        except subprocess.TimeoutExpired:
+            receipt = {"success": False, "error": "OUTCOME_UNKNOWN", "status": 503}
+        except OSError:
+            receipt = {"success": False, "error": "bridge_unavailable", "status": 503}
+        (attempts / f"{attempt + 1}.json").write_bytes(frozen(receipt))
+        status = receipt.get("status")
+        if receipt.get("success") is True or status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
+            return receipt
+        delay = 2 ** (attempt + 1)
+        retry = receipt.get("retryAfter")
+        if retry is not None:
+            try:
+                delay = max(delay, float(retry))
+                if not 0 <= float(retry) <= 300:
+                    return receipt
+            except (ValueError, TypeError):
+                return receipt
+        sleep(delay)
+    return receipt
+
+
+def replay_28hse(payload_path, root, apply=False, sleep=time.sleep):
+    """Replay without recollection or rewriting the original payload/receipts."""
+    payload_path, root = Path(payload_path), Path(root)
+    with payload_path.open("rb") as stream:
+        data = stream.read(5 * 1024 * 1024 + 1)
+    if len(data) > 5 * 1024 * 1024:
+        raise WorkerError("payload_too_large")
+    payload = json.loads(data)
+    if payload.get("source") != "28hse" or payload.get("meta", {}).get("scope_id") != "agent:540":
+        raise WorkerError("replay_scope_mismatch")
+    with scope_lock(root / "locks" / "28hse-agent-540.lock"):
+        path = root / "replays" / str(uuid.uuid4())
+        path.mkdir(parents=True, exist_ok=False)
+        (path / "request.json").write_bytes(data)
+        (path / "replay.json").write_bytes(frozen({"payload_sha256": hashlib.sha256(data).hexdigest(), "replayed_at": datetime.now(timezone.utc).isoformat(), "apply": apply}))
+        receipt = replay_bridge(path / "request.json", path, apply, sleep)
+        (path / "receipt.json").write_bytes(frozen(receipt))
+        baseline = root / "baselines" / "28hse" / "agent-540" / "baseline.json"
+        advance = apply and advance_baseline(baseline, payload, receipt)
+        return {"success": receipt.get("success") is True, "status": receipt.get("status", "failed"), "error": receipt.get("error"), "snapshot": str(path), "receipt_path": str(path / "receipt.json"), "baseline_advanced": advance}

@@ -60,3 +60,9 @@ test("oversize/malformed frozen artifact never reaches ingestion", async () => {
       SnapshotError,
     );
 });
+
+test("bridge errors expose only safe code, status and bounded retry metadata", async () => {
+  const { safeBridgeError } = await import("./apply-source-snapshot.mjs");
+  assert.deepEqual(safeBridgeError(new SnapshotError("OUTCOME_UNKNOWN",503,{retryAfter:5,secret:"private"})),{success:false,error:"OUTCOME_UNKNOWN",status:503,retryAfter:5});
+  assert.deepEqual(safeBridgeError(new Error("postgres://secret")),{success:false,error:"INGESTION_UNAVAILABLE",status:503});
+});

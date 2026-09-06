@@ -52,12 +52,18 @@ export async function runSnapshotBridge(
     ingest ?? (await import("../../src/lib/mls/ingestion-service.mjs")).ingestSnapshot;
   return service(payload, options);
 }
+export function safeBridgeError(error) {
+  const known = error instanceof SnapshotError;
+  const result = { success: false, error: known && /^[A-Za-z0-9_]{1,100}$/.test(error.code) ? error.code : "INGESTION_UNAVAILABLE", status: known && Number.isInteger(error.status) && error.status >= 400 && error.status <= 599 ? error.status : 503 };
+  const retryAfter = known ? error.details?.retryAfter : undefined;
+  if (typeof retryAfter === "number" && Number.isFinite(retryAfter) && retryAfter >= 0) result.retryAfter = retryAfter;
+  return result;
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     process.stdout.write(JSON.stringify(await runSnapshotBridge(process.argv.slice(2))) + "\n");
   } catch (error) {
-    const code = error instanceof SnapshotError ? error.code : "INGESTION_UNAVAILABLE";
-    process.stderr.write(JSON.stringify({ success: false, error: code }) + "\n");
+    process.stderr.write(JSON.stringify(safeBridgeError(error)) + "\n");
     process.exitCode = 1;
   }
 }
