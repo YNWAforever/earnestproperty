@@ -565,7 +565,7 @@ test("castle-peak-road.$segment.tsx sanitizes listing.title_zh before it reaches
   const segment = read("src/routes/castle-peak-road.$segment.tsx");
 
   assert.match(segment, /import \{ sanitizeListingText \} from "@\/lib\/format"/);
-  assert.match(segment, /name: sanitizeListingText\(publicPropertyTitle\(listing\)\) \?\? listing\.title_zh/);
+  assert.match(segment, /name: sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/);
 });
 
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
