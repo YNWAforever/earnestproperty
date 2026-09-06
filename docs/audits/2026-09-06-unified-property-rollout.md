@@ -32,4 +32,4 @@ The two reported examples are different properties with internal aliases: B05464
 
 ## Release status
 
-Disposable database migration and final review are complete. Source commits are local through `5a2225b`. Public push was blocked by automatic approval review, which requires explicit authorization for publishing to the verified public repository `YNWAforever/earnestproperty`. Remote CI and production rollout have not run; production application and database are unchanged by this task.
+Disposable database migration and final review are complete. Source commits are local through `5a2225b`. The user explicitly approved public publication and production deployment. PR #117 is open; its preview build passed. The first CI run found an outdated source-shape assertion for the corridor title sanitizer; the assertion was updated to retain the sanitization requirement after public title normalization. Production rollout is pending CI success.

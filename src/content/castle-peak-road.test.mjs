@@ -546,7 +546,7 @@ test("CorridorInventory.tsx sanitizes listing.title_zh before it reaches alt/hea
   const inventory = read("src/components/site/CorridorInventory.tsx");
 
   assert.match(inventory, /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/);
-  assert.match(inventory, /sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/);
+  assert.match(inventory, /sanitizeListingText\(publicPropertyTitle\(listing\)\) \?\? listing\.title_zh/);
 });
 
 // Task 1 introduced the `eyebrow` prop with an English default ("Live
@@ -565,7 +565,7 @@ test("castle-peak-road.$segment.tsx sanitizes listing.title_zh before it reaches
   const segment = read("src/routes/castle-peak-road.$segment.tsx");
 
   assert.match(segment, /import \{ sanitizeListingText \} from "@\/lib\/format"/);
-  assert.match(segment, /name: sanitizeListingText\(listing\.title_zh\) \?\? listing\.title_zh/);
+  assert.match(segment, /name: sanitizeListingText\(publicPropertyTitle\(listing\)\) \?\? listing\.title_zh/);
 });
 
 test("canonical links, redirects, and sitemap use castle peak road routes", () => {
