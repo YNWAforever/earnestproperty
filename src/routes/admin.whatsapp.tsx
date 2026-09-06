@@ -1,3 +1,4 @@
+import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
 import {
@@ -5,6 +6,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -753,7 +755,7 @@ function AdminWhatsapp() {
   return (
     <AdminShell
       title="WhatsApp 收件匣"
-      description="集中處理 Woztell 收件匣、客服狀態及 24 小時服務窗口內的回覆。"
+      description="查看客戶訊息、分配負責同事及回覆；系統會提示目前可用的發送方式。"
     >
       <AdminToolbar
         filters={
@@ -1202,6 +1204,8 @@ function ConversationWorkspace({
   onAgentChange: (assignedAgentId: string | null) => void;
   onConsentSaved: () => void;
 }) {
+  const replyInputId = useId();
+  const replyCountId = useId();
   if (loading && !detail) return <Skeleton className="h-[32rem] w-full rounded-none" />;
   if (error)
     return (
@@ -1302,16 +1306,6 @@ function ConversationWorkspace({
       />
 
       <div className="border-t p-4">
-        <AiAssistPanel
-          aiAssist={aiAssist}
-          loading={aiAssistLoading}
-          onUseSuggestedReply={(value) => {
-            if (replyBody.trim() && !window.confirm("將會覆蓋你已輸入的回覆內容，確定繼續？")) {
-              return;
-            }
-            onReplyBodyChange(value);
-          }}
-        />
         <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           回覆只可在客戶最後一次來訊後 24 小時內發送。
           {windowRemaining ? <span className="block">{windowRemaining}</span> : null}
@@ -1338,8 +1332,14 @@ function ConversationWorkspace({
           </p>
         ) : null}
         <div className="grid gap-3">
+          <label htmlFor={replyInputId} className="text-sm font-semibold">
+            回覆客戶
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              按「傳送回覆」才會發送
+            </span>
+          </label>
           <Textarea
-            id="whatsapp-reply"
+            id={replyInputId}
             aria-label="WhatsApp 回覆"
             rows={4}
             value={replyBody}
@@ -1348,13 +1348,13 @@ function ConversationWorkspace({
             // agent was typing in.
             disabled={sendingReply || Boolean(availability.reason)}
             maxLength={REPLY_MAX_LENGTH}
-            aria-describedby="whatsapp-reply-count"
+            aria-describedby={replyCountId}
             placeholder="輸入回覆內容"
             onChange={(event) => onReplyBodyChange(event.target.value)}
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span
-              id="whatsapp-reply-count"
+              id={replyCountId}
               className={[
                 "text-xs tabular-nums",
                 replyBody.length >= REPLY_MAX_LENGTH ? "text-destructive" : "text-muted-foreground",
@@ -1364,9 +1364,21 @@ function ConversationWorkspace({
             </span>
             <Button type="button" disabled={!canSendReply || sendingReply} onClick={onSendReply}>
               <Send className="h-4 w-4" />
-              {sendingReply ? "回覆中…" : "回覆"}
+              {sendingReply ? "傳送中…" : "傳送回覆"}
             </Button>
           </div>
+        </div>
+        <div className="mt-3">
+          <AiAssistPanel
+            aiAssist={aiAssist}
+            loading={aiAssistLoading}
+            onUseSuggestedReply={(value) => {
+              if (replyBody.trim() && !window.confirm("將會覆蓋你已輸入的回覆內容，確定繼續？")) {
+                return;
+              }
+              onReplyBodyChange(value);
+            }}
+          />
         </div>
       </div>
     </div>
@@ -1383,38 +1395,15 @@ function AiAssistPanel({
   onUseSuggestedReply: (value: string) => void;
 }) {
   return (
-    <Card className="mb-3">
-      <CardContent className="space-y-2 p-4">
-        <p className="font-medium">AI 助手</p>
-        {aiAssist ? (
-          <>
-            <p className="text-sm">{aiAssist.summary}</p>
-            <p className="text-xs text-muted-foreground">
-              意圖：{intentLabel(aiAssist.detectedIntent)} · 緊急程度：
-              {urgencyLabel(aiAssist.urgency)}
-            </p>
-            {aiAssist.handoffNote ? (
-              <p className="text-xs text-muted-foreground">{aiAssist.handoffNote}</p>
-            ) : null}
-            {aiAssist.suggestedReply ? (
-              <Button
-                // Confirms before replacing a draft: this used to overwrite
-                // whatever the agent had already typed, with no undo.
-                onClick={() => onUseSuggestedReply(aiAssist.suggestedReply ?? "")}
-                type="button"
-                variant="outline"
-              >
-                套用建議回覆
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            {loading ? "正在產生 AI 建議…" : "此對話暫時未有 AI 建議。"}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <WhatsappAiSuggestions
+      loading={loading}
+      summary={aiAssist?.summary}
+      suggestedReply={aiAssist?.suggestedReply}
+      intentLabel={aiAssist ? intentLabel(aiAssist.detectedIntent) : undefined}
+      urgencyLabel={aiAssist ? urgencyLabel(aiAssist.urgency) : undefined}
+      handoffNote={aiAssist?.handoffNote}
+      onUseSuggestedReply={onUseSuggestedReply}
+    />
   );
 }
 

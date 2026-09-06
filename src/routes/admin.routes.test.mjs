@@ -76,9 +76,9 @@ test("operations shell follows the approved navigation groups and exact Team sta
   const shell = read("src/components/admin/AdminShell.tsx");
 
   for (const [heading, paths] of [
-    ["Workspace", ["/admin", "/admin/leads", "/admin/listings"]],
-    ["Growth", ["/admin/cms", "/admin/segments", "/admin/whatsapp", "/admin/blasts"]],
-    ["Administration", ["/admin/team", "/admin/agents", "/admin/operations"]],
+    ["日常跟進", ["/admin", "/admin/leads", "/admin/listings"]],
+    ["內容與推廣", ["/admin/cms", "/admin/segments", "/admin/whatsapp", "/admin/blasts"]],
+    ["團隊與系統", ["/admin/team", "/admin/agents", "/admin/operations"]],
   ]) {
     assert.match(shell, new RegExp(`heading: "${heading}"`));
     for (const path of paths)
@@ -281,7 +281,7 @@ test("admin lead CRM workflow guards async detail state and uses list assignment
     "panelOpenRef",
     "canApplyLeadDetail",
     "contact_id: detail.contact_id",
-    'aria-label="新增跟進 note"',
+    'aria-label="新增內部跟進紀錄"',
     "focus-visible:ring",
   ]) {
     assert.match(leadRoute, new RegExp(text));
@@ -957,7 +957,7 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
   assert.equal(destinations.length, 14);
   assert.ok(destinations.includes("/admin/analytics"));
 
-  for (const heading of ["Workspace", "Growth", "Administration"]) {
+  for (const heading of ["日常跟進", "內容與推廣", "團隊與系統"]) {
     assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
   }
 

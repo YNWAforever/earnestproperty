@@ -1,3 +1,4 @@
+import { stageLabels as STAGE_LABELS, aiScoreLabel } from "@/lib/admin/crm-presentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check, RefreshCw } from "lucide-react";
@@ -21,9 +22,9 @@ import type {
 
 const FILTERS: { key: CommandCenterFilterKey; label: string }[] = [
   { key: "today", label: "今日要跟" },
-  { key: "high_score", label: "高分 Leads" },
+  { key: "high_score", label: "AI 高分查詢" },
   { key: "unassigned", label: "未分配" },
-  { key: "live_agent", label: "Live Agent" },
+  { key: "live_agent", label: "線上客服" },
   { key: "whatsapp", label: "WhatsApp" },
   { key: "all", label: "全部" },
 ];
@@ -44,27 +45,18 @@ function parseCommandCenterSearch(search: Record<string, unknown>): {
 export const Route = createFileRoute("/admin/leads_/command-center")({
   validateSearch: parseCommandCenterSearch,
   head: () => ({
-    meta: [{ title: "Lead Command Center｜Earnest Admin" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "跟進工作台｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: CommandCenter,
 });
 
-const STAGE_LABELS: Record<string, string> = {
-  new: "新客",
-  contacted: "已聯絡",
-  viewing: "睇樓",
-  negotiating: "傾緊",
-  closed_won: "成交",
-  closed_lost: "失單",
-};
-
 const REASON_LABELS: Record<string, string> = {
   OVERDUE_FOLLOWUP: "逾期跟進",
-  RECENT_HANDOFF: "新 Live Agent 轉介",
-  HIGH_SCORE_UNASSIGNED: "高分・未分配",
+  RECENT_HANDOFF: "新線上客服轉介 轉介",
+  HIGH_SCORE_UNASSIGNED: "AI 高分・未分配",
   NEW_UNASSIGNED_NEEDS_ANALYSIS: "新客・未分配・需 AI 分析",
   ACTIVE_WHATSAPP: "WhatsApp 進行中",
-  BY_SCORE: "依分數排序",
+  BY_SCORE: "依 AI 分數排序",
   NEEDS_ANALYSIS: "需 AI 分析",
 };
 
@@ -110,11 +102,11 @@ function enumLabel(map: Record<string, string>, value: string | null | undefined
 
 const WHATSAPP_BLOCKED_LABELS: Record<string, string> = {
   WOZTELL_DISABLED: "未設定 Woztell",
-  CONTACT_OPTED_OUT: "客戶已 opt-out",
+  CONTACT_OPTED_OUT: "客戶已退出推廣",
   OUTSIDE_24_HOUR_WINDOW: "逾 24 小時窗口",
   NO_PHONE: "缺少電話",
-  NO_OPT_IN: "未有 WhatsApp opt-in",
-  OPTED_OUT: "客戶已 opt-out",
+  NO_OPT_IN: "未有 WhatsApp 推廣同意",
+  OPTED_OUT: "客戶已退出推廣",
   NO_CONVERSATION: "未連接 WhatsApp",
 };
 
@@ -222,13 +214,13 @@ function CommandCenter() {
 
   return (
     <AdminShell
-      title="Lead Command Center"
+      title="跟進工作台"
       description="每日跟進工作台：誰要跟、為何重要、下一步、WhatsApp 狀態。"
     >
       {data ? <KpiStrip data={data} /> : null}
       {data && data.rows.length >= COMMAND_CENTER_ROW_LIMIT ? (
         <p className="mb-3 text-xs text-muted-foreground">
-          只涵蓋最近更新的 {COMMAND_CENTER_ROW_LIMIT} 個 Lead，較舊的未有載入。
+          只涵蓋最近更新的 {COMMAND_CENTER_ROW_LIMIT} 筆客戶查詢，較舊的未有載入。
         </p>
       ) : null}
 
@@ -280,8 +272,8 @@ function CommandCenter() {
       {loading && !data ? <Skeleton className="h-72 w-full" /> : null}
       {data && visibleRows.length === 0 ? (
         <AdminEmptyState
-          title="此佇列暫無 Leads"
-          description="切換上方分段或選「全部」查看所有 Leads。"
+          title="此佇列暫無客戶查詢"
+          description="切換上方分段或選「全部」查看所有客戶查詢。"
         />
       ) : null}
       {data && visibleRows.length > 0 ? (
@@ -291,12 +283,12 @@ function CommandCenter() {
               <table className="w-full min-w-[1040px] text-sm">
                 <thead className="border-b text-left text-xs text-muted-foreground">
                   <tr>
-                    <th className="p-3">Lead</th>
+                    <th className="p-3">客戶查詢</th>
                     <th className="p-3">意向 / 預算</th>
                     <th className="p-3">階段</th>
                     <th className="p-3">負責</th>
                     <th className="p-3">AI 分數・原因</th>
-                    <th className="p-3">下一步</th>
+                    <th className="p-3">AI 建議</th>
                     <th className="p-3">WhatsApp</th>
                   </tr>
                 </thead>
@@ -333,7 +325,7 @@ function CommandCenter() {
                       <td className="p-3">{row.assigned_agent_name ?? "未分配"}</td>
                       <td className="p-3">
                         <span className="font-semibold tabular-nums">
-                          {row.lead_score ?? "未分析"}
+                          {aiScoreLabel(row.lead_score)}
                         </span>
                         <p className="text-xs text-muted-foreground">
                           {REASON_LABELS[row.priority.reasonCode] ?? row.priority.reasonCode}
@@ -360,7 +352,7 @@ function CommandCenter() {
         onOpenChange={(open) => {
           if (!open) setSelectedId(null);
         }}
-        title={selected?.name ?? "Lead"}
+        title={selected?.name ?? "客戶查詢"}
         description={
           selected
             ? `${STAGE_LABELS[selected.stage] ?? selected.stage}・${selected.phone ?? "—"}`
@@ -374,7 +366,7 @@ function CommandCenter() {
                   board whose whole job is telling them which one to open. */}
               <Button asChild variant="outline" size="sm">
                 <Link to="/admin/leads" search={{ lead: selected.lead_id }}>
-                  開啟完整 Lead
+                  開啟完整客戶查詢
                 </Link>
               </Button>
               {selected.whatsapp.linked ? (
@@ -409,14 +401,11 @@ function CommandCenter() {
               <p className="mt-1">{selected.summary ?? "未分析"}</p>
             </section>
             <section>
-              <h3 className="text-xs font-semibold text-muted-foreground">下一步建議</h3>
+              <h3 className="text-xs font-semibold text-muted-foreground">AI 下一步建議</h3>
               <p className="mt-1">{selected.next_best_action ?? "—"}</p>
             </section>
             <section className="grid grid-cols-2 gap-2">
-              <Detail
-                label="AI 分數"
-                value={selected.lead_score == null ? "未分析" : String(selected.lead_score)}
-              />
+              <Detail label="AI 分數" value={aiScoreLabel(selected.lead_score)} />
               <Detail label="緊急度" value={enumLabel(URGENCY_LABELS, selected.urgency)} />
               <Detail label="時間線" value={enumLabel(TIMELINE_LABELS, selected.timeline)} />
               <Detail label="預算" value={formatBudget(selected)} />
@@ -432,10 +421,10 @@ function CommandCenter() {
 
 function KpiStrip({ data }: { data: CommandCenterData }) {
   const items = [
-    { label: "高分 leads", value: data.kpis.hot },
+    { label: "AI 高分查詢", value: data.kpis.hot },
     { label: "逾期跟進", value: data.kpis.overdue },
     { label: "未分配", value: data.kpis.unassigned },
-    { label: "新 Live Agent", value: data.kpis.handoffs },
+    { label: "新線上客服轉介", value: data.kpis.handoffs },
     { label: "WhatsApp 受阻", value: data.kpis.whatsapp_blocked },
   ];
   return (
