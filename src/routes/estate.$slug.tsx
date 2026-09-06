@@ -151,7 +151,7 @@ export const Route = createFileRoute("/estate/$slug")({
           content:
             loaderData?.estate.seo_description ??
             seo?.description ??
-            `${loaderData?.estate.name_zh ?? ""} ${loaderData?.estate.total_units ?? ""} 個單位，平均實呎 $${loaderData?.estate.avg_saleable_psf ?? ""}。即時放盤、成交、FAQ。`,
+            `${loaderData?.estate.name_zh ?? ""} 屋苑資料、現有放盤叫價、成交紀錄及常見問題。`,
         },
       ],
       links: loaderData?.estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
@@ -346,6 +346,25 @@ function EstatePage() {
           <IntentWhatsAppCTA context={ctaContext} />
         </div>
       </PageHero>
+
+      {registryEntry?.photo || estate.hero_image ? (
+        <Container className="pt-6">
+          <figure>
+            <AppImage
+              src={registryEntry?.photo || estate.hero_image}
+              alt={`${estateName} 屋苑／放盤參考照片`}
+              width={1600}
+              height={900}
+              className="max-h-[480px] w-full rounded-lg object-cover"
+            />
+            <figcaption className="mt-2 text-xs text-muted-foreground">
+              {registryEntry?.photo
+                ? (registryEntry.photoCredit ?? "屋苑參考照片")
+                : "本行放盤參考照片，並非屋苑全景。"}
+            </figcaption>
+          </figure>
+        </Container>
+      ) : null}
 
       {answerSummary ? (
         <Container className="pt-6">

@@ -67,7 +67,7 @@
     "test:woztell:db": "node --test src/lib/woztell/outbound-intent.db.test.mjs",
     "test:crm:db": "node --test src/lib/neon/website-inquiry.db.test.mjs src/lib/neon/whatsapp-leads.db.test.mjs",
     "test:admin:paging:db": "node scripts/test-admin-pagination-db.mjs",
-    "test:public-performance:db": "node --test src/lib/neon/public-performance.db.test.mjs src/lib/neon/property-identity.db.test.mjs",
+    "test:public-performance:db": "node --test src/lib/neon/public-performance.db.test.mjs src/lib/neon/property-identity.db.test.mjs src/lib/neon/estate-links.db.test.mjs",
     "ops:release-readiness": "node scripts/operations/release-readiness.mjs",
     "media:responsive": "node scripts/media/generate-responsive.mjs"
   },

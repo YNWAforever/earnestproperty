@@ -1016,14 +1016,33 @@ export async function fetchEstateOptions(): Promise<NeonEstateOption[]> {
   });
 }
 
+// Latest source offering per property/deal, before status and estate filters.
+// These are asking prices, never transaction valuations or cached manual figures.
+const estateMarketJoin = `LEFT JOIN LATERAL (
+  WITH ranked AS (
+    SELECT p.*, ROW_NUMBER() OVER (
+      PARTITION BY m.public_listing_no,p.deal_type
+      ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
+        p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC
+    ) AS rank
+    FROM properties p JOIN property_public_members m ON m.property_id=p.id
+  ), current AS (SELECT * FROM ranked WHERE rank=1 AND status='active' AND estate_id=e.id)
+  SELECT ROUND(AVG(price / NULLIF(saleable_area,0)) FILTER (
+    WHERE deal_type='sale' AND price>0 AND saleable_area>0)) AS asking_psf,
+    (SELECT images[1] FROM current WHERE array_length(images,1)>0
+      ORDER BY source_updated_at DESC NULLS LAST,id LIMIT 1) AS listing_image
+  FROM current
+) market ON true`;
+
 export async function fetchEstates(input: { districtSlug?: string } = {}) {
   const districtSlug = input.districtSlug ?? "sham-tseng";
   const rows = await sql().query(
     `
-    SELECT *
-    FROM estates
-    WHERE district_slug = $1
-      AND COALESCE((to_jsonb(estates)->>'published')::boolean, true)
+    SELECT e.*, market.asking_psf AS avg_saleable_psf,
+      COALESCE(NULLIF(e.hero_image,''),market.listing_image) AS hero_image
+    FROM estates e ${estateMarketJoin}
+    WHERE e.district_slug = $1
+      AND COALESCE((to_jsonb(e)->>'published')::boolean, true)
     ORDER BY total_units DESC NULLS LAST, name_zh ASC
     `,
     [districtSlug],
@@ -1033,7 +1052,10 @@ export async function fetchEstates(input: { districtSlug?: string } = {}) {
 
 export async function fetchEstateBySlug(input: { slug: string }) {
   const rows = await sql().query(
-    "SELECT * FROM estates WHERE slug = $1 AND COALESCE((to_jsonb(estates)->>'published')::boolean, true) LIMIT 1",
+    `SELECT e.*, market.asking_psf AS avg_saleable_psf,
+      COALESCE(NULLIF(e.hero_image,''),market.listing_image) AS hero_image
+     FROM estates e ${estateMarketJoin}
+     WHERE e.slug = $1 AND COALESCE((to_jsonb(e)->>'published')::boolean, true) LIMIT 1`,
     [input.slug],
   );
   return rows[0] ?? null;
