@@ -319,3 +319,84 @@ BEGIN
  NEW:=jsonb_populate_record(NEW,v_patch);
  RETURN NEW;
 END $$;
+
+-- Cross-record evidence is checked at COMMIT. The writer can create a receipt
+-- placeholder first and finish its response after every atomic ingestion effect.
+CREATE UNIQUE INDEX IF NOT EXISTS mls_ingestion_policy_parser_identity
+  ON mls_ingestion_policies(source, scope_id, policy_version, parser_version);
+CREATE UNIQUE INDEX IF NOT EXISTS mls_ingestion_receipt_scope_identity
+  ON mls_ingestion_receipts(source, scope_id, policy_version, id);
+CREATE UNIQUE INDEX IF NOT EXISTS mls_observation_source_identity
+  ON listing_source_observations(source, external_listing_id, deal_type, id);
+CREATE INDEX IF NOT EXISTS mls_ingestion_scopes_full_receipt
+  ON mls_ingestion_scopes(full_receipt_id) WHERE full_receipt_id IS NOT NULL;
+ALTER TABLE mls_ingestion_receipts DROP CONSTRAINT IF EXISTS mls_receipt_policy_parser_fk;
+ALTER TABLE mls_ingestion_receipts ADD CONSTRAINT mls_receipt_policy_parser_fk
+  FOREIGN KEY (source, scope_id, policy_version, parser_version)
+  REFERENCES mls_ingestion_policies(source, scope_id, policy_version, parser_version)
+  DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE mls_ingestion_scopes DROP CONSTRAINT IF EXISTS mls_scope_full_receipt_fk;
+ALTER TABLE mls_ingestion_scopes ADD CONSTRAINT mls_scope_full_receipt_fk
+  FOREIGN KEY (source, scope_id, policy_version, full_receipt_id)
+  REFERENCES mls_ingestion_receipts(source, scope_id, policy_version, id)
+  DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE mls_source_state DROP CONSTRAINT IF EXISTS mls_state_receipt_scope_fk;
+ALTER TABLE mls_source_state ADD CONSTRAINT mls_state_receipt_scope_fk
+  FOREIGN KEY (source, scope_id, policy_version, last_receipt_id)
+  REFERENCES mls_ingestion_receipts(source, scope_id, policy_version, id)
+  DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE mls_source_state DROP CONSTRAINT IF EXISTS mls_state_observation_identity_fk;
+ALTER TABLE mls_source_state ADD CONSTRAINT mls_state_observation_identity_fk
+  FOREIGN KEY (source, external_listing_id, deal_type, observation_id)
+  REFERENCES listing_source_observations(source, external_listing_id, deal_type, id)
+  DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE mls_source_contacts DROP CONSTRAINT IF EXISTS mls_contact_observation_identity_fk;
+ALTER TABLE mls_source_contacts ADD CONSTRAINT mls_contact_observation_identity_fk
+  FOREIGN KEY (source, external_listing_id, deal_type, observation_id)
+  REFERENCES listing_source_observations(source, external_listing_id, deal_type, id)
+  DEFERRABLE INITIALLY DEFERRED;
+
+CREATE OR REPLACE FUNCTION mls_ingestion_full_baseline_guard_fn()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE invalid_baseline BOOLEAN;
+BEGIN
+  -- Read final stored rows rather than the earlier trigger NEW image: a receipt
+  -- response may legitimately be completed later in this same transaction.
+  IF TG_TABLE_NAME = 'mls_ingestion_scopes' THEN
+    SELECT EXISTS (
+      SELECT 1 FROM mls_ingestion_scopes s
+      LEFT JOIN mls_ingestion_receipts r ON r.id = s.full_receipt_id
+      WHERE s.source = NEW.source AND s.scope_id = NEW.scope_id AND s.policy_version = NEW.policy_version
+        AND s.full_receipt_id IS NOT NULL AND (
+          r.id IS NULL OR NOT r.full_snapshot OR
+          CASE WHEN jsonb_typeof(r.response #> '{summary,advertisement_count}') = 'number'
+            THEN (r.response #>> '{summary,advertisement_count}')::numeric <> s.full_count
+            ELSE true END
+        )
+    ) INTO invalid_baseline;
+  ELSE
+    SELECT EXISTS (
+      SELECT 1 FROM mls_ingestion_scopes s
+      LEFT JOIN mls_ingestion_receipts r ON r.id = s.full_receipt_id
+      WHERE s.full_receipt_id = NEW.id AND (
+        r.id IS NULL OR NOT r.full_snapshot OR
+        CASE WHEN jsonb_typeof(r.response #> '{summary,advertisement_count}') = 'number'
+          THEN (r.response #>> '{summary,advertisement_count}')::numeric <> s.full_count
+          ELSE true END
+      )
+    ) INTO invalid_baseline;
+  END IF;
+  IF invalid_baseline THEN RAISE EXCEPTION 'MLS_INGESTION_BASELINE_CONFLICT'; END IF;
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS mls_scope_full_baseline_guard ON mls_ingestion_scopes;
+CREATE CONSTRAINT TRIGGER mls_scope_full_baseline_guard
+  AFTER INSERT OR UPDATE ON mls_ingestion_scopes
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+  EXECUTE FUNCTION mls_ingestion_full_baseline_guard_fn();
+DROP TRIGGER IF EXISTS mls_receipt_full_baseline_guard ON mls_ingestion_receipts;
+CREATE CONSTRAINT TRIGGER mls_receipt_full_baseline_guard
+  AFTER INSERT OR UPDATE ON mls_ingestion_receipts
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
+  EXECUTE FUNCTION mls_ingestion_full_baseline_guard_fn();
