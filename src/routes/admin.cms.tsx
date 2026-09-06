@@ -1,3 +1,5 @@
+import { cmsEditorHasChanges } from "@/components/admin/cms-editor-state";
+import { CmsDistrictField, CmsImageField } from "@/components/admin/CmsEditorFields";
 import { uploadAdminMedia } from "@/lib/admin/media-upload";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
@@ -919,107 +921,21 @@ function AdminCms() {
 
   return (
     <AdminShell title="內容中心" description="CMS：管理屋苑內容、文章、FAQ 及 SEO 資料。">
-      {error ? <AdminError message={error} /> : null}
+      {error ? (
+        <div role="alert" className="space-y-2">
+          <AdminError message={error} />
+          <p>未能更新內容清單；請重試確認最新結果。</p>
+          <Button
+            variant="outline"
+            onClick={() => void refreshCmsData(cmsCursor).catch((err) => setError(errorText(err)))}
+          >
+            重試載入內容
+          </Button>
+        </div>
+      ) : null}
       {!data && !error ? <Skeleton className="h-72 w-full" /> : null}
       {data ? (
         <>
-          <Card className="mb-4">
-            <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
-                  <Brain className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div>
-                  <CardTitle as="h2" className="text-base">
-                    AI Agent FAQ Knowledge
-                  </CardTitle>
-                  <CardDescription>
-                    FAQ、屋苑、文章及放盤會被索引成前台 live agent 的回答來源。
-                  </CardDescription>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleRebuildKnowledge}
-                disabled={knowledgeLoading}
-              >
-                <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
-                {knowledgeLoading ? (knowledgeStatus ? "重建中…" : "載入中…") : "重建索引"}
-              </Button>
-            </CardHeader>
-            <CardContent className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-6">
-              <div className="flex items-center gap-2">
-                <Badge
-                  variant={
-                    knowledgeError ? "outline" : knowledgeStatus?.enabled ? "default" : "secondary"
-                  }
-                >
-                  {knowledgeError
-                    ? "狀態未知"
-                    : knowledgeStatus?.enabled
-                      ? "AI 已啟用"
-                      : "AI 未啟用"}
-                </Badge>
-              </div>
-              <KnowledgeMetric
-                label="來源"
-                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.sources}
-              />
-              <KnowledgeMetric
-                label="內容段數"
-                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.chunks}
-              />
-              <KnowledgeMetric
-                label="公開段數"
-                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.publicChunks}
-              />
-              <KnowledgeMetric
-                label="待重建段數"
-                value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.staleChunks}
-              />
-              <KnowledgeMetric
-                label="最後索引時間"
-                value={formatDateTime(knowledgeStatus?.lastIndexedAt)}
-              />
-              {knowledgeError ? (
-                <div
-                  className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6"
-                  role="alert"
-                >
-                  <p className="text-sm text-muted-foreground">
-                    狀態未知 — 未能讀取 AI 知識庫狀態，請重新載入。
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void refreshKnowledgeStatus()}
-                    disabled={knowledgeLoading}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
-                    重新載入狀態
-                  </Button>
-                </div>
-              ) : null}
-              {knowledgeStatus && knowledgeStatus.staleChunks > 0 ? (
-                <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6">
-                  <p className="text-sm text-muted-foreground">
-                    有 {knowledgeStatus.staleChunks} 段內容已過時，前台 AI
-                    仍會引用舊資料，請重建索引。
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRebuildKnowledge}
-                    disabled={knowledgeLoading}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
-                    重建索引
-                  </Button>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
-
           <div className="mb-4 space-y-2" aria-label="我的草稿">
             {draftRows.map((row) => (
               <Button
@@ -1035,14 +951,22 @@ function AdminCms() {
             ))}
           </div>
           <div className="mb-3 flex items-center gap-2">
-            <span>共 {cmsTotal} 項</span>
-            <Button variant="outline" disabled={!cmsCursor} onClick={() => void refreshCmsData()}>
+            <span>
+              {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項（包括草稿）
+            </span>
+            <Button
+              variant="outline"
+              disabled={!cmsCursor}
+              onClick={() => void refreshCmsData().catch((err) => setError(errorText(err)))}
+            >
               第一頁
             </Button>
             <Button
               variant="outline"
               disabled={!cmsNextCursor}
-              onClick={() => void refreshCmsData(cmsNextCursor)}
+              onClick={() =>
+                void refreshCmsData(cmsNextCursor).catch((err) => setError(errorText(err)))
+              }
             >
               下一頁
             </Button>
@@ -1695,9 +1619,122 @@ function AdminCms() {
               </Card>
             </TabsContent>
           </Tabs>
+          <Card className="mt-4">
+            <details>
+              <summary className="cursor-pointer p-4 text-sm font-medium">
+                AI 知識庫狀態及索引詳情
+              </summary>
+              <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-md bg-muted">
+                    <Brain className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <CardTitle as="h2" className="text-base">
+                      AI 知識庫
+                    </CardTitle>
+                    <CardDescription>
+                      常見問題、屋苑、文章及放盤會用作前台 AI 的回答來源。
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={handleRebuildKnowledge}
+                  disabled={knowledgeLoading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
+                  {knowledgeLoading ? (knowledgeStatus ? "重建中…" : "載入中…") : "重建索引"}
+                </Button>
+              </CardHeader>
+              <CardContent className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-6">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant={
+                      knowledgeError
+                        ? "outline"
+                        : knowledgeStatus?.enabled
+                          ? "default"
+                          : "secondary"
+                    }
+                  >
+                    {knowledgeError
+                      ? "狀態未知"
+                      : knowledgeStatus?.enabled
+                        ? "AI 已啟用"
+                        : "AI 未啟用"}
+                  </Badge>
+                </div>
+                <KnowledgeMetric
+                  label="來源"
+                  value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.sources}
+                />
+                <KnowledgeMetric
+                  label="內容段數"
+                  value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.chunks}
+                />
+                <KnowledgeMetric
+                  label="公開段數"
+                  value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.publicChunks}
+                />
+                <KnowledgeMetric
+                  label="待重建段數"
+                  value={knowledgeLoading && !knowledgeStatus ? "…" : knowledgeStatus?.staleChunks}
+                />
+                <KnowledgeMetric
+                  label="最後索引時間"
+                  value={formatDateTime(knowledgeStatus?.lastIndexedAt)}
+                />
+              </CardContent>
+            </details>
+            <div className="px-4">
+              {" "}
+              {knowledgeError ? (
+                <div
+                  className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6"
+                  role="alert"
+                >
+                  <p className="text-sm text-muted-foreground">
+                    狀態未知 — 未能讀取 AI 知識庫狀態，請重新載入。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void refreshKnowledgeStatus()}
+                    disabled={knowledgeLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
+                    重新載入狀態
+                  </Button>
+                </div>
+              ) : null}
+              {knowledgeStatus && knowledgeStatus.staleChunks > 0 ? (
+                <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6">
+                  <p className="text-sm text-muted-foreground">
+                    有 {knowledgeStatus.staleChunks} 段內容已過時，前台 AI
+                    仍會引用舊資料，請重建索引。
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRebuildKnowledge}
+                    disabled={knowledgeLoading}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
+                    重建索引
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          </Card>
 
           <EstateDialog
             estate={editingEstate}
+            savedPayload={
+              estateEdit && estateEdit.resourceId === editingEstate?.id
+                ? { ...emptyEstate, ...estateEdit?.payload }
+                : null
+            }
             fingerprintValues={estateFingerprintValues(
               editingEstate,
               data?.estates.find((item) => item.id === editingEstate?.id) ?? null,
@@ -1716,6 +1753,11 @@ function AdminCms() {
           />
           <ArticleDialog
             article={editingArticle}
+            savedPayload={
+              articleEdit && articleEdit.resourceId === editingArticle?.id
+                ? { ...emptyArticle, ...articleEdit?.payload }
+                : null
+            }
             fingerprintValues={articleFingerprintValues(
               editingArticle,
               data?.articles.find((item) => item.id === editingArticle?.id) ?? null,
@@ -1972,6 +2014,7 @@ function CmsVideoDialog({
 
 function EstateDialog({
   estate,
+  savedPayload,
   saving,
   publishing,
   revisions,
@@ -1983,6 +2026,7 @@ function EstateDialog({
   onRestoreRevision,
 }: {
   estate: AdminEstateInput | null;
+  savedPayload: Record<string, unknown> | null;
   saving: boolean;
   publishing: boolean;
   revisions: CmsRevisionSummary[] | null;
@@ -1993,30 +2037,60 @@ function EstateDialog({
   onPublish: () => void;
   onRestoreRevision: (revisionId: string) => void;
 }) {
-  const { requestClose, dialog } = useDirtyCloseGuard({
-    isDirty: useEditingDirty(estate),
+  const openingDirty = useEditingDirty(estate);
+  const isDirty = estate
+    ? savedPayload
+      ? cmsEditorHasChanges({ ...estate }, savedPayload)
+      : openingDirty
+    : false;
+  const [imageUploading, setImageUploading] = useState(false);
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
+    isDirty: isDirty || imageUploading,
     onClose,
     description: "你未儲存的屋苑 SEO 修改會遺失。",
   });
+  function requestClose() {
+    if (imageUploading) {
+      toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
+      return;
+    }
+    requestDirtyClose();
+  }
   return (
     <>
       <Dialog open={!!estate} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+        <DialogContent className="max-h-[90dvh] flex flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{estate?.id ? "編輯屋苑 SEO" : "新增屋苑 SEO"}</DialogTitle>
             <DialogDescription>完整欄位會一併儲存，避免覆寫未載入資料。</DialogDescription>
           </DialogHeader>
           {estate ? (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-              <form className="grid gap-4" onSubmit={onSubmit}>
+            <div className="min-h-0 overflow-y-auto space-y-6 pr-1">
+              <form
+                id="cms-estate-form"
+                className="grid gap-4"
+                onSubmit={(event) => {
+                  if (imageUploading) {
+                    event.preventDefault();
+                    return;
+                  }
+                  onSubmit(event);
+                }}
+              >
                 <CmsPublicationCompare
                   resourceType="estate"
                   resourceId={estate.id}
                   localPayload={{ ...estate }}
                 />
-                <div className="grid gap-4 md:grid-cols-3">
+                <fieldset className="grid gap-4 rounded-md border p-4 md:grid-cols-3">
+                  <legend className="px-1 font-semibold">基本資料</legend>
+                  <p className="text-xs text-muted-foreground md:col-span-full">
+                    網址代稱請使用英文小寫、數字及連字號，例如
+                    sea-view。修改現有代稱會影響頁面網址。
+                  </p>
                   <TextField
-                    label="Slug"
+                    label="網址代稱（Slug）"
                     value={estate.slug}
                     onChange={(value) => onChange({ ...estate, slug: value })}
                     required
@@ -2032,22 +2106,16 @@ function EstateDialog({
                     value={estate.name_en ?? ""}
                     onChange={(value) => onChange({ ...estate, name_en: nullIfBlank(value) })}
                   />
-                  <TextField
-                    label="地區"
+                  <CmsDistrictField
                     value={estate.district_slug}
                     onChange={(value) => onChange({ ...estate, district_slug: value })}
-                    required
                   />
                   <TextField
                     label="發展商"
                     value={estate.developer ?? ""}
                     onChange={(value) => onChange({ ...estate, developer: nullIfBlank(value) })}
                   />
-                  <TextField
-                    label="Hero 圖片"
-                    value={estate.hero_image ?? ""}
-                    onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
-                  />
+
                   <NumberField
                     label="落成年份"
                     value={estate.year_completed}
@@ -2064,66 +2132,112 @@ function EstateDialog({
                     onChange={(value) => onChange({ ...estate, total_units: value })}
                   />
                   <NumberField
-                    label="面積下限"
+                    label="面積下限（平方呎）"
                     value={estate.area_min}
                     onChange={(value) => onChange({ ...estate, area_min: value })}
                   />
                   <NumberField
-                    label="面積上限"
+                    label="面積上限（平方呎）"
                     value={estate.area_max}
                     onChange={(value) => onChange({ ...estate, area_max: value })}
                   />
-                </div>
-                <TextAreaField
-                  label="設施"
-                  value={estate.facilities?.join("\n") ?? ""}
-                  onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
-                  rows={4}
-                />
-                <TextAreaField
-                  label="描述"
-                  value={estate.description ?? ""}
-                  onChange={(value) => onChange({ ...estate, description: nullIfBlank(value) })}
-                  rows={5}
-                />
-                <TextField
-                  label="SEO 標題"
-                  value={estate.seo_title ?? ""}
-                  onChange={(value) => onChange({ ...estate, seo_title: nullIfBlank(value) })}
-                />
-                <TextAreaField
-                  label="SEO 描述"
-                  value={estate.seo_description ?? ""}
-                  onChange={(value) => onChange({ ...estate, seo_description: nullIfBlank(value) })}
-                  rows={3}
-                />
-                <CmsPublishFooter
-                  saving={saving}
-                  publishing={publishing}
-                  onClose={requestClose}
-                  onPublish={onPublish}
-                />
+                </fieldset>
+                <fieldset className="grid gap-4 rounded-md border p-4">
+                  <legend className="px-1 font-semibold">頁面內容</legend>
+                  <TextAreaField
+                    label="設施（每行一項，亦可用逗號分隔）"
+                    value={estate.facilities?.join("\n") ?? ""}
+                    onChange={(value) => onChange({ ...estate, facilities: splitList(value) })}
+                    rows={4}
+                  />
+                  <TextAreaField
+                    label="描述"
+                    value={estate.description ?? ""}
+                    onChange={(value) => onChange({ ...estate, description: nullIfBlank(value) })}
+                    rows={5}
+                  />
+                </fieldset>
+                <fieldset className="grid gap-4 rounded-md border p-4">
+                  <legend className="px-1 font-semibold">圖片</legend>
+                  <CmsImageField
+                    onUploadingChange={setImageUploading}
+                    label="屋苑主圖"
+                    ownerType="estate"
+                    value={estate.hero_image ?? ""}
+                    onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
+                  />
+                </fieldset>
+                <fieldset className="grid gap-4 rounded-md border p-4">
+                  <legend className="px-1 font-semibold">搜尋結果外觀</legend>
+                  <TextField
+                    label="SEO 標題"
+                    value={estate.seo_title ?? ""}
+                    onChange={(value) => onChange({ ...estate, seo_title: nullIfBlank(value) })}
+                  />
+                  <TextAreaField
+                    label="SEO 描述"
+                    value={estate.seo_description ?? ""}
+                    onChange={(value) =>
+                      onChange({ ...estate, seo_description: nullIfBlank(value) })
+                    }
+                    rows={3}
+                  />
+                </fieldset>
               </form>
-              <AdminContentCopilot
-                resourceType="estate"
-                resourceId={estate.id ?? null}
-                fingerprintValues={fingerprintValues}
-                values={{
-                  name_zh: estate.name_zh,
-                  name_en: estate.name_en,
-                  description: estate.description,
-                  seo_title: estate.seo_title,
-                  seo_description: estate.seo_description,
-                }}
-                onApply={(patch) => onChange({ ...estate, ...patch })}
-              />
+              <details className="rounded-md border p-3">
+                <summary className="cursor-pointer font-medium">AI 內容建議</summary>
+                <AdminContentCopilot
+                  resourceType="estate"
+                  resourceId={estate.id ?? null}
+                  fingerprintValues={fingerprintValues}
+                  values={{
+                    name_zh: estate.name_zh,
+                    name_en: estate.name_en,
+                    description: estate.description,
+                    seo_title: estate.seo_title,
+                    seo_description: estate.seo_description,
+                  }}
+                  onApply={(patch) => onChange({ ...estate, ...patch })}
+                />
+              </details>
               <CmsRevisionHistory
                 resourceId={estate.id}
                 revisions={revisions}
-                onRestoreRevision={onRestoreRevision}
+                onRestoreRevision={(revisionId) => {
+                  if (imageUploading) {
+                    toast.info("圖片上載中，請等待完成後再還原版本。");
+                    return;
+                  }
+                  onRestoreRevision(revisionId);
+                }}
               />
             </div>
           ) : null}
+          {estate ? (
+            <CmsPublishFooter
+              uploading={imageUploading}
+              formId="cms-estate-form"
+              saving={saving}
+              publishing={publishing}
+              dirty={isDirty}
+              hasSaved={!!savedPayload}
+              onClose={requestClose}
+              onPublish={() => setConfirmingPublish(true)}
+            />
+          ) : null}
+          <AdminConfirmDialog
+            open={confirmingPublish}
+            onOpenChange={setConfirmingPublish}
+            title="確認發佈內容"
+            description="此操作會將已儲存草稿公開。請先比較目前發布版本並核對內容。"
+            confirmLabel="確認發佈"
+            disabled={imageUploading || isDirty || !savedPayload}
+            isPending={publishing}
+            onConfirm={() => {
+              setConfirmingPublish(false);
+              onPublish();
+            }}
+          />
         </DialogContent>
       </Dialog>
       {dialog}
@@ -2133,6 +2247,7 @@ function EstateDialog({
 
 function ArticleDialog({
   article,
+  savedPayload,
   saving,
   publishing,
   revisions,
@@ -2144,6 +2259,7 @@ function ArticleDialog({
   onRestoreRevision,
 }: {
   article: AdminArticleInput | null;
+  savedPayload: Record<string, unknown> | null;
   saving: boolean;
   publishing: boolean;
   revisions: CmsRevisionSummary[] | null;
@@ -2154,15 +2270,30 @@ function ArticleDialog({
   onPublish: () => void;
   onRestoreRevision: (revisionId: string) => void;
 }) {
-  const { requestClose, dialog } = useDirtyCloseGuard({
-    isDirty: useEditingDirty(article),
+  const openingDirty = useEditingDirty(article);
+  const isDirty = article
+    ? savedPayload
+      ? cmsEditorHasChanges({ ...article }, savedPayload)
+      : openingDirty
+    : false;
+  const [imageUploading, setImageUploading] = useState(false);
+  const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
+    isDirty: isDirty || imageUploading,
     onClose,
     description: "你未儲存的文章修改會遺失。",
   });
+  function requestClose() {
+    if (imageUploading) {
+      toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
+      return;
+    }
+    requestDirtyClose();
+  }
   return (
     <>
       <Dialog open={!!article} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-6xl">
+        <DialogContent className="max-h-[90dvh] flex flex-col overflow-hidden sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>{article?.id ? "文章編輯" : "新增文章"}</DialogTitle>
             <DialogDescription>
@@ -2170,16 +2301,31 @@ function ArticleDialog({
             </DialogDescription>
           </DialogHeader>
           {article ? (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
-              <form className="grid gap-4" onSubmit={onSubmit}>
+            <div className="min-h-0 overflow-y-auto space-y-6 pr-1">
+              <form
+                id="cms-article-form"
+                className="grid gap-4"
+                onSubmit={(event) => {
+                  if (imageUploading) {
+                    event.preventDefault();
+                    return;
+                  }
+                  onSubmit(event);
+                }}
+              >
                 <CmsPublicationCompare
                   resourceType="article"
                   resourceId={article.id}
                   localPayload={{ ...article }}
                 />
-                <div className="grid gap-4 md:grid-cols-2">
+                <fieldset className="grid gap-4 rounded-md border p-4 md:grid-cols-2">
+                  <legend className="px-1 font-semibold">基本資料</legend>
+                  <p className="text-xs text-muted-foreground md:col-span-full">
+                    網址代稱請使用英文小寫、數字及連字號，例如
+                    sea-view。修改現有代稱會影響頁面網址。
+                  </p>
                   <TextField
-                    label="Slug"
+                    label="網址代稱（Slug）"
                     value={article.slug}
                     onChange={(value) => onChange({ ...article, slug: value })}
                     required
@@ -2200,64 +2346,103 @@ function ArticleDialog({
                     value={article.reading_minutes}
                     onChange={(value) => onChange({ ...article, reading_minutes: value })}
                   />
-                  <TextField
+                </fieldset>
+                <fieldset className="grid gap-4 rounded-md border p-4">
+                  <legend className="px-1 font-semibold">頁面內容</legend>
+                  <TextAreaField
+                    label="摘要"
+                    value={article.excerpt ?? ""}
+                    onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
+                    rows={3}
+                  />
+                  <TextAreaField
+                    label="內容"
+                    value={article.content ?? ""}
+                    onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
+                    rows={8}
+                  />
+                </fieldset>
+                <fieldset className="grid gap-4 rounded-md border p-4">
+                  <legend className="px-1 font-semibold">圖片</legend>
+                  <CmsImageField
+                    onUploadingChange={setImageUploading}
                     label="封面圖片"
+                    ownerType="article"
                     value={article.cover_image ?? ""}
                     onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
                   />
-                </div>
-                <TextAreaField
-                  label="摘要"
-                  value={article.excerpt ?? ""}
-                  onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
-                  rows={3}
-                />
-                <TextAreaField
-                  label="內容"
-                  value={article.content ?? ""}
-                  onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
-                  rows={8}
-                />
-                <TextField
-                  label="SEO 標題"
-                  value={article.seo_title ?? ""}
-                  onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
-                />
-                <TextAreaField
-                  label="SEO 描述"
-                  value={article.seo_description ?? ""}
-                  onChange={(value) =>
-                    onChange({ ...article, seo_description: nullIfBlank(value) })
-                  }
-                  rows={3}
-                />
-                <CmsPublishFooter
-                  saving={saving}
-                  publishing={publishing}
-                  onClose={requestClose}
-                  onPublish={onPublish}
-                />
+                </fieldset>
+                <fieldset className="grid gap-4 rounded-md border p-4">
+                  <legend className="px-1 font-semibold">搜尋結果外觀</legend>
+                  <TextField
+                    label="SEO 標題"
+                    value={article.seo_title ?? ""}
+                    onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
+                  />
+                  <TextAreaField
+                    label="SEO 描述"
+                    value={article.seo_description ?? ""}
+                    onChange={(value) =>
+                      onChange({ ...article, seo_description: nullIfBlank(value) })
+                    }
+                    rows={3}
+                  />
+                </fieldset>
               </form>
-              <AdminContentCopilot
-                resourceType="article"
-                resourceId={article.id ?? null}
-                fingerprintValues={fingerprintValues}
-                values={{
-                  title: article.title,
-                  excerpt: article.excerpt,
-                  content: article.content,
-                  seo_title: article.seo_title,
-                  seo_description: article.seo_description,
-                }}
-                onApply={(patch) => onChange({ ...article, ...patch })}
-              />
+              <details className="rounded-md border p-3">
+                <summary className="cursor-pointer font-medium">AI 內容建議</summary>
+                <AdminContentCopilot
+                  resourceType="article"
+                  resourceId={article.id ?? null}
+                  fingerprintValues={fingerprintValues}
+                  values={{
+                    title: article.title,
+                    excerpt: article.excerpt,
+                    content: article.content,
+                    seo_title: article.seo_title,
+                    seo_description: article.seo_description,
+                  }}
+                  onApply={(patch) => onChange({ ...article, ...patch })}
+                />
+              </details>
               <CmsRevisionHistory
                 resourceId={article.id}
                 revisions={revisions}
-                onRestoreRevision={onRestoreRevision}
+                onRestoreRevision={(revisionId) => {
+                  if (imageUploading) {
+                    toast.info("圖片上載中，請等待完成後再還原版本。");
+                    return;
+                  }
+                  onRestoreRevision(revisionId);
+                }}
               />
             </div>
           ) : null}
+          {article ? (
+            <CmsPublishFooter
+              uploading={imageUploading}
+              formId="cms-article-form"
+              saving={saving}
+              publishing={publishing}
+              dirty={isDirty}
+              hasSaved={!!savedPayload}
+              onClose={requestClose}
+              onPublish={() => setConfirmingPublish(true)}
+            />
+          ) : null}
+          <AdminConfirmDialog
+            open={confirmingPublish}
+            onOpenChange={setConfirmingPublish}
+            title="確認發佈內容"
+            description="此操作會將已儲存草稿公開。請先比較目前發布版本並核對內容。"
+            confirmLabel="確認發佈"
+            disabled={imageUploading || isDirty || !savedPayload}
+            isPending={publishing}
+            onConfirm={() => {
+              setConfirmingPublish(false);
+              onPublish();
+            }}
+          />
         </DialogContent>
       </Dialog>
       {dialog}
@@ -2472,37 +2657,58 @@ function EditorFooter({ saving, onClose }: { saving: boolean; onClose: () => voi
 
 /**
  * Footer for the two CMS-revision-engine-backed dialogs (estate, article).
- * "儲存草稿" never touches the live table; "發布" saves a draft and
- * immediately publishes it. Both buttons stay visible regardless of the
+ * "儲存草稿" never touches the live table; "發佈" opens confirmation for
+ * publishing the saved revision. Both buttons stay visible regardless of the
  * acting staff member's role -- the server enforces the real publish/restore
  * permission boundary (admin/manager only) and callCms() surfaces a clear
  * zh-HK message on a 403, rather than this file re-deriving role state
  * client-side.
  */
 function CmsPublishFooter({
+  uploading,
+  formId,
+  dirty,
+  hasSaved,
   saving,
   publishing,
   onClose,
   onPublish,
 }: {
+  uploading: boolean;
+  formId: string;
+  dirty: boolean;
+  hasSaved: boolean;
   saving: boolean;
   publishing: boolean;
   onClose: () => void;
   onPublish: () => void;
 }) {
-  const disabled = saving || publishing;
+  const disabled = uploading || saving || publishing;
   return (
-    <DialogFooter>
+    <DialogFooter className="shrink-0 border-t pt-3 sm:flex-wrap">
+      <p role="status" className="mr-auto self-center text-sm">
+        {uploading
+          ? "圖片上載中，完成後才可儲存、發佈或關閉"
+          : saving
+            ? "儲存中…"
+            : publishing
+              ? "發佈中…"
+              : dirty
+                ? "有未儲存修改"
+                : hasSaved
+                  ? "目前內容已儲存"
+                  : "尚未儲存草稿"}
+      </p>
       <Button type="button" variant="ghost" onClick={onClose} disabled={disabled}>
         取消
       </Button>
-      <Button type="submit" variant="outline" disabled={disabled}>
+      <Button type="submit" form={formId} variant="outline" disabled={disabled}>
         <Save className="h-4 w-4" />
         {saving ? "儲存中…" : "儲存草稿"}
       </Button>
-      <Button type="button" onClick={onPublish} disabled={disabled}>
+      <Button type="button" onClick={onPublish} disabled={disabled || dirty || !hasSaved}>
         <Upload className="h-4 w-4" />
-        {publishing ? "發布中…" : "發布"}
+        {publishing ? "發佈中…" : "發佈"}
       </Button>
     </DialogFooter>
   );
@@ -2527,8 +2733,8 @@ function CmsRevisionHistory({
 }) {
   if (!resourceId || !revisions) return null;
   return (
-    <div className="rounded-md border p-4 lg:col-span-2">
-      <h4 className="text-sm font-semibold">版本紀錄</h4>
+    <details className="rounded-md border p-4 lg:col-span-2">
+      <summary className="cursor-pointer text-sm font-semibold">版本紀錄</summary>
       {revisions.length ? (
         <ul className="mt-2 space-y-2">
           {revisions.map((revision) => (
@@ -2556,7 +2762,7 @@ function CmsRevisionHistory({
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">暫無版本紀錄</p>
       )}
-    </div>
+    </details>
   );
 }
 
@@ -2651,8 +2857,8 @@ function NoSearchMatch({
 }) {
   return (
     <AdminEmptyState
-      title={`在已載入的${label}中找不到符合「${query}」的項目`}
-      description="搜尋只涵蓋本頁已載入的資料，較舊的記錄可能未有載入。請檢查關鍵字，或清除搜尋查看全部。"
+      title={`${label}中找不到符合「${query}」的項目`}
+      description="搜尋涵蓋目前分類的全部記錄，並套用已選篩選條件。請檢查關鍵字，或清除搜尋。"
       action={
         <Button variant="outline" size="sm" onClick={onClear}>
           清除搜尋

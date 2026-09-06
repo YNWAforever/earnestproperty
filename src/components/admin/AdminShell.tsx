@@ -49,7 +49,7 @@ const EVERYONE: StaffAccessRole[] = ["admin", "manager", "agent", "viewer"];
 
 const navGroups = [
   {
-    heading: "Workspace",
+    heading: "日常跟進",
     items: [
       { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true, roles: STAFF },
       {
@@ -63,7 +63,7 @@ const navGroups = [
         // The daily lead-triage workspace had no sidebar entry at all: its only
         // way in was one button on /admin/leads.
         to: "/admin/leads/command-center",
-        label: "Lead Command Center",
+        label: "跟進工作台",
         icon: Radar,
         activeExact: true,
         includeSearch: false,
@@ -86,7 +86,7 @@ const navGroups = [
     ],
   },
   {
-    heading: "Growth",
+    heading: "內容與推廣",
     items: [
       {
         to: "/admin/cms",
@@ -121,7 +121,7 @@ const navGroups = [
     ],
   },
   {
-    heading: "Administration",
+    heading: "團隊與系統",
     items: [
       {
         to: "/admin/team",

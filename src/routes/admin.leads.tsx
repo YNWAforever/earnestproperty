@@ -63,7 +63,17 @@ import type {
   AdminLeadUpdateInput,
 } from "@/lib/neon/admin-data.types";
 
-type LeadStage = "new" | "contacted" | "viewing" | "negotiating" | "closed_won" | "closed_lost";
+import {
+  type LeadStage,
+  stageOptions,
+  stageLabels,
+  intentLabels,
+  intentOptions,
+  sourceLabels,
+  labeledFilterOptions,
+  quickLeadFilter,
+  aiScoreLabel,
+} from "@/lib/admin/crm-presentation";
 type OptInFilter = "all" | "yes" | "no";
 
 type LeadFilters = {
@@ -99,42 +109,9 @@ const defaultFilters: LeadFilters = {
 };
 
 const bulkErrorLabels: Record<string, string> = {
-  NO_LEADS_SELECTED: "請先選擇至少一個 Lead。",
-  TOO_MANY_LEADS_SELECTED: "一次最多只可更新 200 個 Lead，請分批處理。",
+  NO_LEADS_SELECTED: "請先選擇至少一筆客戶查詢。",
+  TOO_MANY_LEADS_SELECTED: "一次最多只可更新 200 筆客戶查詢，請分批處理。",
   NO_CHANGES_REQUESTED: "請選擇要套用的階段或負責代理。",
-};
-
-const stageOptions: { value: LeadStage; label: string }[] = [
-  { value: "new", label: "新 Lead" },
-  { value: "contacted", label: "跟進" },
-  { value: "viewing", label: "睇樓" },
-  { value: "negotiating", label: "商議中" },
-  { value: "closed_won", label: "成交" },
-  { value: "closed_lost", label: "失敗" },
-];
-
-const stageLabels = Object.fromEntries(stageOptions.map((option) => [option.value, option.label]));
-
-const intentLabels: Record<string, string> = {
-  unknown: "待確認",
-  buyer: "買樓",
-  renter: "租樓",
-  landlord: "放盤",
-  seller: "放售",
-  valuation: "估價",
-};
-
-const intentOptions: { value: string; label: string }[] = Object.entries(intentLabels).map(
-  ([value, label]) => ({ value, label }),
-);
-
-const sourceLabels: Record<string, string> = {
-  website: "網站",
-  live_agent: "線上客服",
-  whatsapp: "WhatsApp",
-  phone: "電話",
-  referral: "轉介",
-  walk_in: "到店",
 };
 
 // Filters used to live in local useState, so reload, browser Back from a lead,
@@ -249,7 +226,7 @@ function AdminLeads() {
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<AdminLeadAiProfile | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  // A failed fetch used to render the same 「未有 AI profile」 empty state as a lead
+  // A failed fetch used to render the same 「未有 AI 分析」 empty state as a lead
   // that was simply never analysed, so a broken AI backend looked like normal
   // data and nobody retried.
   const [aiError, setAiError] = useState<string | null>(null);
@@ -351,7 +328,7 @@ function AdminLeads() {
       try {
         const data = await fetchAdminLead({ data: { id } });
         if (requestId !== detailRequestRef.current || !canApplyLeadDetail(id)) return null;
-        if (!data) throw new Error("找不到 Lead");
+        if (!data) throw new Error("找不到客戶查詢");
 
         const lead = data as AdminLeadDetail;
         setDetail(lead);
@@ -421,8 +398,16 @@ function AdminLeads() {
     loadLeadDetail(selectedId, { resetNote: true });
   }, [loadLeadDetail, panelOpen, selectedId]);
 
-  const intentOptions = useMemo(() => uniqueValues(rows, "intent"), [rows]);
-  const sourceOptions = useMemo(() => uniqueValues(rows, "source"), [rows]);
+  const intentFilterOptions = labeledFilterOptions(
+    intentLabels,
+    uniqueValues(rows, "intent"),
+    filters.intent,
+  );
+  const sourceFilterOptions = labeledFilterOptions(
+    sourceLabels,
+    uniqueValues(rows, "source"),
+    filters.source,
+  );
   const filteredRows = useMemo(() => rows ?? [], [rows]);
 
   // Selection is pruned to what is currently visible, so a filter change cannot
@@ -478,8 +463,8 @@ function AdminLeads() {
       const requested = result.requested ?? selectedVisibleIds.length;
       toast.success(
         updated === requested
-          ? `已更新 ${updated} 個 Lead`
-          : `已更新 ${updated}／${requested} 個 Lead，其餘沒有權限修改`,
+          ? `已更新 ${updated} 筆客戶查詢`
+          : `已更新 ${updated}／${requested} 筆客戶查詢，其餘沒有權限修改`,
       );
     } catch (err) {
       toast.error(errorText(err));
@@ -541,7 +526,7 @@ function AdminLeads() {
   const { requestClose: requestPanelClose, dialog: unsavedLeadDialog } = useDirtyCloseGuard({
     isDirty: isLeadDetailDirty,
     onClose: () => handlePanelOpenChange(false),
-    description: "你有未儲存的 Lead 修改或跟進備註，離開後會遺失。",
+    description: "你有未儲存的查詢修改或跟進備註，離開後會遺失。",
   });
   // The sheet was guarded but the page was not, so clicking a sidebar entry or
   // the browser Back button while the panel was open still destroyed the edits.
@@ -551,7 +536,7 @@ function AdminLeads() {
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
 
-  async function saveLead(nextDraft = draft, successMessage = "Lead 已更新") {
+  async function saveLead(nextDraft = draft, successMessage = "客戶查詢已更新") {
     if (!detail || !nextDraft) return;
 
     // Without this the inline error was decorative: 儲存 still wrote a reversed
@@ -566,7 +551,7 @@ function AdminLeads() {
     const targetLeadId = detail.id;
     setMutatingAction("save");
     try {
-      // 儲存 used to submit only the field draft while reporting 「Lead 已更新」,
+      // 儲存 used to submit only the field draft while reporting 「客戶查詢已更新」,
       // so a follow-up note typed just above the button was silently discarded
       // and the toast said everything had saved.
       //
@@ -619,6 +604,8 @@ function AdminLeads() {
     setNoteError(null);
 
     const targetLeadId = detail.id;
+    const requestId = detailRequestRef.current;
+    const submittedNote = noteBody;
     setMutatingAction("note");
     try {
       await createAdminLeadActivity({
@@ -631,13 +618,21 @@ function AdminLeads() {
           completed_at: null,
         },
       });
+      if (!canApplyLeadDetail(targetLeadId) || requestId !== detailRequestRef.current) return;
+      // The note is committed now. Retain any newer text, even if refreshing fails.
+      setNoteBody((current) => (current === submittedNote ? "" : current));
       await refreshLeads();
-      if (!canApplyLeadDetail(targetLeadId)) return;
-
-      const refreshed = await loadLeadDetail(targetLeadId, { resetNote: true });
-      if (refreshed && canApplyLeadDetail(targetLeadId)) toast.success("跟進紀錄已新增");
+      if (!canApplyLeadDetail(targetLeadId) || requestId !== detailRequestRef.current) return;
+      // A note-only save must not run loadLeadDetail, which resets field drafts.
+      const refreshed = await fetchAdminLead({ data: { id: targetLeadId } });
+      if (!canApplyLeadDetail(targetLeadId) || requestId !== detailRequestRef.current) return;
+      if (!refreshed) throw new Error("跟進紀錄已儲存，但未能重新載入查詢");
+      setDetail(refreshed as AdminLeadDetail);
+      setDetailError(null);
+      toast.success("跟進紀錄已新增");
     } catch (err) {
-      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
+      if (canApplyLeadDetail(targetLeadId) && requestId === detailRequestRef.current)
+        toast.error(errorText(err));
     } finally {
       setMutatingAction(null);
     }
@@ -645,7 +640,7 @@ function AdminLeads() {
 
   async function markStage(stage: LeadStage, label: string) {
     if (!draft) return;
-    await saveLead({ ...draft, stage }, `Lead 已標記為${label}`);
+    await saveLead({ ...draft, stage }, `客戶查詢已標記為${label}`);
   }
 
   // `markStage` submits the whole draft (budget/負責代理/備註/意圖 included), not
@@ -681,7 +676,7 @@ function AdminLeads() {
       const profile = await analyzeAdminLeadAiProfile({ data: { leadId: targetLeadId } });
       if (requestId !== aiRequestRef.current || !canApplyLeadDetail(targetLeadId)) return;
       setAiProfile(profile as AdminLeadAiProfile);
-      toast.success("AI profile 已更新");
+      toast.success("AI 分析 已更新");
     } catch (err) {
       if (canApplyLeadDetail(targetLeadId)) {
         setAiError(errorText(err));
@@ -717,7 +712,7 @@ function AdminLeads() {
             : current,
         );
       }
-      toast.success(approve ? "AI tag 已批准" : "AI tag 已拒絕");
+      toast.success(approve ? "AI 標籤 已批准" : "AI 標籤 已拒絕");
     } catch (err) {
       if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
     } finally {
@@ -726,15 +721,15 @@ function AdminLeads() {
   }
 
   const isMutating = mutatingAction !== null;
-  const panelTitle = detail?.name ?? detail?.phone ?? "Lead 詳情";
+  const panelTitle = detail?.name ?? detail?.phone ?? "客戶查詢詳情";
   const panelDescription = detail
     ? `${stageLabels[detail.stage] ?? detail.stage} · ${formatIntent(detail.intent)} · ${formatDate(
         detail.created_at,
       )}`
-    : "查看聯絡資料、Lead 欄位及 Activity 跟進紀錄。";
+    : "查看聯絡資料、查詢資料及 內部跟進紀錄。";
 
   return (
-    <AdminShell title="客戶查詢" description="CRM：集中處理買樓、租樓及業主估價 leads。">
+    <AdminShell title="客戶查詢" description="集中處理買樓、租樓及業主估價查詢。">
       <AdminToolbar
         filters={
           <>
@@ -750,7 +745,7 @@ function AdminLeads() {
                 onChange={(event) => setQueryDraft(event.target.value)}
                 className="h-11 pl-9 lg:h-9"
                 placeholder="搜尋客戶、電話、放盤"
-                aria-label="搜尋 leads"
+                aria-label="搜尋客戶查詢"
               />
             </div>
 
@@ -767,32 +762,6 @@ function AdminLeads() {
                 ))}
               </SelectContent>
             </Select>
-
-            <Input
-              className="h-11 w-36 lg:h-9"
-              aria-label="意圖篩選"
-              placeholder="全部意圖"
-              list="lead-intent-options"
-              value={filters.intent === "all" ? "" : filters.intent}
-              onChange={(event) => setFilter("intent", event.target.value || "all")}
-            />
-            <datalist id="lead-intent-options">
-              {intentOptions.map((value) => (
-                <option key={value} value={value} />
-              ))}
-            </datalist>
-            <Input
-              aria-label="來源篩選"
-              placeholder="全部來源"
-              list="lead-source-options"
-              value={filters.source === "all" ? "" : filters.source}
-              onChange={(event) => setFilter("source", event.target.value || "all")}
-            />
-            <datalist id="lead-source-options">
-              {sourceOptions.map((value) => (
-                <option key={value} value={value} />
-              ))}
-            </datalist>
 
             <Select
               value={filters.agent_id}
@@ -812,20 +781,6 @@ function AdminLeads() {
               </SelectContent>
             </Select>
 
-            <Select
-              value={filters.optIn}
-              onValueChange={(value) => setFilter("optIn", value as OptInFilter)}
-            >
-              <SelectTrigger className="h-11 w-[9rem] lg:h-9" aria-label="WhatsApp opt-in">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部 WhatsApp</SelectItem>
-                <SelectItem value="yes">已 Opt-in</SelectItem>
-                <SelectItem value="no">未 Opt-in</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Button
               type="button"
               variant="ghost"
@@ -841,7 +796,7 @@ function AdminLeads() {
         actions={
           <>
             <Button asChild size="sm" className="h-11 lg:h-9">
-              <Link to="/admin/leads/command-center">前往 Command Center</Link>
+              <Link to="/admin/leads/command-center">前往跟進工作台</Link>
             </Button>
             {/* `listAdminLeads` is capped at LIMIT 100 server-side and every
                 filter here runs client-side over that slice, so a bare
@@ -855,6 +810,57 @@ function AdminLeads() {
         }
       />
 
+      <div className="mb-3 flex flex-wrap gap-2" aria-label="快速篩選">
+        <Button
+          variant={filters.stage === "new" ? "secondary" : "outline"}
+          aria-pressed={filters.stage === "new"}
+          onClick={() => setFilters((current) => quickLeadFilter(current, "new"))}
+        >
+          新查詢
+        </Button>
+        <Button
+          variant={filters.agent_id === "unassigned" ? "secondary" : "outline"}
+          aria-pressed={filters.agent_id === "unassigned"}
+          onClick={() => setFilters((current) => quickLeadFilter(current, "unassigned"))}
+        >
+          未指派代理
+        </Button>
+      </div>
+      <details className="mb-4 rounded-lg border p-3">
+        <summary className="cursor-pointer text-sm font-medium">
+          進階篩選
+          {filters.intent !== "all" || filters.source !== "all" || filters.optIn !== "all"
+            ? "（已套用）"
+            : ""}
+        </summary>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <AdminStatusSelect
+            ariaLabel="意圖篩選"
+            value={filters.intent}
+            options={[{ value: "all", label: "全部意圖" }, ...intentFilterOptions]}
+            onChange={(value) => setFilter("intent", value)}
+          />
+          <AdminStatusSelect
+            ariaLabel="來源篩選"
+            value={filters.source}
+            options={[{ value: "all", label: "全部來源" }, ...sourceFilterOptions]}
+            onChange={(value) => setFilter("source", value)}
+          />
+          <Select
+            value={filters.optIn}
+            onValueChange={(value) => setFilter("optIn", value as OptInFilter)}
+          >
+            <SelectTrigger className="h-11 w-[9rem] lg:h-9" aria-label="WhatsApp 推廣同意">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部推廣同意狀態</SelectItem>
+              <SelectItem value="yes">已同意推廣</SelectItem>
+              <SelectItem value="no">未有推廣同意</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </details>
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -875,15 +881,13 @@ function AdminLeads() {
       {loadingRows && !rows ? <Skeleton className="h-72 w-full" /> : null}
       {rows && filteredRows.length === 0 ? (
         <AdminEmptyState
-          title={rows.length === 0 ? "未有 Leads" : "已載入的 Leads 中沒有符合條件的項目"}
-          description="沒有符合目前搜尋或篩選條件的 Leads。"
+          title="沒有符合條件的客戶查詢"
+          description="搜尋及篩選已套用至全部可查看的查詢。可清除篩選再試。"
           action={
-            rows.length > 0 ? (
-              <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>
-                <RotateCcw className="h-4 w-4" />
-                清除篩選
-              </Button>
-            ) : undefined
+            <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>
+              <RotateCcw className="h-4 w-4" />
+              清除篩選
+            </Button>
           }
         />
       ) : null}
@@ -891,7 +895,7 @@ function AdminLeads() {
             per lead, each refetching the whole list. */}
       {selectedVisibleIds.length > 0 ? (
         <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
-          <span className="text-sm font-medium">已選 {selectedVisibleIds.length} 個 Lead</span>
+          <span className="text-sm font-medium">已選 {selectedVisibleIds.length} 筆客戶查詢</span>
           <AdminStatusSelect
             ariaLabel="批量設定階段"
             value={bulkStage}
@@ -942,7 +946,7 @@ function AdminLeads() {
                   <TableRow>
                     <TableHead className="w-10">
                       <Checkbox
-                        aria-label="全選本頁 Leads"
+                        aria-label="全選本頁客戶查詢"
                         checked={allVisibleSelected}
                         onCheckedChange={(checked) => toggleSelectAll(checked === true)}
                       />
@@ -985,25 +989,32 @@ function AdminLeads() {
         onOpenChange={(open) => (open ? handlePanelOpenChange(true) : requestPanelClose())}
         footer={
           detail && draft ? (
-            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
                 disabled={isMutating || draft.stage === "closed_lost"}
-                onClick={() => requestMarkStage("closed_lost", "失敗")}
+                onClick={() => requestMarkStage("closed_lost", stageLabels.closed_lost)}
               >
                 <XCircle className="h-4 w-4" />
-                標記失敗
+                結束（未成交）
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 disabled={isMutating || draft.stage === "closed_won"}
-                onClick={() => requestMarkStage("closed_won", "成交")}
+                onClick={() => requestMarkStage("closed_won", stageLabels.closed_won)}
               >
                 <Trophy className="h-4 w-4" />
-                標記成交
+                標記已成交
               </Button>
+              <p role="status" className="w-full text-sm text-muted-foreground">
+                {isMutating
+                  ? "儲存中…"
+                  : isLeadDetailDirty
+                    ? "有未儲存的修改"
+                    : "目前沒有未儲存修改"}
+              </p>
               <Button type="button" disabled={isMutating} onClick={() => saveLead()}>
                 <Save className="h-4 w-4" />
                 {mutatingAction === "save" ? "儲存中…" : "儲存"}
@@ -1043,8 +1054,8 @@ function AdminLeads() {
       <AdminConfirmDialog
         open={bulkConfirmOpen}
         title="確認批量更新？"
-        description={`此操作會一次過修改 ${selectedVisibleIds.length} 個 Lead，無法一次過復原。`}
-        confirmLabel={`更新 ${selectedVisibleIds.length} 個 Lead`}
+        description={`此操作會一次過修改 ${selectedVisibleIds.length} 筆客戶查詢，無法一次過復原。`}
+        confirmLabel={`更新 ${selectedVisibleIds.length} 筆客戶查詢`}
         confirmVariant="destructive"
         isPending={bulkPending}
         onOpenChange={(open) => {
@@ -1075,7 +1086,7 @@ function AdminLeads() {
       <AdminConfirmDialog
         open={pendingStageAction !== null}
         title={`標記為${pendingStageAction?.label ?? ""}`}
-        description="此 Lead 有其他未儲存的修改（預算、負責代理、備註或意圖），會一併儲存。確定要繼續嗎？"
+        description="此客戶查詢 有其他未儲存的修改（預算、負責代理、備註或意圖），會一併儲存。確定要繼續嗎？"
         confirmLabel="確定並儲存"
         onOpenChange={(open) => {
           if (!open) setPendingStageAction(null);
@@ -1155,10 +1166,10 @@ function LeadRow({
         {lead.opt_in_whatsapp ? (
           <Badge variant="secondary">
             <CheckCircle2 className="h-3.5 w-3.5" />
-            Opt-in
+            已同意推廣
           </Badge>
         ) : (
-          <Badge variant="outline">未 Opt-in</Badge>
+          <Badge variant="outline">未有推廣同意</Badge>
         )}
       </TableCell>
     </TableRow>
@@ -1218,9 +1229,9 @@ function LeadDetailEditor({
             <dt className="text-muted-foreground">WhatsApp</dt>
             <dd>
               {lead.opt_in_whatsapp ? (
-                <Badge variant="secondary">已 Opt-in</Badge>
+                <Badge variant="secondary">已同意推廣</Badge>
               ) : (
-                <Badge variant="outline">未 Opt-in</Badge>
+                <Badge variant="outline">未有推廣同意</Badge>
               )}
             </dd>
           </div>
@@ -1228,11 +1239,11 @@ function LeadDetailEditor({
       </section>
 
       <section className="rounded-lg border p-4">
-        <h3 className="text-sm font-semibold">Lead 欄位</h3>
+        <h3 className="text-sm font-semibold">查詢資料</h3>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label="階段">
             <AdminStatusSelect
-              ariaLabel="Lead 階段"
+              ariaLabel="查詢階段"
               value={draft.stage}
               options={stageOptions}
               disabled={disabled}
@@ -1332,7 +1343,7 @@ function LeadDetailEditor({
             />
           </Field>
 
-          <Field label="備註">
+          <Field label="內部備註（不會傳送給客戶）">
             <Textarea
               value={draft.note}
               rows={3}
@@ -1344,11 +1355,75 @@ function LeadDetailEditor({
       </section>
 
       <section className="rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">內部跟進紀錄</h3>
+          <Badge variant="outline">{lead.activities.length}</Badge>
+        </div>
+
+        <p className="mt-2 text-sm text-muted-foreground">
+          只供團隊查看，不會傳送 WhatsApp。下方「儲存」會一併儲存查詢修改及這則紀錄。
+        </p>
+        <div className="mt-4 grid gap-3">
+          <Textarea
+            ref={noteInputRef}
+            aria-label="新增內部跟進紀錄"
+            aria-invalid={Boolean(noteError)}
+            aria-describedby={noteError ? "note-error" : undefined}
+            value={noteBody}
+            rows={3}
+            disabled={disabled}
+            placeholder="輸入內部跟進紀錄，不會傳送 WhatsApp"
+            onChange={(event) => onNoteChange(event.target.value)}
+          />
+          {noteError ? (
+            <p id="note-error" role="alert" className="text-sm text-destructive">
+              {noteError}
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || noteSaving}
+            onClick={onAddNote}
+          >
+            <StickyNote className="h-4 w-4" />
+            {noteSaving ? "儲存中…" : "只儲存跟進紀錄"}
+          </Button>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {lead.activities.length === 0 ? (
+            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              未有跟進紀錄
+            </p>
+          ) : (
+            lead.activities.map((activity) => (
+              <article key={activity.id} className="rounded-lg border bg-muted/20 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Badge variant={activity.activity_type === "note" ? "secondary" : "outline"}>
+                    {formatActivityType(activity.activity_type)}
+                  </Badge>
+                  <time className="text-xs text-muted-foreground">
+                    {formatDate(activity.created_at)}
+                  </time>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm">{activity.body ?? "—"}</p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {activity.staff_name ?? "未記名"}
+                  {activity.due_at ? ` · 到期 ${formatDate(activity.due_at)}` : ""}
+                </p>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-lg border p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-semibold">
               <Sparkles className="h-4 w-4" />
-              AI Profile
+              AI 分析
             </h3>
             {aiProfile?.profile?.last_analyzed_at ? (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -1379,7 +1454,7 @@ function LeadDetailEditor({
         {aiProfile?.profile ? (
           <div className="mt-4 grid gap-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="default">Score {aiProfile.profile.lead_score}</Badge>
+              <Badge variant="default">AI 分數 {aiScoreLabel(aiProfile.profile.lead_score)}</Badge>
               {aiProfile.profile.urgency ? (
                 <Badge variant="outline">{formatAiUrgency(aiProfile.profile.urgency)}</Badge>
               ) : null}
@@ -1398,11 +1473,11 @@ function LeadDetailEditor({
           </div>
         ) : aiError ? (
           <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-            載入 AI profile 失敗，請重試。
+            載入 AI 分析 失敗，請重試。
           </p>
         ) : !aiLoading ? (
           <p className="mt-4 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-            未有 AI profile
+            未有 AI 分析
           </p>
         ) : null}
 
@@ -1457,67 +1532,6 @@ function LeadDetailEditor({
             ))}
           </div>
         ) : null}
-      </section>
-
-      <section className="rounded-lg border p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">Activity / 跟進紀錄</h3>
-          <Badge variant="outline">{lead.activities.length}</Badge>
-        </div>
-
-        <div className="mt-4 grid gap-3">
-          <Textarea
-            ref={noteInputRef}
-            aria-label="新增跟進 note"
-            aria-invalid={Boolean(noteError)}
-            aria-describedby={noteError ? "note-error" : undefined}
-            value={noteBody}
-            rows={3}
-            disabled={disabled}
-            placeholder="新增內部跟進 note"
-            onChange={(event) => onNoteChange(event.target.value)}
-          />
-          {noteError ? (
-            <p id="note-error" role="alert" className="text-sm text-destructive">
-              {noteError}
-            </p>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || noteSaving}
-            onClick={onAddNote}
-          >
-            <StickyNote className="h-4 w-4" />
-            {noteSaving ? "新增中…" : "新增跟進"}
-          </Button>
-        </div>
-
-        <div className="mt-5 space-y-3">
-          {lead.activities.length === 0 ? (
-            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              未有跟進紀錄
-            </p>
-          ) : (
-            lead.activities.map((activity) => (
-              <article key={activity.id} className="rounded-lg border bg-muted/20 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Badge variant={activity.activity_type === "note" ? "secondary" : "outline"}>
-                    {formatActivityType(activity.activity_type)}
-                  </Badge>
-                  <time className="text-xs text-muted-foreground">
-                    {formatDate(activity.created_at)}
-                  </time>
-                </div>
-                <p className="mt-2 whitespace-pre-wrap text-sm">{activity.body ?? "—"}</p>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {activity.staff_name ?? "未記名"}
-                  {activity.due_at ? ` · 到期 ${formatDate(activity.due_at)}` : ""}
-                </p>
-              </article>
-            ))
-          )}
-        </div>
       </section>
     </div>
   );
@@ -1663,7 +1677,7 @@ function formatDate(value: string) {
 
 function formatActivityType(type: string) {
   const labels: Record<string, string> = {
-    note: "Note",
+    note: "內部備註",
     call: "電話",
     viewing: "睇樓",
     follow_up: "跟進",
