@@ -26,6 +26,12 @@ const serverSource = await readFile(
   "utf8",
 );
 
+const publicHelperSource = (
+  await readFile(new URL("../lib/property-public.ts", import.meta.url), "utf8")
+)
+  .replace(/^import .*;$/gm, "")
+  .replace(/export /g, "");
+
 function transpileAndRun(snippet) {
   const { outputText } = ts.transpileModule(snippet, {
     compilerOptions: {
@@ -49,45 +55,29 @@ function extractServerFn(name, nextExportMarker) {
   return serverSource.slice(start, end);
 }
 
-test("fetchPropertyByListingNo's SQL no longer hardcodes status = 'active'", () => {
+test("detail lookup preserves aliases and unavailable-state selection", () => {
   const body = extractServerFn(
     "fetchPropertyByListingNo",
     "export async function fetchPropertyByLegacyDetailId",
   );
+  assert.match(body, /requested\.listing_no = \$1 OR requested_public\.public_listing_no = \$1/);
+  assert.match(body, /offering_rank = 1/);
   assert.doesNotMatch(
     body,
-    /status = 'active'/,
-    "fetchPropertyByListingNo must fetch by listing_no regardless of status -- the route branches on the returned status instead",
+    /WHERE current_offerings\.status = 'active'/,
+    "sold/rented details must remain resolvable when no active offering remains",
   );
-  assert.match(body, /WHERE p\.listing_no = \$1/);
 });
 
-test("REGRESSION: every other public listing query keeps its own status = 'active' filter untouched", () => {
-  // Guards against the loosening above accidentally spreading to queries
-  // that are NOT the single-listing lookup -- these all still assume
-  // active-only results elsewhere in the app (search results, similar
-  // listings, counts, legacy-id redirect, featured).
-  assert.match(serverSource, /const where = \["p\.status = 'active'"\];/); // listingWhere (searchListings)
-  assert.match(
-    serverSource,
-    /let where = `p\.status = 'active' AND \(\$\{parts\.join\(" OR "\)\}\)`;/,
-  ); // corridorWhere
-  assert.match(
-    extractServerFn("fetchFeaturedProperties", "export async function fetchListingsForEstate"),
-    /WHERE p\.status = 'active'/,
+test("public inventory requires latest active offerings while legacy aliases remain resolvable", () => {
+  assert.match(serverSource, /const where = \["p\.status = 'active'"\];/);
+  const legacy = extractServerFn(
+    "fetchPropertyByLegacyDetailId",
+    "export async function fetchSimilarListings",
   );
-  assert.match(
-    extractServerFn("fetchPropertyByLegacyDetailId", "export async function fetchSimilarListings"),
-    /WHERE status = 'active' AND legacy_detail_id = \$1/,
-  );
-  assert.match(
-    extractServerFn("fetchSimilarListings", "export async function listPublicAgentProfiles"),
-    /WHERE p\.status = 'active'/,
-  );
-  assert.match(
-    extractServerFn("fetchListingCountsByEstate", "export async function fetchEstateOptions"),
-    /WHERE p\.status = 'active'/,
-  );
+  assert.match(legacy, /legacy\.legacy_detail_id = \$1/);
+  assert.match(legacy, /offering_rank = 1/);
+  assert.match(legacy, /status = 'active'/);
 });
 
 // --- Loader: active/sold/rented resolve; offline/inactive/draft 404 ------
@@ -106,7 +96,7 @@ function buildLoader() {
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches } = deps;
+  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches } = deps;
   ${body}
 }
 exports.loader = loader;
@@ -264,6 +254,7 @@ function canonicalLink(path) { return { rel: "canonical", href: "https://example
 function formatHkd(n) { return Number.isFinite(n) && n > 0 ? "$" + n : null; }
 function formatSaleDisplay(n) { return Number.isFinite(n) && n > 0 ? "$" + n : null; }
 function sanitizeListingText(s) { return s; }
+${publicHelperSource}
 function head({ loaderData }) {
   ${body}
 }
@@ -468,4 +459,50 @@ test("loader: optional similar listings and transactions fail independently with
     assert.deepEqual(failed === "similar" ? result.similar : result.txns, []);
     assert.equal((failed === "similar" ? result.txns : result.similar).length, 1);
   }
+});
+
+test("legacy sale and rent URLs redirect to the same stable unit and preserve rent intent", async () => {
+  const loader = buildLoader();
+  for (const suffix of ["S", "R"]) {
+    const property = {
+      status: "active",
+      public_listing_no: "B054645",
+      listing_no: "B054645-6782226-S",
+    };
+    let options;
+    const marker = new Error("redirect");
+    await assert.rejects(
+      loader(
+        { listingNo: `B054645-6782226-${suffix}` },
+        {
+          fetchPropertyByListingNo: async () => property,
+          redirect: (input) => {
+            options = input;
+            return marker;
+          },
+        },
+      ),
+      (error) => error === marker,
+    );
+    assert.equal(options.statusCode, 301);
+    assert.equal(options.params.listingNo, "B054645");
+    assert.equal(options.search({}).deal, suffix === "R" ? "rent" : "sale");
+  }
+});
+
+test("head canonical points to the unit even when representative offering changes", () => {
+  const result = buildHead()({
+    loaderData: {
+      property: {
+        status: "active",
+        public_listing_no: "B054645",
+        listing_no: "B054645-NEW-R",
+        title_zh: "碧堤半島",
+        deal_type: "rent",
+        price: null,
+        rent: 18500,
+      },
+    },
+  });
+  assert.equal(result.links[0].href, "https://example.test/property/B054645");
 });

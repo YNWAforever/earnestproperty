@@ -77,9 +77,21 @@ export type NeonPublicAgentProfile = {
 
 export type NeonStaffProfile = NeonPublicAgentProfile;
 
+export type PropertyOffering = {
+  id: string;
+  listing_no: string;
+  deal_type: "sale" | "rent";
+  price: number | null;
+  rent: number | null;
+  status: string;
+};
+
 export type NeonPropertyRow = {
   id: string;
   listing_no: string;
+  public_listing_no?: string;
+  listing_aliases?: string[];
+  offerings?: PropertyOffering[];
   canonical_property_no: string | null;
   title_zh: string;
   title_en: string | null;

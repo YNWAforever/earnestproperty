@@ -85,9 +85,19 @@ export function removeFavourite(listingNo: string): string[] {
 }
 
 export function toggleFavourite(listingNo: string): string[] {
-  return isFavourited(listingNo)
-    ? removeFavourite(listingNo)
-    : addFavourite(listingNo);
+  return isFavourited(listingNo) ? removeFavourite(listingNo) : addFavourite(listingNo);
+}
+
+/** Only server-verified aliases may be consolidated; never infer identity from a prefix. */
+export function migratePropertyFavourite(listingNo: string, aliases: string[] = []): boolean {
+  const current = getFavourites();
+  const aliasSet = new Set(aliases.filter((alias) => alias !== listingNo));
+  const hasAlias = current.some((saved) => aliasSet.has(saved));
+  if (!hasAlias) return current.includes(listingNo);
+  const next = current.filter((saved) => !aliasSet.has(saved));
+  if (!next.includes(listingNo)) next.push(listingNo);
+  writeJson(FAVOURITES_KEY, next);
+  return true;
 }
 
 /**
@@ -101,16 +111,18 @@ export function toggleFavourite(listingNo: string): string[] {
  * (one-time, per-mount) re-render once the effect runs is an acceptable
  * trade for correctness.
  */
-export function useFavourite(listingNo: string) {
+export function useFavourite(listingNo: string, aliases: string[] = []) {
+  const aliasKey = JSON.stringify(aliases);
   const [favourited, setFavourited] = useState(false);
 
   useEffect(() => {
-    setFavourited(isFavourited(listingNo));
-  }, [listingNo]);
+    setFavourited(migratePropertyFavourite(listingNo, JSON.parse(aliasKey)));
+  }, [listingNo, aliasKey]);
 
   const toggle = useCallback(() => {
+    migratePropertyFavourite(listingNo, JSON.parse(aliasKey));
     setFavourited(toggleFavourite(listingNo).includes(listingNo));
-  }, [listingNo]);
+  }, [listingNo, aliasKey]);
 
   return { favourited, toggle };
 }
@@ -138,15 +150,10 @@ function isSavedSearchShape(value: unknown): value is SavedSearch {
 export function getSavedSearches(): SavedSearch[] {
   const stored = readJson<unknown>(SAVED_SEARCHES_KEY, []);
   if (!Array.isArray(stored)) return [];
-  return stored
-    .filter(isSavedSearchShape)
-    .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  return stored.filter(isSavedSearchShape).sort((a, b) => b.savedAt.localeCompare(a.savedAt));
 }
 
-export function saveSearch(
-  label: string,
-  params: SavedSearchParams,
-): SavedSearch {
+export function saveSearch(label: string, params: SavedSearchParams): SavedSearch {
   const entry: SavedSearch = {
     id: generateId(),
     label,

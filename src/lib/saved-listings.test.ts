@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
   addFavourite,
+  migratePropertyFavourite,
   deleteSavedSearch,
   getFavourites,
   getSavedSearches,
@@ -23,8 +24,7 @@ import {
 function createMemoryStorage(): Storage {
   const store = new Map<string, string>();
   return {
-    getItem: (key: string) =>
-      store.has(key) ? (store.get(key) as string) : null,
+    getItem: (key: string) => (store.has(key) ? (store.get(key) as string) : null),
     setItem: (key: string, value: string) => {
       store.set(key, value);
     },
@@ -106,11 +106,7 @@ describe("saved searches", () => {
     saveSearch("first", {});
     saveSearch("second", {});
     saveSearch("third", {});
-    expect(getSavedSearches().map((s) => s.label)).toEqual([
-      "third",
-      "second",
-      "first",
-    ]);
+    expect(getSavedSearches().map((s) => s.label)).toEqual(["third", "second", "first"]);
   });
 
   test("deleting one removes only that one", () => {
@@ -196,4 +192,15 @@ describe("localStorage failures degrade gracefully", () => {
     expect(() => getSavedSearches()).not.toThrow();
     expect(getSavedSearches()).toEqual([]);
   });
+});
+
+test("verified property aliases migrate saved sale/rent favourites without touching conflicting units", () => {
+  addFavourite("B-old-S");
+  addFavourite("B-old-R");
+  addFavourite("B-conflict-S");
+  expect(migratePropertyFavourite("B", ["B-old-S", "B-old-R"])).toBe(true);
+  expect(getFavourites()).toEqual(["B-conflict-S", "B"]);
+  toggleFavourite("B");
+  expect(migratePropertyFavourite("B", ["B-old-S", "B-old-R"])).toBe(false);
+  expect(getFavourites()).toEqual(["B-conflict-S"]);
 });

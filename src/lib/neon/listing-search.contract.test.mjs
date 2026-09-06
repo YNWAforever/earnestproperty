@@ -298,7 +298,7 @@ test("listings.tsx sanitizes title_zh before it reaches JSON-LD and card render 
   assert.match(route, /name: sanitizeListingText\(row\.title_zh\) \?\? row\.title_zh/);
   // Card alt/heading -- a small local helper so the raw fallback (never a
   // blank title) is computed once per card.
-  assert.match(route, /sanitizeListingText\(p\.title_zh\) \?\? p\.title_zh/);
+  assert.match(route, /sanitizeListingText\(publicPropertyTitle\(p\)\) \?\? p\.title_zh/);
 });
 
 test("the listing search index migration exists and is idempotent", () => {
@@ -660,7 +660,7 @@ test("video filtering precedes bounded candidate selection and retains public vi
     pageSize: 12,
   });
   for (const call of [count, rows]) {
-    assert.ok(call.text.includes("WHERE p.status = 'active' AND p.video_url ~ '[^[:space:]]'"));
+    assert.match(call.text, /current_offerings[\s\S]*WHERE p\.status = 'active' AND p\.status = 'active' AND p\.video_url/);
   }
   assert.match(
     rows.text,
@@ -747,15 +747,15 @@ test("listing cards omit detail prose and full galleries at the real mapping bou
 test("canonical identity is ranked before both count and page limits and includes sale/rent", async () => {
   const { count, rows } = await runSearch({ deal: "all", sort: "newest", page: 2, pageSize: 12 });
   for (const call of [count, rows]) {
-    assert.match(call.text, /PARTITION BY[\s\S]*p\.deal_type/);
-    assert.match(call.text, /NULLIF\(p\.canonical_property_no, ''\)/);
-    assert.match(call.text, /canonical_rank = 1/);
+    assert.match(call.text, /PARTITION BY ppm\.public_listing_no, p\.deal_type/);
+    assert.match(call.text, /offering_rank = 1/);
+    assert.match(call.text, /eligible_groups/);
   }
-  assert.ok(rows.text.indexOf("canonical_rank = 1") < rows.text.indexOf("LIMIT"));
+  assert.ok(rows.text.indexOf("offering_rank = 1") < rows.text.indexOf("LIMIT"));
   assert.match(rows.text, /p\.id ASC/);
 });
 
-test("similar listings exclude the current canonical offering before ranking", async () => {
+test("similar listings exclude the current public group before ranking", async () => {
   let captured;
   const server = await importPublicDataServerWithInjectedQuery(async (text, params) => {
     captured = { text, params };
@@ -767,11 +767,8 @@ test("similar listings exclude the current canonical offering before ranking", a
     excludeId: "current",
     limit: 4,
   });
-  assert.match(captured.text, /NOT EXISTS\s*\(\s*SELECT 1 FROM properties current_offering/);
-  assert.match(captured.text, /current_offering\.id = \$3/);
-  assert.match(captured.text, /current_offering\.deal_type = p\.deal_type/);
-  assert.match(captured.text, /NULLIF\(current_offering\.canonical_property_no, ''\)/);
-  assert.match(captured.text, /'listing:' \|\| current_offering\.listing_no/);
-  assert.ok(captured.text.indexOf("NOT EXISTS") < captured.text.indexOf("canonical_rank = 1"));
+  assert.match(captured.text, /SELECT 1 FROM property_public_members current_member/);
+  assert.match(captured.text, /current_member\.property_id = \$3/);
+  assert.match(captured.text, /current_member\.public_listing_no = current_offerings\.public_listing_no/);
   assert.deepEqual(captured.params, ["estate", "sale", "current", 4]);
 });

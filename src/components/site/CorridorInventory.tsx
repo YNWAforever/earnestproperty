@@ -1,3 +1,9 @@
+import {
+  publicPropertyNo,
+  propertyPriceSummary,
+  propertyDealLabel,
+  publicPropertyTitle,
+} from "@/lib/property-public";
 import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
@@ -5,33 +11,24 @@ import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
-import {
-  formatHkd,
-  formatSaleDisplay,
-  sanitizeListingText,
-} from "@/lib/format";
+import { formatHkd, formatSaleDisplay, sanitizeListingText } from "@/lib/format";
 import type { CorridorInventory as CorridorInventoryData, ListingRow } from "@/lib/queries";
 
 type ListingsDeal = "all" | "sale" | "rent";
 
 function formatPrice(row: ListingRow) {
-  if (row.deal_type === "rent") {
-    const hkd = formatHkd(row.rent);
-    return hkd ? `HK${hkd}/月` : "查詢租金";
-  }
-
-  const sale = formatSaleDisplay(row.price);
-  return sale ? `HK${sale}` : "查詢售價";
+  return propertyPriceSummary(row);
 }
 
 function ListingMiniCard({ listing }: { listing: ListingRow }) {
   const cover = listing.images?.[0];
-  const safeTitle = sanitizeListingText(listing.title_zh) ?? listing.title_zh;
+  const safeTitle = sanitizeListingText(publicPropertyTitle(listing)) ?? listing.title_zh;
 
   return (
     <Link
       to="/property/$listingNo"
-      params={{ listingNo: listing.listing_no }}
+      params={{ listingNo: publicPropertyNo(listing) }}
+      search={{ deal: listing.deal_type === "rent" ? "rent" : "sale" }}
       className="group overflow-hidden rounded-lg border bg-card transition hover:border-primary hover:shadow-card"
     >
       <div className="aspect-[4/3] bg-muted">
