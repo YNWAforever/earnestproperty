@@ -126,6 +126,9 @@ export const Route = createFileRoute("/estate/$slug")({
     });
     return {
       estate,
+      // Registry card photo (public/estates/...) for og:image; head() has no
+      // registry access of its own.
+      shareImage: estateRegistry.find((entry) => entry.slug === estate.slug)?.photo ?? null,
       faqs,
       latestListings,
       transactions,
@@ -138,21 +141,35 @@ export const Route = createFileRoute("/estate/$slug")({
   head: ({ loaderData }) => {
     const slug = loaderData?.estate.slug as keyof typeof estateSeo | undefined;
     const seo = slug ? estateSeo[slug] : undefined;
+    const title =
+      loaderData?.estate.seo_title ??
+      seo?.title ??
+      `${loaderData?.estate.name_zh ?? "屋苑"}｜晉誠地產屋苑專頁`;
+    const description =
+      loaderData?.estate.seo_description ??
+      seo?.description ??
+      `${loaderData?.estate.name_zh ?? ""} 屋苑資料、現有放盤叫價、成交紀錄及常見問題。`;
+    const image = loaderData?.shareImage ?? loaderData?.estate.hero_image;
     return {
       meta: [
-        {
-          title:
-            loaderData?.estate.seo_title ??
-            seo?.title ??
-            `${loaderData?.estate.name_zh ?? "屋苑"}｜晉誠地產屋苑專頁`,
-        },
-        {
-          name: "description",
-          content:
-            loaderData?.estate.seo_description ??
-            seo?.description ??
-            `${loaderData?.estate.name_zh ?? ""} 屋苑資料、現有放盤叫價、成交紀錄及常見問題。`,
-        },
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+        ...(image
+          ? [
+              {
+                property: "og:image",
+                content: image.startsWith("http") ? image : `${SITE_URL}${image}`,
+              },
+              {
+                name: "twitter:image",
+                content: image.startsWith("http") ? image : `${SITE_URL}${image}`,
+              },
+            ]
+          : []),
       ],
       links: loaderData?.estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
     };
@@ -350,11 +367,17 @@ function EstatePage() {
       {registryEntry?.photo || estate.hero_image ? (
         <Container className="pt-6">
           <figure>
+            {/* Largest contentful paint element on every estate page: eager +
+                high priority, like the homepage hero, instead of AppImage's
+                lazy default. */}
             <AppImage
               src={registryEntry?.photo || estate.hero_image}
               alt={`${estateName} 屋苑／放盤參考照片`}
               width={1600}
               height={900}
+              loading="eager"
+              fetchPriority="high"
+              sizes="(min-width: 1280px) 1216px, 100vw"
               className="max-h-[480px] w-full rounded-lg object-cover"
             />
             <figcaption className="mt-2 text-xs text-muted-foreground">

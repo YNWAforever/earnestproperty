@@ -84,6 +84,8 @@ const listingColumns = `
   p.management_fee,
   p.features,
   p.description,
+  p.seo_title,
+  p.seo_description,
   p.images,
   p.video_url,
   p.floorplan_url,
@@ -333,6 +335,8 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
     management_fee: numberOrNull(row.management_fee),
     features: textArrayOrNull(row.features),
     description: stringOrNull(row.description),
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
     images: textArrayOrNull(row.images),
     video_url: stringOrNull(row.video_url),
     floorplan_url: stringOrNull(row.floorplan_url),
@@ -953,6 +957,32 @@ export async function fetchPublicAgentProfileBySlug(input: {
  * have no per-page change signal to draw on and keep sitemap.xml.ts's
  * existing shared generation timestamp instead of a fabricated one.
  */
+/**
+ * One URL per public listing group for sitemap.xml: the canonical
+ * public_listing_no (what /property/$listingNo self-canonicalises to) and
+ * the newest updated_at across the group's members. Only groups with a
+ * currently-active member are listed -- sold/rented pages are noindex'd and
+ * offline/draft ones 404, so neither belongs in the sitemap.
+ */
+export async function fetchSitemapListings(): Promise<
+  Array<{ public_listing_no: string; updated_at: string | null }>
+> {
+  const rows = await sql().query(
+    `
+    SELECT ppm.public_listing_no, MAX(p.updated_at) AS updated_at
+    FROM property_public_members ppm
+    JOIN properties p ON p.id = ppm.property_id
+    WHERE p.status = 'active'
+    GROUP BY ppm.public_listing_no
+    ORDER BY ppm.public_listing_no
+    `,
+  );
+  return rows.map((row) => ({
+    public_listing_no: stringOrEmpty(row.public_listing_no),
+    updated_at: dateOrNull(row.updated_at),
+  }));
+}
+
 export async function fetchSitemapTimestamps(): Promise<{
   estates: Record<string, string | null>;
   articles: Record<string, string | null>;
@@ -1315,7 +1345,7 @@ export async function fetchRecentTransactionsCount(
 export async function fetchPublishedArticles() {
   const rows = await sql().query(
     `
-    SELECT slug, title, excerpt, cover_image, category, reading_minutes, published_at
+    SELECT slug, title, excerpt, cover_image, category, reading_minutes, published_at, updated_at
     FROM articles
     WHERE published = true
     ORDER BY published_at DESC NULLS LAST, created_at DESC
@@ -1329,13 +1359,14 @@ export async function fetchPublishedArticles() {
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+    updated_at: dateOrNull(row.updated_at),
   }));
 }
 
 export async function fetchArticleBySlug(input: { slug: string }) {
   const rows = await sql().query(
     `
-    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at
+    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at, updated_at
     FROM articles
     WHERE slug = $1 AND published = true
     LIMIT 1
@@ -1353,6 +1384,7 @@ export async function fetchArticleBySlug(input: { slug: string }) {
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+    updated_at: dateOrNull(row.updated_at),
   };
 }
 

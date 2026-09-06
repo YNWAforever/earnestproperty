@@ -34,9 +34,11 @@ const branchesSchema = {
   "@context": "https://schema.org",
   "@graph": SITE_BRANCHES.map((branch) =>
     branchLocalBusinessSchema({
+      id: branch.id,
       name: branch.name,
       address: branch.address,
       telephone: branch.phone,
+      image: branch.photo,
     }),
   ),
 };
@@ -52,7 +54,7 @@ function branchMapEmbedUrl(branch: SiteBranch) {
   );
 }
 
-const CONTACT_TITLE = "聯絡晉誠地產｜深井 青山公路 汀九物業專家";
+const CONTACT_TITLE = pageSeo.contact.title;
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -61,6 +63,8 @@ export const Route = createFileRoute("/contact")({
       { name: "description", content: pageSeo.contact.description },
       { property: "og:title", content: CONTACT_TITLE },
       { property: "og:description", content: pageSeo.contact.description },
+      { name: "twitter:title", content: CONTACT_TITLE },
+      { name: "twitter:description", content: pageSeo.contact.description },
     ],
     links: [canonicalLink(pageSeo.contact.path)],
   }),

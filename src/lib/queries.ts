@@ -541,6 +541,7 @@ export type ArticleSummary = {
   category: string | null;
   reading_minutes: number | null;
   published_at: string;
+  updated_at?: string | null;
 };
 
 export async function fetchPublishedArticles(): Promise<ArticleSummary[]> {

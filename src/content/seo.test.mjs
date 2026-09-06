@@ -37,6 +37,10 @@ test("seo() mirrors title/description into og:title/og:description and canonical
     { name: "description", content: "D" },
     { property: "og:title", content: "T" },
     { property: "og:description", content: "D" },
+    // __root.tsx pins twitter:title/description to the homepage copy, so the
+    // combinator must override both or every share card shows the homepage.
+    { name: "twitter:title", content: "T" },
+    { name: "twitter:description", content: "D" },
   ]);
   assert.deepEqual(result.links, [canonicalLink("/p")]);
 });

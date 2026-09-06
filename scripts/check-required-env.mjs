@@ -21,6 +21,7 @@
 // and `npm run build:dev` are unaffected.
 
 import { whatsappPhoneProblem } from "../src/config/whatsapp-phone.js";
+import { resolveSiteOrigin } from "./site-origin.mjs";
 
 const REQUIRED_FOR_WHATSAPP_CTAS = [
   "VITE_CONTACT_WHATSAPP_PHONE",
@@ -30,6 +31,36 @@ const REQUIRED_FOR_WHATSAPP_CTAS = [
 
 const vercelEnv = process.env.VERCEL_ENV;
 const isVercelDeploy = vercelEnv === "production" || vercelEnv === "preview";
+
+// The production origin feeds every canonical, sitemap <loc>, og:image and
+// JSON-LD url (src/content/seo.ts). Left unset, the site canonicalises to the
+// *.vercel.app fallback and the custom domain never consolidates in search.
+// Production-only: previews legitimately run on their own generated hosts.
+// Resolution order lives in scripts/site-origin.mjs: an explicit
+// VITE_SITE_URL, else Vercel's VERCEL_PROJECT_PRODUCTION_URL (always present
+// on Vercel builds, and it follows the custom domain once one is attached), so
+// no manual project setting is needed for the common case.
+if (vercelEnv === "production") {
+  const origin = resolveSiteOrigin();
+  if (!origin || !origin.startsWith("https://")) {
+    console.error(
+      [
+        "",
+        `Build blocked (production): could not resolve an https production origin (VITE_SITE_URL=${process.env.VITE_SITE_URL ?? "<unset>"}, VERCEL_PROJECT_PRODUCTION_URL=${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? "<unset>"}).`,
+        "Every canonical, sitemap URL, og:image and JSON-LD url is built from it. Set VITE_SITE_URL",
+        "to the live origin in the Vercel project settings.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+  console.log(`[check-required-env] production origin: ${origin}`);
+  if (origin.endsWith(".vercel.app")) {
+    console.warn(
+      "[check-required-env] the production origin is a vercel.app host. That is correct until a custom domain is attached to the Vercel project; once one is, this resolves to it automatically.",
+    );
+  }
+}
 
 if (isVercelDeploy) {
   const missing = REQUIRED_FOR_WHATSAPP_CTAS.filter((name) => !process.env[name]);

@@ -1,6 +1,32 @@
 import { getEstateEntry } from "./estate-registry.ts";
 
-export const SITE_URL = "https://earnestproperty.vercel.app";
+/**
+ * Production origin. Every canonical, og:image, sitemap <loc>, robots.txt
+ * Sitemap line and JSON-LD url is built from this, so it must be the host
+ * search engines should consolidate on -- not whichever deployment served
+ * the request. vite.config.ts injects import.meta.env.VITE_SITE_URL at build
+ * time from VITE_SITE_URL or Vercel's VERCEL_PROJECT_PRODUCTION_URL (see
+ * scripts/site-origin.mjs); the vercel.app origin is only the fallback for
+ * local dev and `node --test`, where import.meta.env is undefined.
+ */
+const FALLBACK_SITE_URL = "https://earnestproperty.vercel.app";
+
+export function normalizeSiteUrl(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+export const SITE_URL =
+  normalizeSiteUrl(
+    (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SITE_URL,
+  ) ?? FALLBACK_SITE_URL;
+export const SITE_HOST = new URL(SITE_URL).host;
 export const SITE_NAME = "晉誠地產 Earnest Property";
 export const SITE_OG_IMAGE = `${SITE_URL}/og-cover.jpg`;
 export const SITE_LOGO_URL = `${SITE_URL}/brand/earnest-company-logo-2026.jpg`;
@@ -45,7 +71,12 @@ export function seo(input: {
       { name: "description", content: input.description },
       { property: "og:title", content: input.title },
       { property: "og:description", content: input.description },
+      // __root.tsx sets the Twitter pair to the homepage copy; mirror the page's
+      // own title/description so a shared link never renders the homepage card.
+      { name: "twitter:title", content: input.title },
+      { name: "twitter:description", content: input.description },
       ...(input.ogImage ? [{ property: "og:image", content: input.ogImage }] : []),
+      ...(input.ogImage ? [{ name: "twitter:image", content: input.ogImage }] : []),
       ...(input.noindex ? [{ name: "robots", content: "noindex,follow" }] : []),
     ],
     links: [canonicalLink(input.path)],
@@ -55,25 +86,32 @@ export function seo(input: {
 export const pageSeo = {
   home: {
     path: "/",
-    title: "晉誠地產 Earnest Property｜深井 青山公路 汀九買樓租樓",
+    title: "晉誠地產 Earnest Property｜深井 青山公路 汀九樓盤",
     description:
       "深井、青山公路、汀九買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園及汀九筍盤，即時 WhatsApp 查詢。持牌代理 C-018613。",
   },
+  // Rendered by listings.tsx's head() -- keep the route on this object rather
+  // than a second hardcoded string, so an edit here actually ships.
   listings: {
     path: "/listings",
     title: "深井放盤搜尋｜買樓租樓全部真盤 — 晉誠地產",
     description:
       "一站搜尋深井、汀九及青山公路在售及放租盤。海景、連車位、連租約收租盤齊全，WhatsApp 即時預約睇樓。C-018613。",
   },
+  // The corridor hub's live title/description are castlePeakRoadHub in
+  // castle-peak-road.ts (the segment registry owns that copy); only `path` is
+  // consumed from here, by the sitemap.
   castlePeakRoad: {
     path: "/castle-peak-road",
-    title: "青山公路 Castle Peak Road 樓盤｜油柑頭、汀九、深井、青龍頭",
+    title: "青山公路 Castle Peak Road 樓盤｜汀九、深井、青龍頭",
     description:
-      "青山公路沿線買樓租樓指南：油柑頭、汀九、深井、青龍頭、小欖、掃管笏及三聖三個生活圈，即時全部真盤查詢。晉誠地產 C-018613。",
+      "青山公路沿線買樓租樓指南：汀九、深井、青龍頭三個生活圈，交通、校網、屋苑比較，即時全部真盤查詢。晉誠地產 C-018613。",
   },
+  // Rendered by district.sham-tseng.tsx's head(). /district/sham-tseng is the
+  // canonical 深井 page; the corridor segment targets 青山公路深井段 instead.
   shamTseng: {
     path: "/district/sham-tseng",
-    title: "深井 Sham Tseng 物業｜屋苑、交通、62 校網、12 個月成交",
+    title: "深井 Sham Tseng 物業｜屋苑、交通、62 校網、成交",
     description:
       "深井買樓租樓全攻略：5 大屋苑、青馬橋海景、62 校網、去中環 35 分鐘、近 12 個月實呎走勢。晉誠地產 C-018613。",
   },
@@ -82,14 +120,6 @@ export const pageSeo = {
     title: "荃灣 Tsuen Wan 物業｜屋苑、港鐵、學校、樓價走勢",
     description:
       "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產全部真盤 C-018613。",
-  },
-  tingKau: {
-    // Canonical lives on the Castle Peak Road corridor page; /district/ting-kau
-    // is a legacy URL that redirects there (see vercel.ts and the route below).
-    path: "/castle-peak-road/ting-kau",
-    title: "汀九 Ting Kau 樓盤｜青山公路低密度海景別墅、洋房",
-    description:
-      "青山公路汀九段樓盤一覽：觀海別墅、嘉御龍庭、汀九別墅等低密度海景別墅洋房，介乎荃灣與深井，62 校網。晉誠地產 C-018613。",
   },
   blog: {
     path: "/blog",
@@ -100,11 +130,12 @@ export const pageSeo = {
   blogEditorialStandards: {
     path: "/blog/editorial-standards",
     title: "編採及事實查核標準｜晉誠地產 Blog",
-    description: "晉誠地產 Blog 文章的資料來源、審閱制度及事實查核標準說明。",
+    description:
+      "晉誠地產 Blog 文章點樣揀資料來源、邊啲數據要核對、幾時更新，以及發現錯誤時嘅更正做法。買樓前先了解我哋嘅編採及事實查核標準。",
   },
   about: {
     path: "/about",
-    title: "關於晉誠地產 Earnest Property｜深井、青山公路物業專家",
+    title: "關於晉誠地產｜深井、青山公路物業專家",
     description:
       "晉誠地產（C-018613）紮根深井，專營碧堤半島、浪翠園、豪景花園等核心屋苑。全部真盤、即時回覆、持牌可靠。",
   },
@@ -117,17 +148,20 @@ export const pageSeo = {
   privacy: {
     path: "/privacy",
     title: "私隱政策｜晉誠地產 Earnest Property",
-    description: "晉誠地產個人資料收集及使用政策，符合香港《個人資料（私隱）條例》(PDPO) 要求。",
+    description:
+      "晉誠地產點樣收集、使用及保存你透過網站、WhatsApp 及門市提供嘅個人資料，以及你查閱和更正資料嘅權利。符合香港《個人資料（私隱）條例》。",
   },
   disclaimer: {
     path: "/disclaimer",
     title: "免責聲明｜晉誠地產 Earnest Property",
-    description: "晉誠地產網站樓盤資訊及內容的免責聲明。",
+    description:
+      "晉誠地產網站嘅放盤、成交、呎價及樓市分析只供參考，實際資料以業主及土地註冊處紀錄為準。了解本網站資料嘅來源、限制及使用責任。",
   },
   terms: {
     path: "/terms",
     title: "使用條款｜晉誠地產 Earnest Property",
-    description: "使用晉誠地產網站的條款及細則。",
+    description:
+      "使用晉誠地產網站、放盤搜尋、按揭計算機及 WhatsApp 查詢服務嘅條款及細則，包括資料使用、知識產權及責任限制。",
   },
 } satisfies Record<string, PageSeo>;
 
@@ -250,105 +284,105 @@ export const estateSeo: Record<string, EstateSeo> = {
   },
   "hoi-wan-hin": {
     ...estateSeoIdentity("hoi-wan-hin"),
-    title: "海雲軒 Anglers' Bay 深井／青龍頭｜放盤、成交、海景、戶型",
+    title: "海雲軒 Anglers' Bay 深井｜放盤、成交、海景戶型",
     description:
-      "海雲軒（Anglers' Bay）深井／青龍頭屋苑專頁：放盤、成交、海景、戶型、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "海雲軒（Anglers' Bay）位於深井青龍頭一帶，以海景單位為主。即時查看放盤、成交呎價、戶型及 62 校網資料，並可 WhatsApp 預約睇樓或估價。晉誠地產 C-018613。",
   },
   "tai-wah-hin": {
     ...estateSeoIdentity("tai-wah-hin"),
-    title: "帝華軒 Royal Sea Crest 青龍頭／深井｜浪翠園五期、大三房、放盤成交",
+    title: "帝華軒 Royal Sea Crest 青龍頭｜浪翠園五期放盤成交",
     description:
-      "帝華軒（Royal Sea Crest）青龍頭／深井屋苑專頁：浪翠園五期、大三房、放盤成交、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "帝華軒（Royal Sea Crest）即浪翠園五期，以大三房單位見稱，介乎青龍頭與深井之間。放盤、成交、交通及 62 校網一頁睇晒，WhatsApp 即時查詢。晉誠地產 C-018613。",
   },
   "hoi-wan-toi": {
     ...estateSeoIdentity("hoi-wan-toi"),
-    title: "海韻臺 Rhine Terrace 深井｜放盤、成交、海景、單幢住宅",
+    title: "海韻臺 Rhine Terrace 深井｜單幢海景放盤、成交",
     description:
-      "海韻臺（Rhine Terrace）深井屋苑專頁：放盤、成交、海景、單幢住宅、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "海韻臺（Rhine Terrace）係深井單幢海景住宅，鄰近海韻花園及麗都花園門市。查看最新放盤、成交紀錄、交通同 62 校網，並可即時預約睇樓。晉誠地產 C-018613。",
   },
   "chun-wong-kui": {
     ...estateSeoIdentity("chun-wong-kui"),
-    title: "縉皇居 Ocean Pointe 深井｜放盤、成交、高層海景、戶型",
+    title: "縉皇居 Ocean Pointe 深井｜高層海景放盤、成交",
     description:
-      "縉皇居（Ocean Pointe）深井屋苑專頁：放盤、成交、高層海景、戶型、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "縉皇居（Ocean Pointe）以深井高層海景單位為賣點。即時放盤、成交呎價、戶型比較、交通及 62 校網資料，業主亦可 WhatsApp 免費估價。晉誠地產 C-018613。",
   },
   "lung-tang-kok": {
     ...estateSeoIdentity("lung-tang-kok"),
-    title: "龍騰閣 Lung Tang Court 青龍頭｜放盤、成交、大單位、低密度",
+    title: "龍騰閣 Lung Tang Court 青龍頭｜低密度大單位放盤",
     description:
-      "龍騰閣（Lung Tang Court）青龍頭屋苑專頁：放盤、成交、大單位、低密度、交通、62 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "龍騰閣（Lung Tang Court）係青龍頭低密度屋苑，以大面積單位為主，適合想換空間嘅家庭。放盤、成交、交通及 62 校網資料齊全。晉誠地產 C-018613。",
   },
   "mun-ming-shan": {
     ...estateSeoIdentity("mun-ming-shan"),
-    title: "滿名山 The Bloomsway 掃管笏｜分層、洋房、放盤成交、戶型",
+    title: "滿名山 The Bloomsway 掃管笏｜分層、洋房放盤成交",
     description:
-      "滿名山（The Bloomsway）掃管笏屋苑專頁：分層、洋房、放盤成交、戶型、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "滿名山（The Bloomsway）掃管笏分層及洋房屋苑，戶型選擇多。查看最新放盤、成交、交通及 71 校網，並可 WhatsApp 預約睇樓或業主估價。晉誠地產 C-018613。",
   },
   "wong-gam-hoi-ngon": {
     ...estateSeoIdentity("wong-gam-hoi-ngon"),
-    title: "香港黃金海岸 Hong Kong Gold Coast 青山灣／掃管笏｜五期放盤、成交、海景、生活配套",
+    title: "香港黃金海岸 Gold Coast 青山灣｜五期放盤、成交",
     description:
-      "香港黃金海岸（Hong Kong Gold Coast）青山灣／掃管笏屋苑專頁：五期放盤、成交、海景、生活配套、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "香港黃金海岸（Hong Kong Gold Coast）青山灣五期海景屋苑，會所、商場及酒店配套齊備。即時放盤、成交呎價、交通及 71 校網一覽。晉誠地產 C-018613。",
   },
   "oi-kam-hoi-ngon": {
     ...estateSeoIdentity("oi-kam-hoi-ngon"),
-    title: "愛琴海岸 Aegean Coast 掃管笏｜兩三房放盤、成交、會所、戶型",
+    title: "愛琴海岸 Aegean Coast 掃管笏｜兩三房放盤、成交",
     description:
-      "愛琴海岸（Aegean Coast）掃管笏屋苑專頁：兩三房放盤、成交、會所、戶型、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "愛琴海岸（Aegean Coast）掃管笏兩房至三房為主嘅會所屋苑。比較戶型、查看放盤及成交紀錄、交通同 71 校網，WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
   },
   "tai-yu": {
     ...estateSeoIdentity("tai-yu"),
-    title: "帝御 The Royale 青山灣／掃管笏｜金灣、星濤、嵐天三期放盤成交",
+    title: "帝御 The Royale 掃管笏｜金灣、星濤、嵐天放盤成交",
     description:
-      "帝御（The Royale）青山灣／掃管笏屋苑專頁：金灣、星濤、嵐天三期放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "帝御（The Royale）青山灣分金灣、星濤、嵐天三期。一頁比較三期放盤、成交呎價、交通及 71 校網，業主可免費估價。晉誠地產 C-018613。",
   },
   "wong-gam-hoi-waan": {
     ...estateSeoIdentity("wong-gam-hoi-waan"),
-    title: "黃金海灣 Gold Coast Bay 青山灣｜意嵐、珀岸兩期放盤成交",
+    title: "黃金海灣 Gold Coast Bay 青山灣｜意嵐、珀岸放盤成交",
     description:
-      "黃金海灣（Gold Coast Bay）青山灣屋苑專頁：意嵐、珀岸兩期放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "黃金海灣（Gold Coast Bay）青山灣分意嵐、珀岸兩期。查看兩期最新放盤、成交紀錄、交通及 71 校網，WhatsApp 即時查詢或預約睇樓。晉誠地產 C-018613。",
   },
   "sing-tai": {
     ...estateSeoIdentity("sing-tai"),
-    title: "星堤 Avignon 掃管笏｜分層、洋房、低密度放盤成交",
+    title: "星堤 Avignon 掃管笏｜低密度分層、洋房放盤成交",
     description:
-      "星堤（Avignon）掃管笏屋苑專頁：分層、洋房、低密度放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "星堤（Avignon）掃管笏低密度屋苑，分層與洋房兼備。最新放盤、成交呎價、交通及 71 校網資料，並可 WhatsApp 預約睇樓或估價。晉誠地產 C-018613。",
   },
   "seong-yuen": {
     ...estateSeoIdentity("seong-yuen"),
-    title: "上源 Le Pont 掃管笏｜分層、洋房、1,154伙放盤成交",
+    title: "上源 Le Pont 掃管笏｜分層、洋房放盤、成交",
     description:
-      "上源（Le Pont）掃管笏屋苑專頁：分層、洋房、1,154伙放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "上源（Le Pont）掃管笏約 1,154 伙嘅分層及洋房屋苑。即時查看放盤、成交紀錄、交通同 71 校網，業主亦可 WhatsApp 免費估價。晉誠地產 C-018613。",
   },
   "the-carmel": {
     ...estateSeoIdentity("the-carmel"),
-    title: "The Carmel 大欖／掃管笏｜分層、洋房、低密度放盤成交",
+    title: "The Carmel 大欖／掃管笏｜低密度分層、洋房放盤",
     description:
-      "The Carmel 大欖／掃管笏屋苑專頁：分層、洋房、低密度放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "The Carmel 位於大欖掃管笏，低密度分層加洋房組合。查看最新放盤、成交呎價、交通及 71 校網，WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
   },
   "oma-oma": {
     ...estateSeoIdentity("oma-oma"),
-    title: "OMA OMA 掃管笏｜放盤、成交、細戶、家庭戶",
+    title: "OMA OMA 掃管笏｜細戶、家庭戶放盤、成交",
     description:
-      "OMA OMA 掃管笏屋苑專頁：放盤、成交、細戶、家庭戶、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "OMA OMA 掃管笏屋苑細戶與家庭戶並存，上車或換樓都有選擇。即時放盤、成交紀錄、交通及 71 校網一覽，WhatsApp 即時查詢。晉誠地產 C-018613。",
   },
   "lin-shan": {
     ...estateSeoIdentity("lin-shan"),
-    title: "漣山 The Hillgrove 小欖｜低密度、大單位、放盤成交",
+    title: "漣山 The Hillgrove 小欖｜低密度大單位放盤成交",
     description:
-      "漣山（The Hillgrove）小欖屋苑專頁：低密度、大單位、放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "漣山（The Hillgrove）小欖低密度屋苑，以大單位為主。比較放盤、成交呎價、交通及 71 校網，並可 WhatsApp 預約睇樓或業主估價。晉誠地產 C-018613。",
   },
   "long-tou-waan": {
     ...estateSeoIdentity("long-tou-waan"),
-    title: "浪濤灣 Aqua Blue 小欖｜分層、洋房、海景放盤成交",
+    title: "浪濤灣 Aqua Blue 小欖｜海景分層、洋房放盤成交",
     description:
-      "浪濤灣（Aqua Blue）小欖屋苑專頁：分層、洋房、海景放盤成交、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "浪濤灣（Aqua Blue）小欖海景屋苑，分層與洋房兼備。查看最新放盤、成交紀錄、交通及 71 校網，WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
   },
   "tai-tou-waan": {
     ...estateSeoIdentity("tai-tou-waan"),
-    title: "帝濤灣 Palatial Coast 小欖／大欖｜兩期放盤、成交、海景、家庭戶",
+    title: "帝濤灣 Palatial Coast 小欖｜兩期海景放盤、成交",
     description:
-      "帝濤灣（Palatial Coast）小欖／大欖屋苑專頁：兩期放盤、成交、海景、家庭戶、交通、71 校網、最新放盤、成交及業主估價。晉誠地產 C-018613。",
+      "帝濤灣（Palatial Coast）小欖大欖兩期海景屋苑，適合家庭戶。一頁查看兩期放盤、成交呎價、交通及 71 校網，業主可免費估價。晉誠地產 C-018613。",
   },
 };
 

@@ -109,24 +109,37 @@ export const Route = createFileRoute("/listings")({
       }),
       fetchEstateOptions(),
     ]);
-    return { ...result, estates };
+    return { ...result, estates, page: deps.page };
   },
-  head: () => ({
-    meta: [
-      { title: "搜尋放盤｜深井買樓租樓 — 晉誠地產" },
-      {
-        name: "description",
-        content: "篩選深井區放盤：售盤／租盤、價格區間、房數、屋苑。即時 WhatsApp 查詢全部真盤。",
-      },
-      { property: "og:title", content: "搜尋放盤｜晉誠地產" },
-      {
-        property: "og:description",
-        content: "深井區全部真盤篩選，按價錢、房數、屋苑搜尋。",
-      },
-    ],
-    // Bare path -- the canonical must not fork per filter combination.
-    links: [canonicalLink(pageSeo.listings.path)],
-  }),
+  head: ({ loaderData }) => {
+    const page = loaderData?.page ?? 1;
+    const total = loaderData?.total ?? 0;
+    const title =
+      page > 1
+        ? `${pageSeo.listings.title.replace("｜", `（第 ${page} 頁）｜`)}`
+        : pageSeo.listings.title;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: pageSeo.listings.description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: pageSeo.listings.description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: pageSeo.listings.description },
+        // A filter combination with no rows is a soft-404 if indexed; the
+        // bare /listings and any populated page stay indexable.
+        ...(total === 0 ? [{ name: "robots", content: "noindex,follow" }] : []),
+      ],
+      // Bare path -- the canonical must not fork per filter combination.
+      // Pagination is the one exception: page 2+ self-canonicalises, otherwise
+      // every deep result page collapses into page 1 and drops out of the index.
+      links: [
+        page > 1
+          ? canonicalLink(`${pageSeo.listings.path}?page=${page}`)
+          : canonicalLink(pageSeo.listings.path),
+      ],
+    };
+  },
   pendingComponent: ListingsPendingComponent,
   errorComponent: ListingsErrorComponent,
   component: ListingsPage,
@@ -1121,9 +1134,11 @@ function ListingsPage() {
   const listSchema =
     rows.length > 0
       ? itemListSchema({
+          numberOfItems: total,
           items: rows.map((row) => ({
             url: `${SITE_URL}/property/${row.listing_no}`,
             name: sanitizeListingText(row.title_zh) ?? row.title_zh,
+            image: row.images?.[0] ?? null,
           })),
         })
       : null;
@@ -1265,7 +1280,10 @@ function ListingsPage() {
 }
 
 function deriveListingCardData(p: ListingRow) {
-  const cover = p.images?.[0] ?? "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800";
+  // No stock-photo stand-in: a third-party interior with the listing's title
+  // as alt text is indexed as a photo of that flat. AppImage renders its
+  // branded fallback for a null src instead.
+  const cover = p.images?.[0] ?? null;
   const safeTitle = sanitizeListingText(publicPropertyTitle(p)) ?? p.title_zh;
   const price = propertyPriceSummary(p);
   return { cover, safeTitle, price };

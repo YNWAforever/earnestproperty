@@ -152,9 +152,19 @@ export const Route = createFileRoute("/agents")({
   },
   head: () => ({
     meta: [
-      { title: "專業代理｜晉誠地產" },
+      { title: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊" },
       {
         name: "description",
+        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
+      },
+      { property: "og:title", content: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊" },
+      {
+        property: "og:description",
+        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
+      },
+      { name: "twitter:title", content: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊" },
+      {
+        name: "twitter:description",
         content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
       },
     ],

@@ -39,15 +39,30 @@ export const Route = createFileRoute("/agents_/$slug")({
   head: ({ loaderData }) => {
     const profile = loaderData?.profile;
     const name = profile?.name_zh || profile?.name_en || "專業代理";
+    const title = `${name}｜${SITE_NAME}`;
+    const description = `${name} ${profile?.job_title ?? "晉誠地產專業代理"}，直接聯絡了解深井、青山公路、汀九放盤、買樓及租樓服務。`;
     return {
       meta: [
-        { title: `${name}｜${SITE_NAME}` },
-        {
-          name: "description",
-          content: `${name} ${profile?.job_title ?? "晉誠地產專業代理"}，直接聯絡了解放盤、買樓及租樓服務。`,
-        },
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+        ...(profile?.avatar_url
+          ? [
+              { property: "og:image", content: profile.avatar_url },
+              { name: "twitter:image", content: profile.avatar_url },
+            ]
+          : []),
       ],
-      links: profile?.public_slug ? [canonicalLink(`/agents/${profile.public_slug}`)] : [],
+      // Never omit the canonical: a profile without a public_slug still
+      // resolves at the URL it was requested on.
+      links: [
+        profile?.public_slug
+          ? canonicalLink(`/agents/${profile.public_slug}`)
+          : canonicalLink("/agents"),
+      ],
     };
   },
   errorComponent: AgentProfileError,

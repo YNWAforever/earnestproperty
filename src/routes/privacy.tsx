@@ -15,6 +15,10 @@ export const Route = createFileRoute("/privacy")({
     meta: [
       { title: pageSeo.privacy.title },
       { name: "description", content: pageSeo.privacy.description },
+      { property: "og:title", content: pageSeo.privacy.title },
+      { property: "og:description", content: pageSeo.privacy.description },
+      { name: "twitter:title", content: pageSeo.privacy.title },
+      { name: "twitter:description", content: pageSeo.privacy.description },
     ],
     links: [canonicalLink(pageSeo.privacy.path)],
   }),
@@ -26,7 +30,7 @@ function PrivacyPage() {
     <div className="bg-background">
       <PageHero eyebrow="法律 Legal" title="私隱政策">
         <p className="mt-2 text-xs text-muted-foreground">
-          {"生效日期：[待補]　・　最後更新日期：[待補]"}
+          {"生效日期及最後更新日期：待法律顧問審閱後公布"}
         </p>
         <p className="mt-4 max-w-3xl text-sm text-muted-foreground">
           {`本政策說明晉誠地產（牌照號 ${SITE_CONTACT.licenceNo}）如何收集、使用及保護你的個人資料，符合香港《個人資料（私隱）條例》(PDPO) 的要求。`}

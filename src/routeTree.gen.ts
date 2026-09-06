@@ -13,6 +13,7 @@ import { Route as VideosRouteImport } from './routes/videos'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as MortgageRouteImport } from './routes/mortgage'
 import { Route as ListingsRouteImport } from './routes/listings'
@@ -28,6 +29,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CastlePeakRoadIndexRouteImport } from './routes/castle-peak-road.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as PropertyListingNoRouteImport } from './routes/property.$listingNo'
+import { Route as PropertyDetailFileRouteImport } from './routes/property-detail.$file'
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
 import { Route as DistrictTsuenWanRouteImport } from './routes/district.tsuen-wan'
 import { Route as DistrictTingKauRouteImport } from './routes/district.ting-kau'
@@ -104,6 +106,11 @@ const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
@@ -177,6 +184,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const PropertyListingNoRoute = PropertyListingNoRouteImport.update({
   id: '/property/$listingNo',
   path: '/property/$listingNo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PropertyDetailFileRoute = PropertyDetailFileRouteImport.update({
+  id: '/property-detail/$file',
+  path: '/property-detail/$file',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EstateSlugRoute = EstateSlugRouteImport.update({
@@ -480,6 +492,7 @@ export interface FileRoutesByFullPath {
   '/listings': typeof ListingsRoute
   '/mortgage': typeof MortgageRoute
   '/privacy': typeof PrivacyRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
@@ -509,6 +522,7 @@ export interface FileRoutesByFullPath {
   '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
+  '/property-detail/$file': typeof PropertyDetailFileRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
@@ -554,6 +568,7 @@ export interface FileRoutesByTo {
   '/listings': typeof ListingsRoute
   '/mortgage': typeof MortgageRoute
   '/privacy': typeof PrivacyRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
@@ -583,6 +598,7 @@ export interface FileRoutesByTo {
   '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
+  '/property-detail/$file': typeof PropertyDetailFileRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin': typeof AdminIndexRoute
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
@@ -631,6 +647,7 @@ export interface FileRoutesById {
   '/listings': typeof ListingsRoute
   '/mortgage': typeof MortgageRoute
   '/privacy': typeof PrivacyRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
@@ -660,6 +677,7 @@ export interface FileRoutesById {
   '/district/ting-kau': typeof DistrictTingKauRoute
   '/district/tsuen-wan': typeof DistrictTsuenWanRoute
   '/estate/$slug': typeof EstateSlugRoute
+  '/property-detail/$file': typeof PropertyDetailFileRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
@@ -709,6 +727,7 @@ export interface FileRouteTypes {
     | '/listings'
     | '/mortgage'
     | '/privacy'
+    | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
     | '/transactions'
@@ -738,6 +757,7 @@ export interface FileRouteTypes {
     | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
+    | '/property-detail/$file'
     | '/property/$listingNo'
     | '/admin/'
     | '/castle-peak-road/'
@@ -783,6 +803,7 @@ export interface FileRouteTypes {
     | '/listings'
     | '/mortgage'
     | '/privacy'
+    | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
     | '/transactions'
@@ -812,6 +833,7 @@ export interface FileRouteTypes {
     | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
+    | '/property-detail/$file'
     | '/property/$listingNo'
     | '/admin'
     | '/castle-peak-road'
@@ -859,6 +881,7 @@ export interface FileRouteTypes {
     | '/listings'
     | '/mortgage'
     | '/privacy'
+    | '/robots.txt'
     | '/sitemap.xml'
     | '/terms'
     | '/transactions'
@@ -888,6 +911,7 @@ export interface FileRouteTypes {
     | '/district/ting-kau'
     | '/district/tsuen-wan'
     | '/estate/$slug'
+    | '/property-detail/$file'
     | '/property/$listingNo'
     | '/admin/'
     | '/castle-peak-road/'
@@ -936,6 +960,7 @@ export interface RootRouteChildren {
   ListingsRoute: typeof ListingsRoute
   MortgageRoute: typeof MortgageRoute
   PrivacyRoute: typeof PrivacyRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
   TransactionsRoute: typeof TransactionsRoute
@@ -952,6 +977,7 @@ export interface RootRouteChildren {
   DistrictTingKauRoute: typeof DistrictTingKauRoute
   DistrictTsuenWanRoute: typeof DistrictTsuenWanRoute
   EstateSlugRoute: typeof EstateSlugRoute
+  PropertyDetailFileRoute: typeof PropertyDetailFileRoute
   PropertyListingNoRoute: typeof PropertyListingNoRoute
   ApiLiveAgentHandoffRoute: typeof ApiLiveAgentHandoffRoute
   ApiLiveAgentMessageRoute: typeof ApiLiveAgentMessageRoute
@@ -999,6 +1025,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1104,6 +1137,13 @@ declare module '@tanstack/react-router' {
       path: '/property/$listingNo'
       fullPath: '/property/$listingNo'
       preLoaderRoute: typeof PropertyListingNoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/property-detail/$file': {
+      id: '/property-detail/$file'
+      path: '/property-detail/$file'
+      fullPath: '/property-detail/$file'
+      preLoaderRoute: typeof PropertyDetailFileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/estate/$slug': {
@@ -1620,6 +1660,7 @@ const rootRouteChildren: RootRouteChildren = {
   ListingsRoute: ListingsRoute,
   MortgageRoute: MortgageRoute,
   PrivacyRoute: PrivacyRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
   TransactionsRoute: TransactionsRoute,
@@ -1636,6 +1677,7 @@ const rootRouteChildren: RootRouteChildren = {
   DistrictTingKauRoute: DistrictTingKauRoute,
   DistrictTsuenWanRoute: DistrictTsuenWanRoute,
   EstateSlugRoute: EstateSlugRoute,
+  PropertyDetailFileRoute: PropertyDetailFileRoute,
   PropertyListingNoRoute: PropertyListingNoRoute,
   ApiLiveAgentHandoffRoute: ApiLiveAgentHandoffRoute,
   ApiLiveAgentMessageRoute: ApiLiveAgentMessageRoute,

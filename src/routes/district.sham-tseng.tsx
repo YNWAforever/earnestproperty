@@ -49,16 +49,15 @@ type LoaderData = {
 export const Route = createFileRoute("/district/sham-tseng")({
   head: () => ({
     meta: [
-      { title: "深井 Sham Tseng 物業｜屋苑、交通、校網 62、12 個月成交" },
-      {
-        name: "description",
-        content: "深井屋苑一覽、交通時間、小學校網 62、近 12 個月實呎成交走勢及最常見問題。",
-      },
+      { title: pageSeo.shamTseng.title },
+      { name: "description", content: pageSeo.shamTseng.description },
       { property: "og:title", content: "深井 Sham Tseng 地區專頁" },
       {
         property: "og:description",
         content: "深井屋苑、交通、校網 62、近 12 個月成交數據及在售放盤一覽。",
       },
+      { name: "twitter:title", content: "深井 Sham Tseng 地區專頁" },
+      { name: "twitter:description", content: pageSeo.shamTseng.description },
     ],
     links: [canonicalLink(pageSeo.shamTseng.path)],
   }),
@@ -382,6 +381,13 @@ function ShamTsengPage() {
               className="inline-flex min-h-11 items-center rounded-md border bg-background px-4 py-2 text-sm font-semibold"
             >
               比較汀九
+            </Link>
+            <Link
+              to="/castle-peak-road/$segment"
+              params={{ segment: "sham-tseng" }}
+              className="inline-flex min-h-11 items-center rounded-md border bg-background px-4 py-2 text-sm font-semibold"
+            >
+              青山公路深井段・青龍頭
             </Link>
           </div>
         </section>

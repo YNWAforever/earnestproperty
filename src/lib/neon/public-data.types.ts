@@ -110,6 +110,10 @@ export type NeonPropertyRow = {
   management_fee: number | null;
   features: string[] | null;
   description: string | null;
+  // CMS-authored per-listing meta (admin AdminPropertyWorkspace); null on
+  // every imported row. Read by property.$listingNo.tsx's head().
+  seo_title?: string | null;
+  seo_description?: string | null;
   images: string[] | null;
   video_url: string | null;
   floorplan_url: string | null;

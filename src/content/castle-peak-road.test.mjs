@@ -546,7 +546,10 @@ test("CorridorInventory.tsx sanitizes listing.title_zh before it reaches alt/hea
   const inventory = read("src/components/site/CorridorInventory.tsx");
 
   assert.match(inventory, /import \{[\s\S]*?sanitizeListingText[\s\S]*?\} from "@\/lib\/format"/);
-  assert.match(inventory, /sanitizeListingText\(publicPropertyTitle\(listing\)\) \?\? listing\.title_zh/);
+  assert.match(
+    inventory,
+    /sanitizeListingText\(publicPropertyTitle\(listing\)\) \?\? listing\.title_zh/,
+  );
 });
 
 // Task 1 introduced the `eyebrow` prop with an English default ("Live
@@ -582,7 +585,10 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   const sitemap = read("src/routes/sitemap[.]xml.ts");
 
   assert.match(seo, /castlePeakRoad/);
-  assert.match(seo, /path:\s*"\/castle-peak-road\/ting-kau"/);
+  // The 汀九 canonical lives on the corridor segment registry (pageSeo.tingKau
+  // was dead copy that no route or the sitemap ever read, and was removed).
+  assert.doesNotMatch(seo, /tingKau:/);
+  assert.match(read("src/content/castle-peak-road.ts"), /path:\s*"\/castle-peak-road\/ting-kau"/);
   assert.match(vercel, /\/district\/ting-kau/);
   assert.match(vercel, /\/district\/ting-kau\//);
   assert.match(vercel, /\/castle-peak-road\/ting-kau/);

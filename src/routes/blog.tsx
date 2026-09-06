@@ -13,9 +13,10 @@ import {
   EDITORIAL_AUTHOR,
   type BlogCategory,
 } from "@/content/blog-articles";
-import { canonicalLink, pageSeo } from "@/content/seo";
+import { SITE_URL, canonicalLink, pageSeo } from "@/content/seo";
 import { formatHkDate } from "@/lib/format";
 import { fetchPublishedArticles, type ArticleSummary } from "@/lib/queries";
+import { itemListSchema, jsonLdScript, organizationRef } from "@/lib/schema";
 
 type BlogCard = ArticleSummary & {
   author?: string;
@@ -49,7 +50,19 @@ function matchesSearch(query: string, fields: Array<string | null | undefined>) 
   return fields.some((field) => (field ?? "").toLowerCase().includes(needle));
 }
 
+// Category lives in the URL (?category=) so each category is a crawlable,
+// shareable address rather than React state that no link can reach.
+function parseBlogSearch(input: Record<string, unknown>): { category?: CategoryFilter } {
+  const raw = typeof input.category === "string" ? input.category : undefined;
+  const category =
+    raw && (CATEGORY_FILTERS as readonly string[]).includes(raw) && raw !== "全部"
+      ? (raw as CategoryFilter)
+      : undefined;
+  return category ? { category } : {};
+}
+
 export const Route = createFileRoute("/blog")({
+  validateSearch: parseBlogSearch,
   loader: async () => {
     const articles = await fetchPublishedArticles().catch(() => []);
     return { articles: articles.length ? articles : fallbackArticles };
@@ -60,7 +73,10 @@ export const Route = createFileRoute("/blog")({
       { name: "description", content: pageSeo.blog.description },
       { property: "og:title", content: pageSeo.blog.title },
       { property: "og:description", content: pageSeo.blog.description },
+      { name: "twitter:title", content: pageSeo.blog.title },
+      { name: "twitter:description", content: pageSeo.blog.description },
     ],
+    // Bare path -- ?category= must not fork the canonical.
     links: [canonicalLink(pageSeo.blog.path)],
   }),
   component: BlogPage,
@@ -68,8 +84,26 @@ export const Route = createFileRoute("/blog")({
 
 function BlogPage() {
   const { articles } = Route.useLoaderData() as { articles: BlogCard[] };
-  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("全部");
+  const { category: categoryParam } = Route.useSearch();
+  const selectedCategory: CategoryFilter = categoryParam ?? "全部";
   const [searchQuery, setSearchQuery] = useState("");
+  const blogJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Blog",
+    "@id": `${SITE_URL}${pageSeo.blog.path}`,
+    url: `${SITE_URL}${pageSeo.blog.path}`,
+    name: pageSeo.blog.title,
+    description: pageSeo.blog.description,
+    inLanguage: "zh-HK",
+    publisher: organizationRef(),
+    mainEntity: itemListSchema({
+      items: articles.map((article) => ({
+        url: `${SITE_URL}/blog/${article.slug}`,
+        name: article.title,
+        image: article.cover_image,
+      })),
+    }),
+  };
 
   const filteredArticles = useMemo(
     () =>
@@ -83,6 +117,10 @@ function BlogPage() {
 
   return (
     <div className="bg-background">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(blogJsonLd) }}
+      />
       <PageHero
         eyebrow="市場分析 Blog"
         title="深井 青山公路 汀九樓市分析"
@@ -102,11 +140,11 @@ function BlogPage() {
         <section>
           <div className="flex flex-wrap gap-2" role="group" aria-label="按分類篩選文章">
             {CATEGORY_FILTERS.map((category) => (
-              <button
+              <Link
                 key={category}
-                type="button"
+                to="/blog"
+                search={category === "全部" ? {} : { category }}
                 aria-pressed={selectedCategory === category}
-                onClick={() => setSelectedCategory(category)}
                 className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                   selectedCategory === category
                     ? "border-primary bg-primary/10 text-primary"
@@ -114,7 +152,7 @@ function BlogPage() {
                 }`}
               >
                 {category}
-              </button>
+              </Link>
             ))}
           </div>
           <Input
