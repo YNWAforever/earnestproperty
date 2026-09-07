@@ -1,5 +1,6 @@
 import {
   publicPropertyNo,
+  propertyUpdatedAt,
   propertyPriceSummary,
   propertyDealLabel,
   publicPropertyTitle,
@@ -1353,7 +1354,7 @@ function ListingCard({ p }: { p: ListingRow }) {
         <div className="p-4">
           <p className="text-lg font-bold text-primary">{price}</p>
           <h2 className="mt-1 line-clamp-1 text-sm font-semibold">{safeTitle}</h2>
-          {p.source_site && <FreshnessStamp updatedAt={p.last_seen_at} className="mt-1 block" />}
+          <FreshnessStamp updatedAt={propertyUpdatedAt(p)} className="mt-1 block" />
           {p.estates && (
             <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
               <MapPin className="h-3 w-3" />
@@ -1438,7 +1439,7 @@ function ListingCardRow({ p }: { p: ListingRow }) {
           <div className="flex min-w-0 flex-1 flex-col justify-center">
             <p className="text-base font-bold text-primary sm:text-lg">{price}</p>
             <h2 className="mt-1 line-clamp-1 text-sm font-semibold">{safeTitle}</h2>
-            {p.source_site && <FreshnessStamp updatedAt={p.last_seen_at} className="mt-1 block" />}
+            <FreshnessStamp updatedAt={propertyUpdatedAt(p)} className="mt-1 block" />
             {p.estates && (
               <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
                 <MapPin className="h-3 w-3" />

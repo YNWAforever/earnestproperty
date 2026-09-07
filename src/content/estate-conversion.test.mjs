@@ -460,17 +460,17 @@ test("homepage shows featured property videos after featured listings", () => {
   assert.doesNotMatch(home, /youtube\.com\/embed/);
   assert.match(home, /to="\/videos"/);
 
-  // The video band must come after 精選筍盤, which is the whole point of where
+  // The video band must come after 最新放盤, which is the whole point of where
   // the client asked for it. Compared on the rendered section titles rather
   // than bare text, so a comment mentioning either name cannot skew the order.
   // These two SectionHeader calls intentionally carry no `eyebrow` -- an
   // eyebrow identical to the title duplicated the label visually, and was
   // removed in ecaef90 ("fix: remove duplicate homepage section labels").
-  const featuredAt = home.indexOf('title="精選筍盤"');
+  const featuredAt = home.indexOf('title="最新放盤"');
   const videosAt = home.indexOf('title="精選樓盤影片"');
   assert.ok(featuredAt > -1, "featured listings section should carry its title");
   assert.ok(videosAt > -1, "video section should carry its title");
-  assert.ok(featuredAt < videosAt, "精選樓盤影片 must render after 精選筍盤");
+  assert.ok(featuredAt < videosAt, "精選樓盤影片 must render after 最新放盤");
 });
 
 // --- P4 Task 4: verified-facts DataNote, transport, school-net, PSF trend ---

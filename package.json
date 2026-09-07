@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:admin-properties:db": "node --test src/lib/neon/admin-properties.db.test.mjs src/lib/neon/admin-property-management.db.test.mjs",
-    "test:admin-properties": "node --test src/lib/neon/admin-properties.test.mjs src/lib/neon/admin-properties.read.test.mjs src/lib/neon/admin-property-management.test.mjs && bun test src/lib/admin/property-management-ui.test.ts",
+    "test:admin-properties": "node --test src/lib/neon/admin-properties.test.mjs src/lib/neon/admin-properties.read.test.mjs src/lib/neon/admin-property-management.test.mjs src/lib/neon/admin-property-bulk.test.mjs && bun test src/lib/admin/property-management-ui.test.ts src/lib/admin/property-bulk-client.test.ts",
     "test:format": "bun test src/lib/format.test.ts",
     "test:layout": "bun test src/components/layout/layout.test.tsx",
     "test:media": "bun test src/components/media/AppImage.test.tsx",

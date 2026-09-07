@@ -16,7 +16,7 @@ export async function readPublicSourceMetadata(
  c.observation_id AS contact_observation_id, c.contact, (p.config->'public_contacts_enabled' = 'true'::jsonb) AS contact_approved
  FROM mls_source_state s
  JOIN listing_source_observations o ON o.id=s.observation_id
- JOIN mls_ingestion_policies p USING(source,scope_id,policy_version)
+ JOIN mls_ingestion_policies p ON p.source=s.source AND p.scope_id=s.scope_id AND p.policy_version=s.policy_version
  JOIN property_public_members member ON member.property_id=s.property_id
  LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type AND c.observation_id = s.observation_id
  WHERE member.public_listing_no=(SELECT public_listing_no FROM property_public_members WHERE property_id=$1) AND s.policy_version='no-hermes-v2'

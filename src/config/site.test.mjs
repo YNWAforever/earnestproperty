@@ -233,21 +233,21 @@ test("homepage and navigation include Ting Kau content entry points", () => {
   }
 });
 
-// 精選筍盤置頂 (client p2). This regressed once already because the copy edits
+// 最新放盤置頂 (client p2). This regressed once already because the copy edits
 // landed and the move did not, and nothing failed — so the order is pinned here.
-test("homepage puts 精選筍盤 above 深井核心屋苑", () => {
+test("homepage puts 最新放盤 above 深井核心屋苑", () => {
   const source = readFileSync("src/routes/index.tsx", "utf8");
 
   // These three SectionHeader calls intentionally carry no `eyebrow` -- an
   // eyebrow identical to the title duplicated the label visually, and was
   // removed in ecaef90 ("fix: remove duplicate homepage section labels").
-  const featured = source.indexOf('title="精選筍盤"');
+  const featured = source.indexOf('title="最新放盤"');
   const estates = source.indexOf('title="深井核心屋苑"');
   const whyUs = source.indexOf('title="為何選晉誠"');
 
-  assert.notEqual(featured, -1, "homepage should still have a 精選筍盤 section");
+  assert.notEqual(featured, -1, "homepage should still have a 最新放盤 section");
   assert.notEqual(estates, -1, "homepage should still have a 深井核心屋苑 section");
-  assert.ok(featured < estates, "精選筍盤 must render before 深井核心屋苑");
+  assert.ok(featured < estates, "最新放盤 must render before 深井核心屋苑");
   assert.ok(estates < whyUs, "深井核心屋苑 must stay above 為何選晉誠");
 
   // DOM order is only visual order while nothing reorders with CSS.

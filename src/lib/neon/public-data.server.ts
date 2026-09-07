@@ -142,7 +142,11 @@ function mapListingCardRow(row: DbRow): NeonPropertyRow {
 }
 // Rank across every status before applying public filters. A newer withdrawal
 // therefore suppresses an older active scrape for the same unit and deal.
-function canonicalListingCte(where: string, splitByDeal = false) {
+function canonicalListingCte(
+  where: string,
+  splitByDeal = false,
+  candidateOrder = LISTING_FRESHNESS_ORDER,
+) {
   return `WITH ranked_offerings AS (
     SELECT p.id, ppm.public_listing_no, ROW_NUMBER() OVER (
       PARTITION BY ppm.public_listing_no, p.deal_type
@@ -155,7 +159,7 @@ function canonicalListingCte(where: string, splitByDeal = false) {
   ), eligible_candidates AS (
     SELECT p.id, current_offerings.public_listing_no, ROW_NUMBER() OVER (
       PARTITION BY current_offerings.public_listing_no${splitByDeal ? ", p.deal_type" : ""}
-      ORDER BY ${LISTING_FRESHNESS_ORDER}
+      ORDER BY ${candidateOrder}
     ) AS group_rank
     FROM current_offerings
     JOIN properties p ON p.id = current_offerings.id
@@ -457,15 +461,12 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
 // only searchListings (the general /listings search path) accepts a sort.
 const LISTING_FRESHNESS_ORDER =
   "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC";
+// Newest means first recorded on this site, not featured status or scraper last-seen time.
+const LISTING_NEWEST_ORDER = "p.created_at DESC, p.id ASC";
 
-// dedupeListings (src/lib/queries.ts) keeps the FIRST occurrence of a
-// duplicate pair and relies on callers pre-ordering rows by
-// LISTING_FRESHNESS_ORDER so the kept row is the freshest. A user-chosen sort
-// changes the primary ORDER BY column, but true duplicates (re-scrapes of the
-// same physical unit) almost always tie on price/area/psf, so the freshness
-// chain is always appended as a tiebreaker -- this keeps dedup's "kept row is
-// freshest" guarantee intact on the common tie case without trying to solve
-// the rare non-identical-duplicate edge case here.
+// Price/area/PSF sorts retain the existing featured/source-check tie breakers.
+// Newest uses creation order consistently for representative selection and paging;
+// canonical current-offer ranking still suppresses superseded active records.
 function listingOrderBy(sort: NeonListingSort): string {
   switch (sort) {
     case "price_asc":
@@ -486,10 +487,7 @@ function listingOrderBy(sort: NeonListingSort): string {
       );
     case "newest":
     default:
-      // The pre-existing hardcoded order already IS "newest" -- mapping it to
-      // the freshness chain alone (rather than restating those same three
-      // columns as a separate "primary" clause) avoids duplicating them.
-      return LISTING_FRESHNESS_ORDER;
+      return LISTING_NEWEST_ORDER;
   }
 }
 
@@ -645,18 +643,20 @@ export async function searchListings(
   const offset = (page - 1) * pageSize;
   const params: unknown[] = [];
   const where = listingWhere(input, params);
+  const candidateOrder =
+    !input.sort || input.sort === "newest" ? LISTING_NEWEST_ORDER : LISTING_FRESHNESS_ORDER;
   const rowParams = [...params];
   const limitParam = addParam(rowParams, pageSize);
   const offsetParam = addParam(rowParams, offset);
   // Both reads are independent; list totals may reflect a concurrent import until the next refresh.
   const [countRows, rows] = await Promise.all([
     db.query(
-      `${canonicalListingCte(where)}
+      `${canonicalListingCte(where, false, candidateOrder)}
       SELECT count(*)::int AS total FROM eligible_groups`,
       params,
     ),
     db.query(
-      `${canonicalListingCte(where)}
+      `${canonicalListingCte(where, false, candidateOrder)}
       SELECT ${listingCardColumns} FROM properties p JOIN canonical c ON c.id=p.id
       LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}
       ORDER BY ${listingOrderBy(input.sort)} LIMIT ${limitParam} OFFSET ${offsetParam}`,
@@ -708,22 +708,17 @@ export async function fetchCorridorInventory(
 
 export async function fetchFeaturedProperties(limit: number): Promise<NeonPropertyRow[]> {
   const pageSize = Math.min(Math.max(1, limit), 100);
-  // p.featured is manually flagged and the MLS importer always writes it false
-  // (see normalize-old-site.mjs), so a strict `featured = true` filter showed
-  // only the handful of listings someone had hand-flagged -- 1 of 398 at audit
-  // time. Sorting featured-first instead of filtering on it surfaces any
-  // hand-picked listings ahead of the rest while always backfilling the
-  // section from the newest active inventory (sale + rent mixed), so 精選筍盤
-  // never shows fewer than `limit` cards while any active listings exist.
+  // Legacy API name: the homepage now presents latest active inventory.
+  // Keep staff featured flags intact, but never let them pin old stock above new listings.
   const rows = await sql().query(
     `
-    ${canonicalListingCte("p.status = 'active'")}
+    ${canonicalListingCte("p.status = 'active'", false, LISTING_NEWEST_ORDER)}
     SELECT ${listingCardColumns}
     FROM properties p JOIN canonical c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
 
     WHERE p.status = 'active'
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC
+    ORDER BY ${LISTING_NEWEST_ORDER}
     LIMIT $1
     `,
     [pageSize],

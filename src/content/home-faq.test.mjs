@@ -105,8 +105,12 @@ test("the homepage renders both FAQ sections under one FAQPage", () => {
   assert.match(home, /corridorRows\.length > 0 \? corridorRows : \[\.\.\.castlePeakRoadHomeFaqs\]/);
 });
 
-test("the 精選筍盤 section header carries no subtitle", () => {
+test("the 最新放盤 section header carries no subtitle", () => {
+  // #133/#134 renamed this section from 精選筍盤 to 最新放盤 and gave it the
+  // subtitle 「按最新上架排序，隨時 WhatsApp 查詢及預約睇樓。」; the rename stays,
+  // the subtitle was dropped at the client's request.
   const home = read("src/routes/index.tsx");
-  assert.match(home, /title="精選筍盤"/, "the section itself must stay");
+  assert.match(home, /title="最新放盤"/, "the section itself must stay");
   assert.doesNotMatch(home, /隨時 WhatsApp 查詢及預約睇樓/, "the removed subtitle is back");
+  assert.doesNotMatch(home, /按最新上架排序/, "the removed subtitle is back");
 });

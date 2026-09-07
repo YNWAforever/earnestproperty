@@ -96,6 +96,8 @@ export type FeaturedProperty = {
   // Already selected by `listingColumns`; surfaced here so the homepage's
   // featured cards can show a freshness stamp the same way listings.tsx's
   // ListingCard does.
+  created_at?: string | null;
+  updated_at?: string | null;
   last_seen_at: string | null;
   source_site: string | null;
   estates: { name_zh: string; slug: string; district_slug: string } | null;

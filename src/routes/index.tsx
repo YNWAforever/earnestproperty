@@ -3,6 +3,7 @@ import {
   propertyPriceSummary,
   propertyDealLabel,
   publicPropertyTitle,
+  propertyUpdatedAt,
 } from "@/lib/property-public";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -352,7 +353,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* FEATURED LISTINGS — 精選筍盤置頂 (client p2): live stock is the first
+      {/* FEATURED LISTINGS — 最新放盤置頂 (client p2): live stock is the first
           thing after the hero, ahead of the evergreen estate directory. The
           district-stats strip that used to sit above this was removed at the
           client's request; bg-muted/40 still reads as a band against the hero
@@ -360,7 +361,7 @@ function HomePage() {
       <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-            <SectionHeader title="精選筍盤" className="text-left" />
+            <SectionHeader title="最新放盤" className="text-left" />
             <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
               所有放盤 →
             </Link>
@@ -370,7 +371,7 @@ function HomePage() {
             <EmptyState
               className="mt-8"
               icon={Building2}
-              title="暫時未有精選放盤"
+              title="暫時未有公開放盤"
               description="請稍後再試，或直接 WhatsApp 我哋查詢最新盤源。"
               action={
                 <a
@@ -395,7 +396,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* FEATURED VIDEOS — sits directly after 精選筍盤 so a buyer who just
+      {/* FEATURED VIDEOS — sits directly after 最新放盤 so a buyer who just
           scanned the live stock can immediately see the same listings walked
           through on video. Hidden entirely when neither the CMS videos nor any
           featured listing has a video, rather than shipping an empty band. */}
@@ -783,7 +784,7 @@ function CoreEstateGrid({
 
   // Mirrors the already-established pattern for "this section has nothing
   // real to show yet" elsewhere in this codebase (estate-reviews.tsx's own
-  // 屋苑文章 section, and this same file's 精選筍盤 EmptyState above) --
+  // 屋苑文章 section, and this same file's 最新放盤 EmptyState above) --
   // rendering the section heading with a bare, cardless grid underneath
   // looks broken, not like an honest "nothing here yet" state. This is a
   // real, currently-live case: the 青山公路屋苑 group's own estates all stay
@@ -1073,10 +1074,9 @@ type PropertyItem = {
   features: string[] | null;
   images?: string[] | null;
   video_url?: string | null;
-  // Already selected by `listingColumns` / carried on `FeaturedProperty` --
-  // surfaced here so the featured card can show a freshness stamp the same
-  // way listings.tsx's ListingCard does (gated on source_site: only imported
-  // listings get a meaningfully maintained last_seen_at).
+  // Real record timestamps also cover new ingestion rows without legacy metadata.
+  created_at?: string | null;
+  updated_at?: string | null;
   last_seen_at?: string | null;
   source_site?: string | null;
   estates?: { name_zh: string; slug: string } | null;
@@ -1089,7 +1089,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
     !isRent && property.price && property.saleable_area
       ? Math.round(property.price / property.saleable_area)
       : null;
-  const tag = property.features?.[0] ?? "精選";
+  const tag = property.features?.[0] ?? "放盤";
 
   // The card used to render a bare gradient and ignore `images` entirely, so
   // listings with real photography still looked like placeholders. Showing the
@@ -1194,9 +1194,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
             {publicPropertyTitle(property)}
           </Link>
         </h3>
-        {property.source_site && (
-          <FreshnessStamp updatedAt={property.last_seen_at} className="mt-1 block" />
-        )}
+        <FreshnessStamp updatedAt={propertyUpdatedAt(property)} className="mt-1 block" />
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">

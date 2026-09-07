@@ -428,9 +428,9 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   for (const text of [
     "fetchAdminPropertyGroups",
     "fetchAdminAgents",
-    "公開預覽",
+    "AdminPropertyTable",
     "propertyStatusLabels",
-    "管理物業",
+    "AdminPropertyBulkActions",
   ]) {
     assert.match(read("src/routes/admin.listings.tsx"), new RegExp(text));
   }
@@ -603,7 +603,12 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   const listingRoute = read("src/routes/admin.listings.tsx");
   assert.match(listingRoute, /useRef/);
   assert.match(listingRoute, /sequence.current === request/);
-  assert.match(listingRoute, /md:grid-cols/);
+  const listingTable = read("src/components/admin/AdminPropertyTable.tsx");
+  assert.match(listingRoute, /<AdminPropertyTable\s/);
+  assert.match(listingTable, /className="hidden [^"]*lg:block"/);
+  assert.match(listingTable, /<table\s/);
+  assert.match(listingTable, /className="[^"]*lg:hidden"/);
+  assert.match(listingTable, /<article\s/);
   assert.match(listingRoute, /data.total/);
   assert.match(listingEditRoute, /AdminPropertyWorkspace/);
 });
@@ -1019,4 +1024,22 @@ test("Neon Auth UI is given the absolute site origin so password-reset links ret
   const root = read("src/components/auth/PrivateAuthProvider.tsx");
   assert.match(root, /import \{[^}]*\bSITE_URL\b[^}]*\} from "@\/content\/seo"/);
   assert.match(root, /<NeonAuthUIProvider[^>]*baseURL=\{SITE_URL\}/);
+});
+
+test("property management mounts canonical management and public preview actions", () => {
+  const route = read("src/routes/admin.listings.tsx");
+  const table = read("src/components/admin/AdminPropertyTable.tsx");
+  assert.match(
+    route,
+    /import \{ AdminPropertyTable \} from "@\/components\/admin\/AdminPropertyTable"/,
+  );
+  assert.match(route, /<AdminPropertyTable\s+rows=\{data\.rows\}/);
+  assert.match(
+    table,
+    /<Link to="\/admin\/listings\/\$id" params=\{\{ id: row\.propertyNo \}\}>\s*管理\s*<\/Link>/,
+  );
+  assert.match(
+    table,
+    /<Link to="\/property\/\$listingNo" params=\{\{ listingNo: row\.propertyNo \}\}>\s*公開預覽\s*<\/Link>/,
+  );
 });

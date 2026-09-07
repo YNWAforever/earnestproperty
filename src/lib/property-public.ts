@@ -67,3 +67,21 @@ export function publicPropertyTitle(property: PublicProperty & { title_zh: strin
     ? property.title_zh.replace(/售盤|租盤/g, "放盤")
     : property.title_zh;
 }
+
+/** Latest actual record update or source check; never substitutes the current clock. */
+export function propertyUpdatedAt(property: {
+  updated_at?: string | null;
+  last_seen_at?: string | null;
+  created_at?: string | null;
+}): string | null {
+  let latest: string | null = null;
+  for (const value of [property.updated_at, property.last_seen_at, property.created_at]) {
+    if (
+      value &&
+      Number.isFinite(Date.parse(value)) &&
+      (!latest || Date.parse(value) > Date.parse(latest))
+    )
+      latest = value;
+  }
+  return latest;
+}
