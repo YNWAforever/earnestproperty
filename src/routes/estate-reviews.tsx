@@ -8,7 +8,7 @@ import { AppImage } from "@/components/media/AppImage";
 import { PageHero } from "@/components/site/PageHero";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
-import { blogArticles } from "@/content/blog-articles";
+import { articlePublishedAt, publishedBlogArticles } from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_URL, canonicalLink, pageSeo } from "@/content/seo";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
@@ -30,17 +30,22 @@ type DistrictFilter = (typeof DISTRICT_FILTERS)[number];
  * site with 22 real estate pages behind it. A CMS article still wins outright,
  * exactly as on /blog -- this is the floor, not a cap.
  */
-const fallbackArticles: ArticleSummary[] = blogArticles
-  .filter((article) => article.category === "屋苑開箱")
-  .map((article) => ({
-    slug: article.slug,
-    title: article.title,
-    excerpt: article.excerpt,
-    cover_image: null,
-    category: article.category,
-    reading_minutes: article.readingMinutes,
-    published_at: "2026-06-22T00:00:00.000Z",
-  }));
+function fallbackArticles(): ArticleSummary[] {
+  // Computed per request, not at module load: 28 of the 屋苑開箱 articles are
+  // scheduled for future dates, so a module-level list would freeze the set at
+  // server boot and only grow when something happened to redeploy.
+  return publishedBlogArticles()
+    .filter((article) => article.category === "屋苑開箱")
+    .map((article) => ({
+      slug: article.slug,
+      title: article.title,
+      excerpt: article.excerpt,
+      cover_image: null,
+      category: article.category,
+      reading_minutes: article.readingMinutes,
+      published_at: articlePublishedAt(article),
+    }));
+}
 
 export const Route = createFileRoute("/estate-reviews")({
   loader: async () => {
@@ -48,7 +53,7 @@ export const Route = createFileRoute("/estate-reviews")({
       fetchPublishedArticlesByCategory("屋苑開箱").catch(() => [] as ArticleSummary[]),
       fetchEstateOptions(),
     ]);
-    return { articles: articles.length ? articles : fallbackArticles, estates };
+    return { articles: articles.length ? articles : fallbackArticles(), estates };
   },
   head: ({ loaderData }) => ({
     meta: [

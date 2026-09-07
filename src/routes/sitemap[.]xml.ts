@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { blogArticles } from "@/content/blog-articles";
+import { publishedBlogArticles } from "@/content/blog-articles";
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
 import { SITE_URL, estateSeo, pageSeo } from "@/content/seo";
 import {
@@ -29,14 +29,17 @@ const staticPaths = [
   "/mortgage",
   "/agents",
   "/videos",
-  ...blogArticles.map((article) => `/blog/${article.slug}`),
+  // Article URLs are NOT here: 28 屋苑開箱 articles are scheduled for future
+  // dates, and a module-level list would freeze the set at server boot and
+  // advertise a URL that still 404s. They are appended per request below.
   ...castlePeakRoadSitemapPaths,
 ];
 
-/** How many 屋苑開箱 articles ship in the bundle, independent of the CMS. */
-const STATIC_ESTATE_REVIEW_COUNT = blogArticles.filter(
-  (article) => article.category === "屋苑開箱",
-).length;
+/** How many 屋苑開箱 articles are public right now, independent of the CMS.
+ * Evaluated per request because the set grows on a schedule. */
+function staticEstateReviewCount(): number {
+  return publishedBlogArticles().filter((article) => article.category === "屋苑開箱").length;
+}
 
 function uniquePaths(paths: string[]) {
   return Array.from(new Set(paths)).filter((path) => path !== "/district/ting-kau");
@@ -115,7 +118,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           // own fallbackArticles), so the page is only empty if BOTH the CMS
           // and the static set are, and gating solely on the CMS query kept a
           // populated page out of the sitemap.
-          estateReviewArticles.length > 0 || STATIC_ESTATE_REVIEW_COUNT > 0
+          estateReviewArticles.length > 0 || staticEstateReviewCount() > 0
             ? "/estate-reviews"
             : null,
         ].filter((path) => path !== null);
@@ -177,6 +180,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
           ...uniquePaths([
             ...staticPaths,
+            ...publishedBlogArticles().map((article) => `/blog/${article.slug}`),
             ...publishedEstatePaths,
             ...publishedArticlePaths,
             ...conditionalPaths,

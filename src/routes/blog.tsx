@@ -9,7 +9,8 @@ import { PageHero } from "@/components/site/PageHero";
 import { Input } from "@/components/ui/input";
 import {
   BLOG_CATEGORIES,
-  blogArticles,
+  articlePublishedAt,
+  publishedBlogArticles,
   EDITORIAL_AUTHOR,
   type BlogCategory,
 } from "@/content/blog-articles";
@@ -22,16 +23,21 @@ type BlogCard = ArticleSummary & {
   author?: string;
 };
 
-const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
-  slug: article.slug,
-  title: article.title,
-  excerpt: article.excerpt,
-  cover_image: null,
-  category: article.category,
-  reading_minutes: article.readingMinutes,
-  published_at: "2026-06-22T00:00:00.000Z",
-  author: article.author,
-}));
+function fallbackArticles(): BlogCard[] {
+  // Per request: 28 屋苑開箱 articles are scheduled for future dates, and each
+  // one now carries its own date rather than the shared 2026-06-22 constant
+  // this used to stamp on every card.
+  return publishedBlogArticles().map((article) => ({
+    slug: article.slug,
+    title: article.title,
+    excerpt: article.excerpt,
+    cover_image: null,
+    category: article.category,
+    reading_minutes: article.readingMinutes,
+    published_at: articlePublishedAt(article),
+    author: article.author,
+  }));
+}
 
 // The flagship guide gets a "start here" link in the hero rather than being
 // spliced into the lead sentence (「由「…」開始」 read as broken copy).
@@ -88,7 +94,7 @@ export const Route = createFileRoute("/blog")({
   loader: async ({ deps }) => {
     const articles = await fetchPublishedArticles().catch(() => []);
     return {
-      articles: articles.length ? articles : fallbackArticles,
+      articles: articles.length ? articles : fallbackArticles(),
       category: deps.category,
     };
   },

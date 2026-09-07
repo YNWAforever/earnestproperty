@@ -33,7 +33,7 @@ import { estateRegistry, findComparableEstates } from "@/content/estate-registry
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
 import { SITE_URL, authored, canonicalLink, estateSeo } from "@/content/seo";
-import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
+import { publishedBlogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
 import {
   fetchCmsVideos,
@@ -89,7 +89,9 @@ export const Route = createFileRoute("/estate/$slug")({
     const relatedVideos = cmsVideos.filter(
       (video) => deriveEstateTag(video.title)?.tag === estate.name_zh,
     );
-    const relatedArticles = blogArticles.filter((article) =>
+    // Only articles that are actually public: linking an estate page to a
+    // scheduled article would point at a URL that still 404s.
+    const relatedArticles = publishedBlogArticles().filter((article) =>
       article.compareEstateSlugs?.includes(estate.slug),
     );
     // A comparable's real facts (avg PSF / units / year / developer) live in

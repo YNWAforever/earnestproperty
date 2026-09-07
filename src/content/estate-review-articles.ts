@@ -617,13 +617,55 @@ const ATTRIBUTE_ARTICLES: GroupSpec[] = [
   ),
 ];
 
+/**
+ * Publication schedule.
+ *
+ * Publishing 50 pages in one day from one fact base is the pattern Google's
+ * spam policy calls scaled content abuse. The 22 single-estate 開箱 go live
+ * together -- they are one-per-estate, each about a page that already exists,
+ * so there is nothing bulk about them -- and the 28 multi-estate articles then
+ * land one a day.
+ *
+ * These are real timestamps, not a build-time trick: every consumer filters on
+ * `publishedAt <= now` at request time, so an article goes live on its date
+ * with no deploy, and is genuinely unreachable before it (its /blog URL 404s
+ * and it is absent from the sitemap) rather than merely unlisted.
+ */
+const LAUNCH_AT = "2026-09-07T00:00:00.000Z";
+/** 09:00 Hong Kong time (UTC+8) on the first scheduled day. */
+const DAILY_START_AT = "2026-09-08T01:00:00.000Z";
+
+function scheduledAt(dayOffset: number): string {
+  const at = new Date(DAILY_START_AT);
+  at.setUTCDate(at.getUTCDate() + dayOffset);
+  return at.toISOString();
+}
+
+/** Round-robins the three kinds so the daily feed alternates between an area
+ * round-up, a head-to-head and an attribute piece instead of shipping six area
+ * articles in a row. */
+function interleave<T>(...lists: readonly (readonly T[])[]): T[] {
+  const longest = Math.max(...lists.map((list) => list.length));
+  const out: T[] = [];
+  for (let index = 0; index < longest; index += 1) {
+    for (const list of lists) {
+      if (index < list.length) out.push(list[index]);
+    }
+  }
+  return out;
+}
+
 const SINGLE_ESTATE_SLUGS = estateRegistry
   .filter((entry) => entry.hasPage)
   .map((entry) => entry.slug);
 
 export const estateReviewArticles: readonly EstateReviewArticle[] = [
-  ...SINGLE_ESTATE_SLUGS.map(singleEstateArticle),
-  ...AREA_ARTICLES.map(groupArticle),
-  ...VERSUS_ARTICLES.map(groupArticle),
-  ...ATTRIBUTE_ARTICLES.map(groupArticle),
+  ...SINGLE_ESTATE_SLUGS.map((slug) => ({
+    ...singleEstateArticle(slug),
+    publishedAt: LAUNCH_AT,
+  })),
+  ...interleave(AREA_ARTICLES, VERSUS_ARTICLES, ATTRIBUTE_ARTICLES).map((spec, index) => ({
+    ...groupArticle(spec),
+    publishedAt: scheduledAt(index),
+  })),
 ];

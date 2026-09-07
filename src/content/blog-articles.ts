@@ -54,6 +54,14 @@ export type BlogArticleMeta = {
   sections: readonly BlogArticleSection[];
   /** Estate slugs (must resolve in estate-registry.ts) to render as a live
    * comparison table -- see blog_.$slug.tsx's loader. */
+  /**
+   * When this article becomes public, as an ISO instant. Every consumer
+   * filters on it at request time (see `publishedBlogArticles`), so a
+   * scheduled article goes live on its date with no deploy and is genuinely
+   * unreachable before it. Omitted on the two flagship guides, which predate
+   * scheduling and are treated as always published.
+   */
+  publishedAt?: string;
   compareEstateSlugs?: readonly string[];
   links: readonly { href: string; label: string }[];
 };
@@ -182,3 +190,24 @@ export const blogArticles: readonly BlogArticleMeta[] = [
     reviewer: null,
   })),
 ];
+
+/** The date the two flagship guides shipped, and the floor for any article
+ * with no `publishedAt` of its own. */
+export const DEFAULT_ARTICLE_PUBLISHED_AT = "2026-06-22T00:00:00.000Z";
+
+export function articlePublishedAt(article: Pick<BlogArticleMeta, "publishedAt">): string {
+  return article.publishedAt ?? DEFAULT_ARTICLE_PUBLISHED_AT;
+}
+
+/**
+ * The articles that are public *now*.
+ *
+ * `blogArticles` is the whole authored set, including articles scheduled for a
+ * future date; this is what routes, the sitemap and the related-article
+ * lookups must use, so a scheduled article is not merely unlisted but actually
+ * unreachable. `now` is injectable so tests do not depend on the wall clock.
+ */
+export function publishedBlogArticles(now: Date = new Date()): readonly BlogArticleMeta[] {
+  const instant = now.getTime();
+  return blogArticles.filter((article) => Date.parse(articlePublishedAt(article)) <= instant);
+}

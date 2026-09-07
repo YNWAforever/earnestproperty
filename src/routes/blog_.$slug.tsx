@@ -11,7 +11,12 @@ import {
 import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 import { PageHero } from "@/components/site/PageHero";
 import { SiteLink } from "@/components/site/SiteLink";
-import { blogArticles, EDITORIAL_AUTHOR, type BlogArticleSection } from "@/content/blog-articles";
+import {
+  articlePublishedAt,
+  EDITORIAL_AUTHOR,
+  publishedBlogArticles,
+  type BlogArticleSection,
+} from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_URL, authored, canonicalLink } from "@/content/seo";
 import {
@@ -61,7 +66,12 @@ function sectionsFromDbContent(content: string | null): readonly BlogArticleSect
 }
 
 function fallbackArticle(slug: string) {
-  return blogArticles.find((item) => item.slug === slug) ?? null;
+  // publishedBlogArticles, not blogArticles: a scheduled 屋苑開箱 article must
+  // be genuinely unreachable before its date, not merely absent from the
+  // listings. The loader throws notFound() when this returns null, so its URL
+  // 404s until it publishes -- which is also why the sitemap only lists the
+  // published ones.
+  return publishedBlogArticles().find((item) => item.slug === slug) ?? null;
 }
 
 /** ToC anchor ids. Headings here are zh-HK prose with no ASCII content, so a
@@ -119,7 +129,7 @@ export const Route = createFileRoute("/blog_/$slug")({
           reading_minutes: dbArticle?.reading_minutes ?? registryArticle.readingMinutes,
           seo_title: dbArticle?.seo_title ?? null,
           seo_description: dbArticle?.seo_description ?? null,
-          published_at: dbArticle?.published_at ?? "2026-06-22T00:00:00.000Z",
+          published_at: dbArticle?.published_at ?? articlePublishedAt(registryArticle),
           updated_at: dbArticle?.updated_at ?? null,
           author: registryArticle.author,
           reviewer: registryArticle.reviewer,

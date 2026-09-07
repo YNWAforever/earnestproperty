@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { blogArticles } from "./blog-articles.ts";
+import { articlePublishedAt, blogArticles, publishedBlogArticles } from "./blog-articles.ts";
 import { estatePageContent } from "./estate-pages.ts";
 import { estateRegistry } from "./estate-registry.ts";
 import { estateReviewArticles } from "./estate-review-articles.ts";
@@ -245,6 +246,122 @@ test("multi-estate articles group estates that really share the attribute", () =
         haystack.includes(keyword),
         `${article.slug} groups ${slug} under "${keyword}", but its own content never says so`,
       );
+    }
+  }
+});
+
+// --- publication schedule --------------------------------------------------
+
+const singleEstateArticles = estateReviewArticles.filter((article) =>
+  article.slug.endsWith("-estate-review"),
+);
+const scheduledArticles = estateReviewArticles
+  .filter((article) => !article.slug.endsWith("-estate-review"))
+  .slice()
+  .sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
+
+test("the 22 single-estate articles all launch together", () => {
+  assert.equal(singleEstateArticles.length, 22);
+  const dates = new Set(singleEstateArticles.map((article) => article.publishedAt));
+  assert.equal(dates.size, 1, "the launch batch must share one date");
+  assert.ok(
+    Date.parse([...dates][0]) <= Date.parse("2026-09-07T00:00:00.000Z"),
+    "the launch batch must already be live",
+  );
+});
+
+test("the 28 multi-estate articles publish one a day, with no gaps or collisions", () => {
+  assert.equal(scheduledArticles.length, 28);
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  for (const [index, article] of scheduledArticles.entries()) {
+    assert.ok(article.publishedAt, `${article.slug} has no publishedAt`);
+    if (index === 0) continue;
+    const gap =
+      Date.parse(article.publishedAt) - Date.parse(scheduledArticles[index - 1].publishedAt);
+    assert.equal(
+      gap,
+      DAY_MS,
+      `${article.slug} is ${gap / DAY_MS} days after the previous article, not 1`,
+    );
+  }
+  // Every scheduled article is strictly after the launch batch.
+  assert.ok(
+    Date.parse(scheduledArticles[0].publishedAt) > Date.parse(singleEstateArticles[0].publishedAt),
+    "the daily run must start after launch",
+  );
+});
+
+test("the daily run alternates between the three kinds", () => {
+  // Six area round-ups shipping on six consecutive days would read as a dump.
+  const kindOf = (article) => {
+    const body = article.sections.flatMap((section) => section.paragraphs).join("\n");
+    if (body.includes("嘅公開屋苑資料都提到「")) return "attribute";
+    return article.compareEstateSlugs.length === 2 ? "versus" : "area";
+  };
+  const kinds = scheduledArticles.map(kindOf);
+  assert.deepEqual(kinds.slice(0, 6), [
+    "area",
+    "versus",
+    "attribute",
+    "area",
+    "versus",
+    "attribute",
+  ]);
+});
+
+test("publishedBlogArticles gates on the clock, so a scheduled article is not live early", () => {
+  const launchDay = publishedBlogArticles(new Date("2026-09-07T12:00:00.000Z"));
+  // 22 estate 開箱 + the two flagship guides.
+  assert.equal(launchDay.length, 24);
+  assert.equal(launchDay.filter((article) => article.category === "屋苑開箱").length, 22);
+
+  const firstScheduled = scheduledArticles[0];
+  const justBefore = new Date(Date.parse(firstScheduled.publishedAt) - 1000);
+  const justAfter = new Date(Date.parse(firstScheduled.publishedAt));
+  assert.ok(
+    !publishedBlogArticles(justBefore).some((a) => a.slug === firstScheduled.slug),
+    "an article must not be reachable a second before its date",
+  );
+  assert.ok(
+    publishedBlogArticles(justAfter).some((a) => a.slug === firstScheduled.slug),
+    "an article must be live exactly on its date",
+  );
+
+  // Everything is out by the day after the last scheduled article.
+  const afterRun = new Date(
+    Date.parse(scheduledArticles[scheduledArticles.length - 1].publishedAt) + 1000,
+  );
+  assert.equal(publishedBlogArticles(afterRun).length, blogArticles.length);
+});
+
+test("every article carries a real date, and the flagship pair keep theirs", () => {
+  for (const article of blogArticles) {
+    const at = articlePublishedAt(article);
+    assert.ok(!Number.isNaN(Date.parse(at)), `${article.slug} has an unparseable date: ${at}`);
+  }
+  // The two guides predate scheduling and are always published.
+  const flagship = blogArticles.filter((article) => article.publishedAt === undefined);
+  assert.equal(flagship.length, 2);
+});
+
+test("routes and the sitemap read the published set, not the authored set", () => {
+  // The whole point of the schedule is that an unpublished article 404s rather
+  // than merely being unlisted. A route reverting to `blogArticles` would
+  // silently publish all 50 at once, so the wiring is pinned here.
+  for (const path of [
+    "src/routes/blog.tsx",
+    "src/routes/blog_.$slug.tsx",
+    "src/routes/estate-reviews.tsx",
+    "src/routes/estate.$slug.tsx",
+    "src/routes/sitemap[.]xml.ts",
+  ]) {
+    const source = readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
+    assert.match(source, /publishedBlogArticles\(/, `${path} must gate on publishedBlogArticles`);
+    // Checked against the import list rather than the file text, so a comment
+    // that merely names the ungated export does not trip it.
+    const imports = source.match(/import\s[\s\S]*?from\s+"@\/content\/blog-articles";/g) ?? [];
+    for (const statement of imports) {
+      assert.ok(!/\bblogArticles\b/.test(statement), `${path} imports the ungated blogArticles`);
     }
   }
 });

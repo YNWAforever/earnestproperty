@@ -429,8 +429,11 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   // when BOTH the CMS query and the static set are -- the gate widened with
   // it rather than going away. The head keeps its own noindex gate below,
   // which the floor simply stops firing.
-  assert.match(sitemap, /estateReviewArticles\.length > 0 \|\| STATIC_ESTATE_REVIEW_COUNT > 0/);
-  assert.match(sitemap, /STATIC_ESTATE_REVIEW_COUNT = blogArticles\.filter\(/);
+  assert.match(sitemap, /estateReviewArticles\.length > 0 \|\| staticEstateReviewCount\(\)/);
+  // A function, not a module-level constant: 28 屋苑開箱 articles are scheduled
+  // for future dates, so the count has to be taken per request.
+  assert.match(sitemap, /function staticEstateReviewCount\(\)/);
+  assert.match(sitemap, /publishedBlogArticles\(\)\.filter\(/);
   assert.doesNotMatch(
     sitemap,
     /^\s*"\/transactions",\s*$/m,
