@@ -523,7 +523,14 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
     route,
     /import \{ findCastlePeakRoadSegmentByDistrictSlug \} from "@\/content\/castle-peak-road";/,
   );
-  assert.match(route, /import \{ getSchoolNet \} from "@\/content\/school-nets";/);
+  // schoolNetCodeForDistrict moved into school-nets.ts alongside the net data
+  // it keys into, so the route imports both rather than keeping its own copy
+  // of the districtSlug -> net-code map (a third copy was about to be made).
+  assert.match(
+    route,
+    /import \{ getSchoolNet, schoolNetCodeForDistrict \} from "@\/content\/school-nets";/,
+  );
+  assert.match(route, /getSchoolNet\(schoolNetCodeForDistrict\(/);
 
   // Verified-facts block: sourced from estate.verified_at (Task 2's column,
   // null for every estate today), with an honest caveat rather than a

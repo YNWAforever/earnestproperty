@@ -31,7 +31,7 @@ import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
-import { getSchoolNet } from "@/content/school-nets";
+import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
 import { SITE_URL, authored, canonicalLink, estateSeo } from "@/content/seo";
 import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
@@ -54,18 +54,6 @@ import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
-
-/** Maps a registry entry's districtSlug to its school net code, mirroring
- * the data pack's `areaMeta[districtSlug].schoolNetCode`. sham-tseng and
- * tsing-lung-tau both carry net 62; castle-peak-road (the 掃管笏/青山灣/小欖
- * group) carries net 71. Any districtSlug not listed here has no known
- * school net -- getSchoolNet(undefined) returns null, which the render site
- * below already treats as "omit the section", not an error. */
-const SCHOOL_NET_BY_DISTRICT: Record<string, string> = {
-  "sham-tseng": "62",
-  "tsing-lung-tau": "62",
-  "castle-peak-road": "71",
-};
 
 export const Route = createFileRoute("/estate/$slug")({
   loader: async ({ params }) => {
@@ -304,15 +292,13 @@ function EstatePage() {
   // unknown-district estates from Task 2, none of which have a page yet, but
   // this must still degrade cleanly rather than crash if that ever changes.
   // schoolNet is resolved per-estate via the registry entry's districtSlug ->
-  // SCHOOL_NET_BY_DISTRICT -> getSchoolNet(code), instead of being hardcoded
+  // schoolNetCodeForDistrict() -> getSchoolNet(code), instead of being hardcoded
   // to a single district -- it's null (section omitted) for any district
   // without real, sourced school-net data (school-nets.ts) -- see that
   // file's own comment for why other districts intentionally render nothing
   // here rather than invented figures.
   const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(estate.district_slug);
-  const schoolNet = getSchoolNet(
-    registryEntry?.districtSlug ? SCHOOL_NET_BY_DISTRICT[registryEntry.districtSlug] : null,
-  );
+  const schoolNet = getSchoolNet(schoolNetCodeForDistrict(registryEntry?.districtSlug));
   const estateName = seo?.nameZh ?? estate.name_zh;
   // The visible trail and the BreadcrumbList JSON-LD are built from the same
   // crumbs so they can never disagree. The middle crumb is the estate's own

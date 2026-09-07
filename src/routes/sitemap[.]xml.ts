@@ -33,6 +33,11 @@ const staticPaths = [
   ...castlePeakRoadSitemapPaths,
 ];
 
+/** How many 屋苑開箱 articles ship in the bundle, independent of the CMS. */
+const STATIC_ESTATE_REVIEW_COUNT = blogArticles.filter(
+  (article) => article.category === "屋苑開箱",
+).length;
+
 function uniquePaths(paths: string[]) {
   return Array.from(new Set(paths)).filter((path) => path !== "/district/ting-kau");
 }
@@ -106,7 +111,13 @@ export const Route = createFileRoute("/sitemap.xml")({
         ]);
         const conditionalPaths = [
           transactions.length > 0 ? "/transactions" : null,
-          estateReviewArticles.length > 0 ? "/estate-reviews" : null,
+          // /estate-reviews now has a static 屋苑開箱 floor (see that route's
+          // own fallbackArticles), so the page is only empty if BOTH the CMS
+          // and the static set are, and gating solely on the CMS query kept a
+          // populated page out of the sitemap.
+          estateReviewArticles.length > 0 || STATIC_ESTATE_REVIEW_COUNT > 0
+            ? "/estate-reviews"
+            : null,
         ].filter((path) => path !== null);
 
         // Only estates the DB actually has published = true today belong in
