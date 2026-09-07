@@ -78,12 +78,17 @@ import {
 } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
+import { listingSeo } from "@/lib/listing-seo";
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
 import { useFavourite } from "@/lib/saved-listings";
 import { buildContext, track, useTrackPageView } from "@/lib/analytics/events";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
+// The head builds its title/description from the listing's own structured
+// facts (see src/lib/listing-seo.ts), so it needs the fact columns as well as
+// the CMS SEO pair -- all of them already arrive on the row, this only widens
+// what the head is allowed to read.
 type PropertyHeadData = {
   property?: Pick<
     PropertyDetail,
@@ -99,6 +104,15 @@ type PropertyHeadData = {
     | "status"
     | "seo_title"
     | "seo_description"
+    | "estates"
+    | "district_slug"
+    | "saleable_area"
+    | "gross_area"
+    | "bedrooms"
+    | "bathrooms"
+    | "floor"
+    | "orientation"
+    | "features"
   >;
 };
 
@@ -164,17 +178,28 @@ export const Route = createFileRoute("/property/$listingNo")({
   },
   head: ({ loaderData }) => {
     const p = (loaderData as PropertyHeadData | undefined)?.property;
-    if (!p) return { meta: [{ title: "放盤｜晉誠地產" }] };
+    // Reached only while the loader is still resolving -- an unknown or pulled
+    // listing throws notFound() before head() runs -- but it is still a real
+    // rendered head, so it carries a description like every other page.
+    if (!p)
+      return {
+        meta: [
+          { title: "放盤｜晉誠地產" },
+          {
+            name: "description",
+            content:
+              "深井、汀九及青山公路買樓租樓放盤詳情。實用面積、房數、成交呎價及睇樓預約，WhatsApp 即時查詢。晉誠地產 C-018613。",
+          },
+        ],
+      };
     const canonical = canonicalLink(`/property/${publicPropertyNo(p)}`);
-    const priceStr = propertyPriceSummary(p);
-    const safeTitle = sanitizeListingText(publicPropertyTitle(p)) ?? p.title_zh;
-    // The admin CMS collects seo_title/seo_description per listing; prefer a
-    // hand-written value over the derived one, exactly as estate.$slug.tsx does.
-    const seoTitle = sanitizeListingText(p.seo_title);
-    const title = seoTitle ? `${seoTitle}｜晉誠地產` : `${safeTitle}｜${priceStr}｜晉誠地產`;
-    const safeDescription =
-      sanitizeListingText(p.seo_description) ?? sanitizeListingText(p.description);
-    const desc = (safeDescription ?? "").slice(0, 150) || `${safeTitle} ${priceStr}`;
+    // The admin CMS collects seo_title/seo_description per listing and nothing
+    // populates them for an ingested row, so both strings are assembled from
+    // the listing's own facts when they are blank -- a hand-written value still
+    // wins, exactly as estate.$slug.tsx does with `estates.seo_title`. See
+    // src/lib/listing-seo.ts for why the previous `.slice(0, 150)` of the body
+    // copy had to go.
+    const { title, description: desc } = listingSeo(p);
     // Scrapers reject a relative og:image outright (see index.tsx); listing
     // photos come from the CMS/blob store and are normally absolute already,
     // but a site-relative path must be absolutised here, not passed through.

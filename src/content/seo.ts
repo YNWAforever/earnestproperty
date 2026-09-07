@@ -52,6 +52,25 @@ export function canonicalLink(path: string) {
 }
 
 /**
+ * A CMS-authored SEO 標題 / SEO 描述, or `undefined` when the editor left it
+ * blank -- so it can head a `??` fallback chain safely.
+ *
+ * Every DB-backed head (estate, article, listing) prefers a hand-written
+ * `seo_title`/`seo_description` over its derived copy. Those chains used bare
+ * `??`, which only falls through on null/undefined: an empty-string column
+ * value won, and the page shipped an empty `<title>`. The columns really can
+ * hold `''` -- the CMS revision publish writes `payload->>'seo_title'` with no
+ * NULLIF (neon/migrations/20260905110000_cms_atomic_mutations.sql), and
+ * fetchEstateBySlug returns the row unmapped -- so the guard belongs here,
+ * once, rather than in each head.
+ */
+export function authored(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+/**
  * Combinator for the common `head()` shape (title, description, og mirrors,
  * canonical, optional noindex) -- built for and applied to the handful of
  * routes whose title/description genuinely equal their og:title/og:description
@@ -261,9 +280,9 @@ export const estateSeo: Record<string, EstateSeo> = {
     phases: 0,
     totalUnits: 1068,
     areaLabel: "",
-    title: "海韻花園 Rhine Garden 深井｜海景放盤、成交、租盤",
+    title: "海韻花園 Rhine Garden 深井｜1,068 伙臨海放盤成交",
     description:
-      "海韻花園（Rhine Garden）深井臨海屋苑，無敵汀九橋海景。放盤、成交、租務一覽，WhatsApp 即時預約睇樓。C-018613。",
+      "海韻花園（Rhine Garden）1992 年落成，約 1,068 伙，深井臨海地段睇正汀九橋海景。放盤、租盤、成交呎價即時查詢。C-018613。",
     intro:
       "海韻花園（Rhine Garden）位於深井青山公路臨海地段，1992 年底落成，提供約 1,068 個單位，是深井最貼近海岸線的屋苑之一。",
     fit: "鍾意低密度、近海、想要靚海景嘅自住客同退休人士。",
@@ -275,114 +294,114 @@ export const estateSeo: Record<string, EstateSeo> = {
     phases: 0,
     totalUnits: 1392,
     areaLabel: "",
-    title: "麗都花園 Lido Garden 深井｜放盤、租盤、成交呎價",
+    title: "麗都花園 Lido Garden 深井｜1,392 伙放盤、租盤",
     description:
-      "麗都花園（Lido Garden）深井青山公路臨海屋苑，鄰近深井燒鵝美食圈。放盤、租盤、成交數據，持牌代理 C-018613。",
+      "麗都花園（Lido Garden）1988 年落成、約 1,392 伙，深井青山公路臨海，晉誠地產地舖就在樓下。放盤、租盤、成交數據齊。C-018613。",
     intro:
       "麗都花園（Lido Garden）位於深井青山公路深井段，1988 年落成，提供約 1,392 個單位，是深井其中一個最早期嘅臨海屋苑，亦係晉誠地產門市所在地。",
     fit: "預算入門嘅上車客、想要方便生活圈嘅租客、收租投資者。",
   },
   "hoi-wan-hin": {
     ...estateSeoIdentity("hoi-wan-hin"),
-    title: "海雲軒 Anglers' Bay 深井｜放盤、成交、海景戶型",
+    title: "海雲軒 Anglers' Bay 深井｜2004 年兩座海景放盤",
     description:
-      "海雲軒（Anglers' Bay）位於深井青龍頭一帶，以海景單位為主。即時查看放盤、成交呎價、戶型及 62 校網資料，並可 WhatsApp 預約睇樓或估價。晉誠地產 C-018613。",
+      "海雲軒（Anglers' Bay）青山公路 18A 號，信和／嘉華 2004 年兩座住宅，實用 469 至 1,427 呎。放盤、成交、62 校網一頁睇晒。C-018613。",
   },
   "tai-wah-hin": {
     ...estateSeoIdentity("tai-wah-hin"),
-    title: "帝華軒 Royal Sea Crest 青龍頭｜浪翠園五期放盤成交",
+    title: "帝華軒 Royal Sea Crest 青龍頭｜浪翠園五期 168 伙",
     description:
-      "帝華軒（Royal Sea Crest）即浪翠園五期，以大三房單位見稱，介乎青龍頭與深井之間。放盤、成交、交通及 62 校網一頁睇晒，WhatsApp 即時查詢。晉誠地產 C-018613。",
+      "帝華軒（Royal Sea Crest）即浪翠園五期，新鴻基 1997 年建、168 伙，實用 1,056 至 1,086 呎大三房。放盤、成交、62 校網齊全。C-018613。",
   },
   "hoi-wan-toi": {
     ...estateSeoIdentity("hoi-wan-toi"),
-    title: "海韻臺 Rhine Terrace 深井｜單幢海景放盤、成交",
+    title: "海韻臺 Rhine Terrace 深井｜單幢 212 伙海景放盤",
     description:
-      "海韻臺（Rhine Terrace）係深井單幢海景住宅，鄰近海韻花園及麗都花園門市。查看最新放盤、成交紀錄、交通同 62 校網，並可即時預約睇樓。晉誠地產 C-018613。",
+      "海韻臺（Rhine Terrace）青山公路深井段 28 號，1992 年單幢 212 伙，實用 598 至 1,487 呎，與海韻花園是兩個屋苑。放盤成交即查。C-018613。",
   },
   "chun-wong-kui": {
     ...estateSeoIdentity("chun-wong-kui"),
-    title: "縉皇居 Ocean Pointe 深井｜高層海景放盤、成交",
+    title: "縉皇居 Ocean Pointe 深井｜嘉里 558 伙高層海景",
     description:
-      "縉皇居（Ocean Pointe）以深井高層海景單位為賣點。即時放盤、成交呎價、戶型比較、交通及 62 校網資料，業主亦可 WhatsApp 免費估價。晉誠地產 C-018613。",
+      "縉皇居（Ocean Pointe）深慈街 8 號，嘉里建設 2000 年 3 座 558 伙，實用 653 至 1,609 呎高層海景。放盤成交及 62 校網資料齊。C-018613。",
   },
   "lung-tang-kok": {
     ...estateSeoIdentity("lung-tang-kok"),
-    title: "龍騰閣 Lung Tang Court 青龍頭｜低密度大單位放盤",
+    title: "龍騰閣 Lung Tang Court 青龍頭｜48 伙千七呎大單位",
     description:
-      "龍騰閣（Lung Tang Court）係青龍頭低密度屋苑，以大面積單位為主，適合想換空間嘅家庭。放盤、成交、交通及 62 校網資料齊全。晉誠地產 C-018613。",
+      "龍騰閣（Lung Tang Court）青山公路青龍頭段 88–90 號，1981 年落成，僅 48 伙，實用 1,743 至 1,958 呎，低密度大單位放盤成交。C-018613。",
   },
   "mun-ming-shan": {
     ...estateSeoIdentity("mun-ming-shan"),
-    title: "滿名山 The Bloomsway 掃管笏｜分層、洋房放盤成交",
+    title: "滿名山 The Bloomsway 掃管笏｜嘉里 1,100 伙洋房分層",
     description:
-      "滿名山（The Bloomsway）掃管笏分層及洋房屋苑，戶型選擇多。查看最新放盤、成交、交通及 71 校網，並可 WhatsApp 預約睇樓或業主估價。晉誠地產 C-018613。",
+      "滿名山（The Bloomsway）青盈路，嘉里建設 2017 年落成、約 1,100 伙，實用 308 至 2,877 呎，分層連洋房。放盤成交及 71 校網即查。C-018613。",
   },
   "wong-gam-hoi-ngon": {
     ...estateSeoIdentity("wong-gam-hoi-ngon"),
-    title: "香港黃金海岸 Gold Coast 青山灣｜五期放盤、成交",
+    title: "香港黃金海岸 Gold Coast 青山灣｜五期 2,168 伙放盤",
     description:
-      "香港黃金海岸（Hong Kong Gold Coast）青山灣五期海景屋苑，會所、商場及酒店配套齊備。即時放盤、成交呎價、交通及 71 校網一覽。晉誠地產 C-018613。",
+      "香港黃金海岸（Gold Coast）青山灣段 1 號，信和 1990 年起五期 2,168 伙，實用 476 至 2,833 呎，會所商場酒店齊。放盤成交隨時問。C-018613。",
   },
   "oi-kam-hoi-ngon": {
     ...estateSeoIdentity("oi-kam-hoi-ngon"),
-    title: "愛琴海岸 Aegean Coast 掃管笏｜兩三房放盤、成交",
+    title: "愛琴海岸 Aegean Coast 掃管笏｜七座 1,624 伙兩三房",
     description:
-      "愛琴海岸（Aegean Coast）掃管笏兩房至三房為主嘅會所屋苑。比較戶型、查看放盤及成交紀錄、交通同 71 校網，WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
+      "愛琴海岸（Aegean Coast）管青路 2 號，2002 年 7 座 1,624 伙，實用 490 至 811 呎兩至三房為主。放盤、成交、71 校網一次過睇。C-018613。",
   },
   "tai-yu": {
     ...estateSeoIdentity("tai-yu"),
-    title: "帝御 The Royale 掃管笏｜金灣、星濤、嵐天放盤成交",
+    title: "帝御 The Royale 青山灣｜2022 年三期 1,782 伙放盤",
     description:
-      "帝御（The Royale）青山灣分金灣、星濤、嵐天三期。一頁比較三期放盤、成交呎價、交通及 71 校網，業主可免費估價。晉誠地產 C-018613。",
+      "帝御（The Royale）青山灣段 8 號，2022 年落成，金灣、星濤、嵐天三期共 1,782 伙，實用 184 至 1,376 呎。三期放盤成交比較。C-018613。",
   },
   "wong-gam-hoi-waan": {
     ...estateSeoIdentity("wong-gam-hoi-waan"),
-    title: "黃金海灣 Gold Coast Bay 青山灣｜意嵐、珀岸放盤成交",
+    title: "黃金海灣 Gold Coast Bay 青山灣｜2025 年 1,323 伙",
     description:
-      "黃金海灣（Gold Coast Bay）青山灣分意嵐、珀岸兩期。查看兩期最新放盤、成交紀錄、交通及 71 校網，WhatsApp 即時查詢或預約睇樓。晉誠地產 C-018613。",
+      "黃金海灣（Gold Coast Bay）青山灣段 18 號，2025 年落成，意嵐、珀岸兩期共 1,323 伙，實用 182 至 1,329 呎新盤源，WhatsApp 即問。C-018613。",
   },
   "sing-tai": {
     ...estateSeoIdentity("sing-tai"),
-    title: "星堤 Avignon 掃管笏｜低密度分層、洋房放盤成交",
+    title: "星堤 Avignon 掃管笏｜新鴻基 459 伙分層洋房放盤",
     description:
-      "星堤（Avignon）掃管笏低密度屋苑，分層與洋房兼備。最新放盤、成交呎價、交通及 71 校網資料，並可 WhatsApp 預約睇樓或估價。晉誠地產 C-018613。",
+      "星堤（Avignon）管翠路 1 號，新鴻基 2011 年落成、459 伙，實用 554 呎起，低密度分層連洋房。放盤、成交、71 校網一次睇齊。C-018613。",
   },
   "seong-yuen": {
     ...estateSeoIdentity("seong-yuen"),
-    title: "上源 Le Pont 掃管笏｜分層、洋房放盤、成交",
+    title: "上源 Le Pont 掃管笏｜萬科 1,154 伙分層洋房放盤",
     description:
-      "上源（Le Pont）掃管笏約 1,154 伙嘅分層及洋房屋苑。即時查看放盤、成交紀錄、交通同 71 校網，業主亦可 WhatsApp 免費估價。晉誠地產 C-018613。",
+      "上源（Le Pont）掃管笏路 99 號，萬科香港 2020 年落成、1,154 伙，實用 321 至 4,880 呎，一房至大洋房。放盤成交連 71 校網。C-018613。",
   },
   "the-carmel": {
     ...estateSeoIdentity("the-carmel"),
-    title: "The Carmel 大欖／掃管笏｜低密度分層、洋房放盤",
+    title: "The Carmel 大欖／掃管笏｜永泰 178 伙洋房分層放盤",
     description:
-      "The Carmel 位於大欖掃管笏，低密度分層加洋房組合。查看最新放盤、成交呎價、交通及 71 校網，WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
+      "The Carmel 青山公路大欖段 168 號，永泰地產 2019 年落成、僅 178 伙，實用 260 至 3,998 呎，細戶連獨立屋。放盤成交即時查詢。C-018613。",
   },
   "oma-oma": {
     ...estateSeoIdentity("oma-oma"),
-    title: "OMA OMA 掃管笏｜細戶、家庭戶放盤、成交",
+    title: "OMA OMA 掃管笏｜2021 年四座 466 伙放盤、成交",
     description:
-      "OMA OMA 掃管笏屋苑細戶與家庭戶並存，上車或換樓都有選擇。即時放盤、成交紀錄、交通及 71 校網一覽，WhatsApp 即時查詢。晉誠地產 C-018613。",
+      "OMA OMA 掃管笏路 108 號，永泰地產 2021 年 4 座 466 伙，實用 254 至 1,659 呎，開放式至家庭戶。放盤、成交、71 校網。C-018613。",
   },
   "lin-shan": {
     ...estateSeoIdentity("lin-shan"),
-    title: "漣山 The Hillgrove 小欖｜低密度大單位放盤成交",
+    title: "漣山 The Hillgrove 小欖｜216 伙低密度大單位放盤",
     description:
-      "漣山（The Hillgrove）小欖低密度屋苑，以大單位為主。比較放盤、成交呎價、交通及 71 校網，並可 WhatsApp 預約睇樓或業主估價。晉誠地產 C-018613。",
+      "漣山（The Hillgrove）青發里 9 號，2002 年落成、216 伙，實用 630 至 1,653 呎，小欖低密度大單位。放盤及成交紀錄一次過睇。C-018613。",
   },
   "long-tou-waan": {
     ...estateSeoIdentity("long-tou-waan"),
-    title: "浪濤灣 Aqua Blue 小欖｜海景分層、洋房放盤成交",
+    title: "浪濤灣 Aqua Blue 小欖｜南豐 242 伙海景洋房放盤",
     description:
-      "浪濤灣（Aqua Blue）小欖海景屋苑，分層與洋房兼備。查看最新放盤、成交紀錄、交通及 71 校網，WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
+      "浪濤灣（Aqua Blue）青發街 28 號，南豐 2002 年落成、242 伙，實用 615 至 2,282 呎，海景分層連洋房，睇樓即約。C-018613。",
   },
   "tai-tou-waan": {
     ...estateSeoIdentity("tai-tou-waan"),
-    title: "帝濤灣 Palatial Coast 小欖｜兩期海景放盤、成交",
+    title: "帝濤灣 Palatial Coast 小欖｜新鴻基兩期 856 伙",
     description:
-      "帝濤灣（Palatial Coast）小欖大欖兩期海景屋苑，適合家庭戶。一頁查看兩期放盤、成交呎價、交通及 71 校網，業主可免費估價。晉誠地產 C-018613。",
+      "帝濤灣（Palatial Coast）小欖村路 2 號，新鴻基 1999 年兩期 9 座 856 伙，實用 670 呎起海景家庭戶。兩期放盤成交對比。C-018613。",
   },
 };
 

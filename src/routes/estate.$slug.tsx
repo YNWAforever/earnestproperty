@@ -32,7 +32,7 @@ import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-r
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet } from "@/content/school-nets";
-import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
+import { SITE_URL, authored, canonicalLink, estateSeo } from "@/content/seo";
 import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
 import {
@@ -139,17 +139,42 @@ export const Route = createFileRoute("/estate/$slug")({
     };
   },
   head: ({ loaderData }) => {
-    const slug = loaderData?.estate.slug as keyof typeof estateSeo | undefined;
+    // An unknown or unpublished slug throws notFound() in the loader, and this
+    // head still renders over the 404 body. It used to emit the generic pair
+    // 屋苑｜晉誠地產屋苑專頁 + " 屋苑資料…" (note the leading space from the
+    // empty name interpolation) with no canonical and no noindex, so every
+    // crawled dead estate URL became an indexable duplicate placeholder.
+    if (!loaderData?.estate) {
+      const title = "找不到此屋苑頁面｜晉誠地產";
+      const description =
+        "你要搵嘅屋苑頁面唔存在或已下架。可回到深井、青山公路及汀九屋苑總覽，或 WhatsApp 晉誠地產持牌代理查詢最新放盤。C-018613。";
+      return {
+        meta: [
+          { title },
+          { name: "description", content: description },
+          { property: "og:title", content: title },
+          { property: "og:description", content: description },
+          { name: "twitter:title", content: title },
+          { name: "twitter:description", content: description },
+          { name: "robots", content: "noindex,follow" },
+        ],
+        links: [],
+      };
+    }
+    const estate = loaderData.estate;
+    const slug = estate.slug as keyof typeof estateSeo | undefined;
     const seo = slug ? estateSeo[slug] : undefined;
-    const title =
-      loaderData?.estate.seo_title ??
-      seo?.title ??
-      `${loaderData?.estate.name_zh ?? "屋苑"}｜晉誠地產屋苑專頁`;
+    // `??` alone only falls through on null/undefined, and fetchEstateBySlug
+    // returns the row unmapped (`SELECT e.*`), so an empty-string
+    // estates.seo_title -- which the CMS revision publish can persist, since
+    // `payload->>'seo_title'` is not NULLIF'd -- rendered a literally empty
+    // <title> while the curated estateSeo copy sat unused.
+    const title = authored(estate.seo_title) ?? seo?.title ?? `${estate.name_zh}｜晉誠地產屋苑專頁`;
     const description =
-      loaderData?.estate.seo_description ??
+      authored(estate.seo_description) ??
       seo?.description ??
-      `${loaderData?.estate.name_zh ?? ""} 屋苑資料、現有放盤叫價、成交紀錄及常見問題。`;
-    const image = loaderData?.shareImage ?? loaderData?.estate.hero_image;
+      `${estate.name_zh}屋苑資料、現有放盤叫價、成交紀錄及常見問題。晉誠地產 C-018613。`;
+    const image = loaderData?.shareImage ?? estate.hero_image;
     return {
       meta: [
         { title },
@@ -171,7 +196,10 @@ export const Route = createFileRoute("/estate/$slug")({
             ]
           : []),
       ],
-      links: loaderData?.estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
+      // Spelled out rather than via the `estate` alias above:
+      // canonical-links.test.mjs pins this exact expression as the contract
+      // that dynamic-slug routes build their canonical from loaderData.
+      links: estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
     };
   },
   errorComponent: ({ error }) => (

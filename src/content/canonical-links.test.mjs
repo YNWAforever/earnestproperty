@@ -82,7 +82,18 @@ test("castle-peak-road and tsuen-wan routes emit a canonical via the seo() combi
 
   const segmentSource = read("src/routes/castle-peak-road.$segment.tsx");
   assert.match(segmentSource, /seo\(\{/);
-  assert.match(segmentSource, /path: loaderData\?\.segment\.path \?\? castlePeakRoadHub\.path/);
+  // A real segment always canonicalises to its own path. This used to be
+  // `path: loaderData?.segment.path ?? castlePeakRoadHub.path`, which put the
+  // hub canonical (and the hub's title and description) on a segment URL
+  // whenever the loader threw -- a segment declaring itself a duplicate of its
+  // own parent. The segment is now resolved from `params` too, and the
+  // remaining castlePeakRoadHub.path use is the noindexed unknown-slug branch.
+  assert.match(
+    segmentSource,
+    /loaderData\?\.segment \?\? getCastlePeakRoadSegment\(params\.segment\)/,
+  );
+  assert.match(segmentSource, /path: segment\.path/);
+  assert.doesNotMatch(segmentSource, /path: loaderData\?\.segment\.path \?\? castlePeakRoadHub/);
   assert.doesNotMatch(segmentSource, /rel: "canonical", href: `\$\{SITE_URL\}/);
 
   const tsuenWanSource = read("src/routes/district.tsuen-wan.tsx");
