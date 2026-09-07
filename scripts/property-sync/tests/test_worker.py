@@ -498,6 +498,7 @@ class FrozenReplayTests(unittest.TestCase):
             path=root/"original.json"; original=json.dumps(payload, indent=2).encode();path.write_bytes(original)
             calls=[]; sleeps=[]
             def bridge(command, **kwargs):
+                self.assertEqual(kwargs['timeout'], 900 if apply else 180)
                 calls.append(Path(command[command.index("--payload")+1]).read_bytes())
                 response=responses[min(len(calls)-1,len(responses)-1)]
                 if isinstance(response,Exception): raise response
@@ -602,3 +603,4 @@ class CompanyNumberTests(unittest.TestCase):
         cfg,fixtures=w.synthetic_fixture('propertyhk')
         payload,_=w.crawl('propertyhk',cfg,fixtures)
         self.assertEqual(payload['meta']['parser_version'], 'python-v2.0')
+

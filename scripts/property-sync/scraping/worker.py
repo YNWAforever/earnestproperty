@@ -1279,7 +1279,7 @@ def replay_bridge(payload_path, evidence_path, apply=False, sleep=time.sleep):
         if payload_path.read_bytes() != original:
             raise WorkerError("frozen_payload_changed")
         try:
-            process = subprocess.run(command, cwd=repo, capture_output=True, text=True, encoding="utf-8", timeout=180)
+            process = subprocess.run(command, cwd=repo, capture_output=True, text=True, encoding="utf-8", timeout=900 if apply else 180)
             try:
                 receipt = json.loads(process.stdout if process.returncode == 0 else process.stderr)
                 if not isinstance(receipt, dict):
@@ -1327,3 +1327,4 @@ def replay_28hse(payload_path, root, apply=False, sleep=time.sleep):
         baseline = root / "baselines" / "28hse" / "agent-540" / "baseline.json"
         advance = apply and advance_baseline(baseline, payload, receipt)
         return {"success": receipt.get("success") is True, "status": receipt.get("status", "failed"), "error": receipt.get("error"), "snapshot": str(path), "receipt_path": str(path / "receipt.json"), "baseline_advanced": advance}
+
