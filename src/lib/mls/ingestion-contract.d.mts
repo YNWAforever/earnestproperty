@@ -14,7 +14,10 @@ export type SourceRecord = {
   advertisementId: string;
   dealType: "sale" | "rent";
   sourceUrl: string;
+  sourceStatus: "active" | "delisted";
+  sourceStatusReason: "sold" | "rented" | null;
   propertyNo: null;
+  agencyPropertyNo: string | null;
   identity: UnitIdentity;
   unitKey: string | null;
   sourceIdentityValid: boolean;

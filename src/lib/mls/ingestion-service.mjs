@@ -14,6 +14,10 @@ export function snapshotResponse(batch, gate, receiptId = null) {
       offer_count: batch.offerCount,
       rejected_count: batch.rejects.length,
       duplicate_count: batch.duplicates,
+      properties_created: 0,
+      properties_changed: 0,
+      fields_changed: 0,
+      unchanged_properties: 0,
     },
     rejects: batch.rejects,
   };

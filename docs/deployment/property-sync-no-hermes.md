@@ -62,23 +62,23 @@ Copy `scripts/property-sync/config/sources.example.json` to an operator-owned lo
 
 Server policy rows are an independent authority in `mls_ingestion_policies`:
 
-| Setting | Meaning |
-|---|---|
-| source / scope_id | `28hse_agent_540` / `agent:540`, or `propertyhk` / `branches:EPW,EPS,EPT` |
-| policy_version | `no-hermes-v2`; a new version requires a reviewed code/schema compatibility change, not merely editing an environment variable |
-| parser_version | Exact frozen payload parser version; immutable once referenced by receipts |
-| owner / publish_enabled | Both must explicitly authorize the v2 writer; defaults are disabled |
-| bootstrap_approved_at / bootstrap_approved_by / bootstrap_approval_note | Recorded operator approval for the first full baseline |
-| id_scope | Property.hk verified global or branch-local semantics; match worker configuration |
-| config.source_url_identity | Property.hk `{ "verified": true, "path_template": "<operator-verified exact path containing {id}>" }`; branch-local templates must include `{branch}`. No query, fragment, percent-encoded or arbitrary regex identity is accepted. If live URLs need a different verified grammar, extend and test the adapter before activation. |
-| config.district_slugs | Reviewed exact source district name to existing canonical lower-kebab slug mapping. Missing mappings stage new rows and cannot overwrite existing district filters. No raw Chinese location is written as a slug. |
-| config.aliases | Optional reviewed exact identity alias map; never supplied as request authority |
-| Full sync quota | At most one new full sync per source/scope per hour; successful receipt replay is exempt |
-| config.max_batches_per_hour | Separate positive general batch ceiling, default 60, including partial batches; it does not raise the full-sync limit |
-| config.absence_enabled | False by default; only approved complete 28hse runs can infer absence. Property.hk absence is always off. |
-| config.public_contacts_enabled | Strict boolean true required to expose a fresh source contact separately from staff profiles; default off |
+| Setting                                                                 | Meaning                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| source / scope_id                                                       | `28hse_agent_540` / `agent:540`, or `propertyhk` / `branches:EPW,EPS,EPT`                                                                                                                                                                                                                                                          |
+| policy_version                                                          | `no-hermes-v2`; a new version requires a reviewed code/schema compatibility change, not merely editing an environment variable                                                                                                                                                                                                     |
+| parser_version                                                          | Exact frozen payload parser version; immutable once referenced by receipts                                                                                                                                                                                                                                                         |
+| owner / publish_enabled                                                 | Both must explicitly authorize the v2 writer; defaults are disabled                                                                                                                                                                                                                                                                |
+| bootstrap_approved_at / bootstrap_approved_by / bootstrap_approval_note | Recorded operator approval for the first full baseline                                                                                                                                                                                                                                                                             |
+| id_scope                                                                | Property.hk verified global or branch-local semantics; match worker configuration                                                                                                                                                                                                                                                  |
+| config.source_url_identity                                              | Property.hk `{ "verified": true, "path_template": "<operator-verified exact path containing {id}>" }`; branch-local templates must include `{branch}`. No query, fragment, percent-encoded or arbitrary regex identity is accepted. If live URLs need a different verified grammar, extend and test the adapter before activation. |
+| config.district_slugs                                                   | Reviewed exact source district name to existing canonical lower-kebab slug mapping. Missing mappings stage new rows and cannot overwrite existing district filters. No raw Chinese location is written as a slug.                                                                                                                  |
+| config.aliases                                                          | Optional reviewed exact identity alias map; never supplied as request authority                                                                                                                                                                                                                                                    |
+| Full sync quota                                                         | At most one new full sync per source/scope per hour; successful receipt replay is exempt                                                                                                                                                                                                                                           |
+| config.max_batches_per_hour                                             | Separate positive general batch ceiling, default 60, including partial batches; it does not raise the full-sync limit                                                                                                                                                                                                              |
+| config.absence_enabled                                                  | False by default; only approved complete 28hse runs can infer absence. Property.hk absence is always off.                                                                                                                                                                                                                          |
+| config.public_contacts_enabled                                          | Strict boolean true required to expose a fresh source contact separately from staff profiles; default off                                                                                                                                                                                                                          |
 
-The shipped Python parser emits `python-v2.0`. After the schema is approved and applied, these optional policy rows remain disabled:
+The shipped 28hse parser emits `python-v2.2`; the unchanged Property.hk parser emits `python-v2.0`. After the schema is approved and applied, these optional policy rows remain disabled:
 
 ```sql
 BEGIN;
@@ -86,7 +86,7 @@ SELECT pg_advisory_xact_lock(hashtext('earnestproperty:mls-sync'));
 INSERT INTO mls_ingestion_policies
   (source, scope_id, policy_version, parser_version, id_scope)
 VALUES
-  ('28hse_agent_540', 'agent:540', 'no-hermes-v2', 'python-v2.0', 'global'),
+  ('28hse_agent_540', 'agent:540', 'no-hermes-v2', 'python-v2.2', 'global'),
   ('propertyhk', 'branches:EPW,EPS,EPT', 'no-hermes-v2', 'python-v2.0', NULL)
 ON CONFLICT DO NOTHING;
 COMMIT;
@@ -153,17 +153,19 @@ A systemd service should set `WorkingDirectory` to the checkout, use a dedicated
 
 ## Incident recovery and retention
 
-| Outcome | Recovery |
-|---|---|
-| Missing branch/selector/ID configuration | Obtain verified inputs; do not manufacture zero inventory |
-| Challenge, unknown DOM, failed page/detail/branch | Preserve raw evidence; repair access/parser and collect a new complete run |
-| More than 30% drop | Review source evidence and inventory change; do not remove the gate or substitute advertised totals |
-| 401 | Correct managed secret/origin configuration; retain payload |
-| 409 different hash or stale batch | Inspect receipts and chronology; never change timestamp merely to force old data through |
-| 422 | Fix completeness; partial evidence cannot establish absence |
-| 429 | Respect Retry-After; replay original bytes |
-| 503/uncertain COMMIT | Replay same payload; the committed receipt determines whether work already succeeded |
-| Identity ambiguity/correction | Inspect mls_ingestion_reviews; keep existing UUIDs/aliases and hold projection until approved correction |
-| Unknown field ownership | Review provenance/overrides; do not mark every import as a staff override |
+| Outcome                                           | Recovery                                                                                                 |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Missing branch/selector/ID configuration          | Obtain verified inputs; do not manufacture zero inventory                                                |
+| Challenge, unknown DOM, failed page/detail/branch | Preserve raw evidence; repair access/parser and collect a new complete run                               |
+| More than 30% drop                                | Review source evidence and inventory change; do not remove the gate or substitute advertised totals      |
+| 401                                               | Correct managed secret/origin configuration; retain payload                                              |
+| 409 different hash or stale batch                 | Inspect receipts and chronology; never change timestamp merely to force old data through                 |
+| 422                                               | Fix completeness; partial evidence cannot establish absence                                              |
+| 429                                               | Respect Retry-After; replay original bytes                                                               |
+| 503/uncertain COMMIT                              | Replay same payload; the committed receipt determines whether work already succeeded                     |
+| Identity ambiguity/correction                     | Inspect mls_ingestion_reviews; keep existing UUIDs/aliases and hold projection until approved correction |
+| Unknown field ownership                           | Review provenance/overrides; do not mark every import as a staff override                                |
 
 No automatic evidence purge is included. Retain all observations referenced by links, contacts, field winners, conflicts, receipts or full baselines. Store local raw evidence with restricted permissions and an operator-approved retention period; never purge referenced baseline artifacts. Rollback only disables scheduling/publishing. Source ownership remains fenced until a separate reviewed transfer, and all public IDs/history remain intact.
+
+Daily full-collection/differential-import workflow and activation gates: see [property-sync-daily.md](property-sync-daily.md). Python v2.1 adds explicit sold/rented source lifecycle and negotiable amounts. Used parser policies must never be edited in place; an existing applied v2.0 policy requires a separate reviewed compatibility migration before v2.1 activation.

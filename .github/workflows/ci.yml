@@ -130,6 +130,7 @@ jobs:
       - run: npm run test:homepage
       - run: npm run test:mls
       - run: npm run test:property-sync
+      - run: npm run test:property-sync:daily
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"

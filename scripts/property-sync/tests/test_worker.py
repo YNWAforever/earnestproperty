@@ -437,3 +437,168 @@ class AdvertisedDiagnosticTests(unittest.TestCase):
         self.assertTrue(payload["meta"]["crawl_complete"])
         self.assertTrue(w.gate(payload, None)["allowed"])
         self.assertEqual([page["advertised_total"] for page in payload["meta"]["pages"] if page["scope"] == "sale"], [1, 2, 1])
+
+class Live28StructureTests(unittest.TestCase):
+    def test_verified_full_company_and_absolute_same_origin_links(self):
+        head='<h1>晉誠地產代理有限公司 Earnest Property Agency Ltd</h1><p>C-018613</p><p>共有 1 個放售樓盤</p>'
+        rows, terminal, total=w.parse_28_index(head+'<a href="https://www.28hse.com/buy/apartment/property-4003829">Listing</a>', 'sale')
+        self.assertEqual(rows[0]['property_id'],'4003829')
+        self.assertFalse(terminal)
+        with self.assertRaises(w.WorkerError):
+            w.parse_28_index(head.replace('C-018613','C-000000')+'<a href="/buy/apartment/property-4003829">Listing</a>','sale')
+        with self.assertRaises(w.WorkerError):
+            w.parse_28_index(head+'<a href="https://evil.example/buy/apartment/property-4003829">Listing</a>','sale')
+    def test_real_sale_and_rent_table_structures(self):
+        for deal, ident, amount, area in [('sale','4003829','7200000','617'),('rent','3998335','24800','712')]:
+            html=(Path(__file__).parent/'fixtures'/f'28hse-live-{deal}-structure.html').read_text(encoding='utf-8')
+            r=w.parse_28_detail(html,{'property_id':ident,'deal_type':deal,'title':'Listing'})
+            self.assertEqual(r['price' if deal=='sale' else 'rent'],amount)
+            self.assertEqual(r['saleable_area'],area)
+            self.assertIsNone(r['unit'])
+            if deal=='rent':self.assertEqual(r['bedrooms'],4);self.assertEqual(r['bathrooms'],2)
+            with self.assertRaises(w.WorkerError):
+                w.parse_28_detail(html,{'property_id':'999','deal_type':deal})
+
+    def test_live_duplicate_derived_fields_reject_conflicts(self):
+        html=(Path(__file__).parent/'fixtures'/'28hse-live-rent-structure.html').read_text(encoding='utf-8')
+        extra='<tr><td class="table_left">房間及浴室</td><td class="table_right"><div class="pairValue">9 房 8 浴室</div></td></tr>'
+        html=html.replace('</tbody>',extra+'</tbody>')
+        with self.assertRaisesRegex(w.WorkerError,'contradictory_detail'):
+            w.parse_28_detail(html,{'property_id':'3998335','deal_type':'rent'})
+
+class DailyLifecycleTests(unittest.TestCase):
+    def detail(self, value, deal="sale"):
+        marker, label = ("售盤", "售價") if deal == "sale" else ("租盤", "租金")
+        html = f'<h1>Listing #123 {marker}</h1><table class="tablePair"><tr><td>{label}</td><td><div class="pairValue price">{value}</div></td></tr></table>'
+        return w.parse_28_detail(html, {"property_id":"123", "deal_type":deal})
+
+    def test_terminal_amount_badges_and_negotiable(self):
+        for badge, deal, reason, amount in [("已售","sale","sold","售 $695 萬元"),("已租","rent","rented","租 $20,000 元")]:
+            r=self.detail(amount+f'<div class="ui red large label">{badge}</div>',deal)
+            self.assertEqual(r["source_status"], "delisted")
+            self.assertEqual(r["source_status_reason"],reason)
+            self.assertEqual(r["price" if deal=="sale" else "rent"],"6950000" if deal=="sale" else "20000")
+        r=self.detail("價格面議")
+        self.assertIsNone(r["price"])
+        self.assertEqual(r["source_status"],"active")
+        self.assertIsNone(r["source_status_reason"])
+
+    def test_status_unknown_and_contradictory_fail_closed(self):
+        for badges in ["已租", "已售 已租", "待確認", "已售 放售"]:
+            with self.subTest(badges=badges), self.assertRaises(w.WorkerError):
+                self.detail('售 $695 萬元<div class="label">'+badges+'</div>')
+
+class FrozenReplayTests(unittest.TestCase):
+    def replay(self, responses, apply=True):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t); cfg,fixtures=w.synthetic_fixture("28hse")
+            payload,_=w.crawl("28hse",cfg,fixtures)
+            path=root/"original.json"; original=json.dumps(payload, indent=2).encode();path.write_bytes(original)
+            calls=[]; sleeps=[]
+            def bridge(command, **kwargs):
+                calls.append(Path(command[command.index("--payload")+1]).read_bytes())
+                response=responses[min(len(calls)-1,len(responses)-1)]
+                if isinstance(response,Exception): raise response
+                return SimpleNamespace(stdout=json.dumps(response) if response.get("success") else "",stderr=json.dumps(response),returncode=0 if response.get("success") else 1)
+            with patch.object(w.subprocess,"run",bridge), patch.object(w,"crawl",side_effect=AssertionError("must never crawl")):
+                result=w.replay_28hse(path,root,apply=apply,sleep=sleeps.append)
+            self.assertEqual(calls,[original]*len(calls))
+            self.assertEqual(path.read_bytes(),original)
+            self.assertTrue(Path(result["receipt_path"]).exists())
+            self.assertEqual(len(list((Path(result["snapshot"])/"attempts").glob("*.json"))),len(calls))
+            return result,calls,sleeps
+
+    def test_replay_commit_unknown_exact_bytes_and_full_baseline(self):
+        full={"success":True,"status":"success","full_snapshot":True,"receipt_id":"receipt"}
+        result,calls,sleeps=self.replay([{"success":False,"error":"OUTCOME_UNKNOWN","status":503,"retryAfter":5},full])
+        self.assertTrue(result["baseline_advanced"])
+        self.assertEqual(len(calls),2); self.assertEqual(sleeps,[5])
+
+    def test_replay_hard_errors_and_429_ceiling(self):
+        for error in [{"success":False,"error":"invalid_record","status":400},{"success":False,"error":"quota_exceeded","status":429,"retryAfter":600}]:
+            result,calls,sleeps=self.replay([error])
+            self.assertFalse(result["success"]);self.assertFalse(result["baseline_advanced"])
+            self.assertEqual(len(calls),1);self.assertEqual(sleeps,[])
+
+    def test_replay_dryrun_and_network_bound(self):
+        result,calls,sleeps=self.replay([{"success":True,"status":"dry_run"}],False)
+        self.assertFalse(result["baseline_advanced"])
+        result,calls,sleeps=self.replay([w.subprocess.TimeoutExpired("node",180)])
+        self.assertFalse(result["baseline_advanced"]);self.assertEqual(len(calls),3)
+
+class DailyGuardRegressionTests(unittest.TestCase):
+    def test_explicit_unknown_status_row_rejects(self):
+        html='<main data-listing-detail><table><tr><td>售價</td><td>500萬</td></tr><tr><td>狀態</td><td>待確認</td></tr></table></main>'
+        with self.assertRaisesRegex(w.WorkerError,'unknown_source_status'):
+            w.parse_28_detail(html,{'property_id':'123','deal_type':'sale'})
+
+    def test_parser_change_cannot_advance_old_baseline(self):
+        cfg,fixtures=w.synthetic_fixture('28hse');p,_=w.crawl('28hse',cfg,fixtures)
+        self.assertEqual(p['meta']['parser_version'],'python-v2.2')
+        previous=json.loads(json.dumps(p)); previous['meta']['parser_version']='python-v2.1';previous['scraped_at']='2020-01-01T00:00:00Z'
+        with tempfile.TemporaryDirectory() as t:
+            path=Path(t)/'baseline.json'; path.write_bytes(w.frozen(previous));original=path.read_bytes()
+            self.assertFalse(w.advance_baseline(path,p,{'success':True,'status':'success','full_snapshot':True,'receipt_id':'r'}))
+            self.assertEqual(path.read_bytes(),original)
+
+    def test_captured_terminal_and_negotiable_fragments(self):
+        for ident,expected in [('3945770','6950000'),('3942846','4200000'),('3955884',None)]:
+            html=(Path(__file__).parent/'fixtures'/f'28hse-lifecycle-{ident}.html').read_text(encoding='utf-8')
+            record=w.parse_28_detail(html,{'property_id':ident,'deal_type':'sale'})
+            self.assertEqual(record['price'],expected)
+            self.assertEqual(record['source_status'],'delisted' if expected else 'active')
+
+class ReplayRetryRegressionTests(unittest.TestCase):
+    replay = FrozenReplayTests.replay
+    def test_429_honors_delay_and_preserves_server_error(self):
+        error={"success":False,"error":"quota_exceeded","status":429,"retryAfter":7}
+        result,calls,sleeps=self.replay([error])
+        self.assertEqual(len(calls),3);self.assertEqual(sleeps,[7,7])
+        self.assertEqual(result["error"],"quota_exceeded")
+        self.assertFalse(result["baseline_advanced"])
+
+    def test_partial_receipt_never_advances_baseline(self):
+        result,_,_=self.replay([{"success":True,"status":"partial_success","full_snapshot":False,"receipt_id":"partial"}])
+        self.assertFalse(result["baseline_advanced"])
+
+
+class CompanyNumberTests(unittest.TestCase):
+    def extract(self, html):
+        parser = getattr(w, "extract_28_company_number", None)
+        self.assertIsNotNone(parser, "explicit company-number extraction is required")
+        return parser(html)
+
+    def test_verified_label_and_mixed_case_normalization(self):
+        for label in ["物業編號: C020617 (代理提供)", "物業編號： c020617 （代理提供）"]:
+            self.assertEqual(self.extract('<div class="sub header">'+label+'</div>'), "C020617")
+
+    def test_explicit_table_label_is_supported(self):
+        self.assertEqual(self.extract("<table><tr><td>物業編號</td><td>C003097 (代理提供)</td></tr></table>"), "C003097")
+
+    def test_absent_label_never_guesses_ad_id_or_arbitrary_text(self):
+        self.assertIsNone(self.extract('<h1>Listing #4003829</h1><p>C020617</p>'))
+
+    def test_malformed_and_conflicting_labels_fail_closed(self):
+        for label in ["物業編號: C020617", "物業編號: C02-0617 (代理提供)", "物業編號: C020617/C020618 (代理提供)", "物業編號: (代理提供)", "物業編號: C020617 (平台提供)"]:
+            with self.subTest(label=label), self.assertRaisesRegex(w.WorkerError, "agency_property_no"):
+                self.extract('<div class="sub header">'+label+'</div>')
+        with self.assertRaisesRegex(w.WorkerError, "agency_property_no"):
+            self.extract('<div>物業編號: C020617 (代理提供)</div><div>物業編號: C020618 (代理提供)</div>')
+
+    def test_equal_duplicate_labels_are_consistent(self):
+        self.assertEqual(self.extract('<div>物業編號: C020617 (代理提供)</div>'*2), "C020617")
+
+    def test_captured_structure_wires_observation_without_changing_ad_identity(self):
+        html=(Path(__file__).parent/'fixtures'/'28hse-company-number-structure.html').read_text(encoding='utf-8')
+        for ident in ['4003829', '4003830']:
+            record=w.parse_28_detail(html.replace('4003829',ident), {'property_id':ident,'deal_type':'sale'})
+            self.assertEqual(record.get('agency_property_no'), 'C020617')
+            self.assertEqual(record['property_id'], ident)
+            self.assertNotIn('target_property_id', record)
+
+    def test_propertyhk_parser_version_unchanged(self):
+        cfg,fixtures=w.synthetic_fixture('propertyhk')
+        payload,_=w.crawl('propertyhk',cfg,fixtures)
+        self.assertEqual(payload['meta']['parser_version'], 'python-v2.0')

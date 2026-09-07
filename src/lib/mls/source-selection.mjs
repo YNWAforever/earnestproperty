@@ -34,6 +34,54 @@ const FIELDS = [
   "developer",
 ];
 const present = (v) => v !== null && v !== undefined && v !== "";
+const MATERIAL = [
+  "estate",
+  "district",
+  "phase",
+  "block",
+  "floor",
+  "unit",
+  "price",
+  "rent",
+  "gross_area",
+  "saleable_area",
+  "bedrooms",
+  "bathrooms",
+];
+function primaryAdvertisement(sources) {
+  const all = [...sources].sort((a, b) =>
+    String(a.external_listing_id).localeCompare(String(b.external_listing_id)),
+  );
+  const active = all.filter((s) => s.source_status === "active");
+  // Inferred absence is not a contradictory terminal statement.
+  const eligible = active.length
+    ? all.filter((s) => s.source_status === "active" || s.source_status_reason)
+    : all;
+  const conflicts = [];
+  const first = eligible[0];
+  for (const other of eligible.slice(1)) {
+    for (const field of [...MATERIAL, "agency_property_no", "source_status"]) {
+      const get = (s) =>
+        field === "agency_property_no"
+          ? s.raw_identity?.agency_property_no
+          : field === "source_status"
+            ? s.source_status
+            : s.fields?.[field];
+      if (canonicalJson(get(first) ?? null) !== canonicalJson(get(other) ?? null))
+        conflicts.push({
+          field,
+          primaryValue: get(first) ?? null,
+          secondaryValue: get(other) ?? null,
+          primaryObservationId: first.observation_id,
+          secondaryObservationId: other.observation_id,
+          primaryObservedAt: first.last_accepted_at,
+          secondaryObservedAt: other.last_accepted_at,
+          resolution: "hold_multi_ad",
+        });
+    }
+  }
+  return { winner: first, conflicts };
+}
 export function chooseRelationship(record, existing, candidates = []) {
   if (existing) {
     const old = existing.raw_identity ?? {};
@@ -89,8 +137,15 @@ export function chooseRelationship(record, existing, candidates = []) {
 export function selectSourceFields(sources) {
   const primaries = sources.filter((s) => s.source === PRIMARY);
   const secondaries = sources.filter((s) => s.source === "propertyhk");
+  const primaryChoice = primaryAdvertisement(primaries);
   if (
-    primaries.length > 1 ||
+    primaryChoice.conflicts.length > 0 ||
+    (primaries.length > 1 &&
+      primaries.some(
+        (s) =>
+          !s.raw_identity?.agency_property_no ||
+          (s.policy_config && s.policy_config.company_number_identity?.approved !== true),
+      )) ||
     secondaries.length > 1 ||
     [...primaries, ...secondaries].some((s) => !["active", "delisted"].includes(s.source_status))
   )
@@ -98,11 +153,11 @@ export function selectSourceFields(sources) {
       values: {},
       clearFields: [],
       provenance: {},
-      conflicts: [],
+      conflicts: primaryChoice.conflicts,
       ambiguous: true,
       lifecycle: null,
     };
-  const primary = primaries[0],
+  const primary = primaryChoice.winner,
     secondary = secondaries[0],
     values = {},
     provenance = {},

@@ -122,6 +122,15 @@ export function decodeSnapshot(input, options = {}) {
       if (source === "propertyhk" && !BRANCHES.includes(r.branch_code))
         throw new SnapshotError("invalid_branch");
       if (!["sale", "rent"].includes(r.deal_type)) throw new SnapshotError("invalid_deal_type");
+      const sourceStatus = Object.hasOwn(r, "source_status") ? r.source_status : "active";
+      const sourceStatusReason = r.source_status_reason ?? null;
+      if (
+        !["active", "delisted"].includes(sourceStatus) ||
+        (sourceStatus === "active" && sourceStatusReason !== null) ||
+        (sourceStatus === "delisted" &&
+          sourceStatusReason !== (r.deal_type === "sale" ? "sold" : "rented"))
+      )
+        throw new SnapshotError("invalid_source_lifecycle");
       const externalId = cleanSourceId(source, r.property_id, r.branch_code, options.idScope);
       let url;
       try {
@@ -194,6 +203,12 @@ export function decodeSnapshot(input, options = {}) {
         (source === "propertyhk" && !memberships.includes(r.branch_code))
       )
         throw new SnapshotError("invalid_memberships");
+      const agencyPropertyNo = r.agency_property_no ?? null;
+      if (
+        agencyPropertyNo !== null &&
+        (typeof agencyPropertyNo !== "string" || !/^[A-Z][0-9]{6}$/.test(agencyPropertyNo))
+      )
+        throw new SnapshotError("invalid_agency_property_no");
       const identity = exactUnitIdentity(r, options.aliases);
       const key = JSON.stringify([source, externalId, r.deal_type]);
       const record = {
@@ -203,16 +218,22 @@ export function decodeSnapshot(input, options = {}) {
         advertisementId: externalId,
         dealType: r.deal_type,
         sourceUrl: url.href,
+        sourceStatus,
+        sourceStatusReason,
         propertyNo: null,
+        agencyPropertyNo,
         identity,
         unitKey: urlIdentityVerified ? identity.key : null,
         sourceIdentityValid: true,
         sourceOccurrences: [{ index, branch: r.branch_code ?? null, sourceUrl: url.href, raw: r }],
         urlIdentityVerified,
-        offerValid: Number(fields[r.deal_type === "sale" ? "price" : "rent"]) > 0,
+        offerValid:
+          sourceStatus === "active" &&
+          Number(fields[r.deal_type === "sale" ? "price" : "rent"]) > 0,
         exactMatchEligible: urlIdentityVerified && identity.key !== null,
         publicationEligible: false,
         publicationReasons: [
+          ...(sourceStatus === "delisted" ? ["source_terminal"] : []),
           ...(!urlIdentityVerified ? ["source_url_identity_unverified"] : []),
           ...(!(Number(fields[r.deal_type === "sale" ? "price" : "rent"]) > 0)
             ? ["missing_offer_amount"]
@@ -232,10 +253,13 @@ export function decodeSnapshot(input, options = {}) {
         index,
       };
       const fingerprint = hashPayload({
+        agencyPropertyNo,
         source,
         externalId,
         dealType: r.deal_type,
         fields,
+        sourceStatus,
+        sourceStatusReason,
         contact: record.contact,
       });
       if (seen.has(key)) {

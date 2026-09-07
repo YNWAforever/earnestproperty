@@ -1,3 +1,9 @@
+import {
+  companyPolicy,
+  companyRelationship,
+  groupNewCompanyProperty,
+  adoptCompanyFields,
+} from "./company-number.mjs";
 import { randomUUID } from "node:crypto";
 import {
   decodeSnapshot,
@@ -35,8 +41,18 @@ const same = (a, b, numeric = false) =>
     ? normalizeDecimal(a) === normalizeDecimal(b)
     : canonicalJson(a ?? null) === canonicalJson(b ?? null);
 const json = (value) => JSON.stringify(value ?? null);
-function districtSlug(raw, config) {
-  const value = config?.district_slugs?.[raw];
+function estateMapping(estate, config) {
+  const mapped = config?.estate_mappings?.[estate];
+  return mapped &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      mapped.estate_id ?? "",
+    ) &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(mapped.district_slug ?? "")
+    ? mapped
+    : null;
+}
+function districtSlug(raw, config, estate) {
+  const value = estateMapping(estate, config)?.district_slug ?? config?.district_slugs?.[raw];
   return typeof value === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) ? value : null;
 }
 function verifiedOptions(policy) {
@@ -107,6 +123,7 @@ export async function applyIngestion(client, payload, options = {}) {
       throw new SnapshotError("publishing_disabled", 503);
     if (policy.parser_version !== batch.parserVersion)
       throw new SnapshotError("parser_policy_mismatch", 503);
+    const companyRule = companyPolicy(policy);
     batch = decodeSnapshot(payload, verifiedOptions(policy));
     const unverified = batch.records.filter((record) => !record.urlIdentityVerified);
     if (unverified.length) {
@@ -198,7 +215,9 @@ export async function applyIngestion(client, payload, options = {}) {
       ],
     );
     const touched = new Set(),
-      newProperties = new Set();
+      newProperties = new Set(),
+      changedProperties = new Set();
+    let fieldsChanged = 0;
     const review = async (record, reason, evidence, observationId) => {
       const key = hashPayload({
         source: record.source,
@@ -279,7 +298,17 @@ export async function applyIngestion(client, payload, options = {}) {
           reason: "source_link_inconsistent",
           holdProjection: true,
         };
-      const mappedDistrict = districtSlug(record.fields.district, policy.config);
+      relation = await companyRelationship(q, record, existing, relation, companyRule);
+      const linkedProperty = relation.propertyId
+        ? (
+            await q("SELECT estate_id,district_slug FROM properties WHERE id=$1", [
+              relation.propertyId,
+            ])
+          )[0]
+        : null;
+      const mappedDistrict =
+        linkedProperty?.district_slug ??
+        districtSlug(record.fields.district, policy.config, record.fields.estate);
       if (!mappedDistrict) record.publicationReasons.push("district_mapping_unverified");
       const observationId = randomUUID();
       await q(
@@ -296,9 +325,11 @@ export async function applyIngestion(client, payload, options = {}) {
             sourceKey: record.key,
             unitKey: record.unitKey,
             fields: record.fields,
+            sourceStatus: record.sourceStatus,
+            sourceStatusReason: record.sourceStatusReason,
             raw: record.raw,
             sourceOccurrences: record.sourceOccurrences,
-            identity: record.identity,
+            identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             publicationReasons: record.publicationReasons,
             holdProjection: relation.holdProjection,
           }),
@@ -320,10 +351,20 @@ export async function applyIngestion(client, payload, options = {}) {
         const id = randomUUID();
         const p = (
           await q(
-            "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,ingestion_owner,ingestion_identity_policy) VALUES($1,$2,$3,$4,$5,'draft',$6,$6) RETURNING *",
-            [id, "SYNC-" + id, record.fields.title, record.dealType, mappedDistrict, POLICY],
+            "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,ingestion_owner,ingestion_identity_policy,canonical_property_no,estate_id) VALUES($1,$2,$3,$4,$5,'draft',$6,$6,$7,$8) RETURNING *",
+            [
+              id,
+              "SYNC-" + id,
+              record.fields.title,
+              record.dealType,
+              mappedDistrict,
+              POLICY,
+              relation.companyNumber ?? null,
+              estateMapping(record.fields.estate, policy.config)?.estate_id ?? null,
+            ],
           )
         )[0];
+        await groupNewCompanyProperty(q, p, relation);
         relation.propertyId = p.id;
         newProperties.add(p.id);
         await event(p.id, "new", null, null, { status: p.status }, observationId, "source_id_v2");
@@ -343,7 +384,7 @@ export async function applyIngestion(client, payload, options = {}) {
           {
             previousIdentity: state?.raw_identity ?? null,
             previousUnitKey: state?.unit_key ?? null,
-            identity: record.identity,
+            identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             candidates: relation.candidates ?? [],
             reasons: record.publicationReasons,
           },
@@ -351,7 +392,7 @@ export async function applyIngestion(client, payload, options = {}) {
         );
       const propertyId = relation.propertyId;
       await q(
-        "INSERT INTO mls_source_state(source,external_listing_id,deal_type,scope_id,policy_version,observation_id,last_receipt_id,property_id,unit_key,source_status,first_seen_at,last_accepted_at,raw_identity) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',$10,$10,$11) ON CONFLICT(source,external_listing_id,deal_type) DO UPDATE SET observation_id=EXCLUDED.observation_id,last_receipt_id=EXCLUDED.last_receipt_id,property_id=EXCLUDED.property_id,unit_key=EXCLUDED.unit_key,source_status='active',last_accepted_at=EXCLUDED.last_accepted_at,raw_identity=EXCLUDED.raw_identity",
+        "INSERT INTO mls_source_state(source,external_listing_id,deal_type,scope_id,policy_version,observation_id,last_receipt_id,property_id,unit_key,source_status,first_seen_at,last_accepted_at,raw_identity) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$12,$10,$10,$11) ON CONFLICT(source,external_listing_id,deal_type) DO UPDATE SET observation_id=EXCLUDED.observation_id,last_receipt_id=EXCLUDED.last_receipt_id,property_id=EXCLUDED.property_id,unit_key=EXCLUDED.unit_key,source_status=EXCLUDED.source_status,last_accepted_at=EXCLUDED.last_accepted_at,raw_identity=EXCLUDED.raw_identity",
         [
           ...identityArgs,
           batch.scopeId,
@@ -366,6 +407,9 @@ export async function applyIngestion(client, payload, options = {}) {
               ? state.raw_identity
               : {
                   ...state?.raw_identity,
+                  ...(record.agencyPropertyNo
+                    ? { agency_property_no: record.agencyPropertyNo }
+                    : {}),
                   ...Object.fromEntries(
                     Object.entries(record.identity).filter(
                       ([, value]) => value !== null && value !== "",
@@ -373,6 +417,7 @@ export async function applyIngestion(client, payload, options = {}) {
                   ),
                 },
           ),
+          record.sourceStatus,
         ],
       );
       await q(
@@ -396,7 +441,7 @@ export async function applyIngestion(client, payload, options = {}) {
           [propertyId, POLICY],
         );
         touched.add(propertyId);
-        if (state?.source_status === "delisted")
+        if (state?.source_status === "delisted" && record.sourceStatus === "active")
           await event(
             propertyId,
             "reactivated",
@@ -431,16 +476,51 @@ export async function applyIngestion(client, payload, options = {}) {
     for (const propertyId of touched) {
       const property = (await q("SELECT * FROM properties WHERE id=$1", [propertyId]))[0];
       const sources = await q(
-        "SELECT s.*,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
+        "SELECT s.*,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
         [propertyId],
       );
       // Any changed source identity holds the entire projection until operator review.
       if (sources.some((s) => s.hold_projection === "true")) continue;
+      if (property.status === "draft") {
+        const override = (
+          await q(
+            "SELECT o.shared || CASE p.deal_type::text WHEN 'sale' THEN o.sale ELSE o.rent END AS patch FROM admin_property_overrides o JOIN property_public_members m ON m.public_listing_no=o.property_no JOIN properties p ON p.id=m.property_id WHERE p.id=$1",
+            [propertyId],
+          )
+        )[0]?.patch;
+        if (override?.status && override.status !== "draft") {
+          await review(
+            {
+              source: sources[0].source,
+              externalId: sources[0].external_listing_id,
+              dealType: sources[0].deal_type,
+            },
+            "draft_status_override_requires_review",
+            { status: override.status },
+            sources[0].observation_id,
+          );
+          continue;
+        }
+      }
       const selected = selectSourceFields(sources);
+      if (!selected.ambiguous && companyRule && !newProperties.has(propertyId))
+        await adoptCompanyFields(
+          q,
+          property,
+          companyRule,
+          [...Object.values(MAP), "status"],
+          sources[0].observation_id,
+        );
       const fields = await q("SELECT * FROM property_sync_fields WHERE property_id=$1", [
         propertyId,
       ]);
       const representative = sources[0];
+      const terminalPrimary = sources.find(
+        (s) => s.source === "28hse_agent_540" && s.source_status === "delisted",
+      );
+      const inactiveReason = ["sold", "rented"].includes(terminalPrimary?.source_status_reason)
+        ? `explicit_source_${terminalPrimary.source_status_reason}`
+        : "accepted_full_28hse_absence";
       const reviewRecord = {
         source: representative.source,
         externalId: representative.external_listing_id,
@@ -481,7 +561,9 @@ export async function applyIngestion(client, payload, options = {}) {
         let value = rawValue;
         if (field === "district") {
           const source = sources.find((s) => s.source === selected.provenance[field].source);
-          value = districtSlug(rawValue, source?.policy_config);
+          value =
+            property.district_slug ??
+            districtSlug(rawValue, source?.policy_config, source?.fields?.estate);
           if (!value) {
             await review(
               reviewRecord,
@@ -528,7 +610,10 @@ export async function applyIngestion(client, payload, options = {}) {
           continue;
         }
         const numeric = NUMBER_FIELDS.has(column);
-        if (owned?.active_override) {
+        if (
+          owned?.active_override ||
+          (owned && (owned.selection_reason === "manual_override" || !owned.winning_observation_id))
+        ) {
           await review(
             reviewRecord,
             "manual_override",
@@ -580,6 +665,8 @@ export async function applyIngestion(client, payload, options = {}) {
         )[0];
         if (
           !owned?.active_override &&
+          owned?.selection_reason !== "manual_override" &&
+          owned?.winning_observation_id &&
           owned &&
           same(property.status, owned.last_published_value) &&
           (selected.lifecycle === "inactive" ||
@@ -589,11 +676,37 @@ export async function applyIngestion(client, payload, options = {}) {
             column: "status",
             value: selected.lifecycle,
             provenance: {
-              source: representative.source,
-              observationId: representative.observation_id,
-              reason: "source_lifecycle",
+              source: terminalPrimary?.source ?? representative.source,
+              observationId: terminalPrimary?.observation_id ?? representative.observation_id,
+              reason: selected.lifecycle === "inactive" ? inactiveReason : "source_lifecycle",
             },
           });
+      }
+      // Stronger observed terminal evidence replaces an inferred absence even when
+      // the canonical status is already inactive. Keep staff ownership and the
+      // original inactive time; this metadata change must not UPDATE properties.
+      if (
+        property.status === "inactive" &&
+        selected.lifecycle === "inactive" &&
+        inactiveReason.startsWith("explicit_source_")
+      ) {
+        const owned = fields.find((f) => f.field_name === "status");
+        if (
+          owned &&
+          !owned.active_override &&
+          owned.selection_reason !== "manual_override" &&
+          same(property.status, owned.last_published_value)
+        ) {
+          const escalated = await q(
+            "UPDATE property_sync_state SET inactive_reason=$3,last_evaluated_run_id=$2 WHERE property_id=$1 AND inactive_reason='accepted_full_28hse_absence' RETURNING property_id",
+            [propertyId, runId, inactiveReason],
+          );
+          if (escalated.length)
+            await q(
+              "UPDATE property_sync_fields SET winning_observation_id=$2,selection_reason=$3,updated_at=now() WHERE property_id=$1 AND field_name='status'",
+              [propertyId, terminalPrimary.observation_id, inactiveReason],
+            );
+        }
       }
       if (proposals.length) {
         const changed = proposals.filter(
@@ -621,7 +734,11 @@ export async function applyIngestion(client, payload, options = {}) {
               POLICY,
             ],
           );
-          if (!same(property[p.column], effective, NUMBER_FIELDS.has(p.column)))
+          if (!same(property[p.column], effective, NUMBER_FIELDS.has(p.column))) {
+            if (!newProperties.has(propertyId)) {
+              changedProperties.add(propertyId);
+              fieldsChanged++;
+            }
             await event(
               propertyId,
               p.column === "status"
@@ -635,11 +752,12 @@ export async function applyIngestion(client, payload, options = {}) {
               overridden ? null : p.provenance.observationId,
               overridden ? "manual_override" : p.provenance.reason,
             );
+          }
         }
         if (actual.status === "inactive" && property.status !== "inactive")
           await q(
-            "INSERT INTO property_sync_state(property_id,last_evaluated_run_id,inactive_reason,inactive_at) VALUES($1,$2,'accepted_full_28hse_absence',now()) ON CONFLICT(property_id) DO UPDATE SET last_evaluated_run_id=EXCLUDED.last_evaluated_run_id,inactive_reason=EXCLUDED.inactive_reason,inactive_at=EXCLUDED.inactive_at",
-            [propertyId, runId],
+            "INSERT INTO property_sync_state(property_id,last_evaluated_run_id,inactive_reason,inactive_at) VALUES($1,$2,$3,now()) ON CONFLICT(property_id) DO UPDATE SET last_evaluated_run_id=EXCLUDED.last_evaluated_run_id,inactive_reason=EXCLUDED.inactive_reason,inactive_at=EXCLUDED.inactive_at",
+            [propertyId, runId, inactiveReason],
           );
         else if (actual.status === "active" && property.status === "inactive")
           await q(
@@ -658,6 +776,10 @@ export async function applyIngestion(client, payload, options = {}) {
         offer_count: batch.offerCount,
         rejected_count: batch.rejects.length,
         duplicate_count: batch.duplicates,
+        properties_created: newProperties.size,
+        properties_changed: changedProperties.size,
+        fields_changed: fieldsChanged,
+        unchanged_properties: touched.size - newProperties.size - changedProperties.size,
       },
       rejects: batch.rejects,
     };

@@ -23,6 +23,12 @@ export interface IngestionResponse {
     offer_count: number;
     rejected_count: number;
     duplicate_count: number;
+    properties_created: number;
+    /** Existing canonical properties with effective projected field changes. */
+    properties_changed: number;
+    /** Changed fields on existing canonical properties; excludes initial creation. */
+    fields_changed: number;
+    unchanged_properties: number;
   };
   rejects: Array<{ row_index: number; code: string }>;
 }

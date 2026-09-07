@@ -210,3 +210,47 @@ test("aliases must be owned strings and duplicate occurrences remain traceable",
   const d = decodeSnapshot(batch([row(), row()]));
   assert.equal(d.records[0].sourceOccurrences.length, 2);
 });
+
+test("daily lifecycle defaults active and accepts only consistent explicit terminal states", () => {
+  assert.equal(decodeSnapshot(batch()).records[0].sourceStatus, "active");
+  assert.equal(decodeSnapshot(batch()).records[0].sourceStatusReason, null);
+  for (const [deal, reason] of [
+    ["sale", "sold"],
+    ["rent", "rented"],
+  ]) {
+    const terminal = row("123", {
+      deal_type: deal,
+      source_url: `https://www.28hse.com/${deal === "sale" ? "buy" : "rent"}/example/property-123`,
+      source_status: "delisted",
+      source_status_reason: reason,
+    });
+    const record = decodeSnapshot(batch([terminal])).records[0];
+    assert.equal(record.sourceStatus, "delisted");
+    assert.equal(record.sourceStatusReason, reason);
+    assert.equal(record.offerValid, false);
+    assert.ok(record.publicationReasons.includes("source_terminal"));
+  }
+  for (const lifecycle of [
+    { source_status: "sold" },
+    { source_status: null },
+    { source_status: "delisted" },
+    { source_status: "active", source_status_reason: "sold" },
+    { source_status: "delisted", source_status_reason: "rented" },
+    { source_status: "delisted", source_status_reason: "unknown" },
+    { source_status_reason: "sold" },
+  ])
+    assert.equal(
+      decodeSnapshot(batch([row("123", lifecycle)])).rejects[0].code,
+      "invalid_source_lifecycle",
+    );
+});
+test("differing lifecycle duplicate IDs conflict and negotiable amounts remain null", () => {
+  const decoded = decodeSnapshot(
+    batch([row(), row("123", { source_status: "delisted", source_status_reason: "sold" })]),
+  );
+  assert.equal(decoded.records.length, 0);
+  assert.equal(decoded.rejects.length, 2);
+  const record = decodeSnapshot(batch([row("123", { price: null })])).records[0];
+  assert.equal(record.fields.price, null);
+  assert.equal(record.offerValid, false);
+});

@@ -72,9 +72,10 @@
     "test:public-performance:db": "node --test src/lib/neon/public-performance.db.test.mjs src/lib/neon/property-identity.db.test.mjs src/lib/neon/estate-links.db.test.mjs",
     "ops:release-readiness": "node scripts/operations/release-readiness.mjs",
     "media:responsive": "node scripts/media/generate-responsive.mjs",
-    "test:property-sync": "node --test src/lib/mls/ingestion-contract.test.mjs src/lib/mls/ingestion-v2-schema.test.mjs src/lib/mls/source-selection.test.mjs src/lib/mls/propertyhk-http.test.mjs src/lib/mls/public-source-metadata.test.mjs src/routes/api.admin.propertyhk-sync.test.mjs scripts/mls/migrate-ingestion-v2.test.mjs scripts/mls/apply-source-snapshot.test.mjs src/lib/mls/ingestion-service.test.mjs",
-    "test:property-sync:db": "node --test src/lib/mls/ingestion-v2.db.test.mjs src/lib/mls/ingestion-repository.db.test.mjs src/lib/mls/public-source-metadata.db.test.mjs",
-    "test:property-sync:python": "node scripts/property-sync/run-tests.mjs"
+    "test:property-sync": "node --test src/lib/mls/company-number.test.mjs src/lib/mls/ingestion-contract.test.mjs src/lib/mls/ingestion-v2-schema.test.mjs src/lib/mls/source-selection.test.mjs src/lib/mls/propertyhk-http.test.mjs src/lib/mls/public-source-metadata.test.mjs src/routes/api.admin.propertyhk-sync.test.mjs scripts/mls/migrate-ingestion-v2.test.mjs scripts/mls/apply-source-snapshot.test.mjs src/lib/mls/ingestion-service.test.mjs",
+    "test:property-sync:db": "node --test --test-concurrency=1 src/lib/mls/company-number.db.test.mjs src/lib/mls/ingestion-v2.db.test.mjs src/lib/mls/ingestion-repository.db.test.mjs src/lib/mls/public-source-metadata.db.test.mjs src/lib/mls/ingestion-daily.db.test.mjs",
+    "test:property-sync:python": "node scripts/property-sync/run-tests.mjs",
+    "test:property-sync:daily": "node --test scripts/property-sync-daily.test.mjs scripts/mls/verify-daily-target.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",
