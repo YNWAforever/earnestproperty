@@ -12,7 +12,7 @@
 
 Existing TanStack Start server function authentication, Neon raw SQL grouped reads and admin_property_manage remain authoritative. Existing permissions, source snapshots, overrides and audit logging are reused. No new schema migration, dependency or schedule. No production business writes or deployment were performed by this task.
 
-The branch also contains the earlier two-file public metadata join fix prepared in PR #131; the feature commit is separate. Production detail-page restoration is not claimed until that code is deployed.
+PR #131 has been merged to main. This branch has been updated with main, so the new PR excludes that earlier public metadata join fix. Production deployment of that earlier fix was not re-verified as part of this PR creation.
 
 ## Executed verification
 
