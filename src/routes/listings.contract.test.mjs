@@ -358,8 +358,8 @@ test("FreshnessStamp replaces the raw formatHkDate '最後更新' text in BOTH L
   ]) {
     assert.match(
       body,
-      /<FreshnessStamp\s+updatedAt={p\.last_seen_at}/,
-      `expected ${name} to render <FreshnessStamp updatedAt={p.last_seen_at} />`,
+      /<FreshnessStamp\s+updatedAt={propertyUpdatedAt\(p\)}/,
+      `expected ${name} to render freshness using actual available record timestamps`,
     );
     assert.doesNotMatch(
       body,

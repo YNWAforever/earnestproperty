@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   publicPropertyNo,
+  propertyUpdatedAt,
   propertyPriceSummary,
   propertyDealLabel,
   activePropertyOfferings,
@@ -50,4 +51,24 @@ describe("unified property presentation", () => {
 
 test("rented archive retains the rental label when no offers remain", () => {
   expect(propertyDealLabel({ ...rent, status: "rented", offerings: [] })).toBe("租盤");
+});
+
+test("public cards use actual available update times for new and legacy inventory", () => {
+  expect(
+    propertyUpdatedAt({
+      created_at: "2026-09-07T02:00:00Z",
+      updated_at: "2026-09-07T06:00:00Z",
+      last_seen_at: null,
+    }),
+  ).toBe("2026-09-07T06:00:00Z");
+  expect(
+    propertyUpdatedAt({
+      created_at: "2026-08-01T00:00:00Z",
+      updated_at: "2026-08-02T00:00:00Z",
+      last_seen_at: "2026-08-24T00:00:00Z",
+    }),
+  ).toBe("2026-08-24T00:00:00Z");
+  expect(
+    propertyUpdatedAt({ created_at: "invalid", updated_at: null, last_seen_at: null }),
+  ).toBeNull();
 });
