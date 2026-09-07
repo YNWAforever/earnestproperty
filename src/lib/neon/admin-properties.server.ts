@@ -40,12 +40,26 @@ function baseQuery() {
   ), groups AS (
     SELECT p.group_no,bool_or(p.unlinked) AS unlinked,
       jsonb_agg(to_jsonb(p) ORDER BY p.deal_type) AS offerings,
+      max(p.updated_at) AS updated_at,
+      (array_agg(p.estate_name ORDER BY CASE p.deal_type::text WHEN 'sale' THEN 0 ELSE 1 END))[1] AS sort_estate,
+      (array_agg(p.saleable_area ORDER BY CASE p.deal_type::text WHEN 'sale' THEN 0 ELSE 1 END))[1] AS sort_area,
+      max(p.price) FILTER (WHERE p.deal_type::text='sale') AS sort_sale_price,
+      max(p.rent) FILTER (WHERE p.deal_type::text='rent') AS sort_rent_price,
       NOT EXISTS(SELECT 1 FROM current_members other WHERE other.group_no=p.group_no AND $1::uuid IS NOT NULL AND other.agent_id IS DISTINCT FROM $1::uuid) AS editable_shared
     FROM visible p GROUP BY p.group_no
   )`;
 }
 export function buildAdminPropertyGroupsQuery(input: PropertyGroupFilters, actor: StaffAccess) {
   const filters = propertyGroupFiltersSchema.parse(input);
+  const sortColumns = {
+    updated: "updated_at",
+    propertyNo: "group_no",
+    estate: "sort_estate",
+    area: "sort_area",
+    salePrice: "sort_sale_price",
+    rentPrice: "sort_rent_price",
+  } as const;
+  const orderBy = `${sortColumns[filters.sort]} ${filters.direction === "asc" ? "ASC" : "DESC"} NULLS LAST, group_no ASC`;
   const params: unknown[] = [actorScope(actor)];
   const conditions: string[] = [];
   const param = (value: unknown) => {
@@ -69,8 +83,8 @@ export function buildAdminPropertyGroupsQuery(input: PropertyGroupFilters, actor
     statement: `${baseQuery()}, matched AS (
     SELECT g.*,v.version FROM groups g JOIN versions v USING(group_no)
     WHERE EXISTS(SELECT 1 FROM visible p WHERE p.group_no=g.group_no ${conditions.map((c) => `AND ${c}`).join(" ")})
-  ), page AS (SELECT * FROM matched ORDER BY group_no LIMIT ${limit} OFFSET ${offset})
-  SELECT (SELECT count(*)::int FROM matched) AS total,coalesce((SELECT jsonb_agg(to_jsonb(page) ORDER BY group_no) FROM page),'[]'::jsonb) AS rows`,
+  ), page AS (SELECT * FROM matched ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset})
+  SELECT (SELECT count(*)::int FROM matched) AS total,coalesce((SELECT jsonb_agg(to_jsonb(page) ORDER BY ${orderBy}) FROM page),'[]'::jsonb) AS rows`,
     params,
     page: filters.page,
     pageSize: filters.pageSize,
@@ -107,6 +121,7 @@ function sharedFields(row: DbRow): SharedPropertyFields {
 function offering(row: DbRow): ManagedOffering {
   return {
     id: String(row.id),
+    title: String(row.title_zh ?? ""),
     dealType: row.deal_type as "sale" | "rent",
     price: numberOrNull(row.price),
     rent: numberOrNull(row.rent),
@@ -151,6 +166,7 @@ export function mapAdminPropertyGroup(row: DbRow) {
     estateName: stringOrNull(first.estate_name),
     image: shared.images[0] ?? null,
     saleableArea: shared.saleable_area,
+    updatedAt: stringOrNull(row.updated_at),
     offerings: { sale: null, rent: null },
     version: String(row.version),
     editableShared: row.editable_shared === true && row.unlinked !== true,

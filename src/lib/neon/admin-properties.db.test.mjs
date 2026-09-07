@@ -64,6 +64,39 @@ test(
       assert.equal(mapped.summary.offerings.sale.price, 6700000);
       assert.equal(mapped.summary.offerings.rent.rent, 18000);
       assert.equal(mapped.summary.reviewRequired, true);
+      const saleAscending = await query({
+        status: "all",
+        sort: "salePrice",
+        direction: "asc",
+        pageSize: 1,
+      });
+      assert.equal(saleAscending.rows[0].group_no, "SECOND");
+      const saleSecondPage = await query({
+        status: "all",
+        sort: "salePrice",
+        direction: "asc",
+        pageSize: 1,
+        page: 2,
+      });
+      assert.equal(saleSecondPage.rows[0].group_no, "R075733");
+      const saleNullLast = await query({
+        status: "all",
+        sort: "salePrice",
+        direction: "desc",
+        pageSize: 1,
+        page: 3,
+      });
+      assert.ok(saleNullLast.rows[0].group_no.startsWith("unlinked:"));
+      const rentalOrder = await query({ status: "all", sort: "rentPrice", direction: "asc" });
+      assert.ok(rentalOrder.rows[0].group_no.startsWith("unlinked:"));
+      assert.equal(rentalOrder.rows[1].group_no, "R075733");
+      assert.equal(rentalOrder.rows[2].group_no, "SECOND");
+      assert.deepEqual(
+        (await query({ status: "all", sort: "estate", direction: "asc" })).rows.map(
+          (r) => r.group_no,
+        ),
+        ["R075733", "SECOND", rentalOrder.rows[0].group_no],
+      );
       const scoped = await query({ q: "R075733", status: "all" }, agent);
       const scopedMap = mapAdminPropertyGroup(scoped.rows[0]);
       assert.equal(scopedMap.summary.offerings.sale, null);

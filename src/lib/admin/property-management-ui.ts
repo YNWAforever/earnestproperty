@@ -1,4 +1,8 @@
-import type { ManagedOffering, PropertyManagementInput } from "@/lib/neon/admin-properties.types";
+import type {
+  ManagedOffering,
+  ManagedPropertySummary,
+  PropertyManagementInput,
+} from "@/lib/neon/admin-properties.types";
 export const propertyStatusLabels: Record<string, string> = {
   active: "公開",
   draft: "草稿",
@@ -58,9 +62,23 @@ export function offeringPatch(
   ) as PropertyManagementInput["payload"];
 }
 export function offeringPrice(offer: ManagedOffering | null) {
-  if (!offer) return "未開放";
+  if (!offer) return "—";
   const amount = offer.dealType === "sale" ? offer.price : offer.rent;
   return amount === null
     ? "未填價格"
     : `$${Number(amount).toLocaleString("en-HK")}${offer.dealType === "rent" ? "／月" : ""}`;
+}
+
+export function existingOfferingDeals(offerings: {
+  sale: ManagedOffering | null;
+  rent: ManagedOffering | null;
+}) {
+  return (["sale", "rent"] as const).filter((deal) => offerings[deal] != null);
+}
+
+export function canSelectProperty(row: ManagedPropertySummary) {
+  return (
+    !row.unlinked &&
+    existingOfferingDeals(row.offerings).some((deal) => row.offerings[deal]?.editable)
+  );
 }

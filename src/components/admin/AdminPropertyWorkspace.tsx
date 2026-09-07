@@ -28,6 +28,7 @@ import {
   offeringDraft,
   offeringPatch,
   offeringPrice,
+  existingOfferingDeals,
   propertyStatusLabels,
 } from "@/lib/admin/property-management-ui";
 
@@ -187,14 +188,14 @@ export function AdminPropertyWorkspace({
         </Button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {(["sale", "rent"] as const).map((deal) => (
+        {existingOfferingDeals(detail.offerings).map((deal) => (
           <div key={deal} className="rounded-xl border p-4">
             <p className="text-sm text-muted-foreground">
               {deal === "sale" ? "出售" : "出租"} ·{" "}
               {detail.offerings[deal]
                 ? (propertyStatusLabels[detail.offerings[deal]!.status] ??
                   detail.offerings[deal]!.status)
-                : "未開放"}
+                : "—"}
             </p>
             <p className="text-xl font-semibold">{offeringPrice(detail.offerings[deal])}</p>
           </div>
