@@ -13,7 +13,7 @@ import { fetchPublishedArticlesByCategory, fetchRecentTransactions } from "@/lib
 const staticPaths = [
   pageSeo.home.path,
   pageSeo.listings.path,
-  pageSeo.castlePeakRoad.path,
+  // /castle-peak-road arrives via castlePeakRoadSitemapPaths below.
   pageSeo.shamTseng.path,
   // /district/tsuen-wan is intentionally absent: the client pruned 荃灣 from the
   // district navigation, so the page has no inbound internal link. Advertising

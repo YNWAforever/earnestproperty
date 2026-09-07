@@ -42,19 +42,36 @@ import { activePropertyOfferings, publicPropertyNo } from "./property-public";
  * field, and it is what estate.$slug.tsx already does with `estates.seo_title`.
  */
 
-/** Mirrors /listings' and /agents' own DISTRICT_LABELS -- the same four
- * districts and display strings. Kept as a local copy for the same reason
- * agents.tsx documents: four string literals are not worth one route reaching
- * into another's internals. */
+/**
+ * Extends /listings' and /agents' own four-entry DISTRICT_LABELS with the two
+ * slugs those routes never see but `properties`/`estates` rows really carry:
+ * `tsing-lung-tau` (青龍頭 -- 豪景花園, 帝華軒, 龍騰閣) and `yau-kom-tau`
+ * (油柑頭, the ting-kau segment's other half). Both come from
+ * estate-registry.ts's `districtSlug` and castle-peak-road.ts's
+ * `districtSlugs`; omitting them silently dropped the district from the copy.
+ *
+ * An unlisted slug yields null rather than being printed: `properties`
+ * district values are not all real slugs (parse-28hse.mjs assigns the raw
+ * address to `district_slug` for template-parsed rows), so printing whatever
+ * is in the column would put an address fragment in the title.
+ */
 const DISTRICT_LABELS: Record<string, string> = {
   "sham-tseng": "深井",
   "ting-kau": "汀九",
+  "yau-kom-tau": "油柑頭",
+  "tsing-lung-tau": "青龍頭",
   "tsuen-wan": "荃灣",
   "castle-peak-road": "青山公路",
 };
 
 const BRAND_SUFFIX = "｜晉誠地產";
 const LICENCE = "C-018613";
+/** `sold`/`rented` -- kept in sync with property.$listingNo.tsx's own set. A
+ * listing in one of these states is noindexed, but its og:title/og:description
+ * still render when the URL is shared, so the copy has to say so. */
+const UNAVAILABLE_STATUSES = new Set(["sold", "rented"]);
+/** Width cap on the description's grammatical subject -- see its use site. */
+const SUBJECT_MAX_UNITS = 26;
 
 export type ListingSeoInput = {
   listing_no: string;
@@ -98,10 +115,41 @@ function positive(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
+/**
+ * The estate's district wins over the listing's own.
+ *
+ * `properties.district_slug` is inferred from free text and falls through to
+ * `"tsuen-wan"` for anything it does not recognise (inferDistrictSlug in
+ * src/lib/mls/normalize-old-site.mjs ends `return "tsuen-wan"`), so trusting
+ * it first printed 荃灣 on 深井 and 青龍頭 listings. `estates.district_slug` is
+ * the verified value, and this matches how the route body already resolves
+ * location (`estate?.district_slug ?? property.district_slug`).
+ */
 function districtLabel(input: ListingSeoInput): string | null {
-  const slug = text(input.district_slug) ?? text(input.estates?.district_slug);
+  const slug = text(input.estates?.district_slug) ?? text(input.district_slug);
   if (!slug) return null;
   return DISTRICT_LABELS[slug] ?? null;
+}
+
+/**
+ * A scraped `title_zh` fit to use as Chinese prose.
+ *
+ * `titleFor` in src/lib/mls/normalize-old-site.mjs builds every imported title
+ * as `${building} ${售盤|租盤} #${listingNo}` and the source's own titles carry
+ * a " - 晉誠地產" suffix, so the raw value dragged an internal listing number
+ * and a deal marker into the middle of a sentence ("浪翠園 售盤 #12345放盤。").
+ * The deal state and the listing number are both stated elsewhere in the copy
+ * from real columns, so they are stripped rather than reworded.
+ */
+function cleanSourceTitle(value: unknown): string | null {
+  const raw = text(value);
+  if (!raw) return null;
+  const cleaned = raw
+    .replace(/\s*-\s*晉誠地產\s*$/, "")
+    .replace(/\s*[#＃]\S+\s*$/, "")
+    .replace(/\s+(售盤|租盤|放盤)$/, "")
+    .trim();
+  return sanitizeListingText(cleaned);
 }
 
 /**
@@ -154,7 +202,10 @@ function priceLabel(input: ListingSeoInput): string | null {
       const rent = formatHkd(offering.rent);
       if (rent) parts.push(`租 ${rent}`);
     } else {
-      const man = formatManDisplay(offering.price);
+      // formatManDisplay divides by 10,000 and rounds to one decimal, so a
+      // nonsense sub-$5,000 price renders as "$0萬". Suppress the segment
+      // rather than print a zero asking price.
+      const man = (offering.price ?? 0) >= 10_000 ? formatManDisplay(offering.price) : null;
       if (man) parts.push(`售 $${man}`);
     }
   }
@@ -174,7 +225,13 @@ function priceLabel(input: ListingSeoInput): string | null {
  */
 function assembleTitle(head: string, segments: Array<string | null>): string {
   const budget = TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX);
-  let title = truncateToWidth(head, budget);
+  // Reserve the first segment's width before the head takes the rest. A long
+  // source title -- the normal case when estate_id is NULL, so there is no
+  // estate name to head with -- used to consume the whole budget and ship a
+  // title with no price, no room count and no area at all.
+  const reserved = segments.find(Boolean);
+  const headBudget = reserved ? budget - displayWidth(reserved) - displayWidth("｜") : budget;
+  let title = truncateToWidth(head, Math.max(headBudget, Math.ceil(budget / 2)));
   for (const segment of segments) {
     if (!segment) continue;
     if (restates(title, segment)) continue;
@@ -215,11 +272,17 @@ function restates(existing: string, segment: string): boolean {
  * distinguishing facts, then the deal/price, then the district.
  */
 export function listingSeoTitle(input: ListingSeoInput): string {
-  const authored = text(input.seo_title);
-  if (authored) return `${authored}${BRAND_SUFFIX}`;
+  const authoredTitle = text(input.seo_title);
+  // Trimmed to the same budget as the derived title. PropertyForm.tsx caps the
+  // field at 200 characters and admin.cms.tsx at none, so a hand-written value
+  // can be 4x the SERP budget -- and a truncated-by-Google title is exactly
+  // what this module exists to prevent, author or generator.
+  if (authoredTitle) {
+    return `${truncateToWidth(authoredTitle, TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX))}${BRAND_SUFFIX}`;
+  }
 
   const estate = text(input.estates?.name_zh);
-  const sourceTitle = text(input.title_zh);
+  const sourceTitle = cleanSourceTitle(input.title_zh);
   const district = districtLabel(input);
   const head = estate ?? sourceTitle ?? (district ? `${district}放盤` : "放盤");
 
@@ -228,8 +291,16 @@ export function listingSeoTitle(input: ListingSeoInput): string {
   const spec = [floorLabel(input.floor), bedroomLabel(input.bedrooms)].filter(Boolean).join(" ");
   const area = formatArea(positive(input.saleable_area) ?? positive(input.gross_area));
   const distinguishing = Boolean(spec) || Boolean(area);
+  // A gone listing must say so: the page is noindexed, but its
+  // og:title/og:description still render wherever the URL was shared.
+  const state = UNAVAILABLE_STATUSES.has(input.status ?? "")
+    ? input.status === "rented"
+      ? "已租出"
+      : "已售出"
+    : null;
 
   return assembleTitle(head, [
+    state,
     spec || null,
     priceLabel(input),
     district ? `${district}放盤` : null,
@@ -248,7 +319,11 @@ export function listingSeoTitle(input: ListingSeoInput): string {
           listing_no: input.listing_no,
           public_listing_no: input.public_listing_no ?? undefined,
         })}`,
-    estate && sourceTitle ? sourceTitle : null,
+    // Only the part of the source title the head does not already carry.
+    // `restates()` suppresses a multi-part segment only when every part is
+    // present, so "碧堤半島 第05座" behind a 碧堤半島 head used to append the
+    // estate name a second time.
+    estate && sourceTitle ? sanitizeListingText(sourceTitle.split(estate).join(" ")) : null,
   ]);
 }
 
@@ -266,8 +341,11 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   if (authored) return truncateToWidth(authored, DESCRIPTION_MAX_UNITS);
 
   const estate = text(input.estates?.name_zh);
-  const sourceTitle = text(input.title_zh);
-  const subject = estate ?? sourceTitle ?? "此盤源";
+  const sourceTitle = cleanSourceTitle(input.title_zh);
+  // Capped: with no estate to name, the subject is the source title, and a
+  // 40-glyph marketing headline ("…連天台花園及雙車位全屋豪華裝修即買即住")
+  // consumed the whole snippet and pushed the area and the price out of it.
+  const subject = truncateToWidth(estate ?? sourceTitle ?? "此盤源", SUBJECT_MAX_UNITS);
   const district = districtLabel(input);
   const publicNo = publicPropertyNo({
     listing_no: input.listing_no,
@@ -293,7 +371,18 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   // The sign-off every other description on the site carries. Reserved out of
   // the budget before anything else is appended, so a long body or a long
   // feature list can never be what drops the call to action.
-  const cta = `WhatsApp 即時預約睇樓。晉誠地產 ${LICENCE}。`;
+  //
+  // Varied by what the listing actually is -- a gone listing must not invite a
+  // viewing, and a rental and a sale are different asks. That is real
+  // variation from real columns rather than a rotation, so it also keeps the
+  // shared tail from being identical across the whole `/property/*` space.
+  const gone = UNAVAILABLE_STATUSES.has(input.status ?? "");
+  const renting = (input.deal_type ?? "sale") === "rent";
+  const cta = gone
+    ? `此盤已成交，可 WhatsApp 查詢${estate ?? district ?? ""}同類放盤。晉誠地產 ${LICENCE}。`
+    : renting
+      ? `WhatsApp 即時預約睇樓、講價或查租務條款。晉誠地產 ${LICENCE}。`
+      : `WhatsApp 即時預約睇樓或免費估價。晉誠地產 ${LICENCE}。`;
   const bodyBudget = DESCRIPTION_MAX_UNITS - displayWidth(cta);
 
   const sentences: string[] = [];
@@ -306,8 +395,11 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   const spec = [floor, bedrooms]
     .filter((part): part is string => Boolean(part) && !restates(subject, part as string))
     .join(" ");
-  const opening = district ? `${district}${subject}` : subject;
-  sentences.push(spec ? `${opening} ${spec}單位。` : `${opening}放盤。`);
+  // Not prepended when the subject already names the district: a source-title
+  // subject ("青山公路住宅", "青山公路深井段臨海豪宅") produced 青山公路青山公路住宅.
+  const opening = district && !restates(subject, district) ? `${district}${subject}` : subject;
+  const state = gone ? (input.deal_type === "rent" ? "（已租出）" : "（已售出）") : "";
+  sentences.push(spec ? `${opening} ${spec}單位${state}。` : `${opening}放盤${state}。`);
 
   // 2. The measurable facts, in the order a searcher screens on.
   const measures = [area ? `實用 ${area}` : null, orientation, bathrooms]
@@ -341,7 +433,22 @@ export function listingSeoDescription(input: ListingSeoInput): string {
     if (filler) description += `${filler}。`;
   }
 
-  // 6. Uniqueness backstop. A unit with no floor, no area, no orientation and
+  // 6. A 28hse-ingested row carries no `description` at all, so for the
+  //    commonest listing shape step 5 does nothing and the snippet landed
+  //    under this module's own 90-unit floor. This says what the page itself
+  //    renders -- the estate's transaction table and its other listings, both
+  //    fetched by the route loader whenever `estate_id` is set -- so it is a
+  //    true statement rather than filler, and it varies by estate.
+  if (displayWidth(description) < DESCRIPTION_MIN_UNITS) {
+    const context = estate
+      ? `一頁睇齊${estate}成交紀錄、同屋苑其他放盤同交通配套。`
+      : district
+        ? `一頁睇齊${district}放盤比較、成交紀錄同交通配套。`
+        : null;
+    if (context && displayWidth(description + context) <= bodyBudget) description += context;
+  }
+
+  // 7. Uniqueness backstop. A unit with no floor, no area, no orientation and
   //    no features is indistinguishable from its neighbour in the same estate
   //    at the same asking price -- exactly the duplicate-snippet case this
   //    module exists to remove. The public listing number is the one fact that

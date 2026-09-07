@@ -9,7 +9,9 @@ const richUnit: ListingSeoInput = {
   public_listing_no: "EP-1201",
   title_zh: "碧堤半島 3房海景",
   estates: { name_zh: "碧堤半島", district_slug: "sham-tseng" },
-  district_slug: "sham-tseng",
+  // Deliberately the wrong value: inferDistrictSlug defaults to "tsuen-wan",
+  // and the verified estates value must win. See the precedence test below.
+  district_slug: "tsuen-wan",
   deal_type: "sale",
   price: 11_800_000,
   rent: null,
@@ -27,7 +29,7 @@ const bareUnit: ListingSeoInput = {
   listing_no: "PHK-88",
   title_zh: "深井放盤",
   estates: { name_zh: "浪翠園", district_slug: "sham-tseng" },
-  district_slug: "sham-tseng",
+  district_slug: "tsuen-wan",
   deal_type: "sale",
   price: 6_280_000,
   rent: null,
@@ -57,9 +59,10 @@ describe("listingSeoTitle", () => {
   });
 
   test("never restates a fact the head already carries", () => {
-    // title_zh "深井放盤" already says 深井放盤; the district segment must not
-    // be appended a second time.
-    const title = listingSeoTitle({ ...bareUnit, estates: null });
+    // title_zh "深井放盤" already says 深井; the district segment must not be
+    // appended a second time. With estates null there is no verified district
+    // either, so the head is the cleaned source title on its own.
+    const title = listingSeoTitle({ ...bareUnit, estates: null, district_slug: null });
     expect(title).toBe("深井放盤｜售 $628萬｜編號 PHK-88｜晉誠地產");
     expect(title.match(/深井放盤/g)).toHaveLength(1);
   });
@@ -114,7 +117,7 @@ describe("listingSeoDescription", () => {
   test("composes the unit's own facts, the price and a call to action", () => {
     const description = listingSeoDescription(richUnit);
     expect(description).toBe(
-      "深井碧堤半島 高層 3 房單位。實用 968 呎，向南，2 廁。售 $1,180萬，呎價 $12,190。連車位、無敵海景。WhatsApp 即時預約睇樓。晉誠地產 C-018613。",
+      "深井碧堤半島 高層 3 房單位。實用 968 呎，向南，2 廁。售 $1,180萬，呎價 $12,190。連車位、無敵海景。WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。",
     );
     expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
   });
@@ -148,7 +151,7 @@ describe("listingSeoDescription", () => {
       description:
         "豪景花園位於青山公路青龍頭段 100 號，由華懋集團發展，1986 至 1991 年分三期落成，共 28 座、約 2,830 個單位，背山面海，生活配套齊備。",
     });
-    expect(description).toContain("WhatsApp 即時預約睇樓。晉誠地產 C-018613。");
+    expect(description).toContain("WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。");
     expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
   });
 
@@ -209,5 +212,157 @@ describe("listingSeo", () => {
       expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
       expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
     }
+  });
+});
+
+describe("facts the generator must not get wrong", () => {
+  test("prefers the estate's district over the listing's inferred one", () => {
+    // properties.district_slug is inferred from free text and inferDistrictSlug
+    // (src/lib/mls/normalize-old-site.mjs) ends `return "tsuen-wan"`, so every
+    // unrecognised place became 荃灣. richUnit carries that wrong value.
+    expect(listingSeoTitle(richUnit)).toContain("深井");
+    expect(listingSeoTitle(richUnit)).not.toContain("荃灣");
+    expect(listingSeoDescription(richUnit).startsWith("深井")).toBe(true);
+  });
+
+  test("labels 青龍頭 and 油柑頭, the slugs /listings' four-entry map omits", () => {
+    for (const [slug, label] of [
+      ["tsing-lung-tau", "青龍頭"],
+      ["yau-kom-tau", "油柑頭"],
+    ] as const) {
+      const title = listingSeoTitle({
+        ...richUnit,
+        estates: { name_zh: "豪景花園", district_slug: slug },
+      });
+      expect(title).toContain(label);
+    }
+  });
+
+  test("prints no district at all for a slug it does not recognise", () => {
+    // parse-28hse.mjs assigns the raw address to district_slug for
+    // template-parsed rows, so an unknown value must be dropped, not printed.
+    const title = listingSeoTitle({
+      ...richUnit,
+      estates: { name_zh: "碧堤半島", district_slug: "青山公路深井段 33 號" },
+      district_slug: null,
+    });
+    expect(title).toBe("碧堤半島｜高層 3 房｜售 $1,180萬｜實用 968 呎｜晉誠地產");
+  });
+
+  test("strips the deal marker and internal listing number out of a scraped title", () => {
+    // titleFor in normalize-old-site.mjs builds `${building} 售盤 #${no}`.
+    const seo = listingSeo({
+      listing_no: "OLD-1-S",
+      title_zh: "浪翠園 售盤 #OLD-1",
+      district_slug: "sham-tseng",
+      deal_type: "sale",
+      price: 6_280_000,
+    });
+    expect(seo.title).not.toContain("售盤 #OLD-1");
+    expect(seo.description).not.toContain("#OLD-1");
+    expect(seo.description).toContain("深井浪翠園");
+  });
+
+  test("strips the ` - 晉誠地產` suffix a source title can carry", () => {
+    const seo = listingSeo({
+      listing_no: "X-2",
+      title_zh: "西半山單位 - 晉誠地產",
+      deal_type: "sale",
+      price: 9_000_000,
+    });
+    expect(seo.title.match(/晉誠地產/g)).toHaveLength(1);
+  });
+
+  test("says 已售出 / 已租出 on a gone listing, in both strings", () => {
+    // The page is noindexed, but og:title/og:description still render wherever
+    // the URL was already shared, so the copy must not present it as available.
+    const sold = listingSeo({ ...richUnit, status: "sold" });
+    expect(sold.title).toContain("已售出");
+    expect(sold.description).toContain("（已售出）");
+    expect(sold.description).not.toContain("即時預約睇樓");
+
+    const rented = listingSeo({
+      ...richUnit,
+      deal_type: "rent",
+      price: null,
+      rent: 32_000,
+      status: "rented",
+    });
+    expect(rented.title).toContain("已租出");
+    expect(rented.description).toContain("（已租出）");
+  });
+
+  test("never prints a zero asking price", () => {
+    // formatManDisplay divides by 10,000, so a nonsense sub-$5,000 price
+    // rounded to "$0萬".
+    for (const price of [1, 500, 9_999]) {
+      expect(listingSeoTitle({ ...richUnit, price })).not.toContain("$0萬");
+    }
+  });
+
+  test("caps the description subject so a long source title cannot starve the facts", () => {
+    const description = listingSeoDescription({
+      listing_no: "L-1",
+      title_zh: "青山公路深井段臨海豪宅特色單位連天台花園及雙車位全屋豪華裝修即買即住 售盤 #L-1",
+      district_slug: "sham-tseng",
+      deal_type: "sale",
+      price: 42_000_000,
+      bedrooms: 4,
+      saleable_area: 2100,
+      floor: "高層",
+    });
+    // The facts that qualify a searcher survive the long headline.
+    expect(description).toContain("實用 2,100 呎");
+    expect(description).toContain("售 $4,200萬");
+    expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
+  });
+
+  test("does not prepend a district the subject already names", () => {
+    const description = listingSeoDescription({
+      listing_no: "P-9",
+      title_zh: "青山公路住宅 租盤 #P-9",
+      district_slug: "castle-peak-road",
+      deal_type: "rent",
+      rent: 21_000,
+    });
+    expect(description).not.toContain("青山公路青山公路");
+  });
+
+  test("reserves the leading segment so a long head cannot drop the price", () => {
+    const title = listingSeoTitle({
+      listing_no: "L-2",
+      title_zh: "青山公路深井段臨海豪宅特色單位連天台花園及雙車位全屋豪華裝修即買即住",
+      district_slug: "sham-tseng",
+      deal_type: "sale",
+      price: 42_000_000,
+      bedrooms: 4,
+      floor: "高層",
+    });
+    expect(title).toContain("高層 4 房");
+    expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
+  });
+
+  test("trims an over-budget authored title as a backstop", () => {
+    // PropertyForm caps the field at 200 characters and admin.cms.tsx at none.
+    // The admin width counter is the real fix; this stops a 400-unit <title>.
+    const title = listingSeoTitle({
+      ...richUnit,
+      seo_title: "碧堤半島深井臨海三房海景單位業主親自放售即買即住全屋新裝修連車位歡迎預約睇樓",
+    });
+    expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
+    expect(title.endsWith("｜晉誠地產")).toBe(true);
+  });
+
+  test("tops a bare ingested row up to the snippet floor with what the page renders", () => {
+    // 28hse rows have no `description`, so the body-copy filler never fires and
+    // the commonest listing shape shipped under the 90-unit floor.
+    const description = listingSeoDescription(bareUnit);
+    expect(displayWidth(description)).toBeGreaterThanOrEqual(90);
+    expect(description).toContain("浪翠園");
+  });
+
+  test("does not repeat 同屋苑成交紀錄 in both the context line and the CTA", () => {
+    const description = listingSeoDescription(bareUnit);
+    expect(description.match(/成交紀錄/g)?.length ?? 0).toBeLessThanOrEqual(1);
   });
 });

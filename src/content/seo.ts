@@ -117,15 +117,13 @@ export const pageSeo = {
     description:
       "一站搜尋深井、汀九及青山公路在售及放租盤。海景、連車位、連租約收租盤齊全，WhatsApp 即時預約睇樓。C-018613。",
   },
-  // The corridor hub's live title/description are castlePeakRoadHub in
-  // castle-peak-road.ts (the segment registry owns that copy); only `path` is
-  // consumed from here, by the sitemap.
-  castlePeakRoad: {
-    path: "/castle-peak-road",
-    title: "青山公路 Castle Peak Road 樓盤｜汀九、深井、青龍頭",
-    description:
-      "青山公路沿線買樓租樓指南：汀九、深井、青龍頭三個生活圈，交通、校網、屋苑比較，即時全部真盤查詢。晉誠地產 C-018613。",
-  },
+  // No `castlePeakRoad` entry: castlePeakRoadHub in castle-peak-road.ts owns
+  // the corridor hub's title/description, and the hub's path already reaches
+  // the sitemap through castlePeakRoadSitemapPaths. The entry that used to sit
+  // here was dead in all three fields -- its title was byte-identical to the
+  // hub's (a duplicate <title> waiting to be shipped if anyone wired it up),
+  // its description had silently diverged from the rendered one, and its path
+  // was deduplicated away by the sitemap's own uniquePaths().
   // Rendered by district.sham-tseng.tsx's head(). /district/sham-tseng is the
   // canonical 深井 page; the corridor segment targets 青山公路深井段 instead.
   shamTseng: {
@@ -136,9 +134,9 @@ export const pageSeo = {
   },
   tsuenWan: {
     path: "/district/tsuen-wan",
-    title: "荃灣 Tsuen Wan 物業｜屋苑、港鐵、學校、樓價走勢",
+    title: "荃灣樓盤｜港鐵市中心、荃灣西、深井汀九比較",
     description:
-      "荃灣買樓租樓指南：港鐵荃灣線、荃灣西、大型商場、校網一覽，連深井青龍頭比較。晉誠地產全部真盤 C-018613。",
+      "荃灣買樓租樓指南：荃灣市中心港鐵盤、荃灣西、青山公路深井汀九海景屋苑三個生活圈，比較交通取捨同同價選擇。晉誠地產 C-018613。",
   },
   blog: {
     path: "/blog",
@@ -162,7 +160,7 @@ export const pageSeo = {
     path: "/contact",
     title: "聯絡晉誠地產｜深井睇樓預約．WhatsApp 即時查詢",
     description:
-      "WhatsApp 即時聯絡晉誠地產持牌代理，深井麗都花園地舖門市，歡迎預約睇樓及樓盤估價。",
+      "WhatsApp 即時聯絡晉誠地產持牌代理，深井麗都花園地舖門市，買樓、租樓、放盤及免費估價一站處理，歡迎預約睇樓。持牌代理 C-018613。",
   },
   privacy: {
     path: "/privacy",
@@ -268,7 +266,7 @@ export const estateSeo: Record<string, EstateSeo> = {
     areaLabel: "358–1,382 呎",
     title: "豪景花園 Hong Kong Garden 青龍頭｜放盤、成交、呎價",
     description:
-      "豪景花園（Hong Kong Garden）華懋大型屋苑，青龍頭背山面海，2 至 3 房盤源。成交呎價、FAQ、即時 WhatsApp 查詢。",
+      "豪景花園（Hong Kong Garden）華懋 1986 至 1991 年分三期落成，28 座約 2,830 伙，實用 358 至 1,382 呎，青龍頭背山面海。放盤成交即查。C-018613。",
     intro:
       "豪景花園（Hong Kong Garden）位於青山公路青龍頭段 100 號，由華懋集團發展，1986 至 1991 年分三期落成，共 28 座、約 2,830 個單位。",
     fit: "注重空間同預算嘅家庭、想用上車價買三房嘅買家、長線收租投資者。",

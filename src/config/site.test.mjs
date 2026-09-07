@@ -502,6 +502,12 @@ test("sitemap lists every indexable public route", () => {
   const declared = [
     readFileSync("src/routes/sitemap[.]xml.ts", "utf8"),
     readFileSync("src/content/seo.ts", "utf8"),
+    // The corridor hub and segment paths are declared here and reach the
+    // sitemap through castlePeakRoadSitemapPaths, which the sitemap spreads.
+    // seo.ts used to carry a duplicate `/castle-peak-road` literal in a
+    // pageSeo entry that was dead in all three fields; removing it left this
+    // source scan unable to see a path that is genuinely listed.
+    readFileSync("src/content/castle-peak-road.ts", "utf8"),
   ].join("\n");
 
   const missing = readdirSync("src/routes")
