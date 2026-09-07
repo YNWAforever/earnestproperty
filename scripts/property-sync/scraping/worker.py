@@ -326,6 +326,32 @@ def parse_28_index(html, deal):
     return list(links.values()), terminal, total
 
 
+def extract_28_company_number(html):
+    """Read the explicit agent-provided number, never the advertisement ID.
+
+    Missing labels are unobserved. An explicit but malformed or conflicting
+    label rejects the detail so it cannot supply identity or absence evidence.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    numbers = set()
+    for node in soup.find_all(string=lambda value: value and "物業編號" in value):
+        if node.parent.name in ("script", "style"):
+            continue
+        label = text(node.parent.get_text(" ", strip=True))
+        if node.parent.name in ("td", "th") and label.rstrip(":") == "物業編號":
+            cells = node.parent.parent.find_all(["td", "th"], recursive=False)
+            if len(cells) != 2 or cells[0] is not node.parent:
+                raise WorkerError("invalid_agency_property_no")
+            label = "物業編號: " + text(cells[1].get_text(" ", strip=True))
+        match = re.fullmatch(r"物業編號\s*:\s*([A-Za-z0-9]{1,32})\s*\(代理提供\)", label)
+        if not match:
+            raise WorkerError("invalid_agency_property_no")
+        numbers.add(match[1].upper())
+    if len(numbers) > 1:
+        raise WorkerError("conflicting_agency_property_no")
+    return next(iter(numbers), None)
+
+
 def parse_28_detail(html, record):
     s = soup_checked(html)
     roots = s.select("[data-listing-detail]")
@@ -435,6 +461,7 @@ def parse_28_detail(html, record):
         "unit": None,
         "phase": None,
         "estate": None,
+        "agency_property_no": extract_28_company_number(html),
         "raw_payload": {"detail_fields": raw, "source_status_labels": sorted(lifecycle)},
     }
     for k, v in raw.items():
@@ -690,7 +717,7 @@ def crawl(source, cfg, fixtures=None):
         "run_id": str(uuid.uuid4()),
         "scope_id": "agent:540" if source == "28hse" else "branches:EPW,EPS,EPT",
         "policy_version": "no-hermes-v2",
-        "parser_version": "python-v2.1" if source == "28hse" else "python-v2.0",
+        "parser_version": "python-v2.2" if source == "28hse" else "python-v2.0",
         "crawl_complete": complete,
         "pages_failed": sum(p["status"] not in ("listings", "terminal") for p in pages),
         "worker_rejected_count": len(rejected),

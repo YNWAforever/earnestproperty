@@ -536,8 +536,8 @@ class DailyGuardRegressionTests(unittest.TestCase):
 
     def test_parser_change_cannot_advance_old_baseline(self):
         cfg,fixtures=w.synthetic_fixture('28hse');p,_=w.crawl('28hse',cfg,fixtures)
-        self.assertEqual(p['meta']['parser_version'],'python-v2.1')
-        previous=json.loads(json.dumps(p)); previous['meta']['parser_version']='python-v2.0';previous['scraped_at']='2020-01-01T00:00:00Z'
+        self.assertEqual(p['meta']['parser_version'],'python-v2.2')
+        previous=json.loads(json.dumps(p)); previous['meta']['parser_version']='python-v2.1';previous['scraped_at']='2020-01-01T00:00:00Z'
         with tempfile.TemporaryDirectory() as t:
             path=Path(t)/'baseline.json'; path.write_bytes(w.frozen(previous));original=path.read_bytes()
             self.assertFalse(w.advance_baseline(path,p,{'success':True,'status':'success','full_snapshot':True,'receipt_id':'r'}))
@@ -562,3 +562,43 @@ class ReplayRetryRegressionTests(unittest.TestCase):
     def test_partial_receipt_never_advances_baseline(self):
         result,_,_=self.replay([{"success":True,"status":"partial_success","full_snapshot":False,"receipt_id":"partial"}])
         self.assertFalse(result["baseline_advanced"])
+
+
+class CompanyNumberTests(unittest.TestCase):
+    def extract(self, html):
+        parser = getattr(w, "extract_28_company_number", None)
+        self.assertIsNotNone(parser, "explicit company-number extraction is required")
+        return parser(html)
+
+    def test_verified_label_and_mixed_case_normalization(self):
+        for label in ["物業編號: C020617 (代理提供)", "物業編號： c020617 （代理提供）"]:
+            self.assertEqual(self.extract('<div class="sub header">'+label+'</div>'), "C020617")
+
+    def test_explicit_table_label_is_supported(self):
+        self.assertEqual(self.extract("<table><tr><td>物業編號</td><td>C003097 (代理提供)</td></tr></table>"), "C003097")
+
+    def test_absent_label_never_guesses_ad_id_or_arbitrary_text(self):
+        self.assertIsNone(self.extract('<h1>Listing #4003829</h1><p>C020617</p>'))
+
+    def test_malformed_and_conflicting_labels_fail_closed(self):
+        for label in ["物業編號: C020617", "物業編號: C02-0617 (代理提供)", "物業編號: C020617/C020618 (代理提供)", "物業編號: (代理提供)", "物業編號: C020617 (平台提供)"]:
+            with self.subTest(label=label), self.assertRaisesRegex(w.WorkerError, "agency_property_no"):
+                self.extract('<div class="sub header">'+label+'</div>')
+        with self.assertRaisesRegex(w.WorkerError, "agency_property_no"):
+            self.extract('<div>物業編號: C020617 (代理提供)</div><div>物業編號: C020618 (代理提供)</div>')
+
+    def test_equal_duplicate_labels_are_consistent(self):
+        self.assertEqual(self.extract('<div>物業編號: C020617 (代理提供)</div>'*2), "C020617")
+
+    def test_captured_structure_wires_observation_without_changing_ad_identity(self):
+        html=(Path(__file__).parent/'fixtures'/'28hse-company-number-structure.html').read_text(encoding='utf-8')
+        for ident in ['4003829', '4003830']:
+            record=w.parse_28_detail(html.replace('4003829',ident), {'property_id':ident,'deal_type':'sale'})
+            self.assertEqual(record.get('agency_property_no'), 'C020617')
+            self.assertEqual(record['property_id'], ident)
+            self.assertNotIn('target_property_id', record)
+
+    def test_propertyhk_parser_version_unchanged(self):
+        cfg,fixtures=w.synthetic_fixture('propertyhk')
+        payload,_=w.crawl('propertyhk',cfg,fixtures)
+        self.assertEqual(payload['meta']['parser_version'], 'python-v2.0')
