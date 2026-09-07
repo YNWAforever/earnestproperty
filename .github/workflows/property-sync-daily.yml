@@ -49,7 +49,7 @@ jobs:
           python-version: "3.14"
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
       - name: Validate operator gates and private evidence destination
         shell: bash
@@ -157,3 +157,4 @@ jobs:
         run: |
           echo "Daily agent:540 result: ${{ job.status }}. Evidence reference: $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT." >> "$GITHUB_STEP_SUMMARY"
           echo 'See restricted request and receipt artifacts. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
+

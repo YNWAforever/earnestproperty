@@ -1,6 +1,6 @@
 # Daily 28hse collection operations
 
-The checked-in workflow is inactive until repository variables are deliberately configured. It collects agent:540 at 02:17 Hong Kong time (18:17 UTC) on a standard Linux runner using Python 3.14 and Node 22. It does not run the application build, AI or a browser. Property.hk remains disabled.
+The checked-in workflow is inactive until repository variables are deliberately configured. It collects agent:540 at 02:17 Hong Kong time (18:17 UTC) on a standard Linux runner using Python 3.14 and Node 24. It does not run the application build, AI or a browser. Property.hk remains disabled.
 
 ## Activation prerequisites
 
@@ -49,3 +49,4 @@ For apply, configure PROPERTY_SYNC_EXPECTED_DATABASE_HOST to the verified direct
 The company rule requires approved=true, version=company-number-v1 and approved_by. Its optional legacy_field_ownership contains explicitly reviewed per-property field baselines reconstructed from original source evidence; only exact current matches without staff overrides or existing field ownership may be adopted. Never seed these baselines blindly from current production values. Verified estate_mappings use exact source estate labels with existing estate IDs/district slugs; unknown mappings stage new observations rather than inventing locations.
 
 The v2 migration was applied to production on 2026-09-07 with all1,067 properties and public memberships unchanged. Source writer activation is a distinct gate: publish_enabled is the ingestion write permission, not permission to make new draft inventory public. The cloned-production first-import rehearsal remains blocked by automatic approval review pending explicit authorization of this write permission. Do not enable the daily apply until the rehearsal, first receipt/baseline and runner checks succeed.
+

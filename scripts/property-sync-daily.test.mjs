@@ -12,7 +12,7 @@ test("daily workflow is gated, serialized, immutable and narrowly scoped", () =>
     "= python-v2.2",
     "PROPERTY_SYNC_EXPECTED_BRANCH",
     'python-version: "3.14"',
-    'node-version: "22"',
+    'node-version: "24"',
     "--dry-run",
     "replay_28hse_sync.py",
     "retention-days: 7",
@@ -74,3 +74,4 @@ test("accepted asset names derive from immutable snapshot chronology", () => {
   assert.match(y, /tar -czf "\$asset" baseline/);
   assert.ok(!y.includes('tar -czf "accepted-$GITHUB_RUN_ID'));
 });
+
