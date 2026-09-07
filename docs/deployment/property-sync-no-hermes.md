@@ -78,7 +78,7 @@ Server policy rows are an independent authority in `mls_ingestion_policies`:
 | config.absence_enabled                                                  | False by default; only approved complete 28hse runs can infer absence. Property.hk absence is always off.                                                                                                                                                                                                                          |
 | config.public_contacts_enabled                                          | Strict boolean true required to expose a fresh source contact separately from staff profiles; default off                                                                                                                                                                                                                          |
 
-The shipped 28hse parser emits `python-v2.1`; the unchanged Property.hk parser emits `python-v2.0`. After the schema is approved and applied, these optional policy rows remain disabled:
+The shipped 28hse parser emits `python-v2.2`; the unchanged Property.hk parser emits `python-v2.0`. After the schema is approved and applied, these optional policy rows remain disabled:
 
 ```sql
 BEGIN;
@@ -86,7 +86,7 @@ SELECT pg_advisory_xact_lock(hashtext('earnestproperty:mls-sync'));
 INSERT INTO mls_ingestion_policies
   (source, scope_id, policy_version, parser_version, id_scope)
 VALUES
-  ('28hse_agent_540', 'agent:540', 'no-hermes-v2', 'python-v2.1', 'global'),
+  ('28hse_agent_540', 'agent:540', 'no-hermes-v2', 'python-v2.2', 'global'),
   ('propertyhk', 'branches:EPW,EPS,EPT', 'no-hermes-v2', 'python-v2.0', NULL)
 ON CONFLICT DO NOTHING;
 COMMIT;

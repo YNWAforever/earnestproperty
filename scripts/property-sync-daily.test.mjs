@@ -9,6 +9,7 @@ test("daily workflow is gated, serialized, immutable and narrowly scoped", () =>
     "cancel-in-progress: false",
     "PROPERTY_SYNC_DAILY_ENABLED",
     "PROPERTY_SYNC_POLICY_APPROVED",
+    "= python-v2.2",
     "PROPERTY_SYNC_EXPECTED_BRANCH",
     'python-version: "3.14"',
     'node-version: "22"',
@@ -38,6 +39,10 @@ test("database credential exists only on the gated apply step", async () => {
   const steps = workflow.jobs.daily.steps;
   const apply = steps.filter((step) => step.env?.DATABASE_URL_UNPOOLED);
   assert.equal(apply.length, 1);
+  assert.ok(
+    apply[0].run.indexOf("verify-daily-target.mjs") < apply[0].run.indexOf("replay_28hse_sync.py"),
+  );
+  assert.ok(apply[0].env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
   assert.equal(apply[0].if, "endsWith(env.MODE, 'apply')");
   assert.match(
     apply[0].run,

@@ -60,7 +60,7 @@ jobs:
           gh release view property-sync-evidence >/dev/null
           case "$MODE" in
             shadow|replay-shadow) ;;
-            apply|replay-apply) test "$APPLY_ENABLED" = true; test "$POLICY_APPROVED" = python-v2.1 ;;
+            apply|replay-apply) test "$APPLY_ENABLED" = true; test "$POLICY_APPROVED" = python-v2.2 ;;
             *) exit 1 ;;
           esac
       - name: Install collection and bridge dependencies
@@ -114,7 +114,10 @@ jobs:
         if: endsWith(env.MODE, 'apply')
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
-        run: python scripts/property-sync/replay_28hse_sync.py --payload "$PAYLOAD" --root daily-output --apply > replay-result.json
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: |
+          node scripts/mls/verify-daily-target.mjs
+          python scripts/property-sync/replay_28hse_sync.py --payload "$PAYLOAD" --root daily-output --apply > replay-result.json
       - name: Pin accepted full baseline
         if: endsWith(env.MODE, 'apply')
         shell: bash

@@ -15,7 +15,7 @@ def validate_context(scope, ref, branch):
 
 
 def validate_request(data):
-    if data.get('source') != '28hse' or data.get('meta', {}).get('scope_id') != 'agent:540' or data.get('meta', {}).get('parser_version') != 'python-v2.1':
+    if data.get('source') != '28hse' or data.get('meta', {}).get('scope_id') != 'agent:540' or data.get('meta', {}).get('parser_version') != 'python-v2.2':
         raise ValueError('Incompatible source, scope or parser')
 
 

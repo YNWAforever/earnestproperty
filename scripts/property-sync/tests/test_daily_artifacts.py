@@ -8,7 +8,7 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 def payload():
-    return {'source':'28hse','scraped_at':'2026-09-07T00:00:00Z','meta':{'scope_id':'agent:540','parser_version':'python-v2.1'},'listings':[]}
+    return {'source':'28hse','scraped_at':'2026-09-07T00:00:00Z','meta':{'scope_id':'agent:540','parser_version':'python-v2.2'},'listings':[]}
 
 def test_scope_and_branch_fail_closed():
     m.validate_context('agent:540','refs/heads/main','main')
@@ -85,3 +85,9 @@ def test_compact_archive_retains_transient_then_success_attempts(tmp_path):
         assert bundle.extractfile('replays/run/attempts/1.json').read()==first
         assert bundle.extractfile('replays/run/attempts/2.json').read()==second
         assert bundle.extractfile('replays/run/receipt.json').read()==second
+
+
+def test_company_number_parser_baseline_boundary():
+    m.validate_request(payload())
+    old = payload(); old['meta']['parser_version'] = 'python-v2.1'
+    with pytest.raises(ValueError): m.validate_request(old)
