@@ -1,3 +1,9 @@
+import {
+  companyPolicy,
+  companyRelationship,
+  groupNewCompanyProperty,
+  adoptCompanyFields,
+} from "./company-number.mjs";
 import { randomUUID } from "node:crypto";
 import {
   decodeSnapshot,
@@ -35,8 +41,18 @@ const same = (a, b, numeric = false) =>
     ? normalizeDecimal(a) === normalizeDecimal(b)
     : canonicalJson(a ?? null) === canonicalJson(b ?? null);
 const json = (value) => JSON.stringify(value ?? null);
-function districtSlug(raw, config) {
-  const value = config?.district_slugs?.[raw];
+function estateMapping(estate, config) {
+  const mapped = config?.estate_mappings?.[estate];
+  return mapped &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      mapped.estate_id ?? "",
+    ) &&
+    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(mapped.district_slug ?? "")
+    ? mapped
+    : null;
+}
+function districtSlug(raw, config, estate) {
+  const value = estateMapping(estate, config)?.district_slug ?? config?.district_slugs?.[raw];
   return typeof value === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) ? value : null;
 }
 function verifiedOptions(policy) {
@@ -107,6 +123,7 @@ export async function applyIngestion(client, payload, options = {}) {
       throw new SnapshotError("publishing_disabled", 503);
     if (policy.parser_version !== batch.parserVersion)
       throw new SnapshotError("parser_policy_mismatch", 503);
+    const companyRule = companyPolicy(policy);
     batch = decodeSnapshot(payload, verifiedOptions(policy));
     const unverified = batch.records.filter((record) => !record.urlIdentityVerified);
     if (unverified.length) {
@@ -281,7 +298,17 @@ export async function applyIngestion(client, payload, options = {}) {
           reason: "source_link_inconsistent",
           holdProjection: true,
         };
-      const mappedDistrict = districtSlug(record.fields.district, policy.config);
+      relation = await companyRelationship(q, record, existing, relation, companyRule);
+      const linkedProperty = relation.propertyId
+        ? (
+            await q("SELECT estate_id,district_slug FROM properties WHERE id=$1", [
+              relation.propertyId,
+            ])
+          )[0]
+        : null;
+      const mappedDistrict =
+        linkedProperty?.district_slug ??
+        districtSlug(record.fields.district, policy.config, record.fields.estate);
       if (!mappedDistrict) record.publicationReasons.push("district_mapping_unverified");
       const observationId = randomUUID();
       await q(
@@ -302,7 +329,7 @@ export async function applyIngestion(client, payload, options = {}) {
             sourceStatusReason: record.sourceStatusReason,
             raw: record.raw,
             sourceOccurrences: record.sourceOccurrences,
-            identity: record.identity,
+            identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             publicationReasons: record.publicationReasons,
             holdProjection: relation.holdProjection,
           }),
@@ -324,10 +351,20 @@ export async function applyIngestion(client, payload, options = {}) {
         const id = randomUUID();
         const p = (
           await q(
-            "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,ingestion_owner,ingestion_identity_policy) VALUES($1,$2,$3,$4,$5,'draft',$6,$6) RETURNING *",
-            [id, "SYNC-" + id, record.fields.title, record.dealType, mappedDistrict, POLICY],
+            "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,ingestion_owner,ingestion_identity_policy,canonical_property_no,estate_id) VALUES($1,$2,$3,$4,$5,'draft',$6,$6,$7,$8) RETURNING *",
+            [
+              id,
+              "SYNC-" + id,
+              record.fields.title,
+              record.dealType,
+              mappedDistrict,
+              POLICY,
+              relation.companyNumber ?? null,
+              estateMapping(record.fields.estate, policy.config)?.estate_id ?? null,
+            ],
           )
         )[0];
+        await groupNewCompanyProperty(q, p, relation);
         relation.propertyId = p.id;
         newProperties.add(p.id);
         await event(p.id, "new", null, null, { status: p.status }, observationId, "source_id_v2");
@@ -347,7 +384,7 @@ export async function applyIngestion(client, payload, options = {}) {
           {
             previousIdentity: state?.raw_identity ?? null,
             previousUnitKey: state?.unit_key ?? null,
-            identity: record.identity,
+            identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             candidates: relation.candidates ?? [],
             reasons: record.publicationReasons,
           },
@@ -370,6 +407,9 @@ export async function applyIngestion(client, payload, options = {}) {
               ? state.raw_identity
               : {
                   ...state?.raw_identity,
+                  ...(record.agencyPropertyNo
+                    ? { agency_property_no: record.agencyPropertyNo }
+                    : {}),
                   ...Object.fromEntries(
                     Object.entries(record.identity).filter(
                       ([, value]) => value !== null && value !== "",
@@ -441,7 +481,36 @@ export async function applyIngestion(client, payload, options = {}) {
       );
       // Any changed source identity holds the entire projection until operator review.
       if (sources.some((s) => s.hold_projection === "true")) continue;
+      if (property.status === "draft") {
+        const override = (
+          await q(
+            "SELECT o.shared || CASE p.deal_type::text WHEN 'sale' THEN o.sale ELSE o.rent END AS patch FROM admin_property_overrides o JOIN property_public_members m ON m.public_listing_no=o.property_no JOIN properties p ON p.id=m.property_id WHERE p.id=$1",
+            [propertyId],
+          )
+        )[0]?.patch;
+        if (override?.status && override.status !== "draft") {
+          await review(
+            {
+              source: sources[0].source,
+              externalId: sources[0].external_listing_id,
+              dealType: sources[0].deal_type,
+            },
+            "draft_status_override_requires_review",
+            { status: override.status },
+            sources[0].observation_id,
+          );
+          continue;
+        }
+      }
       const selected = selectSourceFields(sources);
+      if (!selected.ambiguous && companyRule && !newProperties.has(propertyId))
+        await adoptCompanyFields(
+          q,
+          property,
+          companyRule,
+          [...Object.values(MAP), "status"],
+          sources[0].observation_id,
+        );
       const fields = await q("SELECT * FROM property_sync_fields WHERE property_id=$1", [
         propertyId,
       ]);
@@ -492,7 +561,9 @@ export async function applyIngestion(client, payload, options = {}) {
         let value = rawValue;
         if (field === "district") {
           const source = sources.find((s) => s.source === selected.provenance[field].source);
-          value = districtSlug(rawValue, source?.policy_config);
+          value =
+            property.district_slug ??
+            districtSlug(rawValue, source?.policy_config, source?.fields?.estate);
           if (!value) {
             await review(
               reviewRecord,
@@ -539,7 +610,10 @@ export async function applyIngestion(client, payload, options = {}) {
           continue;
         }
         const numeric = NUMBER_FIELDS.has(column);
-        if (owned?.active_override) {
+        if (
+          owned?.active_override ||
+          (owned && (owned.selection_reason === "manual_override" || !owned.winning_observation_id))
+        ) {
           await review(
             reviewRecord,
             "manual_override",
@@ -591,6 +665,8 @@ export async function applyIngestion(client, payload, options = {}) {
         )[0];
         if (
           !owned?.active_override &&
+          owned?.selection_reason !== "manual_override" &&
+          owned?.winning_observation_id &&
           owned &&
           same(property.status, owned.last_published_value) &&
           (selected.lifecycle === "inactive" ||

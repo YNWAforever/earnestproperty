@@ -203,6 +203,12 @@ export function decodeSnapshot(input, options = {}) {
         (source === "propertyhk" && !memberships.includes(r.branch_code))
       )
         throw new SnapshotError("invalid_memberships");
+      const agencyPropertyNo = r.agency_property_no ?? null;
+      if (
+        agencyPropertyNo !== null &&
+        (typeof agencyPropertyNo !== "string" || !/^[A-Z][0-9]{6}$/.test(agencyPropertyNo))
+      )
+        throw new SnapshotError("invalid_agency_property_no");
       const identity = exactUnitIdentity(r, options.aliases);
       const key = JSON.stringify([source, externalId, r.deal_type]);
       const record = {
@@ -215,6 +221,7 @@ export function decodeSnapshot(input, options = {}) {
         sourceStatus,
         sourceStatusReason,
         propertyNo: null,
+        agencyPropertyNo,
         identity,
         unitKey: urlIdentityVerified ? identity.key : null,
         sourceIdentityValid: true,
@@ -246,6 +253,7 @@ export function decodeSnapshot(input, options = {}) {
         index,
       };
       const fingerprint = hashPayload({
+        agencyPropertyNo,
         source,
         externalId,
         dealType: r.deal_type,
