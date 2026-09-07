@@ -19,6 +19,7 @@ export const sharedPropertySchema = z.object({
 export type SharedPropertyFields = z.infer<typeof sharedPropertySchema>;
 export type ManagedOffering = {
   id: string;
+  title: string;
   dealType: "sale" | "rent";
   price: number | null;
   rent: number | null;
@@ -34,6 +35,7 @@ export type ManagedPropertySummary = {
   estateName: string | null;
   image: string | null;
   saleableArea: number | null;
+  updatedAt: string | null;
   offerings: { sale: ManagedOffering | null; rent: ManagedOffering | null };
   version: string;
   editableShared: boolean;
@@ -62,6 +64,10 @@ export const propertyGroupFiltersSchema = z
     deal: z.enum(["all", "sale", "rent"]).optional(),
     estateId: z.string().uuid().optional(),
     agentId: z.string().uuid().optional(),
+    sort: z
+      .enum(["updated", "propertyNo", "estate", "area", "salePrice", "rentPrice"])
+      .default("updated"),
+    direction: z.enum(["asc", "desc"]).default("desc"),
     page: z.number().int().min(1).default(1),
     pageSize: z.number().int().min(1).max(100).default(30),
   })
