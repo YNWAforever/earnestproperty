@@ -131,15 +131,18 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: pageSeo.home.title },
       { name: "description", content: pageSeo.home.description },
-      { property: "og:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
+      // Was four hardcoded strings whose description was 58 units against the
+      // page's own 131 -- so the shared card was less than half the snippet,
+      // and it was copy pageSeo did not own.
+      { property: "og:title", content: pageSeo.home.title },
       {
         property: "og:description",
-        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
+        content: pageSeo.home.description,
       },
-      { name: "twitter:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
+      { name: "twitter:title", content: pageSeo.home.title },
       {
         name: "twitter:description",
-        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
+        content: pageSeo.home.description,
       },
       { property: "og:image", content: HERO_OG_IMAGE },
       { name: "twitter:image", content: HERO_OG_IMAGE },

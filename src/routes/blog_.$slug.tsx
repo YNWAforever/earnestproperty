@@ -13,7 +13,13 @@ import { PageHero } from "@/components/site/PageHero";
 import { SiteLink } from "@/components/site/SiteLink";
 import { blogArticles, EDITORIAL_AUTHOR, type BlogArticleSection } from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
-import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
+import { SITE_URL, authored, canonicalLink } from "@/content/seo";
+import {
+  DESCRIPTION_MAX_UNITS,
+  TITLE_MAX_UNITS,
+  displayWidth,
+  truncateToWidth,
+} from "@/content/seo-budget.js";
 import { absoluteUrl, articleSchema } from "@/lib/schema";
 import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
@@ -27,6 +33,11 @@ type ArticleDetail = {
   cover_image: string | null;
   category: string | null;
   reading_minutes: number | null;
+  /** Hand-written per-article SEO copy from the admin CMS. Collected since
+   * 20260623090000 and never selected until now, so every authored value was
+   * discarded; head() prefers them over the derived pair. */
+  seo_title?: string | null;
+  seo_description?: string | null;
   published_at: string;
   updated_at?: string | null;
   author: string;
@@ -106,6 +117,8 @@ export const Route = createFileRoute("/blog_/$slug")({
           cover_image: dbArticle?.cover_image ?? null,
           category: dbArticle?.category ?? registryArticle.category,
           reading_minutes: dbArticle?.reading_minutes ?? registryArticle.readingMinutes,
+          seo_title: dbArticle?.seo_title ?? null,
+          seo_description: dbArticle?.seo_description ?? null,
           published_at: dbArticle?.published_at ?? "2026-06-22T00:00:00.000Z",
           updated_at: dbArticle?.updated_at ?? null,
           author: registryArticle.author,
@@ -123,6 +136,8 @@ export const Route = createFileRoute("/blog_/$slug")({
             cover_image: dbArticle.cover_image,
             category: dbArticle.category,
             reading_minutes: dbArticle.reading_minutes,
+            seo_title: dbArticle.seo_title,
+            seo_description: dbArticle.seo_description,
             published_at: dbArticle.published_at,
             updated_at: dbArticle.updated_at,
             author: EDITORIAL_AUTHOR,
@@ -143,9 +158,42 @@ export const Route = createFileRoute("/blog_/$slug")({
   },
   head: ({ loaderData }) => {
     const article = loaderData?.article;
-    if (!article) return { meta: [{ title: `文章不存在｜${SITE_NAME}` }] };
-    const title = `${article.title}｜${SITE_NAME}`;
-    const description = (article.excerpt ?? "深井 / 青山公路 / 汀九樓市分析文章。").slice(0, 155);
+    // The loader throws notFound() for an unknown slug, and this head still
+    // renders over the 404 body. It used to emit a title and nothing else, so
+    // a dead blog link unfurled with the homepage description and card, and
+    // the URL stayed indexable.
+    if (!article) {
+      const title = `找不到這篇文章｜晉誠地產 Blog`;
+      const description =
+        "呢篇文章可能已移除或連結已更新。返回晉誠地產 Blog，睇深井、青山公路及汀九最新樓市分析、屋苑比較同買樓攻略。C-018613。";
+      return {
+        meta: [
+          { title },
+          { name: "description", content: description },
+          { property: "og:title", content: title },
+          { property: "og:description", content: description },
+          { name: "twitter:title", content: title },
+          { name: "twitter:description", content: description },
+          { name: "robots", content: "noindex,follow" },
+        ],
+        links: [],
+      };
+    }
+    // `晉誠地產 Earnest Property` is 27 display units against a 60-unit title
+    // budget, so appending it pushed both live articles past the cap. Every
+    // other page on the site uses the 10-unit 晉誠地產 suffix.
+    const headline = authored(article.seo_title) ?? authored(article.title) ?? "深井樓市分析";
+    const title =
+      truncateToWidth(headline, TITLE_MAX_UNITS - displayWidth("｜晉誠地產")) + "｜晉誠地產";
+    // Was `.slice(0, 155)` -- 155 CJK characters is ~310 display units, so it
+    // enforced nothing and cut mid-clause when it did fire. An empty-string
+    // excerpt also won the `??`, shipping an empty description meta.
+    const description = truncateToWidth(
+      authored(article.seo_description) ??
+        authored(article.excerpt) ??
+        "晉誠地產深井、青山公路及汀九樓市分析：屋苑比較、校網交通同成交走勢，由紮根深井嘅持牌代理團隊撰寫。C-018613。",
+      DESCRIPTION_MAX_UNITS,
+    );
     const image = absoluteUrl(article.cover_image ?? "/og-cover.jpg");
     return {
       meta: [

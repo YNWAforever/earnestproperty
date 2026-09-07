@@ -14,7 +14,8 @@ import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { estateRegistry } from "@/content/estate-registry";
-import { SITE_NAME, SITE_URL, canonicalLink } from "@/content/seo";
+import { SITE_URL, canonicalLink } from "@/content/seo";
+import { agentSeo } from "@/lib/agent-seo";
 import { fetchNeonBranches, fetchNeonPublicAgentProfileBySlug } from "@/lib/neon/public-data";
 import type { NeonBranchRecord, NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 import { agentBranchName, agentContactNote, resolveAgentContact } from "@/lib/agent-directory";
@@ -38,9 +39,20 @@ export const Route = createFileRoute("/agents_/$slug")({
   },
   head: ({ loaderData }) => {
     const profile = loaderData?.profile;
-    const name = profile?.name_zh || profile?.name_en || "專業代理";
-    const title = `${name}｜${SITE_NAME}`;
-    const description = `${name} ${profile?.job_title ?? "晉誠地產專業代理"}，直接聯絡了解深井、青山公路、汀九放盤、買樓及租樓服務。`;
+    // Was the agent name plus the full site name, then a name + job-title
+    // stencil with an identical tail on every profile; `job_title ?? "…"` let a blank
+    // column win and leave a stray space. The branch, licence, specialties and
+    // served estates the loader already holds now reach the head too --
+    // see src/lib/agent-seo.ts.
+    const { title, description } = agentSeo({
+      name_zh: profile?.name_zh,
+      name_en: profile?.name_en,
+      job_title: profile?.job_title,
+      licence_no: profile?.licence_no,
+      branch_name: profile ? agentBranchName(profile, loaderData?.branches ?? []) : null,
+      specialties: profile?.specialties,
+      served_estate_slugs: profile?.served_estate_slugs,
+    });
     return {
       meta: [
         { title },

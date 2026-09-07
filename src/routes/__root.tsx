@@ -91,6 +91,14 @@ export const Route = createRootRoute({
       { name: "author", content: SITE_NAME },
       { property: "og:type", content: "website" },
       { property: "og:locale", content: "zh_HK" },
+      // The site emitted neither of these anywhere, so every shared card was
+      // missing the two properties that say which brand it belongs to and
+      // which URL it resolves to. og:site_name is a constant; og:url is the
+      // production origin, and each route's own rel=canonical remains the
+      // per-page signal -- a root-level og:url must not claim to be the
+      // page's own address, so it names the site root only.
+      { property: "og:site_name", content: SITE_NAME },
+      { property: "og:url", content: SITE_URL },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:title", content: pageSeo.home.title },
       { name: "twitter:title", content: pageSeo.home.title },

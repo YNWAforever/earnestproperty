@@ -471,3 +471,77 @@ export function listingSeoDescription(input: ListingSeoInput): string {
 export function listingSeo(input: ListingSeoInput): { title: string; description: string } {
   return { title: listingSeoTitle(input), description: listingSeoDescription(input) };
 }
+
+/**
+ * The label for a district slug, or null when the slug is not one this site
+ * recognises. Exported for /listings, whose filter-aware head needs the same
+ * mapping and the same "never print an unrecognised value" rule.
+ */
+export function districtLabelForSlug(slug: string | null | undefined): string | null {
+  const key = text(slug);
+  return key ? (DISTRICT_LABELS[key] ?? null) : null;
+}
+
+export type ListingSearchSeoInput = {
+  deal: "all" | "sale" | "rent";
+  districtSlug?: string | null;
+  estateName?: string | null;
+  bedrooms?: number | null;
+  page: number;
+  /** The filtered result count, as the loader reports it. */
+  total: number;
+};
+
+/**
+ * SEO 標題 / SEO 描述 for a `/listings` result page.
+ *
+ * `/listings` validates ten search params and served exactly one title and one
+ * description for the whole space -- only `page` touched the title, and
+ * nothing at all touched the description. Every filter combination is a
+ * separate crawlable URL, so that was one snippet spread across a large URL
+ * space, and a zero-result page kept the full 「買樓租樓全部真盤」 promise
+ * while being noindexed.
+ *
+ * Everything here comes from the loader's own facts: the deal type, the
+ * resolved district label, the estate's real name, the bedroom filter, the
+ * page number and the result count.
+ */
+export function listingSearchSeo(input: ListingSearchSeoInput): {
+  title: string;
+  description: string;
+} {
+  const place =
+    text(input.estateName) ?? districtLabelForSlug(input.districtSlug) ?? "深井 青山公路 汀九";
+  const bedrooms = positive(input.bedrooms);
+  const bedLabel =
+    input.bedrooms === 0
+      ? "開放式"
+      : bedrooms === 4
+        ? // The filter is capped at 4 and means "4 or more" (see the chip label
+          // in listings.tsx), so the copy must not promise exactly four.
+          "4 房以上"
+        : bedrooms
+          ? `${bedrooms} 房`
+          : "";
+  const dealLabel = input.deal === "sale" ? "售盤" : input.deal === "rent" ? "租盤" : "放盤";
+  const subject = `${place}${bedLabel ? ` ${bedLabel}` : ""}${dealLabel}`;
+  const pageLabel = input.page > 1 ? `（第 ${input.page} 頁）` : "";
+
+  if (input.total <= 0) {
+    return {
+      title: assembleTitle(subject, ["暫無符合條件放盤"]),
+      description: `暫時未有${subject}符合條件。放寬價錢、房數或地區再搜尋，或 WhatsApp 晉誠地產持牌代理，有新盤即通知你。C-018613。`,
+    };
+  }
+
+  return {
+    title: assembleTitle(subject, [
+      `${input.total} 個真盤`,
+      pageLabel ? pageLabel.replace(/[（）]/g, "") : null,
+    ]),
+    description: truncateToWidth(
+      `${subject}共 ${input.total} 個${pageLabel}，逐個列出實用面積、叫價及實呎，海景、連車位、連租約收租盤齊全。WhatsApp 即時預約睇樓。晉誠地產 ${LICENCE}。`,
+      DESCRIPTION_MAX_UNITS,
+    ),
+  };
+}

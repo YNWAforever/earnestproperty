@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
 import { displayWidth, DESCRIPTION_MAX_UNITS, TITLE_MAX_UNITS } from "@/content/seo-budget.js";
-import { listingSeo, listingSeoDescription, listingSeoTitle } from "./listing-seo";
+import {
+  listingSearchSeo,
+  listingSeo,
+  listingSeoDescription,
+  listingSeoTitle,
+} from "./listing-seo";
 import type { ListingSeoInput } from "./listing-seo";
 
 const richUnit: ListingSeoInput = {
@@ -364,5 +369,94 @@ describe("facts the generator must not get wrong", () => {
   test("does not repeat 同屋苑成交紀錄 in both the context line and the CTA", () => {
     const description = listingSeoDescription(bareUnit);
     expect(description.match(/成交紀錄/g)?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("listingSearchSeo", () => {
+  test("the unfiltered first page reads as the whole-corridor search", () => {
+    const { title, description } = listingSearchSeo({ deal: "all", page: 1, total: 320 });
+    expect(title).toBe("深井 青山公路 汀九放盤｜320 個真盤｜晉誠地產");
+    expect(description).toContain("共 320 個");
+    expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
+    expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
+  });
+
+  test("every filter dimension changes both strings", () => {
+    // /listings validates ten search params and served one title and one
+    // description for the entire space; only `page` touched the title.
+    const base = { deal: "all" as const, page: 1, total: 40 };
+    const heads = [
+      listingSearchSeo(base),
+      listingSearchSeo({ ...base, deal: "sale" }),
+      listingSearchSeo({ ...base, deal: "rent" }),
+      listingSearchSeo({ ...base, districtSlug: "sham-tseng" }),
+      listingSearchSeo({ ...base, estateName: "碧堤半島" }),
+      listingSearchSeo({ ...base, bedrooms: 3 }),
+      listingSearchSeo({ ...base, page: 2 }),
+      listingSearchSeo({ ...base, total: 41 }),
+    ];
+    expect(new Set(heads.map((h) => h.title)).size).toBe(heads.length);
+    expect(new Set(heads.map((h) => h.description)).size).toBe(heads.length);
+    for (const { title, description } of heads) {
+      expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
+      expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
+    }
+  });
+
+  test("a zero-result page stops promising listings it does not have", () => {
+    const { title, description } = listingSearchSeo({
+      deal: "rent",
+      districtSlug: "sham-tseng",
+      bedrooms: 4,
+      page: 1,
+      total: 0,
+    });
+    expect(title).toContain("暫無符合條件放盤");
+    expect(title).not.toContain("個真盤");
+    expect(description).toContain("暫時未有深井 4 房以上租盤");
+    expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
+  });
+
+  test("the 4-bedroom filter means four or more, and says so", () => {
+    // The chip in listings.tsx reads 「4 房或以上」; a title promising exactly
+    // four bedrooms would misdescribe the result set.
+    expect(listingSearchSeo({ deal: "all", bedrooms: 4, page: 1, total: 9 }).title).toContain(
+      "4 房以上",
+    );
+    expect(listingSearchSeo({ deal: "all", bedrooms: 0, page: 1, total: 9 }).title).toContain(
+      "開放式",
+    );
+  });
+
+  test("names the estate over the district when both are filtered", () => {
+    const { title } = listingSearchSeo({
+      deal: "sale",
+      districtSlug: "sham-tseng",
+      estateName: "浪翠園",
+      page: 1,
+      total: 12,
+    });
+    expect(title).toContain("浪翠園");
+  });
+
+  test("never prints a district slug it does not recognise", () => {
+    const { title } = listingSearchSeo({
+      deal: "all",
+      districtSlug: "大欖涌, 屯門",
+      page: 1,
+      total: 5,
+    });
+    expect(title).not.toContain("屯門");
+    expect(title).toContain("深井 青山公路 汀九");
+  });
+
+  test("a paginated page differs from page one in both strings", () => {
+    const one = listingSearchSeo({ deal: "all", page: 1, total: 46 });
+    const two = listingSearchSeo({ deal: "all", page: 2, total: 46 });
+    expect(two.title).not.toBe(one.title);
+    // Paginated pages self-canonicalise, so they are indexed independently and
+    // must not serve page one's description verbatim.
+    expect(two.description).not.toBe(one.description);
+    expect(two.description).toContain("第 2 頁");
   });
 });

@@ -1363,6 +1363,12 @@ export async function fetchPublishedArticles() {
     cover_image: stringOrNull(row.cover_image),
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
+    // The admin CMS has collected these two per article since
+    // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
+    // them -- so every hand-written article SEO 標題/描述 was written to the
+    // database and silently discarded. blog_.$slug.tsx's head() reads them now.
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
     updated_at: dateOrNull(row.updated_at),
   }));
@@ -1371,7 +1377,8 @@ export async function fetchPublishedArticles() {
 export async function fetchArticleBySlug(input: { slug: string }) {
   const rows = await sql().query(
     `
-    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at, updated_at
+    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes,
+      published_at, updated_at, seo_title, seo_description
     FROM articles
     WHERE slug = $1 AND published = true
     LIMIT 1
@@ -1388,6 +1395,12 @@ export async function fetchArticleBySlug(input: { slug: string }) {
     cover_image: stringOrNull(row.cover_image),
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
+    // The admin CMS has collected these two per article since
+    // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
+    // them -- so every hand-written article SEO 標題/描述 was written to the
+    // database and silently discarded. blog_.$slug.tsx's head() reads them now.
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
     updated_at: dateOrNull(row.updated_at),
   };

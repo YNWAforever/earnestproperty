@@ -100,6 +100,10 @@ test("propertyEnquiryMessage carries deal-aware price and does not repeat the li
 });
 
 const files = [
+  // /videos, /transactions, /estate-reviews and the homepage's og pair read
+  // their title/description from pageSeo now, instead of hardcoding each
+  // string three times per route, so the copy this test pins lives here too.
+  "src/content/seo.ts",
   "src/config/site.ts",
   "src/config/site-branches.js",
   "src/components/site/SiteHeader.tsx",

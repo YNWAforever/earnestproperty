@@ -45,6 +45,7 @@ import { Container } from "@/components/layout/Container";
 import { PageHero } from "@/components/site/PageHero";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
+import { listingSearchSeo } from "@/lib/listing-seo";
 import { sanitizeListingText } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
 import { buildContext, track } from "@/lib/analytics/events";
@@ -109,26 +110,55 @@ export const Route = createFileRoute("/listings")({
       }),
       fetchEstateOptions(),
     ]);
-    return { ...result, estates, page: deps.page };
+    return {
+      ...result,
+      estates,
+      page: deps.page,
+      // head() receives loaderData, not the search params, so the facts its
+      // title/description need travel with the result. The estate's real name
+      // is resolved here because `estates` is already fetched.
+      seoFilters: {
+        deal: deps.deal,
+        districtSlug: deps.district === "all" ? null : (deps.district ?? null),
+        estateName:
+          estates.find((estate: { slug: string }) => estate.slug === deps.estate)?.name_zh ?? null,
+        bedrooms: deps.bedrooms ?? null,
+      },
+    };
   },
   head: ({ loaderData }) => {
     const page = loaderData?.page ?? 1;
-    const total = loaderData?.total ?? 0;
-    const title =
-      page > 1
-        ? `${pageSeo.listings.title.replace("｜", `（第 ${page} 頁）｜`)}`
-        : pageSeo.listings.title;
+    const filters = loaderData?.seoFilters;
+    // Every filter combination is its own crawlable URL, and they all used to
+    // share one title and one description (only `page` touched the title). The
+    // pageSeo entry stays the bare /listings copy, which is what an unfiltered
+    // first page still renders through the generator's own defaults.
+    const { title, description } = filters
+      ? listingSearchSeo({
+          deal: filters.deal,
+          districtSlug: filters.districtSlug,
+          estateName: filters.estateName,
+          bedrooms: filters.bedrooms,
+          page,
+          total: loaderData?.total ?? 0,
+        })
+      : { title: pageSeo.listings.title, description: pageSeo.listings.description };
     return {
       meta: [
         { title },
-        { name: "description", content: pageSeo.listings.description },
+        { name: "description", content: description },
         { property: "og:title", content: title },
-        { property: "og:description", content: pageSeo.listings.description },
+        { property: "og:description", content: description },
         { name: "twitter:title", content: title },
-        { name: "twitter:description", content: pageSeo.listings.description },
+        { name: "twitter:description", content: description },
         // A filter combination with no rows is a soft-404 if indexed; the
-        // bare /listings and any populated page stay indexable.
-        ...(total === 0 ? [{ name: "robots", content: "noindex,follow" }] : []),
+        // bare /listings and any populated page stay indexable. Gated on the
+        // loader having actually run: `loaderData?.total ?? 0` also read 0
+        // during a transient failure, which noindexed a hub page with
+        // hundreds of rows.
+        ...(loaderData && loaderData.total === 0
+          ? [{ name: "robots", content: "noindex,follow" }]
+          : []),
       ],
       // Bare path -- the canonical must not fork per filter combination.
       // Pagination is the one exception: page 2+ self-canonicalises, otherwise

@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SITE_YOUTUBE_CHANNEL, whatsappUrl } from "@/config/site";
-import { canonicalLink } from "@/content/seo";
+import { canonicalLink, pageSeo } from "@/content/seo";
 import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
 import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
@@ -53,17 +53,17 @@ export const Route = createFileRoute("/videos")({
   loader: async () => fetchVideosPageData(),
   head: () => ({
     meta: [
-      { title: "YouTube影片｜晉誠地產 深井 青山公路 汀九樓盤" },
+      { title: pageSeo.videos.title },
       {
         name: "description",
-        content: "晉誠地產 YouTube影片入口，集中官方頻道影片及附影片的深井、青山公路、汀九樓盤。",
+        content: pageSeo.videos.description,
       },
-      { property: "og:title", content: "YouTube影片｜晉誠地產 深井 青山公路 汀九樓盤" },
+      { property: "og:title", content: pageSeo.videos.title },
       {
         property: "og:description",
-        content: "晉誠地產官方頻道影片及附影片的深井、青山公路、汀九樓盤，集中一頁。",
+        content: pageSeo.videos.description,
       },
-      { name: "twitter:title", content: "YouTube影片｜晉誠地產 深井 青山公路 汀九樓盤" },
+      { name: "twitter:title", content: pageSeo.videos.title },
       {
         name: "twitter:description",
         content: "晉誠地產官方頻道影片及附影片的深井、青山公路、汀九樓盤，集中一頁。",

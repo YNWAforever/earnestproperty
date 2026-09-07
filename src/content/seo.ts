@@ -107,7 +107,7 @@ export const pageSeo = {
     path: "/",
     title: "晉誠地產 Earnest Property｜深井 青山公路 汀九樓盤",
     description:
-      "深井、青山公路、汀九買樓租樓專家。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園及汀九筍盤，即時 WhatsApp 查詢。持牌代理 C-018613。",
+      "深井 青山公路 汀九我哋比你更熟。碧堤半島、浪翠園、豪景花園、海韻花園、麗都花園及汀九筍盤，即時 WhatsApp 查詢。持牌代理 C-018613。",
   },
   // Rendered by listings.tsx's head() -- keep the route on this object rather
   // than a second hardcoded string, so an edit here actually ships.
@@ -142,7 +142,43 @@ export const pageSeo = {
     path: "/blog",
     title: "深井 青山公路 汀九樓市分析 Blog｜晉誠地產",
     description:
-      "深井買樓租樓攻略、屋苑比較、校網交通、成交走勢分析。由深井 hyperlocal 專家撰寫，助你睇通深井樓市。",
+      "深井、青山公路及汀九買樓租樓攻略：屋苑比較、校網交通、成交走勢分析，由紮根深井嘅持牌代理團隊撰寫，助你睇通區內樓市。",
+  },
+  // These five routes used to hardcode their title and description three times
+  // each (meta, og, twitter) inside their own route file, with the og/twitter
+  // copy a shorter, divergent string -- so every shared card was thinner than
+  // the SERP snippet, and none of it was width-tested. They live here now so
+  // seo-copy.test.mjs sweeps them like every other page. Each route still owns
+  // its own canonical and its own noindex gate.
+  agents: {
+    path: "/agents",
+    title: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊",
+    description:
+      "晉誠地產持牌代理團隊，分駐麗都、海韻及青山公路豪景分行。按屋苑、專長及語言揀代理，WhatsApp 直接聯絡預約睇樓或放盤委託。C-018613。",
+  },
+  videos: {
+    path: "/videos",
+    title: "樓盤影片｜深井 青山公路 汀九屋苑實拍｜晉誠地產",
+    description:
+      "晉誠地產 YouTube 影片專頁：樓盤實拍、屋苑開箱、市場評論及社區生活影片，可按屋苑或分類篩選，睇完即 WhatsApp 預約實地睇樓。C-018613。",
+  },
+  transactions: {
+    path: "/transactions",
+    title: "深井 青山公路 汀九成交紀錄｜屋苑實呎｜晉誠地產",
+    description:
+      "深井、青山公路及汀九屋苑最新成交：成交價、實用面積及實呎，可按地區、屋苑、租售及月份篩選，配合前線市場資訊評估你嘅物業。C-018613。",
+  },
+  estateReviews: {
+    path: "/estate-reviews",
+    title: "屋苑開箱｜深井 青山公路 汀九屋苑指南｜晉誠地產",
+    description:
+      "深井、青山公路及汀九屋苑開箱：逐個屋苑睇會所、間隔、樓齡同買家定位，連結各屋苑專頁比較現有放盤同成交紀錄。晉誠地產 C-018613。",
+  },
+  mortgage: {
+    path: "/mortgage",
+    title: "香港按揭計算機｜供款、壓力測試、印花稅｜晉誠地產",
+    description:
+      "香港住宅按揭計算機：輸入樓價即算首期、每月供款、壓力測試、供款與入息比率及從價印花稅，可直接 WhatsApp 晉誠地產跟進按揭同睇樓。C-018613。",
   },
   blogEditorialStandards: {
     path: "/blog/editorial-standards",
