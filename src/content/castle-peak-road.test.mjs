@@ -601,8 +601,19 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.doesNotMatch(layoutRoute, /rel:\s*["']canonical["']/);
   // P7a: same seo() migration as hubRoute above.
   assert.match(segmentRoute, /seo\(\{/);
-  assert.match(segmentRoute, /loaderData\?\.segment\.path/);
+  // The head resolves its segment from `params` as well as loaderData: head()
+  // still runs when the loader throws, and the old
+  // `?? castlePeakRoadHub.title/.description/.path` fallback put the HUB's
+  // copy and the hub canonical on a segment URL.
+  assert.match(
+    segmentRoute,
+    /loaderData\?\.segment \?\? getCastlePeakRoadSegment\(params\.segment\)/,
+  );
+  assert.match(segmentRoute, /path: segment\.path/);
+  // castlePeakRoadHub.path survives as the canonical of the noindexed
+  // unknown-segment branch only, never as a real segment's canonical.
   assert.match(segmentRoute, /castlePeakRoadHub\.path/);
+  assert.match(segmentRoute, /noindex: true/);
   assert.match(tingKauRoute, /redirect/);
   assert.match(tingKauRoute, /\/castle-peak-road\/\$segment/);
   assert.match(tingKauRoute, /statusCode:\s*(301|308)/);

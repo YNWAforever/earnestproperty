@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { canonicalLink, SITE_URL } from "@/content/seo";
+import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { estateRegistry } from "@/content/estate-registry";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 import { fetchNeonBranches, fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
@@ -152,17 +152,17 @@ export const Route = createFileRoute("/agents")({
   },
   head: () => ({
     meta: [
-      { title: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊" },
+      { title: pageSeo.agents.title },
       {
         name: "description",
-        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
+        content: pageSeo.agents.description,
       },
-      { property: "og:title", content: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊" },
+      { property: "og:title", content: pageSeo.agents.title },
       {
         property: "og:description",
-        content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",
+        content: pageSeo.agents.description,
       },
-      { name: "twitter:title", content: "深井 青山公路 汀九持牌地產代理｜晉誠地產團隊" },
+      { name: "twitter:title", content: pageSeo.agents.title },
       {
         name: "twitter:description",
         content: "認識晉誠地產專業代理團隊，直接聯絡合適代理了解深井、青山公路及汀九放盤。",

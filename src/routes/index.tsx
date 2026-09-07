@@ -77,6 +77,7 @@ import {
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
 import { getYouTubeVideoId, isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
+import { castlePeakRoadHomeFaqs } from "@/content/home-faq";
 import { jsonLdScript } from "@/lib/schema";
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
@@ -91,29 +92,42 @@ export const Route = createFileRoute("/")({
     // `fetchVideosPageData()` (what /videos uses) -- that also runs a 36-row
     // searchListings pass to find listing videos, and the homepage can derive
     // those for free from `featured`, which already selects `video_url`.
-    const [estates, castlePeakRoadDbEstates, featured, faqs, counts, agentProfiles, cmsVideos] =
-      await Promise.all([
-        fetchEstates(),
-        // Same live-figure merge as the 深井 group above, scoped to the
-        // 青山公路 district -- fetchEstates() itself is hardcoded to
-        // "sham-tseng" (it delegates to fetchEstatesByDistrict internally),
-        // so this is the first caller to pass a different district through
-        // fetchEstatesByDistrict directly.
-        fetchEstatesByDistrict("castle-peak-road"),
-        fetchFeaturedProperties(),
-        fetchFaqs("district:sham-tseng"),
-        fetchListingCountsByEstate(),
-        fetchNeonPublicAgentProfiles(),
-        // Decorative video section: a real DB error here (fetchCmsVideos only
-        // special-cases the missing-table case and rethrows everything else)
-        // must not take down the whole homepage.
-        fetchCmsVideos().catch(() => []),
-      ]);
+    const [
+      estates,
+      castlePeakRoadDbEstates,
+      featured,
+      faqs,
+      corridorFaqs,
+      counts,
+      agentProfiles,
+      cmsVideos,
+    ] = await Promise.all([
+      fetchEstates(),
+      // Same live-figure merge as the 深井 group above, scoped to the
+      // 青山公路 district -- fetchEstates() itself is hardcoded to
+      // "sham-tseng" (it delegates to fetchEstatesByDistrict internally),
+      // so this is the first caller to pass a different district through
+      // fetchEstatesByDistrict directly.
+      fetchEstatesByDistrict("castle-peak-road"),
+      fetchFeaturedProperties(),
+      fetchFaqs("district:sham-tseng"),
+      // Nothing seeds a 青山公路 scope (20260622060000_public_content.sql
+      // seeds only district:sham-tseng), so this is normally empty and the
+      // static set below is what renders. A CMS row still wins.
+      fetchFaqs("district:castle-peak-road").catch(() => [] as FaqItem[]),
+      fetchListingCountsByEstate(),
+      fetchNeonPublicAgentProfiles(),
+      // Decorative video section: a real DB error here (fetchCmsVideos only
+      // special-cases the missing-table case and rethrows everything else)
+      // must not take down the whole homepage.
+      fetchCmsVideos().catch(() => []),
+    ]);
     return {
       estates,
       castlePeakRoadDbEstates,
       featured,
       faqs,
+      corridorFaqs,
       counts: Object.fromEntries(counts),
       agents: agentProfiles.slice(0, 6),
       cmsVideos,
@@ -132,15 +146,18 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: pageSeo.home.title },
       { name: "description", content: pageSeo.home.description },
-      { property: "og:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
+      // Was four hardcoded strings whose description was 58 units against the
+      // page's own 131 -- so the shared card was less than half the snippet,
+      // and it was copy pageSeo did not own.
+      { property: "og:title", content: pageSeo.home.title },
       {
         property: "og:description",
-        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
+        content: pageSeo.home.description,
       },
-      { name: "twitter:title", content: "晉誠地產 Earnest Property｜深井 青山公路 汀九物業專家" },
+      { name: "twitter:title", content: pageSeo.home.title },
       {
         name: "twitter:description",
-        content: "深井 青山公路 汀九我哋比你更熟。即時搜尋買樓租樓全部真盤。",
+        content: pageSeo.home.description,
       },
       { property: "og:image", content: HERO_OG_IMAGE },
       { name: "twitter:image", content: HERO_OG_IMAGE },
@@ -192,11 +209,21 @@ function HomePage() {
     castlePeakRoadDbEstates,
     featured,
     faqs: faqRows,
+    corridorFaqs: corridorFaqRows,
     counts,
     agents,
     cmsVideos,
   } = Route.useLoaderData();
   const faqs = renderableFaqs(faqRows as FaqItem[]);
+  // The CMS wins when a 青山公路 scope exists; otherwise the derived set in
+  // src/content/home-faq.ts is what renders.
+  const corridorRows = corridorFaqRows as FaqItem[];
+  const corridorFaqs = renderableFaqs(
+    corridorRows.length > 0 ? corridorRows : [...castlePeakRoadHomeFaqs],
+  );
+  // One FAQPage for the page, not one per section: two FAQPage scripts on a
+  // single URL declare two competing FAQ entities for the same document.
+  const allFaqs = [...faqs, ...corridorFaqs];
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
@@ -334,11 +361,7 @@ function HomePage() {
       <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-            <SectionHeader
-              title="最新放盤"
-              desc="按最新上架排序，隨時 WhatsApp 查詢及預約睇樓。"
-              className="text-left"
-            />
+            <SectionHeader title="最新放盤" className="text-left" />
             <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
               所有放盤 →
             </Link>
@@ -635,22 +658,59 @@ function HomePage() {
                 </AccordionItem>
               ))}
             </Accordion>
-            <script
-              type="application/ld+json"
-              dangerouslySetInnerHTML={{
-                __html: jsonLdScript({
-                  "@context": "https://schema.org",
-                  "@type": "FAQPage",
-                  mainEntity: faqs.map((f: FaqItem) => ({
-                    "@type": "Question",
-                    name: f.question,
-                    acceptedAnswer: { "@type": "Answer", text: f.answer },
-                  })),
-                }),
-              }}
-            />
           </div>
         </section>
+      )}
+
+      {/* 青山公路屋苑買樓租樓 FAQ — the corridor counterpart to the 深井 set
+          above. Its questions are deliberately different from
+          castlePeakRoadHub.faqs, which /castle-peak-road already publishes. */}
+      {corridorFaqs.length > 0 && (
+        <section className="border-b border-border">
+          <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <SectionHeader eyebrow="常見問題" title="青山公路屋苑買樓租樓 FAQ" />
+            <Accordion type="single" collapsible className="mt-8">
+              {corridorFaqs.map((f: FaqItem, i: number) => (
+                <AccordionItem key={i} value={`corridor-faq-${i}`}>
+                  <AccordionTrigger className="text-left text-base font-medium">
+                    {f.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
+                    {f.answer}
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+            <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
+              <Link to="/castle-peak-road" className="font-medium text-primary hover:underline">
+                青山公路置業指南 →
+              </Link>
+              <Link to="/district/sham-tseng" className="font-medium text-primary hover:underline">
+                深井地區攻略 →
+              </Link>
+              <Link to="/estate-reviews" className="font-medium text-primary hover:underline">
+                屋苑開箱文章 →
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {allFaqs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLdScript({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: allFaqs.map((f: FaqItem) => ({
+                "@type": "Question",
+                name: f.question,
+                acceptedAnswer: { "@type": "Answer", text: f.answer },
+              })),
+            }),
+          }}
+        />
       )}
 
       <OwnerValuationPanel

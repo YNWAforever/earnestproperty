@@ -9,7 +9,8 @@ import { PageHero } from "@/components/site/PageHero";
 import { Input } from "@/components/ui/input";
 import {
   BLOG_CATEGORIES,
-  blogArticles,
+  articlePublishedAt,
+  publishedBlogArticles,
   EDITORIAL_AUTHOR,
   type BlogCategory,
 } from "@/content/blog-articles";
@@ -22,16 +23,21 @@ type BlogCard = ArticleSummary & {
   author?: string;
 };
 
-const fallbackArticles: BlogCard[] = blogArticles.map((article) => ({
-  slug: article.slug,
-  title: article.title,
-  excerpt: article.excerpt,
-  cover_image: null,
-  category: article.category,
-  reading_minutes: article.readingMinutes,
-  published_at: "2026-06-22T00:00:00.000Z",
-  author: article.author,
-}));
+function fallbackArticles(): BlogCard[] {
+  // Per request: 28 屋苑開箱 articles are scheduled for future dates, and each
+  // one now carries its own date rather than the shared 2026-06-22 constant
+  // this used to stamp on every card.
+  return publishedBlogArticles().map((article) => ({
+    slug: article.slug,
+    title: article.title,
+    excerpt: article.excerpt,
+    cover_image: null,
+    category: article.category,
+    reading_minutes: article.readingMinutes,
+    published_at: articlePublishedAt(article),
+    author: article.author,
+  }));
+}
 
 // The flagship guide gets a "start here" link in the hero rather than being
 // spliced into the lead sentence (「由「…」開始」 read as broken copy).
@@ -61,24 +67,52 @@ function parseBlogSearch(input: Record<string, unknown>): { category?: CategoryF
   return category ? { category } : {};
 }
 
+/**
+ * Title/description for a `?category=` view.
+ *
+ * The category URLs were built as "crawlable, shareable addresses", but head()
+ * was a zero-argument function that never read the validated param, so all six
+ * served the hub's title and description -- every shared category link
+ * unfurled as the hub, and every browser tab read the same. The canonical
+ * still collapses them onto the bare path, so this is about the tab and the
+ * share card, not about indexing six near-duplicates.
+ */
+function blogCategorySeo(category: CategoryFilter | undefined) {
+  if (!category) return { title: pageSeo.blog.title, description: pageSeo.blog.description };
+  return {
+    title: `深井 ${category}｜青山公路 汀九樓市文章｜晉誠地產`,
+    description: `晉誠地產 Blog 嘅${category}文章：深井、青山公路及汀九屋苑比較、校網交通同成交走勢，由紮根深井嘅持牌代理團隊撰寫。`,
+  };
+}
+
 export const Route = createFileRoute("/blog")({
   validateSearch: parseBlogSearch,
-  loader: async () => {
+  // The category has to reach head(), which only receives loaderData. The
+  // loader itself ignores it -- the article list is fetched whole and filtered
+  // client-side, exactly as before.
+  loaderDeps: ({ search }) => ({ category: search.category }),
+  loader: async ({ deps }) => {
     const articles = await fetchPublishedArticles().catch(() => []);
-    return { articles: articles.length ? articles : fallbackArticles };
+    return {
+      articles: articles.length ? articles : fallbackArticles(),
+      category: deps.category,
+    };
   },
-  head: () => ({
-    meta: [
-      { title: pageSeo.blog.title },
-      { name: "description", content: pageSeo.blog.description },
-      { property: "og:title", content: pageSeo.blog.title },
-      { property: "og:description", content: pageSeo.blog.description },
-      { name: "twitter:title", content: pageSeo.blog.title },
-      { name: "twitter:description", content: pageSeo.blog.description },
-    ],
-    // Bare path -- ?category= must not fork the canonical.
-    links: [canonicalLink(pageSeo.blog.path)],
-  }),
+  head: ({ loaderData }) => {
+    const { title, description } = blogCategorySeo(loaderData?.category);
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
+      ],
+      // Bare path -- ?category= must not fork the canonical.
+      links: [canonicalLink(pageSeo.blog.path)],
+    };
+  },
   component: BlogPage,
 });
 

@@ -100,6 +100,10 @@ test("propertyEnquiryMessage carries deal-aware price and does not repeat the li
 });
 
 const files = [
+  // /videos, /transactions, /estate-reviews and the homepage's og pair read
+  // their title/description from pageSeo now, instead of hardcoding each
+  // string three times per route, so the copy this test pins lives here too.
+  "src/content/seo.ts",
   "src/config/site.ts",
   "src/config/site-branches.js",
   "src/components/site/SiteHeader.tsx",
@@ -421,7 +425,15 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   const estateReviews = readFileSync("src/routes/estate-reviews.tsx", "utf8");
 
   assert.match(sitemap, /transactions\.length > 0 \? "\/transactions" : null/);
-  assert.match(sitemap, /estateReviewArticles\.length > 0 \? "\/estate-reviews" : null/);
+  // /estate-reviews now ships a static 屋苑開箱 floor, so it is only empty
+  // when BOTH the CMS query and the static set are -- the gate widened with
+  // it rather than going away. The head keeps its own noindex gate below,
+  // which the floor simply stops firing.
+  assert.match(sitemap, /estateReviewArticles\.length > 0 \|\| staticEstateReviewCount\(\)/);
+  // A function, not a module-level constant: 28 屋苑開箱 articles are scheduled
+  // for future dates, so the count has to be taken per request.
+  assert.match(sitemap, /function staticEstateReviewCount\(\)/);
+  assert.match(sitemap, /publishedBlogArticles\(\)\.filter\(/);
   assert.doesNotMatch(
     sitemap,
     /^\s*"\/transactions",\s*$/m,
@@ -502,6 +514,12 @@ test("sitemap lists every indexable public route", () => {
   const declared = [
     readFileSync("src/routes/sitemap[.]xml.ts", "utf8"),
     readFileSync("src/content/seo.ts", "utf8"),
+    // The corridor hub and segment paths are declared here and reach the
+    // sitemap through castlePeakRoadSitemapPaths, which the sitemap spreads.
+    // seo.ts used to carry a duplicate `/castle-peak-road` literal in a
+    // pageSeo entry that was dead in all three fields; removing it left this
+    // source scan unable to see a path that is genuinely listed.
+    readFileSync("src/content/castle-peak-road.ts", "utf8"),
   ].join("\n");
 
   const missing = readdirSync("src/routes")

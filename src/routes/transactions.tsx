@@ -19,7 +19,7 @@ import { DataNote } from "@/components/layout/DataNote";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { PageHero } from "@/components/site/PageHero";
 import { whatsappUrl } from "@/config/site";
-import { canonicalLink, SITE_URL } from "@/content/seo";
+import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { jsonLdScript, organizationRef } from "@/lib/schema";
 import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
@@ -104,22 +104,12 @@ export const Route = createFileRoute("/transactions")({
   },
   head: ({ loaderData }) => ({
     meta: [
-      { title: "晉誠地產最新成交｜深井 青山公路 汀九近期成交" },
-      {
-        name: "description",
-        content:
-          "晉誠地產最新成交：深井、青山公路、汀九近期屋苑成交價、實用面積及呎價，配合前線市場資訊。",
-      },
-      { property: "og:title", content: "晉誠地產最新成交｜深井 青山公路 汀九近期成交" },
-      {
-        property: "og:description",
-        content: "深井、青山公路、汀九近期屋苑成交價、實用面積及呎價一覽。",
-      },
-      { name: "twitter:title", content: "晉誠地產最新成交｜深井 青山公路 汀九近期成交" },
-      {
-        name: "twitter:description",
-        content: "深井、青山公路、汀九近期屋苑成交價、實用面積及呎價一覽。",
-      },
+      { title: pageSeo.transactions.title },
+      { name: "description", content: pageSeo.transactions.description },
+      { property: "og:title", content: pageSeo.transactions.title },
+      { property: "og:description", content: pageSeo.transactions.description },
+      { name: "twitter:title", content: pageSeo.transactions.title },
+      { name: "twitter:description", content: pageSeo.transactions.description },
       // fetchRecentTransactions only ever returns published + human-verified
       // rows (see its own comment in public-data.server.ts) -- an indexed
       // empty page is a soft-404 risk, so this stays noindex whenever that
