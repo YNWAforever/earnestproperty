@@ -5,7 +5,7 @@ import test from "node:test";
 const source = await readFile(new URL("./index.tsx", import.meta.url), "utf8");
 
 test("homepage uses Chinese-only large headings for the requested sections", () => {
-  for (const title of ["精選筍盤", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
+  for (const title of ["最新放盤", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
     assert.match(source, new RegExp(`title=\\"${title}\\"`));
   }
 
@@ -62,7 +62,7 @@ test("AGENT TEAM PREVIEW no longer restates the local-market/instant-WhatsApp ta
 test("featured-listings PropertyCard shows a FreshnessStamp", () => {
   assert.match(source, /import \{ FreshnessStamp \} from "@\/components\/layout\/FreshnessStamp";/);
   const propertyCard = source.slice(source.indexOf("function PropertyCard("));
-  assert.match(propertyCard, /<FreshnessStamp updatedAt=\{property\.last_seen_at\}/);
+  assert.match(propertyCard, /<FreshnessStamp updatedAt=\{propertyUpdatedAt\(property\)\}/);
 });
 
 test("featured-listings empty state uses the shared EmptyState component", () => {
@@ -126,7 +126,7 @@ test("CoreEstateGrid gates both grid membership and card linking on a live DB ro
 // clears the publish gate), the section rendered its SectionHeader with a
 // bare, cardless grid underneath -- looking broken, not like an honest
 // "nothing here yet" state. estate-reviews.tsx's own 屋苑文章 section (and
-// this same file's 精選筍盤 section, a few hundred lines up) already
+// this same file's 最新放盤 section, a few hundred lines up) already
 // established the pattern for this: a shared EmptyState component, not a
 // silently-empty container.
 test("CoreEstateGrid renders the shared EmptyState, not a bare cardless grid, when a group has zero linkable estates", () => {
@@ -149,4 +149,10 @@ test("CoreEstateGrid renders the shared EmptyState, not a bare cardless grid, wh
     /whatsappUrl\(`你好，想查詢\$\{districtLabel\}屋苑放盤`\)/,
     "the empty state's CTA must be per-district, not a hardcoded 深井 message",
   );
+});
+
+test("homepage does not hide current timestamps when legacy source metadata is missing", () => {
+  const card = source.slice(source.indexOf("function PropertyCard("));
+  assert.doesNotMatch(card, /property\.source_site &&/);
+  assert.doesNotMatch(source, /即日新放盤/);
 });

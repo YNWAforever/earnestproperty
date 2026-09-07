@@ -76,7 +76,7 @@ async function runSearch(input) {
 // module and the audit's 精選筍盤 finding (1 of 398 listings shown) is the same
 // class of bug as the price/keyword issues above: a filter that only ever
 // matched hand-flagged rows, which normalize-old-site.mjs never sets.
-test("featured properties sorts featured-first instead of filtering on it, so the section always backfills", async () => {
+test("homepage inventory uses newest ordering without hiding unfeatured new stock", async () => {
   const { calls, query } = recorder();
   const server = await importPublicDataServerWithInjectedQuery(query);
   await server.fetchFeaturedProperties(6);
@@ -88,7 +88,9 @@ test("featured properties sorts featured-first instead of filtering on it, so th
     /featured = true/,
     "must not filter out every listing nobody has hand-flagged as featured",
   );
-  assert.match(call.text, /ORDER BY p\.featured DESC, p\.last_seen_at DESC NULLS LAST/);
+  assert.match(call.text, /ORDER BY p\.created_at DESC, p\.id ASC/);
+  const candidates = call.text.slice(call.text.indexOf("eligible_candidates AS"));
+  assert.doesNotMatch(candidates, /p\.featured DESC|p\.last_seen_at DESC/);
   assert.deepEqual(call.params, [6]);
 });
 

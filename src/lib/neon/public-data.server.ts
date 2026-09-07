@@ -708,22 +708,17 @@ export async function fetchCorridorInventory(
 
 export async function fetchFeaturedProperties(limit: number): Promise<NeonPropertyRow[]> {
   const pageSize = Math.min(Math.max(1, limit), 100);
-  // p.featured is manually flagged and the MLS importer always writes it false
-  // (see normalize-old-site.mjs), so a strict `featured = true` filter showed
-  // only the handful of listings someone had hand-flagged -- 1 of 398 at audit
-  // time. Sorting featured-first instead of filtering on it surfaces any
-  // hand-picked listings ahead of the rest while always backfilling the
-  // section from the newest active inventory (sale + rent mixed), so 精選筍盤
-  // never shows fewer than `limit` cards while any active listings exist.
+  // Legacy API name: the homepage now presents latest active inventory.
+  // Keep staff featured flags intact, but never let them pin old stock above new listings.
   const rows = await sql().query(
     `
-    ${canonicalListingCte("p.status = 'active'")}
+    ${canonicalListingCte("p.status = 'active'", false, LISTING_NEWEST_ORDER)}
     SELECT ${listingCardColumns}
     FROM properties p JOIN canonical c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
 
     WHERE p.status = 'active'
-    ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC
+    ORDER BY ${LISTING_NEWEST_ORDER}
     LIMIT $1
     `,
     [pageSize],
