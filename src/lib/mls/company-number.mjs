@@ -1,3 +1,4 @@
+import { writeSyncFields } from "./ingestion-batch-writes.mjs";
 import { SnapshotError, canonicalJson } from "./ingestion-contract.mjs";
 export function companyPolicy(policy) {
   const rule = policy.config?.company_number_identity;
@@ -105,6 +106,7 @@ export async function adoptCompanyFields(q, property, rule, allowedFields, obser
     )
   )[0];
   const patch = { ...overrides?.shared, ...overrides?.[property.deal_type] };
+  const adopted = [];
   for (const field of allowedFields) {
     if (
       !Object.hasOwn(baseline, field) ||
@@ -112,10 +114,15 @@ export async function adoptCompanyFields(q, property, rule, allowedFields, obser
       canonicalJson(baseline[field]) !== canonicalJson(property[field])
     )
       continue;
-    // Never replace any existing ownership entry, including manual/unknown selections.
-    await q(
-      "INSERT INTO property_sync_fields(property_id,field_name,last_published_value,winning_observation_id,selection_reason,policy_version) VALUES($1,$2,$3,$4,'approved_legacy_import','no-hermes-v2') ON CONFLICT(property_id,field_name) DO NOTHING",
-      [property.id, field, JSON.stringify(property[field]), observationId],
-    );
+    adopted.push({
+      property_id: property.id,
+      field_name: field,
+      last_published_value: property[field] ?? null,
+      winning_observation_id: observationId,
+      selection_reason: "approved_legacy_import",
+      policy_version: "no-hermes-v2",
+    });
   }
+  // Never replace existing ownership, including manual and unknown selections.
+  await writeSyncFields(q, adopted, true);
 }
