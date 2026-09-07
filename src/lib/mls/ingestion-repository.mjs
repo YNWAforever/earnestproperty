@@ -1,3 +1,4 @@
+import { writeSyncFields, writeReviewRows } from "./ingestion-batch-writes.mjs";
 import {
   companyPolicy,
   companyRelationship,
@@ -218,6 +219,7 @@ export async function applyIngestion(client, payload, options = {}) {
       newProperties = new Set(),
       changedProperties = new Set();
     let fieldsChanged = 0;
+    const pendingReviews = [];
     const review = async (record, reason, evidence, observationId) => {
       const key = hashPayload({
         source: record.source,
@@ -226,19 +228,17 @@ export async function applyIngestion(client, payload, options = {}) {
         reason,
         evidence,
       });
-      await q(
-        "INSERT INTO mls_ingestion_reviews(review_key,source,external_listing_id,deal_type,reason,evidence,observation_id,first_run_id,last_run_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8) ON CONFLICT(review_key) DO UPDATE SET last_run_id=EXCLUDED.last_run_id,observation_id=EXCLUDED.observation_id,last_seen_at=now()",
-        [
-          key,
-          record.source,
-          record.externalId,
-          record.dealType,
-          reason,
-          json(evidence),
-          observationId,
-          runId,
-        ],
-      );
+      pendingReviews.push({
+        review_key: key,
+        source: record.source,
+        external_listing_id: record.externalId,
+        deal_type: record.dealType,
+        reason,
+        evidence,
+        observation_id: observationId,
+        first_run_id: runId,
+        last_run_id: runId,
+      });
     };
     const event = async (propertyId, type, field, oldValue, newValue, observationId, reason) =>
       q(
@@ -720,20 +720,18 @@ export async function applyIngestion(client, payload, options = {}) {
               )
             )[0]
           : property;
+        const provenanceRows = [];
         for (const p of proposals) {
           const effective = actual[p.column],
             overridden = !same(effective, p.value, NUMBER_FIELDS.has(p.column));
-          await q(
-            "INSERT INTO property_sync_fields(property_id,field_name,last_published_value,winning_observation_id,selection_reason,policy_version) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(property_id,field_name) DO UPDATE SET last_published_value=EXCLUDED.last_published_value,winning_observation_id=EXCLUDED.winning_observation_id,selection_reason=EXCLUDED.selection_reason,policy_version=EXCLUDED.policy_version,updated_at=now()",
-            [
-              propertyId,
-              p.column,
-              json(effective),
-              overridden ? null : p.provenance.observationId,
-              overridden ? "manual_override" : p.provenance.reason,
-              POLICY,
-            ],
-          );
+          provenanceRows.push({
+            property_id: propertyId,
+            field_name: p.column,
+            last_published_value: effective ?? null,
+            winning_observation_id: overridden ? null : p.provenance.observationId,
+            selection_reason: overridden ? "manual_override" : p.provenance.reason,
+            policy_version: POLICY,
+          });
           if (!same(property[p.column], effective, NUMBER_FIELDS.has(p.column))) {
             if (!newProperties.has(propertyId)) {
               changedProperties.add(propertyId);
@@ -754,6 +752,7 @@ export async function applyIngestion(client, payload, options = {}) {
             );
           }
         }
+        await writeSyncFields(q, provenanceRows);
         if (actual.status === "inactive" && property.status !== "inactive")
           await q(
             "INSERT INTO property_sync_state(property_id,last_evaluated_run_id,inactive_reason,inactive_at) VALUES($1,$2,$3,now()) ON CONFLICT(property_id) DO UPDATE SET last_evaluated_run_id=EXCLUDED.last_evaluated_run_id,inactive_reason=EXCLUDED.inactive_reason,inactive_at=EXCLUDED.inactive_at",
@@ -766,6 +765,7 @@ export async function applyIngestion(client, payload, options = {}) {
           );
       }
     }
+    await writeReviewRows(q, pendingReviews);
     const response = {
       success: true,
       status: gate.full ? "success" : "partial_success",
