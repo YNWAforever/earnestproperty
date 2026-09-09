@@ -31,7 +31,21 @@ export function SiteFooter() {
               <br />
               Your Sham Tseng Property Expert.
             </p>
-            <p className="mt-4 text-xs opacity-60">牌照號 Licence No.: {SITE_CONTACT.licenceNo}</p>
+            {/* Vendor credit, immediately above the licence line at the foot of
+                the page. Sits in the shared footer, so it appears on every
+                page rather than the homepage alone. */}
+            <p className="mt-4 text-xs opacity-60">
+              Website design and AI solutions created by{" "}
+              <a
+                href="https://www.fimmick.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:opacity-100"
+              >
+                FIMMICK
+              </a>
+            </p>
+            <p className="mt-2 text-xs opacity-60">牌照號 Licence No.: {SITE_CONTACT.licenceNo}</p>
             <p className="mt-3 text-xs opacity-60">
               <Link to="/agents" className="underline underline-offset-2">
                 查看持牌代理團隊
