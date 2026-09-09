@@ -1,3 +1,4 @@
+import { PROMOTION_TIERS, normalize28HsePromotionTier } from "./promotion-tier.mjs";
 import { createHash } from "node:crypto";
 import { exactUnitIdentity } from "./unit-identity.mjs";
 export const POLICY_VERSION = "no-hermes-v2";
@@ -122,6 +123,15 @@ export function decodeSnapshot(input, options = {}) {
       if (source === "propertyhk" && !BRANCHES.includes(r.branch_code))
         throw new SnapshotError("invalid_branch");
       if (!["sale", "rent"].includes(r.deal_type)) throw new SnapshotError("invalid_deal_type");
+      // 28Hse's paid placement grade, as observed on the agent index. Present
+      // (even as "") means the crawler actually looked at a parsed index, so an
+      // empty badge is a real "ordinary" observation. Absent entirely -- every
+      // propertyhk record, and any older payload -- stays `unknown`, which the
+      // homepage feed sorts last and never badges as a paid tier.
+      const promotion = Object.hasOwn(r, "promotion_tier_raw")
+        ? normalize28HsePromotionTier(r.promotion_tier_raw, { badgeObserved: true })
+        : { tier: PROMOTION_TIERS.UNKNOWN, raw: null };
+
       const sourceStatus = Object.hasOwn(r, "source_status") ? r.source_status : "active";
       const sourceStatusReason = r.source_status_reason ?? null;
       if (
@@ -220,6 +230,8 @@ export function decodeSnapshot(input, options = {}) {
         sourceUrl: url.href,
         sourceStatus,
         sourceStatusReason,
+        promotionTier: promotion.tier,
+        promotionTierRaw: promotion.raw,
         propertyNo: null,
         agencyPropertyNo,
         identity,

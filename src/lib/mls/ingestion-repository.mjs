@@ -1,3 +1,4 @@
+import { savePromotionTiers } from "./promotion-tier-repository.mjs";
 import { writeSyncFields, writeReviewRows } from "./ingestion-batch-writes.mjs";
 import {
   companyPolicy,
@@ -473,6 +474,28 @@ export async function applyIngestion(client, payload, options = {}) {
           );
         }
     }
+
+    // 網頁07092026.docx p5: record each source listing's paid placement grade so
+    // the homepage feed can order 黃金 > 置頂 > 普通.
+    //
+    // gate.full is this batch's own completeness signal, the same one the
+    // receipt is stamped with. It is what savePromotionTiers uses to decide
+    // whether a demotion is trustworthy: a partial snapshot may promote a
+    // listing it positively saw badged, but must never demote one whose badge
+    // is merely missing from what it managed to fetch.
+    await savePromotionTiers(
+      q,
+      batch.records.map((record) => ({
+        source: batch.source,
+        externalId: record.externalId,
+        dealType: record.dealType,
+        promotionTier: record.promotionTier,
+        promotionTierRaw: record.promotionTierRaw,
+        fetchedAt: batch.scrapedAt,
+      })),
+      { snapshotComplete: Boolean(gate.full) },
+    );
+
     for (const propertyId of touched) {
       const property = (await q("SELECT * FROM properties WHERE id=$1", [propertyId]))[0];
       const sources = await q(
