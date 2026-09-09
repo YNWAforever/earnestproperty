@@ -312,6 +312,10 @@ test("accepts only exact normalized approved agent company headings", () => {
     "Earnest Property",
     "晉誠地產 Earnest Property",
     "Earnest Property 晉誠地產",
+    // The registered company name, as 28Hse began rendering it on 2026-09-09.
+    "晉誠地產代理有限公司 Earnest Property Agency Ltd",
+    "晉誠地產代理有限公司",
+    "Earnest Property Agency Ltd",
   ]) {
     assert.equal(parseCompany(approved).companyName, approved);
   }
@@ -321,9 +325,57 @@ test("accepts only exact normalized approved agent company headings", () => {
     "Earnest Property Holdings",
     "假冒晉誠地產",
     "晉誠地產分行",
+    // Widening the allowlist for the registered name must not have turned the
+    // check into a substring test: each of these merely contains an approved
+    // name, and every one of them is a different company.
+    "Not Earnest Property Agency Ltd",
+    "Earnest Property Agency Ltd Holdings",
+    "假冒晉誠地產代理有限公司",
+    "晉誠地產代理有限公司分行",
   ]) {
     assert.throws(() => parseCompany(impostor), /company|identity|template/i);
   }
+});
+
+// 2026-09-09 regression: 28Hse started rendering the agent's full registered
+// name, in both languages, inside the single <h1> -- with the newline and the
+// run of indentation the live page actually contains. Every sync run failed
+// with identity_mismatch until the allowlist accepted it. The licence on that
+// same page still read C-018613, which is what made it safe to accept.
+test("the live 28Hse agent heading, whitespace and all, is accepted", () => {
+  const page = parse28HseAgentIndex(
+    [
+      // A template literal, so the newline and the run of indentation the
+      // live page actually contains are reproduced verbatim rather than
+      // escaped away.
+      `<h1>晉誠地產代理有限公司
+                            Earnest Property Agency Ltd</h1>`,
+      "<p>公司牌照: C-018613</p>",
+      "<p>共有 1 個放售樓盤</p>",
+      "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+    ].join(""),
+    { dealType: "sale", pageUrl: build28HseAgentUrl("sale", 1) },
+  );
+  assert.equal(page.companyLicence, "C-018613");
+  assert.equal(page.links.length, 1);
+});
+
+// The company heading is a second factor, never the only one: a page carrying
+// an approved name but the wrong licence must still be rejected.
+test("an approved heading cannot rescue a page whose licence is not C-018613", () => {
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(
+        [
+          "<h1>晉誠地產代理有限公司 Earnest Property Agency Ltd</h1>",
+          "<p>公司牌照: C-999999</p>",
+          "<p>共有 1 個放售樓盤</p>",
+          "<a href='/buy/apartment/property-3972991'>樓盤標題</a>",
+        ].join(""),
+        { dealType: "sale", pageUrl: build28HseAgentUrl("sale", 1) },
+      ),
+    /licence/i,
+  );
 });
 
 test("detects punctuated challenge headings with a bounded vendor suffix", () => {
@@ -442,4 +494,78 @@ test("missing optional values stay null while changed or malformed templates qua
     );
   }
   assert.equal(detect28HseChallenge(fixture("login.html")), true);
+});
+
+// 2026-09-09 regression: 28Hse switched the agent index from relative listing
+// hrefs to absolute ones. The old pattern was anchored to a leading "/", so it
+// matched nothing and every run failed with "positive count has no listing
+// links" while the page still advertised 191 listings.
+test("absolute and relative listing hrefs both resolve, and only 28Hse ones do", () => {
+  const index = (href) =>
+    parse28HseAgentIndex(
+      [
+        "<h1>晉誠地產</h1>",
+        "<p>公司牌照: C-018613</p>",
+        "<p>共有 1 個放售樓盤</p>",
+        `<a href='${href}'>樓盤標題</a>`,
+      ].join(""),
+      { dealType: "sale", pageUrl: build28HseAgentUrl("sale", 1) },
+    );
+
+  // Both spellings resolve to the same canonical absolute URL.
+  for (const href of [
+    "/buy/apartment/property-3972991",
+    "/buy/apartment/property-3972991/",
+    "https://www.28hse.com/buy/apartment/property-3972991",
+    "https://www.28hse.com/buy/apartment/property-3972991/",
+  ]) {
+    const [link] = index(href).links;
+    assert.equal(link.externalId, "3972991");
+    assert.equal(link.url, "https://www.28hse.com/buy/apartment/property-3972991");
+  }
+});
+
+test("an absolute listing href that leaves 28Hse is never ingested", () => {
+  // The old relative-only pattern got this for free. Accepting absolute hrefs
+  // is only safe while protocol and host stay pinned.
+  for (const href of [
+    "https://evil.example.com/buy/apartment/property-3972991",
+    "https://www.28hse.com.evil.example/buy/apartment/property-3972991",
+    "http://www.28hse.com/buy/apartment/property-3972991",
+    "https://m.28hse.com/buy/apartment/property-3972991",
+    // A query or fragment was rejected by the old `$`-anchored pattern too.
+    "https://www.28hse.com/buy/apartment/property-3972991?ref=x",
+    "https://www.28hse.com/buy/apartment/property-3972991#top",
+  ]) {
+    assert.throws(
+      () =>
+        parse28HseAgentIndex(
+          [
+            "<h1>晉誠地產</h1>",
+            "<p>公司牌照: C-018613</p>",
+            "<p>共有 1 個放售樓盤</p>",
+            `<a href='${href}'>樓盤標題</a>`,
+          ].join(""),
+          { dealType: "sale", pageUrl: build28HseAgentUrl("sale", 1) },
+        ),
+      /count|links/i,
+      href,
+    );
+  }
+});
+
+test("the deal type of an absolute href still has to match the page", () => {
+  assert.throws(
+    () =>
+      parse28HseAgentIndex(
+        [
+          "<h1>晉誠地產</h1>",
+          "<p>公司牌照: C-018613</p>",
+          "<p>共有 1 個放售樓盤</p>",
+          "<a href='https://www.28hse.com/rent/apartment/property-3972991'>樓盤標題</a>",
+        ].join(""),
+        { dealType: "sale", pageUrl: build28HseAgentUrl("sale", 1) },
+      ),
+    /count|links/i,
+  );
 });
