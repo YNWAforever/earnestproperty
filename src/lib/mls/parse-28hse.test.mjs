@@ -157,6 +157,11 @@ test("deduplicates empty and image-only anchors before choosing the longest titl
       externalId: "3972991",
       url: "https://www.28hse.com/buy/apartment/property-3972991",
       summaryTitle: "較完整樓盤標題",
+      // None of these anchors carries a .grade_label, and this page parsed as
+      // a real agent index, so the listing is an ordinary one -- not unknown,
+      // and certainly not a paid grade. See promotion-tier.mjs.
+      promotionTier: "normal",
+      promotionTierRaw: null,
     },
   ]);
 });

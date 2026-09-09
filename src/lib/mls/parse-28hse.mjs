@@ -8,6 +8,7 @@ import {
   normalizeText,
 } from "./parse-old-site.mjs";
 import { SOURCE_28HSE, createObservation } from "./source-contract.mjs";
+import { normalize28HsePromotionTier, strongestPromotionTier } from "./promotion-tier.mjs";
 
 const AGENT_ID = "540";
 const AGENT_LICENCE = "C-018613";
@@ -241,6 +242,26 @@ function extractGallery($, sourceUrl) {
   }));
 }
 
+/**
+ * Reads the 28Hse promotion grade badge for one listing anchor.
+ *
+ * The badge is `.grade_label`, rendered inside the card's image anchor (see
+ * promotion-tier.mjs for the observed markup). Each listing on the agent index
+ * has two `a.detail_page` anchors -- the image and the title -- and only the
+ * image one carries the badge, so this searches the anchor and then the
+ * enclosing `.property_item` card before concluding the badge is absent.
+ *
+ * Never reads the title, address, estate name or price: 「黃金地段」 in a title
+ * and the estates 黃金海岸 / 黃金海灣 all contain 黃金 and none is a grade.
+ */
+function gradeLabelFor($, anchor) {
+  const own = $(anchor).find(".grade_label").first();
+  if (own.length) return normalizeText(own.text());
+  const card = $(anchor).closest(".property_item");
+  if (!card.length) return "";
+  return normalizeText(card.find(".grade_label").first().text());
+}
+
 export function build28HseAgentUrl(dealType, page) {
   requireDealType(dealType);
   if (!Number.isInteger(page) || page < 1 || page > 100)
@@ -346,8 +367,30 @@ export function parse28HseAgentIndex(html, context) {
     if (previous && previous.url !== url) {
       throw new Error("Unexpected agent index template: contradictory listing link");
     }
+    // This page parsed as a real agent index (company identity, licence and
+    // advertised count already validated above), so a card with no
+    // `.grade_label` really is an ordinary listing rather than an unobserved
+    // one -- badgeObserved: true is what distinguishes "normal" from "unknown".
+    const observed = normalize28HsePromotionTier(gradeLabelFor($, anchor), {
+      badgeObserved: true,
+    });
+    // The same listing has two anchors and only one carries the badge, so the
+    // grade is merged across both rather than taken from whichever anchor the
+    // title happened to come from.
+    const promotionTier = previous
+      ? strongestPromotionTier([previous.promotionTier, observed.tier])
+      : observed.tier;
+    const promotionTierRaw = observed.raw ?? previous?.promotionTierRaw ?? null;
     if (!previous || summaryTitle.length > previous.summaryTitle.length) {
-      linksById.set(externalId, { externalId, url, summaryTitle });
+      linksById.set(externalId, {
+        externalId,
+        url,
+        summaryTitle,
+        promotionTier,
+        promotionTierRaw,
+      });
+    } else {
+      linksById.set(externalId, { ...previous, promotionTier, promotionTierRaw });
     }
   });
   const links = [...linksById.values()].sort((a, b) => a.externalId.localeCompare(b.externalId));
@@ -427,6 +470,12 @@ export function parse28HseDetail(html, context) {
       .filter(([key]) => key !== "property_no" && ALLOWED_28HSE_FIELDS.has(key))
       .map(([key, value]) => [key, value]),
   );
+  // The promotion grade is deliberately NOT on the observation: it is a
+  // property of the listing's placement on the agent index, not of this detail
+  // page, and listing_source_observations has an exact-key contract that
+  // sync-repository.mjs enforces. It travels beside the observations instead --
+  // see parse28HseAgentIndex's per-link tier and the adapter's own
+  // promotionTiers result.
   return createObservation({
     source: SOURCE_28HSE,
     externalId,

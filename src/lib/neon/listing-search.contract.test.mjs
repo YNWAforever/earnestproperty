@@ -79,10 +79,18 @@ async function runSearch(input) {
 test("homepage inventory uses newest ordering without hiding unfeatured new stock", async () => {
   const { calls, query } = recorder();
   const server = await importPublicDataServerWithInjectedQuery(query);
-  await server.fetchFeaturedProperties(6);
+  // Takes an options object since the 2026-09-07 client feedback added the
+  // region scope and the promotion-tier ordering (網頁07092026.docx p5).
+  await server.fetchFeaturedProperties({ limit: 6 });
 
-  assert.equal(calls.length, 1);
-  const [call] = calls;
+  // The first call is the one-off probe for mls_source_promotion_tiers; the
+  // recorder's stub answers it with no rows, so the tier ranking is off and
+  // this test still asserts the unranked baseline order it was written for.
+  const listingCalls = calls.filter(
+    (call) => !call.text.includes("to_regclass('mls_source_promotion_tiers')"),
+  );
+  assert.equal(listingCalls.length, 1);
+  const [call] = listingCalls;
   assert.doesNotMatch(
     call.text,
     /featured = true/,
@@ -91,7 +99,7 @@ test("homepage inventory uses newest ordering without hiding unfeatured new stoc
   assert.match(call.text, /ORDER BY p\.created_at DESC, p\.id ASC/);
   const candidates = call.text.slice(call.text.indexOf("eligible_candidates AS"));
   assert.doesNotMatch(candidates, /p\.featured DESC|p\.last_seen_at DESC/);
-  assert.deepEqual(call.params, [6]);
+  assert.deepEqual(call.params, [6], "the limit handed to SQL is still the display limit");
 });
 
 test("keyword becomes one bound, escaped LIKE predicate on both queries", async () => {
@@ -382,6 +390,7 @@ const QUERIES_STUB_PUBLIC_DATA_EXPORTS = [
   "fetchNeonRecentTransactionsCount",
   "fetchNeonSimilarListings",
   "searchNeonListings",
+  "fetchNeonEstatesBySlugs",
 ];
 
 async function loadListingQueries(searchListings) {
@@ -395,7 +404,16 @@ async function loadListingQueries(searchListings) {
   ).join("\n");
 
   const castlePeakRoadStubSource = `
-    export const corridorRegionScope = { outOfScopeTextAliases: [] };
+    export const corridorRegionScope = {
+      districtSlugs: [],
+      textAliases: [],
+      outOfScopeTextAliases: [],
+    };
+    // queries.ts reads each segment's own strict-inventory estates when it
+    // builds the homepage feed's scope. These tests exercise dedupe and video
+    // queries, neither of which scopes by segment, so an empty set keeps the
+    // feed exactly as broad as it was.
+    export const castlePeakRoadSegments = [];
     export function isWithinCorridorRegion() { return true; }
   `;
 
@@ -404,10 +422,26 @@ async function loadListingQueries(searchListings) {
   // filter, so an empty registry is sufficient for dedupe and video queries.
   const estateRegistryStubSource = `export const estateRegistry = [];`;
 
+  // The 2026-09-07 client feedback gave queries.ts a fourth aliased import,
+  // "@/content/client-area-presentation", for resolving a homepage card group
+  // by approved canonical membership. These tests exercise dedupe and video
+  // queries only, neither of which resolves a group, so a stub that throws on
+  // use (rather than a silently-empty group) is enough.
+  const clientAreaPresentationStubSource = `
+    export const approvedPresentationEstateSlugs = [];
+    export function getClientAreaGroup(key) {
+      throw new Error("getClientAreaGroup(" + key + ") is not exercised by the dedupeListings tests");
+    }
+  `;
+
   const queriesSource = transpile(read("src/lib/queries.ts"))
     .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
     .replace('from "@/content/castle-peak-road"', `from "${dataUrl(castlePeakRoadStubSource)}"`)
-    .replace('from "@/content/estate-registry"', `from "${dataUrl(estateRegistryStubSource)}"`);
+    .replace('from "@/content/estate-registry"', `from "${dataUrl(estateRegistryStubSource)}"`)
+    .replace(
+      'from "@/content/client-area-presentation"',
+      `from "${dataUrl(clientAreaPresentationStubSource)}"`,
+    );
 
   return import(dataUrl(queriesSource));
 }

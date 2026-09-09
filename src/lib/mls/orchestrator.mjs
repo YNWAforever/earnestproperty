@@ -460,6 +460,22 @@ export async function runDualSourceSync(input) {
       observations.forEach((observation, index) => {
         if (refs[index]) persisted.set(observationKey(observation), refs[index]);
       });
+      // 網頁07092026.docx p5: record the source's own paid placement grade so
+      // the homepage feed can order 黃金 > 置頂 > 普通.
+      //
+      // The completeness signal is the crawl's own: a run that could not walk
+      // every page, or that hit a bot challenge, saw only part of the index,
+      // so a listing whose badge is simply absent from what we did see is not
+      // evidence of a demotion. savePromotionTiers enforces that -- it accepts
+      // a promotion from a partial run but never a demotion.
+      const promotionTiers = results[source].promotionTiers ?? [];
+      if (typeof repository.savePromotionTiers === "function" && promotionTiers.length > 0) {
+        await repository.savePromotionTiers(promotionTiers, {
+          snapshotComplete: Boolean(
+            results[source].paginationComplete && !results[source].challengeDetected,
+          ),
+        });
+      }
     }
     const history = await Promise.all(
       SOURCES.map((source) => repository.getHealthyCountHistory(source, 7)),

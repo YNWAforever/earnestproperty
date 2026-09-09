@@ -10,6 +10,7 @@ import {
   getEstateEntry,
 } from "./estate-registry.ts";
 import { coreEstates } from "./core-estates.ts";
+import { getClientAreaGroup } from "./client-area-presentation.ts";
 import { estateSeo } from "./seo.ts";
 import { estatePageContent } from "./estate-pages.ts";
 import { castlePeakRoadSegments } from "./castle-peak-road.ts";
@@ -18,21 +19,31 @@ function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 }
 
-test("the registry's first 10 entries are exactly the client-approved homepage estates, in core-estates.ts's order", () => {
-  // core-estates.ts's CLIENT_ORDER_SLUGS is untouched by P4 Task 2 -- still
-  // exactly 10 slugs -- so this checks the registry's leading slice, not its
-  // full length (which grew to 22 once Task 2's 12 net-new estates landed:
-  // the original 10 plus 12 new 青山公路 entries, since 5 of the 17 P4
-  // estates already existed here from Task 1 and were updated in place).
-  const firstTen = estateRegistry.slice(0, 10);
-  assert.deepEqual(
-    firstTen.map((entry) => entry.slug),
-    coreEstates.map((estate) => estate.slug),
-  );
-  assert.deepEqual(
-    firstTen.map((entry) => entry.nameZh),
-    coreEstates.map((estate) => estate.name),
-  );
+test("every homepage core estate resolves to a registry entry, name included", () => {
+  // Was "the registry's first 10 entries are exactly core-estates.ts's, in
+  // order". The client's 2026-09-07 feedback (docx p3) reordered that homepage
+  // sequence and dropped 龍騰閣 from it, so the registry array's own order is
+  // no longer the homepage order -- and never should have been coupled to it,
+  // since the registry is free to be in any order (see its own doc comment).
+  // What still has to hold is that every card resolves to a real registry
+  // entry, and that a card's label is either the canonical name or one the
+  // client explicitly asked for.
+  for (const estate of coreEstates) {
+    const entry = getEstateEntry(estate.slug);
+    assert.ok(entry, `${estate.slug} must exist in the registry`);
+    const ref = getClientAreaGroup("sham-tseng").primary.find((r) => r.slug === estate.slug);
+    assert.ok(ref, `${estate.slug} must be a member of the 深井 / 青龍頭 group`);
+    assert.equal(estate.name, ref.presentationLabel ?? entry.nameZh);
+  }
+});
+
+test("the registry still holds every estate the client's new order dropped", () => {
+  // 龍騰閣 left the curated homepage sequence; its identity, detail page and
+  // directory visibility must survive that.
+  const lungTangKok = getEstateEntry("lung-tang-kok");
+  assert.equal(lungTangKok.nameZh, "龍騰閣");
+  assert.equal(lungTangKok.hasPage, true);
+  assert.ok(!coreEstates.some((estate) => estate.slug === "lung-tang-kok"));
 });
 
 test("P4 Task 2 added exactly 12 net-new entries on top of the original 10 (17 named, 5 already present)", () => {

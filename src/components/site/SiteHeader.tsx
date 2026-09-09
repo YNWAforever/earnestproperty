@@ -14,6 +14,7 @@ import { AppImage } from "@/components/media/AppImage";
 import { SiteLink } from "@/components/site/SiteLink";
 import { hrefPathname } from "@/lib/site-links";
 import { whatsappUrl } from "@/config/site";
+import { getClientAreaGroup } from "@/content/client-area-presentation";
 const companyLogo = "/brand/earnest-company-logo-2026.jpg";
 
 type RouteTo =
@@ -76,29 +77,41 @@ const listingNavItem: NavItem = {
   ownsPrefixes: ["/listings", "/property"],
 };
 
+// docx p1's three commercial groups. Read once here so every label and
+// destination in this menu traces to the same source as the estate
+// directory's shortcuts and its group headings.
+const shamTsengArea = getClientAreaGroup("sham-tseng");
+const castlePeakRoadWestArea = getClientAreaGroup("castle-peak-road-west");
+const yauKomTauTingKauArea = getClientAreaGroup("yau-kom-tau-ting-kau");
+
 const megaMenus: MegaMenuGroup[] = [
   {
     id: "districts",
     label: "地區與屋苑",
-    // Client pruned the district entries to 深井 / 青山公路 / 汀九, so all three
-    // sit in `featured` and `links` carries estate entry points only — an estate
-    // is not a district.
+    // docx p1: the client's exact three region labels and their order. Label
+    // and destination both come from client-area-presentation.ts, the same
+    // source the estate directory's shortcuts and group headings use, so the
+    // same destination cannot carry two different names in the header and the
+    // directory. `links` carries estate entry points only — an estate is not
+    // a district.
     featured: [
       {
-        to: "/district/sham-tseng",
-        label: "深井區買樓租樓",
-        description: "集中瀏覽深井區內買賣、租盤及生活配套。",
+        href: shamTsengArea.href,
+        label: `${shamTsengArea.label}買樓租樓`,
+        description: "集中瀏覽深井、青龍頭區內買賣、租盤及生活配套。",
       },
       {
-        to: "/castle-peak-road",
-        label: "青山公路區買樓租樓",
+        // Anchors the 青山公路 overview's 主要屋苑 section, the content that
+        // actually covers 小欖至三聖 — not a new route with no loader.
+        href: castlePeakRoadWestArea.href,
+        label: `${castlePeakRoadWestArea.label}買樓租樓`,
         description: "沿線屋苑與生活圈樓市資訊。",
       },
       {
         // Param route, so it goes through href like the estate links below.
-        href: "/castle-peak-road/ting-kau",
-        label: "汀九豪宅區買樓租樓",
-        description: "查看汀九筍盤、海景屋苑及區內成交資訊。",
+        href: yauKomTauTingKauArea.href,
+        label: `${yauKomTauTingKauArea.label}買樓租樓`,
+        description: "查看油柑頭、汀九筍盤、海景屋苑及區內成交資訊。",
       },
     ],
     // Direct estate entry points (the client's homepage order, the five with

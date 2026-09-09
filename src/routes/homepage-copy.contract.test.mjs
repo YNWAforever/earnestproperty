@@ -3,6 +3,13 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("./index.tsx", import.meta.url), "utf8");
+// EstateCard/CoreEstateGrid moved out of this route into their own component
+// module, so they can be rendered against fixtures by EstateGroupGrid.test.tsx
+// rather than only scanned as text. These assertions follow the code.
+const gridModuleSource = await readFile(
+  new URL("../components/site/EstateGroupGrid.tsx", import.meta.url),
+  "utf8",
+);
 
 test("homepage uses Chinese-only large headings for the requested sections", () => {
   for (const title of ["最新放盤", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
@@ -79,10 +86,11 @@ test("featured-listings empty state uses the shared EmptyState component", () =>
 // regression guard, not new behavior (nothing above this test changes
 // CoreEstateGrid).
 test("CoreEstateGrid renders an em-dash, never 0, for missing avg PSF or listing count", () => {
-  const gridSource = source.slice(
-    source.indexOf("function CoreEstateGrid("),
-    source.indexOf("function SectionHeader("),
-  );
+  // EstateCard and CoreEstateGrid moved out of this route and into
+  // components/site/EstateGroupGrid.tsx, so they can be rendered against
+  // fixtures by EstateGroupGrid.test.tsx rather than only scanned as text.
+  // These assertions follow the code to the file that now owns it.
+  const gridSource = gridModuleSource;
   assert.match(
     gridSource,
     /psf === null \|\| psf === undefined \|\| !Number\.isFinite\(psf\)\s*\?\s*"—"/,
@@ -99,18 +107,19 @@ test("CoreEstateGrid renders an em-dash, never 0, for missing avg PSF or listing
 // (see design/estate-expansion-17's final review) -- guarding it here so it
 // can't silently return.
 test("CoreEstateGrid gates both grid membership and card linking on a live DB row, not hasPage alone", () => {
-  const gridSource = source.slice(
-    source.indexOf("function CoreEstateGrid("),
-    source.indexOf("function SectionHeader("),
-  );
+  // EstateCard and CoreEstateGrid moved out of this route and into
+  // components/site/EstateGroupGrid.tsx, so they can be rendered against
+  // fixtures by EstateGroupGrid.test.tsx rather than only scanned as text.
+  // These assertions follow the code to the file that now owns it.
+  const gridSource = gridModuleSource;
   assert.match(
     gridSource,
-    /staticEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
-    "linkableEstates must require both hasPage and a live DB row, not hasPage alone",
+    /list\.filter\(\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)\)/,
+    "the linkable filter must require both hasPage and a live DB row, not hasPage alone",
   );
   assert.doesNotMatch(
     gridSource,
-    /staticEstates\.filter\(\(estate\) => estate\.hasPage\)/,
+    /list\.filter\(\(estate\) => estate\.hasPage\)\)/,
     "must not regress to gating the grid on hasPage alone",
   );
   assert.match(
@@ -130,14 +139,15 @@ test("CoreEstateGrid gates both grid membership and card linking on a live DB ro
 // established the pattern for this: a shared EmptyState component, not a
 // silently-empty container.
 test("CoreEstateGrid renders the shared EmptyState, not a bare cardless grid, when a group has zero linkable estates", () => {
-  const gridSource = source.slice(
-    source.indexOf("function CoreEstateGrid("),
-    source.indexOf("function SectionHeader("),
-  );
+  // EstateCard and CoreEstateGrid moved out of this route and into
+  // components/site/EstateGroupGrid.tsx, so they can be rendered against
+  // fixtures by EstateGroupGrid.test.tsx rather than only scanned as text.
+  // These assertions follow the code to the file that now owns it.
+  const gridSource = gridModuleSource;
   assert.match(
     gridSource,
-    /if \(linkableEstates\.length === 0\)/,
-    "must explicitly branch on the zero-estates case",
+    /if \(linkableEstates\.length === 0 && linkableOther\.length === 0\)/,
+    "must explicitly branch on the zero-estates case, counting the 其他 tier too",
   );
   assert.match(
     gridSource,

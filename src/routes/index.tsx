@@ -46,6 +46,7 @@ import {
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { EmptyState } from "@/components/layout/EmptyState";
+import { CoreEstateGrid } from "@/components/site/EstateGroupGrid";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
 import responsiveImages from "@/lib/media/responsive-images.generated.json";
@@ -57,7 +58,11 @@ import {
   CORE_ESTATES_PREVIEW_COUNT,
   type CoreEstate,
 } from "@/content/core-estates";
-import { castlePeakRoadEstates } from "@/content/castle-peak-road-estates";
+import {
+  CASTLE_PEAK_ROAD_OTHER_LABEL,
+  castlePeakRoadEstates,
+  castlePeakRoadOtherEstates,
+} from "@/content/castle-peak-road-estates";
 import { fetchNeonPublicAgentProfiles } from "@/lib/neon/public-data";
 import { toTelHref } from "@/lib/contact-links";
 import { formatHkd } from "@/lib/format";
@@ -66,7 +71,7 @@ import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import {
   fetchCmsVideos,
   fetchEstates,
-  fetchEstatesByDistrict,
+  fetchEstatesForAreaGroup,
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
@@ -103,12 +108,12 @@ export const Route = createFileRoute("/")({
       cmsVideos,
     ] = await Promise.all([
       fetchEstates(),
-      // Same live-figure merge as the 深井 group above, scoped to the
-      // 青山公路 district -- fetchEstates() itself is hardcoded to
-      // "sham-tseng" (it delegates to fetchEstatesByDistrict internally),
-      // so this is the first caller to pass a different district through
-      // fetchEstatesByDistrict directly.
-      fetchEstatesByDistrict("castle-peak-road"),
+      // Same live-figure merge as the 深井 / 青龍頭 group above, for the
+      // client's 青山公路區小欖至三聖 group. Both now resolve by approved
+      // canonical membership (client-area-presentation.ts) rather than by a
+      // single district_slug, so an approved estate whose DB district differs
+      // from its commercial grouping still reaches the homepage.
+      fetchEstatesForAreaGroup("castle-peak-road-west"),
       fetchFeaturedProperties(),
       fetchFaqs("district:sham-tseng"),
       // Nothing seeds a 青山公路 scope (20260622060000_public_content.sql
@@ -192,16 +197,6 @@ function dedupeVideosByUrl(videos: HomeVideo[]): HomeVideo[] {
     return true;
   });
 }
-
-// Card placeholders until 屋苑相片 land. Hues sit in a ±13° band around the brand
-// green (157°) so each estate stays distinguishable without drifting off-palette.
-const ESTATE_GRADIENTS: Record<string, string> = {
-  bellagio: "linear-gradient(135deg, oklch(0.62 0.1 159.5), oklch(0.4 0.09 156.5))",
-  "sea-crest-villa": "linear-gradient(135deg, oklch(0.65 0.09 169.5), oklch(0.42 0.08 162.5))",
-  "hong-kong-garden": "linear-gradient(135deg, oklch(0.68 0.08 144.5), oklch(0.44 0.07 152.5))",
-  "rhine-garden": "linear-gradient(135deg, oklch(0.6 0.1 164.5), oklch(0.4 0.09 156.5))",
-  "lido-garden": "linear-gradient(135deg, oklch(0.65 0.08 149.5), oklch(0.43 0.08 154.5))",
-};
 
 function HomePage() {
   const {
@@ -432,6 +427,11 @@ function HomePage() {
           counts={counts}
           staticEstates={coreEstates}
           districtLabel="深井"
+          // The client's amended ten-estate order (docx p3) is a specific
+          // agreed sequence; hiding its tail behind the shared eight-card
+          // preview made the amendment look unfinished. Scoped to this
+          // section -- the shared default is unchanged everywhere else.
+          previewCount={coreEstates.length}
         />
       </section>
 
@@ -443,6 +443,13 @@ function HomePage() {
           counts={counts}
           staticEstates={castlePeakRoadEstates}
           districtLabel="青山公路"
+          // Same reasoning as the 深井 group above: the client's amended
+          // western order (docx p2) must not be truncated by the shared
+          // eight-card preview, or the 其他 tile that closes it would be
+          // hidden behind an expander.
+          previewCount={castlePeakRoadEstates.length}
+          otherEstates={castlePeakRoadOtherEstates}
+          otherId="castle-peak-road-other-estates"
         />
       </section>
 
@@ -744,185 +751,6 @@ function HomePage() {
         </div>
       </section>
     </div>
-  );
-}
-
-/**
- * The client's ten approved estates (docx p13/p15), not just the five the DB
- * knows about. Live figures are merged in by slug; the five the client added
- * have none, so their cards show 「—」 and do not link — they have no page, and
- * linking to an empty one is worse than not linking at all.
- */
-function CoreEstateGrid({
-  estates,
-  counts,
-  staticEstates,
-  districtLabel,
-}: {
-  estates: EstateSummary[];
-  counts: Record<string, number>;
-  staticEstates: CoreEstate[];
-  districtLabel: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const live = new Map(estates.map((estate) => [estate.slug, estate]));
-  // hasPage:true means the route/content/SEO plumbing exists for this estate
-  // (estate-registry.ts's own doc comment); it does NOT mean the estate is
-  // actually published -- the 2026-09-01 17-estate expansion gave all 22
-  // registry entries hasPage:true while 17 of them stay published=false in
-  // Neon until a human clears each one individually. A card must only link
-  // (or count toward the grid at all) once its live DB row actually exists
-  // in `estates` -- gating on hasPage alone would ship a link to a page that
-  // 404s. This also naturally reproduces the original "no detail page yet"
-  // behavior: filter unreachable estates out of the grid entirely rather
-  // than shipping thin, non-clickable cards next to real ones.
-  const linkableEstates = staticEstates.filter((estate) => estate.hasPage && live.has(estate.slug));
-  // Every linkable estate is rendered (so each /estate/* link is in the served
-  // HTML); the ones past the preview count carry `hidden` until 查看更多屋苑.
-  const visible = linkableEstates;
-  const isCollapsed = (index: number) => !expanded && index >= CORE_ESTATES_PREVIEW_COUNT;
-
-  // Mirrors the already-established pattern for "this section has nothing
-  // real to show yet" elsewhere in this codebase (estate-reviews.tsx's own
-  // 屋苑文章 section, and this same file's 最新放盤 EmptyState above) --
-  // rendering the section heading with a bare, cardless grid underneath
-  // looks broken, not like an honest "nothing here yet" state. This is a
-  // real, currently-live case: the 青山公路屋苑 group's own estates all stay
-  // published=false until each individually clears its publish gate, so
-  // this section shows the EmptyState until at least one of them does.
-  if (linkableEstates.length === 0) {
-    return (
-      <EmptyState
-        className="mt-10"
-        icon={Building2}
-        title={`暫未有${districtLabel}屋苑專頁`}
-        description="屋苑專頁陸續上線，歡迎先直接 WhatsApp 我哋查詢最新放盤。"
-        action={
-          <a
-            href={whatsappUrl(`你好，想查詢${districtLabel}屋苑放盤`)}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Button variant="outline">
-              <MessageCircle className="h-4 w-4" />
-              WhatsApp 查詢
-            </Button>
-          </a>
-        }
-      />
-    );
-  }
-
-  return (
-    <>
-      <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {visible.map((estate, index) => {
-          const dbRow = live.get(estate.slug);
-          const units = dbRow?.total_units ?? estate.units;
-          const psf = dbRow?.avg_saleable_psf == null ? null : Number(dbRow.avg_saleable_psf);
-          const photo = estate.photo ?? dbRow?.hero_image;
-          const listingCount = dbRow ? (counts[estate.slug] ?? 0) : estate.listingCount;
-          const meta = [estate.district, `${estateFigure(units)} 個單位`]
-            .filter(Boolean)
-            .join(" · ");
-
-          const card = (
-            <>
-              <div
-                className="relative h-48 overflow-hidden"
-                style={
-                  photo
-                    ? undefined
-                    : { background: ESTATE_GRADIENTS[estate.slug] ?? ESTATE_GRADIENTS.bellagio }
-                }
-              >
-                <AppImage
-                  src={photo}
-                  alt={`${estate.name} ${districtLabel} 放盤`}
-                  width={1600}
-                  height={900}
-                  // This directory follows hero and featured inventory, so every card is below the fold.
-                  loading="lazy"
-                  sizes="(min-width: 1280px) 296px, (min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                  className="h-full w-full object-cover"
-                  // No src (or a runtime error) must let the parent's per-estate
-                  // ESTATE_GRADIENTS background show through -- AppImage's opaque
-                  // default fallback would otherwise paint over it.
-                  fallback={<></>}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <Building2 className="absolute right-4 top-4 h-8 w-8 text-primary-foreground/40" />
-                <div className="absolute bottom-4 left-5 text-primary-foreground">
-                  <h3 className="text-2xl font-bold">{estate.name}</h3>
-                  <p className="text-xs opacity-80">{meta}</p>
-                </div>
-                {estate.photo && estate.photoCredit ? (
-                  <p className="absolute bottom-1 right-2 text-[9px] text-primary-foreground/60">
-                    {estate.photoCredit}
-                  </p>
-                ) : null}
-              </div>
-              <div className="grid grid-cols-2 gap-3 p-5">
-                <div>
-                  <p className="text-[11px] text-muted-foreground">平均放盤實呎</p>
-                  <p className="text-base font-semibold text-primary">
-                    {psf === null || psf === undefined || !Number.isFinite(psf)
-                      ? "—"
-                      : `$${estateFigure(psf)}`}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[11px] text-muted-foreground">最新放盤</p>
-                  <p className="text-base font-semibold text-primary">
-                    {listingCount === null || listingCount === undefined
-                      ? "—"
-                      : `${listingCount} 個`}
-                  </p>
-                </div>
-                {dbRow ? (
-                  <div className="col-span-2 mt-1 flex items-center justify-between border-t border-border pt-3 text-sm font-medium text-primary">
-                    <span>瀏覽屋苑詳情</span>
-                    <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </div>
-                ) : null}
-              </div>
-            </>
-          );
-
-          const shell =
-            "group relative overflow-hidden rounded-2xl border border-border bg-card shadow-card";
-
-          // dbRow presence (not estate.hasPage alone) gates the link -- see
-          // linkableEstates's own comment above. visible is already filtered
-          // to entries with a live dbRow, so this is always true here today;
-          // kept as an explicit per-card check so this stays safe even if
-          // that upstream filter is ever loosened without updating this line.
-          return dbRow ? (
-            <Link
-              key={estate.slug}
-              to="/estate/$slug"
-              params={{ slug: estate.slug }}
-              hidden={isCollapsed(index)}
-              className={`${shell} transition-all hover:-translate-y-1 hover:shadow-elegant`}
-            >
-              {card}
-            </Link>
-          ) : (
-            <div key={estate.slug} hidden={isCollapsed(index)} className={shell}>
-              {card}
-            </div>
-          );
-        })}
-      </div>
-
-      {linkableEstates.length > CORE_ESTATES_PREVIEW_COUNT && !expanded ? (
-        <div className="mt-8 flex justify-center">
-          <Button variant="outline" onClick={() => setExpanded(true)}>
-            查看更多屋苑
-          </Button>
-        </div>
-      ) : null}
-    </>
   );
 }
 

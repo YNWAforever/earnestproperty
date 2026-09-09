@@ -843,6 +843,9 @@ test("repository requires one dedicated query client and exposes the Task 9 surf
     "registerOwnedMedia",
     "saveMediaRecord",
     "saveObservations",
+    // 網頁07092026.docx p5: records the source's own paid placement grade so
+    // the homepage feed can order 黃金 > 置頂 > 普通.
+    "savePromotionTiers",
     "saveProposedLinks",
   ]);
 });
