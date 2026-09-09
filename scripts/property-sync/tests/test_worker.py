@@ -604,3 +604,86 @@ class CompanyNumberTests(unittest.TestCase):
         payload,_=w.crawl('propertyhk',cfg,fixtures)
         self.assertEqual(payload['meta']['parser_version'], 'python-v2.0')
 
+
+
+# 網頁07092026.docx p5: the client asked for 黃金 listings first, then 置頂, then
+# ordinary ones. The grade is 28Hse's own paid placement badge, rendered as
+# .grade_label inside the card's image anchor -- see promotion-tier.mjs, which
+# normalizes the raw value these tests assert on.
+GRADE_HEAD = (
+    "<h1>晉誠地產</h1><p>C-018613</p><p>共有 3 個放租樓盤</p>"
+)
+
+
+def grade_card(ident, badge, title):
+    """One agent-index card, shaped like the live markup: two anchors per
+    listing, and only the image one carries the badge."""
+    label = (
+        f'<div class="ui top left attached small label grade_label">{badge}</div>'
+        if badge
+        else ""
+    )
+    return (
+        '<div class="item property_item ">'
+        '<div class="image myimage desktop_myimage">'
+        f'<a class="detail_page" href="https://www.28hse.com/rent/apartment/property-{ident}">'
+        f"<img src='/x.jpg'>{label}</a></div>"
+        '<div class="content"><div class="header">'
+        f'<a class="detail_page" href="https://www.28hse.com/rent/apartment/property-{ident}">{title}</a>'
+        "</div></div></div>"
+    )
+
+
+def test_promotion_grade_is_read_per_listing_from_the_badge():
+    import scraping.worker as w
+
+    html = GRADE_HEAD + "".join(
+        [
+            grade_card("3998335", "黃金", "3房套+工人房！全新未住！"),
+            grade_card("4005841", "置頂", "青龍頭海景洋房！環境清幽！"),
+            # No badge, and 黃金地段 in the title -- the real trap case from the
+            # live index. It must read as ordinary, never as a gold placement.
+            grade_card("4005842", "", "兩層靚則獨立大屋！黃金地段！連2車位！"),
+        ]
+    )
+    rows, terminal, total = w.parse_28_index(html, "rent")
+    grades = {r["property_id"]: r["promotion_tier_raw"] for r in rows}
+    assert grades == {"3998335": "黃金", "4005841": "置頂", "4005842": ""}
+    assert terminal is False
+    assert total == 3
+
+
+def test_promotion_grade_survives_the_untagged_title_anchor():
+    import scraping.worker as w
+
+    # The title anchor wins the longest-title contest and carries no badge; the
+    # grade must still come through from the image anchor on the same card.
+    html = GRADE_HEAD.replace("共有 3", "共有 1") + grade_card(
+        "3998335", "黃金", "a much longer title that wins the length contest"
+    )
+    rows, _, _ = w.parse_28_index(html, "rent")
+    assert rows[0]["promotion_tier_raw"] == "黃金"
+    assert rows[0]["title"] == "a much longer title that wins the length contest"
+
+
+def test_an_unrecognised_badge_is_carried_through_not_guessed():
+    import scraping.worker as w
+
+    html = GRADE_HEAD.replace("共有 3", "共有 1") + grade_card("3998335", "鑽石", "標題")
+    rows, _, _ = w.parse_28_index(html, "rent")
+    # Passed through verbatim so the consumer records it as unknown rather than
+    # inventing a tier for a grade nobody has verified.
+    assert rows[0]["promotion_tier_raw"] == "鑽石"
+
+
+def test_strongest_grade_merges_repeat_sightings_deterministically():
+    import scraping.worker as w
+
+    assert w.strongest_grade("", "黃金") == "黃金"
+    assert w.strongest_grade("黃金", "") == "黃金"
+    assert w.strongest_grade("置頂", "黃金") == "黃金"
+    assert w.strongest_grade("黃金", "置頂") == "黃金"
+    assert w.strongest_grade("", "置頂") == "置頂"
+    assert w.strongest_grade("", "") == ""
+    # Order of sighting must not change the answer.
+    assert w.strongest_grade("鑽石", "黃金") == w.strongest_grade("黃金", "鑽石")

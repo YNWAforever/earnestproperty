@@ -272,6 +272,33 @@ def soup_checked(html):
     return s
 
 
+# The only grades 28Hse renders, strongest first. Matched exactly, never as a
+# substring: 黃金海岸, 黃金海灣 and 黃金地段 all contain 黃金 and none of them is
+# a promotion grade. An unrecognised badge is carried through verbatim so the
+# consumer can record it as unknown rather than guessing a tier for it.
+GRADE_ORDER = ("黃金", "置頂")
+
+
+def grade_label(anchor_node):
+    """The .grade_label text for one listing anchor, or "" when unbadged."""
+    node = anchor_node.select_one(".grade_label")
+    if node is None:
+        card = anchor_node.find_parent(class_="property_item")
+        node = card.select_one(".grade_label") if card else None
+    return text(node.get_text()) if node is not None else ""
+
+
+def strongest_grade(*values):
+    """Deterministic merge when one listing is seen more than once."""
+    for grade in GRADE_ORDER:
+        if grade in values:
+            return grade
+    for value in values:
+        if value:
+            return value
+    return ""
+
+
 def parse_28_index(html, deal):
     s = soup_checked(html)
     names = [text(n.get_text()).lower() for n in s.select("h1")]
@@ -309,6 +336,16 @@ def parse_28_index(html, deal):
         url = "https://www.28hse.com" + candidate.path.rstrip("/")
         if ident in links and links[ident]["source_url"] != url:
             raise WorkerError("conflicting_url")
+        # 28Hse's paid placement grade, rendered as a .grade_label badge inside
+        # the card's image anchor. Each listing has two anchors and only the
+        # image one carries the badge, so look at the enclosing card too and
+        # keep the strongest grade seen for this id. Absent means an ordinary
+        # listing -- this page parsed as a real agent index, so absence is an
+        # observation, not a gap. Never inferred from the title: a listing here
+        # reads "黃金地段" with no badge at all.
+        grade = grade_label(a)
+        if ident in links:
+            grade = strongest_grade(links[ident]["promotion_tier_raw"], grade)
         if ident not in links or len(title) > len(links[ident]["title"]):
             links[ident] = {
                 "property_id": ident,
@@ -316,7 +353,10 @@ def parse_28_index(html, deal):
                 "source_url": url,
                 "title": title,
                 "deal_type": deal,
+                "promotion_tier_raw": grade,
             }
+        else:
+            links[ident]["promotion_tier_raw"] = grade
     if any(not r["title"] for r in links.values()):
         raise WorkerError("missing_title")
     # v2 requires an actual empty endpoint, even when advertised total was reached.
