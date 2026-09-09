@@ -6,6 +6,7 @@ import {
   stableObservationHash,
 } from "./source-contract.mjs";
 import { nextLifecycleState, normalizeCanonicalFieldValue } from "./reconcile.mjs";
+import { savePromotionTiers } from "./promotion-tier-repository.mjs";
 
 const SOURCES = new Set([SOURCE_28HSE, SOURCE_OLD_SITE]);
 const DEAL_TYPES = new Set(["sale", "rent"]);
@@ -1815,6 +1816,18 @@ export function createSyncRepository(options = {}) {
       throw new TypeError("run row did not return one canonical UUID");
     }
     return { runId: rows[0].id };
+  }
+
+  /**
+   * Persists the observed 28Hse promotion grades (網頁07092026.docx p5).
+   *
+   * Called by the orchestrator right after saveObservations, with the crawl's
+   * own completeness signal -- see savePromotionTiers's own doc comment for
+   * why an incomplete snapshot must not be allowed to demote a listing.
+   */
+  async function savePromotionTiersForRun(observations, options) {
+    if (!Array.isArray(observations)) throw new TypeError("observations must be an array");
+    return savePromotionTiers(query, observations, options);
   }
 
   async function saveObservations(runId, observations) {
@@ -5898,6 +5911,7 @@ export function createSyncRepository(options = {}) {
     registerOwnedMedia,
     saveMediaRecord,
     saveObservations,
+    savePromotionTiers: savePromotionTiersForRun,
     saveProposedLinks,
   });
 }

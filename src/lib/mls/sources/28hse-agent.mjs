@@ -17,6 +17,7 @@ import {
   parse28HseDetail,
 } from "../parse-28hse.mjs";
 import { SOURCE_28HSE, createObservation } from "../source-contract.mjs";
+import { strongestPromotionTier } from "../promotion-tier.mjs";
 
 const ORIGIN = "https://www.28hse.com";
 const ROBOTS_URL = `${ORIGIN}/robots.txt`;
@@ -349,6 +350,16 @@ export function create28HseAgentSourceAdapter({
                   summaryTitle: link.summaryTitle,
                 });
               }
+              // The same listing can surface on more than one index page.
+              // Merge the observed promotion grades deterministically (the
+              // strongest paid grade wins) instead of keeping whichever page
+              // happened to be crawled first.
+              existing.promotionTier = strongestPromotionTier([
+                existing.promotionTier,
+                link.promotionTier,
+              ]);
+              existing.promotionTierRaw =
+                existing.promotionTierRaw ?? link.promotionTierRaw ?? null;
               continue;
             }
             const record = {
@@ -356,6 +367,8 @@ export function create28HseAgentSourceAdapter({
               dealType,
               sourceUrl,
               summaryTitle: link.summaryTitle,
+              promotionTier: link.promotionTier,
+              promotionTierRaw: link.promotionTierRaw ?? null,
               discoveredAt: isoNow(now),
               candidates: new Map([[sourceUrl, { sourceUrl, summaryTitle: link.summaryTitle }]]),
             };
@@ -520,6 +533,19 @@ export function create28HseAgentSourceAdapter({
         pageCounts,
         discovered: discoveredByIdentity.size,
         observations,
+        // 網頁07092026.docx p5. Deliberately beside `observations` rather than
+        // on them: the grade is a property of the listing's placement on the
+        // agent index, not of the detail page an observation describes, and
+        // listing_source_observations has an exact-key contract
+        // (sync-repository.mjs's OBSERVATION_KEYS) that this must not widen.
+        promotionTiers: [...discoveredByIdentity.values()].map((record) => ({
+          source: SOURCE_28HSE,
+          externalId: record.externalId,
+          dealType: record.dealType,
+          promotionTier: record.promotionTier,
+          promotionTierRaw: record.promotionTierRaw,
+          fetchedAt: isoNow(now),
+        })),
         failures,
         diagnostics: [...diagnosticsByUrl.values()],
         conflictingDuplicateIds: [...conflictingDuplicateIds].sort(),

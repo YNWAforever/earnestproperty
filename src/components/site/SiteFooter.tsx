@@ -3,6 +3,8 @@ import { MapPin, Phone, Mail } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
+import { clientAreaGroupsInNavOrder } from "@/content/client-area-presentation";
+import { SiteLink } from "@/components/site/SiteLink";
 const companyLogo = "/brand/earnest-company-logo-2026.jpg";
 
 // "2688 2988", matching how the same numbers are printed elsewhere on the
@@ -55,25 +57,17 @@ export function SiteFooter() {
                   搜尋全部放盤
                 </Link>
               </li>
-              <li>
-                <Link to="/district/sham-tseng" className="opacity-80 hover:opacity-100">
-                  深井區買樓租樓
-                </Link>
-              </li>
-              <li>
-                <Link to="/castle-peak-road" className="opacity-80 hover:opacity-100">
-                  青山公路區買樓租樓
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/castle-peak-road/$segment"
-                  params={{ segment: "ting-kau" }}
-                  className="opacity-80 hover:opacity-100"
-                >
-                  汀九豪宅區買樓租樓
-                </Link>
-              </li>
+              {/* docx p1's three region labels and destinations, from the same
+                  client-area-presentation.ts source the header navigation and
+                  the estate directory read -- so the footer cannot drift into
+                  a fourth wording for the same three destinations. */}
+              {clientAreaGroupsInNavOrder().map((group) => (
+                <li key={group.key}>
+                  <SiteLink href={group.href} className="opacity-80 hover:opacity-100">
+                    {group.label}買樓租樓
+                  </SiteLink>
+                </li>
+              ))}
             </ul>
 
             <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">

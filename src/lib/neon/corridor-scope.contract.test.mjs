@@ -80,6 +80,7 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
   "fetchNeonEstateOptions",
   "fetchNeonEstateTransactions",
   "fetchNeonEstates",
+  "fetchNeonEstatesBySlugs",
   "fetchNeonFaqs",
   "fetchNeonFeaturedProperties",
   "fetchNeonListingCountsByEstate",
@@ -139,17 +140,29 @@ async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
   `;
 
   const estateRegistryUrl = dataUrl(transpile(read("src/content/estate-registry.ts")));
-  const castlePeakRoadUrl = dataUrl(
-    transpile(read("src/content/castle-peak-road.ts")).replace(
+  // The 2026-09-07 client feedback gave castle-peak-road.ts a second relative
+  // import: client-area-presentation.ts, which supplies the approved-estate
+  // allowance isWithinCorridorRegion now honours. That module has its own
+  // relative import of estate-registry.ts, so it is redirected to the same
+  // already-inlined registry module before being inlined itself -- otherwise a
+  // data: URL module would be left with an unresolvable relative specifier.
+  const clientAreaPresentationUrl = dataUrl(
+    transpile(read("src/content/client-area-presentation.ts")).replace(
       'from "./estate-registry.ts"',
       `from "${estateRegistryUrl}"`,
     ),
+  );
+  const castlePeakRoadUrl = dataUrl(
+    transpile(read("src/content/castle-peak-road.ts"))
+      .replace('from "./estate-registry.ts"', `from "${estateRegistryUrl}"`)
+      .replace('from "./client-area-presentation.ts"', `from "${clientAreaPresentationUrl}"`),
   );
 
   const queriesSource = transpile(read("src/lib/queries.ts"))
     .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
     .replace('from "@/content/castle-peak-road"', `from "${castlePeakRoadUrl}"`)
-    .replace('from "@/content/estate-registry"', `from "${estateRegistryUrl}"`);
+    .replace('from "@/content/estate-registry"', `from "${estateRegistryUrl}"`)
+    .replace('from "@/content/client-area-presentation"', `from "${clientAreaPresentationUrl}"`);
 
   return import(dataUrl(queriesSource));
 }

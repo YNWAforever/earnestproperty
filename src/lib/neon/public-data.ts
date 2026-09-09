@@ -39,10 +39,18 @@ export const fetchNeonCorridorInventory = createServerFn({ method: "GET" })
   });
 
 export const fetchNeonFeaturedProperties = createServerFn({ method: "GET" })
-  .inputValidator((data: { limit: number }) => data)
+  .inputValidator(
+    (data: {
+      limit: number;
+      districtSlugs?: string[];
+      estateSlugs?: string[];
+      textAliases?: string[];
+      outOfScopeTextAliases?: string[];
+    }) => data,
+  )
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchFeaturedProperties(data.limit);
+    return neonData.fetchFeaturedProperties(data);
   });
 
 export const fetchNeonListingsForEstate = createServerFn({ method: "GET" })
@@ -97,6 +105,13 @@ export const fetchNeonEstates = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
     return neonData.fetchEstates(data);
+  });
+
+export const fetchNeonEstatesBySlugs = createServerFn({ method: "GET" })
+  .inputValidator((data: { slugs: string[] }) => data)
+  .handler(async ({ data }) => {
+    const neonData = await import("./public-data.server");
+    return neonData.fetchEstatesBySlugs(data);
   });
 
 export const fetchNeonEstateBySlug = createServerFn({ method: "GET" })

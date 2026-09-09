@@ -1,3 +1,4 @@
+import { isApprovedPresentationEstate } from "./client-area-presentation.ts";
 import { estateSlugsForCorridorSegment } from "./estate-registry.ts";
 
 export type CorridorFaq = {
@@ -440,6 +441,20 @@ export function isWithinCorridorRegion(input: {
   // Already attached to a corridor estate: the strongest signal there is, and
   // not something the place-name gate should be allowed to override.
   if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug)) return true;
+
+  // 2026-09-07 client feedback: the same override for an estate the client's
+  // own approved presentation groups name (client-area-presentation.ts).
+  //
+  // Without this, 香港黃金海岸 (slug wong-gam-hoi-ngon) can never appear
+  // anywhere: its own canonical name contains 黃金海岸, which is one of
+  // outOfScopeTextAliases below, so the place-name gate rejected the estate
+  // by its own name. That gate exists to keep unrelated 屯門 / 大欖涌 /
+  // generic-青山公路 stock off the site and is unchanged for everything else
+  // -- this is a per-estate allowance keyed on a canonical slug the client
+  // explicitly approved, never a district, a free-text place name, or the
+  // generic "castle-peak-road" district. An unapproved estate, or a listing
+  // with no estate at all, still goes through the full gate below.
+  if (isApprovedPresentationEstate(input.estateSlug)) return true;
 
   const haystack = (input.text ?? [])
     .filter((value): value is string => Boolean(value))
