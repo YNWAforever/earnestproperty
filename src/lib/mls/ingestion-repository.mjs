@@ -621,7 +621,11 @@ export async function applyIngestion(client, payload, options = {}) {
         // It never claims unknown fields or changes a value already selected manually.
         if (
           rawValue === null &&
-          (!owned?.winning_observation_id || owned.selection_reason === "manual_override")
+          (!owned?.winning_observation_id ||
+            owned.selection_reason === "manual_override" ||
+            (column === "description" &&
+              owned.selection_reason === "operator_publication" &&
+              owned.policy_version === "daily-reviewed-publication-v1"))
         ) {
           if (!owned && property[column] != null && property[column] !== "")
             await review(
