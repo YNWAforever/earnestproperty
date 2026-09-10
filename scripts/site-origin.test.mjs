@@ -29,3 +29,30 @@ test("resolveSiteOrigin prefers VITE_SITE_URL, then Vercel's production URL, els
   );
   assert.equal(resolveSiteOrigin({}), null);
 });
+
+// A canonical SEO URL is not proof that DNS/the custom host serves this app.
+test("custom-domain redirect is opt-in independently of the SEO origin", async () => {
+  const { execFileSync } = await import("node:child_process");
+  function redirects(flag, origin = "https://www.earnestproperty.com") {
+    return JSON.parse(
+      execFileSync(
+        process.execPath,
+        [
+          "--experimental-strip-types",
+          "--input-type=module",
+          "-e",
+          "import {config} from './vercel.ts'; console.log(JSON.stringify(config.redirects.filter(r=>r.has?.some(h=>h.type==='host'))));",
+        ],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: { ...process.env, VITE_SITE_URL: origin, CANONICAL_HOST_REDIRECT_ENABLED: flag },
+        },
+      ),
+    );
+  }
+  assert.deepEqual(redirects(""), []);
+  assert.deepEqual(redirects("false"), []);
+  assert.equal(redirects("true")[0].destination, "https://www.earnestproperty.com/:path*");
+  assert.deepEqual(redirects("true", "https://earnestproperty.vercel.app"), []);
+});
