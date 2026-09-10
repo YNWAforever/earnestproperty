@@ -140,11 +140,43 @@ function requiredText(value, name) {
   return text;
 }
 
+/**
+ * The agent-page headings accepted as proof that the page being parsed really
+ * belongs to Earnest Property.
+ *
+ * This is a *second* identity factor, not the only one: parse28HseAgentIndex
+ * independently requires the page to carry exactly one licence number and for
+ * it to equal AGENT_LICENCE (C-018613), and the agent URL itself is pinned to
+ * /agent/540. This set exists so a template change that swapped in a different
+ * agency's content could not be ingested silently.
+ *
+ * Deliberately exact-match against the normalized heading -- never a substring
+ * or regex test. A substring test would accept any company whose name merely
+ * contains one of these, which is the failure this guard exists to prevent.
+ *
+ * 2026-09-09: every sync run was failing with `identity_mismatch`. 28Hse had
+ * started rendering the agent's full registered name, in both languages, in
+ * the page's single <h1>:
+ *
+ *     晉誠地產代理有限公司
+ *                             Earnest Property Agency Ltd
+ *
+ * which normalizes to "晉誠地產代理有限公司 earnest property agency ltd". The
+ * licence on that same page still read C-018613 exactly once, so the page was
+ * genuinely the right agent's -- only this allowlist rejected it. The observed
+ * combined form is added below, along with each language's registered name on
+ * its own, so the check does not break again if 28Hse renders only one of them.
+ */
 const APPROVED_AGENT_COMPANY_NAMES = new Set([
   "晉誠地產",
   "earnest property",
   "晉誠地產 earnest property",
   "earnest property 晉誠地產",
+  // Registered company name, as rendered by 28Hse from 2026-09-09.
+  "晉誠地產代理有限公司 earnest property agency ltd",
+  "earnest property agency ltd 晉誠地產代理有限公司",
+  "晉誠地產代理有限公司",
+  "earnest property agency ltd",
 ]);
 
 export function is28HseAgentCompanyName(companyName) {
@@ -316,6 +348,42 @@ export function detect28HseChallenge(html) {
   return hasPasswordForm && !hasValidAgentContent;
 }
 
+/**
+ * Resolves one anchor on the agent index to a listing link, or null.
+ *
+ * 2026-09-09: 28Hse switched this page from relative listing hrefs
+ * ("/buy/apartment/property-4007285") to absolute ones
+ * ("https://www.28hse.com/buy/apartment/property-4007285"). The previous
+ * pattern was anchored to a leading "/", so it matched nothing and every run
+ * failed with "positive count has no listing links" -- an advertised count of
+ * 191 alongside zero discovered links.
+ *
+ * Resolving against the page URL first and then matching the *pathname*
+ * accepts both spellings. Pinning protocol and host is what keeps the old
+ * pattern's safety: a relative-only match could never leave 28Hse, and without
+ * this an absolute href pointing anywhere else would now be ingested. A query
+ * or fragment is still rejected outright, exactly as the old `$`-anchored
+ * pattern rejected it.
+ */
+function agentIndexListingLink(href, pageUrl, dealType) {
+  if (typeof href !== "string" || !href) return null;
+  let url;
+  try {
+    url = new URL(href, pageUrl);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.hostname !== "www.28hse.com") return null;
+  if (url.search || url.hash) return null;
+  const match = url.pathname.match(/^\/(buy|rent)\/[^/?#]+\/property-(\d+)\/?$/i);
+  if (!match) return null;
+  if (match[1].toLowerCase() !== (dealType === "sale" ? "buy" : "rent")) return null;
+  return {
+    externalId: match[2],
+    url: `${url.origin}${url.pathname.replace(/\/$/, "")}`,
+  };
+}
+
 export function parse28HseAgentIndex(html, context) {
   requireDealType(context?.dealType);
   const pageUrl = requireAgentPageUrl(context?.pageUrl, context.dealType);
@@ -350,19 +418,10 @@ export function parse28HseAgentIndex(html, context) {
 
   const linksById = new Map();
   $("a[href]").each((_, anchor) => {
-    const href = $(anchor).attr("href");
-    const match = href?.match(/^\/(buy|rent)\/[^/?#]+\/property-(\d+)\/?$/i);
-    if (
-      !match ||
-      (context.dealType === "sale"
-        ? match[1].toLowerCase() !== "buy"
-        : match[1].toLowerCase() !== "rent")
-    )
-      return;
-    const externalId = match[2];
+    const listing = agentIndexListingLink($(anchor).attr("href"), pageUrl, context.dealType);
+    if (!listing) return;
+    const { externalId, url } = listing;
     const summaryTitle = normalizeText($(anchor).text());
-    const canonicalHref = href.endsWith("/") ? href.slice(0, -1) : href;
-    const url = safeAbsoluteUrl(canonicalHref, pageUrl);
     const previous = linksById.get(externalId);
     if (previous && previous.url !== url) {
       throw new Error("Unexpected agent index template: contradictory listing link");
