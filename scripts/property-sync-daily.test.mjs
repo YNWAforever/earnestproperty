@@ -22,7 +22,7 @@ test("daily workflow is gated, serialized, immutable and narrowly scoped", () =>
     "agent:540",
   ])
     assert.ok(y.includes(value), value);
-  assert.equal((y.match(/secrets\.DATABASE_URL_UNPOOLED/g) || []).length, 1);
+  assert.equal((y.match(/secrets\.DATABASE_URL_UNPOOLED/g) || []).length, 2);
   assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(y));
   assert.ok(
     y.indexOf("Collect without database access") < y.indexOf("secrets.DATABASE_URL_UNPOOLED"),
@@ -38,7 +38,12 @@ test("database credential exists only on the gated apply step", async () => {
   assert.match(workflow.jobs.daily.if, /PROPERTY_SYNC_DAILY_ENABLED == 'true'/);
   const steps = workflow.jobs.daily.steps;
   const apply = steps.filter((step) => step.env?.DATABASE_URL_UNPOOLED);
-  assert.equal(apply.length, 1);
+  assert.equal(apply.length, 2);
+  assert.ok(apply.every((step) => step.if === "endsWith(env.MODE, 'apply')"));
+  assert.ok(
+    steps.findIndex((step) => step.name === "Pin accepted full baseline") <
+      steps.findIndex((step) => step.name === "Publish verified imported drafts"),
+  );
   assert.ok(
     apply[0].run.indexOf("verify-daily-target.mjs") < apply[0].run.indexOf("replay_28hse_sync.py"),
   );
@@ -74,4 +79,3 @@ test("accepted asset names derive from immutable snapshot chronology", () => {
   assert.match(y, /tar -czf "\$asset" baseline/);
   assert.ok(!y.includes('tar -czf "accepted-$GITHUB_RUN_ID'));
 });
-

@@ -129,6 +129,20 @@ jobs:
           asset=$(python scripts/property-sync/daily_artifacts.py name --request "$PAYLOAD" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT")
           tar -czf "$asset" baseline
           gh release upload property-sync-evidence "$asset"
+      - name: Publish verified imported drafts
+        if: endsWith(env.MODE, 'apply')
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: node scripts/mls/publish-daily-listings.mjs --payload "$PAYLOAD" --report daily-output/publication.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: property-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: daily-output/publication.json
+          retention-days: 90
+          if-no-files-found: ignore
       - name: Compress evidence even after failure
         if: always()
         run: python scripts/property-sync/daily_artifacts.py archive --root daily-output --destination daily-archives
@@ -156,5 +170,7 @@ jobs:
         if: always()
         run: |
           echo "Daily agent:540 result: ${{ job.status }}. Evidence reference: $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT." >> "$GITHUB_STEP_SUMMARY"
-          echo 'See restricted request and receipt artifacts. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
-
+          echo 'See restricted request, receipt and publication artifacts. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f daily-output/publication.json ]; then
+            python -c 'import json; r=json.load(open("daily-output/publication.json")); print("Publication: %d published, %d held for review." % (len(r["published"]),len(r["held"])))' >> "$GITHUB_STEP_SUMMARY"
+          fi

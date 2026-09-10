@@ -514,6 +514,8 @@ def parse_28_detail(html, record):
             r[k] = 0 if "開放式" in v else int(m[1]) if m else None
         else:
             r[k] = v
+    from .publication import publication_content
+    r["publication"] = publication_content(html, r)
     return r
 
 
