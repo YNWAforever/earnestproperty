@@ -101,6 +101,7 @@ test("CI runs every test script that does not need a database or browser server"
     "test:control-plane:db",
     "test:mls:db",
     "test:property-sync:db",
+    "test:property-sync:publication:db",
     "test:staff-bootstrap:db",
     "test:youtube-sync:db",
   ]);
