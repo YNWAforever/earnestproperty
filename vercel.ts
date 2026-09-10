@@ -26,11 +26,11 @@ const detailRedirects = importedRedirects.map((redirect) =>
   redirectEntry(redirect.source, redirect.destination, redirect.permanent),
 );
 
-// Once VITE_SITE_URL names the custom domain, the vercel.app origin must not
-// keep serving an indexable duplicate: 301 every path there to the canonical
-// host. No-op while SITE_URL is still the vercel.app fallback.
+// SEO canonical URLs do not activate a domain cutover. Enable host redirects
+// only after the custom domain is verified to serve this deployment and assets.
 const FALLBACK_HOST = "earnestproperty.vercel.app";
 function canonicalHostRedirects(): VercelRedirect[] {
+  if (process.env.CANONICAL_HOST_REDIRECT_ENABLED !== "true") return [];
   const resolved = resolveSiteOrigin();
   if (!resolved) return [];
   const origin = new URL(resolved);
