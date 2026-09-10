@@ -19,11 +19,19 @@
  */
 import { castlePeakRoadSegments } from "./castle-peak-road.ts";
 import { estateRegistry } from "./estate-registry.ts";
+import { estateReviewArticles } from "./estate-review-articles.ts";
 import { schoolNets } from "./school-nets.ts";
 
 export const BLOG_CATEGORIES = [
   "買樓攻略",
   "租樓攻略",
+  // 屋苑開箱 is the category /estate-reviews queries
+  // (fetchPublishedArticlesByCategory("屋苑開箱")), and it is a first-class
+  // section in the header, the footer and VIDEO_CATEGORIES -- but it was
+  // missing from this list, so no article authored through the site's own
+  // taxonomy could ever reach 最新屋苑文章, and the CMS category picker never
+  // offered it.
+  "屋苑開箱",
   "屋苑比較",
   "成交分析",
   "社區生活",
@@ -46,6 +54,14 @@ export type BlogArticleMeta = {
   sections: readonly BlogArticleSection[];
   /** Estate slugs (must resolve in estate-registry.ts) to render as a live
    * comparison table -- see blog_.$slug.tsx's loader. */
+  /**
+   * When this article becomes public, as an ISO instant. Every consumer
+   * filters on it at request time (see `publishedBlogArticles`), so a
+   * scheduled article goes live on its date with no deploy and is genuinely
+   * unreachable before it. Omitted on the two flagship guides, which predate
+   * scheduling and are treated as always published.
+   */
+  publishedAt?: string;
   compareEstateSlugs?: readonly string[];
   links: readonly { href: string; label: string }[];
 };
@@ -62,7 +78,15 @@ function estateDisplayName(slug: string): string {
   return entry ? entry.nameZh : slug;
 }
 
-export const blogArticles: readonly BlogArticleMeta[] = [
+/**
+ * The 50 屋苑開箱 articles behind /estate-reviews's 最新屋苑文章 section live in
+ * their own module because they are derived from estatePageContent rather than
+ * hand-typed. They are appended here (rather than kept separate) so /blog, the
+ * sitemap, blog_.$slug.tsx and estate.$slug.tsx's "related articles" lookup all
+ * see one article list. The import is one-directional: that module takes only
+ * `BlogArticleMeta` as a type, so `EDITORIAL_AUTHOR` below is not a cycle.
+ */
+const flagshipArticles: readonly BlogArticleMeta[] = [
   {
     slug: "sham-tseng-buying-guide-2026",
     title: "深井買樓全攻略 2026：5 大屋苑、交通、校網一次睇晒",
@@ -114,7 +138,9 @@ export const blogArticles: readonly BlogArticleMeta[] = [
   },
   {
     slug: "bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
-    title: `${estateDisplayName("bellagio")} vs ${estateDisplayName("sea-crest-villa")} vs ${estateDisplayName("hong-kong-garden")}：深井三大屋苑點揀好？`,
+    // 52 display units with the old 「深井三大屋苑點揀好？」 tail, which
+    // blog_.$slug.tsx would trim before appending the brand suffix.
+    title: `${estateDisplayName("bellagio")} vs ${estateDisplayName("sea-crest-villa")} vs ${estateDisplayName("hong-kong-garden")}：三大屋苑點揀？`,
     excerpt:
       "碧堤半島、浪翠園、豪景花園三大深井屋苑點揀？實時比較呎價、單位數、落成年份同發展商，再睇邊種買家最啱邊個屋苑。",
     category: "屋苑比較",
@@ -155,3 +181,33 @@ export const blogArticles: readonly BlogArticleMeta[] = [
     ],
   },
 ] as const;
+
+export const blogArticles: readonly BlogArticleMeta[] = [
+  ...flagshipArticles,
+  ...estateReviewArticles.map((article) => ({
+    ...article,
+    author: EDITORIAL_AUTHOR,
+    reviewer: null,
+  })),
+];
+
+/** The date the two flagship guides shipped, and the floor for any article
+ * with no `publishedAt` of its own. */
+export const DEFAULT_ARTICLE_PUBLISHED_AT = "2026-06-22T00:00:00.000Z";
+
+export function articlePublishedAt(article: Pick<BlogArticleMeta, "publishedAt">): string {
+  return article.publishedAt ?? DEFAULT_ARTICLE_PUBLISHED_AT;
+}
+
+/**
+ * The articles that are public *now*.
+ *
+ * `blogArticles` is the whole authored set, including articles scheduled for a
+ * future date; this is what routes, the sitemap and the related-article
+ * lookups must use, so a scheduled article is not merely unlisted but actually
+ * unreachable. `now` is injectable so tests do not depend on the wall clock.
+ */
+export function publishedBlogArticles(now: Date = new Date()): readonly BlogArticleMeta[] {
+  const instant = now.getTime();
+  return blogArticles.filter((article) => Date.parse(articlePublishedAt(article)) <= instant);
+}

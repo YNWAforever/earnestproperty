@@ -31,9 +31,9 @@ import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
-import { getSchoolNet } from "@/content/school-nets";
-import { SITE_URL, canonicalLink, estateSeo } from "@/content/seo";
-import { blogArticles, type BlogArticleMeta } from "@/content/blog-articles";
+import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
+import { SITE_URL, authored, canonicalLink, estateSeo } from "@/content/seo";
+import { publishedBlogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
 import {
   fetchCmsVideos,
@@ -54,18 +54,6 @@ import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
-
-/** Maps a registry entry's districtSlug to its school net code, mirroring
- * the data pack's `areaMeta[districtSlug].schoolNetCode`. sham-tseng and
- * tsing-lung-tau both carry net 62; castle-peak-road (the 掃管笏/青山灣/小欖
- * group) carries net 71. Any districtSlug not listed here has no known
- * school net -- getSchoolNet(undefined) returns null, which the render site
- * below already treats as "omit the section", not an error. */
-const SCHOOL_NET_BY_DISTRICT: Record<string, string> = {
-  "sham-tseng": "62",
-  "tsing-lung-tau": "62",
-  "castle-peak-road": "71",
-};
 
 export const Route = createFileRoute("/estate/$slug")({
   loader: async ({ params }) => {
@@ -101,7 +89,9 @@ export const Route = createFileRoute("/estate/$slug")({
     const relatedVideos = cmsVideos.filter(
       (video) => deriveEstateTag(video.title)?.tag === estate.name_zh,
     );
-    const relatedArticles = blogArticles.filter((article) =>
+    // Only articles that are actually public: linking an estate page to a
+    // scheduled article would point at a URL that still 404s.
+    const relatedArticles = publishedBlogArticles().filter((article) =>
       article.compareEstateSlugs?.includes(estate.slug),
     );
     // A comparable's real facts (avg PSF / units / year / developer) live in
@@ -139,17 +129,42 @@ export const Route = createFileRoute("/estate/$slug")({
     };
   },
   head: ({ loaderData }) => {
-    const slug = loaderData?.estate.slug as keyof typeof estateSeo | undefined;
+    // An unknown or unpublished slug throws notFound() in the loader, and this
+    // head still renders over the 404 body. It used to emit the generic pair
+    // 屋苑｜晉誠地產屋苑專頁 + " 屋苑資料…" (note the leading space from the
+    // empty name interpolation) with no canonical and no noindex, so every
+    // crawled dead estate URL became an indexable duplicate placeholder.
+    if (!loaderData?.estate) {
+      const title = "找不到此屋苑頁面｜晉誠地產";
+      const description =
+        "你要搵嘅屋苑頁面唔存在或已下架。可回到深井、青山公路及汀九屋苑總覽，或 WhatsApp 晉誠地產持牌代理查詢最新放盤。C-018613。";
+      return {
+        meta: [
+          { title },
+          { name: "description", content: description },
+          { property: "og:title", content: title },
+          { property: "og:description", content: description },
+          { name: "twitter:title", content: title },
+          { name: "twitter:description", content: description },
+          { name: "robots", content: "noindex,follow" },
+        ],
+        links: [],
+      };
+    }
+    const estate = loaderData.estate;
+    const slug = estate.slug as keyof typeof estateSeo | undefined;
     const seo = slug ? estateSeo[slug] : undefined;
-    const title =
-      loaderData?.estate.seo_title ??
-      seo?.title ??
-      `${loaderData?.estate.name_zh ?? "屋苑"}｜晉誠地產屋苑專頁`;
+    // `??` alone only falls through on null/undefined, and fetchEstateBySlug
+    // returns the row unmapped (`SELECT e.*`), so an empty-string
+    // estates.seo_title -- which the CMS revision publish can persist, since
+    // `payload->>'seo_title'` is not NULLIF'd -- rendered a literally empty
+    // <title> while the curated estateSeo copy sat unused.
+    const title = authored(estate.seo_title) ?? seo?.title ?? `${estate.name_zh}｜晉誠地產屋苑專頁`;
     const description =
-      loaderData?.estate.seo_description ??
+      authored(estate.seo_description) ??
       seo?.description ??
-      `${loaderData?.estate.name_zh ?? ""} 屋苑資料、現有放盤叫價、成交紀錄及常見問題。`;
-    const image = loaderData?.shareImage ?? loaderData?.estate.hero_image;
+      `${estate.name_zh}屋苑資料、現有放盤叫價、成交紀錄及常見問題。晉誠地產 C-018613。`;
+    const image = loaderData?.shareImage ?? estate.hero_image;
     return {
       meta: [
         { title },
@@ -171,7 +186,10 @@ export const Route = createFileRoute("/estate/$slug")({
             ]
           : []),
       ],
-      links: loaderData?.estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
+      // Spelled out rather than via the `estate` alias above:
+      // canonical-links.test.mjs pins this exact expression as the contract
+      // that dynamic-slug routes build their canonical from loaderData.
+      links: estate.slug ? [canonicalLink(`/estate/${loaderData.estate.slug}`)] : [],
     };
   },
   errorComponent: ({ error }) => (
@@ -276,15 +294,13 @@ function EstatePage() {
   // unknown-district estates from Task 2, none of which have a page yet, but
   // this must still degrade cleanly rather than crash if that ever changes.
   // schoolNet is resolved per-estate via the registry entry's districtSlug ->
-  // SCHOOL_NET_BY_DISTRICT -> getSchoolNet(code), instead of being hardcoded
+  // schoolNetCodeForDistrict() -> getSchoolNet(code), instead of being hardcoded
   // to a single district -- it's null (section omitted) for any district
   // without real, sourced school-net data (school-nets.ts) -- see that
   // file's own comment for why other districts intentionally render nothing
   // here rather than invented figures.
   const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(estate.district_slug);
-  const schoolNet = getSchoolNet(
-    registryEntry?.districtSlug ? SCHOOL_NET_BY_DISTRICT[registryEntry.districtSlug] : null,
-  );
+  const schoolNet = getSchoolNet(schoolNetCodeForDistrict(registryEntry?.districtSlug));
   const estateName = seo?.nameZh ?? estate.name_zh;
   // The visible trail and the BreadcrumbList JSON-LD are built from the same
   // crumbs so they can never disagree. The middle crumb is the estate's own

@@ -23,6 +23,10 @@ import {
 } from "./castle-peak-road.ts";
 import { renderableFaqs } from "../lib/faq.ts";
 import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
+import {
+  clientAreaGroupsInNavOrder,
+  clientAreaGroupsInSchematicOrder,
+} from "./client-area-presentation.ts";
 // P4 Task 6's hub-page sections: pure logic lives in corridor-hub.ts (no
 // JSX), matching estate-registry.ts/castle-peak-road.ts's own established
 // split, so it can be imported and actually executed here instead of only
@@ -330,17 +334,57 @@ test("district entry links are exactly the three the client approved", () => {
   const header = read("src/components/site/SiteHeader.tsx");
   const footer = read("src/components/site/SiteFooter.tsx");
 
-  const labels = ["深井區買樓租樓", "青山公路區買樓租樓", "汀九豪宅區買樓租樓"];
-
+  // The client's 2026-09-07 feedback (docx p1) replaced the three labels with
+  // 深井 / 青龍頭, 青山公路區小欖至三聖 and 油柑頭汀九. Both surfaces now render
+  // them from client-area-presentation.ts rather than typing them out, so this
+  // asserts the shared source is what they consume -- and the exact label
+  // strings are asserted directly against that module below.
   for (const source of [header, footer]) {
-    for (const label of labels) {
-      assert.equal(source.includes(label), true, `${label} should be a district entry`);
+    assert.match(
+      source,
+      /client-area-presentation/,
+      "district entries must come from the shared presentation config",
+    );
+    for (const superseded of ["深井區買樓租樓", "青山公路區買樓租樓", "汀九豪宅區買樓租樓"]) {
+      assert.equal(
+        source.includes(superseded),
+        false,
+        `${superseded} is superseded and must not ship alongside the new wording`,
+      );
     }
-    // The superseded labels must be gone, otherwise the old and new wording ship
-    // side by side.
+    // Older superseded labels must also stay gone.
     assert.equal(source.includes("汀九地區頁"), false);
     assert.equal(source.includes("荃灣 Tsuen Wan"), false);
   }
+});
+
+test("the three client-approved region labels and destinations are exactly as supplied", () => {
+  // docx p1, verbatim, in the client's navigation order. Every consumer
+  // (header, footer, estate directory shortcuts, directory group headings,
+  // schematic) reads these, so asserting them once here covers all of them.
+  assert.deepEqual(
+    clientAreaGroupsInNavOrder().map((group) => [group.label, group.href]),
+    [
+      ["深井 / 青龍頭", "/district/sham-tseng"],
+      // Anchors the 青山公路 overview's 主要屋苑 section -- the content that
+      // actually covers 小欖至三聖 -- rather than a new route with no loader.
+      ["青山公路區小欖至三聖", "/castle-peak-road#main-estates"],
+      ["油柑頭汀九", "/castle-peak-road/ting-kau"],
+    ],
+  );
+});
+
+test("the schematic order is east-to-west and deliberately differs from the nav order", () => {
+  // docx p5: 油柑頭汀九 → 深井 / 青龍頭 → 青山公路區小欖至三聖.
+  assert.deepEqual(
+    clientAreaGroupsInSchematicOrder().map((group) => group.label),
+    ["油柑頭汀九", "深井 / 青龍頭", "青山公路區小欖至三聖"],
+  );
+  assert.notDeepEqual(
+    clientAreaGroupsInSchematicOrder().map((group) => group.key),
+    clientAreaGroupsInNavOrder().map((group) => group.key),
+    "the two orders must stay separately stored, not derived from one array",
+  );
 });
 
 test("segment registry carries live listing aliases and FAQ content", () => {
@@ -601,8 +645,19 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.doesNotMatch(layoutRoute, /rel:\s*["']canonical["']/);
   // P7a: same seo() migration as hubRoute above.
   assert.match(segmentRoute, /seo\(\{/);
-  assert.match(segmentRoute, /loaderData\?\.segment\.path/);
+  // The head resolves its segment from `params` as well as loaderData: head()
+  // still runs when the loader throws, and the old
+  // `?? castlePeakRoadHub.title/.description/.path` fallback put the HUB's
+  // copy and the hub canonical on a segment URL.
+  assert.match(
+    segmentRoute,
+    /loaderData\?\.segment \?\? getCastlePeakRoadSegment\(params\.segment\)/,
+  );
+  assert.match(segmentRoute, /path: segment\.path/);
+  // castlePeakRoadHub.path survives as the canonical of the noindexed
+  // unknown-segment branch only, never as a real segment's canonical.
   assert.match(segmentRoute, /castlePeakRoadHub\.path/);
+  assert.match(segmentRoute, /noindex: true/);
   assert.match(tingKauRoute, /redirect/);
   assert.match(tingKauRoute, /\/castle-peak-road\/\$segment/);
   assert.match(tingKauRoute, /statusCode:\s*(301|308)/);
@@ -617,10 +672,16 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
   assert.match(shamTsengRoute, /pageSeo\.shamTseng\.path/);
   assert.match(shamTsengRoute, /\/castle-peak-road/);
   assert.match(header, /青山公路/);
-  // Typed <Link> to a param route, so the slug appears in params rather than as
-  // a literal path. What matters is that it targets the corridor page and not
-  // the legacy /district/ting-kau URL, which 301s.
-  assert.match(footer, /segment:\s*["']ting-kau["']/);
+  // The footer's three district entries now render from
+  // client-area-presentation.ts (docx p1), so the 汀九 destination is that
+  // group's own href rather than a literal <Link params> in this file.
+  // What matters is unchanged: it targets the corridor page, not the legacy
+  // /district/ting-kau URL, which 301s.
+  assert.equal(
+    clientAreaGroupsInNavOrder().find((group) => group.key === "yau-kom-tau-ting-kau").href,
+    "/castle-peak-road/ting-kau",
+  );
+  assert.match(footer, /clientAreaGroupsInNavOrder\(\)/);
   assert.doesNotMatch(footer, /to="\/district\/ting-kau"/);
   assert.match(sitemap, /sitemap\.xml/);
   assert.match(sitemap, /castlePeakRoadSitemapPaths/);
@@ -768,7 +829,11 @@ test("castle-peak-road.index.tsx wires all six Task 6 sections, each using real 
   const hub = read("src/routes/castle-peak-road.index.tsx");
 
   // 1. Corridor schematic: an ordered, labelled sequence, not a pin map.
+  // docx p5 made it three client area groups instead of the two legacy
+  // corridor segments, so it now maps clientAreaGroupsInSchematicOrder().
   assert.match(hub, /function CorridorSchematic/);
+  assert.match(hub, /clientAreaGroupsInSchematicOrder\(\)/);
+  assert.match(hub, /示意圖只反映沿線東西相對位置/);
   assert.doesNotMatch(hub, /\.lat\b|\.lng\b|latitude|longitude/i);
 
   // 2. Area-comparison table, built from the shared pure module.
@@ -777,9 +842,23 @@ test("castle-peak-road.index.tsx wires all six Task 6 sections, each using real 
 
   // 3. Estate directory: gated hasPage link, honest empty state, never a
   // link built directly off a raw slug string.
-  assert.match(hub, /function EstateDirectorySection/);
-  assert.match(hub, /estateDirectoryForSegment\(segment\)/);
-  assert.match(hub, /estate\.hasPage/);
+  // docx p4 (冇左主要屋苑): the old lower, segment-driven 屋苑一覽 is
+  // consolidated into one prominent 主要屋苑 section directly under the
+  // schematic, driven by the client's approved presentation groups. Only
+  // estates with a live published row are linked.
+  assert.match(hub, /function MainEstatesSection/);
+  assert.doesNotMatch(
+    hub,
+    /function EstateDirectorySection/,
+    "the second, contradicting directory must not ship alongside 主要屋苑",
+  );
+  assert.match(hub, /id="main-estates"/);
+  assert.match(hub, /主要屋苑/);
+  assert.match(hub, /published\.has\(ref\.slug\)/);
+  assert.ok(
+    hub.indexOf("<MainEstatesSection") < hub.indexOf("<AreaComparisonSection"),
+    "主要屋苑 must sit above the comparison table, not below it",
+  );
   assert.match(hub, /更多資料稍後提供/);
 
   // 4. Scoped, labelled sale/rent inventory breakdown replaces the old

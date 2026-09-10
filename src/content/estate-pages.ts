@@ -528,7 +528,7 @@ export const estatePageContent = {
       {
         question: "香港黃金海岸和黃金海灣是同一屋苑嗎？",
         answer:
-          "不是。Hong Kong Gold Coast 與 Gold Coast Bay 的地址、樓齡、slug 和 estate_id 都不同。",
+          "不是，兩者是獨立屋苑。Hong Kong Gold Coast 與 Gold Coast Bay 的地址、落成年份和期數都不同，搜尋放盤或查成交時要分開處理。",
       },
     ],
     relatedLinks: [
@@ -647,7 +647,7 @@ export const estatePageContent = {
       {
         question: "黃金海灣和香港黃金海岸是否同一屋苑？",
         answer:
-          "不是。Gold Coast Bay 與 Hong Kong Gold Coast 的地址、樓齡、slug 和 estate_id 不同。",
+          "不是，兩者是獨立屋苑。Gold Coast Bay 與 Hong Kong Gold Coast 的地址、落成年份和期數都不同，放盤和成交紀錄不會互相混算。",
       },
     ],
     relatedLinks: [

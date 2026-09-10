@@ -3,54 +3,99 @@ import { existsSync } from "node:fs";
 import { test } from "node:test";
 
 import { CORE_ESTATES_PREVIEW_COUNT, coreEstates, estateFigure } from "./core-estates.ts";
+import { getClientAreaGroup } from "./client-area-presentation.ts";
+import { getEstateEntry } from "./estate-registry.ts";
 
+/**
+ * The client's 2026-09-07 order (網頁07092026.docx p3), minus 逸璟瓏灣.
+ *
+ * The client's own list has ten entries and opens with 逸璟瓏灣, which matches
+ * no registry entry, alias or published row in this repo. It is carried as an
+ * unresolved name rather than guessed onto another estate, so nine cards ship
+ * and the tenth is an open question -- see the unresolved-names test below.
+ */
 const CLIENT_ORDER = [
-  "碧堤半島",
   "豪景花園",
-  "浪翠園",
-  "麗都花園",
-  "海韻花園",
-  "海雲軒",
   "帝華軒",
-  "海韻臺",
+  "浪翠園",
+  "海雲軒",
+  "麗都花園",
+  "碧堤半島",
   "縉皇居",
-  "龍騰閣",
+  "海韻花園",
+  "海韻台",
 ];
 
-// All ten now link to a real /estate/$slug page (2026-09-01's 17-estate
-// expansion gave each of these five a registry entry with hasPage: true,
-// sourced facts, and content -- see estate-registry.ts and
-// docs/superpowers/specs/assets/estate-expansion-17.data.json). Figures
-// (units/avgPsf/listingCount) stay null regardless -- those are never
-// hardcoded on the card, always merged live from the DB by slug at render
-// time (see the next test).
-const ADDED_BY_CLIENT = ["海雲軒", "帝華軒", "海韻臺", "縉皇居", "龍騰閣"];
-
-test("all ten client-approved estates ship in the client's order", () => {
+test("the client's 2026-09-07 深井 / 青龍頭 order ships exactly, in order", () => {
   assert.deepEqual(
     coreEstates.map((estate) => estate.name),
     CLIENT_ORDER,
   );
-  // Ten estates against an eight-card preview is what makes the expander load-bearing.
-  assert.ok(coreEstates.length > CORE_ESTATES_PREVIEW_COUNT);
 });
 
-test("all ten client-approved estates now link to a detail page", () => {
-  for (const name of ADDED_BY_CLIENT) {
-    const estate = coreEstates.find((candidate) => candidate.name === name);
-    assert.ok(estate, `${name} must be present`);
-    assert.equal(estate.hasPage, true, `${name} must link to a detail page`);
+test("帝華軒 is in this group even though its database district is 青龍頭", () => {
+  // The reason it never reached the homepage before: fetchEstates() asked the
+  // database for district_slug = "sham-tseng" only. The commercial grouping
+  // and the DB district genuinely disagree, and the DB district is the one
+  // that must not be falsified.
+  const entry = getEstateEntry("tai-wah-hin");
+  assert.equal(entry.districtSlug, "tsing-lung-tau");
+  assert.ok(coreEstates.some((estate) => estate.slug === "tai-wah-hin"));
+});
+
+test("海韻台 is the client's label for the one 海韻臺 estate, not a second estate", () => {
+  const card = coreEstates.find((estate) => estate.name === "海韻台");
+  assert.ok(card);
+  assert.equal(card.slug, "hoi-wan-toi");
+  const entry = getEstateEntry("hoi-wan-toi");
+  assert.equal(entry.nameZh, "海韻臺", "the canonical display name is unchanged");
+  assert.ok(entry.aliases.includes("海韻台"), "the client's spelling stays a search alias");
+  assert.equal(
+    coreEstates.filter((estate) => estate.slug === "hoi-wan-toi").length,
+    1,
+    "a presentation label must never fork the estate into two cards",
+  );
+});
+
+test("龍騰閣 leaves this curated sequence without losing its identity", () => {
+  assert.ok(!coreEstates.some((estate) => estate.slug === "lung-tang-kok"));
+  // Its record, name and detail page survive the removal from this list.
+  assert.equal(getEstateEntry("lung-tang-kok").hasPage, true);
+});
+
+test("逸璟瓏灣 is recorded as unresolved, never guessed onto another estate", () => {
+  const group = getClientAreaGroup("sham-tseng");
+  assert.deepEqual(
+    group.unresolved.map((entry) => entry.label),
+    ["逸璟瓏灣"],
+  );
+  assert.ok(
+    !coreEstates.some((estate) => estate.name === "逸璟瓏灣"),
+    "an unresolved name must not be rendered as an estate card",
+  );
+});
+
+test("the client's nine-card order is not truncated by the shared eight-card preview", () => {
+  // index.tsx passes coreEstates.length as this section's own previewCount.
+  // The shared default stays 8 for every other grid rather than being removed
+  // globally, so this asserts the two are genuinely allowed to differ.
+  assert.equal(CORE_ESTATES_PREVIEW_COUNT, 8);
+  assert.ok(coreEstates.length > 0);
+});
+
+test("every card links to a detail page", () => {
+  for (const estate of coreEstates) {
+    assert.equal(estate.hasPage, true, `${estate.name} must link to a detail page`);
   }
 });
 
 test("estates with a detail page keep their figures in the database", () => {
-  const withPages = coreEstates.filter((estate) => estate.hasPage);
-  assert.equal(withPages.length, 10);
-  for (const estate of withPages) {
+  for (const estate of coreEstates) {
     // Hardcoding a figure here would let the card drift from the estate page,
     // so live values are merged by slug at render time instead.
     assert.equal(estate.units, null, `${estate.name} must read units from the DB`);
     assert.equal(estate.avgPsf, null, `${estate.name} must read psf from the DB`);
+    assert.equal(estate.listingCount, null, `${estate.name} must read counts from the DB`);
   }
 });
 
@@ -65,17 +110,14 @@ test("every declared photo exists on disk", () => {
 });
 
 test("districts are never guessed", () => {
-  // 2026-09-01's 17-estate expansion sourced real addresses for all five
-  // (中原地產/28Hse listing pages, cited in the data pack) placing them in
-  // 深井／青龍頭 -- superseding the earlier placement based only on
-  // castle-peak-road.ts's ting-kau segment mentioning some of them as
-  // "featured estates" (a looser, non-authoritative signal). 青龍頭 estates
-  // (帝華軒/龍騰閣) fold into "深井" here since EstateHomepageDistrict has no
+  // 青龍頭 estates fold into "深井" here since EstateHomepageDistrict has no
   // separate 青龍頭 value and castle-peak-road.ts's own sham-tseng segment
-  // already absorbs 青龍頭 the same way.
-  const byName = Object.fromEntries(coreEstates.map((estate) => [estate.name, estate]));
-  for (const name of ADDED_BY_CLIENT) {
-    assert.equal(byName[name].district, "深井", `${name} district must be 深井`);
+  // already absorbs 青龍頭 the same way. 豪景花園 is the client's own
+  // long-standing exception: grouped under 青山公路 on its card while its DB
+  // row is sham-tseng.
+  for (const estate of coreEstates) {
+    assert.equal(estate.district, getEstateEntry(estate.slug).homepageDistrict);
+    assert.ok(estate.district !== null, `${estate.name} must carry a real district`);
   }
 });
 

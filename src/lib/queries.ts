@@ -8,6 +8,7 @@ import {
   fetchNeonEstateOptions,
   fetchNeonEstateTransactions,
   fetchNeonEstates,
+  fetchNeonEstatesBySlugs,
   fetchNeonFaqs,
   fetchNeonFeaturedProperties,
   fetchNeonListingCountsByEstate,
@@ -28,8 +29,17 @@ import type {
   NeonTransactionDealType,
   NeonTransactionRow,
 } from "@/lib/neon/public-data.types";
-import { corridorRegionScope, isWithinCorridorRegion } from "@/content/castle-peak-road";
+import {
+  castlePeakRoadSegments,
+  corridorRegionScope,
+  isWithinCorridorRegion,
+} from "@/content/castle-peak-road";
 import { estateRegistry } from "@/content/estate-registry";
+import {
+  type ClientAreaGroupKey,
+  approvedPresentationEstateSlugs,
+  getClientAreaGroup,
+} from "@/content/client-area-presentation";
 
 /**
  * Derived from estate-registry.ts's `legacySlug` field (DR-10) instead of a
@@ -105,8 +115,50 @@ export type FeaturedProperty = {
 
 export type FaqItem = { question: string; answer: string };
 
+/**
+ * Backs the homepage's 深井核心屋苑 grid.
+ *
+ * Was `fetchEstatesByDistrict("sham-tseng")`, which asked the database for one
+ * district and so could never return 帝華軒 or 龍騰閣 -- both real, published
+ * rows whose `district_slug` is "tsing-lung-tau", the 青龍頭 value. The client
+ * groups 青龍頭 with 深井 commercially (docx p1/p3) while the database keeps
+ * the two districts apart, which is exactly the distinction
+ * client-area-presentation.ts encodes. Resolving by approved canonical
+ * membership fixes the missing cards without falsifying any estate's real
+ * district.
+ */
 export async function fetchEstates(): Promise<EstateSummary[]> {
-  return fetchEstatesByDistrict("sham-tseng");
+  return fetchEstatesForAreaGroup("sham-tseng");
+}
+
+/**
+ * Loads the published `estates` rows for one client presentation group, by
+ * approved canonical membership, in a single bounded query.
+ *
+ * Legacy slugs are resolved both ways (a row still seeded under a retired slug
+ * is found, and comes back canonicalised) so an estate that was renamed does
+ * not silently vanish from a group.
+ *
+ * The corridor region gate still runs -- an approved estate passes it via
+ * isApprovedPresentationEstate, and anything not in the group was never asked
+ * for, so this cannot widen the public surface beyond the client's own list.
+ */
+export async function fetchEstatesForAreaGroup(key: ClientAreaGroupKey): Promise<EstateSummary[]> {
+  const group = getClientAreaGroup(key);
+  const slugs = [...group.primary, ...group.secondary].flatMap((ref) =>
+    estateSlugCandidates(ref.slug),
+  );
+  if (slugs.length === 0) return [];
+  const rows = await fetchNeonEstatesBySlugs({ data: { slugs } });
+  return (rows as EstateSummary[])
+    .map((estate) => withCanonicalSlug(estate))
+    .filter((estate) =>
+      isWithinCorridorRegion({
+        districtSlug: estate.district_slug,
+        estateSlug: estate.slug,
+        text: [estate.name_zh],
+      }),
+    );
 }
 
 export async function fetchEstatesByDistrict(districtSlug: string): Promise<EstateSummary[]> {
@@ -175,14 +227,41 @@ export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
 }
 
 const FEATURED_DISPLAY_LIMIT = 6;
-// The featured query carries no region predicate and the listing API is out of
-// scope to change, so the filter lives here in the consumer. Over-fetch so the
-// homepage still fills six cards after out-of-corridor rows are dropped.
-const FEATURED_FETCH_LIMIT = 24;
 
+/**
+ * The homepage's live listing feed (網頁07092026.docx p5: 黃金 > 置頂 > 普通).
+ *
+ * The region predicate and the promotion-tier ordering both now run in SQL,
+ * before the row limit. The previous shape -- fetch a fixed 24 rows ordered by
+ * freshness, then region-filter, dedupe and slice to six in JS -- could not
+ * support the client's request: a 黃金 listing at row 25 was discarded before
+ * any ranking could see it, and sorting the surviving six would only reorder
+ * whatever the freshness window happened to contain.
+ *
+ * Deduplication order is unchanged and still happens before the cap: the
+ * server's canonicalListingCte collapses each public_listing_no to a single
+ * row inside the query, so the LIMIT counts unique listings, and
+ * dedupeListings below stays as the legacy-shape safety net it already was.
+ *
+ * The scope terms handed to the server are exactly corridorRegionScope's --
+ * the same whitelist/exclusion pair every other corridor query uses, plus the
+ * client's approved estates. isWithinCorridorRegion still runs on the returned
+ * rows as defense in depth, the same way fetchCorridorInventoryForAliases
+ * keeps its own app-layer filter after moving exclusions into SQL.
+ */
 export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
   const rows = (await fetchNeonFeaturedProperties({
-    data: { limit: FEATURED_FETCH_LIMIT },
+    data: {
+      limit: FEATURED_DISPLAY_LIMIT,
+      districtSlugs: corridorRegionScope.districtSlugs,
+      // The client's approved presentation estates join the corridor's own
+      // estates here. This is what lets 香港黃金海岸 stock through a place-name
+      // gate that rejects the literal string 黃金海岸 -- an explicit,
+      // per-estate allowance, not a widening of 屯門 or 大欖涌.
+      estateSlugs: [...corridorEstateSlugsForFeed(), ...approvedPresentationEstateSlugs],
+      textAliases: corridorRegionScope.textAliases,
+      outOfScopeTextAliases: corridorRegionScope.outOfScopeTextAliases,
+    },
   })) as FeaturedProperty[];
 
   return dedupeListings(
@@ -195,6 +274,11 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
       }),
     ),
   ).slice(0, FEATURED_DISPLAY_LIMIT);
+}
+
+/** The corridor segments' own strict-inventory estates, deduplicated. */
+function corridorEstateSlugsForFeed(): string[] {
+  return Array.from(new Set(castlePeakRoadSegments.flatMap((segment) => segment.estateSlugs)));
 }
 
 export type DistrictTransaction = {

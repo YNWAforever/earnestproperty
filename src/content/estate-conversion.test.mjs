@@ -50,6 +50,13 @@ const estateSeo = {
 function canonicalLink(path) {
   return { rel: "canonical", href: "https://example.test" + path };
 }
+// Mirrors authored() in src/content/seo.ts -- the guard that stops an
+// empty-string CMS column from winning the ?? chain.
+function authored(value) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
 function head({ loaderData }) {
   ${body}
 }
@@ -322,7 +329,67 @@ test("estate head() prefers estate.seo_title/seo_description over the estateSeo 
     },
   });
   assert.equal(fallsBackToDefault.meta[0].title, "測試屋苑｜晉誠地產屋苑專頁");
-  assert.match(fallsBackToDefault.meta[1].content, /測試屋苑 屋苑資料、現有放盤叫價/);
+  // No space after the name: the template used to interpolate `name_zh ?? ""`,
+  // so a missing name left the description starting with a stray space.
+  assert.match(fallsBackToDefault.meta[1].content, /測試屋苑屋苑資料、現有放盤叫價/);
+});
+
+test("estate head() treats a blank CMS seo_title/seo_description as absent, not as the copy", () => {
+  const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
+
+  // fetchEstateBySlug returns the row unmapped (`SELECT e.*`) and the CMS
+  // revision publish writes `payload->>'seo_title'` with no NULLIF, so '' can
+  // reach here. A bare `??` chain let it win and shipped an empty <title>.
+  for (const blank of ["", "   "]) {
+    const result = head({
+      loaderData: {
+        estate: {
+          slug: "with-seo",
+          name_zh: "測試屋苑",
+          seo_title: blank,
+          seo_description: blank,
+          total_units: 100,
+          avg_saleable_psf: 12000,
+        },
+      },
+    });
+    assert.equal(result.meta[0].title, "registry title");
+    assert.equal(result.meta[1].content, "registry description");
+  }
+
+  // A padded real value is still used, trimmed.
+  const padded = head({
+    loaderData: {
+      estate: {
+        slug: "with-seo",
+        name_zh: "測試屋苑",
+        seo_title: "  override title  ",
+        seo_description: "  override description  ",
+        total_units: 100,
+        avg_saleable_psf: 12000,
+      },
+    },
+  });
+  assert.equal(padded.meta[0].title, "override title");
+  assert.equal(padded.meta[1].content, "override description");
+});
+
+test("estate head() noindexes the not-found branch instead of shipping a generic placeholder", () => {
+  const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
+
+  // An unknown or unpublished slug throws notFound() in the loader; head()
+  // still renders. It used to emit 屋苑｜晉誠地產屋苑專頁 with no canonical and
+  // no noindex, so every crawled dead estate URL was an indexable duplicate.
+  for (const loaderData of [undefined, {}, { estate: null }]) {
+    const result = head({ loaderData });
+    assert.equal(result.meta[0].title, "找不到此屋苑頁面｜晉誠地產");
+    assert.ok(result.meta[1].content.length > 0, "the 404 head still needs a description");
+    assert.ok(
+      result.meta.some((tag) => tag.name === "robots" && tag.content === "noindex,follow"),
+      "the not-found head must be noindexed",
+    );
+    assert.deepEqual(result.links, [], "a dead URL must not self-canonicalise");
+  }
 });
 
 test("public search and homepage expose lead capture paths", () => {
@@ -456,7 +523,14 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
     route,
     /import \{ findCastlePeakRoadSegmentByDistrictSlug \} from "@\/content\/castle-peak-road";/,
   );
-  assert.match(route, /import \{ getSchoolNet \} from "@\/content\/school-nets";/);
+  // schoolNetCodeForDistrict moved into school-nets.ts alongside the net data
+  // it keys into, so the route imports both rather than keeping its own copy
+  // of the districtSlug -> net-code map (a third copy was about to be made).
+  assert.match(
+    route,
+    /import \{ getSchoolNet, schoolNetCodeForDistrict \} from "@\/content\/school-nets";/,
+  );
+  assert.match(route, /getSchoolNet\(schoolNetCodeForDistrict\(/);
 
   // Verified-facts block: sourced from estate.verified_at (Task 2's column,
   // null for every estate today), with an honest caveat rather than a

@@ -100,6 +100,10 @@ test("propertyEnquiryMessage carries deal-aware price and does not repeat the li
 });
 
 const files = [
+  // /videos, /transactions, /estate-reviews and the homepage's og pair read
+  // their title/description from pageSeo now, instead of hardcoding each
+  // string three times per route, so the copy this test pins lives here too.
+  "src/content/seo.ts",
   "src/config/site.ts",
   "src/config/site-branches.js",
   "src/components/site/SiteHeader.tsx",
@@ -266,23 +270,56 @@ test("homepage puts 最新放盤 above 深井核心屋苑", () => {
 // for "reachable", so the grid now also requires a live DB row
 // (live.has(estate.slug)) before treating an estate as linkable.
 test("homepage estate grid only renders estates with a live, reachable detail page", () => {
-  const source = readFileSync("src/routes/index.tsx", "utf8");
+  // EstateCard/CoreEstateGrid live in their own component module now; the
+  // route still supplies the per-section props, so both files are read.
+  const source =
+    readFileSync("src/components/site/EstateGroupGrid.tsx", "utf8") +
+    readFileSync("src/routes/index.tsx", "utf8");
 
+  // The linkable filter is now shared by the primary tier and the client's
+  // 其他 tier (docx p2), so it reads as a helper applied to both lists.
   assert.match(
     source,
-    /const linkableEstates = staticEstates\.filter\(\s*\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)/,
+    /const linkable = \(list: CoreEstate\[\]\) =>\s*list\.filter\(\(estate\) => estate\.hasPage && live\.has\(estate\.slug\)\)/,
   );
+  assert.match(source, /const linkableEstates = linkable\(staticEstates\);/);
+  assert.match(source, /const linkableOther = linkable\(otherEstates\);/);
   // Every linkable estate is in the served HTML (crawlable /estate/* links);
   // the ones past the preview count are `hidden` until 查看更多屋苑.
-  assert.match(source, /const visible = linkableEstates;/);
   assert.match(source, /hidden=\{isCollapsed\(index\)\}/);
-  assert.match(source, /!expanded && index >= CORE_ESTATES_PREVIEW_COUNT/);
-  assert.match(source, /linkableEstates\.length > CORE_ESTATES_PREVIEW_COUNT/);
+  // previewCount defaults to the shared constant; the client's two amended
+  // groups pass their own full length so the agreed order is not truncated.
+  assert.match(source, /previewCount = CORE_ESTATES_PREVIEW_COUNT/);
+  assert.match(source, /!expanded && index >= previewCount/);
+  assert.match(source, /linkableEstates\.length > previewCount/);
+  assert.match(source, /previewCount=\{coreEstates\.length\}/);
+  assert.match(source, /previewCount=\{castlePeakRoadEstates\.length\}/);
   assert.doesNotMatch(
     source,
     /const visible = expanded \? coreEstates :/,
     "visible must be derived from the hasPage-filtered list, not the raw client list",
   );
+});
+
+// docx p2: 其他 is a group control, not an estate. It must be a real button
+// with aria-expanded/aria-controls and keyboard support -- never a hover-only
+// menu -- and must never gain a slug, a figure or a detail-page link.
+test("the 其他 group control is an accessible button, not a fake estate card", () => {
+  const source =
+    readFileSync("src/components/site/EstateGroupGrid.tsx", "utf8") +
+    readFileSync("src/routes/index.tsx", "utf8");
+
+  assert.match(source, /aria-expanded=\{otherOpen\}/);
+  assert.match(source, /aria-controls=\{otherId\}/);
+  assert.match(source, /<button\s+type="button"/);
+  assert.match(source, /focus-visible:outline-primary/, "the tile must show a visible focus ring");
+  assert.match(source, /<div id=\{otherId\} hidden=\{!otherOpen\}/);
+  assert.doesNotMatch(
+    source,
+    /onMouseEnter=\{\(\) => setOtherOpen/,
+    "the group must not be hover-only",
+  );
+  assert.match(source, /otherEstates=\{castlePeakRoadOtherEstates\}/);
 });
 
 test("homepage share card uses an absolute image and the shared meta registry", () => {
@@ -311,9 +348,11 @@ test("header exposes approved mega menu structure and controls", () => {
     "地區與屋苑",
     "買租服務",
     "市場資訊",
-    "深井區買樓租樓",
-    "青山公路區買樓租樓",
-    "汀九豪宅區買樓租樓",
+    // docx p1's exact three region labels, sourced from
+    // client-area-presentation.ts rather than typed here twice.
+    "shamTsengArea.label",
+    "castlePeakRoadWestArea.label",
+    "yauKomTauTingKauArea.label",
     // 屋苑入口 (one generic link to one estate) became direct estate links.
     "碧堤半島",
     "浪翠園",
@@ -332,7 +371,6 @@ test("header exposes approved mega menu structure and controls", () => {
     "/district/sham-tseng",
     // Ting Kau's canonical page is the corridor segment; /district/ting-kau 301s.
     "/castle-peak-road/ting-kau",
-    "/castle-peak-road",
     "/estate/bellagio",
     "/listings?deal=sale",
     "/listings?deal=rent",
@@ -421,7 +459,15 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   const estateReviews = readFileSync("src/routes/estate-reviews.tsx", "utf8");
 
   assert.match(sitemap, /transactions\.length > 0 \? "\/transactions" : null/);
-  assert.match(sitemap, /estateReviewArticles\.length > 0 \? "\/estate-reviews" : null/);
+  // /estate-reviews now ships a static 屋苑開箱 floor, so it is only empty
+  // when BOTH the CMS query and the static set are -- the gate widened with
+  // it rather than going away. The head keeps its own noindex gate below,
+  // which the floor simply stops firing.
+  assert.match(sitemap, /estateReviewArticles\.length > 0 \|\| staticEstateReviewCount\(\)/);
+  // A function, not a module-level constant: 28 屋苑開箱 articles are scheduled
+  // for future dates, so the count has to be taken per request.
+  assert.match(sitemap, /function staticEstateReviewCount\(\)/);
+  assert.match(sitemap, /publishedBlogArticles\(\)\.filter\(/);
   assert.doesNotMatch(
     sitemap,
     /^\s*"\/transactions",\s*$/m,
@@ -502,6 +548,12 @@ test("sitemap lists every indexable public route", () => {
   const declared = [
     readFileSync("src/routes/sitemap[.]xml.ts", "utf8"),
     readFileSync("src/content/seo.ts", "utf8"),
+    // The corridor hub and segment paths are declared here and reach the
+    // sitemap through castlePeakRoadSitemapPaths, which the sitemap spreads.
+    // seo.ts used to carry a duplicate `/castle-peak-road` literal in a
+    // pageSeo entry that was dead in all three fields; removing it left this
+    // source scan unable to see a path that is genuinely listed.
+    readFileSync("src/content/castle-peak-road.ts", "utf8"),
   ].join("\n");
 
   const missing = readdirSync("src/routes")

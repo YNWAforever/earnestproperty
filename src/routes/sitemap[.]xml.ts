@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { blogArticles } from "@/content/blog-articles";
+import { publishedBlogArticles } from "@/content/blog-articles";
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
 import { SITE_URL, estateSeo, pageSeo } from "@/content/seo";
 import {
@@ -13,7 +13,7 @@ import { fetchPublishedArticlesByCategory, fetchRecentTransactions } from "@/lib
 const staticPaths = [
   pageSeo.home.path,
   pageSeo.listings.path,
-  pageSeo.castlePeakRoad.path,
+  // /castle-peak-road arrives via castlePeakRoadSitemapPaths below.
   pageSeo.shamTseng.path,
   // /district/tsuen-wan is intentionally absent: the client pruned 荃灣 from the
   // district navigation, so the page has no inbound internal link. Advertising
@@ -29,9 +29,17 @@ const staticPaths = [
   "/mortgage",
   "/agents",
   "/videos",
-  ...blogArticles.map((article) => `/blog/${article.slug}`),
+  // Article URLs are NOT here: 28 屋苑開箱 articles are scheduled for future
+  // dates, and a module-level list would freeze the set at server boot and
+  // advertise a URL that still 404s. They are appended per request below.
   ...castlePeakRoadSitemapPaths,
 ];
+
+/** How many 屋苑開箱 articles are public right now, independent of the CMS.
+ * Evaluated per request because the set grows on a schedule. */
+function staticEstateReviewCount(): number {
+  return publishedBlogArticles().filter((article) => article.category === "屋苑開箱").length;
+}
 
 function uniquePaths(paths: string[]) {
   return Array.from(new Set(paths)).filter((path) => path !== "/district/ting-kau");
@@ -106,7 +114,13 @@ export const Route = createFileRoute("/sitemap.xml")({
         ]);
         const conditionalPaths = [
           transactions.length > 0 ? "/transactions" : null,
-          estateReviewArticles.length > 0 ? "/estate-reviews" : null,
+          // /estate-reviews now has a static 屋苑開箱 floor (see that route's
+          // own fallbackArticles), so the page is only empty if BOTH the CMS
+          // and the static set are, and gating solely on the CMS query kept a
+          // populated page out of the sitemap.
+          estateReviewArticles.length > 0 || staticEstateReviewCount() > 0
+            ? "/estate-reviews"
+            : null,
         ].filter((path) => path !== null);
 
         // Only estates the DB actually has published = true today belong in
@@ -166,6 +180,7 @@ export const Route = createFileRoute("/sitemap.xml")({
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
           ...uniquePaths([
             ...staticPaths,
+            ...publishedBlogArticles().map((article) => `/blog/${article.slug}`),
             ...publishedEstatePaths,
             ...publishedArticlePaths,
             ...conditionalPaths,

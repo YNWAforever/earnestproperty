@@ -1,3 +1,4 @@
+import { isApprovedPresentationEstate } from "./client-area-presentation.ts";
 import { estateSlugsForCorridorSegment } from "./estate-registry.ts";
 
 export type CorridorFaq = {
@@ -79,7 +80,7 @@ export const castlePeakRoadHub = {
   path: "/castle-peak-road",
   label: "青山公路 Castle Peak Road",
   launchName: "Core Corridor Launch",
-  title: "青山公路 Castle Peak Road 樓盤｜汀九、深井、青龍頭",
+  title: "青山公路樓盤｜汀九、深井、青龍頭海景屋苑｜晉誠地產",
   description:
     "青山公路沿線買樓租樓指南：汀九、深井、青龍頭三個生活圈，比較交通、景觀、樓齡、校網，結合晉誠地產 C-018613 全部真盤。",
   h1: "青山公路 Castle Peak Road · 海景住宅走廊",
@@ -122,9 +123,9 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     nameZh: "油柑頭 汀九",
     nameEn: "Yau Kom Tau / Ting Kau",
     eyebrow: "青山公路東段",
-    title: "油柑頭・汀九樓盤｜青山公路低密度海景別墅、洋房",
+    title: "汀九樓盤｜油柑頭低密度海景別墅、洋房｜晉誠地產",
     description:
-      "油柑頭及汀九 Ting Kau 樓盤指南：觀海別墅、嘉御龍庭、汀九別墅等低密度海景別墅洋房，介乎荃灣與深井，62 校網。晉誠地產 C-018613。",
+      "汀九、油柑頭買樓租樓指南：觀海別墅、嘉御龍庭、汀九別墅等低密度海景別墅洋房，62 校網，巴士小巴自駕往荃灣、青衣及機場。晉誠地產 C-018613。",
     h1: "油柑頭 汀九 · 青山公路低密度海景住宅",
     intro: [
       "油柑頭與汀九是青山公路海景生活圈的東面入口，沿青山公路面向汀九橋、青馬橋及藍巴勒海峽，是青山公路少數以低密度別墅、洋房和海景住宅為主的地段。",
@@ -237,9 +238,9 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     eyebrow: "青山公路深井段",
     // Targets 青山公路深井段 rather than bare 深井 -- /district/sham-tseng is
     // the canonical 深井 page and links here as the corridor view.
-    title: "青山公路深井段・青龍頭樓盤｜海景大型屋苑、豪景花園",
+    title: "青山公路深井段・青龍頭樓盤｜海景大型屋苑｜晉誠地產",
     description:
-      "青山公路深井段至青龍頭樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園與豪景花園沿線比較，配合晉誠地產即時全部真盤。",
+      "青山公路深井段至青龍頭樓盤指南：碧堤半島、浪翠園、麗都花園、海韻花園、豪景花園沿線比較，小巴直達荃灣站，62 校網。晉誠地產 C-018613。",
     h1: "深井 / 青山公路 · 海景大型屋苑",
     intro: [
       "深井是青山公路最成熟的海景住宅生活圈，屋苑規模、巴士小巴、餐飲和日常配套都比汀九集中。",
@@ -440,6 +441,20 @@ export function isWithinCorridorRegion(input: {
   // Already attached to a corridor estate: the strongest signal there is, and
   // not something the place-name gate should be allowed to override.
   if (input.estateSlug && corridorEstateSlugs.has(input.estateSlug)) return true;
+
+  // 2026-09-07 client feedback: the same override for an estate the client's
+  // own approved presentation groups name (client-area-presentation.ts).
+  //
+  // Without this, 香港黃金海岸 (slug wong-gam-hoi-ngon) can never appear
+  // anywhere: its own canonical name contains 黃金海岸, which is one of
+  // outOfScopeTextAliases below, so the place-name gate rejected the estate
+  // by its own name. That gate exists to keep unrelated 屯門 / 大欖涌 /
+  // generic-青山公路 stock off the site and is unchanged for everything else
+  // -- this is a per-estate allowance keyed on a canonical slug the client
+  // explicitly approved, never a district, a free-text place name, or the
+  // generic "castle-peak-road" district. An unapproved estate, or a listing
+  // with no estate at all, still goes through the full gate below.
+  if (isApprovedPresentationEstate(input.estateSlug)) return true;
 
   const haystack = (input.text ?? [])
     .filter((value): value is string => Boolean(value))

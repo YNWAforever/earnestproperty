@@ -706,22 +706,140 @@ export async function fetchCorridorInventory(
   };
 }
 
-export async function fetchFeaturedProperties(limit: number): Promise<NeonPropertyRow[]> {
-  const pageSize = Math.min(Math.max(1, limit), 100);
-  // Legacy API name: the homepage now presents latest active inventory.
-  // Keep staff featured flags intact, but never let them pin old stock above new listings.
+/**
+ * The verified 28Hse promotion grade for a listing, as a rank the client's
+ * requested order can sort on: 黃金 > 置頂 > 普通, with an unobserved listing
+ * last (網頁07092026.docx p5).
+ *
+ * Resolved through property_source_links, the same join both ingestion
+ * generations maintain, so the tier belongs to the canonical property rather
+ * than to whichever source row happened to win field selection. Only an
+ * `active` link counts, so a delisted source row cannot keep pinning a
+ * listing to the top. min() picks the strongest grade deterministically when a
+ * property has several verified linked source observations -- it never changes
+ * which source or agent the listing itself is attributed to.
+ *
+ * COALESCE to 3 means "no verified grade observed": an unclassified or
+ * Property.hk-only listing keeps its existing unpromoted fallback position and
+ * is never presented as a paid tier.
+ */
+const PROMOTION_TIER_RANK_JOIN = `LEFT JOIN LATERAL (
+  SELECT min(
+    CASE t.promotion_tier
+      WHEN 'gold' THEN 0
+      WHEN 'pinned' THEN 1
+      WHEN 'normal' THEN 2
+      ELSE 3
+    END
+  ) AS rank
+  FROM property_source_links psl
+  JOIN mls_source_promotion_tiers t
+    ON t.source = psl.source
+   AND t.external_listing_id = psl.external_listing_id
+   AND t.deal_type = psl.deal_type
+  WHERE psl.property_id = p.id AND psl.status = 'active'
+) promotion ON TRUE`;
+
+const PROMOTION_TIER_RANK_EXPRESSION = "COALESCE(promotion.rank, 3)";
+
+/**
+ * Whether mls_source_promotion_tiers exists yet.
+ *
+ * Postgres rejects a query naming a missing relation at parse time, so the
+ * ranked feed cannot simply be attempted and caught -- the homepage would 500
+ * for every visitor between this code deploying and
+ * 20260909120000_source_promotion_tiers.sql being applied. Same probe-then-
+ * degrade shape readPublicSourceMetadata (public-source-metadata.mjs) already
+ * uses for its own optional tables.
+ *
+ * Cached briefly rather than forever so the ranking starts working once the
+ * migration is applied, with no redeploy, and rather than per request so the
+ * feed does not pay for two round trips on every homepage view. A negative
+ * result is cached for the same short window: the cost of being wrong is one
+ * page render without the tier ordering, not an error.
+ */
+const PROMOTION_TIER_TABLE_TTL_MS = 60_000;
+let promotionTierTable: { available: boolean; checkedAt: number } | null = null;
+
+async function promotionTierTableAvailable(): Promise<boolean> {
+  if (promotionTierTable && Date.now() - promotionTierTable.checkedAt < PROMOTION_TIER_TABLE_TTL_MS)
+    return promotionTierTable.available;
+  try {
+    const rows = await sql().query(
+      "SELECT to_regclass('mls_source_promotion_tiers') IS NOT NULL AS available",
+    );
+    const available = rows[0]?.available === true;
+    promotionTierTable = { available, checkedAt: Date.now() };
+    return available;
+  } catch {
+    // A probe failure is not a reason to fail the homepage. Degrade to the
+    // unranked feed, and re-probe after the TTL.
+    promotionTierTable = { available: false, checkedAt: Date.now() };
+    return false;
+  }
+}
+
+/**
+ * The homepage's live listing feed.
+ *
+ * Ordering happens in SQL, before the row limit, and the region predicate is
+ * applied in SQL too. Both were previously done in the caller
+ * (queries.ts's fetchFeaturedProperties) on a fixed 24-row over-fetch, which
+ * meant a higher-priority listing sitting at row 25 could never appear no
+ * matter how it ranked -- the 黃金-first ordering the client asked for cannot
+ * be built on top of a window that has already discarded candidates.
+ *
+ * Deduplication still happens first: canonicalListingCte collapses each
+ * public_listing_no to one row before this ORDER BY sees it, so a listing with
+ * several source rows or several offers is one card, ranked once.
+ *
+ * Staff `featured` flags and publication/delisting rules are untouched --
+ * `p.status = 'active'` is still the gate, and LISTING_NEWEST_ORDER remains
+ * the within-tier order, so this only inserts the client's tier priority
+ * ahead of the existing deterministic freshness/id tiebreak.
+ */
+export async function fetchFeaturedProperties(input: {
+  limit: number;
+  districtSlugs?: string[];
+  estateSlugs?: string[];
+  textAliases?: string[];
+  outOfScopeTextAliases?: string[];
+}): Promise<NeonPropertyRow[]> {
+  const pageSize = Math.min(Math.max(1, input.limit), 100);
+  const scope = normalizeCorridorInventoryInput({
+    districtSlugs: input.districtSlugs ?? [],
+    estateSlugs: input.estateSlugs ?? [],
+    textAliases: input.textAliases ?? [],
+    outOfScopeTextAliases: input.outOfScopeTextAliases ?? [],
+    limit: pageSize,
+  });
+
+  const ranked = await promotionTierTableAvailable();
+
+  const params: unknown[] = [];
+  // With no scope terms the feed stays exactly as broad as it was before the
+  // region predicate moved into SQL -- every active listing, with the caller's
+  // own filter still applied afterwards as defense in depth.
+  const where = hasCorridorAliases(scope) ? corridorWhere(scope, params) : "p.status = 'active'";
+  // Before the migration lands there is no tier to rank on, so the feed keeps
+  // its previous freshness order rather than erroring.
+  const order = ranked
+    ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, ${LISTING_NEWEST_ORDER}`
+    : LISTING_NEWEST_ORDER;
+  const limitParam = addParam(params, pageSize);
+
   const rows = await sql().query(
     `
-    ${canonicalListingCte("p.status = 'active'", false, LISTING_NEWEST_ORDER)}
+    ${canonicalListingCte(where, false, LISTING_NEWEST_ORDER)}
     SELECT ${listingCardColumns}
     FROM properties p JOIN canonical c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
-
-    WHERE p.status = 'active'
-    ORDER BY ${LISTING_NEWEST_ORDER}
-    LIMIT $1
+    ${ranked ? PROMOTION_TIER_RANK_JOIN : ""}
+    WHERE ${where}
+    ORDER BY ${order}
+    LIMIT ${limitParam}
     `,
-    [pageSize],
+    params,
   );
   return rows.map(mapListingCardRow);
 }
@@ -1096,6 +1214,39 @@ export async function fetchEstates(input: { districtSlug?: string } = {}) {
   return rows;
 }
 
+/**
+ * Loads the published `estates` rows for an explicit, bounded set of canonical
+ * slugs, in one round trip.
+ *
+ * Added for the client's 2026-09-07 presentation groups, which span more than
+ * one `district_slug` (深井 / 青龍頭 is "sham-tseng" *and* "tsing-lung-tau"):
+ * fetchEstates() above can only ask for one district, so 帝華軒 -- a real,
+ * published, tsing-lung-tau row -- was never returned to the homepage. Asking
+ * by approved canonical membership instead of by district also avoids a
+ * per-estate request loop and keeps the query bounded regardless of how many
+ * districts a group grows to span.
+ *
+ * Publication is still gated exactly as fetchEstates() gates it, and the
+ * ordering below is only a stable tiebreak -- the caller re-orders into the
+ * client's own sequence.
+ */
+export async function fetchEstatesBySlugs(input: { slugs: string[] }) {
+  const slugs = Array.from(new Set(input.slugs.map((slug) => slug.trim()).filter(Boolean)));
+  if (slugs.length === 0) return [];
+  const rows = await sql().query(
+    `
+    SELECT e.*, market.asking_psf AS avg_saleable_psf,
+      COALESCE(NULLIF(e.hero_image,''),market.listing_image) AS hero_image
+    FROM estates e ${estateMarketJoin}
+    WHERE e.slug = ANY($1::text[])
+      AND COALESCE((to_jsonb(e)->>'published')::boolean, true)
+    ORDER BY e.slug ASC
+    `,
+    [slugs],
+  );
+  return rows;
+}
+
 export async function fetchEstateBySlug(input: { slug: string }) {
   const rows = await sql().query(
     `SELECT e.*, market.asking_psf AS avg_saleable_psf,
@@ -1358,6 +1509,12 @@ export async function fetchPublishedArticles() {
     cover_image: stringOrNull(row.cover_image),
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
+    // The admin CMS has collected these two per article since
+    // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
+    // them -- so every hand-written article SEO 標題/描述 was written to the
+    // database and silently discarded. blog_.$slug.tsx's head() reads them now.
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
     updated_at: dateOrNull(row.updated_at),
   }));
@@ -1366,7 +1523,8 @@ export async function fetchPublishedArticles() {
 export async function fetchArticleBySlug(input: { slug: string }) {
   const rows = await sql().query(
     `
-    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes, published_at, updated_at
+    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes,
+      published_at, updated_at, seo_title, seo_description
     FROM articles
     WHERE slug = $1 AND published = true
     LIMIT 1
@@ -1383,6 +1541,12 @@ export async function fetchArticleBySlug(input: { slug: string }) {
     cover_image: stringOrNull(row.cover_image),
     category: stringOrNull(row.category),
     reading_minutes: numberOrNull(row.reading_minutes),
+    // The admin CMS has collected these two per article since
+    // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
+    // them -- so every hand-written article SEO 標題/描述 was written to the
+    // database and silently discarded. blog_.$slug.tsx's head() reads them now.
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
     published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
     updated_at: dateOrNull(row.updated_at),
   };

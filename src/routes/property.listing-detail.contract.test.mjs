@@ -32,6 +32,23 @@ const publicHelperSource = (
   .replace(/^import .*;$/gm, "")
   .replace(/export /g, "");
 
+/** Strip a module's imports and `export ` keywords so it can be concatenated
+ * into a transpiled snippet, the same way publicHelperSource is. */
+const inlineModule = async (relativePath) =>
+  (await readFile(new URL(relativePath, import.meta.url), "utf8"))
+    .replace(/^import\s[\s\S]*?;$/gm, "")
+    .replace(/^export type [\s\S]*?^};$/gm, "")
+    .replace(/export declare /g, "")
+    .replace(/export /g, "");
+
+// head() now builds its title/description with listingSeo(), so the snippet
+// needs the generator and the width budget it depends on, not just the four
+// stubs it used to get. Inlined rather than stubbed so the executed head is
+// the real one -- a stub would have let the generator regress unnoticed here.
+const formatModuleSource = await inlineModule("../lib/format.ts");
+const seoBudgetSource = await inlineModule("../content/seo-budget.js");
+const listingSeoSource = await inlineModule("../lib/listing-seo.ts");
+
 function transpileAndRun(snippet) {
   const { outputText } = ts.transpileModule(snippet, {
     compilerOptions: {
@@ -240,6 +257,18 @@ test("loader: offline/inactive/draft (and a missing listing_no) throw notFound b
 function buildHead() {
   const unavailableMatch = routeSource.match(/const UNAVAILABLE_STATUSES = new Set\(\[[^\]]*\]\);/);
   assert.ok(unavailableMatch);
+  // listing-seo.ts declares the same set (its copy decides whether the title
+  // says 已售出/已租出) and is inlined below, so the snippet would silently use
+  // the module's copy if the two ever diverged. Pin them equal instead.
+  const moduleUnavailable = listingSeoSource.match(
+    /const UNAVAILABLE_STATUSES = new Set\(\[[^\]]*\]\);/,
+  );
+  assert.ok(moduleUnavailable, "expected listing-seo.ts to declare UNAVAILABLE_STATUSES");
+  assert.equal(
+    moduleUnavailable[0],
+    unavailableMatch[0],
+    "src/lib/listing-seo.ts and the route must agree on which statuses are unavailable",
+  );
   const startNeedle = "head: ({ loaderData }) => {";
   const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
   assert.ok(bodyStart > startNeedle.length - 1, "expected the route head()");
@@ -249,12 +278,12 @@ function buildHead() {
   const body = routeSource.slice(bodyStart, closeIdx);
 
   const snippet = `
-${unavailableMatch[0]}
-function canonicalLink(path) { return { rel: "canonical", href: "https://example.test" + path }; }
-function formatHkd(n) { return Number.isFinite(n) && n > 0 ? "$" + n : null; }
-function formatSaleDisplay(n) { return Number.isFinite(n) && n > 0 ? "$" + n : null; }
-function sanitizeListingText(s) { return s; }
+const SITE_URL = "https://example.test";
+function canonicalLink(path) { return { rel: "canonical", href: SITE_URL + path }; }
+${formatModuleSource}
 ${publicHelperSource}
+${seoBudgetSource}
+${listingSeoSource}
 function head({ loaderData }) {
   ${body}
 }

@@ -9,6 +9,32 @@ export const Route = createFileRoute("/auth/$pathname")({
   // homepage, leaving them to navigate back by hand.
   validateSearch: (search: Record<string, unknown>) =>
     typeof search.redirect === "string" ? { redirect: search.redirect } : {},
+  // This route had no head() at all, so it inherited the homepage title,
+  // description and og/twitter card verbatim -- a shared sign-in link unfurled
+  // as the homepage -- and it was the only /auth or /account route without a
+  // robots noindex. robots.txt disallows /auth, but that stops crawling, not
+  // indexing of a linked URL, and it does nothing for the share card.
+  head: () => ({
+    meta: [
+      { title: "職員登入｜晉誠地產內部系統" },
+      {
+        name: "description",
+        content:
+          "晉誠地產職員內部登入頁，只供已授權帳戶使用。買樓、租樓或估價查詢請返回晉誠地產網站首頁，或 WhatsApp 聯絡持牌代理 C-018613。",
+      },
+      { property: "og:title", content: "職員登入｜晉誠地產內部系統" },
+      {
+        property: "og:description",
+        content: "晉誠地產職員內部登入頁，只供已授權帳戶使用。",
+      },
+      { name: "twitter:title", content: "職員登入｜晉誠地產內部系統" },
+      {
+        name: "twitter:description",
+        content: "晉誠地產職員內部登入頁，只供已授權帳戶使用。",
+      },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
   component: Auth,
 });
 

@@ -2,6 +2,7 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { ArrowRight, HelpCircle, Home, MapPin, TrendingUp, Waves } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SiteLink } from "@/components/site/SiteLink";
 import { Container } from "@/components/layout/Container";
 import { DataNote } from "@/components/layout/DataNote";
 import { AnswerSummaryCallout } from "@/components/site/AnswerSummaryCallout";
@@ -10,10 +11,14 @@ import {
   buildAreaComparisonRows,
   buyerFitHighlights,
   computePriceSnapshot,
-  estateDirectoryForSegment,
   summarizeSegmentInventory,
   type PriceSnapshot,
 } from "@/components/site/corridor-hub";
+import {
+  clientAreaEstateLabel,
+  clientAreaGroupsInNavOrder,
+  clientAreaGroupsInSchematicOrder,
+} from "@/content/client-area-presentation";
 import {
   castlePeakRoadHub,
   castlePeakRoadSegments,
@@ -24,6 +29,7 @@ import { seo, SITE_URL } from "@/content/seo";
 import {
   fetchCorridorInventoryForAliases,
   fetchDistrictTransactions,
+  fetchEstatesForAreaGroup,
   type CorridorInventory,
   type DistrictTransaction,
 } from "@/lib/queries";
@@ -33,10 +39,22 @@ import { jsonLdScript } from "@/lib/schema";
 type HubLoaderData = {
   inventories: Record<string, CorridorInventory>;
   priceSnapshots: Record<string, PriceSnapshot | null>;
+  /**
+   * Canonical slugs of the client's approved estates that actually have a
+   * live, published `estates` row. Only these are linked by 主要屋苑 -- an
+   * unpublished estate is omitted rather than linked to a page that 404s.
+   */
+  publishedEstateSlugs: string[];
 };
 
 export const Route = createFileRoute("/castle-peak-road/")({
   loader: async (): Promise<HubLoaderData> => {
+    // One bounded, batched query per approved group (fetchEstatesForAreaGroup
+    // asks for that group's canonical slugs in a single round trip) rather
+    // than a per-estate request loop.
+    const publishedByGroup = await Promise.all(
+      clientAreaGroupsInNavOrder().map((group) => fetchEstatesForAreaGroup(group.key)),
+    );
     const rows = await Promise.all(
       castlePeakRoadSegments.map(async (segment) => {
         const [inventory, transactionsBySlug] = await Promise.all([
@@ -95,6 +113,7 @@ export const Route = createFileRoute("/castle-peak-road/")({
     return {
       inventories: Object.fromEntries(rows.map((row) => [row.slug, row.inventory])),
       priceSnapshots: Object.fromEntries(rows.map((row) => [row.slug, row.priceSnapshot])),
+      publishedEstateSlugs: publishedByGroup.flat().map((estate) => estate.slug),
     };
   },
   head: () =>
@@ -171,42 +190,130 @@ function CastlePeakRoadRouteError({ error }: { error: Error }) {
  * if any, live estate rows have real lat/lng populated, and fabricating pins
  * is explicitly forbidden elsewhere in this plan. A simple, labelled
  * east-to-west sequence is enough to give a first-glance sense of relative
- * position; `castlePeakRoadSegments` is already ordered east-to-west (油柑頭
- * /汀九's own intro copy calls it "青山公路海景生活圈的東面入口"; 深井 /
- * 青山公路's own intro says it "由深井向西伸延至青龍頭").
+ * position.
+ *
+ * docx p5 supplies the order directly: 油柑頭汀九 → 深井 / 青龍頭 →
+ * 青山公路區小欖至三聖. That is intentionally NOT the same order as the
+ * navigation shortcuts on docx p1, so both are stored separately in
+ * client-area-presentation.ts and this component reads the schematic one. It
+ * no longer maps castlePeakRoadSegments, which has only the two legacy
+ * corridor segments and therefore could never render three steps.
+ *
+ * The heading is unchanged. docx p5 also carries a 深井 annotation pointing at
+ * this heading, but it does not say whether the heading should become 深井走向
+ * 示意, whether only part of a label changes, or whether it marks a different
+ * target -- so it is recorded as an open question rather than acted on. The
+ * 青山公路 hub's H1, canonical URL and metadata are untouched.
  */
 function CorridorSchematic() {
+  const steps = clientAreaGroupsInSchematicOrder();
   return (
     <Container className="pt-10">
       <div className="flex items-center gap-2">
         <MapPin className="h-5 w-5 text-primary" />
         <h2 className="text-lg font-semibold text-primary">青山公路走向示意</h2>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4">
-        <span className="rounded-md bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground">
+      {/* Vertical steps on narrow screens (arrows rotate to point down) and a
+          horizontal row from sm up. DOM order is the reading order in both
+          cases -- the sequence is never produced by CSS ordering. */}
+      <div className="mt-4 flex flex-col items-stretch gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:flex-wrap sm:items-center">
+        <span className="rounded-md bg-muted px-3 py-2 text-center text-xs font-semibold text-muted-foreground">
           東（近荃灣）
         </span>
-        {castlePeakRoadSegments.map((segment, index) => (
-          <div key={segment.slug} className="flex items-center gap-3">
-            <Link
-              to="/castle-peak-road/$segment"
-              params={{ segment: segment.slug }}
-              className="rounded-md border bg-background px-4 py-2 text-sm font-semibold text-primary transition hover:border-primary"
+        {steps.map((group, index) => (
+          <div
+            key={group.key}
+            className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center"
+          >
+            <SiteLink
+              href={group.href}
+              className="rounded-md border bg-background px-4 py-2 text-center text-sm font-semibold text-primary transition hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             >
-              {segment.nameZh}
-            </Link>
-            {index < castlePeakRoadSegments.length - 1 && (
-              <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {group.label}
+            </SiteLink>
+            {index < steps.length - 1 && (
+              <ArrowRight
+                aria-hidden="true"
+                className="h-4 w-4 shrink-0 rotate-90 self-center text-muted-foreground sm:rotate-0"
+              />
             )}
           </div>
         ))}
-        <span className="rounded-md bg-muted px-3 py-2 text-xs font-semibold text-muted-foreground">
+        <span className="rounded-md bg-muted px-3 py-2 text-center text-xs font-semibold text-muted-foreground">
           西（近屯門）
         </span>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
         示意圖只反映沿線東西相對位置，並非實際地圖座標；如需準確路線及地圖，請以地圖應用程式為準。
       </p>
+    </Container>
+  );
+}
+
+/**
+ * docx p4: the client annotated this page 「冇左主要屋苑」.
+ *
+ * The page did have an estate list, but it sat below the comparison table and
+ * before the FAQ, and it was driven by `segment.estateSlugs` -- the two legacy
+ * corridor segments' strict *inventory* membership, which does not represent
+ * the client's approved presentation groups at all (青山公路's own western
+ * estates are not in any segment's estateSlugs, so that section never showed
+ * them). Both problems are fixed here: the section moves directly under the
+ * schematic, above the long comparison/FAQ content, and its membership comes
+ * from client-area-presentation.ts. The old lower 屋苑一覽 section is removed
+ * rather than left as a second, contradicting directory.
+ *
+ * Only estates with a live, published row are linked. An estate whose row is
+ * still unpublished is omitted rather than linked to a page that 404s, and a
+ * group with nothing published renders an honest empty state instead of
+ * invented estates padding out a third column.
+ */
+function MainEstatesSection({ publishedSlugs }: { publishedSlugs: string[] }) {
+  const published = new Set(publishedSlugs);
+  return (
+    <Container className="py-12">
+      {/* Anchor target for the 青山公路區小欖至三聖 shortcut in the header and
+          the estate directory (client-area-presentation.ts). ASCII id so the
+          fragment survives copy/paste and URL encoding. */}
+      <div id="main-estates" className="flex items-center gap-2 scroll-mt-24">
+        <Home className="h-6 w-6 text-primary" />
+        <h2 className="text-2xl font-bold text-primary">主要屋苑</h2>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        按晉誠地產的三個生活圈分組，點擊屋苑可睇即時放盤同屋苑詳情。
+      </p>
+      <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        {clientAreaGroupsInNavOrder().map((group) => {
+          const members = [...group.primary, ...group.secondary].filter((ref) =>
+            published.has(ref.slug),
+          );
+          return (
+            <div key={group.key} className="rounded-lg border bg-card p-5">
+              <h3 className="font-bold text-primary">{group.label}</h3>
+              {members.length === 0 ? (
+                <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                  呢一段暫時未有獨立屋苑檔案頁面，更多資料稍後提供。可以先 WhatsApp 晉誠地產查詢
+                  {group.label}放盤。
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y">
+                  {members.map((ref) => (
+                    <li key={ref.slug} className="py-2 text-sm">
+                      <Link
+                        to="/estate/$slug"
+                        params={{ slug: ref.slug }}
+                        className="font-medium text-primary underline-offset-2 hover:underline"
+                      >
+                        {clientAreaEstateLabel(ref)}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </Container>
   );
 }
@@ -247,66 +354,6 @@ function AreaComparisonSection() {
             ))}
           </tbody>
         </table>
-      </div>
-    </Container>
-  );
-}
-
-/**
- * For each segment, lists only the registry entries its own `estateSlugs`
- * claims as strict inventory (estateDirectoryForSegment, corridor-hub.ts).
- * Today that's empty for "ting-kau" -- rendered as an explicit, honest
- * empty-state message rather than omitted or papered over -- and the 5
- * `hasPage: true` estates for "sham-tseng", each linked to its real detail
- * page. Never links a `hasPage: false` entry, which would 404.
- */
-function EstateDirectorySection() {
-  return (
-    <Container className="py-12">
-      <div className="flex items-center gap-2">
-        <Home className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-primary">屋苑一覽</h2>
-      </div>
-      <div className="mt-6 grid gap-5 md:grid-cols-2">
-        {castlePeakRoadSegments.map((segment) => {
-          const estates = estateDirectoryForSegment(segment);
-          return (
-            <div key={segment.slug} className="rounded-lg border bg-card p-5">
-              <h3 className="font-bold text-primary">{segment.nameZh}</h3>
-              {estates.length === 0 ? (
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  呢一段暫時未有獨立屋苑檔案頁面，更多資料稍後提供。可以先睇返上面
-                  {segment.nameZh}
-                  即時放盤，或直接 WhatsApp 晉誠地產查詢。
-                </p>
-              ) : (
-                <ul className="mt-3 divide-y">
-                  {estates.map((estate) => (
-                    <li
-                      key={estate.slug}
-                      className="flex items-center justify-between py-2 text-sm"
-                    >
-                      {estate.hasPage ? (
-                        <Link
-                          to="/estate/$slug"
-                          params={{ slug: estate.slug }}
-                          className="font-medium text-primary underline-offset-2 hover:underline"
-                        >
-                          {estate.nameZh}
-                        </Link>
-                      ) : (
-                        <>
-                          <span className="font-medium text-muted-foreground">{estate.nameZh}</span>
-                          <span className="text-xs text-muted-foreground">更多資料稍後提供</span>
-                        </>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
       </div>
     </Container>
   );
@@ -408,7 +455,8 @@ function DecisionGuideSection() {
 }
 
 function CastlePeakRoadHubPage() {
-  const { inventories, priceSnapshots } = Route.useLoaderData() as HubLoaderData;
+  const { inventories, priceSnapshots, publishedEstateSlugs } =
+    Route.useLoaderData() as HubLoaderData;
   const breadcrumbJsonLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -469,6 +517,7 @@ function CastlePeakRoadHubPage() {
       </PageHero>
 
       <CorridorSchematic />
+      <MainEstatesSection publishedSlugs={publishedEstateSlugs} />
 
       <Container className="py-12">
         <div className="flex items-center gap-2">
@@ -487,7 +536,6 @@ function CastlePeakRoadHubPage() {
       </Container>
 
       <AreaComparisonSection />
-      <EstateDirectorySection />
       <PriceSnapshotSection priceSnapshots={priceSnapshots} />
       <DecisionGuideSection />
 

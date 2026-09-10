@@ -7,6 +7,7 @@ import {
   estateListingHref,
   type EstateDirectoryData,
 } from "@/lib/estate-directory";
+import { clientAreaGroupsInNavOrder } from "@/content/client-area-presentation";
 
 let cached: EstateDirectoryData | undefined;
 let cachedAt = 0;
@@ -107,11 +108,12 @@ export function EstateDirectory({
       </div>
       <div className={mobile ? "py-3" : "min-h-0 overflow-y-auto px-5 py-4"}>
         <div className="mb-4 flex flex-wrap gap-2">
-          {[
-            ["/district/sham-tseng", "深井區"],
-            ["/castle-peak-road", "青山公路"],
-            ["/castle-peak-road/ting-kau", "汀九豪宅區"],
-          ].map(([href, label]) => (
+          {/* docx p1: the client's exact three shortcut labels, in their order.
+              Both the label and the destination come from
+              client-area-presentation.ts, which also names the group headings
+              below -- so a shortcut and the section it leads to can never
+              disagree, on desktop or mobile. */}
+          {clientAreaGroupsInNavOrder().map(({ href, label }) => (
             <SiteLink
               key={href}
               href={href}

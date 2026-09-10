@@ -6,7 +6,22 @@ export const Route = createFileRoute("/account/$pathname")({
   // of the index (robots.txt already disallows /account; this covers a
   // crawler that arrives via a shared link).
   head: () => ({
-    meta: [{ title: "帳戶設定｜晉誠地產" }, { name: "robots", content: "noindex" }],
+    // Without its own description this inherited the homepage description and
+    // the homepage og/twitter card from the root shell, so a shared account
+    // link unfurled as the public site's marketing copy.
+    meta: [
+      { title: "帳戶設定｜晉誠地產職員系統" },
+      {
+        name: "description",
+        content:
+          "晉誠地產職員帳戶設定：管理登入電郵、密碼及個人資料。此頁只供已登入職員使用，不對外公開，亦不會被搜尋引擎收錄。",
+      },
+      { property: "og:title", content: "帳戶設定｜晉誠地產職員系統" },
+      { property: "og:description", content: "晉誠地產職員帳戶設定頁，只供已登入職員使用。" },
+      { name: "twitter:title", content: "帳戶設定｜晉誠地產職員系統" },
+      { name: "twitter:description", content: "晉誠地產職員帳戶設定頁，只供已登入職員使用。" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
   }),
   component: Account,
 });

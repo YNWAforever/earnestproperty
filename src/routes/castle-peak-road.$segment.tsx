@@ -58,12 +58,25 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
 
     return { segment, inventory, nearbyInventory };
   },
-  head: ({ loaderData }) =>
-    seo({
-      title: loaderData?.segment.title ?? castlePeakRoadHub.title,
-      description: loaderData?.segment.description ?? castlePeakRoadHub.description,
-      path: loaderData?.segment.path ?? castlePeakRoadHub.path,
-    }),
+  head: ({ params, loaderData }) => {
+    // Resolved from `params` as well, not just loaderData. head() still runs
+    // when the loader throws -- an unknown slug (notFound above) or a failure
+    // of the un-caught primary inventory fetch -- and the old
+    // `?? castlePeakRoadHub.*` fallback then emitted the HUB's title, the
+    // hub's description AND `canonicalLink("/castle-peak-road")` on a segment
+    // URL: a real segment advertising itself as a duplicate of its own parent.
+    const segment = loaderData?.segment ?? getCastlePeakRoadSegment(params.segment);
+    if (!segment) {
+      return seo({
+        title: "找不到青山公路分段｜晉誠地產",
+        description:
+          "這個青山公路分段頁面不存在或已合併。可返回青山公路總覽，比較汀九、深井、青龍頭三個生活圈嘅放盤、交通同校網。晉誠地產 C-018613。",
+        path: castlePeakRoadHub.path,
+        noindex: true,
+      });
+    }
+    return seo({ title: segment.title, description: segment.description, path: segment.path });
+  },
   errorComponent: CastlePeakRoadSegmentError,
   component: CastlePeakRoadSegmentPage,
 });
