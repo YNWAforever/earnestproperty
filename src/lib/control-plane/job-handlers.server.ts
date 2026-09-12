@@ -309,3 +309,123 @@ export const woztellHistoryImportHandler = registerJobHandler<
     }
   },
 });
+
+export const woztellEnquiryProcessHandler = registerJobHandler<{ eventId: string }>({
+  jobType: "woztell.enquiry.process",
+  payloadVersion: 1,
+  parsePayload(input) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).length !== 1 ||
+      !("eventId" in input) ||
+      typeof input.eventId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.eventId)
+    )
+      throw Object.assign(new Error("Invalid enquiry event payload"), { code: "VALIDATION_ERROR" });
+    return { eventId: input.eventId };
+  },
+  async run(payload, context) {
+    const { observeEnquiryEvent } = await import("../whatsapp-enquiries/workflow.server.ts");
+    try {
+      return await observeEnquiryEvent(payload.eventId, context.checkpoint);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        ["WA_ENQUIRY_MODE_UNSUPPORTED", "JOB_OWNERSHIP_LOST"].includes(String(error.code))
+      )
+        throw error;
+      throw retryableJobError(
+        "WA_ENQUIRY_OBSERVATION_RETRYABLE",
+        "Observation could not complete.",
+      );
+    }
+  },
+});
+
+export const SERVICE_CAPABILITIES = [
+  "woztell.enquiry.process@1",
+  "woztell.enquiry.process@2",
+  "woztell.enquiry.service@1",
+  "woztell.enquiry.sla.check@1",
+  "woztell.reply.deliver@1",
+  "woztell.reply.deliver@2",
+  "woztell.enquiry.assign@1",
+];
+function idPayload(input: unknown, key: string) {
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).length !== 1 ||
+    typeof (input as Record<string, unknown>)[key] !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      String((input as Record<string, unknown>)[key]),
+    )
+  )
+    throw Object.assign(new Error("Invalid service job"), { code: "VALIDATION_ERROR" });
+  return { [key]: String((input as Record<string, unknown>)[key]) };
+}
+registerJobHandler({ ...woztellEnquiryProcessHandler, payloadVersion: 2 });
+registerJobHandler({
+  jobType: "woztell.enquiry.service",
+  payloadVersion: 1,
+  parsePayload: (input) => idPayload(input, "actionId"),
+  async run(payload, context) {
+    await context.checkpoint();
+    const { prepareServiceAction } =
+      await import("../whatsapp-enquiries/service-workflow.server.ts");
+    const summary = await prepareServiceAction(payload.actionId);
+    if (summary.blocked)
+      throw Object.assign(new Error("Service action blocked; inspect its retained reason."), {
+        code: "WA_SERVICE_ACTION_BLOCKED",
+      });
+    return { summary };
+  },
+});
+registerJobHandler({
+  jobType: "woztell.reply.deliver",
+  payloadVersion: 2,
+  parsePayload: (input) => idPayload(input, "actionId"),
+  async run(payload, context) {
+    const { deliverServiceAction } =
+      await import("../whatsapp-enquiries/service-workflow.server.ts");
+    return {
+      summary: await deliverServiceAction(payload.actionId, {
+        checkpoint: context.checkpoint,
+        job: context.workerId ? { jobId: context.jobId, workerId: context.workerId } : undefined,
+      }),
+    };
+  },
+});
+registerJobHandler({
+  jobType: "woztell.enquiry.assign",
+  payloadVersion: 1,
+  parsePayload: (input) => idPayload(input, "requestId"),
+  async run(payload, context) {
+    await context.checkpoint();
+    const { queryRows } = await import("../neon/db.server.ts");
+    await queryRows(
+      "UPDATE whatsapp_assignment_requests SET evidence=evidence||jsonb_build_object('blockReason','WOZTELL_ASSIGNMENT_CAPABILITY_UNVERIFIED') WHERE id=$1::uuid AND state='pending'",
+      [payload.requestId],
+    );
+    throw Object.assign(new Error("Assignment capability is not verified."), {
+      code: "WOZTELL_ASSIGNMENT_CAPABILITY_UNVERIFIED",
+    });
+  },
+});
+
+registerJobHandler({
+  jobType: "woztell.enquiry.sla.check",
+  payloadVersion: 1,
+  parsePayload: (input) => idPayload(input, "inquiryId"),
+  async run(payload, context) {
+    await context.checkpoint();
+    const { checkServiceObligation } =
+      await import("../whatsapp-enquiries/service-workflow.server.ts");
+    return { summary: await checkServiceObligation(payload.inquiryId) };
+  },
+});

@@ -301,11 +301,11 @@ test("admin replies enqueue an authorized durable intent before provider work", 
 });
 
 test("webhook validates the raw body before parsing", () => {
-  const webhookRoute = read("src/routes/api.woztell.webhook.ts");
+  const webhookRoute = read("src/lib/whatsapp-enquiries/webhook.server.ts");
 
   // The signature is checked against the RAW bytes, before JSON.parse -- parsing
   // first and re-serializing would change the bytes and break verification.
-  assert.match(webhookRoute, /request\.text\(\)/);
+  assert.match(webhookRoute, /request\.body\?\.getReader\(\)/);
   assert.match(webhookRoute, /x-woztell-signature/);
   assert.match(webhookRoute, /try\s*\{[\s\S]*JSON\.parse\(raw/);
   assert.match(webhookRoute, /INVALID_JSON/);
@@ -632,6 +632,32 @@ test("a genuine success is still a success", async () => {
   assert.equal(result.ok, true);
 });
 
+test("nested result IDs are exposed as identifiable provider acceptance", async () => {
+  const result = await captureSend(200, {
+    ok: 1,
+    sendResult: { result: [{ messageEvent: { messageId: "nested-id" } }] },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.providerResult.outcome, "identifiable_acceptance");
+  assert.equal(result.providerResult.primaryMessageId, "nested-id");
+});
+
+test("an inner error prevents a successful outer envelope becoming blanket success", async () => {
+  const result = await captureSend(200, {
+    ok: 1,
+    sendResult: {
+      result: [
+        { messageEvent: { messageId: "possibly-sent" } },
+        { err: "second response rejected" },
+      ],
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.refused, false);
+  assert.equal(result.providerResult.outcome, "partial_or_unknown");
+  assert.equal(result.providerResult.possibleAccepted, true);
+});
+
 // WOZTELL_DELIVERY_UNKNOWN is terminal because the provider may already have
 // delivered the message, so re-queueing risks a second billable WhatsApp to a
 // real person. That reasoning does not hold when WOZTELL says ok:0 -- it
@@ -680,7 +706,7 @@ test("an ambiguous 5xx is still terminal unknown", async () => {
 // channel credentials produces exactly that, and it is indistinguishable from a
 // quiet day unless the rejection announces itself.
 test("a rejected webhook says so, and says which of the three causes it is", () => {
-  const route = read("src/routes/api.woztell.webhook.ts");
+  const route = read("src/lib/whatsapp-enquiries/webhook.server.ts");
 
   assert.match(route, /console\.warn\([\s\S]{0,400}REJECTED/);
   // Each state has a different fix, so the log has to tell them apart.

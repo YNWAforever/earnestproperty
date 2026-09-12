@@ -53,12 +53,13 @@ export const REPLY_WINDOW_URGENT_MS = 2 * 60 * 60 * 1000;
  * shows the status badge beside this.
  */
 export function conversationAttention(input: {
+  awaitingHumanResponse?: boolean | null;
   lastDirection: string | null;
   lastInboundAt: Date | string | null;
   now?: Date;
 }) {
   const now = input.now ?? new Date();
-  const awaitingReply = input.lastDirection === "inbound";
+  const awaitingReply = input.awaitingHumanResponse ?? input.lastDirection === "inbound";
 
   const inbound =
     input.lastInboundAt === null || input.lastInboundAt === undefined

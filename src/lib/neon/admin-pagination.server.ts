@@ -13,7 +13,10 @@ export async function readAdminPage<R extends AdminPageResource>(
   input: AdminPageInput & { resource: R },
   actor: StaffAccess,
 ): Promise<CursorPage<AdminPageRows[R]>> {
-  const query = buildAdminPageQuery(input, actor);
+  const enquiries =
+    input.resource === "conversations" &&
+    (await (await import("../whatsapp-enquiries/assignment.server")).assignmentSchemaAvailable());
+  const query = buildAdminPageQuery(input, actor, { enquiries });
   const [result] = await queryRows(query.statement, query.params);
   const rows = (result?.rows ?? []) as Array<{ id: string; _cursor_at: string }>;
   const page = finishAdminPage(rows, query.input.limit, query.binding, Number(result?.total ?? 0));

@@ -39,6 +39,7 @@ type PropertyDecisionActionsProps = {
   title: string;
   dealType: "sale" | "rent";
   price: number | null;
+  enquiryHref?: string;
   onInquiry: () => void;
 };
 
@@ -57,6 +58,7 @@ export function PropertyMobileContactSummary({
   title,
   dealType,
   price,
+  enquiryHref,
   onInquiry,
 }: PropertyMobileContactSummaryProps) {
   const decision = getPropertyDecision({ dealType, price });
@@ -74,10 +76,9 @@ export function PropertyMobileContactSummary({
   const branchWhatsapp = "phone" in branchContact ? branchContact.whatsapp : null;
   const enquiryMessage = propertyEnquiryMessage({ title, dealType, price });
   const phoneHref = toTelHref(phone) ?? "/contact";
-  const whatsappHref = toWhatsAppHref(
-    agent?.whatsapp || branchWhatsapp || fallbackWhatsapp,
-    enquiryMessage,
-  );
+  const whatsappHref =
+    enquiryHref ??
+    toWhatsAppHref(agent?.whatsapp || branchWhatsapp || fallbackWhatsapp, enquiryMessage);
   const hasWhatsapp = whatsappHref !== null;
   function handleWhatsAppClick() {
     track(
@@ -158,6 +159,7 @@ export function PropertyDecisionActions({
   title,
   dealType,
   price,
+  enquiryHref,
   onInquiry,
 }: PropertyDecisionActionsProps) {
   const decision = getPropertyDecision({ dealType, price });
@@ -175,10 +177,9 @@ export function PropertyDecisionActions({
   const branchWhatsapp = "phone" in branchContact ? branchContact.whatsapp : null;
   const enquiryMessage = propertyEnquiryMessage({ title, dealType, price });
   const phoneHref = toTelHref(phone) ?? "/contact";
-  const whatsappHref = toWhatsAppHref(
-    agent?.whatsapp || branchWhatsapp || fallbackWhatsapp,
-    enquiryMessage,
-  );
+  const whatsappHref =
+    enquiryHref ??
+    toWhatsAppHref(agent?.whatsapp || branchWhatsapp || fallbackWhatsapp, enquiryMessage);
   const hasWhatsapp = whatsappHref !== null;
   function handleWhatsAppClick() {
     track(

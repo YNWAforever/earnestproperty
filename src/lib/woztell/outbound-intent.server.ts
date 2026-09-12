@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { parseWoztellProviderResult, type ParsedWoztellProviderResult } from "./provider-result.ts";
 
 export type OutboundState =
   | "queued"
@@ -7,7 +8,11 @@ export type OutboundState =
   | "unknown"
   | "failed"
   | "cancelled";
-export type OutboundIntentInput = { requestId: string; conversationId: string } & (
+export type OutboundIntentInput = {
+  requestId: string;
+  conversationId: string;
+  enquiryId?: string;
+} & (
   | { kind: "text"; payload: { text: string } }
   | { kind: "template"; payload: { templateId: string } }
 );
@@ -19,6 +24,12 @@ export function parseOutboundIntent(value: unknown): OutboundIntentInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw invalid();
   const v = value as Record<string, unknown>;
   if (
+    Object.keys(v).some(
+      (key) => !["requestId", "conversationId", "enquiryId", "kind", "payload"].includes(key),
+    )
+  )
+    throw invalid();
+  if (
     typeof v.requestId !== "string" ||
     !uuid.test(v.requestId) ||
     typeof v.conversationId !== "string" ||
@@ -28,7 +39,10 @@ export function parseOutboundIntent(value: unknown): OutboundIntentInput {
   if (!v.payload || typeof v.payload !== "object" || Array.isArray(v.payload)) throw invalid();
   const p = v.payload as Record<string, unknown>;
   if (Object.keys(p).length !== 1) throw invalid();
+  if (v.enquiryId !== undefined && (typeof v.enquiryId !== "string" || !uuid.test(v.enquiryId)))
+    throw invalid();
   const ids = {
+    ...(typeof v.enquiryId === "string" ? { enquiryId: v.enquiryId.toLowerCase() } : {}),
     requestId: v.requestId.toLowerCase(),
     conversationId: v.conversationId.toLowerCase(),
   };
@@ -45,6 +59,7 @@ export function hashOutboundIntent(input: OutboundIntentInput) {
         input.conversationId,
         input.kind,
         input.kind === "text" ? input.payload.text : input.payload.templateId,
+        ...(input.enquiryId ? [input.enquiryId] : []),
       ]),
     )
     .digest("hex");
@@ -85,7 +100,10 @@ export async function enqueueOutboundIntent(
       input.conversationId,
       staffId,
       input.kind,
-      JSON.stringify(input.payload),
+      JSON.stringify({
+        ...input.payload,
+        ...(input.enquiryId ? { enquiryId: input.enquiryId } : {}),
+      }),
       hashOutboundIntent(input),
       scope,
       randomUUID(),
@@ -96,21 +114,22 @@ export async function enqueueOutboundIntent(
 }
 
 type Reservation = { memberId: string; response: Record<string, unknown>[] };
-type Outcome = { state: OutboundState; externalMessageId: string | null; error: string | null };
+type Outcome = {
+  state: OutboundState;
+  externalMessageId: string | null;
+  error: string | null;
+  providerResult?: ParsedWoztellProviderResult;
+};
 type ProviderResult = {
   ok: boolean;
   body?: unknown;
   refused?: boolean;
   status?: number;
   error?: string;
+  providerResult?: ParsedWoztellProviderResult;
 };
 export function providerMessageIdentity(body: unknown): string | null {
-  if (!body || typeof body !== "object") return null;
-  const b = body as Record<string, unknown>;
-  const id =
-    b.messageId ??
-    (b.data && typeof b.data === "object" ? (b.data as Record<string, unknown>).messageId : null);
-  return typeof id === "string" && id.length > 0 && id.length <= 512 ? id : null;
+  return parseWoztellProviderResult(body).primaryMessageId;
 }
 export async function deliverOutboundIntent(
   id: string,
@@ -132,11 +151,25 @@ export async function deliverOutboundIntent(
   try {
     const send = deps.send ?? (await import("./woztell.server.ts")).sendWoztellResponse;
     const result = await send(reservation);
-    externalMessageId = providerMessageIdentity(result.body);
+    const parsed = result.providerResult ?? parseWoztellProviderResult(result.body);
+    externalMessageId = parsed.primaryMessageId;
+    const possibleAccepted = result.ok || parsed.possibleAccepted;
+    const definitivelyRefused = result.refused === true || parsed.outcome === "definitive_refusal";
     await finish(id, {
-      state: result.ok ? "accepted" : result.refused ? "failed" : "unknown",
+      state:
+        result.ok && parsed.outcome === "identifiable_acceptance"
+          ? "accepted"
+          : definitivelyRefused && !possibleAccepted
+            ? "failed"
+            : "unknown",
       externalMessageId,
-      error: result.ok ? null : result.refused ? "WOZTELL_REFUSED" : "WOZTELL_DELIVERY_UNKNOWN",
+      error:
+        result.ok && parsed.outcome === "identifiable_acceptance"
+          ? null
+          : definitivelyRefused && !possibleAccepted
+            ? "WOZTELL_REFUSED"
+            : "WOZTELL_DELIVERY_UNKNOWN",
+      providerResult: parsed,
     });
   } catch {
     // Never throw a retryable send after the irreversible boundary. If this write also fails,
@@ -175,7 +208,7 @@ async function beginOutboundDispatch(
        AND j.status='running' AND j.lease_owner=$3 AND j.lease_expires_at>clock_timestamp()) AS allowed
       FROM whatsapp_outbound_intents i JOIN whatsapp_conversations wc ON wc.id=i.conversation_id
       LEFT JOIN crm_contacts c ON c.id=wc.contact_id LEFT JOIN whatsapp_templates t ON t.id::text=i.payload->>'templateId'
-      JOIN ops_jobs j ON j.id=$2::uuid WHERE i.id=$1::uuid
+      JOIN ops_jobs j ON j.id=$2::uuid WHERE i.id=$1::uuid AND i.actor_staff_id IS NOT NULL
     ), reserved AS (
       UPDATE whatsapp_outbound_intents i SET state=CASE WHEN i.state='dispatching' THEN 'unknown' WHEN e.allowed THEN 'dispatching' ELSE 'cancelled' END,
       dispatch_started_at=COALESCE(i.dispatch_started_at,CASE WHEN e.allowed THEN clock_timestamp() END),updated_at=now()
@@ -233,9 +266,16 @@ export async function finishOutboundIntent(
     ), removed AS (
       DELETE FROM whatsapp_messages m USING reconciled i WHERE m.id<>i.message_id AND m.id=(SELECT message_id FROM whatsapp_outbound_intents WHERE id=i.id)
       AND m.external_message_id IS NULL RETURNING m.id
-    ) UPDATE whatsapp_messages m SET status=i.state,external_message_id=i.external_message_id,error=i.error,sent_by=i.actor_staff_id
+    ) UPDATE whatsapp_messages m SET status=i.state,external_message_id=i.external_message_id,error=i.error,sent_by=i.actor_staff_id,
+      payload=COALESCE(m.payload,'{}'::jsonb) || CASE WHEN $5::jsonb IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('providerResult',$5::jsonb) END
       FROM reconciled i WHERE m.id=i.message_id`,
-      params: [id, outcome.state, outcome.externalMessageId, outcome.error],
+      params: [
+        id,
+        outcome.state,
+        outcome.externalMessageId,
+        outcome.error,
+        outcome.providerResult ? JSON.stringify(outcome.providerResult) : null,
+      ],
     },
   ]);
 }

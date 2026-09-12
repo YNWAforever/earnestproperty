@@ -1,3 +1,4 @@
+import { WhatsappEnquiryQueue } from "@/components/admin/WhatsappEnquiryContext";
 import { stageLabels as STAGE_LABELS, aiScoreLabel } from "@/lib/admin/crm-presentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -217,6 +218,7 @@ function CommandCenter() {
       title="跟進工作台"
       description="每日跟進工作台：誰要跟、為何重要、下一步、WhatsApp 狀態。"
     >
+      <WhatsappEnquiryQueue />
       {data ? <KpiStrip data={data} /> : null}
       {data && data.rows.length >= COMMAND_CENTER_ROW_LIMIT ? (
         <p className="mb-3 text-xs text-muted-foreground">

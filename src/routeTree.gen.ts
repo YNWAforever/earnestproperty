@@ -28,6 +28,7 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CastlePeakRoadIndexRouteImport } from './routes/castle-peak-road.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as WCodeRouteImport } from './routes/w.$code'
 import { Route as PropertyListingNoRouteImport } from './routes/property.$listingNo'
 import { Route as PropertyDetailFileRouteImport } from './routes/property-detail.$file'
 import { Route as EstateSlugRouteImport } from './routes/estate.$slug'
@@ -42,6 +43,8 @@ import { Route as AuthPathnameRouteImport } from './routes/auth.$pathname'
 import { Route as ApiYoutubeSyncRouteImport } from './routes/api.youtube-sync'
 import { Route as ApiMlsSyncRouteImport } from './routes/api.mls-sync'
 import { Route as AgentsSlugRouteImport } from './routes/agents_.$slug'
+import { Route as AdminWhatsappSettingsRouteImport } from './routes/admin.whatsapp-settings'
+import { Route as AdminWhatsappLinksRouteImport } from './routes/admin.whatsapp-links'
 import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AdminTeamRouteImport } from './routes/admin.team'
@@ -73,6 +76,7 @@ import { Route as AdminAgentsIdRouteImport } from './routes/admin.agents_.$id'
 import { Route as ApiAdminWoztellSendTemplateRouteImport } from './routes/api.admin.woztell.send-template'
 import { Route as ApiAdminWoztellSendRouteImport } from './routes/api.admin.woztell.send'
 import { Route as ApiAdminWoztellBackfillRouteImport } from './routes/api.admin.woztell.backfill'
+import { Route as ApiAdminWhatsappServiceWorkerRouteImport } from './routes/api.admin.whatsapp.service-worker'
 import { Route as ApiAdminMediaUploadRouteImport } from './routes/api.admin.media.upload'
 import { Route as ApiAdminJobsSendQueueRouteImport } from './routes/api.admin.jobs.send-queue'
 import { Route as ApiAdminControlPlaneWorkerRouteImport } from './routes/api.admin.control-plane.worker'
@@ -182,6 +186,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
+const WCodeRoute = WCodeRouteImport.update({
+  id: '/w/$code',
+  path: '/w/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PropertyListingNoRoute = PropertyListingNoRouteImport.update({
   id: '/property/$listingNo',
   path: '/property/$listingNo',
@@ -251,6 +260,16 @@ const AgentsSlugRoute = AgentsSlugRouteImport.update({
   id: '/agents_/$slug',
   path: '/agents/$slug',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminWhatsappSettingsRoute = AdminWhatsappSettingsRouteImport.update({
+  id: '/whatsapp-settings',
+  path: '/whatsapp-settings',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminWhatsappLinksRoute = AdminWhatsappLinksRouteImport.update({
+  id: '/whatsapp-links',
+  path: '/whatsapp-links',
+  getParentRoute: () => AdminRoute,
 } as any)
 const AdminWhatsappRoute = AdminWhatsappRouteImport.update({
   id: '/whatsapp',
@@ -408,6 +427,12 @@ const ApiAdminWoztellBackfillRoute = ApiAdminWoztellBackfillRouteImport.update({
   path: '/api/admin/woztell/backfill',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminWhatsappServiceWorkerRoute =
+  ApiAdminWhatsappServiceWorkerRouteImport.update({
+    id: '/api/admin/whatsapp/service-worker',
+    path: '/api/admin/whatsapp/service-worker',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiAdminMediaUploadRoute = ApiAdminMediaUploadRouteImport.update({
   id: '/api/admin/media/upload',
   path: '/api/admin/media/upload',
@@ -516,6 +541,8 @@ export interface FileRoutesByFullPath {
   '/admin/team': typeof AdminTeamRoute
   '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/admin/whatsapp-links': typeof AdminWhatsappLinksRoute
+  '/admin/whatsapp-settings': typeof AdminWhatsappSettingsRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/api/youtube-sync': typeof ApiYoutubeSyncRouteWithChildren
@@ -530,6 +557,7 @@ export interface FileRoutesByFullPath {
   '/estate/$slug': typeof EstateSlugRoute
   '/property-detail/$file': typeof PropertyDetailFileRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
+  '/w/$code': typeof WCodeRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/admin/agents/$id': typeof AdminAgentsIdRoute
@@ -555,6 +583,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/whatsapp/service-worker': typeof ApiAdminWhatsappServiceWorkerRoute
   '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/woztell/send-template': typeof ApiAdminWoztellSendTemplateRoute
@@ -593,6 +622,8 @@ export interface FileRoutesByTo {
   '/admin/team': typeof AdminTeamRoute
   '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/admin/whatsapp-links': typeof AdminWhatsappLinksRoute
+  '/admin/whatsapp-settings': typeof AdminWhatsappSettingsRoute
   '/agents/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/api/youtube-sync': typeof ApiYoutubeSyncRouteWithChildren
@@ -607,6 +638,7 @@ export interface FileRoutesByTo {
   '/estate/$slug': typeof EstateSlugRoute
   '/property-detail/$file': typeof PropertyDetailFileRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
+  '/w/$code': typeof WCodeRoute
   '/admin': typeof AdminIndexRoute
   '/castle-peak-road': typeof CastlePeakRoadIndexRoute
   '/admin/agents/$id': typeof AdminAgentsIdRoute
@@ -632,6 +664,7 @@ export interface FileRoutesByTo {
   '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/whatsapp/service-worker': typeof ApiAdminWhatsappServiceWorkerRoute
   '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/woztell/send-template': typeof ApiAdminWoztellSendTemplateRoute
@@ -673,6 +706,8 @@ export interface FileRoutesById {
   '/admin/team': typeof AdminTeamRoute
   '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/whatsapp': typeof AdminWhatsappRoute
+  '/admin/whatsapp-links': typeof AdminWhatsappLinksRoute
+  '/admin/whatsapp-settings': typeof AdminWhatsappSettingsRoute
   '/agents_/$slug': typeof AgentsSlugRoute
   '/api/mls-sync': typeof ApiMlsSyncRoute
   '/api/youtube-sync': typeof ApiYoutubeSyncRouteWithChildren
@@ -687,6 +722,7 @@ export interface FileRoutesById {
   '/estate/$slug': typeof EstateSlugRoute
   '/property-detail/$file': typeof PropertyDetailFileRoute
   '/property/$listingNo': typeof PropertyListingNoRoute
+  '/w/$code': typeof WCodeRoute
   '/admin/': typeof AdminIndexRoute
   '/castle-peak-road/': typeof CastlePeakRoadIndexRoute
   '/admin/agents_/$id': typeof AdminAgentsIdRoute
@@ -712,6 +748,7 @@ export interface FileRoutesById {
   '/api/admin/control-plane/worker': typeof ApiAdminControlPlaneWorkerRoute
   '/api/admin/jobs/send-queue': typeof ApiAdminJobsSendQueueRoute
   '/api/admin/media/upload': typeof ApiAdminMediaUploadRoute
+  '/api/admin/whatsapp/service-worker': typeof ApiAdminWhatsappServiceWorkerRoute
   '/api/admin/woztell/backfill': typeof ApiAdminWoztellBackfillRoute
   '/api/admin/woztell/send': typeof ApiAdminWoztellSendRoute
   '/api/admin/woztell/send-template': typeof ApiAdminWoztellSendTemplateRoute
@@ -754,6 +791,8 @@ export interface FileRouteTypes {
     | '/admin/team'
     | '/admin/transactions'
     | '/admin/whatsapp'
+    | '/admin/whatsapp-links'
+    | '/admin/whatsapp-settings'
     | '/agents/$slug'
     | '/api/mls-sync'
     | '/api/youtube-sync'
@@ -768,6 +807,7 @@ export interface FileRouteTypes {
     | '/estate/$slug'
     | '/property-detail/$file'
     | '/property/$listingNo'
+    | '/w/$code'
     | '/admin/'
     | '/castle-peak-road/'
     | '/admin/agents/$id'
@@ -793,6 +833,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
+    | '/api/admin/whatsapp/service-worker'
     | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
     | '/api/admin/woztell/send-template'
@@ -831,6 +872,8 @@ export interface FileRouteTypes {
     | '/admin/team'
     | '/admin/transactions'
     | '/admin/whatsapp'
+    | '/admin/whatsapp-links'
+    | '/admin/whatsapp-settings'
     | '/agents/$slug'
     | '/api/mls-sync'
     | '/api/youtube-sync'
@@ -845,6 +888,7 @@ export interface FileRouteTypes {
     | '/estate/$slug'
     | '/property-detail/$file'
     | '/property/$listingNo'
+    | '/w/$code'
     | '/admin'
     | '/castle-peak-road'
     | '/admin/agents/$id'
@@ -870,6 +914,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
+    | '/api/admin/whatsapp/service-worker'
     | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
     | '/api/admin/woztell/send-template'
@@ -910,6 +955,8 @@ export interface FileRouteTypes {
     | '/admin/team'
     | '/admin/transactions'
     | '/admin/whatsapp'
+    | '/admin/whatsapp-links'
+    | '/admin/whatsapp-settings'
     | '/agents_/$slug'
     | '/api/mls-sync'
     | '/api/youtube-sync'
@@ -924,6 +971,7 @@ export interface FileRouteTypes {
     | '/estate/$slug'
     | '/property-detail/$file'
     | '/property/$listingNo'
+    | '/w/$code'
     | '/admin/'
     | '/castle-peak-road/'
     | '/admin/agents_/$id'
@@ -949,6 +997,7 @@ export interface FileRouteTypes {
     | '/api/admin/control-plane/worker'
     | '/api/admin/jobs/send-queue'
     | '/api/admin/media/upload'
+    | '/api/admin/whatsapp/service-worker'
     | '/api/admin/woztell/backfill'
     | '/api/admin/woztell/send'
     | '/api/admin/woztell/send-template'
@@ -991,6 +1040,7 @@ export interface RootRouteChildren {
   EstateSlugRoute: typeof EstateSlugRoute
   PropertyDetailFileRoute: typeof PropertyDetailFileRoute
   PropertyListingNoRoute: typeof PropertyListingNoRoute
+  WCodeRoute: typeof WCodeRoute
   ApiAdminPropertyhkSyncRoute: typeof ApiAdminPropertyhkSyncRoute
   ApiLiveAgentHandoffRoute: typeof ApiLiveAgentHandoffRoute
   ApiLiveAgentMessageRoute: typeof ApiLiveAgentMessageRoute
@@ -1004,6 +1054,7 @@ export interface RootRouteChildren {
   ApiAdminControlPlaneWorkerRoute: typeof ApiAdminControlPlaneWorkerRoute
   ApiAdminJobsSendQueueRoute: typeof ApiAdminJobsSendQueueRoute
   ApiAdminMediaUploadRoute: typeof ApiAdminMediaUploadRoute
+  ApiAdminWhatsappServiceWorkerRoute: typeof ApiAdminWhatsappServiceWorkerRoute
   ApiAdminWoztellBackfillRoute: typeof ApiAdminWoztellBackfillRoute
   ApiAdminWoztellSendRoute: typeof ApiAdminWoztellSendRoute
   ApiAdminWoztellSendTemplateRoute: typeof ApiAdminWoztellSendTemplateRoute
@@ -1145,6 +1196,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/w/$code': {
+      id: '/w/$code'
+      path: '/w/$code'
+      fullPath: '/w/$code'
+      preLoaderRoute: typeof WCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/property/$listingNo': {
       id: '/property/$listingNo'
       path: '/property/$listingNo'
@@ -1242,6 +1300,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/agents/$slug'
       preLoaderRoute: typeof AgentsSlugRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/whatsapp-settings': {
+      id: '/admin/whatsapp-settings'
+      path: '/whatsapp-settings'
+      fullPath: '/admin/whatsapp-settings'
+      preLoaderRoute: typeof AdminWhatsappSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/whatsapp-links': {
+      id: '/admin/whatsapp-links'
+      path: '/whatsapp-links'
+      fullPath: '/admin/whatsapp-links'
+      preLoaderRoute: typeof AdminWhatsappLinksRouteImport
+      parentRoute: typeof AdminRoute
     }
     '/admin/whatsapp': {
       id: '/admin/whatsapp'
@@ -1460,6 +1532,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminWoztellBackfillRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/whatsapp/service-worker': {
+      id: '/api/admin/whatsapp/service-worker'
+      path: '/api/admin/whatsapp/service-worker'
+      fullPath: '/api/admin/whatsapp/service-worker'
+      preLoaderRoute: typeof ApiAdminWhatsappServiceWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/media/upload': {
       id: '/api/admin/media/upload'
       path: '/api/admin/media/upload'
@@ -1567,6 +1646,8 @@ interface AdminRouteChildren {
   AdminTeamRoute: typeof AdminTeamRoute
   AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminWhatsappRoute: typeof AdminWhatsappRoute
+  AdminWhatsappLinksRoute: typeof AdminWhatsappLinksRoute
+  AdminWhatsappSettingsRoute: typeof AdminWhatsappSettingsRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminAgentsIdRoute: typeof AdminAgentsIdRoute
   AdminAgentsNewRoute: typeof AdminAgentsNewRoute
@@ -1592,6 +1673,8 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminTeamRoute: AdminTeamRoute,
   AdminTransactionsRoute: AdminTransactionsRoute,
   AdminWhatsappRoute: AdminWhatsappRoute,
+  AdminWhatsappLinksRoute: AdminWhatsappLinksRoute,
+  AdminWhatsappSettingsRoute: AdminWhatsappSettingsRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminAgentsIdRoute: AdminAgentsIdRoute,
   AdminAgentsNewRoute: AdminAgentsNewRoute,
@@ -1699,6 +1782,7 @@ const rootRouteChildren: RootRouteChildren = {
   EstateSlugRoute: EstateSlugRoute,
   PropertyDetailFileRoute: PropertyDetailFileRoute,
   PropertyListingNoRoute: PropertyListingNoRoute,
+  WCodeRoute: WCodeRoute,
   ApiAdminPropertyhkSyncRoute: ApiAdminPropertyhkSyncRoute,
   ApiLiveAgentHandoffRoute: ApiLiveAgentHandoffRoute,
   ApiLiveAgentMessageRoute: ApiLiveAgentMessageRoute,
@@ -1713,6 +1797,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminControlPlaneWorkerRoute: ApiAdminControlPlaneWorkerRoute,
   ApiAdminJobsSendQueueRoute: ApiAdminJobsSendQueueRoute,
   ApiAdminMediaUploadRoute: ApiAdminMediaUploadRoute,
+  ApiAdminWhatsappServiceWorkerRoute: ApiAdminWhatsappServiceWorkerRoute,
   ApiAdminWoztellBackfillRoute: ApiAdminWoztellBackfillRoute,
   ApiAdminWoztellSendRoute: ApiAdminWoztellSendRoute,
   ApiAdminWoztellSendTemplateRoute: ApiAdminWoztellSendTemplateRoute,

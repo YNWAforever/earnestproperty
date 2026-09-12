@@ -957,9 +957,10 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     destinations.length,
     `duplicate sidebar destination: ${destinations.join(", ")}`,
   );
-  // 14 includes the operational analytics dashboard and command-center, which
-  // had no sidebar entry at all (its only way in was a button on /admin/leads).
-  assert.equal(destinations.length, 14);
+  // Includes the two reviewed WhatsApp workflow management screens.
+  assert.equal(destinations.length, 16);
+  assert.ok(destinations.includes("/admin/whatsapp-links"));
+  assert.ok(destinations.includes("/admin/whatsapp-settings"));
   assert.ok(destinations.includes("/admin/analytics"));
 
   for (const heading of ["日常跟進", "內容與推廣", "團隊與系統"]) {
@@ -1042,4 +1043,15 @@ test("property management mounts canonical management and public preview actions
     table,
     /<Link to="\/property\/\$listingNo" params=\{\{ listingNo: row\.propertyNo \}\}>\s*公開預覽\s*<\/Link>/,
   );
+});
+
+test("WhatsApp selected enquiry is sent for text and template with association-bound retry identity", () => {
+  const route = read("src/routes/admin.whatsapp.tsx");
+  assert.equal(
+    (route.match(/enquiryId: enquirySelections\[targetId\] \|\| undefined/g) ?? []).length,
+    2,
+  );
+  assert.match(route, /JSON\.stringify\(\[text,\s*enquirySelections\[targetId\]/);
+  assert.match(route, /JSON\.stringify\(\[templateId,\s*enquirySelections\[targetId\]/);
+  assert.match(route, /refreshKey=/);
 });

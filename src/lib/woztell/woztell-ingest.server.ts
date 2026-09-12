@@ -3,18 +3,34 @@ import { normalizeAdminPhone } from "../neon/admin-workflow.ts";
 import { isOptOutText, outboundWoztellEvidence } from "./woztell.server.ts";
 import type { NormalizedWoztellEvent } from "./woztell.server.ts";
 
+import { classifyWoztellEvent } from "../whatsapp-enquiries/event-classification.ts";
+import { enquiryMode } from "../whatsapp-enquiries/contracts.ts";
+import type { EventOrigin, EnquiryMode } from "../whatsapp-enquiries/contracts.ts";
+import {
+  buildLiveEventStatements,
+  enquirySchemaAvailable,
+} from "../whatsapp-enquiries/workflow.server.ts";
+
 export type IngestOutcome = {
   contactId: string | null;
   conversationId: string | null;
   messageInserted: boolean;
-  skipped: "no-identity" | "status-event" | null;
+  skipped: "no-identity" | "status-event" | "unsupported-event" | null;
 };
 
 /** Contact, thread and message commit together. Shared identity locks precede a fresh SQL snapshot. */
 export async function ingestWoztellEvent(
   event: NormalizedWoztellEvent,
+  origin: EventOrigin,
   injectedTransaction?: typeof import("../neon/db.server.ts").transactionRows,
+  options: { mode?: EnquiryMode; schemaAvailable?: () => Promise<boolean>; now?: Date } = {},
 ): Promise<IngestOutcome> {
+  if (origin !== "live_webhook" && origin !== "history_import")
+    throw new Error("WA_EVENT_ORIGIN_REQUIRED");
+  const classification = classifyWoztellEvent(event.payload, { now: options.now });
+  const observe = origin === "live_webhook" && (options.mode ?? enquiryMode()) !== "off";
+  if (observe && !(await (options.schemaAvailable ?? enquirySchemaAvailable)()))
+    throw new Error("WA_ENQUIRY_SCHEMA_REQUIRED");
   const transactionRows =
     injectedTransaction ?? (await import("../neon/db.server.ts")).transactionRows;
   const wrapped = event.payload.messageEvent;
@@ -69,6 +85,16 @@ export async function ingestWoztellEvent(
       skipped: "status-event",
     };
   }
+  if (!classification.direction)
+    return {
+      contactId: null,
+      conversationId: null,
+      messageInserted: false,
+      skipped: "unsupported-event",
+    };
+  event = { ...event, direction: classification.direction };
+  if (observe && (!event.appId || !event.channelId || !event.woztellMemberId))
+    throw new Error("WA_ENQUIRY_SCOPE_REQUIRED");
   const phone = event.direction === "inbound" ? event.fromPhone : event.toPhone;
   const normalizedPhone = normalizeAdminPhone(phone),
     memberId = event.woztellMemberId;
@@ -86,6 +112,10 @@ export async function ingestWoztellEvent(
   ]
     .filter((v): v is string => Boolean(v))
     .sort();
+  const workflowStatements =
+    observe && (classification.kind !== "unsupported" || classification.surveyCandidate)
+      ? buildLiveEventStatements(event, options.now, options.mode ?? enquiryMode())
+      : [];
   const results = await transactionRows([
     ...keys.map((key) => ({
       statement: "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
@@ -164,8 +194,9 @@ export async function ingestWoztellEvent(
         JSON.stringify(outboundWoztellEvidence(event)),
       ],
     },
+    ...workflowStatements,
   ]);
-  const row = results.at(-1)?.[0] as
+  const row = results[keys.length]?.[0] as
     | { contact_id: string; conversation_id: string | null; inserted: boolean }
     | undefined;
   if (!row || (memberId && !row.conversation_id))

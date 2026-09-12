@@ -98,6 +98,7 @@ test("CI runs every test script that does not need a database or browser server"
     "test:cms:db",
     "test:crm:db",
     "test:woztell:db",
+    "test:whatsapp-enquiries:db",
     "test:control-plane:db",
     "test:mls:db",
     "test:property-sync:db",

@@ -18,6 +18,7 @@ export const Route = createFileRoute("/api/admin/woztell/send-template")({
             return Response.json({ ok: false, error: "VALIDATION_ERROR" }, { status: 400 });
           const input = parseOutboundIntent({
             requestId: body.requestId,
+            enquiryId: body.enquiryId,
             conversationId: body.conversationId,
             kind: "template",
             payload: { templateId: body.templateId },
@@ -25,12 +26,18 @@ export const Route = createFileRoute("/api/admin/woztell/send-template")({
           const intent = await enqueueOutboundIntent(input, staff.staffId, agentScope(staff));
           return Response.json({ ok: true, intent }, { status: 202 });
         } catch (error) {
+          const associationError =
+            error instanceof Error &&
+            /ENQUIRY_(SELECTION_REQUIRED|ASSOCIATION_INVALID)/.exec(error.message)?.[0];
           const code =
-            error && typeof error === "object" && "code" in error
+            associationError ||
+            (error && typeof error === "object" && "code" in error
               ? String(error.code)
-              : "OUTBOUND_PERSISTENCE_UNAVAILABLE";
+              : "OUTBOUND_PERSISTENCE_UNAVAILABLE");
           const status =
-            code === "OUTBOUND_CONFLICT_OR_NOT_FOUND"
+            code === "OUTBOUND_CONFLICT_OR_NOT_FOUND" ||
+            code === "ENQUIRY_SELECTION_REQUIRED" ||
+            code === "ENQUIRY_ASSOCIATION_INVALID"
               ? 409
               : code === "VALIDATION_ERROR" || error instanceof SyntaxError
                 ? 400

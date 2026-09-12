@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import crypto from "node:crypto";
 import { boundedProviderFetch } from "./provider-fetch.ts";
+import { parseWoztellProviderResult } from "./provider-result.ts";
 
 export type NormalizedWoztellEvent = {
   direction: "inbound" | "outbound";
@@ -227,7 +228,9 @@ function eventTimestamp(value: unknown) {
   const numeric = Number(raw);
   if (Number.isFinite(numeric)) {
     const millis = numeric > 9_999_999_999 ? numeric : numeric * 1000;
-    return new Date(millis).toISOString();
+    return Math.abs(millis) <= 8640000000000000
+      ? new Date(millis).toISOString()
+      : new Date().toISOString();
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
@@ -309,7 +312,7 @@ export function normalizeWoztellEvent(payload: AnyRecord): NormalizedWoztellEven
     text: stringOrNull(data.text),
     woztellMemberId: memberId,
     channelId,
-    appId: stringOrNull(payload.app ?? source.app),
+    appId: identityValue(payload.appId ?? payload.app ?? source.appId ?? source.app),
     memberName: stringOrNull(record(payload.memberExtra ?? source.memberExtra).name),
     payload,
   };
@@ -396,14 +399,22 @@ export async function sendWoztellResponse(input: {
     }
   }
   const envelope = record(body);
+  const providerResult = parseWoztellProviderResult(body, {
+    expectedResponseCount: input.response.length,
+  });
 
   // `ok` is WOZTELL's own verdict and it is the authoritative one. A refusal
   // normally arrives as HTTP 500 -- that status is its documented "bot found an
   // error before sending the response out", NOT a crash -- but reading the
   // status alone would stamp a 2xx carrying ok:0 as 'sent' and show staff a
   // reply that never left the building.
-  const refused = envelope.ok === 0;
-  if (res.ok && envelope.ok === 1) return { ok: true, body, status: res.status };
+  const refused = providerResult.outcome === "definitive_refusal";
+  if (
+    res.ok &&
+    (providerResult.outcome === "execution_accepted" ||
+      providerResult.outcome === "identifiable_acceptance")
+  )
+    return { ok: true, body, status: res.status, providerResult };
   if (res.ok && !refused) {
     return {
       ok: false,
@@ -411,6 +422,7 @@ export async function sendWoztellResponse(input: {
       body,
       status: res.status,
       refused: false,
+      providerResult,
     };
   }
 
@@ -447,7 +459,7 @@ export async function sendWoztellResponse(input: {
   // ambiguous failure is terminal there, because the customer may already have
   // the message, while a refusal is safe to retry. Only an explicit ok:0
   // counts, so anything less certain stays ambiguous.
-  return { ok: false, error: providerError, status: res.status, body, refused };
+  return { ok: false, error: providerError, status: res.status, body, refused, providerResult };
 }
 
 export { deliverWoztellCampaign } from "./campaign-delivery.server.ts";

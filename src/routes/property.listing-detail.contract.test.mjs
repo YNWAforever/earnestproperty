@@ -105,7 +105,7 @@ function buildLoader() {
   const startNeedle = "loader: async ({ params }) => {";
   const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
   assert.ok(bodyStart > startNeedle.length - 1, "expected the route loader");
-  const returnMarker = "return { property, similar, txns, branches };";
+  const returnMarker = "return { property, similar, txns, branches, enquiryLinks };";
   const returnIdx = routeSource.indexOf(returnMarker, bodyStart);
   assert.ok(returnIdx !== -1, "expected the loader's final return statement");
   const body = routeSource.slice(bodyStart, returnIdx + returnMarker.length);
@@ -113,7 +113,7 @@ function buildLoader() {
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches } = deps;
+  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no } = deps;
   ${body}
 }
 exports.loader = loader;
@@ -585,4 +585,29 @@ test("selected sale and rent retain shared page copy and separate sanitized note
   );
   assert.match(routeSource, /safeOfferingDescription\s*&&/);
   assert.match(routeSource, /\{safeOfferingDescription\}/);
+});
+
+test("tracking resolver failure retains public listing and uses company contact fallback", async () => {
+  const loader = buildLoader();
+  const property = {
+    id: "p",
+    listing_no: "G1",
+    status: "active",
+    deal_type: "sale",
+    estate_id: null,
+  };
+  const result = await loader(
+    { listingNo: "G1" },
+    {
+      fetchPropertyByListingNo: async () => property,
+      fetchSimilarListings: async () => [],
+      fetchEstateTransactions: async () => [],
+      fetchNeonBranches: async () => [],
+      resolveWhatsappLinks: async () => {
+        throw new Error("configuration unavailable");
+      },
+    },
+  );
+  assert.equal(result.property, property);
+  assert.equal(result.enquiryLinks.fallbackHref, "/contact");
 });

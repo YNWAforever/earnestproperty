@@ -1,0 +1,28 @@
+{
+  "environment": null,
+  "companyChannelId": null,
+  "policyId": null,
+  "copyVersion": null,
+  "staffMappingEvidence": null,
+  "providerReadbackEvidence": null,
+  "templateEvidence": null,
+  "workerCapabilityEvidence": null,
+  "workerLagSeconds": null,
+  "approvedLagSeconds": null,
+  "approvedRecipientEvidence": null,
+  "websitePlacementEvidence": null,
+  "property28hsePlacementEvidence": null,
+  "youtubePlacementEvidence": null,
+  "testTenantScenarioEvidence": null,
+  "rollbackDrillEvidence": null,
+  "releaseApprover": null,
+  "codeSha": "74d906d225d8d5ac3e20677521de870fa986843c",
+  "workingTreeClean": false,
+  "appliedMigrations": [],
+  "policyApproved": false,
+  "pilot": {
+    "branches": 1,
+    "staff": 2,
+    "managers": 1
+  }
+}

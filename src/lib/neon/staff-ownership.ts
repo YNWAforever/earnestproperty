@@ -69,6 +69,10 @@ export const STAFF_HISTORICAL_COLUMNS = [
   // current ownership. Reassigning this would rewrite who received an invite
   // or reset and corrupt the audit trail.
   "target_staff_id",
+  "requested_staff_id",
+  "desired_staff_id",
+  "first_human_response_staff_id",
+  "verified_by",
 ] as const;
 
 /**
@@ -101,3 +105,11 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
     params: [fromStaffId, toStaffId] as unknown[],
   }));
 }
+
+/** Provider-confirmed ownership requires reconciliation; mappings retire on staff exit.
+ * Neither may be relabelled by a bulk local handover. Evidence records retain their subject. */
+export const STAFF_RECONCILED_COLUMNS = [
+  { table: "whatsapp_conversations", column: "confirmed_staff_id" },
+  { table: "whatsapp_staff_channels", column: "staff_id" },
+  { table: "whatsapp_human_response_evidence", column: "staff_id" },
+] as const;

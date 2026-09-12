@@ -1277,7 +1277,16 @@ export const fetchAdminConversationAiAssist =
   };
 
 const updateAdminConversationServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminConversationUpdateInput) => data)
+  .inputValidator((data: AdminConversationUpdateInput) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        status: z.enum(["open", "pending", "closed"]),
+        assigned_agent_id: z.string().uuid().nullable(),
+      })
+      .strict()
+      .parse(data),
+  )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1338,7 +1347,7 @@ export async function setWhatsappMarketingConsent(options: {
   );
 }
 export async function sendAdminConversationReply(options: {
-  data: { conversationId: string; text: string; requestId: string };
+  data: { conversationId: string; text: string; requestId: string; enquiryId?: string };
 }) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
@@ -1360,7 +1369,7 @@ export async function sendAdminConversationReply(options: {
 }
 
 export async function sendAdminConversationTemplate(options: {
-  data: { conversationId: string; templateId: string; requestId: string };
+  data: { conversationId: string; templateId: string; requestId: string; enquiryId?: string };
 }) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
