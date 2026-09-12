@@ -347,6 +347,9 @@ export const woztellEnquiryProcessHandler = registerJobHandler<{ eventId: string
 });
 
 export const SERVICE_CAPABILITIES = [
+  "woztell.enquiry.staff.notify@1",
+  "woztell.enquiry.staff.notify.reconcile@1",
+  "woztell.enquiry.staff.ack.check@1",
   "woztell.enquiry.process@1",
   "woztell.enquiry.process@2",
   "woztell.enquiry.service@1",
@@ -407,14 +410,12 @@ registerJobHandler({
   parsePayload: (input) => idPayload(input, "requestId"),
   async run(payload, context) {
     await context.checkpoint();
-    const { queryRows } = await import("../neon/db.server.ts");
-    await queryRows(
-      "UPDATE whatsapp_assignment_requests SET evidence=evidence||jsonb_build_object('blockReason','WOZTELL_ASSIGNMENT_CAPABILITY_UNVERIFIED') WHERE id=$1::uuid AND state='pending'",
-      [payload.requestId],
-    );
-    throw Object.assign(new Error("Assignment capability is not verified."), {
-      code: "WOZTELL_ASSIGNMENT_CAPABILITY_UNVERIFIED",
-    });
+    const { createLiveAssignmentProvider, executeAssignment, reconcileAssignment } =
+      await import("../whatsapp-enquiries/assignment.server.ts");
+    const provider = createLiveAssignmentProvider();
+    await executeAssignment(payload.requestId, provider);
+    const result = await reconcileAssignment(payload.requestId, provider);
+    return { summary: { confirmed: result.confirmed ? 1 : 0 } };
   },
 });
 
@@ -429,3 +430,32 @@ registerJobHandler({
     return { summary: await checkServiceObligation(payload.inquiryId) };
   },
 });
+
+for (const jobType of [
+  "woztell.enquiry.staff.notify",
+  "woztell.enquiry.staff.notify.reconcile",
+  "woztell.enquiry.staff.ack.check",
+]) {
+  registerJobHandler({
+    jobType,
+    payloadVersion: 1,
+    parsePayload: (input) => idPayload(input, "notificationId"),
+    async run(payload, context) {
+      await context.checkpoint();
+      const api = await import("../whatsapp-enquiries/staff-notifications.server.ts");
+      if (!(await api.staffNotificationSchemaAvailable())) return { summary: { blocked: 1 } };
+      const summary =
+        jobType === "woztell.enquiry.staff.notify"
+          ? await api.dispatchStaffNotification(payload.notificationId, {
+              checkpoint: context.checkpoint,
+              job: context.workerId
+                ? { jobId: context.jobId, workerId: context.workerId }
+                : undefined,
+            })
+          : jobType === "woztell.enquiry.staff.notify.reconcile"
+            ? await api.reconcileStaffNotification(payload.notificationId)
+            : await api.checkStaffAcknowledgement(payload.notificationId);
+      return { summary };
+    },
+  });
+}

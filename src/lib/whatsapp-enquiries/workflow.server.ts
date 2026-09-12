@@ -67,7 +67,12 @@ export function buildLiveEventStatements(
         now.toISOString(),
         classified.timing,
         event.legacyExternalMessageId === null ? "provider_id" : "synthetic_ambiguous",
-        JSON.stringify(classified.evidence),
+        JSON.stringify({
+          ...classified.evidence,
+          staffRoutingEligible: active && process.env.EP_WA_ROUTING_ENABLED === "true",
+          staffNotificationsEligible:
+            active && process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
+        }),
         event.legacyExternalMessageId,
         event.text,
         event.direction,

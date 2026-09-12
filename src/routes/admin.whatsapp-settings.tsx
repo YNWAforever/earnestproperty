@@ -1,3 +1,5 @@
+import { StaffEndpointEditor } from "@/components/admin/StaffEndpointEditor";
+import { StaffReferenceEditor } from "@/components/admin/StaffReferenceEditor";
 import { WhatsappServicePolicyEditor } from "@/components/admin/WhatsappServicePolicyEditor";
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -143,6 +145,8 @@ function WhatsappSettings() {
             </Button>
           </article>
         ))}
+        <StaffReferenceEditor agents={agents} />
+        <StaffEndpointEditor agents={agents} />
         <WhatsappServicePolicyEditor agents={agents} />
       </div>
     </AdminShell>

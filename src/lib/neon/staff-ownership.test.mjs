@@ -56,7 +56,15 @@ test("historical columns and ownership columns do not overlap", () => {
     assert.equal(owned.has(historical), false, `${historical} cannot be both`);
   }
   assert.ok(STAFF_HISTORICAL_COLUMNS.includes("updated_by"));
-  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 18);
+  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 23);
+  for (const column of [
+    "property_responsible_staff_id_at_intake",
+    "requested_staff_id_snapshot",
+    "recipient_staff_id",
+    "acknowledged_by",
+    "attended_staff_id",
+  ])
+    assert.ok(STAFF_HISTORICAL_COLUMNS.includes(column));
 });
 
 test("count SQL pairs each table with its own column, not a copy-pasted one", () => {

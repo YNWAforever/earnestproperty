@@ -100,3 +100,7 @@ Supersedes the preceding Phase 3-only scope statement. Same branch/base; earlier
 - Phase 6: not defined in the supplied plan (which ends at Phase 5); clarification requested, no invented scope.
 
 See PHASE4_5_VERIFICATION.md for current checks and limitations.
+
+## Staff handoff extension P3-N1–P3-N5 (2026-09-12)
+
+Local branch `codex/staff-reference-handoff`, base `b6d049e9e9d59b9aececf13b5e990f9a13647f23`. Implements exact scoped reference snapshots, per-enquiry atomic ready/intent/job capture, current-recipient authenticated acknowledgement/help, private provider adapters, optional staff-context isolation and admin settings/inbox surfaces. All default flags remain off. Additive migrations are tested only in approved isolated synthetic schemas. See staff-handoff/STAFF_HANDOFF_VERIFICATION.md for exact evidence and incomplete browser/live gates. No commit, push, merge, deployment, tenant modification or provider message is part of this task.

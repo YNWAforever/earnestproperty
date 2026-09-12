@@ -94,7 +94,7 @@ test(
       await db.query(`CREATE SCHEMA ${schema}`);
       for (const statement of [
         `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true)`,
-        `CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,status text,deal_type text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz DEFAULT now())`,
+        `CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,agent_id uuid,status text,deal_type text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz DEFAULT now())`,
         `CREATE TABLE property_public_members(property_id uuid,public_listing_no text)`,
         `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text)`,
         `CREATE TABLE crm_leads(id uuid PRIMARY KEY,contact_id uuid,source text,stage text)`,

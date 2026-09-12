@@ -15,7 +15,7 @@ export type IngestOutcome = {
   contactId: string | null;
   conversationId: string | null;
   messageInserted: boolean;
-  skipped: "no-identity" | "status-event" | "unsupported-event" | null;
+  skipped: "no-identity" | "status-event" | "unsupported-event" | "staff-internal" | null;
 };
 
 /** Contact, thread and message commit together. Shared identity locks precede a fresh SQL snapshot. */
@@ -23,10 +23,26 @@ export async function ingestWoztellEvent(
   event: NormalizedWoztellEvent,
   origin: EventOrigin,
   injectedTransaction?: typeof import("../neon/db.server.ts").transactionRows,
-  options: { mode?: EnquiryMode; schemaAvailable?: () => Promise<boolean>; now?: Date } = {},
+  options: {
+    signedEvent?: boolean;
+    mode?: EnquiryMode;
+    schemaAvailable?: () => Promise<boolean>;
+    now?: Date;
+  } = {},
 ): Promise<IngestOutcome> {
   if (origin !== "live_webhook" && origin !== "history_import")
     throw new Error("WA_EVENT_ORIGIN_REQUIRED");
+  if (origin === "live_webhook" && options.signedEvent) {
+    const { isolateSignedStaffEvent } =
+      await import("../whatsapp-enquiries/staff-event-isolation.server.ts");
+    if (await isolateSignedStaffEvent(event, injectedTransaction))
+      return {
+        contactId: null,
+        conversationId: null,
+        messageInserted: false,
+        skipped: "staff-internal",
+      };
+  }
   const classification = classifyWoztellEvent(event.payload, { now: options.now });
   const observe = origin === "live_webhook" && (options.mode ?? enquiryMode()) !== "off";
   if (observe && !(await (options.schemaAvailable ?? enquirySchemaAvailable)()))

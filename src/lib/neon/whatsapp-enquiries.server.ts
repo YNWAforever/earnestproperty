@@ -28,6 +28,7 @@ function admin(actor: StaffAccess) {
 function linkDto(row: DbRow): TrackingLink {
   return {
     id: String(row.id),
+    referenceMappingId: row.reference_mapping_id ? String(row.reference_mapping_id) : null,
     code: String(row.code),
     version: Number(row.version),
     channelId: String(row.channel_id),
@@ -55,8 +56,16 @@ export async function listTrackingLinks(actor: StaffAccess) {
   ).map(linkDto);
 }
 /** Same current-offer ordering as public detail; never substitutes a different source row. */
-export const currentOfferSql = `SELECT p.id,p.title_zh FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE p.id=$1::uuid AND m.public_listing_no=$2 AND p.deal_type::text=$3 AND p.status::text='active' AND p.id=(SELECT x.id FROM property_public_members pm JOIN properties x ON x.id=pm.property_id WHERE pm.public_listing_no=$2 AND x.deal_type::text=$3 ORDER BY x.source_updated_at DESC NULLS LAST,x.last_seen_at DESC NULLS LAST,x.updated_at DESC NULLS LAST,x.created_at DESC,x.id ASC LIMIT 1)`;
+export const currentOfferSql = `SELECT p.id,p.title_zh,p.agent_id FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE p.id=$1::uuid AND m.public_listing_no=$2 AND p.deal_type::text=$3 AND p.status::text='active' AND p.id=(SELECT x.id FROM property_public_members pm JOIN properties x ON x.id=pm.property_id WHERE pm.public_listing_no=$2 AND x.deal_type::text=$3 ORDER BY x.source_updated_at DESC NULLS LAST,x.last_seen_at DESC NULLS LAST,x.updated_at DESC NULLS LAST,x.created_at DESC,x.id ASC LIMIT 1)`;
 async function validateLink(input: TrackingLinkInput, query = queryRows) {
+  if (input.referenceMappingId) {
+    const [ref] = await query(
+      "SELECT staff_id FROM staff_external_references WHERE id=$1::uuid AND valid_from<=now() AND (valid_until IS NULL OR valid_until>now()) AND verified_at<=now()",
+      [input.referenceMappingId],
+    );
+    if (!ref || (input.requestedStaffId && input.requestedStaffId !== ref.staff_id))
+      throw new Error("STAFF_REFERENCE_CONFLICT_OR_EXPIRED");
+  }
   if (
     Boolean(input.propertyId) !== Boolean(input.publicListingNo) ||
     Boolean(input.propertyId) !== Boolean(input.dealType)
@@ -87,7 +96,7 @@ function versionStatement(
   actor: StaffAccess,
   channel: string,
 ): TransactionStatement {
-  return {
+  const statement: TransactionStatement = {
     statement: `INSERT INTO whatsapp_tracking_link_versions(link_id,version,channel_id,placement_source,entry_point_type,public_listing_no,property_id,deal_type,requested_staff_id,branch_id,external_listing_id,video_id,enabled,created_by,placement_verified_at) SELECT $1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8,$9::uuid,$10,$11,$12,$13,$14::uuid,$15::timestamptz WHERE EXISTS(SELECT 1 FROM whatsapp_tracking_links WHERE id=$1::uuid AND current_version=$2) RETURNING *`,
     params: [
       id,
@@ -107,6 +116,13 @@ function versionStatement(
       input.placementVerified ? new Date().toISOString() : null,
     ],
   };
+  if (input.referenceMappingId) {
+    statement.statement = statement.statement
+      .replace("placement_verified_at)", "placement_verified_at,reference_mapping_id)")
+      .replace("$15::timestamptz WHERE", "$15::timestamptz,$16::uuid WHERE");
+    statement.params!.push(input.referenceMappingId);
+  }
+  return statement;
 }
 export async function saveTrackingLink(
   input: TrackingLinkInput & { id?: string; expectedVersion?: number },
@@ -290,6 +306,7 @@ export async function trackedRedirect(request: Request, code: string, query = qu
   );
   if (!row) return fallback();
   let title = "";
+  let propertyResponsibleStaffIdAtIntake: string | null = null;
   if (row.property_id) {
     const [offer] = await query(currentOfferSql, [
       row.property_id,
@@ -298,11 +315,26 @@ export async function trackedRedirect(request: Request, code: string, query = qu
     ]);
     if (!offer) return fallback();
     title = String(offer.title_zh).slice(0, 160);
+    propertyResponsibleStaffIdAtIntake = offer.agent_id ? String(offer.agent_id) : null;
   }
   const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
   companyWhatsappHref(phone, "");
   const reference = mintReference(),
-    snapshot = linkDto(row);
+    snapshot = { ...linkDto(row), propertyResponsibleStaffIdAtIntake };
+  let aliasContext = {};
+  if (snapshot.referenceMappingId) {
+    const [ref] = await query(
+      "SELECT namespace,external_reference,staff_id,mapping_version FROM staff_external_references WHERE id=$1::uuid AND valid_from<=now() AND (valid_until IS NULL OR valid_until>now()) AND verified_at<=now()",
+      [snapshot.referenceMappingId],
+    );
+    if (!ref || (snapshot.requestedStaffId && snapshot.requestedStaffId !== ref.staff_id))
+      return fallback();
+    aliasContext = {
+      referenceNamespace: ref.namespace,
+      incomingStaffReference: ref.external_reference,
+      referenceMappingVersion: ref.mapping_version,
+    };
+  }
   await query(
     `INSERT INTO whatsapp_link_opens(reference_hash,link_id,link_version,channel_id,context_snapshot) VALUES($1,$2::uuid,$3,$4,$5::jsonb)`,
     [
@@ -310,7 +342,7 @@ export async function trackedRedirect(request: Request, code: string, query = qu
       row.id,
       row.version,
       channel,
-      JSON.stringify(snapshot),
+      JSON.stringify({ ...snapshot, ...aliasContext }),
     ],
   );
   const text = title

@@ -73,6 +73,11 @@ export const STAFF_HISTORICAL_COLUMNS = [
   "desired_staff_id",
   "first_human_response_staff_id",
   "verified_by",
+  "property_responsible_staff_id_at_intake",
+  "requested_staff_id_snapshot",
+  "recipient_staff_id",
+  "acknowledged_by",
+  "attended_staff_id",
 ] as const;
 
 /**
@@ -109,6 +114,8 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
 /** Provider-confirmed ownership requires reconciliation; mappings retire on staff exit.
  * Neither may be relabelled by a bulk local handover. Evidence records retain their subject. */
 export const STAFF_RECONCILED_COLUMNS = [
+  { table: "staff_external_references", column: "staff_id" },
+  { table: "staff_notification_endpoints", column: "staff_id" },
   { table: "whatsapp_conversations", column: "confirmed_staff_id" },
   { table: "whatsapp_staff_channels", column: "staff_id" },
   { table: "whatsapp_human_response_evidence", column: "staff_id" },

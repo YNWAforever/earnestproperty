@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { createHash } from "node:crypto";
+import { hasUntrustedStaffOverride } from "./staff-reference.ts";
 import { extractReferences } from "./links.ts";
 import { queryRows } from "../neon/db.server.ts";
 /** Only protected transcript text is inspected. No message body is copied into attribution. */
@@ -14,7 +15,10 @@ export async function observeEpisode(eventId: string, query = queryRows) {
   );
   if (!event) return null;
   const parsed = extractReferences(String(event.text ?? ""));
-  const invalid = parsed.invalid || parsed.references.length > 1;
+  const invalid =
+    parsed.invalid ||
+    parsed.references.length > 1 ||
+    hasUntrustedStaffOverride(String(event.text ?? ""));
   const hash =
     parsed.references.length === 1 && !invalid
       ? createHash("sha256").update(parsed.references[0]).digest("hex")
