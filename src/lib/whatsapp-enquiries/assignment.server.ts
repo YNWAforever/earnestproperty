@@ -99,7 +99,7 @@ const mappingSchema = z
     staffId: z.string().uuid(),
     inboxUserId: z.string().trim().min(1).max(120),
     folderId: z.string().trim().min(1).max(120),
-    routingNodeId: z.string().trim().min(1).max(120),
+    routingNodeId: z.string().trim().max(120),
     branchId: z.string().trim().max(120).nullable(),
     verificationRef: z.string().trim().min(1).max(160),
     eligible: z.boolean(),

@@ -103,7 +103,10 @@ test("Phase3 isolated synthetic assignment and response evidence", { skip: !url 
     await migrate();
     await migrate();
     await query("INSERT INTO staff_users(id) VALUES($1),($2),($3),($4)", [admin, a, b, c]);
-    await query("INSERT INTO staff_roles VALUES($1,'admin'),($2,'agent')", [admin, c]);
+    await query(
+      "INSERT INTO staff_roles VALUES($1,'admin'),($2,'agent'),($3,'agent'),($4,'agent')",
+      [admin, c, a, b],
+    );
     await query("INSERT INTO whatsapp_conversations(id) VALUES($1)", [conv]);
     await query(
       "INSERT INTO whatsapp_staff_channels(staff_id,channel_id,inbox_user_id,folder_id,routing_node_id,eligible,verification_ref,verified_at,verified_by) VALUES($1,'fixture','user-a','folder','node',true,'synthetic',now(),$3),($2,'fixture','user-b','folder','node',true,'synthetic',now(),$3)",
@@ -126,6 +129,13 @@ test("Phase3 isolated synthetic assignment and response evidence", { skip: !url 
           .confirmed_staff_id,
         null,
       );
+    });
+    await t.test("Mapped active staff without an authorized role cannot dispatch", async () => {
+      await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [a]);
+      const id = await request(a);
+      assert.equal((await executeAssignment(id, provider, ports)).state, "blocked");
+      assert.equal(calls, 0);
+      await query("INSERT INTO staff_roles VALUES($1,'agent')", [a]);
     });
     let first;
     await t.test(

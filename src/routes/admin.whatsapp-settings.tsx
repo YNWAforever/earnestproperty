@@ -98,7 +98,7 @@ function WhatsappSettings() {
             [
               ["inboxUserId", "實際 Inbox User ID"],
               ["folderId", "已核對 Folder ID"],
-              ["routingNodeId", "已核對 Routing Node ID"],
+              ["routingNodeId", "Routing Node ID（選填；直接 Inbox 指派可留空）"],
               ["branchId", "分行識別碼"],
               ["verificationRef", "核實紀錄編號"],
             ] as const
@@ -106,7 +106,7 @@ function WhatsappSettings() {
             <label key={key}>
               {label}
               <Input
-                required={key !== "branchId"}
+                required={key !== "branchId" && key !== "routingNodeId"}
                 value={form[key]}
                 onChange={(e) => setForm({ ...form, [key]: e.target.value })}
               />
