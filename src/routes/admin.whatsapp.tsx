@@ -1,3 +1,4 @@
+import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
 import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
@@ -112,7 +113,19 @@ const replyErrorLabels: Record<string, string> = {
 // an unfiltered list. Only non-default values are written, so a plain
 // /admin/whatsapp stays clean.
 function parseWhatsappSearch(search: Record<string, unknown>) {
-  const result: { conversation?: string; q?: string; status?: string } = {};
+  const result: {
+    conversation?: string;
+    q?: string;
+    status?: string;
+    notification?: string;
+    enquiry?: string;
+  } = {};
+  for (const key of ["notification", "enquiry"] as const)
+    if (
+      typeof search[key] === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search[key])
+    )
+      result[key] = search[key];
   if (typeof search.conversation === "string" && search.conversation.trim()) {
     result.conversation = search.conversation;
   }
@@ -191,7 +204,16 @@ function AdminWhatsapp() {
   const [queryDraft, setQueryDraft] = useState(inboxQuery);
 
   const setWhatsappSearch = useCallback(
-    (next: { conversation?: string; q?: string; status?: string }, replace = true) => {
+    (
+      next: {
+        conversation?: string;
+        q?: string;
+        status?: string;
+        notification?: string;
+        enquiry?: string;
+      },
+      replace = true,
+    ) => {
       void navigate({
         search: (current) => ({ ...current, ...next }),
         replace,
@@ -473,11 +495,13 @@ function AdminWhatsapp() {
   // or Command Center's 開啟 WhatsApp 對話.
   useEffect(() => {
     const requested = search.conversation;
+    if (requested && search.enquiry)
+      setEnquirySelections((current) => ({ ...current, [requested]: search.enquiry! }));
     if (!requested || requested === selectedIdRef.current) return;
     selectedIdRef.current = requested;
     setSelectedId(requested);
     if (!isDesktop) setPanelOpen(true);
-  }, [isDesktop, search.conversation]);
+  }, [isDesktop, search.conversation, search.enquiry]);
 
   // The inbox never auto-refreshed and an open conversation was never refetched
   // at all: new customer messages simply never appeared while an agent read the
@@ -782,6 +806,24 @@ function AdminWhatsapp() {
       title="WhatsApp 收件匣"
       description="查看客戶訊息、分配負責同事及回覆；系統會提示目前可用的發送方式。"
     >
+      {user ? (
+        <StaffNotificationPanel
+          key={user.id}
+          refreshKey={listUpdatedAt}
+          onOpen={(item) => {
+            openConversation(item.conversationId);
+            setEnquirySelections((current) => ({
+              ...current,
+              [item.conversationId]: item.inquiryId,
+            }));
+            setWhatsappSearch({
+              conversation: item.conversationId,
+              enquiry: item.inquiryId,
+              notification: item.id,
+            });
+          }}
+        />
+      ) : null}
       <AdminToolbar
         filters={
           <>

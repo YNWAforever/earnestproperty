@@ -1,4 +1,5 @@
 export type TrackingLinkInput = {
+  referenceMappingId?: string | null;
   placementSource: "website" | "28hse" | "youtube" | "other";
   entryPointType: "sales" | "reception";
   publicListingNo?: string | null;

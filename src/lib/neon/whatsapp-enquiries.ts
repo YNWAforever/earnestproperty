@@ -4,6 +4,7 @@ import { z } from "zod";
 const optionalText = z.string().trim().min(1).max(160).nullable().optional();
 export const trackingLinkSchema = z
   .object({
+    referenceMappingId: z.string().uuid().nullable().optional(),
     placementSource: z.enum(["website", "28hse", "youtube", "other"]),
     entryPointType: z.enum(["sales", "reception"]),
     publicListingNo: optionalText,

@@ -33,6 +33,7 @@ function WhatsappLinks() {
   const [staff, setStaff] = useState("");
   const [source, setSource] = useState<TrackingLinkInput["placementSource"]>("website");
   const [external, setExternal] = useState("");
+  const [referenceMappingId, setReferenceMappingId] = useState("");
   const [verified, setVerified] = useState(false);
   async function refresh() {
     setLinks(await getWhatsappTrackingLinks(await withStaffAuthHeaders({})));
@@ -81,6 +82,7 @@ function WhatsappLinks() {
           publicListingNo: o?.publicListingNo ?? null,
           dealType: o?.dealType ?? null,
           requestedStaffId: staff || null,
+          referenceMappingId: referenceMappingId || null,
           externalListingId: source === "28hse" ? external || null : null,
           videoId: source === "youtube" ? external || null : null,
         },
@@ -164,6 +166,17 @@ function WhatsappLinks() {
                 </option>
               ))}
           </select>
+        </label>
+        <label className="block">
+          已核實來源代碼映射編號（選填）
+          <Input
+            value={referenceMappingId}
+            onChange={(e) => setReferenceMappingId(e.target.value)}
+            placeholder="從同事映射設定複製編號"
+          />
+          <span className="text-sm text-muted-foreground">
+            如有指定同事，必須與映射中的同事一致。
+          </span>
         </label>
         {source === "28hse" || source === "youtube" ? (
           <label className="block">

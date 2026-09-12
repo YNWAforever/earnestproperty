@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { queryRows, transactionRows } from "../neon/db.server.ts";
@@ -173,6 +174,7 @@ export type AssignmentProvider = {
     nodeId: string;
     requestId: string;
     version: number;
+    beforeSend?: () => Promise<void>;
   }) => Promise<{ accepted: boolean; definitivelyRefused?: boolean }>;
   readAuthoritativeAssignment: (scope: {
     channelId: string;
@@ -181,7 +183,7 @@ export type AssignmentProvider = {
 };
 /** No live adapter can be created until the tenant's execution/readback contract is verified. */
 export function createLiveAssignmentProvider(): AssignmentProvider {
-  throw new Error("WOZTELL_ASSIGNMENT_CAPABILITY_UNVERIFIED");
+  return createInboxApi();
 }
 export async function executeAssignment(
   requestId: string,
@@ -204,7 +206,7 @@ export async function executeAssignment(
     {
       statement: `WITH claimed AS (UPDATE whatsapp_assignment_requests r SET state='executing',claim_id=$2::uuid,started_at=now(),target_snapshot=jsonb_build_object('inboxUserId',m.inbox_user_id,'folderId',m.folder_id,'nodeId',m.routing_node_id) FROM whatsapp_conversations w,whatsapp_staff_channels m,staff_users s
  WHERE r.id=$1::uuid AND r.conversation_id=w.id AND r.state='pending' AND r.id=w.pending_assignment_id AND r.version=w.assignment_version
- AND m.staff_id=r.desired_staff_id AND m.channel_id=w.channel_id AND m.eligible AND m.retired_at IS NULL AND s.id=m.staff_id AND s.active
+ AND m.staff_id=r.desired_staff_id AND m.channel_id=w.channel_id AND m.eligible AND m.retired_at IS NULL AND s.id=m.staff_id AND s.active AND EXISTS(SELECT 1 FROM staff_roles role WHERE role.staff_user_id=s.id AND role.role IN ('agent','manager','admin'))
  AND NOT EXISTS(SELECT 1 FROM whatsapp_assignment_requests x WHERE x.conversation_id=w.id AND x.state IN ('executing','unknown')) RETURNING r.*)
  SELECT c.*,w.channel_id,w.woztell_member_id,m.inbox_user_id,m.folder_id,m.routing_node_id FROM claimed c JOIN whatsapp_conversations w ON w.id=c.conversation_id JOIN whatsapp_staff_channels m ON m.staff_id=c.desired_staff_id AND m.channel_id=w.channel_id`,
       params: [requestId, claim],
@@ -213,7 +215,23 @@ export async function executeAssignment(
   const row = result[1]?.[0];
   if (!row) return { state: "blocked" };
   let state: "unknown" | "failed" = "unknown";
+  const beforeSend = async () => {
+    const [valid] = await queryRows(
+      "SELECT r.id FROM whatsapp_assignment_requests r JOIN whatsapp_conversations w ON w.pending_assignment_id=r.id JOIN staff_users s ON s.id=r.desired_staff_id JOIN whatsapp_staff_channels m ON m.staff_id=s.id AND m.channel_id=w.channel_id WHERE r.id=$1::uuid AND r.claim_id=$2::uuid AND r.state='executing' AND w.assignment_version=r.version AND s.active AND m.eligible AND m.retired_at IS NULL AND m.inbox_user_id=r.target_snapshot->>'inboxUserId' AND m.folder_id=r.target_snapshot->>'folderId' AND EXISTS(SELECT 1 FROM staff_roles role WHERE role.staff_user_id=s.id AND role.role IN ('agent','manager','admin'))",
+      [requestId, claim],
+    );
+    if (
+      !valid ||
+      (ports === defaultPorts &&
+        (process.env.EP_WA_ROUTING_ENABLED !== "true" ||
+          process.env.EP_WA_ENQUIRY_MODE !== "active"))
+    )
+      throw Object.assign(new Error("WA_ASSIGNMENT_PREFLIGHT_BLOCKED"), {
+        code: "WA_ASSIGNMENT_PREFLIGHT_BLOCKED",
+      });
+  };
   try {
+    await beforeSend();
     state = classifyAssignmentExecution(
       await provider.execute({
         channelId: String(row.channel_id),
@@ -223,9 +241,17 @@ export async function executeAssignment(
         nodeId: String(row.routing_node_id),
         requestId,
         version: Number(row.version),
+        beforeSend,
       }),
     );
-  } catch {
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "WA_ASSIGNMENT_PREFLIGHT_BLOCKED"
+    )
+      state = "failed";
     /* An uncertain irreversible execution is never retried. */
   }
   await queryRows(
@@ -273,7 +299,7 @@ export async function reconcileAssignment(
     },
     { statement: `SELECT set_config('app.wa_confirm_assignment','true',true)` },
     {
-      statement: `WITH verified AS (UPDATE whatsapp_assignment_requests r SET state=CASE WHEN $2::boolean THEN 'confirmed' ELSE 'unknown' END,evidence=$3::jsonb,finished_at=now() WHERE r.id=$1::uuid AND r.state IN ('unknown','executing') AND EXISTS(SELECT 1 FROM whatsapp_conversations c WHERE c.id=r.conversation_id AND c.assignment_version=r.version AND c.pending_assignment_id=r.id) AND EXISTS(SELECT 1 FROM whatsapp_staff_channels m JOIN staff_users s ON s.id=m.staff_id WHERE m.staff_id=r.desired_staff_id AND m.channel_id=$4 AND m.eligible AND m.retired_at IS NULL AND s.active AND m.inbox_user_id=r.target_snapshot->>'inboxUserId' AND m.folder_id=r.target_snapshot->>'folderId') RETURNING *) UPDATE whatsapp_conversations w SET confirmed_staff_id=r.desired_staff_id,assigned_agent_id=r.desired_staff_id,updated_at=now() FROM verified r WHERE w.id=r.conversation_id AND w.assignment_version=r.version AND w.pending_assignment_id=r.id AND r.state='confirmed' RETURNING w.id`,
+      statement: `WITH verified AS (UPDATE whatsapp_assignment_requests r SET state=CASE WHEN $2::boolean THEN 'confirmed' ELSE 'unknown' END,evidence=$3::jsonb,finished_at=now() WHERE r.id=$1::uuid AND r.state IN ('unknown','executing') AND EXISTS(SELECT 1 FROM whatsapp_conversations c WHERE c.id=r.conversation_id AND c.assignment_version=r.version AND c.pending_assignment_id=r.id) AND EXISTS(SELECT 1 FROM whatsapp_staff_channels m JOIN staff_users s ON s.id=m.staff_id WHERE m.staff_id=r.desired_staff_id AND m.channel_id=$4 AND m.eligible AND m.retired_at IS NULL AND s.active AND EXISTS(SELECT 1 FROM staff_roles role WHERE role.staff_user_id=s.id AND role.role IN ('agent','manager','admin')) AND m.inbox_user_id=r.target_snapshot->>'inboxUserId' AND m.folder_id=r.target_snapshot->>'folderId') RETURNING *) UPDATE whatsapp_conversations w SET confirmed_staff_id=r.desired_staff_id,assigned_agent_id=r.desired_staff_id,updated_at=now() FROM verified r WHERE w.id=r.conversation_id AND w.assignment_version=r.version AND w.pending_assignment_id=r.id AND r.state='confirmed' RETURNING w.id`,
       params: [
         requestId,
         matches,

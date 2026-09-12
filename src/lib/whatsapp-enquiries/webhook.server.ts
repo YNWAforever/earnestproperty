@@ -100,7 +100,9 @@ export async function handleWoztellWebhook(
       { status: 503 },
     );
   try {
-    const outcome = await (deps.ingest ?? ingestWoztellEvent)(event, "live_webhook");
+    const outcome = await (deps.ingest ?? ingestWoztellEvent)(event, "live_webhook", undefined, {
+      signedEvent: true,
+    });
     return Response.json(outcome.skipped ? { ok: true, skipped: outcome.skipped } : { ok: true });
   } catch (error) {
     if (error instanceof Error && error.message === "WA_ENQUIRY_SCHEMA_REQUIRED")

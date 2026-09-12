@@ -87,6 +87,8 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260912130000_whatsapp_enquiry_episodes.sql",
   "20260912140000_whatsapp_assignment_evidence.sql",
   "20260912150000_whatsapp_service_workflow.sql",
+  "20260912160000_staff_reference_snapshots.sql",
+  "20260912170000_staff_notifications.sql",
 ]);
 
 /**

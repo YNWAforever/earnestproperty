@@ -51,3 +51,13 @@ No copy/template/channel/folder/staff mapping approval inferred from source docu
 - Activation requires a persisted generation matching EP_WA_ACTIVATION_ID. Historical and observe captures retain their original ineligible evidence across later activation.
 - Phase 5 release evidence is a separate gate from deterministic implementation tests. The JSON checker checks evidence completeness, not the truth of external documents; a release owner must verify referenced evidence.
 - Phase 6 has no supplied acceptance criteria. No production action is inferred from the request to develop phases.
+
+## Staff handoff extension decisions
+
+- Reference namespace, raw alias, mapping version, requested staff and selected-offer owner are separate immutable intake facts. Retired/recycled aliases cannot reinterpret a pinned link as another person.
+- Confirmed handler receives action-required work; legitimate protected/existing-coordinator/fallback mismatches remain visible. No collaboration FYI is emitted until its access policy is approved.
+- Readiness is per enquiry, recipient, assignment version, purpose and generation, with intent and job in the same transaction. Flags are captured at live intake; historical/observe/flag-off events cannot become backlog.
+- Acknowledgement and help are authenticated, current-version/current-eligibility writes, independent of the customer-response deadline. GET/HEAD never acknowledges or records seen. Customer replies resolve pending work without inventing acknowledgement.
+- Destination management is role-gated, versioned and auditable. It cannot enter synthetic inbound-window timestamps. Unknown transport acceptance is never blindly retried.
+- A private note is context evidence only, not a targeted device notification. Optional outside-window staff templates remain blocked until the approved locator-bearing parameter contract is verified. Five/ten-minute reminders stay unapproved.
+- Review gate requires separate browser accounts, test tenant/device evidence, release approval and fresh activation. No production action is inferred from coding authority.
