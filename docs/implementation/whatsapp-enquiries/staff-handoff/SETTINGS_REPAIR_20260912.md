@@ -141,3 +141,17 @@ Operator reports not seeing the pilot note. Read-only provider verification conf
 ## Operator receipt/isolation confirmation
 
 Operator confirmed the pilot note is visible in WOZTELL Inbox and that the customer WhatsApp received nothing. This proves the tested private-note visibility/isolation only, not device push or the automatic pipeline. Authorized activation scope remains all new qualified enquiries with available verified staff mappings; unmatched enquiries require manual handling. info@earnestproperty.com owns the routing-only policy. Keep customer service automation, direct staff WhatsApp and acknowledgement escalation disabled. Preserve observe events unchanged.
+
+## Routing-only production activation completed
+
+2026-09-12: operator confirmed customer WhatsApp received no pilot note. Approved routing-only policy 73f28fbe-1444-4b38-b833-c43aa4303489 and created activation e1111b82-ca70-4e88-af4e-8c61794bdc81, cutover 2026-09-12T13:29:02.302Z, under the explicitly designated info@earnestproperty.com policy owner. Assisted executor and user authorization are retained in audit 259e75f1-5790-445a-917b-b9c2e17891fc; no staff login was impersonated. Enabled only verified Willy private-note endpoint 1e6a8975-68d2-46a4-91ab-978ea71bb2a6.
+
+Production variables: EP_WA_ENQUIRY_MODE=active, EP_WA_ROUTING_ENABLED=true, EP_WA_STAFF_NOTIFICATIONS_ENABLED=true, EP_WA_ACTIVATION_ID=e1111b82-ca70-4e88-af4e-8c61794bdc81. Customer service automation, direct staff WhatsApp alerts and ack escalation explicitly false. Inbox verification reference now records the user-confirmed pilot. No schema migrations.
+
+Exact source release: local commit 8eea44ec5973ccc9df7663ced32ecb4712a42ab0 on codex/whatsapp-routing-notifications. Exported only committed files, excluding unrelated bun.lockb modification. Vercel candidate dpl_HkcwEhoHJfVr11sZAt9FihBz9HzP built READY, then promoted. CLI inspection of earnestproperty.vercel.app resolves to this release; homepage and settings respond HTTP 200 (not a claim of authenticated browser rendering). GitHub push/merge not performed.
+
+Cloudflare earnestproperty-cron version 973103bd-be9f-4e7f-9c96-155086f43151 published the existing one-minute service route while retaining five/ten-minute triggers. Actual service-worker POST returned HTTP 200 with zero queued jobs, and database service-v2 heartbeat observed at 2026-09-12T13:32:51.068Z. All-new automatic intake/assignment/notification remains to be verified with a fresh real user message. Existing qualified mappings/endpoints currently cover Willy only; unavailable handlers remain manual routing exceptions.
+
+Completed the identified user observation test inquiry f45e0749-135c-4716-8a46-d6fd8330e2fd with status closed and an audit, retaining its immutable effect-ineligible event and transcript. This is not a live-event replay or eligibility upgrade. A subsequent genuine user message can create a new active enquiry.
+
+Rollback: set mode=observe and routing/staff-notifications=false and redeploy the same compatible source; keep customer/service/direct-alert/escalation flags false. End activation only as part of operator-authorized rollback, retain schema/evidence and inspect any unknown attempts without replay. Prior deployment is dpl_4n4RukRavQm85nQnrNN6DmAEJNvW, but keep compatible source for reading the new policy purpose rather than blindly reverting it. The local source branch still needs authorized GitHub synchronization to prevent future main deployments from reverting the policy support.
