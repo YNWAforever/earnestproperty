@@ -1,4 +1,5 @@
 export type ServiceRules = {
+  purpose?: "full_service" | "routing_notifications";
   timezone: string | null;
   weekdays: number[] | null;
   holidays: string[] | null;
@@ -89,6 +90,16 @@ export function unresolvedServicePolicy(policy: ServicePolicy): string[] {
     !Number.isFinite(serviceInstant(policy.effectiveAt))
   )
     reasons.push("POLICY_NOT_APPROVED");
+  if (r.purpose === "routing_notifications") {
+    if (!r.managerStaffId) reasons.push("POLICY_MISSING_managerStaffId");
+    if (
+      !Number.isInteger(r.freshnessSeconds) ||
+      Number(r.freshnessSeconds) <= 0 ||
+      Number(r.freshnessSeconds) > 366 * 86400
+    )
+      reasons.push("POLICY_INVALID_freshnessSeconds");
+    return reasons;
+  }
   for (const key of Object.keys(r) as (keyof ServiceRules)[])
     if (r[key] === null) reasons.push(`POLICY_MISSING_${key}`);
   if (
@@ -137,6 +148,8 @@ export function calculateServiceSchedule(
 ): ServiceSchedule {
   const reasons = unresolvedServicePolicy(policy);
   if (reasons.length) return { status: "unresolved", reasons };
+  if (policy.rules.purpose === "routing_notifications")
+    return { status: "not_applicable", reason: "ROUTING_ONLY_POLICY" };
   const r = policy.rules,
     at = serviceInstant(intake.occurredAt),
     received = serviceInstant(intake.receivedAt),

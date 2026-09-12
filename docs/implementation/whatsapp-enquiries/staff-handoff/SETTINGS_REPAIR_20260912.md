@@ -101,3 +101,43 @@ Prepared server configuration (not yet installed):
 - EP_WA_INBOX_INTERNAL_MESSAGE_URL=https://api.inbox.woztell.sanuker.com/v1.0/internal-message (official documented path only; no live send test)
 
 Official contract: https://support.woztell.com/portal/en/kb/articles/public-a . Do not infer delivery readiness from successful read APIs. Keep routing, service, staff alerts and reminders disabled until an authorized live pilot, approved business policy and test sender exist. Do not enable a private-note endpoint without verifying customer isolation. Other staff mappings require exact account evidence, not inferred name/phone matches. Production environment installation/deployment are not performed in this step.
+
+## Tracked test link redirect repaired
+
+2026-09-12: User reported /w/U4XbCVRP5hGBAKvBAoQcKmw_jsMKSbW0 did not open WhatsApp. Reproduced HTTP 302 Location /contact. Registered version 1 was enabled, linked to A065407 sale and Willy; deployment lacked EP_WA_COMPANY_PHONE and EP_WA_TRACKED_LINKS_ENABLED. Configured production phone 85297987774 using the existing public /contact WhatsApp destination and enabled tracked navigation only. Redeployed approved commit 98cafb056434475d29c9265d237c60fa4e5e2b1d as dpl_E6qfaZuz9Xc6B2xLS8857wdGgaDB, now READY with earnestproperty.vercel.app alias.
+
+Post-deployment GET without following redirect: HTTP 302, destination wa.me/85297987774, decoded prefilled text includes A065407 and an EPWA reference, Cache-Control private/no-store. The verification created link-open evidence only; no WhatsApp message was sent. Three existing redirect tests passed. Automatic routing and service automation were not activated. Real incoming-message processing and Willy handoff remain separate live tests.
+
+## Production observe-only activation (2026-09-12)
+
+Operator approved enabling observation without sending messages. Production EP_WA_ENQUIRY_MODE was set to observe. Redeployment dpl_4n4RukRavQm85nQnrNN6DmAEJNvW is READY and owns earnestproperty.vercel.app, using the existing reviewed source.
+
+Routing, service automation, staff notifications, staff WhatsApp alerts, escalation and activation were not enabled. No production migrations, provider writes or messages were performed for this activation.
+
+Verification limitation: the attempted bounded service-worker check stopped before making its HTTP request because CRON_SECRET was unavailable to the Vercel env-run process. The deployed Cloudflare worker predates the new service-worker schedule; automatic observation processing is not yet verified. No schedules were changed. A fresh user-sent test message and worker processing verification are still required; the prior message captured while mode was off must not be represented as a new live event.
+
+Rollback: set EP_WA_ENQUIRY_MODE=off and redeploy the same reviewed production source. Retain captured evidence and schema.
+
+## Live observation verified (2026-09-12 12:00 UTC)
+
+Correction to the earlier pending-worker assessment: the existing five-minute control-plane cron is operational and processes v1 observe events. Live Cloudflare tail captured POST /api/admin/control-plane/worker returning HTTP 200 with claimed=1, succeeded=1, retried=0, failed=0. The existing ten-minute queue invocation returned zero claimed jobs. No worker deployment or schedule/secret change was necessary.
+
+The user-sent 11:57:15 UTC message produced event 739fdffa-d6bc-4bc1-a875-358f16be5339. At 12:00:43.773 UTC it became observed; its job succeeded on attempt 1. Inquiry f45e0749-135c-4716-8a46-d6fd8330e2fd resolves public listing A065407 by reference and requested staff Willy (72285986-c82c-46bd-98d9-c6b021d91b0d). assigned_agent_id remains null; event and inquiry effects_eligible are both false; association_review is false. This verifies the actual live observation path. It does not verify active routing, notifications or the newer one-minute service lane. The earlier queued state was the normal wait for the next five-minute tick, not evidence of a broken cron.
+
+## Routing and Inbox notification activation preparation
+
+User approved all new enquiries, Inbox internal notifications, and manual handling when no eligible handler is available. Policy owner explicitly selected: info@earnestproperty.com (79e7d3e9-b235-4661-a7c3-cc88cbadc9fb). Added manager role while retaining admin, with assisted-operation audit. Enabled only Willy's previously verified staff-channel mapping. Draft policy 73f28fbe-1444-4b38-b833-c43aa4303489 is routing_notifications with a 300-second intake freshness limit; customer service/calendar/copy fields remain unapproved and unused. No active generation yet.
+
+Found and reproduced two activation blockers: policy validation incorrectly required customer-service configuration for routing-only activation; actual Inbox unassigned-thread responses omit userId rather than returning null. Added routing-only validation which cannot schedule customer-service obligations, preserving existing full-service policy requirements. Accepted omitted userId only as an empty/unassigned handler; private notes still require exact confirmed handler/folder. Both regressions were observed failing before fixes.
+
+Verification: test:whatsapp-enquiries 72 passed; staff-notifications.test.mjs 6 passed; tsc --noEmit passed; scoped ESLint and git diff --check passed. No schema migration or unrelated bun.lockb change included.
+
+Authorized one-off live adapter verification INBOX-PILOT-20260912-A065407-1: assigned only the existing A065407 test conversation to Willy, verified authoritative Inbox readback, then posted one labelled internal note. Provider returned accepted/private_note_posted. Audits c5e8c9ce-7a05-4d60-afea-6638a9c774f3 and 70251505-e420-42b5-a0d3-10e67a24f9aa record intent/result. This manual transport verification does not upgrade the observe event or prove the automatic workflow. Recipient/customer device isolation confirmation is pending. Endpoint prepared disabled; global flags remain observe/off.
+
+## Missing notification visibility investigation
+
+Operator reports not seeing the pilot note. Read-only provider verification confirms thread T0000771 in main remains assigned to Inbox user 69280afe1bbc4961899a4ce8 (willylai@fimmick.com); filtered list-users confirms folder access and no further page. Earnest transcript contains no pilot internal note. This does not prove the note is absent from native WOZTELL Inbox. Official internal-message API documents an internal message in a thread, not guaranteed recipient push delivery. No resend, flag activation, or delivery confirmation was performed. Browser inspection could not start because the local CUA kernel failed with a sandbox ACL error. Awaiting which surface the operator is inspecting; actual native-note visibility and customer isolation remain unverified.
+
+## Operator receipt/isolation confirmation
+
+Operator confirmed the pilot note is visible in WOZTELL Inbox and that the customer WhatsApp received nothing. This proves the tested private-note visibility/isolation only, not device push or the automatic pipeline. Authorized activation scope remains all new qualified enquiries with available verified staff mappings; unmatched enquiries require manual handling. info@earnestproperty.com owns the routing-only policy. Keep customer service automation, direct staff WhatsApp and acknowledgement escalation disabled. Preserve observe events unchanged.

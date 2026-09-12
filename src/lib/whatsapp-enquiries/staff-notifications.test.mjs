@@ -172,3 +172,30 @@ test("NT-05 protected work link contains only opaque IDs and configured origin",
     old === undefined ? delete process.env.VITE_SITE_URL : (process.env.VITE_SITE_URL = old);
   }
 });
+
+test("unassigned live thread may omit userId but cannot authorize a private note", async () => {
+  const api = createInboxApi(
+    config,
+    async () =>
+      new Response(
+        JSON.stringify({
+          ok: 1,
+          data: [{ channelId: "channel", memberId: "customer", folder: "folder" }],
+        }),
+      ),
+  );
+  assert.deepEqual(
+    await api.readAuthoritativeAssignment({ channelId: "channel", memberId: "customer" }),
+    { inboxUserId: "", folderId: "folder" },
+  );
+  await assert.rejects(
+    api.postPrivateNote({
+      channelId: "channel",
+      memberId: "customer",
+      folderId: "folder",
+      inboxUserId: "agent",
+      message: "test",
+    }),
+    /PREFLIGHT_BLOCKED/,
+  );
+});

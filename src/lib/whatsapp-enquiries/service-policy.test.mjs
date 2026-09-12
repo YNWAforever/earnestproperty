@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateServiceSchedule, draftServicePolicy } from "./service-policy.ts";
+import {
+  calculateServiceSchedule,
+  draftServicePolicy,
+  unresolvedServicePolicy,
+} from "./service-policy.ts";
 import { renderServiceCopy, SERVICE_COPY } from "./service-copy.ts";
 const hypothetical = () => ({
   ...draftServicePolicy(),
@@ -179,4 +183,25 @@ test("AT39 later opening calendars use a future workday 10:00 survey", () => {
   assert.equal(r.status, "ready");
   assert.equal(r.responseDueAt, "2026-09-11T07:00:00.000Z");
   assert.equal(r.surveyDueAt, "2026-09-15T02:00:00.000Z");
+});
+
+test("routing-only approval does not require or authorize customer service", () => {
+  const p = {
+    ...hypothetical(),
+    copy: { afterHours: null },
+    rules: {
+      ...draftServicePolicy().rules,
+      purpose: "routing_notifications",
+      managerStaffId: "11111111-1111-4111-8111-111111111111",
+      freshnessSeconds: 300,
+    },
+  };
+  assert.deepEqual(unresolvedServicePolicy(p), []);
+  assert.deepEqual(calc(p, 8), { status: "not_applicable", reason: "ROUTING_ONLY_POLICY" });
+  p.rules.managerStaffId = null;
+  assert.ok(unresolvedServicePolicy(p).includes("POLICY_MISSING_managerStaffId"));
+  p.rules.freshnessSeconds = null;
+  assert.ok(unresolvedServicePolicy(p).includes("POLICY_INVALID_freshnessSeconds"));
+  p.status = "draft";
+  assert.ok(unresolvedServicePolicy(p).includes("POLICY_NOT_APPROVED"));
 });
