@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   STAFF_HISTORICAL_COLUMNS,
+  STAFF_RECONCILED_COLUMNS,
   STAFF_OWNERSHIP_COLUMNS,
   staffOwnershipCountSql,
   staffReassignStatements,
@@ -55,7 +56,7 @@ test("historical columns and ownership columns do not overlap", () => {
     assert.equal(owned.has(historical), false, `${historical} cannot be both`);
   }
   assert.ok(STAFF_HISTORICAL_COLUMNS.includes("updated_by"));
-  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 14);
+  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 18);
 });
 
 test("count SQL pairs each table with its own column, not a copy-pasted one", () => {
@@ -261,7 +262,10 @@ test("every REFERENCES staff_users column in the schema is classified as ownersh
   const unclassified = schemaRefs.filter(({ table, column }) => {
     const isOwnership = ownershipKeys.has(`${table}.${column}`);
     const isHistorical = historicalNames.has(column);
-    return isOwnership === isHistorical; // false/false (missing) or true/true (ambiguous)
+    const reconciled = STAFF_RECONCILED_COLUMNS.some(
+      (r) => r.table === table && r.column === column,
+    );
+    return Number(isOwnership) + Number(isHistorical) + Number(reconciled) !== 1; // false/false (missing) or true/true (ambiguous)
   });
   assert.deepEqual(
     unclassified,

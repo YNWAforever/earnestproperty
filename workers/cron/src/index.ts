@@ -20,6 +20,7 @@ type Env = {
  * mismatch silently does nothing rather than erroring.
  */
 const SCHEDULE: Record<string, string> = {
+  "* * * * *": "/api/admin/whatsapp/service-worker",
   "*/5 * * * *": "/api/admin/control-plane/worker",
   "*/10 * * * *": "/api/admin/jobs/send-queue",
 };

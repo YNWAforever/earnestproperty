@@ -56,3 +56,6 @@ workers/mls-container/.wrangler/
 # its module graph to real files here (cleaned up in the test's `after()`);
 # an interrupted run can leave this behind.
 src/lib/neon/.admin-transactions-contract-tmp/
+
+# Local verification logs and review snapshots.
+.audit/

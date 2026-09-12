@@ -39,7 +39,7 @@ function cleanIdempotencyKey(value: string) {
   return key;
 }
 
-export async function enqueueJob(input: {
+export type EnqueueJobInput = {
   jobType: string;
   payloadVersion: number;
   payload: unknown;
@@ -47,18 +47,24 @@ export async function enqueueJob(input: {
   actorStaffId?: string | null;
   maxAttempts?: number;
   runAfter?: Date;
-}) {
+};
+/** Validation is shared by standalone and transaction-participating enqueue callers. */
+export function buildEnqueueJobStatement(
+  input: EnqueueJobInput,
+  options: { requireEnquiryEvent?: boolean } = {},
+) {
   const parsed = parseRegisteredJobPayload(input.jobType, input.payloadVersion, input.payload);
-  const { queryRows } = await import("../neon/db.server.ts");
-  const rows = await queryRows<JobRow>(
-    `INSERT INTO ops_jobs
-      (job_type, payload_version, payload, status, max_attempts, run_after,
-       idempotency_key, actor_staff_id)
-     VALUES ($1, $2, $3::jsonb, 'queued', $4, $5, $6, $7)
-     ON CONFLICT (idempotency_key) DO UPDATE
-       SET idempotency_key = EXCLUDED.idempotency_key
-     RETURNING *`,
-    [
+  if (options.requireEnquiryEvent && input.jobType !== "woztell.enquiry.process")
+    throw validationError("Enquiry prerequisite requires an enquiry processing job.");
+  const values = options.requireEnquiryEvent
+    ? "SELECT $1,$2,$3::jsonb,'queued',$4,$5,$6,$7 WHERE EXISTS (SELECT 1 FROM whatsapp_enquiry_events WHERE id=($3::jsonb->>'eventId')::uuid)"
+    : "VALUES ($1,$2,$3::jsonb,'queued',$4,$5,$6,$7)";
+  return {
+    statement: `INSERT INTO ops_jobs
+ (job_type,payload_version,payload,status,max_attempts,run_after,idempotency_key,actor_staff_id)
+ ${values}
+ ON CONFLICT (idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING *`,
+    params: [
       input.jobType,
       input.payloadVersion,
       JSON.stringify(parsed.payload),
@@ -67,26 +73,37 @@ export async function enqueueJob(input: {
       cleanIdempotencyKey(input.idempotencyKey),
       input.actorStaffId ?? null,
     ],
-  );
-  return rows[0];
+  };
+}
+export async function enqueueJob(input: EnqueueJobInput) {
+  const statement = buildEnqueueJobStatement(input);
+  const { queryRows } = await import("../neon/db.server.ts");
+  return (await queryRows<JobRow>(statement.statement, statement.params))[0];
 }
 
-export async function claimJobs(input: {
-  workerId: string;
-  limit?: number;
-  leaseSeconds?: number;
-}) {
-  const { queryRows } = await import("../neon/db.server.ts");
+export async function claimJobs(
+  input: {
+    workerId: string;
+    limit?: number;
+    leaseSeconds?: number;
+    lane?: "general" | "service";
+    capabilities?: string[];
+  },
+  injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
+) {
+  const queryRows = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
   const workerId = cleanWorkerId(input.workerId);
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? 10), 1), 100);
   const leaseSeconds = Math.min(Math.max(Math.trunc(input.leaseSeconds ?? 60), 5), 3_600);
   return queryRows<JobRow>(
-    `WITH candidates AS (
+    `WITH capability AS MATERIALIZED (SELECT set_config('app.wa_worker_capabilities',to_json($5::text[])::text,true) AS value), candidates AS (
        SELECT id
-       FROM ops_jobs
-       WHERE status = 'queued' AND run_after <= now()
+       FROM ops_jobs CROSS JOIN capability
+       WHERE capability.value IS NOT NULL AND status = 'queued' AND run_after <= now()
+       AND CASE WHEN $4='service' THEN (job_type || '@' || payload_version::text)=ANY($5::text[])
+        ELSE NOT ((job_type LIKE 'woztell.enquiry.%' AND NOT(job_type='woztell.enquiry.process' AND payload_version=1)) OR (job_type='woztell.reply.deliver' AND payload_version=2)) END
        ORDER BY run_after, created_at
-       FOR UPDATE SKIP LOCKED
+       FOR UPDATE OF ops_jobs SKIP LOCKED
        LIMIT $1
      )
      UPDATE ops_jobs AS job
@@ -98,7 +115,7 @@ export async function claimJobs(input: {
      FROM candidates
      WHERE job.id = candidates.id
      RETURNING job.*`,
-    [limit, workerId, leaseSeconds],
+    [limit, workerId, leaseSeconds, input.lane ?? "general", input.capabilities ?? []],
   );
 }
 export async function renewJobLease(input: {
@@ -620,8 +637,11 @@ export async function runClaimedJobs(input: {
   workerId: string;
   limit?: number;
   leaseSeconds?: number;
+  lane?: "general" | "service";
+  capabilities?: string[];
 }) {
-  await recoverExpiredLeases();
+  if (input.lane === "service") await recoverExpiredServiceLeases();
+  else await recoverExpiredLeases();
   // Drain more than one job per invocation -- forcing limit:1 meant a backlog
   // shrank by one per tick while the response still reported claimed:1, so the
   // queue looked healthy while it fell further behind.
@@ -714,4 +734,17 @@ export async function runClaimedJobs(input: {
 
 export function hasRegisteredJobHandler(jobType: string, payloadVersion: number) {
   return getJobHandler(jobType, payloadVersion) !== null;
+}
+
+/** Keep service recovery bounded and independent from campaign/history recovery work. */
+export async function recoverExpiredServiceLeases(
+  injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
+) {
+  const query = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  return query(`WITH expired AS (SELECT id FROM ops_jobs WHERE status='running' AND lease_expires_at<clock_timestamp() AND (job_type LIKE 'woztell.enquiry.%' OR job_type='woztell.reply.deliver') ORDER BY lease_expires_at FOR UPDATE SKIP LOCKED LIMIT 100),
+ recovered AS (UPDATE ops_jobs j SET status=CASE WHEN attempt_count<max_attempts THEN 'queued' ELSE 'failed' END,lease_owner=NULL,lease_expires_at=NULL,last_error_code='LEASE_EXPIRED',updated_at=now() FROM expired e WHERE j.id=e.id RETURNING j.*),
+ uncertain AS (UPDATE whatsapp_outbound_intents o SET state='unknown',error='WOZTELL_DELIVERY_UNKNOWN',updated_at=now() FROM recovered j WHERE j.job_type='woztell.reply.deliver' AND j.payload_version=2 AND j.payload->>'actionId'=o.service_action_id::text AND o.state='dispatching' RETURNING o.*),
+ action AS (UPDATE whatsapp_service_actions a SET state='unknown',block_reason='WOZTELL_DELIVERY_UNKNOWN',updated_at=now() FROM uncertain o WHERE a.id=o.service_action_id RETURNING a.id),
+ transcript AS (UPDATE whatsapp_messages m SET status='unknown',error='WOZTELL_DELIVERY_UNKNOWN' FROM uncertain o WHERE m.id=o.message_id RETURNING m.id)
+ SELECT id FROM recovered`);
 }

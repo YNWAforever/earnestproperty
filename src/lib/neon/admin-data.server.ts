@@ -2934,6 +2934,25 @@ export async function updateAdminConversation(
   actor: StaffAccess,
 ) {
   const scope = agentScope(actor);
+  const assignments = await import("../whatsapp-enquiries/assignment.server");
+  if (await assignments.assignmentSchemaAvailable()) {
+    const [current] = await queryRows(
+      `SELECT assigned_agent_id FROM whatsapp_conversations WHERE id=$1::uuid AND ($2::uuid IS NULL OR assigned_agent_id=$2::uuid)`,
+      [input.id, scope],
+    );
+    if (!current) throw new Response("Forbidden", { status: 403 });
+    if ((current.assigned_agent_id ?? null) !== input.assigned_agent_id) {
+      await assignments.requestConversationAssignment(
+        { conversationId: input.id, staffId: input.assigned_agent_id, reason: "manual" },
+        actor,
+      );
+    }
+    await queryRows(
+      `UPDATE whatsapp_conversations SET status=$2,updated_at=now() WHERE id=$1::uuid AND ($3::uuid IS NULL OR assigned_agent_id=$3::uuid)`,
+      [input.id, input.status, scope],
+    );
+    return { ok: true };
+  }
   const rows = await queryRows(
     `UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3${
       scope !== null ? " AND assigned_agent_id = $4" : ""

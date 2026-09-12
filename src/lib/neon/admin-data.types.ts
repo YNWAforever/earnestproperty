@@ -155,6 +155,7 @@ export type AdminLeadRow = {
 };
 
 export type AdminConversationRow = {
+  awaiting_human_response?: boolean | null;
   id: string;
   status: string;
   last_message_at: string | null;

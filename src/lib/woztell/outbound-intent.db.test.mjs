@@ -135,7 +135,7 @@ test(
     });
     try {
       const results = await Promise.all(
-        Array.from({ length: 8 }, () => ingestWoztellEvent(event, tx)),
+        Array.from({ length: 8 }, () => ingestWoztellEvent(event, "live_webhook", tx)),
       );
       assert.equal(new Set(results.map((r) => r.contactId)).size, 1);
       assert.equal(new Set(results.map((r) => r.conversationId)).size, 1);
@@ -150,7 +150,7 @@ test(
           data: { text: "STOP" },
         },
       });
-      await ingestWoztellEvent(older, tx);
+      await ingestWoztellEvent(older, "history_import", tx);
       const contact = (
         await sql.query(
           "SELECT opt_in_whatsapp,opted_out_whatsapp,last_inbound_at FROM crm_contacts WHERE whatsapp_member_id=$1",
@@ -251,7 +251,7 @@ test(
         { ...payload, channelId: "different-channel" },
         { ...payload, messageEvent: { ...payload.messageEvent, data: { text: "Different text" } } },
       ]) {
-        await ingestWoztellEvent(normalizeWoztellEvent(changed), tx);
+        await ingestWoztellEvent(normalizeWoztellEvent(changed), "live_webhook", tx);
         assert.equal(await state(), "unknown");
       }
       const valid = normalizeWoztellEvent(payload);
@@ -261,7 +261,10 @@ test(
         channelId: "fixture-channel",
         messageEvent: payload.messageEvent,
       });
-      await Promise.all([ingestWoztellEvent(valid, tx), ingestWoztellEvent(history, tx)]);
+      await Promise.all([
+        ingestWoztellEvent(valid, "live_webhook", tx),
+        ingestWoztellEvent(history, "history_import", tx),
+      ]);
       assert.equal(await state(), "accepted");
       assert.equal(sends, 1);
       const rows = await query(
@@ -317,7 +320,7 @@ test(
         data: { messageId: external },
       });
     try {
-      await ingestWoztellEvent(status("DELIVERED"), tx);
+      await ingestWoztellEvent(status("DELIVERED"), "live_webhook", tx);
       assert.equal(
         (
           await sql.query(
@@ -339,9 +342,10 @@ test(
             data: { text: "synthetic receipt test" },
           },
         }),
+        "live_webhook",
         tx,
       );
-      await ingestWoztellEvent(status("READ", "different-channel"), tx);
+      await ingestWoztellEvent(status("READ", "different-channel"), "live_webhook", tx);
       assert.equal(
         (
           await sql.query("SELECT status FROM whatsapp_messages WHERE external_message_id=$1", [
@@ -350,15 +354,15 @@ test(
         )[0].status,
         "delivered",
       );
-      await ingestWoztellEvent(status("READ"), tx);
-      await ingestWoztellEvent(status("DELIVERED"), tx);
-      await ingestWoztellEvent(status("FAILED"), tx);
+      await ingestWoztellEvent(status("READ"), "live_webhook", tx);
+      await ingestWoztellEvent(status("DELIVERED"), "live_webhook", tx);
+      await ingestWoztellEvent(status("FAILED"), "live_webhook", tx);
       const rows = await sql.query(
         "SELECT text,status FROM whatsapp_messages WHERE external_message_id=$1",
         [external],
       );
       assert.deepEqual(rows, [{ text: "synthetic receipt test", status: "read" }]);
-      await ingestWoztellEvent(status("READ", "different-channel"), tx);
+      await ingestWoztellEvent(status("READ", "different-channel"), "live_webhook", tx);
       assert.equal(
         (
           await sql.query(

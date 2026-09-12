@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { SITE_BRANCHES } from "@/config/site";
 import { calculateMortgage } from "@/lib/mortgage";
 
-import { PropertyDecisionActions } from "./PropertyDecisionActions";
+import { PropertyDecisionActions, PropertyMobileContactSummary } from "./PropertyDecisionActions";
 
 function renderActions(price: number | null, dealType: "sale" | "rent" = "sale") {
   return load(
@@ -206,4 +206,28 @@ describe("PropertyDecisionActions", () => {
     expect($("[data-property-mortgage-card]")).toHaveLength(0);
     expect($("[data-property-cash-required]")).toHaveLength(0);
   });
+});
+
+describe("tracked company enquiry CTAs", () => {
+  for (const Component of [PropertyDecisionActions, PropertyMobileContactSummary])
+    test(`${Component.name} uses the explicit link while preserving telephone`, () => {
+      const $ = load(
+        renderToStaticMarkup(
+          createElement(Component, {
+            agent: null,
+            branchContact: SITE_BRANCHES[0],
+            fallbackWhatsapp: "85291234567",
+            listingNo: "G1",
+            title: "測試",
+            dealType: "rent",
+            price: 18000,
+            onInquiry: () => undefined,
+            enquiryHref: "/w/approved-placement",
+          }),
+        ),
+      );
+      expect($('a[href="/w/approved-placement"]').length).toBeGreaterThan(0);
+      expect($('a[href^="https://wa.me/"]').length).toBe(0);
+      expect($('a[href^="tel:"]').length).toBeGreaterThan(0);
+    });
 });

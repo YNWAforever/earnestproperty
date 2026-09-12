@@ -64,7 +64,10 @@ export async function runHistoryImportPage(
       });
     },
     async ingest(event: ReturnType<typeof chatNodeToEvent>) {
-      return (await import("./woztell-ingest.server.ts")).ingestWoztellEvent(event);
+      return (await import("./woztell-ingest.server.ts")).ingestWoztellEvent(
+        event,
+        "history_import",
+      );
     },
     advance: advanceHistoryImport,
   };

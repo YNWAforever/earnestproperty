@@ -1,3 +1,4 @@
+import { WhatsappServiceHealth } from "@/components/admin/operations/WhatsappServiceHealth";
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RefreshCw } from "lucide-react";
@@ -227,6 +228,7 @@ function AdminOperations() {
       ) : null}
       {!health && !error ? <Skeleton className="mt-4 h-48 w-full" /> : null}
 
+      {health ? <WhatsappServiceHealth /> : null}
       {health ? (
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
           {/* Every tab is rendered, not just the permitted ones. Omitting them

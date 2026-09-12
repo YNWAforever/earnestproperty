@@ -1,3 +1,4 @@
+import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
 import {
   activePropertyOfferings,
   selectPropertyOffering,
@@ -174,7 +175,16 @@ export const Route = createFileRoute("/property/$listingNo")({
       // exactly like before this table existed.
       fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
     ]);
-    return { property, similar, txns, branches };
+    const enquiryLinks = await resolveWhatsappLinks({
+      data: {
+        offers: activePropertyOfferings(property).map((offer) => ({
+          propertyId: offer.id,
+          publicListingNo: publicPropertyNo(property),
+          dealType: offer.deal_type,
+        })),
+      },
+    }).catch(() => ({ enabled: true, fallbackHref: "/contact", links: [] }));
+    return { property, similar, txns, branches, enquiryLinks };
   },
   head: ({ loaderData }) => {
     const p = (loaderData as PropertyHeadData | undefined)?.property;
@@ -285,11 +295,13 @@ function PropertyPage() {
     similar,
     txns,
     branches,
+    enquiryLinks,
   } = Route.useLoaderData() as {
     property: PropertyDetail;
     similar: SimilarListing[];
     txns: EstateTransaction[];
     branches: NeonBranchRecord[];
+    enquiryLinks: Awaited<ReturnType<typeof resolveWhatsappLinks>>;
   };
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -840,6 +852,13 @@ function PropertyPage() {
               agent={agent}
               branchContact={branchContact}
               branches={branches}
+              enquiryHref={
+                enquiryLinks?.enabled
+                  ? (enquiryLinks.links.find((link) => link.propertyId === property.id)?.href ??
+                    enquiryLinks.fallbackHref ??
+                    "/contact")
+                  : undefined
+              }
               fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
               listingNo={property.listing_no}
               title={safeTitle}
@@ -1010,6 +1029,13 @@ function PropertyPage() {
                 agent={agent}
                 branchContact={branchContact}
                 branches={branches}
+                enquiryHref={
+                  enquiryLinks?.enabled
+                    ? (enquiryLinks.links.find((link) => link.propertyId === property.id)?.href ??
+                      enquiryLinks.fallbackHref ??
+                      "/contact")
+                    : undefined
+                }
                 fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
                 listingNo={property.listing_no}
                 title={safeTitle}

@@ -1,3 +1,4 @@
+import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
 import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
@@ -82,6 +83,14 @@ const inboxStatusFilterOptions = [
 
 const messageStatusLabels: Record<string, string> = {
   received: "已接收",
+  queued: "已排隊",
+  dispatching: "傳送中",
+  accepted: "供應商已接納（未確認送達）",
+  delivered: "已送達",
+  read: "已讀",
+  unknown: "結果未確定",
+  blocked: "已阻擋",
+  cancelled: "已取消",
   sending: "傳送中",
   sent: "已送出",
   failed: "送出失敗",
@@ -140,6 +149,7 @@ function AdminWhatsapp() {
   const [woztellEnabled, setWoztellEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
+  const [enquirySelections, setEnquirySelections] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminConversationDetail | null>(null);
   const [aiAssist, setAiAssist] = useState<AdminConversationAiAssist | null>(null);
@@ -616,7 +626,13 @@ function AdminWhatsapp() {
       const result = await sendAdminConversationReply({
         data: {
           conversationId: targetId,
-          requestId: stableOutboundRequestId(user?.id, targetId, "text", text),
+          enquiryId: enquirySelections[targetId] || undefined,
+          requestId: stableOutboundRequestId(
+            user?.id,
+            targetId,
+            "text",
+            JSON.stringify([text, enquirySelections[targetId] ?? null]),
+          ),
           text,
         },
       });
@@ -629,6 +645,7 @@ function AdminWhatsapp() {
       const refreshed = await loadConversationDetail(targetId);
       if (refreshed && canApplyConversationDetail(targetId)) toast.success("回覆已加入傳送佇列");
     } catch (err) {
+      releaseRejectedOutboundRequest(err, user?.id, targetId, "text");
       if (!canApplyConversationDetail(targetId)) return;
       const message = formatReplyError(errorText(err));
       // The send is persisted as a failed message server-side, but the timeline
@@ -661,8 +678,14 @@ function AdminWhatsapp() {
       const result = await sendAdminConversationTemplate({
         data: {
           conversationId: targetId,
+          enquiryId: enquirySelections[targetId] || undefined,
           templateId,
-          requestId: stableOutboundRequestId(user?.id, targetId, "template", templateId),
+          requestId: stableOutboundRequestId(
+            user?.id,
+            targetId,
+            "template",
+            JSON.stringify([templateId, enquirySelections[targetId] ?? null]),
+          ),
         },
       });
       assertNoMutationError(result);
@@ -673,6 +696,7 @@ function AdminWhatsapp() {
       const refreshed = await loadConversationDetail(targetId);
       if (refreshed && canApplyConversationDetail(targetId)) toast.success("範本已加入傳送佇列");
     } catch (err) {
+      releaseRejectedOutboundRequest(err, user?.id, targetId, "template");
       if (!canApplyConversationDetail(targetId)) return;
       const message = formatReplyError(errorText(err));
       setReplyError(message);
@@ -700,6 +724,7 @@ function AdminWhatsapp() {
         (row) =>
           conversationAttention({
             lastDirection: row.last_direction,
+            awaitingHumanResponse: row.awaiting_human_response,
             lastInboundAt: row.last_inbound_at,
           }).awaitingReply,
       ).length,
@@ -884,6 +909,11 @@ function AdminWhatsapp() {
         <Card className="hidden lg:block">
           <CardContent className="p-0">
             <ConversationWorkspace
+              selectedEnquiryId={selectedId ? (enquirySelections[selectedId] ?? "") : ""}
+              onEnquirySelect={(id) => {
+                if (selectedId)
+                  setEnquirySelections((current) => ({ ...current, [selectedId]: id }));
+              }}
               detail={detail}
               olderCursor={olderCursor}
               loadingOlder={loadingOlder}
@@ -936,6 +966,10 @@ function AdminWhatsapp() {
         onOpenChange={handlePanelOpenChange}
       >
         <ConversationWorkspace
+          selectedEnquiryId={selectedId ? (enquirySelections[selectedId] ?? "") : ""}
+          onEnquirySelect={(id) => {
+            if (selectedId) setEnquirySelections((current) => ({ ...current, [selectedId]: id }));
+          }}
           detail={detail}
           olderCursor={olderCursor}
           loadingOlder={loadingOlder}
@@ -1055,6 +1089,7 @@ function ConversationList({
       {rows.map((conversation) => {
         const attention = conversationAttention({
           lastDirection: conversation.last_direction,
+          awaitingHumanResponse: conversation.awaiting_human_response,
           lastInboundAt: conversation.last_inbound_at,
         });
         const waited = formatDuration(attention.waitedMs);
@@ -1154,6 +1189,8 @@ function ConversationList({
 }
 
 function ConversationWorkspace({
+  selectedEnquiryId,
+  onEnquirySelect,
   detail,
   olderCursor,
   loadingOlder,
@@ -1179,6 +1216,8 @@ function ConversationWorkspace({
   onAgentChange,
   onConsentSaved,
 }: {
+  selectedEnquiryId: string;
+  onEnquirySelect: (id: string) => void;
   detail: AdminConversationDetail | null;
   olderCursor: string | null;
   loadingOlder: boolean;
@@ -1271,7 +1310,7 @@ function ConversationWorkspace({
               onChange={onStatusChange}
             />
           </Field>
-          <Field label="負責代理">
+          <Field label="要求更改負責代理（待確認）">
             <Select
               value={detail.assigned_agent_id ?? "none"}
               disabled={disabled}
@@ -1297,6 +1336,19 @@ function ConversationWorkspace({
         ) : null}
       </div>
 
+      <WhatsappEnquiryContext
+        key={detail.id}
+        conversationId={detail.id}
+        refreshKey={
+          detail.last_message_at +
+          ":" +
+          detail.messages.map((m) => m.id + ":" + m.status).join(",") +
+          ":" +
+          savingConversation
+        }
+        selectedId={selectedEnquiryId}
+        onSelect={onEnquirySelect}
+      />
       <MessageTimeline
         key={detail.id}
         messages={detail.messages}
@@ -1570,7 +1622,7 @@ function MessageTimeline({
 
 function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
   const outbound = message.direction === "outbound";
-  const failed = message.status === "failed";
+  const failed = message.status === "failed" || ["unknown", "blocked"].includes(message.status);
 
   // A failed send used to differ from a delivered one by `font-semibold` alone:
   // same bubble colour, same size, no icon. On the surface that decides whether
@@ -1762,7 +1814,7 @@ function statusLabel(status: string) {
 function messageStatusLabel(status: string) {
   if (status === "queued") return "等待傳送";
   if (status === "dispatching") return "傳送中（未確認）";
-  if (status === "accepted") return "供應商已接受";
+  if (status === "accepted") return "供應商已接納（未確認送達）";
   if (status === "unknown") return "傳送結果未明，請核對，勿重發";
   if (status === "cancelled") return "已取消";
   return messageStatusLabels[status] ?? status;
@@ -1806,13 +1858,19 @@ function agentLabel(agent: AdminAgentRow) {
 }
 
 function formatReplyError(value: string) {
+  if (value.includes("ENQUIRY_SELECTION_REQUIRED"))
+    return "此對話有多項查詢，請先選擇本次回覆對應的查詢。";
+  if (value.includes("ENQUIRY_ASSOCIATION_INVALID")) return "查詢關聯已變更，請重新選擇。";
   return replyErrorLabels[value] ?? value;
 }
 
 function assertNoMutationError(result: unknown) {
   if (!result || typeof result !== "object") return;
   const maybeError = (result as { error?: unknown }).error;
-  if (maybeError) throw new Error(formatReplyError(String(maybeError)));
+  if (maybeError)
+    throw Object.assign(new Error(formatReplyError(String(maybeError))), {
+      code: String(maybeError),
+    });
   if ((result as { ok?: unknown }).ok === false) throw new Error("操作失敗");
 }
 
@@ -1900,4 +1958,15 @@ function stableOutboundRequestId(
 }
 function clearOutboundRequestId(userId: string | undefined, conversationId: string, kind: string) {
   sessionStorage.removeItem(outboundStorageKey(userId, conversationId, kind));
+}
+
+function releaseRejectedOutboundRequest(
+  error: unknown,
+  userId: string | undefined,
+  conversationId: string,
+  kind: string,
+) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : null;
+  if (code === "ENQUIRY_SELECTION_REQUIRED" || code === "ENQUIRY_ASSOCIATION_INVALID")
+    clearOutboundRequestId(userId, conversationId, kind);
 }

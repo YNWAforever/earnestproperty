@@ -146,6 +146,7 @@ jobs:
       - run: npm run test:estate-conversion
       - run: npm run test:neon-auth
       - run: npm run test:command-center
+      - run: npm run test:whatsapp-enquiries
       - run: npm run test:woztell
       - run: npm run test:operations
 

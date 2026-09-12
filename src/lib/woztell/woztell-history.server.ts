@@ -149,6 +149,11 @@ export function chatNodeToWebhookPayload(node: WoztellChatNode): Record<string, 
   // other value as inbound, and a literal "MEMBER" here would be misleading to
   // anyone reading the stored payload later.
   if (type) payload.type = type;
+  // Preserve synthetic legacy ID inputs, but unknown sender evidence is never customer intake.
+  if (
+    !["BOT", "MEMBER", "ADMIN", "INCOMING_WEBHOOK"].includes(String(node.from ?? "").toUpperCase())
+  )
+    payload.eventType = "UNVERIFIED_HISTORY_SENDER";
 
   return payload;
 }

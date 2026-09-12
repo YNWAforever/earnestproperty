@@ -4,6 +4,7 @@ import {
   parseOutboundIntent,
   hashOutboundIntent,
   deliverOutboundIntent,
+  finishOutboundIntent,
 } from "./outbound-intent.server.ts";
 const id = "11111111-1111-4111-8111-111111111111";
 const input = { requestId: id, conversationId: id, kind: "text", payload: { text: "hello" } };
@@ -80,6 +81,65 @@ test("explicit provider refusal is failed; ambiguous HTTP failure is unknown", a
     assert.equal(h.state(), state);
   }
 });
+test("nested provider identity is persisted for callback correlation", async () => {
+  const h = harness(() => ({
+    ok: true,
+    body: {
+      ok: 1,
+      sendResult: { result: [{ messageEvent: { messageId: "nested-external" } }] },
+    },
+  }));
+  await deliverOutboundIntent(id, h.deps);
+  assert.equal(h.state(), "accepted");
+  assert.equal(h.persisted[0].externalMessageId, "nested-external");
+  assert.equal(h.persisted[0].providerResult.responseCount, 1);
+  assert.equal(h.persisted[0].providerResult.results[0].messageId, "nested-external");
+});
+test("execution acceptance without a stable message identity stays unknown", async () => {
+  const h = harness(() => ({ ok: true, body: { ok: 1, sendResult: { result: [{}] } } }));
+  await deliverOutboundIntent(id, h.deps);
+  await deliverOutboundIntent(id, h.deps);
+  assert.equal(h.state(), "unknown");
+  assert.equal(h.sends(), 1);
+});
+test("mixed response evidence is terminal unknown but retains a unique id for correlation", async () => {
+  const h = harness(() => ({
+    ok: false,
+    body: {
+      ok: 1,
+      sendResult: {
+        result: [
+          { messageEvent: { messageId: "possibly-sent" } },
+          { err: "second response rejected" },
+        ],
+      },
+    },
+  }));
+  await deliverOutboundIntent(id, h.deps);
+  await deliverOutboundIntent(id, h.deps);
+  assert.equal(h.state(), "unknown");
+  assert.equal(h.persisted[0].externalMessageId, "possibly-sent");
+  assert.equal(h.sends(), 1);
+});
+test("an early callback row is adopted before the HTTP result updates the transcript", async () => {
+  let statements;
+  await finishOutboundIntent(
+    id,
+    { state: "accepted", externalMessageId: "early-callback-id", error: null },
+    async (input) => {
+      statements = input;
+      return input.map(() => []);
+    },
+  );
+  const sql = statements[1].statement;
+  assert.match(sql, /existing AS/);
+  assert.match(sql, /m\.external_message_id=\$3/);
+  assert.match(sql, /message_id=COALESCE\(\(SELECT id FROM existing\),i\.message_id\)/);
+  assert.match(sql, /DELETE FROM whatsapp_messages/);
+  assert.match(sql, /jsonb_build_object\('providerResult',\$5::jsonb\)/);
+  assert.match(sql, /COALESCE\(m\.payload,'\{\}'::jsonb\)/);
+  assert.deepEqual(statements[1].params, [id, "accepted", "early-callback-id", null, null]);
+});
 
 // The injected transaction inspects the exact production SQL boundary; real SQL execution is
 // covered separately by outbound-intent.db.test.mjs on the approved disposable database.
@@ -96,7 +156,7 @@ test("later callback carries strict outbound evidence into atomic unknown-intent
     messageEvent: { messageId: "known-id", type: "TEXT", data: { text: "hello" } },
   });
   let statements;
-  await ingestWoztellEvent(event, async (input) => {
+  await ingestWoztellEvent(event, "live_webhook", async (input) => {
     statements = input;
     return input.map((_, index) =>
       index === input.length - 1 ? [{ contact_id: id, conversation_id: id, inserted: false }] : [],

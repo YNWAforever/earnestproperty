@@ -42,7 +42,8 @@ const copy = {
   },
   suspend: {
     title: "確認停用帳戶",
-    description: "停用會立即移除 Earnest 存取權；既有工作必須先安全交接。",
+    description:
+      "停用會立即移除 Earnest 存取權；既有工作必須先安全交接。WhatsApp 交接會先建立分派要求，請在收件匣核對 WOZTELL 確認結果。",
     label: "停用帳戶",
   },
   reactivate: {

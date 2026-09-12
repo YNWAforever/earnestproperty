@@ -1,0 +1,40 @@
+export type TrackingLinkInput = {
+  placementSource: "website" | "28hse" | "youtube" | "other";
+  entryPointType: "sales" | "reception";
+  publicListingNo?: string | null;
+  propertyId?: string | null;
+  dealType?: "sale" | "rent" | null;
+  requestedStaffId?: string | null;
+  branchId?: string | null;
+  externalListingId?: string | null;
+  videoId?: string | null;
+  placementVerified?: boolean;
+  enabled: boolean;
+};
+export type TrackingLink = TrackingLinkInput & {
+  id: string;
+  code: string;
+  version: number;
+  channelId: string;
+  createdAt: string;
+  placementVerifiedAt: string | null;
+};
+export type WhatsappEnquiry = {
+  id: string;
+  conversationId: string;
+  name: string | null;
+  propertyId: string | null;
+  publicListingNo: string | null;
+  placementSource: string;
+  attributionMethod: string;
+  requestedStaffId: string | null;
+  entryPointType: string;
+  serviceState: string;
+  associationReview: boolean;
+  customerMessageAt: string | null;
+  webhookReceivedAt: string;
+  responseDueAt: string | null;
+  firstHumanResponseAt: string | null;
+  effectsEligible: boolean;
+  crmLeadId: string | null;
+};

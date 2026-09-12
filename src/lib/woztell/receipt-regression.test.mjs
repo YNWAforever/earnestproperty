@@ -14,7 +14,7 @@ test("delivery receipt does not create a contact, conversation or inbound messag
     timestamp: 1700000000,
   });
   const calls = [];
-  const result = await ingestWoztellEvent(event, async (statements) => {
+  const result = await ingestWoztellEvent(event, "live_webhook", async (statements) => {
     calls.push(...statements);
     return statements.map(() => [{ contact_id: null, conversation_id: null, inserted: false }]);
   });
@@ -35,7 +35,7 @@ test("wrapped provider error is a receipt, not an UNKNOWN content bubble", async
     },
   });
   const calls = [];
-  const result = await ingestWoztellEvent(event, async (statements) => {
+  const result = await ingestWoztellEvent(event, "live_webhook", async (statements) => {
     calls.push(...statements);
     return statements.map(() => []);
   });
