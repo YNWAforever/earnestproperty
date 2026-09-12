@@ -76,3 +76,54 @@ test("AT30 unavailable or missing protected owner never falls through to request
     { staffId: null, reason: "protected_owner_unavailable" },
   );
 });
+
+test("direct Inbox mapping accepts no chatbot node and keeps routing disabled", async () => {
+  const { saveStaffChannel } = await import("./assignment.server.ts");
+  const previous = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  process.env.EP_WA_COMPANY_CHANNEL_ID = "fixture-channel";
+  const id = "11111111-1111-4111-8111-111111111111";
+  let parameters;
+  try {
+    await saveStaffChannel(
+      {
+        staffId: id,
+        inboxUserId: "inbox-user",
+        folderId: "main",
+        routingNodeId: "",
+        branchId: null,
+        verificationRef: "synthetic-readback",
+        eligible: false,
+      },
+      { staffId: id, roles: ["admin"] },
+      {
+        query: async (_sql, params) => {
+          parameters = params;
+          return [{ id }];
+        },
+        transaction: async () => {
+          throw new Error("Unexpected transaction");
+        },
+      },
+    );
+    assert.equal(parameters[4], "");
+    assert.equal(parameters[7], false);
+    await assert.rejects(
+      saveStaffChannel(
+        {
+          staffId: id,
+          inboxUserId: "inbox-user",
+          folderId: "",
+          routingNodeId: "",
+          branchId: null,
+          verificationRef: "synthetic-readback",
+          eligible: false,
+        },
+        { staffId: id, roles: ["admin"] },
+      ),
+      /too_small/,
+    );
+  } finally {
+    if (previous === undefined) delete process.env.EP_WA_COMPANY_CHANNEL_ID;
+    else process.env.EP_WA_COMPANY_CHANNEL_ID = previous;
+  }
+});
