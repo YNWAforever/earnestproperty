@@ -106,3 +106,32 @@ test("health separates opens, enquiry attribution and human evidence; unknowns r
   assert.ok(health.reasons.includes("SEND_RECONCILIATION_REQUIRED"));
   assert.ok(health.reasons.includes("SERVICE_WORKER_NOT_OBSERVED"));
 });
+
+test("routing-only policy can be approved without customer-service rules", async () => {
+  const rules = {
+    ...draftServicePolicy().rules,
+    purpose: "routing_notifications",
+    managerStaffId: id,
+    freshnessSeconds: 300,
+  };
+  const row = { id, version: 1, status: "draft", rules, copy_version: "routing-v1" };
+  let writes = 0;
+  const result = await approveServicePolicy(
+    {
+      id,
+      version: 1,
+      effectiveAt: "2026-09-12T00:00:00Z",
+      decisionEvidenceRef: "synthetic-routing-only",
+    },
+    actor,
+    {
+      query: async (sql) => (sql.includes("SELECT *") ? [row] : [{ id }]),
+      transaction: async () => {
+        writes++;
+        return [[], [{ id }]];
+      },
+    },
+  );
+  assert.deepEqual(result, { ok: true });
+  assert.equal(writes, 1);
+});

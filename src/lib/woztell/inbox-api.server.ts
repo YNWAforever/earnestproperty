@@ -108,7 +108,7 @@ export function createInboxApi(
     if (
       t.channelId !== scope.channelId ||
       t.memberId !== scope.memberId ||
-      (t.userId !== null && typeof t.userId !== "string") ||
+      (t.userId !== undefined && t.userId !== null && typeof t.userId !== "string") ||
       typeof t.folder !== "string"
     )
       throw new Error("WOZTELL_INBOX_SCOPE_UNVERIFIED");

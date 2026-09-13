@@ -9,6 +9,7 @@ import {
 } from "./service-policy.ts";
 export const serviceRulesSchema = z
   .object({
+    purpose: z.enum(["full_service", "routing_notifications"]).optional(),
     timezone: z.string().max(100).nullable(),
     weekdays: z.array(z.number().int().min(0).max(6)).max(7).nullable(),
     holidays: z
