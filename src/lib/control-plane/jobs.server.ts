@@ -1,3 +1,4 @@
+import { wakeAfterCommit, laneForJob } from "./job-wake.server.ts";
 import {
   getJobHandler,
   isRetryableJobError,
@@ -75,10 +76,12 @@ export function buildEnqueueJobStatement(
     ],
   };
 }
-export async function enqueueJob(input: EnqueueJobInput) {
+export async function enqueueJob(input: EnqueueJobInput, options: { wake?: boolean } = {}) {
   const statement = buildEnqueueJobStatement(input);
   const { queryRows } = await import("../neon/db.server.ts");
-  return (await queryRows<JobRow>(statement.statement, statement.params))[0];
+  const row = (await queryRows<JobRow>(statement.statement, statement.params))[0];
+  if (row?.status === "queued" && options.wake !== false) wakeAfterCommit(laneForJob(row.job_type));
+  return row;
 }
 
 export async function claimJobs(
@@ -289,6 +292,7 @@ export async function retryJob(jobId: string, audit?: JobCommandAudit) {
      SELECT * FROM retried`,
     [jobId, audit?.actorStaffId ?? null, audit?.requestId ?? null],
   );
+  if (rows[0]) wakeAfterCommit(laneForJob(rows[0].job_type));
   return rows[0] ?? null;
 }
 

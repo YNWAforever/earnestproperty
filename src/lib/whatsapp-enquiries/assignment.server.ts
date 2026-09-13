@@ -1,3 +1,4 @@
+import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import "@tanstack/react-start/server-only";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { randomUUID } from "node:crypto";
@@ -53,6 +54,7 @@ export async function requestConversationAssignment(
     },
   ]);
   if (!result[1]?.[0]) throw new Response("Forbidden", { status: 403 });
+  if (result[1][0].pending_assignment_id) wakeAfterCommit("service");
   return {
     ok: true,
     assignment: {

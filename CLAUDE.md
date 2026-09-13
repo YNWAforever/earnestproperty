@@ -82,7 +82,7 @@ vercel.ts         Vercel config-as-TS: crons + redirects (not vercel.json)
   degrades every WhatsApp CTA to `/contact`. `prebuild` fails Vercel builds on it;
   local dev only warns. See `.env.example`.
 - Vercel Hobby allows one cron run/day — the daily entries in `vercel.ts` are a
-  safety floor; real 5/10-minute cadence comes from `workers/cron/`. Both drain
+  safety floor; event-driven job wakes use Vercel waitUntil and a 15-minute recovery sweep comes from `workers/cron/`. Both drain
   `ops_jobs` under a lease, so running both is safe.
 - Public site copy is **zh-HK**. No i18n framework — strings are inline.
 

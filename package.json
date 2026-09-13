@@ -83,7 +83,8 @@
     "test:whatsapp-enquiries:db": "node --test src/lib/whatsapp-enquiries/workflow.db.test.mjs src/lib/whatsapp-enquiries/episodes.db.test.mjs src/lib/whatsapp-enquiries/assignment.db.test.mjs src/lib/whatsapp-enquiries/service-workflow.db.test.mjs",
     "test:staff-notifications": "node --test src/lib/whatsapp-enquiries/staff-reference.test.mjs src/lib/whatsapp-enquiries/staff-notifications.test.mjs && bun test src/components/admin/StaffNotificationCard.test.tsx",
     "test:staff-notifications:db": "node --test src/lib/whatsapp-enquiries/staff-reference.db.test.mjs src/lib/whatsapp-enquiries/staff-notifications.db.test.mjs",
-    "test:staff-notifications:e2e": "node scripts/test-staff-handoff-browser.mjs"
+    "test:staff-notifications:e2e": "node scripts/test-staff-handoff-browser.mjs",
+    "test:job-wake": "node --test src/lib/control-plane/job-wake.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",
@@ -127,6 +128,7 @@
     "@tanstack/react-start": "^1.167.14",
     "@tanstack/router-plugin": "^1.167.10",
     "@tanstack/zod-adapter": "^1.166.9",
+    "@vercel/functions": "3.9.7",
     "cheerio": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

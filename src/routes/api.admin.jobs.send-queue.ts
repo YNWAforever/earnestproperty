@@ -17,12 +17,15 @@ async function drainSendQueue({ request }: { request: Request }) {
 
   const campaigns = await findEligibleCampaigns();
   for (const { campaign_id: campaignId, queue_run_at: queueRunAt } of campaigns) {
-    await enqueueJob({
-      jobType: "woztell.campaign.deliver",
-      payloadVersion: 1,
-      payload: { campaignId },
-      idempotencyKey: campaignDeliveryIdempotencyKey(campaignId, queueRunAt),
-    });
+    await enqueueJob(
+      {
+        jobType: "woztell.campaign.deliver",
+        payloadVersion: 1,
+        payload: { campaignId },
+        idempotencyKey: campaignDeliveryIdempotencyKey(campaignId, queueRunAt),
+      },
+      { wake: false },
+    );
   }
   const counts = await runClaimedJobs({
     workerId: `legacy-send-queue:${crypto.randomUUID()}`,

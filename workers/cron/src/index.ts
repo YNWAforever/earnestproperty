@@ -1,13 +1,4 @@
-/**
- * Cron-only Worker for the Earnest Property job queue.
- *
- * Vercel Hobby allows a cron to run at most once per day, but `ops_jobs` needs
- * draining every few minutes or queued WhatsApp campaigns and AI knowledge
- * rebuilds return 202 and then sit. Cloudflare Cron Triggers are available on
- * the Workers free plan, so scheduling lives here and the app stays on Vercel.
- *
- * This Worker serves no HTTP traffic. It only implements `scheduled`.
- */
+/** Low-frequency recovery for durable jobs; producers wake the app after commit. */
 
 type Env = {
   SITE_ORIGIN: string;
@@ -19,16 +10,18 @@ type Env = {
  * wrangler.jsonc exactly — Cloudflare passes the expression back verbatim, so a
  * mismatch silently does nothing rather than erroring.
  */
-const SCHEDULE: Record<string, string> = {
-  "* * * * *": "/api/admin/whatsapp/service-worker",
-  "*/5 * * * *": "/api/admin/control-plane/worker",
-  "*/10 * * * *": "/api/admin/jobs/send-queue",
+const SCHEDULE: Record<string, string[]> = {
+  "*/15 * * * *": [
+    "/api/admin/whatsapp/service-worker",
+    "/api/admin/control-plane/worker",
+    "/api/admin/jobs/send-queue",
+  ],
 };
 
 export default {
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    const path = SCHEDULE[event.cron];
-    if (!path) {
+    const paths = SCHEDULE[event.cron];
+    if (!paths) {
       console.error(`No endpoint mapped for cron "${event.cron}" — check wrangler.jsonc`);
       return;
     }
@@ -40,7 +33,9 @@ export default {
     // waitUntil keeps the Worker alive for the response. Without it the fetch can
     // be cancelled the moment `scheduled` returns, so a job could be claimed and
     // then abandoned mid-run.
-    ctx.waitUntil(drain(new URL(path, env.SITE_ORIGIN).href, env.CRON_SECRET));
+    ctx.waitUntil(
+      Promise.all(paths.map((path) => drain(new URL(path, env.SITE_ORIGIN).href, env.CRON_SECRET))),
+    );
   },
 };
 

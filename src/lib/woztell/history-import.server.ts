@@ -1,3 +1,4 @@
+import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import { createHash } from "node:crypto";
 import { fetchWoztellHistoryPage, chatNodeToEvent } from "./woztell-history.server.ts";
 export async function startHistoryImport(staffId: string, mode: "forward" | "backward") {
@@ -20,6 +21,7 @@ export async function startHistoryImport(staffId: string, mode: "forward" | "bac
  ) SELECT id,completed FROM run`,
     [id, mode, staffId, channel],
   );
+  if (rows[0] && !rows[0].completed) wakeAfterCommit("general");
   return rows[0];
 }
 export type HistoryJobPayload = {
