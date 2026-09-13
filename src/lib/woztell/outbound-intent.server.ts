@@ -1,3 +1,4 @@
+import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { parseWoztellProviderResult, type ParsedWoztellProviderResult } from "./provider-result.ts";
 
@@ -110,6 +111,7 @@ export async function enqueueOutboundIntent(
     ],
   );
   if (!rows[0]) throw invalid("OUTBOUND_CONFLICT_OR_NOT_FOUND");
+  if (rows[0].state === "queued") wakeAfterCommit("service");
   return rows[0];
 }
 

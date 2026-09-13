@@ -1,81 +1,30 @@
 # earnestproperty-cron
 
-A Cloudflare Worker that does one thing: fire the job-queue drain endpoints on a
-schedule. It serves no traffic and has no routes.
+Recovery sweep for durable `ops_jobs`. One `*/15 * * * *` trigger invokes the service, general control-plane, and legacy campaign drains concurrently. Each endpoint fails independently and authenticates using the existing CRON_SECRET. The worker serves no HTTP traffic.
 
-## Why this exists
+New live enquiry captures, manual assignment/reply requests, standalone job enqueue/retry and history-import requests wake their existing leased runner after commit when `OPS_EVENT_WAKE_ENABLED=true` in the app. Vercel `waitUntil` retains the request lifetime; the webhook returns without waiting for provider work. Each wake uses the existing bounded runner (up to 20 jobs, 45-second between-job budget). Job chains beyond this budget, delayed jobs, interrupted/failed wakes and expired leases are recovered by the sweep. Delay can be 15 minutes plus provider/scheduler runtime; this is not a precise deadline scheduler.
 
-`ops_jobs` needs draining every few minutes. Without it, queued WhatsApp campaigns
-and AI knowledge rebuilds return `202` and then sit forever.
+All delivery permissions, approved policies and capability checks remain in the existing handlers. The wake flag grants no sending permission. Future timed customer-service features need a separate latency review before activation. The current routing-only policy has customer autoreplies and escalation disabled.
 
-Vercel **Hobby allows one cron run per day**, and a deploy carrying `*/5 * * * *`
-fails outright:
+## Release order
 
-> Hobby accounts are limited to daily cron jobs. This cron expression
-> (`*/5 * * * *`) would run more than once per day.
+1. Deploy the app with the wake implementation. Enable OPS_EVENT_WAKE_ENABLED=true for production and redeploy. Preserve all WhatsApp permission flags.
+2. Verify post-commit wake logs and normal enquiry processing. Do not create synthetic production customer records or send test messages without authorization.
+3. Deploy the recovery worker: `npx wrangler deploy --config workers/cron/wrangler.jsonc`.
+4. Verify `npx wrangler tail earnestproperty-cron`: one trigger runs all three endpoints, authenticated, with count-only app responses.
 
-The options were: upgrade to Vercel Pro, accept once-a-day draining, or schedule
-from somewhere else. **Cloudflare Cron Triggers are included on the Workers free
-plan**, so scheduling moved here and the app stays on Vercel unchanged.
+Existing CRON_SECRET is retained. No migration or secret rotation is needed. `vercel.ts` daily fallback schedules remain in place. Live secrets must never be printed or committed.
 
-`vercel.ts` still declares the same three endpoints on a daily schedule. That is
-deliberate — if this Worker is unconfigured or down, jobs still drain within 24
-hours instead of never. Both endpoints claim jobs under a lease, so two
-schedulers hitting them is safe.
+## Rollback
 
-## Setup
+Restore the previous worker source/config from commit f03b223d5087b1517080a1887c07ee7701fc9d55 and deploy it first (old 1/5/10-minute recovery). Then set OPS_EVENT_WAKE_ENABLED=false and redeploy the app if immediate wakes are faulty. Keep durable jobs and existing idempotency keys; never replay unknown provider outcomes by resetting state. No schema rollback.
 
-From the repo root:
+## Verification
 
-```bash
-npx wrangler deploy --config workers/cron/wrangler.jsonc
-```
+`npm run test:job-wake`, `npm run test:whatsapp-enquiries`, `npm run test:control-plane`, `npm run test:woztell`, `npm run test:staff-notifications`, `npm run test:cron`, `npm run typecheck`, `npm run lint`.
 
-Then set the shared secret. It must match `CRON_SECRET` in the Vercel project
-exactly, or every call returns 401 and the queue silently stops draining:
+For local worker scheduling: `npx wrangler dev --config workers/cron/wrangler.jsonc --test-scheduled`, then request `http://localhost:8787/__scheduled?cron=*/15+*+*+*+*` using synthetic local credentials and a local app only.
 
-```bash
-npx wrangler secret put CRON_SECRET --config workers/cron/wrangler.jsonc
-```
+Empty scheduled endpoint requests decrease from 1,872/day to 288/day, grouped into 96 wake periods. This does not guarantee a CU-hour saving: public traffic, admin polling, connection behavior and other jobs may still keep Neon awake. Observe endpoint suspension via the Neon control plane; querying SQL to check idleness itself wakes the database.
 
-To read the current value from Vercel (run from the repo root so the CLI resolves
-the right project):
-
-```bash
-vercel env pull .env.vercel --environment=production
-```
-
-## Verifying it works
-
-Trigger a run without waiting for the schedule:
-
-```bash
-npx wrangler dev --config workers/cron/wrangler.jsonc --test-scheduled
-```
-
-then in another terminal:
-
-```bash
-curl "http://localhost:8787/__scheduled?cron=*/5+*+*+*+*"
-```
-
-Live logs:
-
-```bash
-npx wrangler tail earnestproperty-cron
-```
-
-A healthy run logs the endpoint and a `200` with the claimed/succeeded counts. A
-`401` means the secret has drifted from Vercel's.
-
-## Changing the schedule
-
-Cron expressions live in `wrangler.jsonc` under `triggers.crons`, and each one is
-mapped to an endpoint in `src/index.ts`. **The keys in `SCHEDULE` must match the
-expressions exactly** — Cloudflare passes the expression back verbatim, so a
-mismatch does nothing rather than erroring.
-
-## If you upgrade Vercel to Pro
-
-This Worker becomes redundant. Move the sub-daily schedules back into
-`vercel.ts`'s `crons` array and delete this directory.
+Platform reference: https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package

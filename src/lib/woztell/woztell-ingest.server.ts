@@ -1,3 +1,4 @@
+import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import "@tanstack/react-start/server-only";
 import { normalizeAdminPhone } from "../neon/admin-workflow.ts";
 import { isOptOutText, outboundWoztellEvidence } from "./woztell.server.ts";
@@ -28,6 +29,7 @@ export async function ingestWoztellEvent(
     mode?: EnquiryMode;
     schemaAvailable?: () => Promise<boolean>;
     now?: Date;
+    wake?: () => void;
   } = {},
 ): Promise<IngestOutcome> {
   if (origin !== "live_webhook" && origin !== "history_import")
@@ -219,6 +221,7 @@ export async function ingestWoztellEvent(
     throw Object.assign(new Error("WOZTELL_IDENTITY_CONFLICT"), {
       code: "WOZTELL_IDENTITY_CONFLICT",
     });
+  if (workflowStatements.length > 0) (options.wake ?? (() => wakeAfterCommit("service")))();
   return {
     contactId: row.contact_id,
     conversationId: row.conversation_id,

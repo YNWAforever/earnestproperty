@@ -152,6 +152,7 @@ jobs:
       - run: npm run test:operations
 
       - run: npm run test:control-plane
+      - run: npm run test:job-wake
       - run: npm run test:team
       - run: npm run test:property-experience
       - run: npm run test:content-copilot

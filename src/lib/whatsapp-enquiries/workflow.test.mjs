@@ -122,3 +122,40 @@ test("Active mode is explicit and invalid modes fail closed", async () => {
   assert.equal(enquiryMode("active"), "active");
   assert.throws(() => enquiryMode("arbitrary"), /supports/);
 });
+
+test("live workflow wake follows commit even in a history/live transcript race", async () => {
+  const order = [];
+  await ingestWoztellEvent(
+    event,
+    "live_webhook",
+    async (statements) => {
+      order.push("commit");
+      return statements.map(() => [{ contact_id: "c", conversation_id: "v", inserted: false }]);
+    },
+    { mode: "observe", schemaAvailable: async () => true, wake: () => order.push("wake") },
+  );
+  assert.deepEqual(order, ["commit", "wake"]);
+});
+test("failed commit and history imports never wake live enquiry processing", async () => {
+  let wakes = 0;
+  const options = { mode: "observe", schemaAvailable: async () => true, wake: () => wakes++ };
+  await assert.rejects(
+    ingestWoztellEvent(
+      event,
+      "live_webhook",
+      async () => {
+        throw new Error("rollback");
+      },
+      options,
+    ),
+    /rollback/,
+  );
+  await ingestWoztellEvent(
+    event,
+    "history_import",
+    async (statements) =>
+      statements.map(() => [{ contact_id: "c", conversation_id: "v", inserted: true }]),
+    options,
+  );
+  assert.equal(wakes, 0);
+});
