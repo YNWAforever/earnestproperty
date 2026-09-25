@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { getSql } from "@/lib/neon/db.server";
+import { maybePruneExpiredRateLimitBuckets } from "./rate-limit-prune";
 
 type RateLimitInput = {
   key: string;
@@ -44,6 +45,7 @@ export async function enforceRateLimit({
   if (count > limit) {
     throw new Response("Too Many Requests", { status: 429 });
   }
+  await maybePruneExpiredRateLimitBuckets((statement) => sql.query(statement));
 }
 
 /**

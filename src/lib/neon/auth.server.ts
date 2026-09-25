@@ -140,7 +140,12 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
     return rows
       .map((row) => {
         if (typeof row.publicKey !== "string") return null;
-        return JSON.parse(row.publicKey) as JsonWebKey;
+        try {
+          return JSON.parse(row.publicKey) as JsonWebKey;
+        } catch {
+          // A bad retired key must not hide a valid key later in the set.
+          return null;
+        }
       })
       .filter((jwk): jwk is JsonWebKey => Boolean(jwk));
   }
@@ -169,9 +174,13 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
     const signature = base64UrlToBytes(encodedSignature);
     for (const jwk of await listNeonAuthJwks()) {
       if (jwk.kty !== "OKP" || jwk.crv !== "Ed25519") continue;
-      const key = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["verify"]);
-      if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, signedData)) {
-        return payload;
+      try {
+        const key = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["verify"]);
+        if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, signedData)) {
+          return payload;
+        }
+      } catch {
+        // Ignore one unusable key; a different active key may verify the JWT.
       }
     }
 

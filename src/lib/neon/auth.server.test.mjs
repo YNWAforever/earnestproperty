@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync, sign } from "node:crypto";
 import test from "node:test";
 
-import { createStaffAccessResolver } from "./auth.server.ts";
+import { createNeonSessionReader, createStaffAccessResolver } from "./auth.server.ts";
 
 // requireStaffAccess is the security boundary for every admin server function
 // and had no unit coverage: its binding rules were only ever exercised live.
@@ -317,3 +318,43 @@ for (const verified of [null, "true", 1]) {
     }
   });
 }
+
+
+test("a malformed retired JWK does not reject a JWT signed by a valid key", async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
+  const claims = {
+    sub: "auth-kevin",
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    ...(process.env.NEON_AUTH_ISSUER ? { iss: process.env.NEON_AUTH_ISSUER } : {}),
+    ...(process.env.NEON_AUTH_AUDIENCE ? { aud: process.env.NEON_AUTH_AUDIENCE } : {}),
+  };
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const data = `${header}.${payload}`;
+  const token = `${data}.${sign(null, Buffer.from(data), privateKey).toString("base64url")}`;
+  const queryRows = async (statement) => {
+    if (statement.includes("FROM neon_auth.jwks")) {
+      return [
+        { publicKey: "{bad-json" },
+        { publicKey: JSON.stringify({ kty: "OKP", crv: "Ed25519", x: "bad" }) },
+        { publicKey: JSON.stringify(publicKey.export({ format: "jwk" })) },
+      ];
+    }
+    if (statement.includes('FROM neon_auth."user"')) {
+      return [{ id: "auth-kevin", email: "kevin@example.test", name: "Kevin" }];
+    }
+    return [];
+  };
+  const previousAuthUrl = process.env.NEON_AUTH_BASE_URL;
+  process.env.NEON_AUTH_BASE_URL = "https://auth.invalid";
+  try {
+    const read = createNeonSessionReader(queryRows);
+    const result = await read(new Request("https://earnest.test/admin", {
+      headers: { authorization: `Bearer ${token}` },
+    }));
+    assert.equal(result?.user.id, "auth-kevin");
+  } finally {
+    if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
+    else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
+  }
+});

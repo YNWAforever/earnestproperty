@@ -32,5 +32,18 @@ export function safeAdminRedirect(value: unknown): string {
   if (path !== "/admin" && !path.startsWith("/admin/") && !path.startsWith("/admin?")) {
     return DEFAULT_REDIRECT;
   }
+  // Browsers normalise dot segments and backslashes before navigating.
+  // Check the resolved destination as well as the raw prefix above.
+  try {
+    const resolved = new URL(path, "https://redirect.invalid");
+    if (
+      resolved.origin !== "https://redirect.invalid" ||
+      (resolved.pathname !== "/admin" && !resolved.pathname.startsWith("/admin/"))
+    ) {
+      return DEFAULT_REDIRECT;
+    }
+  } catch {
+    return DEFAULT_REDIRECT;
+  }
   return path;
 }
