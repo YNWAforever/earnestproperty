@@ -102,6 +102,7 @@ test("CI runs every test script that does not need a database or browser server"
     "test:staff-notifications:db",
     "test:staff-notifications:e2e",
     "test:control-plane:db",
+    "test:live-agent:local-db",
     "test:mls:db",
     "test:property-sync:db",
     "test:property-sync:publication:db",
