@@ -7185,3 +7185,18 @@ test("self-review: run-start lookup preserves an exact pre-abort reason without 
   );
   assert.equal(client.calls.length, 0);
 });
+
+test("publication snapshots reject __proto__ keys before SQL", async () => {
+  const batch = approvedBatch();
+  Object.defineProperty(batch.proposals[0], "__proto__", {
+    enumerable: true,
+    value: null,
+  });
+  const client = fakePublicationClient();
+
+  await assert.rejects(
+    createSyncRepository({ client }).publishBatch(batch),
+    /unexpected|__proto__/i,
+  );
+  assert.equal(client.calls.length, 0);
+});

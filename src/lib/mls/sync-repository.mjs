@@ -727,6 +727,7 @@ function snapshotDataGraph(value, label, seen = new Map(), depth = 0) {
     }
   } else {
     for (const key of Object.keys(descriptors)) {
+      if (key === "__proto__") throw new TypeError(`${label} contains an unexpected key`);
       const descriptor = descriptors[key];
       if (!descriptor.enumerable) throw new TypeError(`${label} contains an unexpected hidden key`);
       output[key] = snapshotDataGraph(descriptor.value, label, seen, depth + 1);
