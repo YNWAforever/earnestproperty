@@ -286,6 +286,18 @@ test("provider adapter requests reset and session revocation without exposing pr
   );
 });
 
+test("provider error logs exclude response content", async (t) => {
+  const logs = [];
+  t.mock.method(console, "error", (...args) => logs.push(args));
+  const { provider } = createProvider([response({ detail: "provider-private-marker" }, 401)]);
+  await assert.rejects(
+    provider.resolveUser({ authUserId: "auth-1", request: authorizedRequest }),
+    (error) => error instanceof StaffIdentityProviderError && error.status === 401,
+  );
+  assert.ok(logs.length > 0);
+  assert.doesNotMatch(JSON.stringify(logs), /provider-private-marker/);
+});
+
 test("provider statuses and network errors map to safe stable codes", async (t) => {
   const cases = [
     [400, "PROVIDER_INVALID_REQUEST"],

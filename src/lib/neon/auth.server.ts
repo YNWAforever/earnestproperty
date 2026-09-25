@@ -432,16 +432,23 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
         return { staff: null, denial: STAFF_EMAIL_UNVERIFIED };
       }
 
-      if (!deferProfileBind)
-        await queryRows(
+      if (!deferProfileBind) {
+        const bound = await queryRows(
           `
         UPDATE staff_users
         SET auth_user_id = $1, updated_at = now()
         WHERE id = $2
           AND auth_user_id IS NULL
+          AND active = true
+          AND lower(email) = lower($3)
+        RETURNING id::text AS id, auth_user_id
         `,
-          [authUserId, row.id],
-        ).catch(() => []);
+          [authUserId, row.id, email],
+        );
+        if (bound[0]?.id !== row.id || bound[0]?.auth_user_id !== authUserId) {
+          return { staff: null, denial: null };
+        }
+      }
     }
     return {
       staff: {

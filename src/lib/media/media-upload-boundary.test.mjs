@@ -75,7 +75,10 @@ function route({ allowed = true, token = "test_blob_token_store" } = {}) {
     },
   };
 }
-function request(file = new File(["ok"], "a.png", { type: "image/png" }), headers = {}) {
+
+const pngSignature = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+function request(file = new File([pngSignature], "a.png", { type: "image/png" }), headers = {}) {
   const body = new FormData();
   body.set("file", file);
   body.set("uploadId", "22222222-2222-4222-8222-222222222222");
@@ -122,6 +125,40 @@ test("unsupported, oversized, empty, malformed bodies and missing credentials ne
   assert.equal((await missing.post(request())).status, 503);
   assert.equal(missing.provider, 0);
 });
+
+test("real JPEG, PNG, and WebP headers pass the upload boundary", async () => {
+  for (const [path, type] of [
+    ["public/og-cover.jpg", "image/jpeg"],
+    ["public/logo-mark.png", "image/png"],
+    ["public/responsive/hero-front-2b0f006c1f-320.webp", "image/webp"],
+  ]) {
+    const f = route();
+    const file = new File([readFileSync(path)], "image", { type });
+    assert.equal((await f.post(request(file))).status, 200, path);
+    assert.equal(f.provider, 1);
+  }
+});
+
+test("AVIF compatible brand passes the upload boundary", async () => {
+  const avifHeader = Uint8Array.from([
+    0, 0, 0, 24, 102, 116, 121, 112, 109, 105, 102, 49,
+    0, 0, 0, 0, 97, 118, 105, 102, 109, 105, 102, 49,
+  ]);
+  const f = route();
+  const file = new File([avifHeader], "image.avif", { type: "image/avif" });
+  assert.equal((await f.post(request(file))).status, 200);
+  assert.equal(f.provider, 1);
+});
+test("declared image type with non-image bytes never reaches Blob", async () => {
+  const f = route();
+  const forged = new File(["<html><script>alert(1)</script></html>"], "fake.png", {
+    type: "image/png",
+  });
+  const response = await f.post(request(forged));
+  assert.equal(response.status, 415);
+  assert.equal(f.provider, 0);
+});
+
 test("client preserves retry identity and signed receipt across calls and passes auth headers", async () => {
   const store = new Map();
   const requests = [];
