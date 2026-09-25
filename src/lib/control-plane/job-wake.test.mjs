@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { createJobWake } from "./job-wake.js";
+import { createJobWake, signalJobWake } from "./job-wake.js";
 
 test("disabled wake does not schedule or run any work", async () => {
   const pending = [],
@@ -87,4 +87,24 @@ test("database maintenance and content refresh have no idle schedules", () => {
   assert.match(migration, /workflow_dispatch:/);
   assert.match(migration, /neon\/migrations\/\*\*/);
   assert.match(properties, /workflow_dispatch:/);
+});
+
+test("stalled scheduler requests time out so the caller can fall back", async () => {
+  await assert.rejects(
+    signalJobWake({
+      url: "https://scheduler.example",
+      secret: "test-secret",
+      lane: "service",
+      timeoutMs: 20,
+      fetcher: async (_url, options) => {
+        assert.ok(options.signal instanceof AbortSignal);
+        await new Promise((_, reject) => {
+          options.signal.addEventListener("abort", () => reject(options.signal.reason), {
+            once: true,
+          });
+        });
+      },
+    }),
+    { name: "TimeoutError" },
+  );
 });
