@@ -5,7 +5,7 @@ import { test } from "node:test";
 const incremental = readFileSync(new URL("./api.youtube-sync.ts", import.meta.url), "utf8");
 const full = readFileSync(new URL("./api.youtube-sync.full.ts", import.meta.url), "utf8");
 
-test("daily route exposes cron GET and staff POST through the shared handlers", () => {
+test("incremental route retains protected GET and staff POST for manual sync", () => {
   assert.match(incremental, /createFileRoute\(["']\/api\/youtube-sync["']\)/);
   assert.match(incremental, /GET/);
   assert.match(incremental, /POST/);
@@ -13,7 +13,7 @@ test("daily route exposes cron GET and staff POST through the shared handlers", 
   assert.match(incremental, /handlers\.staff\(request\)/);
 });
 
-test("monthly route exposes only full cron GET", () => {
+test("full route retains its protected GET handler for manual sync", () => {
   assert.match(full, /createFileRoute\(["']\/api\/youtube-sync\/full["']\)/);
   assert.match(full, /handlers\.cron\(request, ["']full["']\)/);
   assert.doesNotMatch(full, /POST/);
@@ -45,12 +45,8 @@ test("public CMS video reads combine staff publication with source availability"
   assert.match(fetchCmsVideos, /SELECT id, title, video_url, description, sort_order, created_at/);
 });
 
-test("Vercel retains control-plane jobs and adds the two YouTube schedules", () => {
-  for (const existingPath of ["/api/admin/control-plane/worker", "/api/admin/jobs/send-queue"]) {
-    assert.ok(vercel.includes(existingPath), `${existingPath} must remain scheduled`);
-  }
-  assert.match(vercel, /path:\s*"\/api\/youtube-sync"[\s\S]*schedule:\s*"0 19 \* \* \*"/);
-  assert.match(vercel, /path:\s*"\/api\/youtube-sync\/full"[\s\S]*schedule:\s*"0 21 1 \* \*"/);
+test("Vercel does not invoke YouTube or job routes on an idle schedule", () => {
+  assert.match(vercel, /crons:\s*\[\s*\]/);
 });
 
 test("server-only configuration is documented without values", () => {

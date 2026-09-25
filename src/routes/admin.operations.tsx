@@ -116,7 +116,7 @@ function AdminOperations() {
       if (refreshedTab !== "overview") return;
 
       // Deliberately NOT cleared to null first: doing so unmounted the job and
-      // migration sections on every 30s tick, guaranteeing a flash and a layout
+      // migration sections on every refresh, guaranteeing a flash and a layout
       // jump mid-read. The values are replaced in place once the fetch resolves.
       setOverviewError(null);
       const jobsPromise = currentHealth.capabilities.jobsRead

@@ -22,8 +22,7 @@
     {
       "name": "earnest-mls-runner",
       "binding": "MLS_RUN_WORKFLOW",
-      "class_name": "MlsRunWorkflow",
-      "schedules": ["0 18 * * *"]
+      "class_name": "MlsRunWorkflow"
     }
   ],
   "vars": {

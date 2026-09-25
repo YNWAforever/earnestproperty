@@ -63,37 +63,43 @@ export async function persistWebsiteInquiry(query, input) {
       RETURNING inquiry_id
     ),`
     : "";
-  const contactValues = submissionId
-    ? "SELECT $1, $2, $3, $4, 'website', $6 FROM submission WHERE true"
-    : "VALUES ($1, $2, $3, $4, 'website', $6)";
+  // Public phone-only requests may fill blanks but cannot rewrite an existing identity or consent.
+  const sourceGuard = submissionId ? "EXISTS (SELECT 1 FROM submission)" : "true";
   const contactCte = normalizedPhone
     ? `
-      contact AS (
+      matched_contact AS (
+        UPDATE crm_contacts c SET
+          name = COALESCE(c.name, $1),
+          email = COALESCE(c.email, $4),
+          updated_at = now()
+        WHERE ${sourceGuard} AND c.id = (
+          SELECT id FROM crm_contacts
+          WHERE normalized_phone = $3
+            OR (length($3::text) = 11 AND left($3::text, 3) = '852'
+              AND normalized_phone = right($3::text, 8))
+          ORDER BY (normalized_phone = $3) DESC, id
+          LIMIT 1
+        )
+        RETURNING id
+      ),
+      inserted_contact AS (
         INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        ${contactValues}
+        SELECT $1, $2, $3, $4, 'website', $6
+        WHERE ${sourceGuard} AND NOT EXISTS (SELECT 1 FROM matched_contact)
         ON CONFLICT (normalized_phone) DO UPDATE SET
-          -- Existing values win. This endpoint is unauthenticated: the only
-          -- thing a submitter proves is that they typed a phone number, so
-          -- letting EXCLUDED win meant anyone who knew a customer's number
-          -- could rewrite that contact's name and email in the CRM. New values
-          -- still fill blanks, which is the case the public form is for.
           name = COALESCE(crm_contacts.name, EXCLUDED.name),
           email = COALESCE(crm_contacts.email, EXCLUDED.email),
-          -- Deliberately NOT "OR EXCLUDED.opt_in_whatsapp". Raising consent here
-          -- let an unauthenticated caller forge WhatsApp marketing opt-in for
-          -- any number already in the CRM, and a forged opt-in feeds straight
-          -- into real blast delivery (see campaign-delivery.server.ts).
           opt_in_whatsapp = crm_contacts.opt_in_whatsapp,
           updated_at = now()
         RETURNING id
-      )`
+      ),
+      contact AS (SELECT id FROM matched_contact UNION ALL SELECT id FROM inserted_contact)`
     : `
       contact AS (
         INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-        ${contactValues}
+        SELECT $1, $2, $3, $4, 'website', $6 WHERE ${sourceGuard}
         RETURNING id
       )`;
-
   const rows = await query(
     `
     WITH resolved_listing AS (

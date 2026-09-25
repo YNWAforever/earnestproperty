@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { runClaimedJobs } from "../lib/control-plane/jobs.server.ts";
+import { getNextJobDueAt } from "../lib/control-plane/jobs-next-due.ts";
+import { queryRows } from "../lib/neon/db.server.ts";
 
 async function drainJobs({ request }: { request: Request }) {
   const expected = process.env.CRON_SECRET;
@@ -11,8 +13,13 @@ async function drainJobs({ request }: { request: Request }) {
 
   const counts = await runClaimedJobs({
     workerId: `control-plane:${crypto.randomUUID()}`,
+    lane: "general",
     limit: 10,
     leaseSeconds: 60,
+  });
+  const nextDueAt = await getNextJobDueAt({
+    lane: "general",
+    query: (sql, params) => queryRows<{ due_at: unknown }>(sql, params),
   });
   return Response.json({
     claimed: counts.claimed,
@@ -20,18 +27,14 @@ async function drainJobs({ request }: { request: Request }) {
     retried: counts.retried,
     failed: counts.failed,
     cancelled: counts.cancelled,
+    nextDueAt,
   });
 }
 
 export const Route = createFileRoute("/api/admin/control-plane/worker")({
   server: {
     handlers: {
-      // Vercel Cron issues GET, and this path is scheduled in vercel.ts. With
-      // POST only, TanStack fell through to the SPA render instead of 405, so
-      // the documented "if the Cloudflare Worker is down, jobs still drain
-      // within 24h" backstop silently did not exist -- it had never run once.
-      // The Bearer CRON_SECRET check applies to both verbs; a drain endpoint
-      // reachable by GET is browser-navigable and prefetchable without it.
+      // Both verbs keep the same Bearer check for manual recovery calls.
       GET: drainJobs,
       POST: drainJobs,
     },

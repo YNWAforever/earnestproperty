@@ -215,8 +215,8 @@ test("live-agent handoff avoids fake Woztell conversations and implicit opt-in",
   // opt-in. The contact upsert preserves the stored value instead of OR-ing in the
   // caller-supplied flag (was previously `... OR EXCLUDED.opt_in_whatsapp`).
   assert.doesNotMatch(server, /OR\s+EXCLUDED\.opt_in_whatsapp/i);
-  assert.match(server, /opt_in_whatsapp = crm_contacts\.opt_in_whatsapp/);
-  assert.match(server, /session\.status\s+!==\s+"handoff_requested"/);
+  assert.match(server, /opt_in_whatsapp\s*=\s*crm_contacts\.opt_in_whatsapp/);
+  assert.match(server, /session\.status\s+===\s+"handoff_requested"/);
 
   assert.match(widget, /<Checkbox/);
   assert.match(widget, /handoffConsent/);

@@ -2,6 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
+import { readPublicJsonBody } from "@/lib/ai/read-public-json-body";
+
 import { createLiveAgentSession, toPublicLiveAgentSession } from "@/lib/ai/live-agent.server";
 import { clientIpFromRequest, enforceRateLimit } from "@/lib/ratelimit.server";
 
@@ -23,7 +25,13 @@ export const Route = createFileRoute("/api/live-agent/session")({
           throw err;
         }
 
-        const body = await readJsonBody(request);
+        let body: Record<string, unknown>;
+        try {
+          body = await readPublicJsonBody(request);
+        } catch (error) {
+          if (error instanceof Response) return error;
+          throw error;
+        }
         const { session, accessToken } = await createLiveAgentSession({
           anonymousId: typeof body.anonymousId === "string" ? body.anonymousId : null,
           sourcePath: typeof body.sourcePath === "string" ? body.sourcePath : null,
@@ -36,10 +44,3 @@ export const Route = createFileRoute("/api/live-agent/session")({
     },
   },
 });
-
-async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
-  const body = await request.json().catch(() => ({}));
-  return body && typeof body === "object" && !Array.isArray(body)
-    ? (body as Record<string, unknown>)
-    : {};
-}

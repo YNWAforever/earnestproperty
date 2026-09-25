@@ -44,10 +44,12 @@ wrangler.jsonc is the base configuration. It is private, has no HTTP routes,
 has no Workflow schedule, and is used for local verification, an unscheduled
 deployment, and the first manual shadow proof.
 
-wrangler.scheduled.jsonc is structurally equivalent to the base file and adds
-only the approved Workflow schedule 0 18 \* \* \*. Deploy it only after the
-manual shadow proof and the separately approved daily-shadow gate. The base
-defaults are MLS_SCHEDULED_MODE=shadow, MLS_PUBLISH_ENABLED=false, and
+wrangler.scheduled.jsonc is retained as a legacy deployment profile, but both
+profiles omit Workflow schedules. Wrangler rejects an empty schedules array.
+Neither profile declares a daily MLS run. Verify the live Workflow schedule
+after deployment. Production shadow and publish runs require a separately
+approved manual Workflow trigger. The defaults are
+MLS_SCHEDULED_MODE=shadow, MLS_PUBLISH_ENABLED=false, and
 MLS_MEDIA_RIGHTS_CONFIRMED=false.
 
 ## Runtime names

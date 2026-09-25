@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { allowedOperationTabs, resolveOperationTab } from "./operations-permissions.ts";
@@ -14,7 +15,6 @@ import {
   resolveOperationsRouteState,
   transitionOperationsHealthState,
 } from "./operations-route-state.ts";
-import { createOperationsPoller } from "./operations-polling.ts";
 
 const agent = {
   jobsRead: false,
@@ -149,75 +149,6 @@ test("control-plane client rejects successful envelopes without data", async () 
   );
 });
 
-test("poller pauses while hidden and refreshes immediately when visible", () => {
-  let visible = true;
-  let timerCallback;
-  let visibilityCallback;
-  let ticks = 0;
-  const poller = createOperationsPoller({
-    intervalMs: 30_000,
-    isVisible: () => visible,
-    subscribeVisibility: (next) => {
-      visibilityCallback = next;
-      return () => {
-        visibilityCallback = undefined;
-      };
-    },
-    setTimer: (next, ms) => {
-      assert.equal(ms, 30_000);
-      timerCallback = next;
-      return 1;
-    },
-    clearTimer: () => undefined,
-    onPulse: () => {
-      ticks += 1;
-    },
-  });
-
-  poller.start();
-  visible = false;
-  timerCallback();
-  assert.equal(ticks, 0);
-  visible = true;
-  visibilityCallback();
-  assert.equal(ticks, 1);
-  poller.stop();
-});
-
-test("poller installs one timer and listener, then removes both on stop", () => {
-  let setTimerCalls = 0;
-  let clearTimerCalls = 0;
-  let subscribeCalls = 0;
-  let unsubscribeCalls = 0;
-  const poller = createOperationsPoller({
-    intervalMs: 30_000,
-    isVisible: () => true,
-    subscribeVisibility: () => {
-      subscribeCalls += 1;
-      return () => {
-        unsubscribeCalls += 1;
-      };
-    },
-    setTimer: () => {
-      setTimerCalls += 1;
-      return 1;
-    },
-    clearTimer: () => {
-      clearTimerCalls += 1;
-    },
-    onPulse: () => undefined,
-  });
-
-  poller.start();
-  poller.start();
-  poller.stop();
-  poller.stop();
-  assert.equal(setTimerCalls, 1);
-  assert.equal(subscribeCalls, 1);
-  assert.equal(clearTimerCalls, 1);
-  assert.equal(unsubscribeCalls, 1);
-});
-
 function operationsHealth(capabilities) {
   return {
     status: "healthy",
@@ -235,7 +166,7 @@ test("Operations health failure preserves the last good snapshot and marks it st
     { type: "failure", error: "Refresh failed" },
   );
 
-  // Panels must stay mounted: dropping health to null on a transient 30s-tick
+  // Panels must stay mounted: dropping health to null on a transient manual refresh
   // failure destroyed the operator's filters, loaded pages and open dialogs.
   // Authorization is enforced per request by requireStaffPermission on every
   // /api/admin/control-plane/* handler, not by these client-side flags.
@@ -307,35 +238,20 @@ test("Operations health loader starts with only the injected health fetch", asyn
   assert.deepEqual(state, { health: operationsHealth(agent), error: null, stale: false });
 });
 
-test("poller ignores retained timer and visibility callbacks after stop", () => {
-  let visible = true;
-  let timerCallback;
-  let visibilityCallback;
-  let ticks = 0;
-  const poller = createOperationsPoller({
-    intervalMs: 30_000,
-    isVisible: () => visible,
-    subscribeVisibility: (listener) => {
-      visibilityCallback = listener;
-      return () => undefined;
-    },
-    setTimer: (listener) => {
-      timerCallback = listener;
-      return 1;
-    },
-    clearTimer: () => undefined,
-    onPulse: () => {
-      ticks += 1;
-    },
-  });
-
-  poller.start();
-  poller.stop();
-  timerCallback();
-  visible = false;
-  visibilityCallback();
-  visible = true;
-  visibilityCallback();
-
-  assert.equal(ticks, 0);
+test("idle admin views do not repeatedly query Neon", () => {
+  const files = [
+    new URL("./operations-polling.ts", import.meta.url),
+    new URL("../../../routes/admin.operations.tsx", import.meta.url),
+    new URL("../../../routes/admin.whatsapp.tsx", import.meta.url),
+    new URL("../../../routes/admin.leads_.command-center.tsx", import.meta.url),
+  ];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    assert.doesNotMatch(source, /setInterval\s*\(/, file.pathname + " has idle polling");
+    assert.doesNotMatch(source, /addEventListener\(["']focus/, file.pathname + " refreshes without a user action");
+  }
+  const whatsapp = readFileSync(files[2], "utf8");
+  const commandCenter = readFileSync(files[3], "utf8");
+  assert.match(whatsapp, /onClick=\{\(\) => \{[\s\S]*?refreshConversations\(\)/);
+  assert.match(commandCenter, /onClick=\{\(\) => void refresh\(\)\}/);
 });

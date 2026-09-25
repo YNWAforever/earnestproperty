@@ -21,6 +21,8 @@ const session = {
 function fixture({
   staffRow = null,
   emailVerified = false,
+  bindRows = [{ id: staffId, auth_user_id: session.user.id }],
+  bindError = false,
   getSession = async () => session,
 } = {}) {
   const queries = [];
@@ -32,6 +34,10 @@ function fixture({
       }
       if (statement.includes('"emailVerified"'))
         return [{ id: session.user.id, email: session.user.email, email_verified: emailVerified }];
+      if (statement.includes("UPDATE staff_users")) {
+        if (bindError) throw new Error("synthetic bind failure");
+        return bindRows;
+      }
       return [];
     },
     getSession,
@@ -66,7 +72,17 @@ test("an invited member whose Neon Auth email is verified is bound on first requ
   assert.deepEqual(access.roles, ["admin"]);
   const bind = queries.find((query) => /UPDATE staff_users/.test(query.statement));
   assert.ok(bind, "the row must be bound to the Neon Auth account");
-  assert.deepEqual(bind.params, ["auth-kevin", staffId]);
+  assert.deepEqual(bind.params, ["auth-kevin", staffId, "kevin@example.test"]);
+});
+
+test("a verified invited member is refused when another account wins the bind", async () => {
+  const { resolver } = fixture({ staffRow: invitedRow, emailVerified: true, bindRows: [] });
+  assert.equal((await denial(resolver.requireStaffAccess(request, ["admin"]))).status, 403);
+});
+
+test("a verified invited member is refused when binding fails", async () => {
+  const { resolver } = fixture({ staffRow: invitedRow, emailVerified: true, bindError: true });
+  await assert.rejects(resolver.requireStaffAccess(request, ["admin"]), /synthetic bind failure/);
 });
 
 test("an invited member whose Neon Auth email is NOT verified is refused with a distinct reason", async () => {

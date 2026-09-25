@@ -193,11 +193,10 @@ test("base deploy is private, unscheduled, and single-container", () => {
   expect(value.workflows[0].schedules).toBeUndefined();
 });
 
-test("scheduled config differs only by the approved daily Workflow schedule", () => {
+test("both MLS deployment configs explicitly disable recurring Workflow runs", () => {
   const base = config("wrangler.jsonc") as any;
   const scheduled = config("wrangler.scheduled.jsonc") as any;
-  expect(scheduled.workflows[0].schedules).toEqual(["0 18 * * *"]);
-  delete scheduled.workflows[0].schedules;
+  expect(scheduled.workflows[0].schedules).toBeUndefined();
   expect(scheduled).toEqual(base);
   expect(JSON.stringify(base)).not.toMatch(
     /DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|MLS_R2_SECRET_ACCESS_KEY/,

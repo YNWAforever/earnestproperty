@@ -279,3 +279,28 @@ test("body read timeouts retain the actionable timeout code", async () => {
   const result = await client.generateProposal({ system: "rules", prompt: "record" });
   assert.equal(result.error, "OPENCODE_GO_TIMEOUT");
 });
+
+test("OpenCode stops reading an oversized provider stream", async () => {
+  let cancelled = 0;
+  let pulls = 0;
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    fetchImpl: async () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            pulls += 1;
+            if (pulls <= 3) controller.enqueue(new Uint8Array(80_000));
+            else controller.close();
+          },
+          cancel() {
+            cancelled += 1;
+          },
+        }),
+      ),
+  });
+
+  const result = await client.generateProposal({ system: "rules", prompt: "record" });
+  assert.equal(result.error, "OPENCODE_GO_RESPONSE_INVALID");
+  assert.equal(cancelled, 1);
+});

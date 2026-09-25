@@ -21,6 +21,30 @@ const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 /** media_assets.owner_type is a bare TEXT column with no CHECK constraint. */
 const ALLOWED_OWNER_TYPES = ["property", "estate", "article", "agent", "cms"];
 
+async function hasMatchingImageSignature(file: File): Promise<boolean> {
+  const bytes = new Uint8Array(await file.slice(0, 256).arrayBuffer());
+  const has = (offset: number, signature: number[]) =>
+    signature.every((byte, index) => bytes[offset + index] === byte);
+
+  if (file.type === "image/jpeg") return has(0, [0xff, 0xd8, 0xff]);
+  if (file.type === "image/png")
+    return has(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (file.type === "image/webp")
+    return has(0, [0x52, 0x49, 0x46, 0x46]) && has(8, [0x57, 0x45, 0x42, 0x50]);
+  if (file.type === "image/avif") {
+    if (bytes.length < 16 || !has(4, [0x66, 0x74, 0x79, 0x70])) return false;
+    const boxSize =
+      bytes[0] * 0x1000000 + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
+    if (boxSize < 16 || boxSize > file.size) return false;
+    for (let offset = 8; offset + 4 <= Math.min(boxSize, bytes.length); offset += 4) {
+      if (offset === 12) continue; // minor version, not a brand
+      if (has(offset, [0x61, 0x76, 0x69, 0x66]) || has(offset, [0x61, 0x76, 0x69, 0x73]))
+        return true;
+    }
+  }
+  return false;
+}
+
 export const Route = createFileRoute("/api/admin/media/upload")({
   server: {
     handlers: {
@@ -79,6 +103,9 @@ export const Route = createFileRoute("/api/admin/media/upload")({
             { ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_UPLOAD_BYTES },
             { status: 413 },
           );
+        }
+        if (!(await hasMatchingImageSignature(file))) {
+          return Response.json({ ok: false, error: "INVALID_IMAGE_CONTENT" }, { status: 415 });
         }
 
         const uploadId = String(form.get("uploadId") ?? "");

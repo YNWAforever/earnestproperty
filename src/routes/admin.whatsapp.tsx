@@ -503,21 +503,6 @@ function AdminWhatsapp() {
     if (!isDesktop) setPanelOpen(true);
   }, [isDesktop, search.conversation, search.enquiry]);
 
-  // The inbox never auto-refreshed and an open conversation was never refetched
-  // at all: new customer messages simply never appeared while an agent read the
-  // thread, and 重新整理 only updated the left-hand list. On a page whose entire
-  // premise is a 24-hour reply window, that gap is the whole product.
-  useEffect(() => {
-    if (!user) return;
-    const interval = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      void refreshConversations();
-      const openId = selectedIdRef.current;
-      if (openId) void loadConversationDetail(openId, { background: true });
-    }, 30_000);
-    return () => window.clearInterval(interval);
-  }, [loadConversationDetail, refreshConversations, user]);
-
   function openConversation(id: string) {
     if (selectedIdRef.current !== id) {
       selectedIdRef.current = id;
@@ -804,7 +789,7 @@ function AdminWhatsapp() {
   return (
     <AdminShell
       title="WhatsApp 收件匣"
-      description="查看客戶訊息、分配負責同事及回覆；系統會提示目前可用的發送方式。"
+      description="查看客戶訊息、分配負責同事及回覆；按「重新整理」讀取新訊息。"
     >
       {user ? (
         <StaffNotificationPanel

@@ -1055,3 +1055,17 @@ test("WhatsApp selected enquiry is sent for text and template with association-b
   assert.match(route, /JSON\.stringify\(\[templateId,\s*enquirySelections\[targetId\]/);
   assert.match(route, /refreshKey=/);
 });
+
+test("campaign status and delivery job are committed in one transaction", () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const start = source.indexOf("export async function queueAdminCampaign(");
+  const end = source.indexOf("export async function ", start + 1);
+  assert.ok(start >= 0 && end > start);
+  const queue = source.slice(start, end);
+  assert.match(queue, /sql\.transaction\(/);
+  assert.match(queue, /WITH flipped AS[\s\S]*INSERT INTO ops_jobs/);
+  assert.match(queue, /INSERT INTO audit_logs/);
+  assert.doesNotMatch(queue, /await writeAudit\(/);
+  assert.match(queue, /wakeAfterCommit\("general"\)/);
+  assert.doesNotMatch(read("src/routes/api.admin.campaigns.$id.queue.ts"), /enqueueJob\(/);
+});

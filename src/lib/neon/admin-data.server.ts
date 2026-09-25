@@ -79,6 +79,7 @@ import {
   computeLeadPriority,
   resolveWhatsappStatus,
 } from "./command-center";
+import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "./phone-identity.ts";
 import { persistWebsiteInquiry } from "./website-inquiry.js";
 import {
   persistListingAlert,
@@ -91,6 +92,7 @@ import {
   VALUATION_CONSENT_VERSION,
 } from "./valuation-leads.js";
 import { woztellEnabled } from "../woztell/woztell.server";
+import { wakeAfterCommit } from "../control-plane/job-wake.server";
 
 /**
  * Row-ownership scope for the acting staff member.
@@ -778,7 +780,8 @@ type AudienceSummary = {
 // without silently dropping the ones an audience previously had no field for.
 // See createAdminAudienceFromSegment.
 const RECIPIENT_ELIGIBILITY_SQL = `
-SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp
+SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp,
+  ${marketingIdentitySafeSql("c")} AS identity_safe
 FROM crm_contacts c
 LEFT JOIN crm_leads l ON l.contact_id = c.id
 LEFT JOIN properties p ON p.id = l.property_id
@@ -884,15 +887,27 @@ function isEligibleAudienceRow(row: Record<string, unknown>) {
   return (
     Boolean(row.normalized_phone) &&
     row.opt_in_whatsapp === true &&
-    row.opted_out_whatsapp === false
+    row.opted_out_whatsapp === false &&
+    row.identity_safe !== false
   );
 }
 
+function uniqueEligibleAudienceRows(rows: Record<string, unknown>[]) {
+  const seenPhones = new Set<string>();
+  return rows.filter((row) => {
+    if (!isEligibleAudienceRow(row)) return false;
+    const phone = normalizeAdminPhone(row.normalized_phone);
+    if (!phone || seenPhones.has(phone)) return false;
+    seenPhones.add(phone);
+    return true;
+  });
+}
 function summarizeAudienceRows(rows: Record<string, unknown>[]): AudienceSummary {
+  const eligibleIds = new Set(uniqueEligibleAudienceRows(rows).map((row) => row.id));
   return rows.reduce<AudienceSummary>(
     (summary, row) => {
       summary.total += 1;
-      if (isEligibleAudienceRow(row)) summary.eligible += 1;
+      if (eligibleIds.has(row.id)) summary.eligible += 1;
       if (!row.normalized_phone) summary.missingPhone += 1;
       if (row.opted_out_whatsapp === true) summary.optedOut += 1;
       if (row.opt_in_whatsapp !== true) summary.notOptedIn += 1;
@@ -3220,8 +3235,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const filters = parseAudienceFilters(campaign.filters);
   const rows = await fetchAudienceRecipientRows(filters);
-  const eligibleContactIds = rows
-    .filter(isEligibleAudienceRow)
+  const eligibleContactIds = uniqueEligibleAudienceRows(rows)
     .map((row) => stringOrEmpty(row.id))
     .filter(Boolean);
   const uniqueEligibleContactIds = Array.from(new Set(eligibleContactIds));
@@ -3320,6 +3334,8 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
         WHERE NULLIF(contact.normalized_phone, '') IS NOT NULL
           AND contact.opt_in_whatsapp = true
           AND contact.opted_out_whatsapp = false
+          AND ${marketingIdentitySafeSql("contact")}
+          AND ${campaignRecipientPrimarySql("r", "contact")}
       )::int AS eligible_recipients
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
@@ -3344,49 +3360,73 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
   // TOCTOU hardening: the eligibility predicate above can go stale between the
   // SELECT and the writes (a concurrent cancel/materialize could change the
   // campaign status or recipients). Re-assert the entire predicate inside the
-  // status flip's WHERE clause and run both writes in one atomic transaction so
-  // they cannot half-apply. The recipient update is gated on the campaign
-  // actually being 'queued' (set by the first statement in the same tx).
+  // status flip's WHERE clause. Recipient timestamps, delivery job, and audit
+  // all depend on flipped, so the four writes commit or roll back together.
   const sql = getSql();
   const [flipped] = await sql.transaction((tx) => [
     tx.query(
       `
-      UPDATE whatsapp_campaigns c
-      SET status = 'queued', reviewed_by = $1, reviewed_at = now(), updated_at = now()
-      FROM whatsapp_templates t
-      WHERE c.id = $2
-        -- Must match canQueueAdminCampaign's own gate. This previously also
-        -- accepted 'draft', so a concurrent save-back-to-draft mid-queue still
-        -- sent: the re-assert that exists to close the TOCTOU window was
-        -- letting through the exact state the check above rejects.
-        AND c.status IN ('review', 'scheduled')
-        AND t.id = c.template_id
-        AND t.status LIKE 'active%'
-        AND EXISTS (
-          SELECT 1
-          FROM whatsapp_campaign_recipients r
-          JOIN crm_contacts contact ON contact.id = r.contact_id
-          WHERE r.campaign_id = c.id
-            AND r.status = 'queued'
-            AND NULLIF(contact.normalized_phone, '') IS NOT NULL
-            AND contact.opt_in_whatsapp = true
-            AND contact.opted_out_whatsapp = false
-        )
-      RETURNING c.id, c.reviewed_at
+      WITH flipped AS (
+        UPDATE whatsapp_campaigns c
+        SET status = 'queued', reviewed_by = $1,
+            reviewed_at = GREATEST(
+              clock_timestamp(),
+              COALESCE(c.reviewed_at + interval '1 millisecond', clock_timestamp())
+            ),
+            updated_at = now()
+        FROM whatsapp_templates t
+        WHERE c.id = $2
+          AND c.status IN ('review', 'scheduled')
+          AND t.id = c.template_id
+          AND t.status LIKE 'active%'
+          AND EXISTS (
+            SELECT 1
+            FROM whatsapp_campaign_recipients r
+            JOIN crm_contacts contact ON contact.id = r.contact_id
+            WHERE r.campaign_id = c.id
+              AND r.status = 'queued'
+              AND NULLIF(contact.normalized_phone, '') IS NOT NULL
+              AND contact.opt_in_whatsapp = true
+              AND contact.opted_out_whatsapp = false
+              AND ${marketingIdentitySafeSql("contact")}
+              AND ${campaignRecipientPrimarySql("r", "contact")}
+          )
+        RETURNING c.id, c.reviewed_at
+      ), recipients AS (
+        UPDATE whatsapp_campaign_recipients r
+        SET queued_at = COALESCE(r.queued_at, now())
+        WHERE r.campaign_id IN (SELECT id FROM flipped)
+          AND r.status = 'queued'
+        RETURNING r.id
+      ), enqueued AS (
+        INSERT INTO ops_jobs
+          (job_type, payload_version, payload, status, max_attempts, run_after,
+           idempotency_key, actor_staff_id)
+        SELECT 'woztell.campaign.deliver', 1,
+               jsonb_build_object('campaignId', flipped.id::text),
+               'queued', 5, now(),
+               'woztell.campaign.deliver:' || flipped.id::text || ':' ||
+                 floor(extract(epoch from flipped.reviewed_at) * 1000)::bigint::text,
+               $1
+        FROM flipped
+        WHERE true
+        ON CONFLICT (idempotency_key) DO UPDATE
+          SET idempotency_key = EXCLUDED.idempotency_key
+        RETURNING id, status
+      ), audited AS (
+        INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+        SELECT $1, 'campaign.queue', 'campaign', flipped.id,
+               jsonb_build_object('eligibleRecipients', $3::integer)
+        FROM flipped
+        RETURNING id
+      )
+      SELECT flipped.id, flipped.reviewed_at, enqueued.id AS job_id,
+             enqueued.status AS job_status,
+             (SELECT count(*) FROM recipients) AS recipients_marked,
+             (SELECT count(*) FROM audited) AS audit_rows
+      FROM flipped CROSS JOIN enqueued
       `,
-      [actor.staffId, id],
-    ),
-    tx.query(
-      `
-      UPDATE whatsapp_campaign_recipients
-      SET queued_at = COALESCE(queued_at, now())
-      WHERE campaign_id = $1
-        AND status = 'queued'
-        AND EXISTS (
-          SELECT 1 FROM whatsapp_campaigns c WHERE c.id = $1 AND c.status = 'queued'
-        )
-      `,
-      [id],
+      [actor.staffId, id, Number(row.eligible_recipients ?? 0)],
     ),
   ]);
 
@@ -3396,18 +3436,15 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
     return { ok: false as const, error: "CAMPAIGN_NOT_ELIGIBLE" };
   }
 
-  await writeAudit(actor.staffId, "campaign.queue", "campaign", id, {
-    eligibleRecipients: Number(row.eligible_recipients ?? 0),
-  });
-
-  // reviewed_at is re-stamped on every queue flip, so it identifies THIS queue
-  // run. Callers fold it into the job's idempotency key: two enqueues of the
-  // same run collapse to one job (what idempotency is for), while a later
-  // re-queue of the same campaign gets a fresh key and therefore a fresh job
-  // row. Without it the key was campaign-stable, so once a job reached a
-  // terminal state the ON CONFLICT no-op handed back the dead row forever and
-  // the campaign could never be sent again.
-  return { ok: true as const, queueRunAt: rowDate(flipped[0].reviewed_at) };
+  // The delivery job is committed with the status flip above. Signal only
+  // after that transaction succeeds; the wake path performs no idle polling.
+  wakeAfterCommit("general");
+  return {
+    ok: true as const,
+    queueRunAt: rowDate(flipped[0].reviewed_at),
+    jobId: stringOrEmpty(flipped[0].job_id),
+    jobStatus: stringOrEmpty(flipped[0].job_status),
+  };
 }
 
 export async function cancelAdminCampaign(id: string, actor: StaffAccess) {

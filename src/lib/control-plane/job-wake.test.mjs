@@ -65,56 +65,26 @@ test("lifetime registration failure never masks a committed mutation", async () 
   await Promise.resolve();
   assert.deepEqual(errors, ["JOB_WAKE_REGISTRATION_FAILED"]);
 });
-test("one low-frequency sweep covers all job lanes", () => {
+test("job drains have no recurring Cloudflare or Vercel schedule", () => {
   const config = readFileSync("workers/cron/wrangler.jsonc", "utf8");
-  assert.match(config, /"crons": \["\*\/15 \* \* \* \*"\]/);
-  const source = readFileSync("workers/cron/src/index.ts", "utf8");
-  for (const path of [
-    "/api/admin/whatsapp/service-worker",
-    "/api/admin/control-plane/worker",
-    "/api/admin/jobs/send-queue",
-  ])
-    assert.ok(source.includes(path));
+  const vercel = readFileSync("vercel.ts", "utf8");
+  const worker = readFileSync("workers/cron/src/index.ts", "utf8");
+  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
+  assert.doesNotMatch(vercel, /path:\s*"\/api\/admin\/(control-plane\/worker|jobs\/send-queue)"/);
+  assert.match(worker, /getByName\(lane\)\.signal\(\)/);
+  assert.match(worker, /authorization.*Bearer/);
+  assert.match(worker, /"\/api\/admin\/whatsapp\/service-worker"/);
+  assert.match(worker, /"\/api\/admin\/control-plane\/worker"/);
 });
 
-test("recovery sweep attempts every lane even when one endpoint fails", async () => {
-  const { default: worker } = await import("../../../workers/cron/src/index.ts");
-  const original = globalThis.fetch,
-    calls = [],
-    pending = [];
-  globalThis.fetch = async (url, options) => {
-    calls.push({ url, options });
-    if (String(url).endsWith("service-worker")) throw new Error("synthetic failure");
-    return new Response('{"claimed":0}');
-  };
-  try {
-    await worker.scheduled(
-      { cron: "*/15 * * * *" },
-      { SITE_ORIGIN: "https://example.invalid", CRON_SECRET: "synthetic" },
-      { waitUntil: (p) => pending.push(p) },
-    );
-    await Promise.all(pending);
-    assert.equal(calls.length, 3);
-    for (const { options } of calls) {
-      assert.equal(options.method, "POST");
-      assert.equal(options.headers.authorization, "Bearer synthetic");
-    }
-  } finally {
-    globalThis.fetch = original;
-  }
-});
-test("missing cron secret or unknown trigger never connects to the app", async () => {
-  const { default: worker } = await import("../../../workers/cron/src/index.ts");
-  let scheduled = 0;
-  await worker.scheduled(
-    { cron: "*/15 * * * *" },
-    { SITE_ORIGIN: "https://example.invalid" },
-    { waitUntil: () => scheduled++ },
-  );
-  await worker.scheduled(
-    { cron: "* * * * *" },
-    { SITE_ORIGIN: "https://example.invalid", CRON_SECRET: "synthetic" },
-    { waitUntil: () => scheduled++ },
-  );
-  assert.equal(scheduled, 0);
+test("database maintenance and content refresh have no idle schedules", () => {
+  const vercel = readFileSync("vercel.ts", "utf8");
+  const migration = readFileSync(".github/workflows/migration-drift.yml", "utf8");
+  const properties = readFileSync(".github/workflows/property-sync-daily.yml", "utf8");
+  assert.match(vercel, /crons:\s*\[\s*\]/);
+  assert.doesNotMatch(migration, /^\s+schedule:/m);
+  assert.doesNotMatch(properties, /^\s+schedule:/m);
+  assert.match(migration, /workflow_dispatch:/);
+  assert.match(migration, /neon\/migrations\/\*\*/);
+  assert.match(properties, /workflow_dispatch:/);
 });

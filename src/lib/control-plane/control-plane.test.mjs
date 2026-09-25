@@ -708,8 +708,9 @@ test("re-materializing a campaign never re-queues a possibly-delivered recipient
 
 test("the queue flip re-asserts the same statuses canQueueAdminCampaign accepts", () => {
   const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8").replaceAll("\r\n", "\n");
-  const start = source.indexOf("UPDATE whatsapp_campaigns c\n      SET status = 'queued'");
-  const clause = source.slice(start, source.indexOf("RETURNING c.id", start));
+  const queue = source.slice(source.indexOf("export async function queueAdminCampaign("));
+  const start = queue.indexOf("UPDATE whatsapp_campaigns c");
+  const clause = queue.slice(start, queue.indexOf("RETURNING c.id", start));
 
   assert.notEqual(start, -1);
   // Accepting 'draft' here contradicted the gate above it, so a concurrent

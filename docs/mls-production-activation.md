@@ -1,10 +1,10 @@
 # MLS Production Activation
 
-This is the approval-gated operator contract for the Cloudflare-native MLS project. It separates code verification from account mutations, secret placement, live source access, media upload, deployment, schedule activation, and publication. The read-only status contract reports `publisher: cloudflare-container`. No provider command in this runbook is authorized by code approval.
+This is the approval-gated operator contract for the Cloudflare-native MLS project. It separates code verification from account mutations, secret placement, live source access, media upload, deployment and publication. The read-only status contract reports `publisher: cloudflare-container`. No provider command in this runbook is authorized by code approval.
 
 ## 1. Authority matrix
 
-Record a separate approval for each boundary: code merge; the `20260817120000_dual_source_listing_sync.sql` migration; Workers Paid; private R2 bucket and token creation; secret placement; live source access; Vercel Blob upload; unscheduled Cloudflare deployment; schedule enablement; and publication. Approval of one row never authorizes another.
+Record a separate approval for each boundary: code merge; the `20260817120000_dual_source_listing_sync.sql` migration; Workers Paid; private R2 bucket and token creation; secret placement; live source access; Vercel Blob upload; unscheduled Cloudflare deployment; and publication. Approval of one row never authorizes another.
 
 ## 2. Preflight
 
@@ -125,7 +125,7 @@ Any redirect to HTML/homepage, missing legacy link, denial, or parse failure is 
 
 ### Manual shadow readiness checks
 
-This section is a manual, approval-gated readiness check. It does not authorize automatic schedule activation or publication. Keep the run in `shadow` with `publishEnabled:false`; the later, separately approved scheduled-deployment and first-publish examples remain outside this section.
+This section is a manual, approval-gated readiness check. It does not authorize automatic schedule activation or publication. Keep the run in `shadow` with `publishEnabled:false`; the later, separately approved manual first-publish example remains outside this section.
 
 1. Only after the separately approved secret-placement gate, copy Vercel Production variables interactively. Map `DATABASE_URL_UNPOOLED` to the Neon production value, `BLOB_READ_WRITE_TOKEN` to the Vercel Blob token retained for a later publish only, and the R2 keys to the private evidence bucket. Do not put values in files, command history, Docker arguments, or logs.
 2. Run the read-only capability, runtime-name, migration, object-lock, and lifecycle checks. Record names and booleans only.
@@ -239,7 +239,7 @@ The optional runtime-name inventory may additionally include documented non-secr
 ```json
 {
   "identity": {
-    "attemptId": "<scheduled-production-attempt-id>",
+    "attemptId": "<manual-production-attempt-id>",
     "workflowId": "<workflow-instance-id>",
     "deploymentId": "<container-and-workflow-deployment-id>",
     "commitSha": "<reviewed-40-character-commit-sha>",
@@ -247,7 +247,7 @@ The optional runtime-name inventory may additionally include documented non-secr
     "evidencePrefix": "<exact-evidence-prefix>"
   },
   "workflow": {
-    "attemptId": "<scheduled-production-attempt-id>",
+    "attemptId": "<manual-production-attempt-id>",
     "deploymentId": "<container-and-workflow-deployment-id>",
     "state": "succeeded"
   },
@@ -257,7 +257,7 @@ The optional runtime-name inventory may additionally include documented non-secr
     "exitCode": 0
   },
   "run": {
-    "attemptId": "<scheduled-production-attempt-id>",
+    "attemptId": "<manual-production-attempt-id>",
     "workflowId": "<workflow-instance-id>",
     "deploymentId": "<container-and-workflow-deployment-id>",
     "commitSha": "<reviewed-40-character-commit-sha>",
@@ -314,7 +314,7 @@ The optional runtime-name inventory may additionally include documented non-secr
       "schemaVersion": 1,
       "environment": "production",
       "hkDate": "<Hong-Kong-date>",
-      "attemptId": "<scheduled-production-attempt-id>",
+      "attemptId": "<manual-production-attempt-id>",
       "mode": "shadow",
       "commitSha": "<reviewed-40-character-commit-sha>",
       "containerDeploymentId": "<container-and-workflow-deployment-id>",
@@ -357,7 +357,7 @@ The optional runtime-name inventory may additionally include documented non-secr
     }
   },
   "statusRoute": {
-    "attemptId": "<scheduled-production-attempt-id>",
+    "attemptId": "<manual-production-attempt-id>",
     "state": "succeeded",
     "exitCode": 0,
     "manifestPresent": true
@@ -419,7 +419,7 @@ Only after the unscheduled deployment approval, deploy the base configuration:
 npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.jsonc
 ```
 
-Verify from the reviewed configuration and read-only describe output that `workers_dev=false`, there are no routes, there are no schedules, the Container image is registered, and the Workflow is registered. Keep `MLS_SCHEDULED_MODE=shadow`, `MLS_PUBLISH_ENABLED=false`, and `MLS_MEDIA_RIGHTS_CONFIRMED=false` until the later approvals.
+Verify from the reviewed configuration that `workers_dev=false`, there are no routes, there are no schedules, the Container image is registered, and the Workflow is registered. Verify the live Workflow schedules field through the read-only Cloudflare Workflow API; Wrangler describe omits it. Keep `MLS_SCHEDULED_MODE=shadow`, `MLS_PUBLISH_ENABLED=false`, and `MLS_MEDIA_RIGHTS_CONFIRMED=false` until the later approvals.
 
 ## 7. Manual production shadow
 
@@ -431,25 +431,21 @@ npm.cmd exec wrangler -- workflows trigger earnest-mls-runner '{"kind":"manual",
 
 Record the Workflow ID, attempt ID, Container deployment, Neon run UUID, R2 evidence prefix, and manifest hash. A `publication_outcome_unknown` result is an ambiguous commit state: reconcile Neon, R2, Blob, and the Container record before retrying; never infer rollback from it.
 
-## 8. Seven daily shadow approval
+## 8. Seven manually initiated shadow dates
 
-Only after the manual shadow proof is accepted, deploy the scheduled configuration. Verify the Workflow description reports only `0 18 * * *` and collect **seven approved healthy Hong Kong dates**. Each date must include source health, exact match counts, quarantine and lifecycle evidence, media validation, R2 manifest presence, and owner approval.
-
-```powershell
-npm.cmd exec wrangler -- deploy --config workers/mls-container/wrangler.scheduled.jsonc
-```
+Only after the manual shadow proof is accepted, collect **seven separately approved healthy Hong Kong dates** through the manual Workflow trigger. The reviewed configuration omits Workflow schedules; do not deploy an automatic schedule. Verify the live Workflow has no schedule before considering Neon idle cost resolved. Each date must include source health, exact match counts, quarantine and lifecycle evidence, media validation, R2 manifest presence, and owner approval.
 
 ## 9. Manual first publish
 
 After media-rights authorization, a separate publish-flag change approval, and seven approved healthy shadow dates, trigger exactly one manual `publish` using the same Workflow command with `"mode":"publish"` and an operator-approved suffix. Verify canonical identity, source links, field/lifecycle/event evidence, media rights, Vercel Blob URLs, R2 artifacts, and the Neon run UUID before accepting the result.
 
-## 10. Seven monitored live runs (scheduled publish)
+## 10. Seven monitored manual live runs
 
-Only after the manual first-publish approval, update the reviewed non-secret mode/flags and redeploy the scheduled configuration. Monitor seven scheduled dates. Stop on degraded source health, unexpected quarantine, ownership mismatch, duplicate identity, missing manifest, Blob rights failure, or any event inconsistency.
+Only after the manual first-publish approval, update the reviewed non-secret mode/flags and redeploy the unscheduled configuration. Trigger each of seven live runs manually with separate approval. Stop on degraded source health, unexpected quarantine, ownership mismatch, duplicate identity, missing manifest, Blob rights failure, or any event inconsistency.
 
 ## 11. Rollback
 
-Use the unscheduled configuration, set the reviewed gates back to shadow/false, and reconcile any running Workflow and Container state before terminating it. Preserve Neon, R2, and Blob evidence. Do not reactivate retired host scheduling while Cloudflare may still run. Reversing already-published canonical values is a separate approved compensating operation; never delete or rewrite audit history.
+Use the configuration without Workflow schedules, set the reviewed gates back to shadow/false, and reconcile any running Workflow and Container state before terminating it. Preserve Neon, R2, and Blob evidence. Do not reactivate retired host scheduling while Cloudflare may still run. Reversing already-published canonical values is a separate approved compensating operation; never delete or rewrite audit history.
 
 Read-only inspection commands:
 
@@ -466,4 +462,4 @@ The existing `npm run mls:shadow` and `npm run mls:legacy-sync` commands remain 
 
 ## Production boundary
 
-Migration, credential placement, live scraping, Vercel Blob upload, Cloudflare deployment, schedule enablement, and production publication each require explicit authorization and independent evidence. Code verification here is not rollout proof.
+Migration, credential placement, live scraping, Vercel Blob upload, Cloudflare deployment and production publication each require explicit authorization and independent evidence. Code verification here is not rollout proof.

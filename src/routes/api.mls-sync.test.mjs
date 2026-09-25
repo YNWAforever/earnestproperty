@@ -36,58 +36,24 @@ test("protected status identifies the actual run publisher with legacy compatibi
   assert.doesNotMatch(source, /\bPOST\b|\bPUT\b|\bDELETE\b/);
 });
 
-test("Vercel no longer schedules MLS but retains control-plane safety crons", () => {
-  assert.match(vercel, /crons/);
+test("Vercel has no idle database schedules", () => {
+  assert.match(vercel, /crons:\s*\[\s*\]/);
   assert.doesNotMatch(vercel, /\/api\/mls-sync/);
-  assert.match(vercel, /\/api\/admin\/control-plane\/worker/);
-  assert.match(vercel, /\/api\/admin\/jobs\/send-queue/);
+  assert.doesNotMatch(vercel, /schedule:\s*"/);
 });
 
-// Vercel Hobby rejects any cron that would run more than once a day, and it fails
-// the *deploy*, not the request — so a schedule like "*/5 * * * *" bricks the whole
-// release. The sub-daily cadence the job queue needs lives in a Cloudflare Worker
-// (workers/cron/); vercel.ts only ever carries the once-a-day floor.
-test("every vercel.ts cron runs at most once a day", () => {
-  const schedules = [...vercel.matchAll(/schedule:\s*"([^"]+)"/g)].map(([, value]) => value);
-  assert.ok(schedules.length > 0, "vercel.ts should still declare crons");
-
-  for (const schedule of schedules) {
-    const [minute, hour] = schedule.split(/\s+/);
-    for (const [field, name] of [
-      [minute, "minute"],
-      [hour, "hour"],
-    ]) {
-      assert.doesNotMatch(
-        field,
-        /[*/,-]/,
-        `cron "${schedule}" has a non-literal ${name} field, so it runs more than once a day — Hobby will reject the deploy`,
-      );
-    }
-  }
-});
-
-test("the sub-daily job drain is scheduled from the cloudflare worker", () => {
+test("Cloudflare wakes the appropriate job lane only after a signal or due alarm", () => {
   const worker = readFileSync(new URL("../../workers/cron/src/index.ts", import.meta.url), "utf8");
   const config = readFileSync(
     new URL("../../workers/cron/wrangler.jsonc", import.meta.url),
     "utf8",
   );
 
-  // The endpoints Vercel can no longer poll frequently must be reachable from
-  // somewhere that can, or queued jobs sit until the daily floor.
-  for (const path of ["/api/admin/control-plane/worker", "/api/admin/jobs/send-queue"]) {
-    assert.ok(worker.includes(path), `${path} must be driven by the cron worker`);
-  }
-  assert.match(worker, /Bearer \$\{secret\}/);
-
-  // Cloudflare passes the cron expression back verbatim, so an expression present
-  // in wrangler.jsonc but absent from the SCHEDULE map fires and does nothing.
-  const configured = [...config.matchAll(/"(\*\/\d+ [^"]+)"/g)].map(([, value]) => value);
-  assert.ok(configured.length > 0, "wrangler.jsonc should declare cron triggers");
-  for (const expression of configured) {
-    assert.ok(
-      worker.includes(`"${expression}"`),
-      `cron "${expression}" is triggered but not mapped to an endpoint in SCHEDULE`,
-    );
-  }
+  assert.match(worker, /\/api\/admin\/control-plane\/worker/);
+  assert.match(worker, /\/api\/admin\/whatsapp\/service-worker/);
+  assert.match(worker, /\/wake\/general/);
+  assert.match(worker, /\/wake\/service/);
+  assert.match(worker, /Bearer \$\{this\.env\.CRON_SECRET\}/);
+  assert.doesNotMatch(worker, /\/api\/admin\/jobs\/send-queue/);
+  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
 });

@@ -1,7 +1,9 @@
 export function normalizeAdminPhone(value: unknown) {
   if (value === null || value === undefined) return null;
-  const normalized = String(value).replace(/\D/g, "");
-  return normalized || null;
+  const text = String(value).trim();
+  const normalized = text.replace(/\D/g, "");
+  if (!normalized) return null;
+  return !text.startsWith("+") && normalized.length === 8 ? `852${normalized}` : normalized;
 }
 
 export function canReplyToConversation(input: {
