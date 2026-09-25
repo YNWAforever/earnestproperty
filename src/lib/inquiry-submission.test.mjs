@@ -45,3 +45,25 @@ test("pending persistence stores only digest keys and opaque identity", async ()
   assert.equal(JSON.stringify([...saved]).includes("PRIVATE_TEXT"), false);
   assert.equal(saved.size, 1);
 });
+
+test("a malformed stored identity is replaced before submitting", async () => {
+  const malformed = "a".repeat(36);
+  let persisted;
+  const storage = {
+    getItem: () => malformed,
+    setItem: (_key, value) => {
+      persisted = value;
+    },
+    removeItem: () => {},
+  };
+  await submitWithInquiryIdentity(
+    { name: "Corrupted pending identity", phone: "85261111111" },
+    async ({ submissionId }) => {
+      assert.match(submissionId, /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+      assert.notEqual(submissionId, malformed);
+      return { id: "inquiry" };
+    },
+    storage,
+  );
+  assert.match(persisted, /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i);
+});
