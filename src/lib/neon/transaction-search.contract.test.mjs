@@ -223,6 +223,15 @@ test("fetchDistrictTransactions filters on published=true AND verification_state
   assert.match(call.text, /t\.deal_type = 'sale'/);
 });
 
+test("district trend bounds direct caller month ranges", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+  await server.fetchDistrictTransactions({ districtSlug: "sham-tseng", monthsBack: 1e308 });
+  assert.equal(calls.at(-1).params.at(-1), 12);
+  await server.fetchDistrictTransactions({ districtSlug: "sham-tseng", monthsBack: 1_000 });
+  assert.equal(calls.at(-1).params.at(-1), 36);
+});
+
 test("fetchEstateTransactions filters on published=true AND verification_state='verified'", async () => {
   const { calls, query } = recorder();
   const server = await importPublicDataServerWithInjectedQuery(query);
@@ -232,6 +241,15 @@ test("fetchEstateTransactions filters on published=true AND verification_state='
   assert.match(call.text, /published = true/);
   assert.match(call.text, /verification_state = 'verified'/);
   assert.match(call.text, /deal_type = 'sale'/);
+});
+
+test("estate transactions bound direct caller row limits", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+  await server.fetchEstateTransactions({ estateId: "estate-1", limit: 1e308 });
+  assert.equal(calls.at(-1).params.at(-1), 8);
+  await server.fetchEstateTransactions({ estateId: "estate-1", limit: 1_000 });
+  assert.equal(calls.at(-1).params.at(-1), 100);
 });
 
 // --- migration + registration ----------------------------------------------

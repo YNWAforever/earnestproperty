@@ -102,6 +102,15 @@ test("homepage inventory uses newest ordering without hiding unfeatured new stoc
   assert.deepEqual(call.params, [6], "the limit handed to SQL is still the display limit");
 });
 
+test("featured feed bounds directly supplied limits", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+  await server.fetchFeaturedProperties({ limit: 1e308 });
+  assert.equal(calls.at(-1).params.at(-1), 6);
+  await server.fetchFeaturedProperties({ limit: 1_000 });
+  assert.equal(calls.at(-1).params.at(-1), 100);
+});
+
 test("keyword becomes one bound, escaped LIKE predicate on both queries", async () => {
   const { count, rows } = await runSearch({
     deal: "all",
@@ -831,4 +840,17 @@ test("similar listings exclude the current public group before ranking", async (
     /current_member\.public_listing_no = current_offerings\.public_listing_no/,
   );
   assert.deepEqual(captured.params, ["estate", "sale", "current", 4]);
+});
+
+test("similar listings bound direct caller limits before SQL", async () => {
+  let captured;
+  const server = await importPublicDataServerWithInjectedQuery(async (text, params) => {
+    captured = { text, params };
+    return [];
+  });
+  const input = { estateId: "estate", dealType: "sale", excludeId: "current" };
+  await server.fetchSimilarListings({ ...input, limit: 1e308 });
+  assert.equal(captured.params.at(-1), 4);
+  await server.fetchSimilarListings({ ...input, limit: 1_000 });
+  assert.equal(captured.params.at(-1), 100);
 });
