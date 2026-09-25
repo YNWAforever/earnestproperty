@@ -136,6 +136,40 @@ test("featured feed bounds directly supplied limits", async () => {
   assert.equal(calls.at(-1).params.at(-1), 100);
 });
 
+test("oversized public scope arrays are rejected before SQL", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+  const scope = {
+    districtSlugs: ["sham-tseng"],
+    estateSlugs: [],
+    textAliases: Array.from({ length: 1_000 }, (_, index) => "alias-" + index),
+    outOfScopeTextAliases: [],
+    limit: 6,
+  };
+
+  await assert.rejects(server.fetchCorridorInventory(scope), /INVALID_PUBLIC_SCOPE/);
+  await assert.rejects(
+    server.fetchCorridorInventory({ ...scope, textAliases: ["x".repeat(1_000)] }),
+    /INVALID_PUBLIC_SCOPE/,
+  );
+  await assert.rejects(
+    server.fetchCorridorInventory({
+      ...scope,
+      districtSlugs: Array.from({ length: 30 }, (_, index) => "district-" + index),
+      estateSlugs: Array.from({ length: 30 }, (_, index) => "estate-" + index),
+      textAliases: Array.from({ length: 30 }, (_, index) => "alias-" + index),
+      outOfScopeTextAliases: Array.from({ length: 30 }, (_, index) => "exclude-" + index),
+    }),
+    /INVALID_PUBLIC_SCOPE/,
+  );
+  await assert.rejects(
+    server.fetchEstatesBySlugs({
+      slugs: Array.from({ length: 1_000 }, (_, index) => "estate-" + index),
+    }),
+    /INVALID_PUBLIC_SCOPE/,
+  );
+  assert.equal(calls.length, 0, "oversized scopes must not query Neon");
+});
 test("keyword becomes one bound, escaped LIKE predicate on both queries", async () => {
   const { count, rows } = await runSearch({
     deal: "all",
