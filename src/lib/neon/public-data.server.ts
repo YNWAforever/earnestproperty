@@ -1441,9 +1441,10 @@ export async function fetchRecentTransactions(
   const params: unknown[] = [];
   const where = transactionsWhere(input, params);
   const limit = Number.isSafeInteger(input.limit) ? Math.min(Math.max(1, input.limit), 100) : 1;
+  const requestedOffset = input.offset ?? 0;
   const offset =
-    Number.isSafeInteger(input.offset) && input.offset >= 0 && input.offset <= 1_000_000
-      ? input.offset
+    Number.isSafeInteger(requestedOffset) && requestedOffset >= 0 && requestedOffset <= 1_000_000
+      ? requestedOffset
       : 0;
   const limitParam = addParam(params, limit);
   const offsetParam = addParam(params, offset);
