@@ -538,7 +538,18 @@ function listingOrderBy(sort: NeonListingSort): string {
   }
 }
 
-function cleanTerms(values: string[]) {
+const MAX_PUBLIC_SCOPE_TERMS_PER_LIST = 48;
+const MAX_PUBLIC_SCOPE_TERMS_TOTAL = 96;
+const MAX_PUBLIC_SCOPE_TERM_LENGTH = 160;
+
+function cleanTerms(values: string[], maxEntries = MAX_PUBLIC_SCOPE_TERMS_PER_LIST) {
+  if (
+    !Array.isArray(values) ||
+    values.length > maxEntries ||
+    values.some((value) => typeof value !== "string" || value.length > MAX_PUBLIC_SCOPE_TERM_LENGTH)
+  ) {
+    throw new TypeError("INVALID_PUBLIC_SCOPE");
+  }
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
@@ -554,11 +565,22 @@ function clampCorridorLimit(value: number) {
 function normalizeCorridorInventoryInput(
   input: NeonCorridorInventoryInput,
 ): NeonCorridorInventoryInput {
+  if (!input) throw new TypeError("INVALID_PUBLIC_SCOPE");
+  const districtSlugs = cleanTerms(input.districtSlugs);
+  const estateSlugs = cleanTerms(input.estateSlugs);
+  const textAliases = cleanTerms(input.textAliases);
+  const outOfScopeTextAliases = cleanTerms(input.outOfScopeTextAliases);
+  if (
+    districtSlugs.length + estateSlugs.length + textAliases.length + outOfScopeTextAliases.length >
+    MAX_PUBLIC_SCOPE_TERMS_TOTAL
+  ) {
+    throw new TypeError("INVALID_PUBLIC_SCOPE");
+  }
   return {
-    districtSlugs: cleanTerms(input.districtSlugs),
-    estateSlugs: cleanTerms(input.estateSlugs),
-    textAliases: cleanTerms(input.textAliases).map(escapeLikeTerm),
-    outOfScopeTextAliases: cleanTerms(input.outOfScopeTextAliases).map(escapeLikeTerm),
+    districtSlugs,
+    estateSlugs,
+    textAliases: textAliases.map(escapeLikeTerm),
+    outOfScopeTextAliases: outOfScopeTextAliases.map(escapeLikeTerm),
     limit: clampCorridorLimit(input.limit),
   };
 }
@@ -1284,7 +1306,8 @@ export async function fetchEstates(input: { districtSlug?: string } = {}) {
  * client's own sequence.
  */
 export async function fetchEstatesBySlugs(input: { slugs: string[] }) {
-  const slugs = Array.from(new Set(input.slugs.map((slug) => slug.trim()).filter(Boolean)));
+  if (!input) throw new TypeError("INVALID_PUBLIC_SCOPE");
+  const slugs = cleanTerms(input.slugs, 64);
   if (slugs.length === 0) return [];
   const rows = await sql().query(
     `
