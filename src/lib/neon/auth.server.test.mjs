@@ -393,3 +393,22 @@ test("a signed JWT cannot bypass a revoked Neon Auth session", async () => {
     else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
   }
 });
+
+test("a bound staff identity excludes email-only fallback, including after deactivation", async () => {
+  let lookup = "";
+  const resolver = createStaffAccessResolver({
+    getSession: async () => session,
+    queryRows: async (statement) => {
+      if (statement.includes("FROM staff_users s") && statement.includes("s.active = true")) {
+        lookup = statement;
+      }
+      return [];
+    },
+  });
+  assert.equal((await denial(resolver.requireStaffAccess(request, ["admin"]))).status, 403);
+  assert.match(
+    lookup,
+    /s\.auth_user_id IS NULL\s+AND NOT EXISTS\s*\(\s*SELECT 1 FROM staff_users bound\s+WHERE bound.auth_user_id = \$1\s*\)/,
+    "a disabled or active row already bound to this identity must block email fallback",
+  );
+});
