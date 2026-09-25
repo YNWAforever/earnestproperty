@@ -72,6 +72,31 @@ async function runSearch(input) {
   return { count, rows };
 }
 
+test("direct listing filters reject invalid deal and numeric values before SQL", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+  const base = { deal: "sale", page: 1, pageSize: 12 };
+
+  await assert.rejects(
+    server.searchListings({ ...base, deal: "unknown" }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  await assert.rejects(
+    server.searchListings({ ...base, minPrice: "many" }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  await assert.rejects(
+    server.searchListings({ ...base, minArea: Infinity }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  await assert.rejects(
+    server.searchListings({ ...base, minPrice: 1e308 }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  await assert.rejects(server.searchListings({ ...base, bedrooms: 5 }), /INVALID_PUBLIC_FILTER/);
+  assert.equal(calls.length, 0, "invalid filters must not query Neon");
+});
+
 // fetchFeaturedProperties shares the same harness -- it lives in the same
 // module and the audit's 精選筍盤 finding (1 of 398 listings shown) is the same
 // class of bug as the price/keyword issues above: a filter that only ever

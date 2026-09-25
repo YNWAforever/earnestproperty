@@ -361,6 +361,49 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
   };
 }
 
+function assertPublicNumber(value: unknown): void {
+  if (value === undefined) return;
+  if (
+    typeof value !== "number" ||
+    !Number.isFinite(value) ||
+    value < 0 ||
+    value > Number.MAX_SAFE_INTEGER
+  ) {
+    throw new TypeError("INVALID_PUBLIC_FILTER");
+  }
+}
+
+function assertListingFilters(input: NeonListingFiltersInput): void {
+  if (!input || (input.deal !== "sale" && input.deal !== "rent" && input.deal !== "all")) {
+    throw new TypeError("INVALID_PUBLIC_FILTER");
+  }
+  for (const value of [input.minPrice, input.maxPrice, input.minArea, input.maxArea]) {
+    assertPublicNumber(value);
+  }
+  if (
+    input.bedrooms !== undefined &&
+    (!Number.isSafeInteger(input.bedrooms) || input.bedrooms < 0 || input.bedrooms > 4)
+  ) {
+    throw new TypeError("INVALID_PUBLIC_FILTER");
+  }
+}
+
+function assertTransactionFilters(
+  input: Pick<NeonRecentTransactionsInput, "dealType" | "minPrice" | "maxPrice">,
+): void {
+  if (
+    !input ||
+    (input.dealType !== undefined &&
+      input.dealType !== "all" &&
+      input.dealType !== "sale" &&
+      input.dealType !== "rent")
+  ) {
+    throw new TypeError("INVALID_PUBLIC_FILTER");
+  }
+  assertPublicNumber(input.minPrice);
+  assertPublicNumber(input.maxPrice);
+}
+
 function boundedPublicCount(value: number, fallback: number, max: number): number {
   return Number.isSafeInteger(value) && value >= 1 ? Math.min(value, max) : fallback;
 }
@@ -641,6 +684,7 @@ async function fetchCorridorRows(
 export async function searchListings(
   input: NeonListingFiltersInput,
 ): Promise<NeonListingSearchResult> {
+  assertListingFilters(input);
   const db = sql();
   // This server function is directly callable, so route search validation alone
   // cannot keep an extreme page from becoming Infinity in the SQL OFFSET.
@@ -1442,6 +1486,7 @@ function mapTransactionRow(row: DbRow): NeonTransactionRow {
 export async function fetchRecentTransactions(
   input: NeonRecentTransactionsInput,
 ): Promise<NeonTransactionRow[]> {
+  assertTransactionFilters(input);
   const params: unknown[] = [];
   const where = transactionsWhere(input, params);
   const limit = Number.isSafeInteger(input.limit) ? Math.min(Math.max(1, input.limit), 100) : 1;
@@ -1494,6 +1539,7 @@ export async function fetchRecentTransactions(
 export async function fetchRecentTransactionsCount(
   input: Omit<NeonRecentTransactionsInput, "limit" | "offset">,
 ): Promise<number> {
+  assertTransactionFilters(input);
   const params: unknown[] = [];
   const where = transactionsWhere({ ...input, limit: 0 }, params);
   const rows = await sql().query(
