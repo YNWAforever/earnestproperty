@@ -2537,14 +2537,14 @@ export async function completeAdminLeadActivity(
   input: { activity_id: string; lead_id: string },
   actor: StaffAccess,
 ) {
-  const rows = await queryRows(
+  const rows = await queryRows<{ id: string; lead_id: string }>(
     `UPDATE crm_activities SET completed_at = now()
-     WHERE id = $1 AND completed_at IS NULL
-     RETURNING id`,
-    [input.activity_id],
+     WHERE id = $1::uuid AND lead_id = $2::uuid AND completed_at IS NULL
+     RETURNING id, lead_id`,
+    [input.activity_id, input.lead_id],
   );
   if (!rows[0]) return { ok: false as const, error: "Not found or already complete" };
-  await writeAudit(actor.staffId, "lead.activity.complete", "lead", input.lead_id, {
+  await writeAudit(actor.staffId, "lead.activity.complete", "lead", rows[0].lead_id, {
     activityId: input.activity_id,
   });
   return { ok: true as const };

@@ -199,3 +199,54 @@ test("campaign cancellation only changes active campaigns and their pending reci
     error: "Not found",
   });
 });
+
+test("activity completion verifies its lead and audits the stored lead", async () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === "completeAdminLeadActivity",
+  );
+  assert.ok(declaration);
+  const executable = ts.transpileModule(declaration.getText(file).replace(/^export\s+/, ""), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  const queries = [];
+  const audits = [];
+  let matched = true;
+  const complete = new Function(
+    "queryRows",
+    "writeAudit",
+    executable + "\nreturn completeAdminLeadActivity;",
+  )(
+    async (sql, params) => {
+      queries.push({ sql, params });
+      return matched ? [{ id: "activity-1", lead_id: "lead-actual" }] : [];
+    },
+    async (...args) => {
+      audits.push(args);
+    },
+  );
+  const input = { activity_id: "activity-1", lead_id: "lead-actual" };
+  const actor = { staffId: "manager-1" };
+  assert.deepEqual(await complete(input, actor), { ok: true });
+  assert.deepEqual(queries[0].params, ["activity-1", "lead-actual"]);
+  assert.match(
+    queries[0].sql,
+    /WHERE id = \$1::uuid\s+AND lead_id = \$2::uuid\s+AND completed_at IS NULL\s+RETURNING id, lead_id/,
+  );
+  assert.deepEqual(audits[0].slice(0, 4), [
+    "manager-1",
+    "lead.activity.complete",
+    "lead",
+    "lead-actual",
+  ]);
+
+  matched = false;
+  assert.deepEqual(await complete({ ...input, lead_id: "lead-mismatch" }, actor), {
+    ok: false,
+    error: "Not found or already complete",
+  });
+  assert.equal(audits.length, 1, "a rejected completion must not write an audit entry");
+});
