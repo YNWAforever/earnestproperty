@@ -1,59 +1,62 @@
-/** Low-frequency recovery for durable jobs; producers wake the app after commit. */
+import { DurableObject } from "cloudflare:workers";
+import { createJobAlarm } from "./job-alarm.js";
 
 type Env = {
   SITE_ORIGIN: string;
   CRON_SECRET: string;
+  JOB_WAKE: DurableObjectNamespace<JobWakeAlarm>;
 };
 
-/**
- * Which endpoint each trigger drives. Keys must match the cron expressions in
- * wrangler.jsonc exactly — Cloudflare passes the expression back verbatim, so a
- * mismatch silently does nothing rather than erroring.
- */
-const SCHEDULE: Record<string, string[]> = {
-  "*/15 * * * *": [
-    "/api/admin/whatsapp/service-worker",
-    "/api/admin/control-plane/worker",
-    "/api/admin/jobs/send-queue",
-  ],
+type JobLane = "service" | "general";
+const ENDPOINT: Record<JobLane, string> = {
+  service: "/api/admin/whatsapp/service-worker",
+  general: "/api/admin/control-plane/worker",
 };
 
-export default {
-  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    const paths = SCHEDULE[event.cron];
-    if (!paths) {
-      console.error(`No endpoint mapped for cron "${event.cron}" — check wrangler.jsonc`);
-      return;
-    }
-    if (!env.CRON_SECRET) {
-      console.error("CRON_SECRET is not set; every call would 401. Run `wrangler secret put`.");
-      return;
-    }
+/** Each lane stores just one alarm; an empty lane has no alarm or Neon call. */
+export class JobWakeAlarm extends DurableObject<Env> {
+  async signal() {
+    await this.controller().signal();
+  }
 
-    // waitUntil keeps the Worker alive for the response. Without it the fetch can
-    // be cancelled the moment `scheduled` returns, so a job could be claimed and
-    // then abandoned mid-run.
-    ctx.waitUntil(
-      Promise.all(paths.map((path) => drain(new URL(path, env.SITE_ORIGIN).href, env.CRON_SECRET))),
-    );
-  },
-};
+  async alarm() {
+    await this.controller().fire();
+  }
 
-async function drain(url: string, secret: string) {
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { authorization: `Bearer ${secret}` },
+  private controller() {
+    const lane = this.ctx.id.name;
+    if (lane !== "service" && lane !== "general") throw new Error("JOB_ALARM_LANE_INVALID");
+    return createJobAlarm({
+      storage: this.ctx.storage,
+      drain: async () => {
+        const response = await fetch(new URL(ENDPOINT[lane], this.env.SITE_ORIGIN), {
+          method: "POST",
+          headers: { authorization: `Bearer ${this.env.CRON_SECRET}` },
+        });
+        if (!response.ok) throw new Error(`JOB_DRAIN_HTTP_${response.status}`);
+        const result = (await response.json()) as { nextDueAt?: unknown };
+        if (!("nextDueAt" in result)) throw new Error("JOB_DRAIN_NEXT_DUE_MISSING");
+        return result.nextDueAt as string | null;
+      },
+      report: (code) => console.error(`[job-alarm] ${lane}: ${code}`),
     });
-
-    // Log the body on failure: a 401 means the secret drifted from Vercel's, which
-    // is otherwise invisible because the queue just quietly stops draining.
-    if (!response.ok) {
-      console.error(`${url} -> ${response.status}: ${await response.text()}`);
-      return;
-    }
-    console.log(`${url} -> ${response.status} ${await response.text()}`);
-  } catch (error) {
-    console.error(`${url} failed:`, error instanceof Error ? error.message : error);
   }
 }
+
+export default {
+  async fetch(request: Request, env: Env) {
+    const url = new URL(request.url);
+    const lane =
+      url.pathname === "/wake/service"
+        ? "service"
+        : url.pathname === "/wake/general"
+          ? "general"
+          : null;
+    if (request.method !== "POST" || !lane) return new Response(null, { status: 404 });
+    if (!env.CRON_SECRET || request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
+      return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
+    }
+    await env.JOB_WAKE.getByName(lane).signal();
+    return Response.json({ scheduled: true }, { status: 202 });
+  },
+} satisfies ExportedHandler<Env>;

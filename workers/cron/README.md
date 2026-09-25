@@ -1,30 +1,32 @@
-# earnestproperty-cron
+# Earnest Property job alarm
 
-Recovery sweep for durable `ops_jobs`. One `*/15 * * * *` trigger invokes the service, general control-plane, and legacy campaign drains concurrently. Each endpoint fails independently and authenticates using the existing CRON_SECRET. The worker serves no HTTP traffic.
+This Worker receives an authenticated post-commit signal for the service or general `ops_jobs` lane. Each lane has one Cloudflare Durable Object alarm. The alarm calls the existing authenticated app drain once, reads `nextDueAt`, and moves itself to the next queued `run_after` or running lease expiry. When the lane is empty it deletes the alarm. There is no Cloudflare Cron Trigger and no recurring Vercel job drain, so an idle queue makes no Neon request.
 
-New live enquiry captures, manual assignment/reply requests, standalone job enqueue/retry and history-import requests wake their existing leased runner after commit when `OPS_EVENT_WAKE_ENABLED=true` in the app. Vercel `waitUntil` retains the request lifetime; the webhook returns without waiting for provider work. Each wake uses the existing bounded runner (up to 20 jobs, 45-second between-job budget). Job chains beyond this budget, delayed jobs, interrupted/failed wakes and expired leases are recovered by the sweep. Delay can be 15 minutes plus provider/scheduler runtime; this is not a precise deadline scheduler.
-
-All delivery permissions, approved policies and capability checks remain in the existing handlers. The wake flag grants no sending permission. Future timed customer-service features need a separate latency review before activation. The current routing-only policy has customer autoreplies and escalation disabled.
+The app signal uses `OPS_WAKE_URL` (the Worker's HTTPS origin) and the existing server-only `CRON_SECRET`. The Worker exposes only `POST /wake/service` and `POST /wake/general`; both require `Authorization: Bearer <CRON_SECRET>`. The Worker does not receive a database credential or job payload. Each drain endpoint keeps its own bearer check and job leases.
 
 ## Release order
 
-1. Deploy the app with the wake implementation. Enable OPS_EVENT_WAKE_ENABLED=true for production and redeploy. Preserve all WhatsApp permission flags.
-2. Verify post-commit wake logs and normal enquiry processing. Do not create synthetic production customer records or send test messages without authorization.
-3. Deploy the recovery worker: `npx wrangler deploy --config workers/cron/wrangler.jsonc`.
-4. Verify `npx wrangler tail earnestproperty-cron`: one trigger runs all three endpoints, authenticated, with count-only app responses.
+1. Deploy the app with the updated drain responses while the currently deployed cron still runs. Set `OPS_WAKE_URL` to the new Worker's expected HTTPS origin and enable `OPS_EVENT_WAKE_ENABLED=true` in the app. Until the new Worker is deployed, failed signals use the app's local post-commit runner; the old cron still provides recovery.
+2. Deploy this Worker with `wrangler deploy --config workers/cron/wrangler.jsonc`. The explicit `triggers.crons: []` removes previously deployed Cron Triggers. The SQLite Durable Object namespace is created by migration `v1`. Keep its `CRON_SECRET` equal to the Vercel server secret.
+3. Send one authenticated signal to each lane to inspect any jobs that were already queued before the change. This one-time wake may contact Neon. Confirm the response is 202, then inspect Worker alarm and app logs. Do not create synthetic customer jobs or provider sends.
+4. Verify a real committed job signals the Worker and the app drain returns `nextDueAt`. After the last job finishes, confirm no further drain calls occur during an idle interval. Check Neon suspension through its control plane without issuing SQL.
 
-Existing CRON_SECRET is retained. No migration or secret rotation is needed. `vercel.ts` daily fallback schedules remain in place. Live secrets must never be printed or committed.
+No production flag, secret, schedule, or resource has been changed by this source commit.
 
-## Rollback
+## Failure and recovery
 
-Restore the previous worker source/config from commit f03b223d5087b1517080a1887c07ee7701fc9d55 and deploy it first (old 1/5/10-minute recovery). Then set OPS_EVENT_WAKE_ENABLED=false and redeploy the app if immediate wakes are faulty. Keep durable jobs and existing idempotency keys; never replay unknown provider outcomes by resetting state. No schema rollback.
+If signaling fails, the app runs the immediate job locally and logs `JOB_WAKE_SIGNAL_FAILED`. That fallback cannot arm a later retry or delayed job. After fixing the Worker or secret, send `POST /wake/service` and `POST /wake/general` with the server-side bearer token once; this re-arms any persisted work. A failed alarm drain backs off from one minute to at most one hour while work may remain. An empty response clears the alarm. The manual app drain routes remain available for operator recovery.
 
-## Verification
+The former `/api/admin/jobs/send-queue` route remains callable manually for orphaned legacy campaign recipients. Newly queued campaigns enqueue a durable job and signal the general lane directly. The service permission and provider-send gates are unchanged.
 
-`npm run test:job-wake`, `npm run test:whatsapp-enquiries`, `npm run test:control-plane`, `npm run test:woztell`, `npm run test:staff-notifications`, `npm run test:cron`, `npm run typecheck`, `npm run lint`.
+## Other database schedules
 
-For local worker scheduling: `npx wrangler dev --config workers/cron/wrangler.jsonc --test-scheduled`, then request `http://localhost:8787/__scheduled?cron=*/15+*+*+*+*` using synthetic local credentials and a local app only.
+The Vercel YouTube crons are removed. Staff can still invoke incremental or full sync manually. The GitHub migration drift check runs on migration-file pushes to main or manual dispatch; property collection is manual dispatch only. Videos and property listings will no longer refresh automatically from those workflows, and migration drift is no longer rechecked daily. This is the cost tradeoff for zero repository-managed idle Neon wakes. Independently configured external schedules must be checked during rollout.
 
-Empty scheduled endpoint requests decrease from 1,872/day to 288/day, grouped into 96 wake periods. This does not guarantee a CU-hour saving: public traffic, admin polling, connection behavior and other jobs may still keep Neon awake. Observe endpoint suspension via the Neon control plane; querying SQL to check idleness itself wakes the database.
+## Local checks
 
-Platform reference: https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package
+- `node --test src/lib/control-plane/job-wake.test.mjs src/lib/control-plane/job-signal.test.mjs src/lib/control-plane/jobs-next-due.test.mjs workers/cron/src/job-alarm.test.mjs`
+- `wrangler deploy --dry-run --config workers/cron/wrangler.jsonc`
+- Run the relevant route and service tests with a local fixture. Neither check above needs Neon.
+
+Cloudflare documents [Durable Object alarms](https://developers.cloudflare.com/durable-objects/api/alarms/) and [SQLite-backed free tier limits](https://developers.cloudflare.com/durable-objects/platform/pricing/). This avoids idle Neon calls, though Cloudflare alarm requests and storage still have their own usage limits.

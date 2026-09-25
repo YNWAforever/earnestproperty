@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const path = new URL("../.github/workflows/property-sync-daily.yml", import.meta.url);
-test("daily workflow is gated, serialized, immutable and narrowly scoped", () => {
+test("manual property workflow remains gated, serialized, immutable and narrowly scoped", () => {
   const y = readFileSync(path, "utf8");
   for (const value of [
-    "17 18 * * *",
+    "workflow_dispatch:",
     "cancel-in-progress: false",
     "PROPERTY_SYNC_DAILY_ENABLED",
     "PROPERTY_SYNC_POLICY_APPROVED",
@@ -22,6 +22,7 @@ test("daily workflow is gated, serialized, immutable and narrowly scoped", () =>
     "agent:540",
   ])
     assert.ok(y.includes(value), value);
+  assert.doesNotMatch(y, /^\s+schedule:/m);
   assert.equal((y.match(/secrets\.DATABASE_URL_UNPOOLED/g) || []).length, 2);
   assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(y));
   assert.ok(

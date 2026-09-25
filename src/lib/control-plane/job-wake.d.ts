@@ -5,3 +5,9 @@ export function createJobWake(ports: {
   run: (lane: JobLane) => unknown;
   report?: (code: string) => void;
 }): (lane: JobLane) => void;
+export function signalJobWake(input: {
+  url: string;
+  secret: string;
+  lane: JobLane;
+  fetcher?: typeof fetch;
+}): Promise<void>;

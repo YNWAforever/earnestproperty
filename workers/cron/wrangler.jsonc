@@ -2,22 +2,20 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "earnestproperty-cron",
   "main": "src/index.ts",
-  "compatibility_date": "2025-09-24",
+  "compatibility_date": "2026-08-27",
 
-  // This Worker exists only because Vercel Hobby caps crons at one run per day.
-  // It serves no traffic — no routes, no custom domain — it just wakes up and
-  // POSTs to the job-drain endpoints on the Vercel deployment.
-  "workers_dev": false,
-
-  "triggers": {
-    "crons": ["*/15 * * * *"],
+  // The public endpoint only accepts a server-side CRON_SECRET bearer token.
+  // No Cron Triggers remain: Durable Object alarms wake only after a committed job.
+  "workers_dev": true,
+  "triggers": { "crons": [] },
+  "durable_objects": {
+    "bindings": [{ "name": "JOB_WAKE", "class_name": "JobWakeAlarm" }],
   },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JobWakeAlarm"] }],
 
   "vars": {
     "SITE_ORIGIN": "https://earnestproperty.vercel.app",
   },
 
-  // CRON_SECRET is a secret, not a var. Set it with:
-  //   wrangler secret put CRON_SECRET --config workers/cron/wrangler.jsonc
-  // It must match CRON_SECRET in the Vercel project, or every call gets a 401.
+  // CRON_SECRET is a secret, not a var. Keep it equal to the Vercel server secret.
 }

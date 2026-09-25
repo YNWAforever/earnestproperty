@@ -84,7 +84,7 @@
     "test:staff-notifications": "node --test src/lib/whatsapp-enquiries/staff-reference.test.mjs src/lib/whatsapp-enquiries/staff-notifications.test.mjs && bun test src/components/admin/StaffNotificationCard.test.tsx",
     "test:staff-notifications:db": "node --test src/lib/whatsapp-enquiries/staff-reference.db.test.mjs src/lib/whatsapp-enquiries/staff-notifications.db.test.mjs",
     "test:staff-notifications:e2e": "node scripts/test-staff-handoff-browser.mjs",
-    "test:job-wake": "node --test src/lib/control-plane/job-wake.test.mjs"
+    "test:job-wake": "node --test src/lib/control-plane/job-wake.test.mjs src/lib/control-plane/job-signal.test.mjs src/lib/control-plane/jobs-next-due.test.mjs workers/cron/src/job-alarm.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",

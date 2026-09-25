@@ -30,11 +30,11 @@ test("AT46 ordinary numbers and unverified provider payloads are not answers", (
   assert.throws(() => createLiveServiceTransport(), /UNVERIFIED/);
 });
 
-test("Recovery cron includes authenticated service lane", async () => {
+test("Job alarm includes authenticated service lane", async () => {
   const { readFileSync } = await import("node:fs");
   const worker = readFileSync("workers/cron/src/index.ts", "utf8"),
     config = readFileSync("workers/cron/wrangler.jsonc", "utf8");
-  assert.match(config, /"\*\/15 \* \* \* \*"/);
+  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
   assert.match(worker, /"\/api\/admin\/whatsapp\/service-worker"/);
   const { drainServiceJobs } = await import("../../routes/api.admin.whatsapp.service-worker.ts");
   const original = process.env.CRON_SECRET;

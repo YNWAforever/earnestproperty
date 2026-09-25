@@ -1,7 +1,5 @@
-name: Daily property collection
+name: Property collection on demand
 on:
-  schedule:
-    - cron: "17 18 * * *"
   workflow_dispatch:
     inputs:
       mode:
