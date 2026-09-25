@@ -74,6 +74,7 @@ export type ContentCopilotPatchApplyResult =
       value: null;
       error:
         | "COPILOT_UNKNOWN_FIELD"
+        | "COPILOT_PROPOSAL_INVALID"
         | "COPILOT_STALE_PROPOSAL"
         | "COPILOT_PATCH_CONFLICT"
         | "COPILOT_FINGERPRINT_INVALID";
