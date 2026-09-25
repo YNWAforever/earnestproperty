@@ -7,6 +7,7 @@ const OPENCODE_GO_TIMEOUT_MS = 30_000;
 const OPENCODE_GO_MAX_RETRIES = 2;
 const OPENCODE_GO_RETRY_BASE_DELAY_MS = 300;
 const OPENCODE_GO_MAX_RESPONSE_CHARS = 120_000;
+const OPENCODE_GO_MAX_RESPONSE_BYTES = 120_000;
 
 type FetchImpl = (url: string, init: RequestInit) => Promise<Response>;
 type SleepImpl = (ms: number) => Promise<void>;
@@ -143,8 +144,8 @@ async function fetchWithRetry(
 
 async function parseProviderResponse(response: Response) {
   try {
-    const body = await response.text();
-    if (body.length > OPENCODE_GO_MAX_RESPONSE_CHARS) return null;
+    const body = await readProviderResponseBody(response);
+    if (body === null || body.length > OPENCODE_GO_MAX_RESPONSE_CHARS) return null;
 
     const providerBody = JSON.parse(body) as {
       choices?: Array<{ message?: { content?: unknown } }>;
@@ -161,6 +162,38 @@ async function parseProviderResponse(response: Response) {
     if (isTimeoutError(error)) throw error;
     return null;
   }
+}
+
+async function readProviderResponseBody(response: Response): Promise<string | null> {
+  // A size check after response.text() still buffers the entire provider body.
+  // Stop at the byte limit while reading so a bad gateway cannot exhaust memory.
+  const reader = response.body?.getReader();
+  if (!reader) return response.text();
+
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteLength += value.byteLength;
+      if (byteLength > OPENCODE_GO_MAX_RESPONSE_BYTES) {
+        void reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 function extractUsageMetadata(usage: unknown): Record<string, number> {

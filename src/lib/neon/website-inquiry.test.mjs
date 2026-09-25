@@ -222,40 +222,29 @@ test("public inquiry upsert can never raise consent or overwrite an existing con
   assert.equal(calls[0].params[5], true);
 });
 
-test("live-agent contact upsert also refuses to overwrite an existing contact", () => {
+test("live-agent atomic contact upsert preserves existing identity and consent", () => {
   const source = readFileSync(new URL("../ai/live-agent.server.ts", import.meta.url), "utf8");
-  const start = source.indexOf("async function upsertLiveAgentContact");
+  const start = source.indexOf("inserted_contact AS (");
   const clause = source.slice(start, source.indexOf("RETURNING id", start));
 
   assert.notEqual(start, -1);
   assert.match(clause, /name\s*=\s*COALESCE\(crm_contacts\.name,\s*EXCLUDED\.name\)/);
   assert.match(clause, /phone\s*=\s*COALESCE\(crm_contacts\.phone,\s*EXCLUDED\.phone\)/);
   assert.match(clause, /email\s*=\s*COALESCE\(crm_contacts\.email,\s*EXCLUDED\.email\)/);
+  assert.match(clause, /opt_in_whatsapp\s*=\s*crm_contacts\.opt_in_whatsapp/);
   assert.doesNotMatch(clause, /opt_in_whatsapp\s*=[^,]*EXCLUDED/);
 });
 
-// updateLiveAgentContact is the path an attacker actually reaches. The first
-// unauthenticated handoff carrying a victim's phone hits the upsert's ON
-// CONFLICT -- which preserves the victim's fields -- but returns the victim's
-// contact id, and that id is bound to the session. A SECOND handoff on the same
-// session lands here with contact_id set, so caller-wins COALESCE would rewrite
-// the victim's name/phone/email in place while normalized_phone still points
-// the row at them. Asserting only on upsertLiveAgentContact missed this
-// entirely: the two functions must agree.
-test("live-agent contact UPDATE path is existing-wins too, not just the upsert", () => {
+test("live-agent atomic existing contact update is existing-wins", () => {
   const source = readFileSync(new URL("../ai/live-agent.server.ts", import.meta.url), "utf8");
-  const start = source.indexOf("async function updateLiveAgentContact");
-  const clause = source.slice(start, source.indexOf("RETURNING id", start));
+  const start = source.indexOf("updated_contact AS (");
+  const clause = source.slice(start, source.indexOf("RETURNING c.id", start));
 
-  assert.notEqual(start, -1, "updateLiveAgentContact must exist");
-  assert.match(clause, /name\s*=\s*COALESCE\(name,\s*\$1\)/);
-  assert.match(clause, /phone\s*=\s*COALESCE\(phone,\s*\$2\)/);
-  assert.match(clause, /email\s*=\s*COALESCE\(email,\s*\$3\)/);
-
-  // The caller-wins form that made the hijack possible.
-  assert.doesNotMatch(clause, /name\s*=\s*COALESCE\(\$1,\s*name\)/);
-  assert.doesNotMatch(clause, /phone\s*=\s*COALESCE\(\$2,\s*phone\)/);
-  assert.doesNotMatch(clause, /email\s*=\s*COALESCE\(\$3,\s*email\)/);
+  assert.notEqual(start, -1);
+  assert.match(clause, /name\s*=\s*COALESCE\(c\.name,\s*\$3\)/);
+  assert.match(clause, /phone\s*=\s*COALESCE\(c\.phone,\s*\$4\)/);
+  assert.match(clause, /email\s*=\s*COALESCE\(c\.email,\s*\$6\)/);
+  assert.doesNotMatch(clause, /name\s*=\s*COALESCE\(\$3,\s*c\.name\)/);
 });
 
 test("website inquiry SQL resolves active listings and active staff before inserting", () => {

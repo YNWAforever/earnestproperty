@@ -2,6 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
+import { readPublicJsonBody } from "@/lib/ai/read-public-json-body";
+
 import {
   LiveAgentPublicError,
   answerLiveAgentMessage,
@@ -17,7 +19,13 @@ export const Route = createFileRoute("/api/live-agent/message")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const body = await readJsonBody(request);
+        let body: Record<string, unknown>;
+        try {
+          body = await readPublicJsonBody(request);
+        } catch (error) {
+          if (error instanceof Response) return error;
+          throw error;
+        }
         if (
           typeof body.sessionId !== "string" ||
           typeof body.accessToken !== "string" ||
@@ -66,10 +74,3 @@ export const Route = createFileRoute("/api/live-agent/message")({
     },
   },
 });
-
-async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
-  const body = await request.json().catch(() => ({}));
-  return body && typeof body === "object" && !Array.isArray(body)
-    ? (body as Record<string, unknown>)
-    : {};
-}

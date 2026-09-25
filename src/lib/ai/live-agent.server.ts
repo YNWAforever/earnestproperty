@@ -5,7 +5,6 @@ import {
   numberOrNull,
   stringOrEmpty,
   stringOrNull,
-  transactionRows,
 } from "@/lib/neon/db.server";
 
 import type { LiveAgentMessage, LiveAgentSession } from "./ai-types";
@@ -174,6 +173,9 @@ export async function requestLiveAgentHandoff(input: {
   }
 
   const session = await getLiveAgentSessionForHandoff(sessionId, accessToken);
+  if (session.status === "handoff_requested") {
+    return { ok: true, status: "handoff_requested" as const };
+  }
   const leadInput = buildLiveAgentLeadInput({
     ...input,
     source_path: session.source_path,
@@ -185,104 +187,163 @@ export async function requestLiveAgentHandoff(input: {
   const preferredEstates = leadInput.preferred_estates.map((estate) => estate.slice(0, 120));
   const note = `Live agent handoff from ${leadInput.source_path ?? "public site"}`;
 
-  const contactId = session.contact_id
-    ? await updateLiveAgentContact({
-        contactId: session.contact_id,
-        name,
-        phone,
-        email,
-        optInWhatsapp: leadInput.opt_in_whatsapp,
-      })
-    : await upsertLiveAgentContact({
-        name,
-        phone,
-        normalizedPhone: leadInput.normalized_phone,
-        email,
-        optInWhatsapp: leadInput.opt_in_whatsapp,
-      });
-  const leadId = await upsertLiveAgentLead({
-    leadId: session.lead_id,
-    contactId,
-    intent,
-    budgetMin: leadInput.budget_min,
-    budgetMax: leadInput.budget_max,
-    preferredEstates,
-    note,
-  });
-  const conversationId = await resolveExistingWoztellConversation({
-    conversationId: session.conversation_id,
-    contactId,
-  });
-  const transitioningToHandoff = session.status !== "handoff_requested";
-
-  // One transaction, not four sequential writes. The session flips to
-  // 'handoff_requested' FIRST, so if any following insert failed the session was
-  // already transitioned and `transitioningToHandoff` would be false on a retry
-  // -- the agent-facing crm_activities follow-up and the audit row were then
-  // never written at all, and a visitor who asked for a callback silently had no
-  // task created for anyone.
-  const handoffStatements = [
-    {
-      statement: `UPDATE live_agent_sessions
-     SET contact_id=$1,
-         lead_id=$2,
-         conversation_id=$3,
-         status='handoff_requested',
-         intent=$4,
-         budget_min=$5,
-         budget_max=$6,
-         preferred_estates=$7::text[],
-         opt_in_whatsapp=$8,
+  // The claim locks the still-open session before any contact or lead write.
+  // A concurrent request that loses the claim has no rows to feed into the
+  // dependent CTEs, so it cannot create an orphan lead or duplicate follow-up.
+  const rows = await queryRows<{ id: unknown }>(
+    `WITH claimed AS MATERIALIZED (
+       SELECT id, contact_id, lead_id, conversation_id
+       FROM live_agent_sessions
+       WHERE id=$1
+         AND access_token=$2
+         AND status IN ('open', 'qualified')
+       FOR UPDATE
+     ),
+     updated_contact AS (
+       UPDATE crm_contacts c
+       SET name=COALESCE(c.name, $3),
+           phone=COALESCE(c.phone, $4),
+           email=COALESCE(c.email, $6),
+           updated_at=now()
+       FROM claimed s
+       WHERE c.id=s.contact_id
+       RETURNING c.id
+     ),
+     inserted_contact AS (
+       INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
+       SELECT $3, $4, $5, $6, 'live_agent', $7 FROM claimed
+       WHERE NOT EXISTS (SELECT 1 FROM updated_contact)
+       ON CONFLICT (normalized_phone) DO UPDATE SET
+         name=COALESCE(crm_contacts.name, EXCLUDED.name),
+         phone=COALESCE(crm_contacts.phone, EXCLUDED.phone),
+         email=COALESCE(crm_contacts.email, EXCLUDED.email),
+         opt_in_whatsapp=crm_contacts.opt_in_whatsapp,
          updated_at=now()
-     WHERE id=$9`,
-      params: [
-        contactId,
-        leadId,
-        conversationId,
-        intent,
-        leadInput.budget_min,
-        leadInput.budget_max,
-        preferredEstates,
-        leadInput.opt_in_whatsapp,
-        session.id,
-      ],
-    },
-  ];
+       RETURNING id
+     ),
+     resolved_contact AS (
+       SELECT id FROM updated_contact
+       UNION ALL SELECT id FROM inserted_contact
+     ),
+     updated_lead AS (
+       UPDATE crm_leads l
+       SET contact_id=c.id,
+           stage='contacted',
+           intent=$8,
+           budget_min=$9,
+           budget_max=$10,
+           preferred_estates=$11::text[],
+           source='live_agent',
+           note=COALESCE(NULLIF(l.note, ''), $12),
+           updated_at=now()
+       FROM claimed s CROSS JOIN resolved_contact c
+       WHERE l.id=s.lead_id
+       RETURNING l.id
+     ),
+     inserted_lead AS (
+       INSERT INTO crm_leads (
+         contact_id, stage, intent, budget_min, budget_max, preferred_estates, source, note
+       )
+       SELECT c.id, 'contacted', $8, $9, $10, $11::text[], 'live_agent', $12
+       FROM claimed s CROSS JOIN resolved_contact c
+       WHERE NOT EXISTS (SELECT 1 FROM updated_lead)
+       RETURNING id
+     ),
+     resolved_lead AS (
+       SELECT id FROM updated_lead
+       UNION ALL SELECT id FROM inserted_lead
+     ),
+     candidate_conversation AS (
+       SELECT w.id
+       FROM claimed s CROSS JOIN resolved_contact c
+       JOIN whatsapp_conversations w
+         ON (w.id=s.conversation_id OR w.contact_id=c.id)
+       WHERE w.channel_id IS NOT NULL
+         AND w.woztell_member_id IS NOT NULL
+       ORDER BY CASE WHEN w.id=s.conversation_id THEN 0 ELSE 1 END, w.updated_at DESC
+       LIMIT 1
+     ),
+     updated_conversation AS (
+       UPDATE whatsapp_conversations w
+       SET contact_id=c.id,
+           status='pending',
+           last_message_at=COALESCE(w.last_message_at, now()),
+           updated_at=now()
+       FROM candidate_conversation candidate CROSS JOIN resolved_contact c
+       WHERE w.id=candidate.id
+       RETURNING w.id
+     ),
+     transitioned AS (
+       UPDATE live_agent_sessions s
+       SET contact_id=c.id,
+           lead_id=l.id,
+           conversation_id=(SELECT id FROM updated_conversation),
+           status='handoff_requested',
+           intent=$8,
+           budget_min=$9,
+           budget_max=$10,
+           preferred_estates=$11::text[],
+           opt_in_whatsapp=$7,
+           updated_at=now()
+       FROM claimed claim CROSS JOIN resolved_contact c CROSS JOIN resolved_lead l
+       WHERE s.id=claim.id
+         AND s.status IN ('open', 'qualified')
+       RETURNING s.id
+     ),
+     follow_up AS (
+       INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
+       SELECT l.id, c.id, 'follow_up', $12
+       FROM transitioned t CROSS JOIN resolved_contact c CROSS JOIN resolved_lead l
+       RETURNING id
+     ),
+     handoff_message AS (
+       INSERT INTO live_agent_messages (session_id, direction, message_text, safety_flags, shown_publicly)
+       SELECT id, 'system', $13, ARRAY['handoff_requested']::text[], false
+       FROM transitioned
+       RETURNING id
+     ),
+     handoff_audit AS (
+       INSERT INTO ai_audit_logs (actor_type, action, subject_type, subject_id, metadata)
+       SELECT 'visitor', 'live_agent.handoff', 'live_agent_session', t.id,
+         jsonb_build_object(
+           'contactId', c.id,
+           'leadId', l.id,
+           'conversationId', (SELECT id FROM updated_conversation),
+           'hasPhone', $14::boolean,
+           'sourcePath', $15::text
+         )
+       FROM transitioned t CROSS JOIN resolved_contact c CROSS JOIN resolved_lead l
+       RETURNING id
+     )
+     SELECT id FROM transitioned`,
+    [
+      session.id,
+      accessToken,
+      name,
+      phone,
+      leadInput.normalized_phone,
+      email,
+      leadInput.opt_in_whatsapp,
+      intent,
+      leadInput.budget_min,
+      leadInput.budget_max,
+      preferredEstates,
+      note,
+      "Live-agent handoff requested for WhatsApp follow-up.",
+      Boolean(phone),
+      leadInput.source_path,
+    ],
+  );
 
-  if (transitioningToHandoff) {
-    handoffStatements.push(
-      {
-        statement: `INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
-       VALUES ($1,$2,'follow_up',$3)`,
-        params: [leadId, contactId, note],
-      },
-      {
-        statement: `INSERT INTO live_agent_messages (session_id, direction, message_text, safety_flags, shown_publicly)
-       VALUES ($1,'system',$2,$3::text[],false)`,
-        params: [
-          session.id,
-          "Live-agent handoff requested for WhatsApp follow-up.",
-          ["handoff_requested"],
-        ],
-      },
-      {
-        statement: `INSERT INTO ai_audit_logs (actor_type, action, subject_type, subject_id, metadata)
-       VALUES ('visitor','live_agent.handoff','live_agent_session',$1,$2::jsonb)`,
-        params: [
-          session.id,
-          JSON.stringify({
-            contactId,
-            leadId,
-            conversationId,
-            hasPhone: Boolean(phone),
-            sourcePath: leadInput.source_path,
-          }),
-        ],
-      },
-    );
+  if (!rows[0]) {
+    // The other in-flight request may have won the transition. An owned,
+    // already-requested session is an idempotent success; any other state is
+    // a real lifecycle conflict.
+    const current = await getLiveAgentSessionForHandoff(sessionId, accessToken);
+    if (current.status !== "handoff_requested") {
+      throw new LiveAgentPublicError("Live-agent session is not open.", 400);
+    }
   }
-
-  await transactionRows(handoffStatements);
 
   return { ok: true, status: "handoff_requested" as const };
 }
@@ -343,177 +404,6 @@ async function getLiveAgentSessionForHandoff(sessionId: string, accessToken: str
     throw new LiveAgentPublicError("Live-agent session is not open.", 400);
   }
   return session;
-}
-
-async function upsertLiveAgentContact(input: {
-  name: string | null;
-  phone: string | null;
-  normalizedPhone: string | null;
-  email: string | null;
-  optInWhatsapp: boolean;
-}) {
-  if (input.normalizedPhone) {
-    const rows = await queryRows<{ id: unknown }>(
-      `INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
-       VALUES ($1,$2,$3,$4,'live_agent',$5)
-       ON CONFLICT (normalized_phone) DO UPDATE SET
-         -- Existing values win: the live-agent widget is unauthenticated, so a
-         -- caller supplying someone else's phone number must not be able to
-         -- rewrite that contact's name/phone/email. New values still fill
-         -- blanks. opt_in_whatsapp was already never raised here.
-         name = COALESCE(crm_contacts.name, EXCLUDED.name),
-         phone = COALESCE(crm_contacts.phone, EXCLUDED.phone),
-         email = COALESCE(crm_contacts.email, EXCLUDED.email),
-         opt_in_whatsapp = crm_contacts.opt_in_whatsapp,
-         updated_at = now()
-       RETURNING id`,
-      [input.name, input.phone, input.normalizedPhone, input.email, input.optInWhatsapp],
-    );
-    return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent contact.").id);
-  }
-
-  const rows = await queryRows<{ id: unknown }>(
-    `INSERT INTO crm_contacts (name, phone, email, source, opt_in_whatsapp)
-     VALUES ($1,$2,$3,'live_agent',$4)
-     RETURNING id`,
-    [input.name, input.phone, input.email, input.optInWhatsapp],
-  );
-  return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent contact.").id);
-}
-
-async function updateLiveAgentContact(input: {
-  contactId: string;
-  name: string | null;
-  phone: string | null;
-  email: string | null;
-  optInWhatsapp: boolean;
-}) {
-  const rows = await queryRows<{ id: unknown }>(
-    // Existing values win, matching upsertLiveAgentContact. This path is the
-    // one an attacker actually reaches: the FIRST handoff with a victim's phone
-    // hits the upsert's ON CONFLICT (which correctly preserves their fields)
-    // but returns the victim's contact id, which is then bound to the session.
-    // A SECOND handoff on the same unauthenticated session lands here with
-    // session.contact_id already set -- so caller-wins COALESCE would rewrite
-    // the victim's name, phone and email in place, while normalized_phone (not
-    // in this SET list) still points the row at the victim for dedupe and blast
-    // targeting.
-    `UPDATE crm_contacts
-     SET name = COALESCE(name, $1),
-         phone = COALESCE(phone, $2),
-         email = COALESCE(email, $3),
-         updated_at = now()
-     WHERE id=$4
-     RETURNING id`,
-    [input.name, input.phone, input.email, input.contactId],
-  );
-  if (rows[0]) return stringOrEmpty(rows[0].id);
-  return upsertLiveAgentContact({
-    name: input.name,
-    phone: input.phone,
-    normalizedPhone: null,
-    email: input.email,
-    optInWhatsapp: input.optInWhatsapp,
-  });
-}
-
-async function upsertLiveAgentLead(input: {
-  leadId: string | null;
-  contactId: string;
-  intent: string;
-  budgetMin: number | null;
-  budgetMax: number | null;
-  preferredEstates: string[];
-  note: string;
-}) {
-  if (input.leadId) {
-    const rows = await queryRows<{ id: unknown }>(
-      `UPDATE crm_leads
-       SET contact_id=$1,
-           stage='contacted',
-           intent=$2,
-           budget_min=$3,
-           budget_max=$4,
-           preferred_estates=$5::text[],
-           source='live_agent',
-           note=COALESCE(NULLIF(note, ''), $6),
-           updated_at=now()
-       WHERE id=$7
-       RETURNING id`,
-      [
-        input.contactId,
-        input.intent,
-        input.budgetMin,
-        input.budgetMax,
-        input.preferredEstates,
-        input.note,
-        input.leadId,
-      ],
-    );
-    if (rows[0]) return stringOrEmpty(rows[0].id);
-  }
-
-  const rows = await queryRows<{ id: unknown }>(
-    `INSERT INTO crm_leads (
-       contact_id, stage, intent, budget_min, budget_max, preferred_estates, source, note
-     )
-     VALUES ($1,'contacted',$2,$3,$4,$5::text[],'live_agent',$6)
-     RETURNING id`,
-    [
-      input.contactId,
-      input.intent,
-      input.budgetMin,
-      input.budgetMax,
-      input.preferredEstates,
-      input.note,
-    ],
-  );
-  return stringOrEmpty(requireRow(rows[0], "Unable to create live-agent lead.").id);
-}
-
-async function resolveExistingWoztellConversation(input: {
-  conversationId: string | null;
-  contactId: string;
-}) {
-  if (input.conversationId) {
-    const rows = await queryRows<{ id: unknown }>(
-      `UPDATE whatsapp_conversations
-       SET contact_id=$1,
-           status='pending',
-           last_message_at=COALESCE(last_message_at, now()),
-           updated_at=now()
-       WHERE id=$2
-         AND channel_id IS NOT NULL
-         AND woztell_member_id IS NOT NULL
-       RETURNING id`,
-      [input.contactId, input.conversationId],
-    );
-    if (rows[0]) return stringOrEmpty(rows[0].id);
-  }
-
-  const existing = await queryRows<{ id: unknown }>(
-    `SELECT id
-     FROM whatsapp_conversations
-     WHERE contact_id=$1
-       AND channel_id IS NOT NULL
-       AND woztell_member_id IS NOT NULL
-     ORDER BY updated_at DESC
-     LIMIT 1`,
-    [input.contactId],
-  );
-  if (existing[0]) {
-    await queryRows(
-      `UPDATE whatsapp_conversations
-       SET status='pending',
-           last_message_at=COALESCE(last_message_at, now()),
-           updated_at=now()
-       WHERE id=$1`,
-      [existing[0].id],
-    );
-    return stringOrEmpty(existing[0].id);
-  }
-
-  return null;
 }
 
 function mapSession(row: LiveAgentSessionRow): LiveAgentSession {
