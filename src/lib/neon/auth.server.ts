@@ -287,7 +287,15 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
       WHERE s.active = true
         AND (
           s.auth_user_id = $1
-          OR ($2::text IS NOT NULL AND lower(s.email) = lower($2::text) AND s.auth_user_id IS NULL)
+          OR (
+            $2::text IS NOT NULL
+            AND lower(s.email) = lower($2::text)
+            AND s.auth_user_id IS NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM staff_users bound
+              WHERE bound.auth_user_id = $1
+            )
+          )
         )
       GROUP BY s.id
       LIMIT 1
