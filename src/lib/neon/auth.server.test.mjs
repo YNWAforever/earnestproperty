@@ -323,26 +323,33 @@ test("a live bearer session is accepted and a revoked token is denied", async ()
   const queries = [];
   const queryRows = async (statement, params = []) => {
     queries.push({ statement, params });
-    if (!statement.includes("FROM neon_auth.session s") || params[0] !== "live-token")
-      return [];
+    if (!statement.includes("FROM neon_auth.session s") || params[0] !== "live-token") return [];
     return [{ id: "auth-kevin", email: "kevin@example.test", name: "Kevin" }];
   };
   const previousAuthUrl = process.env.NEON_AUTH_BASE_URL;
   process.env.NEON_AUTH_BASE_URL = "https://auth.invalid";
   try {
     const read = createNeonSessionReader(queryRows);
-    const live = await read(new Request("https://earnest.test/admin", {
-      headers: { authorization: "Bearer live-token" },
-    }));
+    const live = await read(
+      new Request("https://earnest.test/admin", {
+        headers: { authorization: "Bearer live-token" },
+      }),
+    );
     assert.equal(live?.user.id, "auth-kevin");
-    const revoked = await read(new Request("https://earnest.test/admin", {
-      headers: { authorization: "Bearer revoked-token" },
-    }));
+    const revoked = await read(
+      new Request("https://earnest.test/admin", {
+        headers: { authorization: "Bearer revoked-token" },
+      }),
+    );
     assert.equal(revoked, null);
     assert.equal(queries.length, 2);
-    assert.ok(queries.every(({ statement }) =>
-      statement.includes("FROM neon_auth.session s") && statement.includes('s."expiresAt" > now()'),
-    ));
+    assert.ok(
+      queries.every(
+        ({ statement }) =>
+          statement.includes("FROM neon_auth.session s") &&
+          statement.includes('s."expiresAt" > now()'),
+      ),
+    );
   } finally {
     if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
     else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
@@ -352,10 +359,12 @@ test("a live bearer session is accepted and a revoked token is denied", async ()
 test("a signed JWT cannot bypass a revoked Neon Auth session", async () => {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
-  const payload = Buffer.from(JSON.stringify({
-    sub: "auth-kevin",
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  })).toString("base64url");
+  const payload = Buffer.from(
+    JSON.stringify({
+      sub: "auth-kevin",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }),
+  ).toString("base64url");
   const data = header + "." + payload;
   const token = data + "." + sign(null, Buffer.from(data), privateKey).toString("base64url");
   const queries = [];
@@ -371,9 +380,11 @@ test("a signed JWT cannot bypass a revoked Neon Auth session", async () => {
   process.env.NEON_AUTH_BASE_URL = "https://auth.invalid";
   try {
     const read = createNeonSessionReader(queryRows);
-    const result = await read(new Request("https://earnest.test/admin", {
-      headers: { authorization: "Bearer " + token },
-    }));
+    const result = await read(
+      new Request("https://earnest.test/admin", {
+        headers: { authorization: "Bearer " + token },
+      }),
+    );
     assert.equal(result, null);
     assert.equal(queries.length, 1);
     assert.match(queries[0], /FROM neon_auth.session s/);
