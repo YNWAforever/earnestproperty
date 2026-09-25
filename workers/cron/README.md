@@ -15,7 +15,7 @@ No production flag, secret, schedule, or resource has been changed by this sourc
 
 ## Failure and recovery
 
-If signaling fails, the app runs the immediate job locally and logs `JOB_WAKE_SIGNAL_FAILED`. That fallback cannot arm a later retry or delayed job. After fixing the Worker or secret, send `POST /wake/service` and `POST /wake/general` with the server-side bearer token once; this re-arms any persisted work. A failed alarm drain backs off from one minute to at most one hour while work may remain. An empty response clears the alarm. The manual app drain routes remain available for operator recovery.
+If signaling fails, the app runs the immediate job locally and logs `JOB_WAKE_SIGNAL_FAILED`. That fallback cannot arm a later retry or delayed job. After fixing the Worker or secret, send `POST /wake/service` and `POST /wake/general` with the server-side bearer token once; this re-arms any persisted work. A failed alarm drain backs off from one minute and stops after seven consecutive failures, deleting the alarm and logging `JOB_DRAIN_RETRY_EXHAUSTED`. A later committed job or manual wake signal resets the failure count and re-arms the lane. An empty response clears the alarm. The manual app drain routes remain available for operator recovery.
 
 The former `/api/admin/jobs/send-queue` route remains callable manually for orphaned legacy campaign recipients. Newly queued campaigns enqueue a durable job and signal the general lane directly. The service permission and provider-send gates are unchanged.
 
