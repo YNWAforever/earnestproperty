@@ -98,3 +98,35 @@ test("repeated drain failures back off instead of waking Neon every minute", asy
   await scheduler.fire();
   assert.equal(await storage.getAlarm(), 181_000);
 });
+
+test("persistent drain failures stop automatic wakes until a new committed signal", async () => {
+  const storage = fakeStorage();
+  const reports = [];
+  let clock = 1_000;
+  let calls = 0;
+  const scheduler = createJobAlarm({
+    storage,
+    now: () => clock,
+    drain: async () => {
+      calls++;
+      throw new Error("unavailable");
+    },
+    report: (code) => reports.push(code),
+  });
+  await scheduler.signal();
+  for (let attempt = 0; attempt < 7; attempt++) {
+    const alarm = await storage.getAlarm();
+    assert.notEqual(alarm, null, "a retry is expected before the final failure");
+    clock = alarm;
+    await scheduler.fire();
+  }
+  assert.equal(calls, 7);
+  assert.equal(await storage.getAlarm(), null);
+  assert.equal(reports.filter((code) => code === "JOB_DRAIN_RETRY_EXHAUSTED").length, 1);
+
+  await scheduler.signal();
+  assert.equal(await storage.getAlarm(), clock + 1_000);
+  clock += 1_000;
+  await scheduler.fire();
+  assert.equal(await storage.getAlarm(), clock + 60_000);
+});

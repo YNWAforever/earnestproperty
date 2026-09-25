@@ -1,5 +1,6 @@
 const MIN_DELAY_MS = 1_000;
 const FAILURE_RETRY_MS = 60_000;
+const MAX_FAILURES = 7;
 
 /** One persistent alarm per lane; no timer exists once its queue is empty. */
 export function createJobAlarm({ storage, drain, now = Date.now, report = () => {} }) {
@@ -18,6 +19,7 @@ export function createJobAlarm({ storage, drain, now = Date.now, report = () => 
     const startedGeneration = Number((await storage.get("generation")) ?? 0);
     let nextDueAt = null;
     let failed = false;
+    let retriesExhausted = false;
     try {
       nextDueAt = await drain();
       if (
@@ -38,9 +40,14 @@ export function createJobAlarm({ storage, drain, now = Date.now, report = () => 
       } else if (failed) {
         const failures = Number((await storage.get("failures")) ?? 0) + 1;
         await storage.put("failures", failures);
-        await storage.setAlarm(
-          now() + Math.min(3_600_000, FAILURE_RETRY_MS * 2 ** Math.min(failures - 1, 6)),
-        );
+        if (failures >= MAX_FAILURES) {
+          await storage.deleteAlarm();
+          retriesExhausted = true;
+        } else {
+          await storage.setAlarm(
+            now() + Math.min(3_600_000, FAILURE_RETRY_MS * 2 ** Math.min(failures - 1, 6)),
+          );
+        }
       } else if (nextDueAt === null) {
         await storage.put("failures", 0);
         await storage.deleteAlarm();
@@ -49,6 +56,7 @@ export function createJobAlarm({ storage, drain, now = Date.now, report = () => 
         await storage.setAlarm(Math.max(now() + MIN_DELAY_MS, Date.parse(nextDueAt)));
       }
     });
+    if (retriesExhausted) report("JOB_DRAIN_RETRY_EXHAUSTED");
   }
 
   return { signal, fire };
