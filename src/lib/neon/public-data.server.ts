@@ -361,6 +361,10 @@ function mapListingRow(row: DbRow): NeonPropertyRow {
   };
 }
 
+function boundedPublicCount(value: number, fallback: number, max: number): number {
+  return Number.isSafeInteger(value) && value >= 1 ? Math.min(value, max) : fallback;
+}
+
 function addParam(params: unknown[], value: unknown) {
   params.push(value);
   return `$${params.length}`;
@@ -810,7 +814,7 @@ export async function fetchFeaturedProperties(input: {
   textAliases?: string[];
   outOfScopeTextAliases?: string[];
 }): Promise<NeonPropertyRow[]> {
-  const pageSize = Math.min(Math.max(1, input.limit), 100);
+  const pageSize = boundedPublicCount(input.limit, 6, 100);
   const scope = normalizeCorridorInventoryInput({
     districtSlugs: input.districtSlugs ?? [],
     estateSlugs: input.estateSlugs ?? [],
@@ -1027,7 +1031,7 @@ export async function fetchSimilarListings(
     ORDER BY p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC
     LIMIT $4
     `,
-    [input.estateId, input.dealType, input.excludeId, input.limit],
+    [input.estateId, input.dealType, input.excludeId, boundedPublicCount(input.limit, 4, 100)],
   );
   return rows.map(mapListingCardRow);
 }
@@ -1335,7 +1339,7 @@ export async function fetchDistrictTransactions(input: {
       AND t.deal_date >= (CURRENT_DATE - ($2::int * INTERVAL '1 month'))::date
     ORDER BY t.deal_date ASC
     `,
-    [input.districtSlug, input.monthsBack],
+    [input.districtSlug, boundedPublicCount(input.monthsBack, 12, 36)],
   );
   return rows.map((row) => ({
     deal_date: dateOrNull(row.deal_date),
@@ -1363,7 +1367,7 @@ export async function fetchEstateTransactions(input: { estateId: string; limit: 
     ORDER BY deal_date DESC NULLS LAST
     LIMIT $2
     `,
-    [input.estateId, input.limit],
+    [input.estateId, boundedPublicCount(input.limit, 8, 100)],
   );
   return rows.map((row) => ({
     deal_date: dateOrNull(row.deal_date),
