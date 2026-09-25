@@ -73,14 +73,6 @@ function getBearerToken(request: Request) {
   return match?.[1] ?? null;
 }
 
-function claimAsString(payload: AnyRecord, keys: string[]) {
-  for (const key of keys) {
-    const value = payload[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return null;
-}
-
 function staffRolesFromValue(value: unknown): StaffRole[] {
   if (Array.isArray(value)) return value.map(String) as StaffRole[];
   if (typeof value !== "string") return [];
@@ -101,96 +93,13 @@ function staffRolesFromValue(value: unknown): StaffRole[] {
   return [];
 }
 
-function base64UrlToBytes(value: string) {
-  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-  return Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
-}
-
-function base64UrlToJson(value: string) {
-  return asRecord(JSON.parse(new TextDecoder().decode(base64UrlToBytes(value))));
-}
-
-function isTokenTimeValid(payload: AnyRecord) {
-  const now = Math.floor(Date.now() / 1000);
-  const exp = typeof payload.exp === "number" ? payload.exp : null;
-  const nbf = typeof payload.nbf === "number" ? payload.nbf : null;
-  // A positive future `exp` is ALWAYS required: a missing/zero/past exp is rejected.
-  if (exp === null || exp <= now) return false;
-  if (nbf !== null && nbf > now) return false;
-  return true;
-}
-
 /**
  * Resolve the signed-in Neon Auth user for a request: the provider's session
  * cookie when one is present, else the bearer token the admin client attaches
- * (withStaffAuthHeaders), verified as a Neon Auth JWT or looked up as a raw
- * session token in the neon_auth tables this database already holds.
+ * (withStaffAuthHeaders), looked up as an active server-side session token
+ * in the neon_auth tables this database already holds.
  */
 export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows) {
-  async function listNeonAuthJwks() {
-    const rows = await queryRows(
-      `
-      SELECT "publicKey"
-      FROM neon_auth.jwks
-      WHERE "expiresAt" IS NULL OR "expiresAt" > now()
-      ORDER BY "createdAt" DESC
-      `,
-    ).catch(() => []);
-    return rows
-      .map((row) => {
-        if (typeof row.publicKey !== "string") return null;
-        return JSON.parse(row.publicKey) as JsonWebKey;
-      })
-      .filter((jwk): jwk is JsonWebKey => Boolean(jwk));
-  }
-
-  async function verifyNeonJwt(token: string) {
-    const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
-    if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
-
-    const header = base64UrlToJson(encodedHeader);
-    if (header.alg !== "EdDSA") return null;
-
-    const payload = base64UrlToJson(encodedPayload);
-    if (!isTokenTimeValid(payload)) return null;
-
-    // Validate issuer/audience when configured (env unset = skip that specific check).
-    const expectedIssuer = process.env.NEON_AUTH_ISSUER;
-    if (expectedIssuer && payload.iss !== expectedIssuer) return null;
-    const expectedAudience = process.env.NEON_AUTH_AUDIENCE;
-    if (expectedAudience) {
-      const aud = payload.aud;
-      const audiences = Array.isArray(aud) ? aud.map(String) : typeof aud === "string" ? [aud] : [];
-      if (!audiences.includes(expectedAudience)) return null;
-    }
-
-    const signedData = new TextEncoder().encode(`${encodedHeader}.${encodedPayload}`);
-    const signature = base64UrlToBytes(encodedSignature);
-    for (const jwk of await listNeonAuthJwks()) {
-      if (jwk.kty !== "OKP" || jwk.crv !== "Ed25519") continue;
-      const key = await crypto.subtle.importKey("jwk", jwk, { name: "Ed25519" }, false, ["verify"]);
-      if (await crypto.subtle.verify({ name: "Ed25519" }, key, signature, signedData)) {
-        return payload;
-      }
-    }
-
-    return null;
-  }
-
-  async function findNeonAuthUser(authUserId: string) {
-    const rows = await queryRows(
-      `
-      SELECT id::text AS id, email, name
-      FROM neon_auth."user"
-      WHERE id::text = $1
-      LIMIT 1
-      `,
-      [authUserId],
-    ).catch(() => []);
-    return rows[0] ?? null;
-  }
-
   async function findNeonAuthSession(token: string) {
     const rows = await queryRows(
       `
@@ -207,33 +116,14 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
   }
 
   async function getNeonSessionFromBearerToken(token: string): Promise<NeonSession | null> {
-    const payload = await verifyNeonJwt(token).catch(() => null);
-    if (!payload) {
-      const authSession = await findNeonAuthSession(token);
-      if (!authSession?.id) return null;
-
-      return {
-        user: {
-          id: stringOrEmpty(authSession.id),
-          email: stringOrNull(authSession.email),
-          name: stringOrNull(authSession.name),
-        },
-        session: { token },
-      };
-    }
-
-    const authUserId = claimAsString(payload, ["sub", "userId", "user_id", "id"]);
-    if (!authUserId) return null;
-
-    const authUser = await findNeonAuthUser(authUserId);
-    const email = stringOrNull(authUser?.email) ?? claimAsString(payload, ["email"]);
-    const name = stringOrNull(authUser?.name) ?? claimAsString(payload, ["name"]);
+    const authSession = await findNeonAuthSession(token);
+    if (!authSession?.id) return null;
 
     return {
       user: {
-        id: authUserId,
-        email,
-        name,
+        id: stringOrEmpty(authSession.id),
+        email: stringOrNull(authSession.email),
+        name: stringOrNull(authSession.name),
       },
       session: { token },
     };

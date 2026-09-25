@@ -41,3 +41,9 @@ test("missing or malformed input falls back", () => {
   expect(safeAdminRedirect("   ")).toBe("/admin");
   expect(safeAdminRedirect("admin/leads")).toBe("/admin");
 });
+
+test("normalised non-admin paths fall back", () => {
+  for (const hostile of ["/admin/../contact", "/admin/%2e%2e/contact", "/admin/..\\contact"]) {
+    expect(safeAdminRedirect(hostile)).toBe("/admin");
+  }
+});
