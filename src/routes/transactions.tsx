@@ -68,7 +68,7 @@ const searchSchema = z.object({
   // the current filters' top RESULT_LIMIT rows -- a known, low-risk
   // limitation, not a bug.
   tx: fallback(z.string().optional(), undefined),
-  page: fallback(z.number().int().min(1), 1).default(1),
+  page: fallback(z.number().int().min(1).max(10_000), 1).default(1),
 });
 
 export const Route = createFileRoute("/transactions")({

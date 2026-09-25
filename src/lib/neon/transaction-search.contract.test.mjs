@@ -161,6 +161,13 @@ test("offset defaults to 0 (page 1) and is a real bound parameter, floored at 0 
   assert.equal(negative.params.at(-1), 0);
 });
 
+test("an extreme offset cannot reach the SQL query", async () => {
+  for (const offset of [1e308, Infinity, Number.MAX_SAFE_INTEGER + 1, 1_000_001]) {
+    const call = await runRecent({ limit: 30, offset });
+    assert.equal(call.params.at(-1), 0, `offset=${offset} must fall back to zero`);
+  }
+});
+
 test("every optional filter stays a bound parameter, including an injection attempt", async () => {
   const call = await runRecent({
     districtSlug: "sham-tseng' OR 1=1 --",
