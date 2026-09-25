@@ -3187,6 +3187,10 @@ export async function previewAdminAudience(input: {
 }
 
 export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffAccess) {
+  if (!input || !["draft", "review", "scheduled"].includes(input.status)) {
+    return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
+  }
+
   requireNonEmpty(input.name, "name");
   const params = [
     input.name,
@@ -3200,7 +3204,7 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
     ? await queryRows(
         `UPDATE whatsapp_campaigns SET name=$1, template_id=$2, audience_id=$3,
           status=$4::whatsapp_campaign_status, scheduled_at=$5, updated_at=now()
-         WHERE id=$6 RETURNING id`,
+         WHERE id=$6 AND status IN ('draft', 'review', 'scheduled') RETURNING id`,
         [...params, input.id],
       )
     : await queryRows(

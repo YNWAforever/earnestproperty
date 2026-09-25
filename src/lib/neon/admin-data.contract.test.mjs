@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import ts from "typescript";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -81,4 +82,60 @@ test("property mutation keeps Copilot content fields explicit and scoped", () =>
   assert.match(server, /features = \$22::text\[\]/);
   assert.match(server, /video_url, agent_id, title_en, features/);
   assert.match(server, /input\.features \?\? \[\]/);
+});
+
+test("campaign save rejects delivery statuses before any database write", async () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === "saveAdminCampaign",
+  );
+  assert.ok(declaration);
+  const executable = ts.transpileModule(declaration.getText(file).replace(/^export\s+/, ""), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  let writes = 0;
+  const queries = [];
+  const save = new Function(
+    "requireNonEmpty",
+    "queryRows",
+    "writeAudit",
+    "stringOrEmpty",
+    executable + "\nreturn saveAdminCampaign;",
+  )(
+    () => {},
+    async (sql, params) => {
+      writes += 1;
+      queries.push({ sql, params });
+      return [{ id: "campaign-1" }];
+    },
+    async () => {},
+    String,
+  );
+  const input = {
+    name: "Campaign",
+    template_id: null,
+    audience_id: null,
+    status: "review",
+    scheduled_at: null,
+  };
+  for (const status of ["queued", "sending", "completed", "failed", null]) {
+    assert.deepEqual(await save({ ...input, status }, { staffId: "manager-1" }), {
+      id: "",
+      error: "INVALID_CAMPAIGN_STATUS",
+    });
+  }
+  assert.equal(writes, 0, "an invalid status must not create or update a campaign");
+  assert.deepEqual(await save(input, { staffId: "manager-1" }), { id: "campaign-1" });
+  assert.equal(writes, 1, "review remains an editable status");
+  assert.deepEqual(await save({ ...input, id: "campaign-1" }, { staffId: "manager-1" }), {
+    id: "campaign-1",
+  });
+  assert.match(
+    queries[1].sql,
+    /WHERE id=\$6\s+AND status IN \('draft', 'review', 'scheduled'\)/,
+    "a concurrent queue or send must prevent an edit",
+  );
 });
