@@ -66,6 +66,25 @@ async function runRecent(input) {
   return calls[0];
 }
 
+test("direct transaction filters reject invalid deal and price before SQL", async () => {
+  const { calls, query } = recorder();
+  const server = await importPublicDataServerWithInjectedQuery(query);
+
+  await assert.rejects(
+    server.fetchRecentTransactions({ limit: 24, dealType: "unknown" }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  await assert.rejects(
+    server.fetchRecentTransactionsCount({ minPrice: "many" }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  await assert.rejects(
+    server.fetchRecentTransactionsCount({ maxPrice: 1e308 }),
+    /INVALID_PUBLIC_FILTER/,
+  );
+  assert.equal(calls.length, 0, "invalid filters must not query Neon");
+});
+
 // --- fetchRecentTransactions (the /transactions route's own query) --------
 
 test("fetchRecentTransactions always filters on published=true AND verification_state='verified'", async () => {
