@@ -60,6 +60,28 @@ test("proposal validation rejects unknown fields and unsupported selectable clai
   assert.equal(result.error, "COPILOT_UNKNOWN_FIELD");
 });
 
+test("proposal validation rejects duplicate patches for the same field", () => {
+  const patch = {
+    field: "title_zh",
+    before: "Original",
+    after: "First suggestion",
+    reason: "Clearer copy",
+    confidence: "high",
+    evidenceIds: [],
+    unsupportedClaims: [],
+    claimType: "subjective",
+  };
+  const result = validateContentCopilotProposal({
+    resourceType: "listing",
+    sourceFingerprint: "a".repeat(64),
+    patches: [patch, { ...patch, after: "Second suggestion" }],
+    evidence: [],
+    warnings: [],
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "COPILOT_PROPOSAL_INVALID");
+});
+
 test("only selected supported patches are applied", () => {
   const result = applySelectedContentPatches(
     { title_zh: "old title", description: "old description" },
@@ -94,6 +116,33 @@ test("only selected supported patches are applied", () => {
     ok: true,
     value: { title_zh: "new title", description: "old description" },
     error: null,
+  });
+});
+
+test("patch application rejects duplicate field writes", () => {
+  const patch = {
+    field: "title_zh",
+    before: "Original",
+    after: "First suggestion",
+    reason: "Clearer copy",
+    confidence: "high",
+    evidenceIds: [],
+    unsupportedClaims: [],
+  };
+  const result = applySelectedContentPatches(
+    { title_zh: "Original" },
+    [patch, { ...patch, after: "Second suggestion" }],
+    ["title_zh"],
+    {
+      resourceType: "listing",
+      sourceFingerprint: "a".repeat(64),
+      currentFingerprint: "a".repeat(64),
+    },
+  );
+  assert.deepEqual(result, {
+    ok: false,
+    value: null,
+    error: "COPILOT_PROPOSAL_INVALID",
   });
 });
 
