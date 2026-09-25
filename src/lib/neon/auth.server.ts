@@ -151,7 +151,9 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
   }
 
   async function verifyNeonJwt(token: string) {
-    const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
+    const segments = token.split(".");
+    if (segments.length !== 3) return null;
+    const [encodedHeader, encodedPayload, encodedSignature] = segments;
     if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
 
     const header = base64UrlToJson(encodedHeader);

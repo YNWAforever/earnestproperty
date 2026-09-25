@@ -353,6 +353,15 @@ test("a malformed retired JWK does not reject a JWT signed by a valid key", asyn
       headers: { authorization: `Bearer ${token}` },
     }));
     assert.equal(result?.user.id, "auth-kevin");
+    const extraSegment = await read(new Request("https://earnest.test/admin", {
+      headers: { authorization: "Bearer " + token + ".extra" },
+    }));
+    assert.equal(extraSegment, null, "a JWT must have exactly three segments");
+    const invalidToken = data + "." + Buffer.alloc(64).toString("base64url");
+    const rejected = await read(new Request("https://earnest.test/admin", {
+      headers: { authorization: "Bearer " + invalidToken },
+    }));
+    assert.equal(rejected, null, "malformed keys must not bypass signature verification");
   } finally {
     if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
     else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
