@@ -2157,9 +2157,26 @@ export async function checkAdminFaqConflicts(
 }
 
 export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess) {
+  // The CMS read model exposes at most 120 FAQs for reordering.
+  if (!Array.isArray(orderedIds) || orderedIds.length > 120) {
+    throw new Response("Invalid FAQ order.", { status: 400 });
+  }
+  const seen = new Set<string>();
+  for (const id of orderedIds) {
+    if (
+      typeof id !== "string" ||
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id) ||
+      seen.has(id.toLowerCase())
+    ) {
+      throw new Response("Invalid FAQ order.", { status: 400 });
+    }
+    seen.add(id.toLowerCase());
+  }
+  if (orderedIds.length === 0) return { ok: true };
+
   // NOTE: the faqs table has no updated_at column in this schema, so the
   // batched UPDATE only sets sort_order (matching the previous per-row loop).
-  await queryRows(
+  const rows = await queryRows(
     `
     UPDATE faqs SET sort_order = d.ord
     FROM (
@@ -2167,9 +2184,12 @@ export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess)
       FROM unnest($1::uuid[]) WITH ORDINALITY AS t(id, ordinality)
     ) AS d
     WHERE faqs.id = d.id
+      AND faqs.sort_order IS DISTINCT FROM d.ord
+    RETURNING faqs.id
     `,
     [orderedIds],
   );
+  if (rows.length === 0) return { ok: true };
   await writeAudit(actor.staffId, "faq.reorder", "faq", undefined, { orderedIds });
   return { ok: true };
 }
