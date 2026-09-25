@@ -652,6 +652,97 @@ test("suspension preserves local deactivation when revocation fails, while react
   assert.equal(absent.calls.activeChanges.length, 0);
 });
 
+test("suspension still revokes sessions if action tracking cannot begin", async () => {
+  const suspension = fixture();
+  suspension.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  suspension.identityActions.beginIdentityAction = async () => {
+    throw new Error("action store unavailable");
+  };
+
+  const result = await suspension.service.changeStaffActive(
+    { staffId: targetId, active: false },
+    admin,
+    request,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(suspension.calls.activeChanges[0].input.active, false);
+  assert.equal(suspension.calls.provider.at(-1).method, "revoke");
+  assert.equal(suspension.calls.audit.at(-2).action, "staff.session_revocation");
+  assert.equal(suspension.calls.audit.at(-2).outcome, "success");
+  assert.equal(suspension.calls.audit.at(-1).action, "staff.suspended");
+});
+
+test("successful session revocation remains successful if action finalization fails", async () => {
+  const suspension = fixture();
+  suspension.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  let finalizationAttempts = 0;
+  suspension.identityActions.markIdentityActionSucceeded = async () => {
+    finalizationAttempts += 1;
+    throw new Error("action store unavailable");
+  };
+
+  const result = await suspension.service.changeStaffActive(
+    { staffId: targetId, active: false },
+    admin,
+    request,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(suspension.calls.provider.at(-1).method, "revoke");
+  assert.equal(finalizationAttempts, 1);
+  assert.equal(suspension.calls.audit.at(-2).action, "staff.session_revocation");
+  assert.equal(suspension.calls.audit.at(-2).outcome, "success");
+  assert.equal(
+    suspension.calls.actions.some((call) => call.method === "retryable"),
+    false,
+  );
+});
+
+test("suspension keeps a safe revocation failure when action tracking also fails", async () => {
+  const suspension = fixture({
+    provider: {
+      revokeUserSessions: async () => {
+        throw Object.assign(new Error("private provider details"), {
+          code: "PROVIDER_UNAVAILABLE",
+        });
+      },
+    },
+  });
+  suspension.staff.set(targetId, {
+    id: targetId,
+    email: "target@example.test",
+    auth_user_id: "auth-target",
+    active: true,
+  });
+  suspension.identityActions.beginIdentityAction = async () => {
+    throw new Error("action store unavailable");
+  };
+
+  const result = await suspension.service.changeStaffActive(
+    { staffId: targetId, active: false },
+    admin,
+    request,
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(suspension.calls.activeChanges[0].input.active, false);
+  assert.equal(suspension.calls.audit.at(-2).action, "staff.session_revocation");
+  assert.equal(suspension.calls.audit.at(-2).outcome, "failure");
+  assert.equal(suspension.calls.audit.at(-2).metadata.safeErrorCode, "PROVIDER_UNAVAILABLE");
+  assert.equal(suspension.calls.audit.at(-1).action, "staff.suspended");
+  assert.doesNotMatch(JSON.stringify(result), /private provider details|action store unavailable/);
+});
 test("default lifecycle dependencies defer unrelated admin and audit modules", async () => {
   assert.equal(typeof lifecycleModule.createDefaultStaffLifecycleDependencies, "function");
 

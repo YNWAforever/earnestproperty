@@ -776,18 +776,33 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         return { ...result, requestId };
       }
       const result = await dependencies.setStaffActive({ ...input, active: false }, actor);
-      const operation = await beginAction({
-        action: "session_revocation",
-        actor,
-        member,
-        requestId,
-        keyValue: member.id,
-      });
+      let operationId: string | null = null;
+      try {
+        operationId = (
+          await beginAction({
+            action: "session_revocation",
+            actor,
+            member,
+            requestId,
+            keyValue: member.id,
+          })
+        ).operationId;
+      } catch {
+        // Local deactivation has committed. Revocation must still be attempted
+        // when recording the action is temporarily unavailable.
+      }
       try {
         if (!member.authUserId)
           throw Object.assign(new Error(), { code: "PROVIDER_IDENTITY_NOT_FOUND" });
         await dependencies.provider.revokeUserSessions({ userId: member.authUserId, request });
-        await actions.markIdentityActionSucceeded({ operationId: operation.operationId });
+        if (operationId) {
+          try {
+            await actions.markIdentityActionSucceeded({ operationId });
+          } catch {
+            // A completed provider revocation remains successful even if its
+            // action record cannot be finalized yet.
+          }
+        }
         await safeAudit(dependencies.writeAudit, {
           actor,
           permission: "staff.manage",
@@ -798,11 +813,15 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           metadata: { reassignedCounts: result.reassigned },
         });
       } catch (error) {
-        const failure = await markProviderFailure({
-          operationId: operation.operationId,
-          error,
-          cooldown: "invitation",
-        });
+        const failureCode = operationId
+          ? (
+              await markProviderFailure({
+                operationId,
+                error,
+                cooldown: "invitation",
+              })
+            ).code
+          : safeProviderCode(error);
         await safeAudit(dependencies.writeAudit, {
           actor,
           permission: "staff.manage",
@@ -810,7 +829,7 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
           targetStaffId: member.id,
           requestId,
           outcome: "failure",
-          metadata: { safeErrorCode: failure.code, reassignedCounts: result.reassigned },
+          metadata: { safeErrorCode: failureCode, reassignedCounts: result.reassigned },
         });
       }
       await safeAudit(dependencies.writeAudit, {
