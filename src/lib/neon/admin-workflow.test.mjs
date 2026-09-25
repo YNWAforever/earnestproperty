@@ -10,9 +10,11 @@ import {
   normalizeAdminPhone,
 } from "./admin-workflow.ts";
 
-test("normalizeAdminPhone keeps digits only", () => {
+test("normalizeAdminPhone uses one identity for local and international HK numbers", () => {
   assert.equal(normalizeAdminPhone("+852 6090 3521"), "85260903521");
-  assert.equal(normalizeAdminPhone(" 6822-7287 "), "68227287");
+  assert.equal(normalizeAdminPhone(" 6090-3521 "), "85260903521");
+  assert.equal(normalizeAdminPhone("85260903521"), "85260903521");
+  assert.equal(normalizeAdminPhone("+44 20 7946 0958"), "442079460958");
   assert.equal(normalizeAdminPhone(null), null);
 });
 

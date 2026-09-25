@@ -141,11 +141,18 @@ export async function ingestWoztellEvent(
     })),
     {
       statement: `WITH matched AS (
-      SELECT * FROM crm_contacts WHERE normalized_phone=$1 OR whatsapp_member_id=$2
+      SELECT * FROM crm_contacts WHERE normalized_phone=$1
+        OR (length($1::text)=11 AND left($1::text,3)='852'
+          AND normalized_phone=right($1::text,8)) OR whatsapp_member_id=$2
     ), valid AS (
-      SELECT * FROM matched WHERE (SELECT count(*) FROM matched)=1
-      AND (normalized_phone IS NULL OR $1::text IS NULL OR normalized_phone=$1)
-      AND (whatsapp_member_id IS NULL OR $2::text IS NULL OR whatsapp_member_id=$2)
+      SELECT * FROM matched
+      WHERE (normalized_phone IS NULL OR $1::text IS NULL OR normalized_phone=$1
+        OR (length($1::text)=11 AND left($1::text,3)='852'
+          AND normalized_phone=right($1::text,8)))
+        AND (whatsapp_member_id IS NULL OR $2::text IS NULL OR whatsapp_member_id=$2)
+      ORDER BY (whatsapp_member_id=$2) DESC NULLS LAST,
+        (normalized_phone=$1) DESC NULLS LAST, id
+      LIMIT 1
     ), updated_contact AS (
       UPDATE crm_contacts c SET name=COALESCE($3,c.name),phone=COALESCE(c.phone,$4),
         normalized_phone=COALESCE(c.normalized_phone,$1),whatsapp_member_id=COALESCE(c.whatsapp_member_id,$2),

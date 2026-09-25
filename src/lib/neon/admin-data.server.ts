@@ -79,6 +79,7 @@ import {
   computeLeadPriority,
   resolveWhatsappStatus,
 } from "./command-center";
+import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "./phone-identity.ts";
 import { persistWebsiteInquiry } from "./website-inquiry.js";
 import {
   persistListingAlert,
@@ -779,7 +780,8 @@ type AudienceSummary = {
 // without silently dropping the ones an audience previously had no field for.
 // See createAdminAudienceFromSegment.
 const RECIPIENT_ELIGIBILITY_SQL = `
-SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp
+SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp,
+  ${marketingIdentitySafeSql("c")} AS identity_safe
 FROM crm_contacts c
 LEFT JOIN crm_leads l ON l.contact_id = c.id
 LEFT JOIN properties p ON p.id = l.property_id
@@ -885,15 +887,27 @@ function isEligibleAudienceRow(row: Record<string, unknown>) {
   return (
     Boolean(row.normalized_phone) &&
     row.opt_in_whatsapp === true &&
-    row.opted_out_whatsapp === false
+    row.opted_out_whatsapp === false &&
+    row.identity_safe !== false
   );
 }
 
+function uniqueEligibleAudienceRows(rows: Record<string, unknown>[]) {
+  const seenPhones = new Set<string>();
+  return rows.filter((row) => {
+    if (!isEligibleAudienceRow(row)) return false;
+    const phone = normalizeAdminPhone(row.normalized_phone);
+    if (!phone || seenPhones.has(phone)) return false;
+    seenPhones.add(phone);
+    return true;
+  });
+}
 function summarizeAudienceRows(rows: Record<string, unknown>[]): AudienceSummary {
+  const eligibleIds = new Set(uniqueEligibleAudienceRows(rows).map((row) => row.id));
   return rows.reduce<AudienceSummary>(
     (summary, row) => {
       summary.total += 1;
-      if (isEligibleAudienceRow(row)) summary.eligible += 1;
+      if (eligibleIds.has(row.id)) summary.eligible += 1;
       if (!row.normalized_phone) summary.missingPhone += 1;
       if (row.opted_out_whatsapp === true) summary.optedOut += 1;
       if (row.opt_in_whatsapp !== true) summary.notOptedIn += 1;
@@ -3221,8 +3235,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const filters = parseAudienceFilters(campaign.filters);
   const rows = await fetchAudienceRecipientRows(filters);
-  const eligibleContactIds = rows
-    .filter(isEligibleAudienceRow)
+  const eligibleContactIds = uniqueEligibleAudienceRows(rows)
     .map((row) => stringOrEmpty(row.id))
     .filter(Boolean);
   const uniqueEligibleContactIds = Array.from(new Set(eligibleContactIds));
@@ -3321,6 +3334,8 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
         WHERE NULLIF(contact.normalized_phone, '') IS NOT NULL
           AND contact.opt_in_whatsapp = true
           AND contact.opted_out_whatsapp = false
+          AND ${marketingIdentitySafeSql("contact")}
+          AND ${campaignRecipientPrimarySql("r", "contact")}
       )::int AS eligible_recipients
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
@@ -3373,6 +3388,8 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
               AND NULLIF(contact.normalized_phone, '') IS NOT NULL
               AND contact.opt_in_whatsapp = true
               AND contact.opted_out_whatsapp = false
+              AND ${marketingIdentitySafeSql("contact")}
+              AND ${campaignRecipientPrimarySql("r", "contact")}
           )
         RETURNING c.id, c.reviewed_at
       ), recipients AS (

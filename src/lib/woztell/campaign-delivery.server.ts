@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "../neon/phone-identity.ts";
 
 import { isBlastRecipientAllowed, sendWoztellResponse, woztellEnabled } from "./woztell.server.ts";
 
@@ -64,7 +65,10 @@ export async function beginCampaignDispatch(
         SELECT r.id, c.status AS campaign_status, contact.normalized_phone, contact.whatsapp_member_id,
           contact.opt_in_whatsapp, contact.opted_out_whatsapp, t.element_name, t.language_code, t.components, j.attempt_count,
           (c.status IN ('queued', 'sending') AND contact.opt_in_whatsapp = true
-            AND contact.opted_out_whatsapp = false AND t.status LIKE 'active%'
+            AND contact.opted_out_whatsapp = false
+            AND ${marketingIdentitySafeSql("contact")}
+            AND ${campaignRecipientPrimarySql("r", "contact")}
+            AND t.status LIKE 'active%'
             AND COALESCE(NULLIF(contact.whatsapp_member_id, ''), NULLIF(contact.normalized_phone, '')) IS NOT NULL
             AND j.status = 'running' AND j.lease_owner = $4 AND j.lease_expires_at > clock_timestamp()) AS allowed
         FROM whatsapp_campaign_recipients r

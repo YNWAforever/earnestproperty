@@ -199,14 +199,24 @@ export async function requestLiveAgentHandoff(input: {
          AND status IN ('open', 'qualified')
        FOR UPDATE
      ),
+     candidate_contact AS MATERIALIZED (
+       SELECT c.id FROM claimed s
+       JOIN crm_contacts c ON c.id=s.contact_id
+         OR (s.contact_id IS NULL AND $5::text IS NOT NULL AND
+           (c.normalized_phone=$5 OR
+             (length($5::text)=11 AND left($5::text,3)='852'
+               AND c.normalized_phone=right($5::text,8))))
+       ORDER BY (c.id=s.contact_id) DESC, (c.normalized_phone=$5) DESC, c.id
+       LIMIT 1 FOR UPDATE OF c
+     ),
      updated_contact AS (
        UPDATE crm_contacts c
        SET name=COALESCE(c.name, $3),
            phone=COALESCE(c.phone, $4),
            email=COALESCE(c.email, $6),
            updated_at=now()
-       FROM claimed s
-       WHERE c.id=s.contact_id
+       FROM candidate_contact candidate
+       WHERE c.id=candidate.id
        RETURNING c.id
      ),
      inserted_contact AS (

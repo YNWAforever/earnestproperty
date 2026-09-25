@@ -1,3 +1,5 @@
+import { normalizeAdminPhone } from "../neon/admin-workflow.ts";
+
 export function canUseChunkForPublicAnswer(input: {
   visibility?: string;
   stale?: boolean;
@@ -24,7 +26,7 @@ export function buildLiveAgentLeadInput(input: {
   return {
     name: input.name ?? null,
     phone: input.phone ?? null,
-    normalized_phone: normalizePhone(input.phone ?? null),
+    normalized_phone: normalizeAdminPhone(input.phone ?? null),
     email: input.email ?? null,
     intent: input.intent ?? "buyer",
     budget_min: input.budget_min ?? null,
@@ -34,10 +36,4 @@ export function buildLiveAgentLeadInput(input: {
     source_path: input.source_path ?? null,
     opt_in_whatsapp: input.opt_in_whatsapp === true,
   };
-}
-
-function normalizePhone(phone: string | null) {
-  if (!phone) return null;
-  const digits = phone.replace(/\D+/g, "");
-  return digits || null;
 }
