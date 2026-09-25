@@ -139,3 +139,63 @@ test("campaign save rejects delivery statuses before any database write", async 
     "a concurrent queue or send must prevent an edit",
   );
 });
+
+test("campaign cancellation only changes active campaigns and their pending recipients", async () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === "cancelAdminCampaign",
+  );
+  assert.ok(declaration);
+  const executable = ts.transpileModule(declaration.getText(file).replace(/^export\s+/, ""), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  const statements = [];
+  let rows = [{ id: "campaign-1" }];
+  const cancel = new Function("getSql", "queryRows", executable + "\nreturn cancelAdminCampaign;")(
+    () => ({
+      transaction: async (callback) => {
+        callback({
+          query: (sql) => {
+            statements.push(sql);
+            return rows;
+          },
+        });
+        return [rows];
+      },
+    }),
+    async (sql) => {
+      statements.push(sql);
+      return rows;
+    },
+  );
+
+  assert.deepEqual(await cancel("campaign-1", { staffId: "manager-1" }), { ok: true });
+  assert.equal(
+    statements.length,
+    1,
+    "the transition and its side effects must share one statement",
+  );
+  assert.match(
+    statements[0],
+    /WHERE id = \$1::uuid\s+AND status IN \('draft', 'review', 'scheduled', 'queued', 'sending'\)/,
+    "completed and already cancelled campaigns must be immutable",
+  );
+  assert.match(
+    statements[0],
+    /UPDATE whatsapp_campaign_recipients[\s\S]*campaign_id IN \(SELECT id FROM cancelled\)/,
+    "recipient cancellation must depend on the campaign transition",
+  );
+  assert.match(
+    statements[0],
+    /INSERT INTO audit_logs[\s\S]*FROM cancelled/,
+    "audit must record only a successful cancellation",
+  );
+  rows = [];
+  assert.deepEqual(await cancel("campaign-1", { staffId: "manager-1" }), {
+    ok: false,
+    error: "Not found",
+  });
+});
