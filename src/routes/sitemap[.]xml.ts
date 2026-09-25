@@ -69,6 +69,7 @@ export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
       GET: async () => {
+        let degraded = false;
         const agentPaths = await listPublicAgentProfiles()
           .then((profiles) =>
             profiles.flatMap((profile) =>
@@ -76,6 +77,7 @@ export const Route = createFileRoute("/sitemap.xml")({
             ),
           )
           .catch((error: unknown) => {
+            degraded = true;
             // Silently swallowing this meant a DB blip shipped a sitemap with
             // zero agent URLs and nobody found out. Still degrade gracefully
             // (a missing sitemap entirely is worse for SEO than one missing
@@ -94,17 +96,24 @@ export const Route = createFileRoute("/sitemap.xml")({
         // same empty case (see their head()), so this self-heals the moment
         // data lands with no further deploy needed.
         const [transactions, estateReviewArticles, timestamps, listings] = await Promise.all([
-          fetchRecentTransactions({ limit: 1 }).catch(() => []),
-          fetchPublishedArticlesByCategory("屋苑開箱").catch(() => []),
+          fetchRecentTransactions({ limit: 1 }).catch(() => {
+            degraded = true;
+            return [];
+          }),
+          fetchPublishedArticlesByCategory("屋苑開箱").catch(() => {
+            degraded = true;
+            return [];
+          }),
           fetchSitemapTimestamps().catch(
-            (): Awaited<ReturnType<typeof fetchSitemapTimestamps>> => ({
-              estates: {},
-              articles: {},
-            }),
+            (): Awaited<ReturnType<typeof fetchSitemapTimestamps>> => {
+              degraded = true;
+              return { estates: {}, articles: {} };
+            },
           ),
           // The listing detail pages are the site's money pages and the only
           // ones carrying RealEstateListing JSON-LD; they were absent here.
           fetchSitemapListings().catch((error: unknown) => {
+            degraded = true;
             console.error(
               "[sitemap] fetchSitemapListings failed; shipping without listings",
               error,
@@ -193,7 +202,9 @@ export const Route = createFileRoute("/sitemap.xml")({
         return new Response(body, {
           headers: {
             "content-type": "application/xml; charset=utf-8",
-            "cache-control": "public, max-age=3600",
+            "cache-control": degraded
+              ? "no-store"
+              : "public, max-age=3600, s-maxage=3600",
           },
         });
       },
