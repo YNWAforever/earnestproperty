@@ -14,7 +14,7 @@ export function createJobWake({ enabled, waitUntil, run, report = () => {} }) {
 }
 
 /** Only call from the server after a job-producing commit. */
-export async function signalJobWake({ url, secret, lane, fetcher = fetch }) {
+export async function signalJobWake({ url, secret, lane, fetcher = fetch, timeoutMs = 10_000 }) {
   if (!url || !secret || (lane !== "service" && lane !== "general")) {
     throw new Error("JOB_WAKE_SIGNAL_CONFIG_MISSING");
   }
@@ -25,6 +25,7 @@ export async function signalJobWake({ url, secret, lane, fetcher = fetch }) {
   const response = await fetcher(endpoint.href, {
     method: "POST",
     headers: { authorization: `Bearer ${secret}` },
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new Error("JOB_WAKE_SIGNAL_FAILED");
 }

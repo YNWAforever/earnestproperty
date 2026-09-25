@@ -10,4 +10,5 @@ export function signalJobWake(input: {
   secret: string;
   lane: JobLane;
   fetcher?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<void>;
