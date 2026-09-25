@@ -172,24 +172,6 @@ function CommandCenter() {
     refresh();
   }, [refresh]);
 
-  // 今日要跟 and 逾期跟進 are derived from `now` on the server, so a board opened
-  // at 09:00 and worked from all morning showed 09:00 data at 15:00: leads that
-  // became overdue, new handoffs and new WhatsApp replies simply never appeared,
-  // and nothing on screen said how old the view was.
-  useEffect(() => {
-    if (!user) return;
-    const interval = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-      void refresh();
-    }, 120_000);
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [refresh, user]);
-
   async function runAnalysis(row: CommandCenterRow) {
     setBusy(true);
     try {
