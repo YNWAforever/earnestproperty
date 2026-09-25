@@ -33,7 +33,8 @@ export async function submitWithInquiryIdentity<T extends object, R extends { id
   } catch {
     /* in-memory retry still works */
   }
-  if (!id || !/^[0-9a-f-]{36}$/i.test(id)) id = crypto.randomUUID();
+  if (!id || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))
+    id = crypto.randomUUID();
   pending.set(key, id);
   try {
     storage?.setItem(key, id);
