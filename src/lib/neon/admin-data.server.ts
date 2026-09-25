@@ -3452,28 +3452,34 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
 }
 
 export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
-  const sql = getSql();
-  const [rows] = await sql.transaction((tx) => [
-    tx.query(
-      "UPDATE whatsapp_campaigns SET status = 'cancelled', updated_at = now() WHERE id = $1::uuid RETURNING id",
-      [id],
-    ),
-    tx.query(
-      `UPDATE whatsapp_campaign_recipients
+  const rows = await queryRows(
+    `WITH cancelled AS (
+       UPDATE whatsapp_campaigns
+       SET status = 'cancelled', updated_at = now()
+       WHERE id = $1::uuid
+         AND status IN ('draft', 'review', 'scheduled', 'queued', 'sending')
+       RETURNING id
+     ), recipients AS (
+       UPDATE whatsapp_campaign_recipients r
        SET status = 'cancelled', error = 'CAMPAIGN_CANCELLED'
-       WHERE campaign_id = $1::uuid
-         AND status IN ('queued', 'sending') AND dispatch_started_at IS NULL`,
-      [id],
-    ),
-    tx.query(
-      `INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       WHERE r.campaign_id IN (SELECT id FROM cancelled)
+         AND r.status IN ('queued', 'sending')
+         AND r.dispatch_started_at IS NULL
+       RETURNING r.id
+     ), audited AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
        SELECT $2::uuid, 'campaign.cancel', 'campaign', id,
          jsonb_build_object('dispatchBoundary', 'dispatch_started_at')
-       FROM whatsapp_campaigns WHERE id = $1::uuid`,
-      [id, actor.staffId],
-    ),
-  ]);
-  if (!Array.isArray(rows) || !rows[0]) return { ok: false, error: "Not found" };
+       FROM cancelled
+       RETURNING id
+     )
+     SELECT cancelled.id,
+       (SELECT count(*) FROM recipients) AS recipients_cancelled,
+       (SELECT count(*) FROM audited) AS audit_rows
+     FROM cancelled`,
+    [id, actor.staffId],
+  );
+  if (!rows[0]) return { ok: false, error: "Not found" };
   return { ok: true };
 }
 export async function createWebsiteInquiry(input: {
