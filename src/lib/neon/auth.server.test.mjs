@@ -319,30 +319,52 @@ for (const verified of [null, "true", 1]) {
   });
 }
 
+test("a live bearer session is accepted and a revoked token is denied", async () => {
+  const queries = [];
+  const queryRows = async (statement, params = []) => {
+    queries.push({ statement, params });
+    if (!statement.includes("FROM neon_auth.session s") || params[0] !== "live-token")
+      return [];
+    return [{ id: "auth-kevin", email: "kevin@example.test", name: "Kevin" }];
+  };
+  const previousAuthUrl = process.env.NEON_AUTH_BASE_URL;
+  process.env.NEON_AUTH_BASE_URL = "https://auth.invalid";
+  try {
+    const read = createNeonSessionReader(queryRows);
+    const live = await read(new Request("https://earnest.test/admin", {
+      headers: { authorization: "Bearer live-token" },
+    }));
+    assert.equal(live?.user.id, "auth-kevin");
+    const revoked = await read(new Request("https://earnest.test/admin", {
+      headers: { authorization: "Bearer revoked-token" },
+    }));
+    assert.equal(revoked, null);
+    assert.equal(queries.length, 2);
+    assert.ok(queries.every(({ statement }) =>
+      statement.includes("FROM neon_auth.session s") && statement.includes('s."expiresAt" > now()'),
+    ));
+  } finally {
+    if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
+    else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
+  }
+});
 
-test("a malformed retired JWK does not reject a JWT signed by a valid key", async () => {
+test("a signed JWT cannot bypass a revoked Neon Auth session", async () => {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const header = Buffer.from(JSON.stringify({ alg: "EdDSA" })).toString("base64url");
-  const claims = {
+  const payload = Buffer.from(JSON.stringify({
     sub: "auth-kevin",
     exp: Math.floor(Date.now() / 1000) + 3600,
-    ...(process.env.NEON_AUTH_ISSUER ? { iss: process.env.NEON_AUTH_ISSUER } : {}),
-    ...(process.env.NEON_AUTH_AUDIENCE ? { aud: process.env.NEON_AUTH_AUDIENCE } : {}),
-  };
-  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
-  const data = `${header}.${payload}`;
-  const token = `${data}.${sign(null, Buffer.from(data), privateKey).toString("base64url")}`;
+  })).toString("base64url");
+  const data = header + "." + payload;
+  const token = data + "." + sign(null, Buffer.from(data), privateKey).toString("base64url");
+  const queries = [];
   const queryRows = async (statement) => {
-    if (statement.includes("FROM neon_auth.jwks")) {
-      return [
-        { publicKey: "{bad-json" },
-        { publicKey: JSON.stringify({ kty: "OKP", crv: "Ed25519", x: "bad" }) },
-        { publicKey: JSON.stringify(publicKey.export({ format: "jwk" })) },
-      ];
-    }
-    if (statement.includes('FROM neon_auth."user"')) {
+    queries.push(statement);
+    if (statement.includes("FROM neon_auth.jwks"))
+      return [{ publicKey: JSON.stringify(publicKey.export({ format: "jwk" })) }];
+    if (statement.includes('FROM neon_auth."user"'))
       return [{ id: "auth-kevin", email: "kevin@example.test", name: "Kevin" }];
-    }
     return [];
   };
   const previousAuthUrl = process.env.NEON_AUTH_BASE_URL;
@@ -350,25 +372,11 @@ test("a malformed retired JWK does not reject a JWT signed by a valid key", asyn
   try {
     const read = createNeonSessionReader(queryRows);
     const result = await read(new Request("https://earnest.test/admin", {
-      headers: { authorization: `Bearer ${token}` },
-    }));
-    assert.equal(result?.user.id, "auth-kevin");
-    const missingUserReader = createNeonSessionReader(async (statement, params) =>
-      statement.includes('FROM neon_auth."user"') ? [] : queryRows(statement, params),
-    );
-    const missingUser = await missingUserReader(new Request("https://earnest.test/admin", {
       headers: { authorization: "Bearer " + token },
     }));
-    assert.equal(missingUser, null, "a deleted Neon Auth user must not retain JWT access");
-    const extraSegment = await read(new Request("https://earnest.test/admin", {
-      headers: { authorization: "Bearer " + token + ".extra" },
-    }));
-    assert.equal(extraSegment, null, "a JWT must have exactly three segments");
-    const invalidToken = data + "." + Buffer.alloc(64).toString("base64url");
-    const rejected = await read(new Request("https://earnest.test/admin", {
-      headers: { authorization: "Bearer " + invalidToken },
-    }));
-    assert.equal(rejected, null, "malformed keys must not bypass signature verification");
+    assert.equal(result, null);
+    assert.equal(queries.length, 1);
+    assert.match(queries[0], /FROM neon_auth.session s/);
   } finally {
     if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
     else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;

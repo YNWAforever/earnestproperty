@@ -51,14 +51,11 @@ async function readStaffAuthToken() {
   // getSession() below, which already covers every case this app needs.
   // Revisit if the SDK is upgraded past this version.
   //
-  // This JWT is verified successfully by this app's OWN requireStaffAccess
-  // (auth.server.ts's verifyNeonJwt) -- do not replace it here. It is NOT,
-  // however, a credential Neon Auth's own admin API accepts -- no forwardable
-  // credential is (Neon's docs: admin operations are cookie-session only), so
-  // the server stopped calling that API entirely: identity reads, session
-  // revocation and invitations are served from the local neon_auth tables
-  // (see staff-lifecycle.server.ts), and the one remaining provider call
-  // (request-password-reset) is public.
+  // The admin client sends the session token returned by getSession(). The
+  // server checks it in neon_auth.session for every bearer request, so logout
+  // and staff session revocation invalidate it. Standalone JWTs are not admin
+  // sessions. Neon Auth admin operations require a cookie session, so identity
+  // reads, revocation, and invitations use the local neon_auth tables.
   const client = authClient as NeonAuthClientWithStaffToken;
   const session = await client.getSession?.().catch(() => null);
   return sessionTokenFromValue(session);

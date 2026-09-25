@@ -70,21 +70,19 @@ test("admin auth headers read the staff token from the session, not the broken J
   assert.match(authClient, /headers\.set\("authorization", `Bearer \$\{token\}`\)/);
 });
 
-test("admin server functions forward Neon Auth JWTs and verify them on the server", () => {
+test("admin server functions require an active Neon Auth session token", () => {
   const adminData = read("src/lib/neon/admin-data.ts");
   const serverAuth = read("src/lib/neon/auth.server.ts");
 
   assert.match(adminData, /withStaffAuthHeaders/);
   assert.match(adminData, /fetchAdminOverviewServer/);
   assert.match(adminData, /saveAdminPropertyServer/);
-  assert.match(serverAuth, /verifyNeonJwt/);
-  assert.match(serverAuth, /crypto\.subtle\.verify/);
-  assert.match(serverAuth, /Ed25519/);
   assert.match(serverAuth, /staffRolesFromValue/);
   assert.match(serverAuth, /array_to_json/);
   assert.match(serverAuth, /getBearerToken/);
-  assert.match(serverAuth, /neon_auth\.jwks/);
-  assert.match(serverAuth, /neon_auth\.session/);
-  assert.match(serverAuth, /expiresAt/);
-  assert.match(serverAuth, /neon_auth\."user"/);
+  assert.match(serverAuth, /FROM neon_auth\.session s/);
+  assert.match(serverAuth, /WHERE s\.token = \$1/);
+  assert.match(serverAuth, /s\."expiresAt" > now\(\)/);
+  assert.match(serverAuth, /INNER JOIN neon_auth\."user"/);
+  assert.doesNotMatch(serverAuth, /verifyNeonJwt|neon_auth\.jwks|crypto\.subtle\.verify/);
 });
