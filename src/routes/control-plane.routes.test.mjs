@@ -126,16 +126,15 @@ test("WozTell queue routes enqueue durable campaign jobs and delegate to the wor
   const cronSource = readFileSync("src/routes/api.admin.jobs.send-queue.ts", "utf8");
 
   assert.match(queueSource, /requireStaffPermission\(request, "campaign\.queue"\)/);
-  assert.match(queueSource, /jobType:\s*"woztell\.campaign\.deliver"/);
-  assert.match(queueSource, /payloadVersion:\s*1/);
-  // The idempotency key is scoped to the campaign's current queue RUN, not to
-  // the campaign. A campaign-stable key made a campaign permanently
-  // un-sendable: enqueueJob's ON CONFLICT returns the existing row, so once
-  // that job reached a terminal state every later enqueue got the dead row
-  // back and nothing was ever queued again. Both paths must derive the key the
-  // same way, or one queue run would enqueue two delivery jobs.
-  assert.match(queueSource, /campaignDeliveryIdempotencyKey\(params\.id, result\.queueRunAt\)/);
-  assert.doesNotMatch(queueSource, /idempotencyKey: `woztell\.campaign\.deliver:\$\{params\.id\}`/);
+  const adminSource = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
+  assert.match(queueSource, /sendAdminCampaignQueue/);
+  assert.doesNotMatch(queueSource, /enqueueJob\(/);
+  assert.match(adminSource, /WITH flipped AS[\s\S]*INSERT INTO ops_jobs/);
+  assert.match(adminSource, /SELECT 'woztell\.campaign\.deliver', 1/);
+  // The SQL key uses the same epoch-millisecond token as the legacy recovery
+  // route, so one queue run still resolves to one billable delivery job.
+  assert.match(adminSource, /floor\(extract\(epoch from flipped\.reviewed_at\) \* 1000\)/);
+  assert.match(adminSource, /wakeAfterCommit\("general"\)/);
   assert.match(cronSource, /process\.env\.CRON_SECRET/);
   assert.match(cronSource, /enqueueJob\(/);
   assert.match(cronSource, /runClaimedJobs\(/);
