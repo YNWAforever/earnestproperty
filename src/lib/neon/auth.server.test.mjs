@@ -353,6 +353,13 @@ test("a malformed retired JWK does not reject a JWT signed by a valid key", asyn
       headers: { authorization: `Bearer ${token}` },
     }));
     assert.equal(result?.user.id, "auth-kevin");
+    const missingUserReader = createNeonSessionReader(async (statement, params) =>
+      statement.includes('FROM neon_auth."user"') ? [] : queryRows(statement, params),
+    );
+    const missingUser = await missingUserReader(new Request("https://earnest.test/admin", {
+      headers: { authorization: "Bearer " + token },
+    }));
+    assert.equal(missingUser, null, "a deleted Neon Auth user must not retain JWT access");
     const extraSegment = await read(new Request("https://earnest.test/admin", {
       headers: { authorization: "Bearer " + token + ".extra" },
     }));

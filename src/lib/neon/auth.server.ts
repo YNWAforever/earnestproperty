@@ -237,6 +237,7 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
     if (!authUserId) return null;
 
     const authUser = await findNeonAuthUser(authUserId);
+    if (stringOrEmpty(authUser?.id) !== authUserId) return null;
     const email = stringOrNull(authUser?.email) ?? claimAsString(payload, ["email"]);
     const name = stringOrNull(authUser?.name) ?? claimAsString(payload, ["name"]);
 
