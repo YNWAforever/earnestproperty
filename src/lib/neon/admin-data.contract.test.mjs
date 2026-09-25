@@ -250,3 +250,64 @@ test("activity completion verifies its lead and audits the stored lead", async (
   });
   assert.equal(audits.length, 1, "a rejected completion must not write an audit entry");
 });
+
+test("FAQ reorder rejects invalid batches and skips empty database work", async () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === "reorderAdminFaqs",
+  );
+  assert.ok(declaration);
+  const executable = ts.transpileModule(declaration.getText(file).replace(/^export\s+/, ""), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+
+  const queries = [];
+  const audits = [];
+  let changedRows = [];
+  const reorder = new Function(
+    "queryRows",
+    "writeAudit",
+    executable + "\nreturn reorderAdminFaqs;",
+  )(
+    async (sql, params) => {
+      queries.push({ sql, params });
+      return changedRows;
+    },
+    async (...args) => {
+      audits.push(args);
+    },
+  );
+  const actor = { staffId: "manager-1" };
+  const first = "00000000-0000-0000-0000-000000000001";
+  const second = "00000000-0000-0000-0000-000000000002";
+
+  assert.deepEqual(await reorder([], actor), { ok: true });
+  assert.equal(queries.length, 0, "empty reorder must not reach Neon");
+  assert.equal(audits.length, 0, "empty reorder is not a mutation");
+
+  const oversized = Array.from(
+    { length: 121 },
+    (_, index) => `00000000-0000-0000-0000-${String(index + 1).padStart(12, "0")}`,
+  );
+  for (const ids of [null, ["bad-id"], [first, first], oversized]) {
+    await assert.rejects(
+      () => reorder(ids, actor),
+      (error) => error instanceof Response && error.status === 400,
+    );
+  }
+  assert.equal(queries.length, 0, "invalid batches must not reach Neon");
+  assert.equal(audits.length, 0);
+
+  changedRows = [{ id: first }, { id: second }];
+  assert.deepEqual(await reorder([first, second], actor), { ok: true });
+  assert.equal(queries.length, 1);
+  assert.deepEqual(queries[0].params, [[first, second]]);
+  assert.match(queries[0].sql, /sort_order IS DISTINCT FROM d.ord[\s\S]*RETURNING faqs.id/);
+  assert.equal(audits.length, 1);
+
+  changedRows = [];
+  assert.deepEqual(await reorder([first, second], actor), { ok: true });
+  assert.equal(audits.length, 1, "unchanged order must not write an audit entry");
+});
