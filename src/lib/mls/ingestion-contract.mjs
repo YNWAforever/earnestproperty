@@ -79,11 +79,13 @@ export function decodeSnapshot(input, options = {}) {
   )
     throw new SnapshotError("invalid_envelope");
   // Preserve all six PostgreSQL fractional digits; never round a receipt key via Date.
+  // Bound clock skew so future evidence cannot advance the accepted-snapshot watermark.
   if (
     typeof b.scraped_at !== "string" ||
     !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z$/.test(b.scraped_at) ||
     !Number.isFinite(Date.parse(b.scraped_at)) ||
-    new Date(b.scraped_at).toISOString().slice(0, 19) !== b.scraped_at.slice(0, 19)
+    new Date(b.scraped_at).toISOString().slice(0, 19) !== b.scraped_at.slice(0, 19) ||
+    Date.parse(b.scraped_at) > Date.now() + 5 * 60 * 1000
   )
     throw new SnapshotError("invalid_timestamp");
   if (
