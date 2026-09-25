@@ -86,7 +86,7 @@ const searchSchema = z.object({
   // /listings.
   agent: fallback(z.string().optional(), undefined),
   sort: fallback(z.enum(SORT_OPTIONS), "newest").default("newest"),
-  page: fallback(z.number().int().min(1), 1).default(1),
+  page: fallback(z.number().int().min(1).max(10_000), 1).default(1),
 });
 
 export const Route = createFileRoute("/listings")({

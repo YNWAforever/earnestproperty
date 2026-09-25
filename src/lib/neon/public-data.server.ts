@@ -638,8 +638,13 @@ export async function searchListings(
   input: NeonListingFiltersInput,
 ): Promise<NeonListingSearchResult> {
   const db = sql();
-  const page = Math.max(1, input.page);
-  const pageSize = Math.min(Math.max(1, input.pageSize), 100);
+  // This server function is directly callable, so route search validation alone
+  // cannot keep an extreme page from becoming Infinity in the SQL OFFSET.
+  const page =
+    Number.isSafeInteger(input.page) && input.page >= 1 && input.page <= 10_000 ? input.page : 1;
+  const pageSize = Number.isSafeInteger(input.pageSize)
+    ? Math.min(Math.max(1, input.pageSize), 100)
+    : 1;
   const offset = (page - 1) * pageSize;
   const params: unknown[] = [];
   const where = listingWhere(input, params);
@@ -1435,8 +1440,13 @@ export async function fetchRecentTransactions(
 ): Promise<NeonTransactionRow[]> {
   const params: unknown[] = [];
   const where = transactionsWhere(input, params);
-  const limitParam = addParam(params, Math.min(Math.max(1, input.limit), 100));
-  const offsetParam = addParam(params, Math.max(0, input.offset ?? 0));
+  const limit = Number.isSafeInteger(input.limit) ? Math.min(Math.max(1, input.limit), 100) : 1;
+  const offset =
+    Number.isSafeInteger(input.offset) && input.offset >= 0 && input.offset <= 1_000_000
+      ? input.offset
+      : 0;
+  const limitParam = addParam(params, limit);
+  const offsetParam = addParam(params, offset);
   const rows = await sql().query(
     `
     SELECT

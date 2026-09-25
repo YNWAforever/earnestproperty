@@ -213,6 +213,13 @@ test("page size is clamped and offset derived from the page", async () => {
   assert.deepEqual(rows.params, [100, 200]);
 });
 
+test("an extreme page cannot send a non-finite or oversized SQL offset", async () => {
+  for (const page of [1e308, Infinity, Number.MAX_SAFE_INTEGER + 1, 10_001]) {
+    const { rows } = await runSearch({ deal: "all", page, pageSize: 12 });
+    assert.deepEqual(rows.params, [12, 0], `page=${page} must fall back to page one`);
+  }
+});
+
 test("agentId scopes results to one agent's listings, for the agent-profile linked-listings section", async () => {
   const { rows } = await runSearch({
     deal: "all",
