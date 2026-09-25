@@ -74,6 +74,7 @@ export type ContentCopilotPatchApplyResult =
       value: null;
       error:
         | "COPILOT_UNKNOWN_FIELD"
+        | "COPILOT_PROPOSAL_INVALID"
         | "COPILOT_STALE_PROPOSAL"
         | "COPILOT_PATCH_CONFLICT"
         | "COPILOT_FINGERPRINT_INVALID";
@@ -206,7 +207,11 @@ export function validateContentCopilotProposal(value: unknown) {
   const allowed = new Set(allowedContentCopilotFields(parsed.data.resourceType));
   const evidenceIds = new Set(parsed.data.evidence.map((item) => item.id));
   const evidenceById = new Map(parsed.data.evidence.map((item) => [item.id, item]));
+  const seenFields = new Set<string>();
   for (const patch of parsed.data.patches) {
+    if (seenFields.has(patch.field))
+      return { ok: false as const, value: null, error: "COPILOT_PROPOSAL_INVALID" };
+    seenFields.add(patch.field);
     if (!allowed.has(patch.field))
       return { ok: false as const, value: null, error: "COPILOT_UNKNOWN_FIELD" };
     if (patch.evidenceIds.some((id) => !evidenceIds.has(id)))
@@ -255,6 +260,9 @@ export function applySelectedContentPatches(
     patches.some((patch) => !allowed.has(patch.field))
   ) {
     return { ok: false, value: null, error: "COPILOT_UNKNOWN_FIELD" };
+  }
+  if (new Set(patches.map((patch) => patch.field)).size !== patches.length) {
+    return { ok: false, value: null, error: "COPILOT_PROPOSAL_INVALID" };
   }
   const next = { ...current };
   for (const patch of patches) {
