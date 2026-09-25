@@ -56,6 +56,15 @@ test("T07 wire source and ID cleaning preserve raw evidence; no agency number re
   assert.equal(d.records[0].propertyNo, null);
   assert.throws(() => decodeSnapshot({ ...batch(), source: "old_site" }), SnapshotError);
 });
+test("a future scraped_at cannot poison the accepted-snapshot watermark", () => {
+  const nearFuture = { ...batch(), scraped_at: new Date(Date.now() + 60_000).toISOString() };
+  assert.doesNotThrow(() => decodeSnapshot(nearFuture));
+  const future = { ...batch(), scraped_at: "2099-01-01T00:00:00Z" };
+  assert.throws(
+    () => decodeSnapshot(future),
+    (error) => error instanceof SnapshotError && error.code === "invalid_timestamp",
+  );
+});
 test("T14 T16 T17 complete exact identity preserves phase suffix and leading zero", () => {
   const a = exactUnitIdentity(row());
   assert.ok(a.key);
