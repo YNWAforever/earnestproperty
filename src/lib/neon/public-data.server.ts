@@ -1162,12 +1162,22 @@ export async function fetchSitemapListings(): Promise<
 > {
   const rows = await sql().query(
     `
-    SELECT ppm.public_listing_no, MAX(p.updated_at) AS updated_at
-    FROM property_public_members ppm
-    JOIN properties p ON p.id = ppm.property_id
-    WHERE p.status = 'active'
-    GROUP BY ppm.public_listing_no
-    ORDER BY ppm.public_listing_no
+    WITH ranked_offerings AS (
+      SELECT ppm.public_listing_no, p.status, p.updated_at,
+        ROW_NUMBER() OVER (
+          PARTITION BY ppm.public_listing_no, p.deal_type
+          ORDER BY p.source_updated_at DESC NULLS LAST,
+            p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST,
+            p.created_at DESC, p.id ASC
+        ) AS offering_rank
+      FROM property_public_members ppm
+      JOIN properties p ON p.id = ppm.property_id
+    )
+    SELECT public_listing_no, MAX(updated_at) AS updated_at
+    FROM ranked_offerings
+    WHERE offering_rank = 1 AND status = 'active'
+    GROUP BY public_listing_no
+    ORDER BY public_listing_no
     `,
   );
   return rows.map((row) => ({
