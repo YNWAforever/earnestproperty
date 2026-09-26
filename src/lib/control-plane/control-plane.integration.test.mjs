@@ -48,7 +48,7 @@ test("database helper uses Neon transaction batching", () => {
 
 test("job repository uses idempotent inserts, skip-locked claims, and guarded completion", () => {
   const source = readFileSync("src/lib/control-plane/jobs.server.ts", "utf8");
-  assert.match(source, /ON CONFLICT \(idempotency_key\) DO UPDATE/);
+  assert.match(source, /ON CONFLICT \(idempotency_key\) DO NOTHING/);
   assert.match(source, /FOR UPDATE SKIP LOCKED/);
   assert.match(source, /status = 'running'[\s\S]*lease_owner = \$2/);
   assert.match(source, /status = 'cancelled'/);

@@ -608,12 +608,9 @@ test("WozTell campaign handler maps timeout to retry and permanent rejection to 
   );
 });
 
-// enqueueJob's ON CONFLICT is `DO UPDATE SET idempotency_key =
-// EXCLUDED.idempotency_key` -- a self-assignment that returns the EXISTING row
-// rather than re-arming it. That is correct for de-duplicating one queue run,
-// but with a campaign-stable key it also meant a campaign whose job had reached
-// 'succeeded' or exhausted max_attempts could never be queued again: the route
-// answered 202 with the dead job's status and the UI reported success.
+// enqueueJob returns the existing job on a duplicate key without re-arming it.
+// A campaign-stable key would still prevent a later queue run from creating
+// fresh work after the previous job succeeded or exhausted its attempts.
 test("campaign delivery idempotency key is scoped to a queue run, not the campaign", async () => {
   const { campaignDeliveryIdempotencyKey } = await import("./jobs.ts");
 

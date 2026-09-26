@@ -64,7 +64,7 @@ export function buildEnqueueJobStatement(
     statement: `INSERT INTO ops_jobs
  (job_type,payload_version,payload,status,max_attempts,run_after,idempotency_key,actor_staff_id)
  ${values}
- ON CONFLICT (idempotency_key) DO UPDATE SET idempotency_key=EXCLUDED.idempotency_key RETURNING *`,
+ ON CONFLICT (idempotency_key) DO NOTHING RETURNING *`,
     params: [
       input.jobType,
       input.payloadVersion,
@@ -79,9 +79,16 @@ export function buildEnqueueJobStatement(
 export async function enqueueJob(input: EnqueueJobInput, options: { wake?: boolean } = {}) {
   const statement = buildEnqueueJobStatement(input);
   const { queryRows } = await import("../neon/db.server.ts");
-  const row = (await queryRows<JobRow>(statement.statement, statement.params))[0];
-  if (row?.status === "queued" && options.wake !== false) wakeAfterCommit(laneForJob(row.job_type));
-  return row;
+  const inserted = (await queryRows<JobRow>(statement.statement, statement.params))[0];
+  if (inserted) {
+    if (options.wake !== false) wakeAfterCommit(laneForJob(inserted.job_type));
+    return inserted;
+  }
+  return (
+    await queryRows<JobRow>("SELECT * FROM ops_jobs WHERE idempotency_key=$1", [
+      cleanIdempotencyKey(input.idempotencyKey),
+    ])
+  )[0];
 }
 
 export async function claimJobs(
