@@ -147,3 +147,9 @@ Each F row above names its owning task; the commit below supplies that row's imp
 | T13  | release-evidence commit at PR head | Final validation, recipient manifest and rollout/rollback          |
 
 All 24 findings have an owning task. F11 remains blocked on the approved template and device-level evidence; F23 and F24 remain blocked on comparable staging measurements and remote property image transfer. The `fixed-local` rows still require the stated staging checks before any production claim. No live message was sent and no external delivery was verified.
+
+## PR gate corrections after T13
+
+- `cf69017`: updated the stale media-upload VM fixture to current live Neon session behavior; `test:mls` passed locally 639/639 and in GitHub Actions.
+- `461b328`: narrowed the Team route contract to allow a read-only sign-up origin while still banning browser token state and navigation; `test:command-center` and `test:team` passed locally and remotely.
+- GitHub Actions run `36273289277` completed the full `ci` job successfully at `461b328`. The fixture-gated `browser-staging` job was skipped; staging, delivery and performance evidence gates in the F ledger remain open.
