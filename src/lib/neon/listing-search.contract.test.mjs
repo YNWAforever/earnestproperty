@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -72,6 +73,43 @@ async function runSearch(input) {
   return { count, rows };
 }
 
+test("sitemap lists only groups with a current active offering", async () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(`
+      CREATE TABLE properties (
+        id TEXT PRIMARY KEY, deal_type TEXT, status TEXT,
+        source_updated_at TEXT, last_seen_at TEXT, updated_at TEXT, created_at TEXT
+      );
+      CREATE TABLE property_public_members (property_id TEXT, public_listing_no TEXT);
+    `);
+    const insertProperty = db.prepare("INSERT INTO properties VALUES (?, ?, ?, ?, ?, ?, ?)");
+    const insertMember = db.prepare("INSERT INTO property_public_members VALUES (?, ?)");
+    for (const [id, publicNo, dealType, status, date] of [
+      ["old-sale", "P-001", "sale", "active", "2026-01-01"],
+      ["new-sale", "P-001", "sale", "sold", "2026-02-01"],
+      ["old-dual", "P-002", "sale", "active", "2026-01-01"],
+      ["new-dual", "P-002", "sale", "sold", "2026-02-01"],
+      ["rent-dual", "P-002", "rent", "active", "2026-03-01"],
+      ["live-sale", "P-003", "sale", "active", "2026-04-01"],
+      ["old-draft", "P-004", "sale", "active", "2026-01-01"],
+      ["new-draft", "P-004", "sale", "draft", "2026-05-01"],
+    ]) {
+      insertProperty.run(id, dealType, status, date, date, date, date);
+      insertMember.run(id, publicNo);
+    }
+    const server = await importPublicDataServerWithInjectedQuery(async (sql, params = []) =>
+      db.prepare(sql).all(...params),
+    );
+    const rows = await server.fetchSitemapListings();
+    assert.deepEqual(
+      rows.map((row) => row.public_listing_no),
+      ["P-002", "P-003"],
+    );
+  } finally {
+    db.close();
+  }
+});
 test("direct listing filters reject invalid deal and numeric values before SQL", async () => {
   const { calls, query } = recorder();
   const server = await importPublicDataServerWithInjectedQuery(query);

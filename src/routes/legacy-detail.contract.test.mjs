@@ -48,12 +48,12 @@ test("SITE_URL is env-driven with the vercel.app origin only as a fallback", () 
 });
 
 // P0-4: listing detail pages belong in the sitemap.
-test("sitemap lists active listing detail pages with a real lastmod", () => {
+test("sitemap lists current active listing detail pages with a real lastmod", () => {
   const sitemap = read("src/routes/sitemap[.]xml.ts");
   assert.match(sitemap, /fetchSitemapListings\(\)/);
   assert.match(sitemap, /\.\.\.listingPaths,/);
-  assert.match(
-    read("src/lib/neon/public-data.server.ts"),
-    /WHERE p\.status = 'active'\s+GROUP BY ppm\.public_listing_no/,
-  );
+  const publicData = read("src/lib/neon/public-data.server.ts");
+  assert.match(publicData, /PARTITION BY ppm\.public_listing_no, p\.deal_type/);
+  assert.match(publicData, /WHERE offering_rank = 1 AND status = 'active'/);
+  assert.match(publicData, /GROUP BY public_listing_no/);
 });
