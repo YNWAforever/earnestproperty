@@ -1075,6 +1075,35 @@ export async function listAdminDistrictOptions() {
 }
 
 export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffAccess) {
+  const validRequiredText = (value: unknown, max: number) =>
+    typeof value === "string" && value.trim().length > 0 && value.trim().length <= max;
+  const validOptionalAmount = (value: number | null) =>
+    value === null || (Number.isFinite(value) && value >= 0);
+  const validOptionalCount = (value: number | null, max = Number.MAX_SAFE_INTEGER) =>
+    value === null || (Number.isSafeInteger(value) && value >= 0 && value <= max);
+
+  // The browser form is not the only way to call this server function. Keep
+  // malformed public listings out of the database even with a forged payload.
+  if (
+    !validRequiredText(input.listing_no, 40) ||
+    !validRequiredText(input.title_zh, 200) ||
+    !validRequiredText(input.district_slug, 60) ||
+    (input.deal_type !== "sale" && input.deal_type !== "rent") ||
+    !["draft", "active", "sold", "rented", "offline"].includes(input.status) ||
+    !validOptionalAmount(input.price) ||
+    !validOptionalAmount(input.rent) ||
+    !validOptionalCount(input.saleable_area) ||
+    !validOptionalCount(input.bedrooms, 20) ||
+    !validOptionalCount(input.bathrooms, 20) ||
+    typeof input.featured !== "boolean" ||
+    !Array.isArray(input.images) ||
+    !input.images.every((image) => typeof image === "string") ||
+    !Array.isArray(input.features) ||
+    !input.features.every((feature) => typeof feature === "string")
+  ) {
+    throw new Response("Invalid property", { status: 400 });
+  }
+
   const scope = agentScope(actor);
   // Scoped agents may only ever own their own rows: ignore any caller-supplied
   // agent_id on insert and force themselves as the owner.

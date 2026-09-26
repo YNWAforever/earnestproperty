@@ -364,6 +364,64 @@ test("getAdminTransaction adds an agent_id scope predicate for a scoped agent, n
   assert.deepEqual(calls[0].params, ["txn-1", "agent-1"]);
 });
 
+test("saveAdminProperty rejects invalid public listing values before SQL", async () => {
+  const base = {
+    listing_no: "A-1",
+    title_zh: "Test listing",
+    title_en: null,
+    deal_type: "sale",
+    estate_id: null,
+    district_slug: "central",
+    address: null,
+    price: 10_000_000,
+    rent: null,
+    saleable_area: 500,
+    bedrooms: 2,
+    bathrooms: 1,
+    floor: null,
+    description: null,
+    features: [],
+    status: "active",
+    featured: false,
+    images: [],
+    agent_id: null,
+  };
+  for (const change of [
+    { listing_no: "" },
+    { title_zh: " " },
+    { district_slug: "" },
+    { deal_type: "other" },
+    { status: "published" },
+    { images: "not-an-array" },
+    { features: "not-an-array" },
+    { price: -1 },
+    { price: Number.POSITIVE_INFINITY },
+    { rent: -1 },
+    { saleable_area: -1 },
+    { saleable_area: 500.5 },
+    { bedrooms: -1 },
+    { bedrooms: 21 },
+    { bathrooms: 21 },
+    { featured: "false" },
+  ]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    await assert.rejects(
+      server.saveAdminProperty({ ...base, ...change }, ADMIN_ACTOR),
+      (error) => error instanceof Response && error.status === 400,
+    );
+    assert.equal(calls.length, 0, "invalid property input reached SQL");
+  }
+
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await server.saveAdminProperty(
+    { ...base, price: null, rent: 0, saleable_area: 0, bedrooms: 0, bathrooms: 0 },
+    ADMIN_ACTOR,
+  );
+  assert.match(calls[0].text, /INSERT INTO properties/);
+});
+
 test("updateAdminLead rejects invalid budgets before CRM SQL", async () => {
   const base = {
     id: "lead-1",
