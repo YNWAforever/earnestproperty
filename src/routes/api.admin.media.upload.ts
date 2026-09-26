@@ -27,14 +27,12 @@ async function hasMatchingImageSignature(file: File): Promise<boolean> {
     signature.every((byte, index) => bytes[offset + index] === byte);
 
   if (file.type === "image/jpeg") return has(0, [0xff, 0xd8, 0xff]);
-  if (file.type === "image/png")
-    return has(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (file.type === "image/png") return has(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (file.type === "image/webp")
     return has(0, [0x52, 0x49, 0x46, 0x46]) && has(8, [0x57, 0x45, 0x42, 0x50]);
   if (file.type === "image/avif") {
     if (bytes.length < 16 || !has(4, [0x66, 0x74, 0x79, 0x70])) return false;
-    const boxSize =
-      bytes[0] * 0x1000000 + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
+    const boxSize = bytes[0] * 0x1000000 + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
     if (boxSize < 16 || boxSize > file.size) return false;
     for (let offset = 8; offset + 4 <= Math.min(boxSize, bytes.length); offset += 4) {
       if (offset === 12) continue; // minor version, not a brand

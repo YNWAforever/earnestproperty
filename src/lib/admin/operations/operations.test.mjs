@@ -248,7 +248,11 @@ test("idle admin views do not repeatedly query Neon", () => {
   for (const file of files) {
     const source = readFileSync(file, "utf8");
     assert.doesNotMatch(source, /setInterval\s*\(/, file.pathname + " has idle polling");
-    assert.doesNotMatch(source, /addEventListener\(["']focus/, file.pathname + " refreshes without a user action");
+    assert.doesNotMatch(
+      source,
+      /addEventListener\(["']focus/,
+      file.pathname + " refreshes without a user action",
+    );
   }
   const whatsapp = readFileSync(files[2], "utf8");
   const commandCenter = readFileSync(files[3], "utf8");

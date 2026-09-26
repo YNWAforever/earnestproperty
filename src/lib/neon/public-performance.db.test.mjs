@@ -179,22 +179,48 @@ test(
         false,
         "card transport excludes long offering copy",
       );
-      assert.equal(before.description, before.offerings.find(o=>o.id===before.id).description,
-        'before migration, main description still uses representative source copy');
-      await query(`CREATE TABLE admin_property_overrides(property_no text PRIMARY KEY,shared jsonb)`);
+      assert.equal(
+        before.description,
+        before.offerings.find((o) => o.id === before.id).description,
+        "before migration, main description still uses representative source copy",
+      );
+      await query(
+        `CREATE TABLE admin_property_overrides(property_no text PRIMARY KEY,shared jsonb)`,
+      );
       await query(`INSERT INTO admin_property_overrides VALUES('C0','{"description":"Shared C"}')`);
-      const sharedDetail=await server.fetchPropertyByListingNo({listingNo:'C0'});
-      assert.equal(sharedDetail.description,'Shared C','public main description uses managed shared copy');
-      assert.equal(sharedDetail.offerings.find(o=>o.deal_type==='sale').description,'sale description');
-      assert.equal(sharedDetail.offerings.find(o=>o.deal_type==='rent').description,'rent description');
-      await query(`UPDATE admin_property_overrides SET shared='{"description":null}' WHERE property_no='C0'`);
-      assert.equal((await server.fetchPropertyByListingNo({listingNo:'R0'})).description,null,
-        'explicit shared clearing does not fall back to offering copy');
+      const sharedDetail = await server.fetchPropertyByListingNo({ listingNo: "C0" });
+      assert.equal(
+        sharedDetail.description,
+        "Shared C",
+        "public main description uses managed shared copy",
+      );
+      assert.equal(
+        sharedDetail.offerings.find((o) => o.deal_type === "sale").description,
+        "sale description",
+      );
+      assert.equal(
+        sharedDetail.offerings.find((o) => o.deal_type === "rent").description,
+        "rent description",
+      );
+      await query(
+        `UPDATE admin_property_overrides SET shared='{"description":null}' WHERE property_no='C0'`,
+      );
+      assert.equal(
+        (await server.fetchPropertyByListingNo({ listingNo: "R0" })).description,
+        null,
+        "explicit shared clearing does not fall back to offering copy",
+      );
       await query(`UPDATE admin_property_overrides SET shared='{}' WHERE property_no='C0'`);
-      assert.equal((await server.fetchPropertyByListingNo({listingNo:'C0'})).description,before.description);
+      assert.equal(
+        (await server.fetchPropertyByListingNo({ listingNo: "C0" })).description,
+        before.description,
+      );
       await query(`DROP TABLE admin_property_overrides`);
-      assert.equal((await server.fetchPropertyByListingNo({listingNo:'C0'})).description,before.description,
-        'public detail remains valid when management schema is absent');
+      assert.equal(
+        (await server.fetchPropertyByListingNo({ listingNo: "C0" })).description,
+        before.description,
+        "public detail remains valid when management schema is absent",
+      );
       await query(`UPDATE properties SET featured=true WHERE id='000'`);
       await query(
         `UPDATE properties SET status='inactive',source_updated_at='2026-02-01' WHERE id='dup0'`,
@@ -265,38 +291,65 @@ test(
       const disputed = await server.fetchPropertyByListingNo({ listingNo: "C4" });
       assert.equal(disputed.floor, null, "do not invent a fallback from conflicting floors");
       assert.equal(disputed.saleable_area, null, "do not choose the maximum conflicting area");
-      await query(`ALTER TABLE estates ADD COLUMN published boolean DEFAULT true, ADD COLUMN avg_saleable_psf numeric, ADD COLUMN hero_image text, ADD COLUMN name_en text, ADD COLUMN aliases text[]`);
-      await query(`INSERT INTO estates(id,slug,name_zh,district_slug,avg_saleable_psf) VALUES('market-estate','market-estate','Synthetic','market-district',99999)`);
+      await query(
+        `ALTER TABLE estates ADD COLUMN published boolean DEFAULT true, ADD COLUMN avg_saleable_psf numeric, ADD COLUMN hero_image text, ADD COLUMN name_en text, ADD COLUMN aliases text[]`,
+      );
+      await query(
+        `INSERT INTO estates(id,slug,name_zh,district_slug,avg_saleable_psf) VALUES('market-estate','market-estate','Synthetic','market-district',99999)`,
+      );
       await query(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,status,estate_id,price,saleable_area,images,source_updated_at)
         VALUES('market-old','market-old','market','sale','active','market-estate',1000000,500,ARRAY['https://example.com/old.jpg'],'2026-01-01'),
         ('market-new','market-new','market','sale','active','market-estate',3000000,500,ARRAY['https://example.com/new.jpg'],'2026-02-01')`);
       await query(`INSERT INTO property_public_groups VALUES('market')`);
-      await query(`INSERT INTO property_public_members VALUES('market-old','market'),('market-new','market')`);
-      const directory=await server.fetchEstateDirectory();
-      const directoryEstate=directory.rows.find(e=>e.slug==='market-estate');
-      assert.equal(directoryEstate.total,1);assert.equal(directoryEstate.sale,1);assert.equal(directoryEstate.rent,0);
+      await query(
+        `INSERT INTO property_public_members VALUES('market-old','market'),('market-new','market')`,
+      );
+      const directory = await server.fetchEstateDirectory();
+      const directoryEstate = directory.rows.find((e) => e.slug === "market-estate");
+      assert.equal(directoryEstate.total, 1);
+      assert.equal(directoryEstate.sale, 1);
+      assert.equal(directoryEstate.rent, 0);
       await query(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,status,estate_id,price,source_updated_at)
         VALUES('market-rent','market-rent','market','rent','active','market-estate',10000,'2026-02-01')`);
       await query(`INSERT INTO property_public_members VALUES('market-rent','market')`);
-      const dualDirectory=(await server.fetchEstateDirectory()).rows.find(e=>e.slug==='market-estate');
-      assert.equal(dualDirectory.total,1,'dual offering counts as one property');
-      assert.equal(dualDirectory.sale,1);assert.equal(dualDirectory.rent,1);
-      const market=await server.fetchEstateBySlug({slug:'market-estate'});
-      assert.equal(Number(market.avg_saleable_psf),6000,"current asking PSF replaces stale manual value and deduplicates history");
-      assert.equal(market.hero_image,'https://example.com/new.jpg');
+      const dualDirectory = (await server.fetchEstateDirectory()).rows.find(
+        (e) => e.slug === "market-estate",
+      );
+      assert.equal(dualDirectory.total, 1, "dual offering counts as one property");
+      assert.equal(dualDirectory.sale, 1);
+      assert.equal(dualDirectory.rent, 1);
+      const market = await server.fetchEstateBySlug({ slug: "market-estate" });
+      assert.equal(
+        Number(market.avg_saleable_psf),
+        6000,
+        "current asking PSF replaces stale manual value and deduplicates history",
+      );
+      assert.equal(market.hero_image, "https://example.com/new.jpg");
       await query(`UPDATE properties SET status='inactive' WHERE id='market-new'`);
-      const withdrawn=await server.fetchEstateBySlug({slug:'market-estate'});
-      assert.equal(withdrawn.avg_saleable_psf,null,"withdrawn current offering cannot resurrect historic price");
-      const rentOnly=(await server.fetchEstateDirectory()).rows.find(e=>e.slug==='market-estate');
-      assert.equal(rentOnly.total,1);assert.equal(rentOnly.sale,0);assert.equal(rentOnly.rent,1);
+      const withdrawn = await server.fetchEstateBySlug({ slug: "market-estate" });
+      assert.equal(
+        withdrawn.avg_saleable_psf,
+        null,
+        "withdrawn current offering cannot resurrect historic price",
+      );
+      const rentOnly = (await server.fetchEstateDirectory()).rows.find(
+        (e) => e.slug === "market-estate",
+      );
+      assert.equal(rentOnly.total, 1);
+      assert.equal(rentOnly.sale, 0);
+      assert.equal(rentOnly.rent, 1);
       await query(`UPDATE properties SET status='inactive' WHERE id='market-rent'`);
-      const emptyEstate=(await server.fetchEstateDirectory()).rows.find(e=>e.slug==='market-estate');
-      assert.equal(emptyEstate.total,0,'published empty estate remains discoverable');
+      const emptyEstate = (await server.fetchEstateDirectory()).rows.find(
+        (e) => e.slug === "market-estate",
+      );
+      assert.equal(emptyEstate.total, 0, "published empty estate remains discoverable");
       await query(`UPDATE estates SET published=false WHERE id='market-estate'`);
-      assert.equal(await server.fetchEstateBySlug({slug:'market-estate'}),null);
-      assert.equal((await server.fetchEstateDirectory()).rows.some(e=>e.slug==='market-estate'),false);
-      assert.deepEqual(await server.fetchEstates({districtSlug:'market-district'}),[]);
-
+      assert.equal(await server.fetchEstateBySlug({ slug: "market-estate" }), null);
+      assert.equal(
+        (await server.fetchEstateDirectory()).rows.some((e) => e.slug === "market-estate"),
+        false,
+      );
+      assert.deepEqual(await server.fetchEstates({ districtSlug: "market-district" }), []);
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     }
