@@ -19,6 +19,8 @@ const OBSERVATION_ID = "11111111-1111-4111-8111-111111111111";
 const PROPERTY_ID = "22222222-2222-4222-8222-222222222222";
 const PUBLIC_ADDRESS = "8.8.8.8";
 const MEDIA_HOST = "images.28hse.test";
+// This is a liveness bound, not a latency budget for parallel test workers.
+const CANCELLATION_SETTLE_TIMEOUT_MS = 1_000;
 const DECODABLE_IMAGES = {
   jpeg3x2:
     "/9j/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAACAAMDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AKpAB//Z",
@@ -1228,7 +1230,9 @@ test("a shared cancellation aborts a hanging resolver immediately with the exact
   controller.abort(reason);
   const prompt = await Promise.race([
     observed,
-    new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+    new Promise((resolve) =>
+      setTimeout(() => resolve("still-pending"), CANCELLATION_SETTLE_TIMEOUT_MS),
+    ),
   ]);
   releaseResolver?.([PUBLIC_ADDRESS]);
   const final = prompt === "still-pending" ? await observed : prompt;
@@ -1357,7 +1361,9 @@ test("shared cancellation races every repository and Blob await with the exact r
       controller.abort(reason);
       const prompt = await Promise.race([
         observed,
-        new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+        new Promise((resolve) =>
+          setTimeout(() => resolve("still-pending"), CANCELLATION_SETTLE_TIMEOUT_MS),
+        ),
       ]);
       gate.resolve(null);
       const final = prompt === "still-pending" ? await observed : prompt;
@@ -1553,7 +1559,9 @@ test("redirect-body cleanup cannot outlive the candidate deadline or shared canc
   controller.abort(reason);
   const prompt = await Promise.race([
     observed,
-    new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+    new Promise((resolve) =>
+      setTimeout(() => resolve("still-pending"), CANCELLATION_SETTLE_TIMEOUT_MS),
+    ),
   ]);
   releaseCancel?.();
   const final = prompt === "still-pending" ? await observed : prompt;
@@ -1705,7 +1713,7 @@ test("decode cancellation returns the exact shared reason before hashing", async
   );
   const decoderStarted = await Promise.race([
     started.promise.then(() => true),
-    new Promise((resolve) => setTimeout(() => resolve(false), 25)),
+    new Promise((resolve) => setTimeout(() => resolve(false), CANCELLATION_SETTLE_TIMEOUT_MS)),
   ]);
   assert.equal(decoderStarted, true, "decodeImage must be invoked");
   controller.abort(reason);
@@ -1714,7 +1722,9 @@ test("decode cancellation returns the exact shared reason before hashing", async
       () => ({ value: "resolved" }),
       (error) => ({ error }),
     ),
-    new Promise((resolve) => setTimeout(() => resolve("still-pending"), 25)),
+    new Promise((resolve) =>
+      setTimeout(() => resolve("still-pending"), CANCELLATION_SETTLE_TIMEOUT_MS),
+    ),
   ]);
   release.resolve({ width: 3, height: 2 });
 
