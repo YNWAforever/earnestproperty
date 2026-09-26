@@ -224,7 +224,7 @@ test("conversion components use intent helpers and factual proof", () => {
   assert.match(fallback, /type WhatsAppIntent/);
   assert.match(fallback, /intent\?: Exclude<WhatsAppIntent, "valuation">/);
   assert.match(fallback, /whatsappIntentUrl\(intent/);
-  assert.match(owner, /深井業主估價報告/);
+  assert.match(owner, /查詢物業估價及放盤建議/);
   assert.match(trust, /earnestPublicTrust/);
   assert.match(trust, /earnestPublicTrust\.licenceNo/);
   assert.match(snapshot, /成交資料/);
@@ -551,7 +551,7 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
   // `district_slug === "sham-tseng"` gate -- see
   // estate.district-driven.contract.test.mjs for the tests that guard
   // against that hardcoding coming back.
-  assert.match(route, /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/);
+  assert.match(route, /const transportSegment = registryEntry\?\.corridorSegment/);
   assert.match(route, /const schoolNet = getSchoolNet\(/);
   assert.match(route, /\{transportSegment && \(/);
   assert.match(route, /\{schoolNet && \(/);

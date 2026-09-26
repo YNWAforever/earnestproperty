@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   STAFF_HISTORICAL_COLUMNS,
   STAFF_RECONCILED_COLUMNS,
+  STAFF_HISTORICAL_PAIR_COLUMNS,
   STAFF_OWNERSHIP_COLUMNS,
   staffOwnershipCountSql,
   staffReassignStatements,
@@ -273,7 +274,12 @@ test("every REFERENCES staff_users column in the schema is classified as ownersh
     const reconciled = STAFF_RECONCILED_COLUMNS.some(
       (r) => r.table === table && r.column === column,
     );
-    return Number(isOwnership) + Number(isHistorical) + Number(reconciled) !== 1; // false/false (missing) or true/true (ambiguous)
+    const historicalPair = STAFF_HISTORICAL_PAIR_COLUMNS.some(
+      (r) => r.table === table && r.column === column,
+    );
+    return (
+      Number(isOwnership) + Number(isHistorical) + Number(reconciled) + Number(historicalPair) !== 1
+    ); // false/false (missing) or true/true (ambiguous)
   });
   assert.deepEqual(
     unclassified,

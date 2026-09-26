@@ -11,9 +11,9 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F01 | Public listing number search misses current listing | T01 | fixed-local | T01 commit; PGlite real COUNT SQL red 0 then green 1; alias, case, whitespace, withdrawn tested; staging pending |
 | F02 | Internal SYNC identifier reaches customer UI | T01 | fixed-local | T01 commit; helper red/green and public route replacements; staged browser review pending |
 | F03 | WhatsApp entry points lose property context | T02 | fixed-local | Shared per-offer action and batch resolver across homepage, list, detail desktop/mobile; pure test passed; staging browser pending |
-| F04 | Internal copy and estate location mismatch | T11 | open | Audit report; source owner review pending |
-| F05 | Five-minute response promise unsupported | T11 | open | Audit report; actual human SLA unverified |
-| F06 | Listing content and media claims mismatch | T11 | open | Audit report; source and override review pending |
+| F04 | Internal copy and estate location mismatch | T11 | fixed-local | Engineering copy removed, shared transport gated by registry corridor and valuation CTA neutralized; source owner review pending |
+| F05 | Five-minute response promise unsupported | T11 | fixed-local | Homepage time promise removed; T10 separates human-response sample; real SLA remains unverified |
+| F06 | Listing content and media claims mismatch | T11 | fixed-local | Display-only title cleanup and admin review prompts; A074714 exact row, CMS override and source facts still unverified |
 | F07 | Detail page social URL points to homepage | T02 | fixed-local | Property og:url now matches canonical public URL; SEO suite passed; SSR/browser pending |
 | F08 | Assignment evidence panel errors | T03 | fixed-local | True staff_role enum PGlite failed with SQLSTATE 42883 before cast; after enum[] cast, admin/manager/assigned agent pass and viewer/inactive/cross-conversation fail; staging pending |
 | F09 | Active staff is conflated with routing readiness | T04 | fixed-local | Separate readiness query includes unmapped staff; PGlite enum fixture and revoked endpoint test passed; staging pending |
@@ -111,3 +111,10 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Counts keep opens, attributed enquiries, confirmed assignments and verified human responses separate. The human-response sample requires an intake message and a staff response, excludes spam/test states, and labels the Hong Kong timezone. These are operational counts rather than an SLA or delivery proof.
 - The explicit migration registry now includes all four additive 2026-09-27 migrations, so the existing drift check can see missing versions. Policy editing starts collapsed below the effective-policy summary; drafts and simulations are labelled separately.
 - Tests: health policy/readiness Node 9 passed; operations Node 17/Bun 8, control-plane Node 97, job-wake Node 17, WhatsApp Node 81, typecheck and targeted lint passed. CI now wires the new deterministic tests, including the in-memory PostgreSQL public-number fixture. No live job or migration was run.
+
+## T11 evidence
+
+- Removed internal SEO/MLS/trust-proof phrases; gated estate corridor transport by registry scope so 星堤 cannot borrow 深井/青龍頭 copy. Generic owner valuation CTA no longer promises a 深井 report on a 掃管笏 page. Homepage no longer promises a five-minute or agent-direct response.
+- Public title cleanup is display-only and preserves the imported source; it strips limited promotional artifacts and unsupported VR title words without guessing bedroom/helper-room counts. The existing property detail media tab still requires a real `video_url`. Admin list/detail expose missing estate, title/structured-room disagreement and missing VR URL for human review.
+- The content-corrections report records each before/after and an isolated-DB read-only preview query. No CMS data, imported row or production content was mutated. Remaining source facts, A074714 exact row and any DB override need a content owner and verified isolated data before correction.
+- Tests: homepage Node 25, estate-conversion Node 102, blog Node 37/Bun 5, videos Node 27, SEO Node 61/Bun 6, property-experience Bun 197/Node 146, admin title test Bun 7, typecheck and targeted lint passed. No staging browser or content-owner review occurred.

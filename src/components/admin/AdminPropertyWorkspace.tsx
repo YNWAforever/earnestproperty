@@ -23,6 +23,7 @@ import type {
   SharedPropertyFields,
 } from "@/lib/neon/admin-properties.types";
 import {
+  propertyContentReviewReasons,
   changedFields,
   neutralPropertyTitle,
   offeringDraft,
@@ -205,6 +206,22 @@ export function AdminPropertyWorkspace({
         <p role="status" className="rounded-lg border bg-amber-50 p-4 text-sm text-amber-900">
           物業資料可供查閱。管理功能正在準備，暫時未能儲存修改。
         </p>
+      ) : null}
+      {propertyContentReviewReasons(detail.shared).length ? (
+        <aside
+          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"
+          aria-label="內容待核實"
+        >
+          <p className="font-medium">內容待核實</p>
+          <ul className="mt-2 list-disc pl-5">
+            {propertyContentReviewReasons(detail.shared).map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+          <p className="mt-2">
+            請比對原始來源及人工更正紀錄後再改資料；此提示不會自動改房數或媒體。
+          </p>
+        </aside>
       ) : null}
       {detail.conflicts.length ? (
         <details className="rounded-lg border border-amber-300 p-4">

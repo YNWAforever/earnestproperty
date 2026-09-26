@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   publicPropertyNo,
+  publicPropertyTitle,
   propertyUpdatedAt,
   propertyPriceSummary,
   propertyDealLabel,
@@ -80,4 +81,11 @@ test("an imported internal SYNC identifier is never a customer listing number", 
       public_listing_no: "A074714",
     }),
   ).toBe("A074714");
+});
+
+test("public title removes promotional artifacts without rewriting source room counts", () => {
+  const raw = "【筍盤】!!!3房套工 Patry Room VR睇樓!!";
+  const property = { ...sale, title_zh: raw };
+  expect(publicPropertyTitle(property)).toBe("3房套工 Party Room");
+  expect(property.title_zh).toBe(raw);
 });

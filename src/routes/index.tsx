@@ -504,7 +504,7 @@ function HomePage() {
           <Feature
             icon={<MessageCircle className="h-5 w-5" />}
             title="即時 WhatsApp"
-            desc="一 click 直達負責代理，平均 5 分鐘內回覆。"
+            desc="WhatsApp 查詢樓盤，由團隊按可用人手跟進。"
           />
         </div>
       </section>
@@ -765,7 +765,7 @@ function HomePage() {
               準備搵深井 青山公路筍盤？
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              即時 WhatsApp 我哋持牌代理，5 分鐘內專人回覆。
+              WhatsApp 查詢樓盤，由晉誠地產團隊跟進。
             </p>
           </div>
           <div className="w-full max-w-xl">

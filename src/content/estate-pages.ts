@@ -38,7 +38,7 @@ export const earnestPublicTrust = {
   coverageNotes: [
     "公開資料顯示晉誠地產紮根深井麗都花園地舖。",
     "公開盤源覆蓋深井、屯門青山公路、碧堤半島、琨崙、海澄軒等沿線屋苑。",
-    "此區域證明只作 factual trust proof；即時可睇盤源以本網站資料庫及代理回覆為準。",
+    "放盤及屋苑資料會更新；查詢單位是否仍可睇樓，請聯絡團隊確認。",
   ],
 } as const;
 
