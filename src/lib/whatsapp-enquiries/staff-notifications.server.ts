@@ -105,6 +105,24 @@ export async function dispatchStaffNotification(
     );
     return { accepted: 0, blocked: 1, unknown: 0 };
   }
+  // Reload the same capability policy shown in admin. The SQL boundary below
+  // remains the final atomic guard before the provider request.
+  let readiness: Awaited<
+    ReturnType<
+      (typeof import("../neon/whatsapp-readiness.server.ts"))["inspectWhatsappStaffReadinessForDispatch"]
+    >
+  > = null;
+  if (ports === defaults) {
+    try {
+      const { inspectWhatsappStaffReadinessForDispatch } =
+        await import("../neon/whatsapp-readiness.server.ts");
+      readiness = await inspectWhatsappStaffReadinessForDispatch(String(n.recipient_staff_id), {
+        query,
+      });
+    } catch {
+      // An unreadable capability is blocked, never treated as ready.
+    }
+  }
   const transports = [
     "inbox_private_note",
     ...(runtime.staffWhatsAppEnabled ? ["staff_whatsapp"] : []),
@@ -158,6 +176,12 @@ export async function dispatchStaffNotification(
         : !options.job
           ? "job_lease_required"
           : null;
+    if (ports === defaults) {
+      const capability =
+        transport === "inbox_private_note" ? readiness?.inboxPrivateNote : readiness?.staffWhatsapp;
+      if (!capability || capability.state !== "ready")
+        reason = capability?.reasons[0]?.code ?? "schema_unavailable";
+    }
     if (transport === "staff_whatsapp" && ep?.destination_reference === n.woztell_member_id)
       reason = "customer_destination_forbidden";
     const workLink = staffNotificationWorkLink({
@@ -275,7 +299,7 @@ export async function dispatchStaffNotification(
       /* Only a started irreversible POST has a possibly accepted unknown outcome. */
     }
     await query(
-      "UPDATE staff_notification_attempts SET dispatch_state=$3,evidence_kind=$4,provider_operation_id=$5,safe_error=CASE WHEN $3='unknown' THEN 'provider_outcome_unknown' WHEN $3='failed' THEN 'provider_refused' WHEN $3='suppressed' THEN 'transport_preflight_blocked' ELSE NULL END,finished_at=now(),updated_at=now() WHERE id=$1::uuid AND claim_id=$2::uuid AND dispatch_state IN ('dispatching','unknown')",
+      "UPDATE staff_notification_attempts SET dispatch_state=$3,evidence_kind=$4,provider_operation_id=$5,provider_accepted_at=CASE WHEN $3='accepted' THEN COALESCE(provider_accepted_at,now()) ELSE provider_accepted_at END,provider_acceptance_source=CASE WHEN $3='accepted' THEN COALESCE(provider_acceptance_source,'woztell_send_responses') ELSE provider_acceptance_source END,safe_error=CASE WHEN $3='unknown' THEN 'provider_outcome_unknown' WHEN $3='failed' THEN 'provider_refused' WHEN $3='suppressed' THEN 'transport_preflight_blocked' ELSE NULL END,finished_at=now(),updated_at=now() WHERE id=$1::uuid AND claim_id=$2::uuid AND dispatch_state IN ('dispatching','unknown')",
       [
         attempt.id,
         claim,

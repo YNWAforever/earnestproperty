@@ -26,3 +26,21 @@ Visual audit evidence reviewed from the supplied HTML: A074714 detail (public nu
 | `npm.cmd run typecheck` | exit 0 | Compile after route edit |
 
 The PGlite fixture neither connects to Neon nor supplies a false branch identity. It does not replace the guarded Neon integration suites or staged browser tests.
+## T02–T04 local verification
+
+| Task | Command | Result | Scope |
+|---|---|---|---|
+| T02 | `node --test src/lib/whatsapp-enquiries/public-context.test.mjs` | exit 0; 2/2, 0 skipped | Per-offer tracked/untracked/contact action and one batch resolver call |
+| T02 | `npm run test:property-experience` | exit 0; Node 146/146 and Bun 196/196 | Property CTA and head contracts; no staged browser |
+| T02 | `npm run test:seo` | exit 0; Node 61/61 and Bun 6/6 | Static SEO and canonical contracts |
+| T02 | `npm run test:whatsapp-enquiries` | exit 0; 76/76 before T03 script addition | Existing WhatsApp contracts |
+| T03 | `node --test src/lib/whatsapp-enquiries/assignment-role-enum.db.test.mjs` | red on SQLSTATE 42883; after fix exit 0; 1/1 | Isolated PostgreSQL enum fixture including viewer |
+| T03 | `npm run test:whatsapp-enquiries` | exit 0; 77/77, 0 skipped | Includes the new enum fixture |
+| T03 | `npm run test:whatsapp-enquiries:db` | exit 0; 0 passed, 4 skipped | Guarded Neon test branch absent; not passing evidence |
+| T04 | `npm run test:staff-notifications` | exit 0; Node 16/16, Bun 4/4, 0 skipped | PGlite readiness and receipt tests; synthetic provider transport |
+| T04 | `npm run test:staff-notifications:db` | exit 0; 0 passed, 2 skipped | Guarded Neon test branch absent; not passing evidence |
+| T04 | `npm run typecheck` and targeted ESLint | exit 0 | Compile and lint of changed T04 files |
+
+The receipt test executes the additive migration and the actual acceptance and signed-receipt UPDATE SQL in isolated PGlite. It cannot establish that any phone received a message. The assignment fixture mirrors the `staff_role` enum and its later `viewer` value; its adapter converts JavaScript arrays to PostgreSQL array literals for PGlite, while the production Neon branch remains untested.
+
+Official WOZTELL Bot API guidance: https://doc.woztell.com/docs/reference/bot-api-reference . The repository has no approved tenant template JSON, name, language or parameter fixture; the template path remains blocked. No external provider request was made during these tests.

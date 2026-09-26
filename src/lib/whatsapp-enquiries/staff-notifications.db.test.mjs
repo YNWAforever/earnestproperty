@@ -101,6 +101,7 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
       "20260912140000_whatsapp_assignment_evidence.sql",
       "20260912150000_whatsapp_service_workflow.sql",
       "20260912170000_staff_notifications.sql",
+      "20260927080000_staff_notification_receipt_times.sql",
     ]) {
       if (file.includes("staff_notifications"))
         await query("INSERT INTO inquiries(source,name) VALUES('website','Synthetic legacy row')");

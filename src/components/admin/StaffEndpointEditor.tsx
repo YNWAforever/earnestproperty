@@ -206,7 +206,9 @@ export function StaffEndpointEditor({
         <article key={r.id} className="rounded border p-2">
           <p>
             {agents.find((a) => a.id === r.staffId)?.name ?? r.staffId} · {r.transport} · v
-            {r.version} · {r.enabled ? "啟用" : "關閉"}
+            {r.version} · {r.enabled ? "啟用" : "關閉"} · 目的地 {r.maskedDestination ?? "未設定"}
+            {" · "}核實 {r.verifiedAt ?? "未核實"} · 權限{" "}
+            {r.permissionGranted ? "已核實" : "未核實"}
           </p>
           <Button
             variant="outline"

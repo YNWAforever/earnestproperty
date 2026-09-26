@@ -1,4 +1,6 @@
 import { StaffEndpointEditor } from "@/components/admin/StaffEndpointEditor";
+import { StaffReadinessBadge } from "@/components/admin/whatsapp/StaffReadinessBadge";
+import { getWhatsappStaffReadiness, getWhatsappRuntimeStatus } from "@/lib/neon/whatsapp-readiness";
 import { StaffReferenceEditor } from "@/components/admin/StaffReferenceEditor";
 import { WhatsappServicePolicyEditor } from "@/components/admin/WhatsappServicePolicyEditor";
 import { useEffect, useState } from "react";
@@ -23,6 +25,13 @@ function WhatsappSettings() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getWhatsappStaffChannels>>>([]);
   const [agents, setAgents] = useState<Awaited<ReturnType<typeof fetchAdminAgents>>>([]);
   const [error, setError] = useState("");
+  const [readinessError, setReadinessError] = useState("");
+  const [readiness, setReadiness] = useState<Awaited<ReturnType<typeof getWhatsappStaffReadiness>>>(
+    [],
+  );
+  const [runtime, setRuntime] = useState<Awaited<
+    ReturnType<typeof getWhatsappRuntimeStatus>
+  > | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     staffId: "",
@@ -46,6 +55,17 @@ function WhatsappSettings() {
       .catch(() => {
         if (!cancelled) setError("未能載入；需要管理員／經理權限及已套用的資料庫遷移。");
       });
+    Promise.all([getWhatsappStaffReadiness(), getWhatsappRuntimeStatus()])
+      .then(([staff, status]) => {
+        if (!cancelled) {
+          setReadiness(staff);
+          setRuntime(status);
+          setReadinessError("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setReadinessError("未能核對同事能力；請檢查管理權限及資料庫遷移。");
+      });
     return () => {
       cancelled = true;
     };
@@ -60,6 +80,32 @@ function WhatsappSettings() {
           自動分派仍未開放：需要核實 WOZTELL 執行／查證介面及人工改派政策。儲存映射不會執行分派。
         </p>
         {error ? <p role="alert">{error}</p> : null}
+        <section aria-label="同事接收能力" className="space-y-3 rounded border p-4">
+          <h2 className="font-semibold">同事接收能力</h2>
+          <p className="text-sm text-muted-foreground">
+            分派、Inbox 私有備註及同事 WhatsApp 是三種獨立能力。供應商接納不等於手機送達。
+            {runtime
+              ? `目前模式：${runtime.mode}；模板：${runtime.staffWhatsappTemplate.state === "ready" ? "已核實" : "未核實"}`
+              : null}
+          </p>
+          {readinessError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {readinessError}
+            </p>
+          ) : null}
+          {readiness.map((staff) => (
+            <article key={staff.staffId} className="grid gap-2 rounded border p-3 sm:grid-cols-2">
+              <div className="font-medium">
+                {staff.displayName}
+                {staff.active ? "" : "（帳戶停用）"}
+              </div>
+              <div className="text-sm">同事手機：{staff.maskedDestination ?? "未設定"}</div>
+              <StaffReadinessBadge label="Inbox 分派" capability={staff.assignment} />
+              <StaffReadinessBadge label="Inbox 私有備註" capability={staff.inboxPrivateNote} />
+              <StaffReadinessBadge label="同事 WhatsApp" capability={staff.staffWhatsapp} />
+            </article>
+          ))}
+        </section>
         <form
           className="grid max-w-2xl gap-3"
           onSubmit={async (e) => {
@@ -69,6 +115,7 @@ function WhatsappSettings() {
             try {
               await saveWhatsappStaffChannel({ ...form, branchId: form.branchId || null });
               setRows(await getWhatsappStaffChannels());
+              setReadiness(await getWhatsappStaffReadiness());
             } catch {
               setError("未能儲存，請核對同事及映射證據。");
             } finally {

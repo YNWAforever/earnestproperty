@@ -52,7 +52,20 @@ export function StaffNotificationCard({
         {item.attempts.length ? (
           item.attempts.map((a, i) => (
             <li key={i}>
-              {a.transport}：{a.state} · {a.evidenceKind ?? "未有送達證據"}
+              {a.transport}：
+              {a.state === "accepted"
+                ? "供應商已接納（未證實送達）"
+                : a.state === "delivered"
+                  ? "有簽名收據"
+                  : a.state === "unknown"
+                    ? "發送結果不明（需核對）"
+                    : a.state}
+              {a.evidenceKind ? ` · ${a.evidenceKind}` : ""}
+              {a.acceptedAt ? ` · 接納 ${a.acceptedAt}（${a.acceptedSource ?? "來源未核實"}）` : ""}
+              {a.deliveredAt
+                ? ` · 送達 ${a.deliveredAt}（${a.deliveredSource ?? "來源未核實"}）`
+                : ""}
+              {a.readAt ? ` · 已讀 ${a.readAt}（${a.readSource ?? "來源未核實"}）` : ""}
               {a.error ? ` · ${a.error}` : ""}
             </li>
           ))

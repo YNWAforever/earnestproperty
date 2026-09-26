@@ -30,6 +30,12 @@ export type StaffNotificationItem = {
     state: string;
     evidenceKind: string | null;
     error: string | null;
+    acceptedAt: string | null;
+    acceptedSource: string | null;
+    deliveredAt: string | null;
+    deliveredSource: string | null;
+    readAt: string | null;
+    readSource: string | null;
   }[];
 };
 export type StaffNotificationPage = {

@@ -16,9 +16,9 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F06 | Listing content and media claims mismatch | T11 | open | Audit report; source and override review pending |
 | F07 | Detail page social URL points to homepage | T02 | fixed-local | Property og:url now matches canonical public URL; SEO suite passed; SSR/browser pending |
 | F08 | Assignment evidence panel errors | T03 | fixed-local | True staff_role enum PGlite failed with SQLSTATE 42883 before cast; after enum[] cast, admin/manager/assigned agent pass and viewer/inactive/cross-conversation fail; staging pending |
-| F09 | Active staff is conflated with routing readiness | T04 | open | Audit report; current readiness review pending |
-| F10 | Inbox assignment, private note and staff phone conflated | T04 | open | Audit report; capability and evidence review pending |
-| F11 | Staff template send and delivery unverified | T04 | blocked | Needs approved provider template contract and device delivery evidence; code work remains |
+| F09 | Active staff is conflated with routing readiness | T04 | fixed-local | Separate readiness query includes unmapped staff; PGlite enum fixture and revoked endpoint test passed; staging pending |
+| F10 | Inbox assignment, private note and staff phone conflated | T04 | fixed-local | Three capability states shown separately; provider acceptance, signed delivery and read timestamps are distinct; staging/device evidence pending |
+| F11 | Staff template send and delivery unverified | T04 | blocked | Session text and readiness implemented; template guard retained pending approved name, language, parameters, WOZTELL JSON and device receipt |
 | F12 | Mapping and test-send workflow unclear | T05 | open | Audit report; UI and service review pending |
 | F13 | Runtime mode and policy UI disagree | T10 | open | Audit report; current runtime review pending |
 | F14 | Single link creation can become generic enquiry | T08 | open | Audit screenshot and report; current UI review pending |
@@ -64,3 +64,10 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - The isolated PostgreSQL fixture uses the production `staff_role` enum plus its later `viewer` value. The original `r.role=ANY($2::text[])` returned SQLSTATE `42883`, `operator does not exist: staff_role = text`. The corrected query uses `staff_role[]`; the fixture adapts JavaScript arrays into PostgreSQL array literals because PGlite's parameter encoder does not mirror Neon's.
 - Authorized admin, manager and assigned agent can read. Inactive staff, viewer, staff without a persisted role and an agent assigned to another conversation receive 403. A missing conversation returns 404 only to an authorized global role; agents receive 403 to avoid enumeration.
 - The client wrapper returns a safe error code, status code and correlation request ID. The panel displays distinct messages and its retry only re-reads assignment evidence. The existing Neon branch database suite still needs its guarded test branch; its skipped state is not counted as passing.
+
+## T04 evidence
+
+- Staff readiness is evaluated from staff role and active state, Inbox mapping, both endpoint types, channel, permissions, runtime configuration and the 24-hour window. Missing mapping and missing schema are explicit. The admin panel labels Inbox assignment, private note and staff WhatsApp separately and masks the device reference.
+- The production dispatcher reloads the same readiness policy and still performs its existing database boundary check immediately before send. Staff destination isolation, Inbox preflight, job lease and template guard remain in place.
+- An additive migration records provider acceptance, signed delivery and signed read timestamps with separate sources. A PGlite test executes the actual update SQL and proves duplicate read receipt stability. No source code or provider response has been treated as device delivery.
+- WOZTELL official Bot API guidance describes using the platform-generated JSON for an approved template. This tenant's approved template name, language, parameter mapping and response fixture have not been supplied, so template sending remains blocked.

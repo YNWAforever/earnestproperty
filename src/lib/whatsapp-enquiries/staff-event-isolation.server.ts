@@ -102,8 +102,16 @@ export async function isolateSignedStaffEvent(
       ? [
           {
             statement:
-              "UPDATE staff_notification_attempts SET dispatch_state='delivered',evidence_kind='provider_delivered',updated_at=now() WHERE id=$1::uuid AND dispatch_state IN ('dispatching','unknown','accepted','delivered')",
-            params: [correlated.id],
+              event.messageType.toUpperCase() === "READ"
+                ? "UPDATE staff_notification_attempts SET dispatch_state='delivered',evidence_kind='provider_delivered',provider_read_at=$2::timestamptz,provider_read_source=$3,updated_at=now() WHERE id=$1::uuid AND provider_read_at IS NULL AND dispatch_state IN ('dispatching','unknown','accepted','delivered')"
+                : "UPDATE staff_notification_attempts SET dispatch_state='delivered',evidence_kind='provider_delivered',provider_delivered_at=$2::timestamptz,provider_delivery_source=$3,updated_at=now() WHERE id=$1::uuid AND provider_delivered_at IS NULL AND dispatch_state IN ('dispatching','unknown','accepted','delivered')",
+            params: [
+              correlated.id,
+              classification.occurredAt ?? new Date().toISOString(),
+              classification.occurredAt
+                ? "signed_webhook_event_time"
+                : "signed_webhook_received_time",
+            ],
           },
         ]
       : []),
