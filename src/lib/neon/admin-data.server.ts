@@ -11,6 +11,7 @@ import {
   stringOrNull,
   transactionRows,
 } from "./db.server";
+import { leadBudgetError } from "../admin/lead-budget";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { isMissingBranchesTableError } from "./branches-schema";
 import type { StaffAccess } from "./auth.server";
@@ -2421,6 +2422,8 @@ export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAcc
 }
 
 export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {
+  const budgetProblem = leadBudgetError(input.budget_min, input.budget_max);
+  if (budgetProblem) throw new Response(budgetProblem, { status: 400 });
   const scope = agentScope(actor);
   const params: unknown[] = [
     input.stage,
