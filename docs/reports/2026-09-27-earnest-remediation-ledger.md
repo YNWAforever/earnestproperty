@@ -23,7 +23,7 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F13 | Runtime mode and policy UI disagree | T10 | open | Audit report; current runtime review pending |
 | F14 | Single link creation can become generic enquiry | T08 | open | Audit screenshot and report; current UI review pending |
 | F15 | Link list is capped and lacks management | T07 | open | Audit screenshot and report; paging retest pending |
-| F16 | Bulk API lacks UI and retry identity | T06 | open | Audit report; service review pending |
+| F16 | Bulk API lacks UI and retry identity | T06 | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI and Neon concurrency/staging pending |
 | F17 | Expired reference may block disable | T07 | open | Static audit finding; behavior test pending |
 | F18 | Shared redirect capacity bucket | T12 | open | Static audit finding; isolated capacity test pending |
 | F19 | Active member count masks account readiness | T09 | open | Audit report; current team data review pending |
@@ -78,3 +78,10 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Preview stores a five-minute opaque token and displays `[測試]`, name, transport, masked destination, version and exact copy. Only an explicit submit writes a purpose-specific test attempt and leased job. Test attempts do not reference customer enquiries or contribute to enquiry SLA.
 - The one-minute actor/endpoint cap and request ID are enforced in a transaction with current endpoint, mapping, staff role and message-window checks. The worker checks these again before provider dispatch. A started but uncertain provider request becomes `unknown` and is never automatically resent; `accepted` is not delivered.
 - Isolated PGlite executed the new migration and enqueue SQL, with one synthetic accepted transport and one post-boundary timeout. No WOZTELL network request was made. Inbox note testing requires a dedicated synthetic provider thread ID that does not belong to a customer conversation. No designated colleague or verified endpoint was supplied for the real T13 send.
+
+## T06 evidence
+
+- A ten-minute actor-bound preview stores the exact normalized rows and payload hash, with a 1,000-row limit. It reads current offers, staff mappings, references and matching links in one database call without creating links, opens or messages.
+- Commit accepts 1–50 rows. PostgreSQL locks the batch and sorted placement keys, checks the preview snapshot and current offer/staff/reference facts, and records either an atomic committed result with link IDs/codes/versions or a rejected result with reason codes. Same chunk/hash returns its stored result after a lost response; different payload conflicts. A new chunk ID is required after a rejected chunk.
+- New placement metadata is additive. One fully matching enabled legacy candidate may be reused; ambiguous legacy candidates are blocked. Historical versions and codes are not rewritten. A new placement uses the existing 192-bit reference code format.
+- PGlite ran the actual migration/function over synthetic 60-row, withdrawn, revoked-mapping, two-actor and retry cases. It serializes the two-actor fixture and does not prove independent Neon connection concurrency; that remains a staging DB gate. The UI path has not yet migrated to this service at this task boundary.

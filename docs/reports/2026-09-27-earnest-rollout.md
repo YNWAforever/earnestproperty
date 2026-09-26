@@ -16,3 +16,7 @@ Apply `neon/migrations/20260927080000_staff_notification_receipt_times.sql` to t
 ## T05 test-notification schema and controls
 
 Apply `neon/migrations/20260927083000_staff_notification_test_attempts.sql` after the T04 receipt migration in isolated staging before enabling the new wizard code. It creates purpose-specific previews and attempts; it does not enqueue any test on migration. Configure a synthetic Inbox member only if its thread is independently verified and has no customer conversation. A real colleague send requires the T13 manifest and explicit submit. For rollback, hide the test UI and stop the test job capability; retain attempts and unknown outcomes for reconciliation. Do not delete test history or replay uncertain sends.
+
+## T06 batch schema
+
+Apply `neon/migrations/20260927090000_whatsapp_link_batch_operations.sql` only to an isolated staging database after the existing tracking-link and staff-reference schema. Check the function and the 50+10 fixture before enabling the batch UI. The migration adds preview, operation, row and placement tables plus a commit function; it leaves legacy links and attribution intact. No historical placement metadata is backfilled automatically. To roll back code, disable new batch entry points and retain operation records and placement keys for reconciliation. Preview exact legacy rows before any later metadata backfill; ambiguous candidates require a human decision.

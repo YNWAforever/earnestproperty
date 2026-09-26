@@ -55,3 +55,13 @@ Official WOZTELL Bot API guidance: https://doc.woztell.com/docs/reference/bot-ap
 | targeted `npx eslint` | exit 0 | Changed T05 TypeScript and TSX files |
 
 No live test notification was queued or sent. The fixture's synthetic recipient is not a designated colleague, and provider acceptance is not device delivery. Browser/staging validation remains pending.
+
+## T06 local verification
+
+| Command | Result | Scope |
+|---|---|---|
+| `node --test src/lib/whatsapp-enquiries/link-batches.test.mjs` | exit 0; 2/2, 0 skipped | Canonical source/placement identity, stable row hashes and limits |
+| `node --test src/lib/whatsapp-enquiries/link-batches.db.test.mjs` | exit 0; 1/1, 0 skipped | PGlite migration/function with 50+10 rows, replay, conflict, withdrawn and mapping revoke |
+| `npm run typecheck` | exit 0 | Batch service and server function contract |
+
+Independent Neon connections, live migration chain and staging UI remain unverified. The synthetic PGlite fixture does not use production data or provider network.
