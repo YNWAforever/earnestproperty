@@ -1,9 +1,11 @@
 import { Outlet, createFileRoute } from "@tanstack/react-router";
+import { useNeonAuth } from "@/hooks/use-neon-auth";
 
 export const Route = createFileRoute("/admin")({
   component: AdminLayout,
 });
 
 function AdminLayout() {
-  return <Outlet />;
+  const { user, session } = useNeonAuth();
+  return <Outlet key={`${user?.id ?? "anonymous"}:${session?.id ?? "none"}`} />;
 }
