@@ -26,7 +26,7 @@ function admin(actor: StaffAccess) {
   if (!actor.roles.some((r) => r === "admin" || r === "manager"))
     throw new Response("Forbidden", { status: 403 });
 }
-function linkDto(row: DbRow): TrackingLink {
+export function linkDto(row: DbRow): TrackingLink {
   return {
     id: String(row.id),
     referenceMappingId: row.reference_mapping_id ? String(row.reference_mapping_id) : null,
@@ -96,6 +96,7 @@ function versionStatement(
   input: TrackingLinkInput,
   actor: StaffAccess,
   channel: string,
+  verifiedAt?: string | null,
 ): TransactionStatement {
   const statement: TransactionStatement = {
     statement: `INSERT INTO whatsapp_tracking_link_versions(link_id,version,channel_id,placement_source,entry_point_type,public_listing_no,property_id,deal_type,requested_staff_id,branch_id,external_listing_id,video_id,enabled,created_by,placement_verified_at) SELECT $1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8,$9::uuid,$10,$11,$12,$13,$14::uuid,$15::timestamptz WHERE EXISTS(SELECT 1 FROM whatsapp_tracking_links WHERE id=$1::uuid AND current_version=$2) RETURNING *`,
@@ -114,7 +115,11 @@ function versionStatement(
       input.videoId ?? null,
       input.enabled,
       actor.staffId,
-      input.placementVerified ? new Date().toISOString() : null,
+      verifiedAt === undefined
+        ? input.placementVerified
+          ? new Date().toISOString()
+          : null
+        : verifiedAt,
     ],
   };
   if (input.referenceMappingId) {
@@ -132,20 +137,39 @@ export async function saveTrackingLink(
 ) {
   const { query, transaction } = dependencies;
   admin(actor);
-  await validateLink(input, query);
+  if (input.id && !input.expectedVersion) throw new Error("WA_LINK_VERSION_REQUIRED");
+  if (input.enabled || !input.id) await validateLink(input, query);
   const previous =
     input.id && !input.enabled
       ? (
           await query(
-            "SELECT channel_id FROM whatsapp_tracking_link_versions WHERE link_id=$1::uuid AND version=$2",
+            "SELECT v.* FROM whatsapp_tracking_link_versions v JOIN whatsapp_tracking_links l ON l.id=v.link_id AND l.current_version=v.version WHERE v.link_id=$1::uuid AND v.version=$2",
             [input.id, input.expectedVersion],
           )
         )[0]
       : null;
+  if (input.id && !input.enabled && !previous) throw new Error("WA_LINK_VERSION_CONFLICT");
+  // Disable copies the prior immutable identity. The caller may omit or alter stale
+  // offer/reference fields; neither can prevent an authorized shutdown.
+  const effectiveInput: TrackingLinkInput = previous
+    ? {
+        referenceMappingId: previous.reference_mapping_id as string | null,
+        placementSource: previous.placement_source as TrackingLinkInput["placementSource"],
+        entryPointType: previous.entry_point_type as TrackingLinkInput["entryPointType"],
+        publicListingNo: previous.public_listing_no as string | null,
+        propertyId: previous.property_id as string | null,
+        dealType: previous.deal_type as TrackingLinkInput["dealType"],
+        requestedStaffId: previous.requested_staff_id as string | null,
+        branchId: previous.branch_id as string | null,
+        externalListingId: previous.external_listing_id as string | null,
+        videoId: previous.video_id as string | null,
+        placementVerified: Boolean(previous.placement_verified_at),
+        enabled: false,
+      }
+    : input;
   const channel = previous ? String(previous.channel_id) : companyChannel(),
     id = input.id ?? randomUUID(),
     version = input.id ? (input.expectedVersion ?? 0) + 1 : 1;
-  if (input.id && !input.expectedVersion) throw new Error("WA_LINK_VERSION_REQUIRED");
   const first: TransactionStatement = input.id
     ? {
         statement:
@@ -158,7 +182,10 @@ export async function saveTrackingLink(
         params: [id, mintReference(), actor.staffId],
       };
   // The immutable version is inserted only when the optimistic update succeeded. Lock/read current version in one CTE.
-  const result = await transaction([first, versionStatement(id, version, input, actor, channel)]);
+  const result = await transaction([
+    first,
+    versionStatement(id, version, effectiveInput, actor, channel),
+  ]);
   if (!result[0].length) throw new Error("WA_LINK_VERSION_CONFLICT");
   const [row] = await query(
     `SELECT ${fields} FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v ON v.link_id=l.id WHERE l.id=$1::uuid AND v.version=$2`,

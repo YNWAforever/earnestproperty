@@ -22,9 +22,9 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F12 | Mapping and test-send workflow unclear | T05 | fixed-local | Four-step staff wizard, source/account selector, masked test preview, durable one-shot job, PGlite revoke/idempotency/rate/unknown tests; staging and real recipient pending |
 | F13 | Runtime mode and policy UI disagree | T10 | open | Audit report; current runtime review pending |
 | F14 | Single link creation can become generic enquiry | T08 | open | Audit screenshot and report; current UI review pending |
-| F15 | Link list is capped and lacks management | T07 | open | Audit screenshot and report; paging retest pending |
+| F15 | Link list is capped and lacks management | T07 | fixed-local | Keyset page 25/50/100 and 650-link synthetic traversal; versioned export snapshot; UI migration/staging pending |
 | F16 | Bulk API lacks UI and retry identity | T06 | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI and Neon concurrency/staging pending |
-| F17 | Expired reference may block disable | T07 | open | Static audit finding; behavior test pending |
+| F17 | Expired reference may block disable | T07 | fixed-local | PGlite expired reference: disable succeeds, stale version conflicts, re-enable remains blocked |
 | F18 | Shared redirect capacity bucket | T12 | open | Static audit finding; isolated capacity test pending |
 | F19 | Active member count masks account readiness | T09 | open | Audit report; current team data review pending |
 | F20 | Invitation and first-login loop incomplete | T09 | open | Audit report; current flow review pending |
@@ -85,3 +85,10 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Commit accepts 1–50 rows. PostgreSQL locks the batch and sorted placement keys, checks the preview snapshot and current offer/staff/reference facts, and records either an atomic committed result with link IDs/codes/versions or a rejected result with reason codes. Same chunk/hash returns its stored result after a lost response; different payload conflicts. A new chunk ID is required after a rejected chunk.
 - New placement metadata is additive. One fully matching enabled legacy candidate may be reused; ambiguous legacy candidates are blocked. Historical versions and codes are not rewritten. A new placement uses the existing 192-bit reference code format.
 - PGlite ran the actual migration/function over synthetic 60-row, withdrawn, revoked-mapping, two-actor and retry cases. It serializes the two-actor fixture and does not prove independent Neon connection concurrency; that remains a staging DB gate. The UI path has not yet migrated to this service at this task boundary.
+
+## T07 evidence
+
+- New server pagination uses created-at plus link ID keyset cursor and identical search/source/staff/enabled filter predicates for count and page. A 650-link PGlite fixture traversed all pages without duplicates or omissions. Open events and attributed enquiries are separate counts; a failed count read returns unknown rather than zero.
+- Disabling an existing link copies its prior immutable identity and verification timestamp into a new disabled version, checking link and expected version while allowing expired references and withdrawn offers. Re-enabling still validates live dependencies. A stale expected version is reported as a conflict.
+- The export takes an actor-scoped, fifteen-minute snapshot of exact link IDs and versions, then pages 500 rows at a time. Selected IDs and all matching filters are distinct scopes. CSV quotes fields, neutralizes spreadsheet formula prefixes, includes a UTF-8 BOM and excludes customer numbers, raw staff destinations, Inbox IDs and credentials. Tracking URLs are public `/w/` paths.
+- The browser management UI still uses its old list at this task boundary; T08 will consume these endpoints. No production migration or export was run.

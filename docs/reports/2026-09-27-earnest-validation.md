@@ -65,3 +65,13 @@ No live test notification was queued or sent. The fixture's synthetic recipient 
 | `npm run typecheck` | exit 0 | Batch service and server function contract |
 
 Independent Neon connections, live migration chain and staging UI remain unverified. The synthetic PGlite fixture does not use production data or provider network.
+
+## T07 local verification
+
+| Command | Result | Scope |
+|---|---|---|
+| `node --test src/lib/whatsapp-enquiries/link-management.db.test.mjs` | exit 0; 1/1, 0 skipped | PGlite 650 rows, filters/cursor, open/enquiry counts, expired-reference disable/reenable, versioned 500+150 export |
+| `bun test src/lib/admin/whatsapp-link-export.test.ts` | exit 0; 1/1, 0 skipped | CSV formula, comma/quote/newline and BOM |
+| `npm run typecheck` | exit 0 | Paged API and export server functions |
+
+Neon staging migration and browser export remain unverified.
