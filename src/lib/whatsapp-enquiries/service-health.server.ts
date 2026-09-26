@@ -8,6 +8,7 @@ import {
 } from "../neon/whatsapp-readiness.server.ts";
 import { assessWhatsappRuntime } from "../neon/whatsapp-readiness-policy.ts";
 import { dueWorkHealth, summarizeStaffCoverage } from "./service-health-model.ts";
+import { redirectCapacity } from "./redirect-capacity.ts";
 
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
 type Query = typeof queryRows;
@@ -55,6 +56,7 @@ export async function getServiceHealth(
     mode,
     serviceEnabled,
     runtime,
+    redirectCapacity: redirectCapacity(),
     policy: {
       version: null as number | null,
       purpose: null as string | null,

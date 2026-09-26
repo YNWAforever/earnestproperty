@@ -735,6 +735,7 @@ function PropertyPage() {
                   alt={safeTitle}
                   width={1200}
                   height={900}
+                  sizes="(min-width: 1024px) 800px, 100vw"
                   className="aspect-[4/3] w-full object-cover"
                   loading="eager"
                   fetchPriority="high"
@@ -783,8 +784,9 @@ function PropertyPage() {
                       <AppImage
                         src={src}
                         alt={`${safeTitle} ${i + 1}`}
-                        width={200}
-                        height={150}
+                        width={80}
+                        height={60}
+                        sizes="80px"
                         className="h-full w-full object-cover"
                       />
                     </button>

@@ -94,6 +94,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260927083000_staff_notification_test_attempts.sql",
   "20260927090000_whatsapp_link_batch_operations.sql",
   "20260927093000_whatsapp_link_management_indexes.sql",
+  "20260927100000_whatsapp_redirect_bucket_retention.sql",
 ]);
 
 /**

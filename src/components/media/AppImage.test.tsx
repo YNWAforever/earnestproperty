@@ -189,16 +189,17 @@ describe("responsive local media", () => {
 test("generated candidates exist, match width descriptors and preserve aspect ratio without upscaling", async () => {
   const { default: manifest } = await import("../../lib/media/responsive-images.generated.json");
   const { default: sharp } = await import("sharp");
-  for (const image of Object.values(manifest)) {
-    for (const candidate of image.srcSet.split(", ")) {
+  const checks = Object.values(manifest).flatMap((image) =>
+    image.srcSet.split(", ").map(async (candidate) => {
       const [src, descriptor] = candidate.split(" ");
       const width = Number(descriptor.slice(0, -1));
-      const metadata = await sharp(`${process.cwd()}/public${src}`).metadata();
+      const metadata = await sharp(process.cwd() + "/public" + src).metadata();
       expect(metadata.width).toBe(width);
       expect(width).toBeLessThanOrEqual(image.width);
       expect(
         Math.abs((metadata.height ?? 0) - (width * image.height) / image.width),
       ).toBeLessThanOrEqual(1);
-    }
-  }
+    }),
+  );
+  await Promise.all(checks);
 });

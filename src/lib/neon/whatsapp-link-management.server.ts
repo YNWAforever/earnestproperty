@@ -139,7 +139,9 @@ export async function listWhatsappTrackingLinksPage(
     return {
       ...base,
       requestedStaffName: row.requested_staff_name ? String(row.requested_staff_name) : null,
-      sourcePlacementId: row.source_placement_id ? String(row.source_placement_id) : base.externalListingId ?? base.videoId ?? null,
+      sourcePlacementId: row.source_placement_id
+        ? String(row.source_placement_id)
+        : (base.externalListingId ?? base.videoId ?? null),
       opens: countsUnavailable ? null : Number(count?.opens ?? 0),
       enquiries: countsUnavailable ? null : Number(count?.enquiries ?? 0),
       readiness: base.requestedStaffId

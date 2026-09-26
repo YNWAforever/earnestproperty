@@ -25,13 +25,13 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F15 | Link list is capped and lacks management | T07 | fixed-local | Keyset page 25/50/100 and 650-link synthetic traversal; versioned export snapshot; UI migration/staging pending |
 | F16 | Bulk API lacks UI and retry identity | T06 | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI and Neon concurrency/staging pending |
 | F17 | Expired reference may block disable | T07 | fixed-local | PGlite expired reference: disable succeeds, stale version conflicts, re-enable remains blocked |
-| F18 | Shared redirect capacity bucket | T12 | open | Static audit finding; isolated capacity test pending |
+| F18 | Shared redirect capacity bucket | T12 | fixed-local | 32 fixed global shards plus registered-link bucket, contextual untracked fallback and bounded retention; 92 WhatsApp tests including synthetic capacity and PGlite prune; staging load pending |
 | F19 | Active member count masks account readiness | T09 | fixed-local | Team DTO separates active, invitation, verified email, identity, role/branch, Inbox and phone; local tests passed; staging pending |
 | F20 | Invitation and first-login loop incomplete | T09 | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending |
 | F21 | Health misses eligible staff and due work | T10 | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending |
 | F22 | Missing agent/link/mapping/content tasks lack entry points | T08 | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; content review remains T11 |
-| F23 | External response latency needs measured diagnosis | T12 | open | Audit samples are not HK/user p75; new baseline pending |
-| F24 | Oversized thumbnails and serial bulk reads | T12 | open | Audit DOM and static evidence; measurement pending |
+| F23 | External response latency needs measured diagnosis | T12 | blocked | No HK staging endpoint, region or trace sample; performance report records protocol and open 30%/300 ms targets |
+| F24 | Oversized thumbnails and serial bulk reads | T12 | blocked | Local 128/256 px variants and gallery sizes, T06 set-based batch; remote property thumbnail transfer and Neon 50-row timing still unmeasured |
 
 ## T00 baseline
 
@@ -118,3 +118,9 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Public title cleanup is display-only and preserves the imported source; it strips limited promotional artifacts and unsupported VR title words without guessing bedroom/helper-room counts. The existing property detail media tab still requires a real `video_url`. Admin list/detail expose missing estate, title/structured-room disagreement and missing VR URL for human review.
 - The content-corrections report records each before/after and an isolated-DB read-only preview query. No CMS data, imported row or production content was mutated. Remaining source facts, A074714 exact row and any DB override need a content owner and verified isolated data before correction.
 - Tests: homepage Node 25, estate-conversion Node 102, blog Node 37/Bun 5, videos Node 27, SEO Node 61/Bun 6, property-experience Bun 197/Node 146, admin title test Bun 7, typecheck and targeted lint passed. No staging browser or content-owner review occurred.
+
+## T12 evidence
+
+- Registered redirects use 32 fixed global rate shards and a bucket keyed only after an enabled registered link resolves. Default caps are 5,000/minute per shard and 600/minute per link; bounded environment settings and effective values appear in operations health. HEAD/prefetch exits before all database writes. A limited registered link redirects to the contextual company WhatsApp URL with `X-WA-Tracking: untracked`, without minting an EPWA reference or open. Global overload returns 429. Bounded opportunistic stale-bucket pruning has a window-start index; the new migration and SQL executed in synthetic PGlite.
+- `test:whatsapp-enquiries` passed Node 92/92 including over-300 synthetic decision, hot-link fallback, prefetch and retention SQL. `test:listing-search` passed Node 90/90 and Bun 12/12 after aligning the list-row contract with its new property-specific action. `test:media` passed Bun 12/12; `typecheck` passed. `test:public-performance:db` exited 0 with 0 pass and 3 skipped because verified isolated Neon credentials are absent.
+- The generated inventory contains 20 local static images, 7,124,290 original bytes, 77,598 selected 128 px bytes and 284,828 selected 256 px bytes. These are file-size sums, not page transfer. The property gallery declares 80 px thumbnail sizes, but remote property photos do not gain local variants. No Hong Kong warm/cold, region, DB p95 or staging load data was obtained. F23 and F24 remain blocked on those specific measurements and remote-photo delivery.

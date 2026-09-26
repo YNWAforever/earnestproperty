@@ -13,6 +13,12 @@ import {
   companyWhatsappHref,
 } from "../whatsapp-enquiries/links.ts";
 import { resolvePublicWaAction, type PublicWaOffer } from "../whatsapp-enquiries/public-context.ts";
+import {
+  redirectBucketKey,
+  redirectCapacity,
+  redirectCapacityDecision,
+  maybePruneRedirectBuckets,
+} from "../whatsapp-enquiries/redirect-capacity.ts";
 const fields = `l.id,l.code,v.*,l.created_at`;
 export function companyChannel() {
   const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
@@ -332,16 +338,20 @@ export async function trackedRedirect(request: Request, code: string, query = qu
   if (!shouldMintReference(request)) return new Response(null, { status: 204, headers });
   if (!trackingEnabled() || !/^[A-Za-z0-9_-]{16,64}$/.test(code)) return fallback();
   const channel = companyChannel();
-  // A finite global bucket bounds storage under arbitrary code/IP input; no IP is retained.
-  const key = createHash("sha256").update("wa-redirect-global").digest("hex");
-  const [limit] = await query(
-    `INSERT INTO whatsapp_link_rate_buckets(bucket_key,window_start,request_count) VALUES($1,date_trunc('minute',now()),1) ON CONFLICT(bucket_key) DO UPDATE SET window_start=date_trunc('minute',now()),request_count=CASE WHEN whatsapp_link_rate_buckets.window_start=date_trunc('minute',now()) THEN whatsapp_link_rate_buckets.request_count+1 ELSE 1 END RETURNING request_count`,
-    [key],
-  );
-  if (Number(limit.request_count) > 300)
+  // Fixed-size global shards bound arbitrary-code traffic without one hot row.
+  // Per-link buckets are created only after a registered enabled link is found.
+  const capacity = redirectCapacity();
+  const rateSql =
+    "INSERT INTO whatsapp_link_rate_buckets(bucket_key,window_start,request_count) VALUES($1,date_trunc('minute',now()),1) ON CONFLICT(bucket_key) DO UPDATE SET window_start=date_trunc('minute',now()),request_count=CASE WHEN whatsapp_link_rate_buckets.window_start=date_trunc('minute',now()) THEN whatsapp_link_rate_buckets.request_count+1 ELSE 1 END RETURNING request_count";
+  const globalKey = redirectBucketKey("global", code, capacity.globalShards);
+  const [globalRate] = await query(rateSql, [globalKey]);
+  await maybePruneRedirectBuckets((sql) => query(sql), Number(globalRate.request_count));
+  if (
+    redirectCapacityDecision(Number(globalRate.request_count), null, capacity) === "global_limited"
+  )
     return new Response("請稍後再試，或聯絡公司總台。", {
       status: 429,
-      headers: { ...headers, "Retry-After": "60" },
+      headers: { ...headers, "Retry-After": "60", "X-WA-Tracking": "untracked" },
     });
   const [row] = await query(
     `SELECT ${fields} FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v ON v.link_id=l.id AND v.version=l.current_version WHERE l.code=$1 AND v.enabled AND v.channel_id=$2`,
@@ -359,6 +369,33 @@ export async function trackedRedirect(request: Request, code: string, query = qu
     if (!offer) return fallback();
     title = String(offer.title_zh).slice(0, 160);
     propertyResponsibleStaffIdAtIntake = offer.agent_id ? String(offer.agent_id) : null;
+  }
+  const [linkRate] = await query(rateSql, [redirectBucketKey("registered", String(row.id))]);
+  if (
+    redirectCapacityDecision(
+      Number(globalRate.request_count),
+      Number(linkRate.request_count),
+      capacity,
+    ) === "link_limited"
+  ) {
+    const action = resolvePublicWaAction(
+      {
+        propertyId: String(row.property_id ?? ""),
+        publicListingNo: String(row.public_listing_no ?? ""),
+        dealType: row.deal_type === "rent" ? "rent" : "sale",
+        title,
+      },
+      null,
+      process.env.EP_WA_COMPANY_PHONE,
+    );
+    const location = row.property_id
+      ? action.href
+      : (fallback().headers.get("Location") ?? "/contact");
+    console.warn("WA_REDIRECT_LINK_LIMITED", JSON.stringify({ linkId: String(row.id) }));
+    return new Response(null, {
+      status: 302,
+      headers: { ...headers, Location: location, "X-WA-Tracking": "untracked" },
+    });
   }
   const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
   companyWhatsappHref(phone, "");

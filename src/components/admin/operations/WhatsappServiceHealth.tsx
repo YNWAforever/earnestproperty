@@ -89,6 +89,11 @@ export function WhatsappServiceHealth() {
             分母範圍：{health.coverage?.scope ?? "就緒資料未取得"}。手機通知不等同 Inbox
             分派或私人備註。
           </p>
+          <p className="text-xs text-muted-foreground">
+            追蹤連結限流：每條已註冊連結 {health.redirectCapacity.registeredPerLinkPerMinute}/分鐘；
+            全域固定 {health.redirectCapacity.globalShards} 個分區，每分區{" "}
+            {health.redirectCapacity.globalPerShardPerMinute}/分鐘。超限時追蹤狀態為 untracked。
+          </p>
           <p className="text-sm">
             已到期工作：{health.overdueJobs} · 過期租約：{health.expiredLeases} · 最早到期：
             {health.oldestDueAt ?? "沒有"} · 下次排程：{health.nextWakeAt ?? "沒有"}
