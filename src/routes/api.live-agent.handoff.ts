@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { readPublicJsonBody } from "@/lib/ai/read-public-json-body";
+import { leadBudgetError } from "@/lib/admin/lead-budget";
 
 import {
   LiveAgentPublicError,
@@ -35,6 +36,19 @@ export const Route = createFileRoute("/api/live-agent/handoff")({
           return Response.json({ error: "Invalid handoff session" }, { status: 400 });
         }
 
+        const rawBudgetMin = body.budget_min;
+        const rawBudgetMax = body.budget_max;
+        if (
+          (rawBudgetMin != null && typeof rawBudgetMin !== "number") ||
+          (rawBudgetMax != null && typeof rawBudgetMax !== "number")
+        ) {
+          return Response.json({ error: "Invalid handoff budget" }, { status: 400 });
+        }
+        const budgetMin = typeof rawBudgetMin === "number" ? rawBudgetMin : null;
+        const budgetMax = typeof rawBudgetMax === "number" ? rawBudgetMax : null;
+        if (leadBudgetError(budgetMin, budgetMax)) {
+          return Response.json({ error: "Invalid handoff budget" }, { status: 400 });
+        }
         try {
           await enforceRateLimit({
             key: `live-agent:handoff:ip:${clientIpFromRequest(request)}`,
@@ -49,8 +63,8 @@ export const Route = createFileRoute("/api/live-agent/handoff")({
             phone: typeof body.phone === "string" ? body.phone : null,
             email: typeof body.email === "string" ? body.email : null,
             intent: typeof body.intent === "string" ? body.intent : null,
-            budget_min: typeof body.budget_min === "number" ? body.budget_min : null,
-            budget_max: typeof body.budget_max === "number" ? body.budget_max : null,
+            budget_min: budgetMin,
+            budget_max: budgetMax,
             preferred_estates: Array.isArray(body.preferred_estates)
               ? body.preferred_estates.map(String)
               : [],
