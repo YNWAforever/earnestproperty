@@ -20,7 +20,7 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F10 | Inbox assignment, private note and staff phone conflated | T04 | fixed-local | Three capability states shown separately; provider acceptance, signed delivery and read timestamps are distinct; staging/device evidence pending |
 | F11 | Staff template send and delivery unverified | T04 | blocked | Session text and readiness implemented; template guard retained pending approved name, language, parameters, WOZTELL JSON and device receipt |
 | F12 | Mapping and test-send workflow unclear | T05 | fixed-local | Four-step staff wizard, source/account selector, masked test preview, durable one-shot job, PGlite revoke/idempotency/rate/unknown tests; staging and real recipient pending |
-| F13 | Runtime mode and policy UI disagree | T10 | open | Audit report; current runtime review pending |
+| F13 | Runtime mode and policy UI disagree | T10 | fixed-local | Effective policy summary and separate draft editor; runtime capabilities use T04 readiness; staging pending |
 | F14 | Single link creation can become generic enquiry | T08 | fixed-local | New wizard requires a current offering, route and placement before preview; staging browser pending |
 | F15 | Link list is capped and lacks management | T07 | fixed-local | Keyset page 25/50/100 and 650-link synthetic traversal; versioned export snapshot; UI migration/staging pending |
 | F16 | Bulk API lacks UI and retry identity | T06 | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI and Neon concurrency/staging pending |
@@ -28,7 +28,7 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F18 | Shared redirect capacity bucket | T12 | open | Static audit finding; isolated capacity test pending |
 | F19 | Active member count masks account readiness | T09 | fixed-local | Team DTO separates active, invitation, verified email, identity, role/branch, Inbox and phone; local tests passed; staging pending |
 | F20 | Invitation and first-login loop incomplete | T09 | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending |
-| F21 | Health misses eligible staff and due work | T10 | open | Audit report; runtime review pending |
+| F21 | Health misses eligible staff and due work | T10 | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending |
 | F22 | Missing agent/link/mapping/content tasks lack entry points | T08 | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; content review remains T11 |
 | F23 | External response latency needs measured diagnosis | T12 | open | Audit samples are not HK/user p75; new baseline pending |
 | F24 | Oversized thumbnails and serial bulk reads | T12 | open | Audit DOM and static evidence; measurement pending |
@@ -104,3 +104,10 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Team member DTO now derives distinct active, invitation, email verification, identity binding, role/branch, Inbox assignment, private note and optional phone states. The detail checklist and initial staff shell expose the correct owner for each step; a generic invitation link is explicitly manual-share and suspension only revokes staff access.
 - Manual staff identity binding now checks Neon Auth email verification on the server. The lifecycle fixture proves an unverified account is rejected without a write and a verified account can bind. Existing bound owner access and session refresh remain intact.
 - `test:team` Node 91 and Bun 31 passed; `test:neon-auth` 5 passed; onboarding policy 4 passed; typecheck and targeted lint passed. The new browser spec is fixture-gated and has not run against staging. Team aggregate attention counts do not include all provider readiness reasons; per-member readiness does, and staging data verification remains open.
+
+## T10 evidence
+
+- Health now reports separate runtime capabilities, approved/effective policy version and purpose, active intake staff denominator, assignment and phone readiness, missing mappings, queued due work, expired leases, next wake, last successful job and provider ambiguity. An absent schema is blocked rather than a healthy zero. Worker alarms require due work or expired leases; an idle old heartbeat is not a failure.
+- Counts keep opens, attributed enquiries, confirmed assignments and verified human responses separate. The human-response sample requires an intake message and a staff response, excludes spam/test states, and labels the Hong Kong timezone. These are operational counts rather than an SLA or delivery proof.
+- The explicit migration registry now includes all four additive 2026-09-27 migrations, so the existing drift check can see missing versions. Policy editing starts collapsed below the effective-policy summary; drafts and simulations are labelled separately.
+- Tests: health policy/readiness Node 9 passed; operations Node 17/Bun 8, control-plane Node 97, job-wake Node 17, WhatsApp Node 81, typecheck and targeted lint passed. CI now wires the new deterministic tests, including the in-memory PostgreSQL public-number fixture. No live job or migration was run.

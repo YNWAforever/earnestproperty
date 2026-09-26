@@ -90,6 +90,10 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260912160000_staff_reference_snapshots.sql",
   "20260912170000_staff_notifications.sql",
   "20260925120000_rate_limit_bucket_cleanup.sql",
+  "20260927080000_staff_notification_receipt_times.sql",
+  "20260927083000_staff_notification_test_attempts.sql",
+  "20260927090000_whatsapp_link_batch_operations.sql",
+  "20260927093000_whatsapp_link_management_indexes.sql",
 ]);
 
 /**

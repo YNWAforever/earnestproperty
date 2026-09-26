@@ -73,6 +73,7 @@ jobs:
       - run: scripts/property-sync/.venv/bin/python -m pip install -r scripts/property-sync/requirements.txt
       - run: npm run test:property-sync:python
       - run: npm run test:listing-search
+      - run: npm run test:public-number-search:db
       - run: npm run test:listing-priority
       - run: npm run test:estate-grid
       - run: npm run test:cron
