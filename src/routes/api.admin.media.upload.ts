@@ -74,10 +74,11 @@ export const Route = createFileRoute("/api/admin/media/upload")({
           return Response.json({ ok: false, error: "INVALID_UPLOAD_BODY" }, { status: 400 });
         }
         const file = form.get("file");
-        const requestedOwnerType = String(form.get("ownerType") ?? "property");
-        const ownerType = ALLOWED_OWNER_TYPES.includes(requestedOwnerType)
-          ? requestedOwnerType
-          : "property";
+        const requestedOwnerType = form.get("ownerType");
+        const ownerType = requestedOwnerType === null ? "property" : requestedOwnerType;
+        if (typeof ownerType !== "string" || !ALLOWED_OWNER_TYPES.includes(ownerType)) {
+          return Response.json({ ok: false, error: "INVALID_OWNER_TYPE" }, { status: 400 });
+        }
         if (!(file instanceof File)) {
           return Response.json({ ok: false, error: "file is required" }, { status: 400 });
         }
