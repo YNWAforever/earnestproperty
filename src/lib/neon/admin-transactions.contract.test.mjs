@@ -204,6 +204,43 @@ test("saveAdminTransaction computes and stores saleable_psf from price/saleable_
   assert.ok(call.params.includes(20_000), "saleable_psf should be price / saleable_area = 20000");
 });
 
+test("saveAdminTransaction rejects invalid numeric and publication inputs before SQL", async () => {
+  const base = {
+    estate_id: "estate-1",
+    deal_type: "sale",
+    price: 10_000_000,
+    saleable_area: 500,
+    deal_date: "2026-08-01",
+    unit: null,
+    block: null,
+    floor_band: null,
+    source: null,
+    source_url: null,
+    verified: false,
+  };
+  for (const change of [
+    { price: 0 },
+    { price: -1 },
+    { price: Number.POSITIVE_INFINITY },
+    { price: Number.NaN },
+    { saleable_area: 0 },
+    { saleable_area: -1 },
+    { saleable_area: 500.5 },
+    { saleable_area: Number.NaN },
+    { saleable_area: Number.POSITIVE_INFINITY },
+    { verified: "false" },
+    { verified: 1 },
+  ]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    await assert.rejects(
+      server.saveAdminTransaction({ ...base, ...change }, AGENT_ACTOR),
+      (error) => error instanceof Response && error.status === 400,
+    );
+    assert.equal(calls.length, 0, "invalid input reached SQL");
+  }
+});
+
 test("saveAdminTransaction attributes a new (INSERT) transaction to whoever creates it", async () => {
   const { calls, query } = recorder();
   const server = await loadAdminDataServerWithInjectedQuery(query);
