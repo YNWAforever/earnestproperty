@@ -87,7 +87,8 @@
     "test:staff-notifications:db": "node --test src/lib/whatsapp-enquiries/staff-reference.db.test.mjs src/lib/whatsapp-enquiries/staff-notifications.db.test.mjs",
     "test:staff-notifications:e2e": "node scripts/test-staff-handoff-browser.mjs",
     "test:ratelimit": "bun test src/lib/rate-limit-prune.test.ts",
-    "test:job-wake": "node --test src/lib/control-plane/job-wake.test.mjs src/lib/control-plane/job-signal.test.mjs src/lib/control-plane/jobs-next-due.test.mjs workers/cron/src/job-alarm.test.mjs"
+    "test:job-wake": "node --test src/lib/control-plane/job-wake.test.mjs src/lib/control-plane/job-signal.test.mjs src/lib/control-plane/jobs-next-due.test.mjs workers/cron/src/job-alarm.test.mjs",
+    "test:public-number-search:db": "node --test src/lib/neon/public-number-search.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",
@@ -160,6 +161,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@cloudflare/workers-types": "5.20260926.1",
+    "@electric-sql/pglite": "0.4.5",
     "@eslint/js": "^9.32.0",
     "@lovable.dev/vite-tanstack-config": "^1.4.0",
     "@playwright/test": "^1.62.1",

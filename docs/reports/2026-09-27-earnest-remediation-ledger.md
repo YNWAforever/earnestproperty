@@ -8,8 +8,8 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 
 | Finding | Audit issue | Task | Status | Commit and fresh evidence |
 |---|---|---|---|---|
-| F01 | Public listing number search misses current listing | T01 | open | Audit screenshot: A074714 gives zero results; current branch retest pending |
-| F02 | Internal SYNC identifier reaches customer UI | T01 | open | Audit screenshot: breadcrumb shows SYNC; current branch retest pending |
+| F01 | Public listing number search misses current listing | T01 | fixed-local | T01 commit; PGlite real COUNT SQL red 0 then green 1; alias, case, whitespace, withdrawn tested; staging pending |
+| F02 | Internal SYNC identifier reaches customer UI | T01 | fixed-local | T01 commit; helper red/green and public route replacements; staged browser review pending |
 | F03 | WhatsApp entry points lose property context | T02 | open | Audit report; current branch retest pending |
 | F04 | Internal copy and estate location mismatch | T11 | open | Audit report; source owner review pending |
 | F05 | Five-minute response promise unsupported | T11 | open | Audit report; actual human SLA unverified |
@@ -44,3 +44,11 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 - No `ASTRA_TEST_DATABASE_URL`, `ASTRA_TEST_BRANCH_ID`, browser fixture or local `.env.local` was present in this worktree. Database tests have not been run and must not be reported as passed. The current public deployment was not reachable through the read-only web tool.
 
 Ruling: keep the audit HTML in the supplied pack rather than committing it — its admin screenshot contains private operational context — cost if wrong: reviewers need the separately supplied pack for visual evidence.
+
+## T01 evidence
+
+- A fresh in-memory PostgreSQL fixture executes the actual `searchListings` COUNT SQL with `A074714`, lower case, whitespace, an old alias, sale/rent and a newer withdrawn sale. It failed on the audit SQL (`0 !== 1`) and passes after the search change (1/1). The standard Neon branch DB suite remains unrun.
+- `publicPropertyNo` refuses SYNC and raw UUID fallback; the helper regression failed before the fix and passed after. Customer-facing breadcrumb, enquiry props, form prompt, homepage text, analytics and list structured URL now use the public identity.
+- Focused post-change checks: `test:listing-search` Node 90/90 plus Bun 12/12; `test:property-experience` exit 0, Node 146/146; `typecheck` exit 0. No staging or production claim.
+
+Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while the guarded Neon test branch credentials are absent — it executes PostgreSQL syntax and enum types with synthetic rows, but it cannot prove Neon network, migration or production data behavior.

@@ -1045,7 +1045,7 @@ function PropertyCard({ property }: { property: PropertyItem }) {
         </div>
         <a
           href={whatsappUrl(
-            `你好，我想查詢樓盤 ${property.listing_no} (${publicPropertyTitle(property)})`,
+            `你好，我想查詢樓盤 ${publicPropertyNo(property)} (${publicPropertyTitle(property)})`,
           )}
           target="_blank"
           rel="noopener noreferrer"

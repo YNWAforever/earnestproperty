@@ -1167,7 +1167,7 @@ function ListingsPage() {
       ? itemListSchema({
           numberOfItems: total,
           items: rows.map((row) => ({
-            url: `${SITE_URL}/property/${row.listing_no}`,
+            url: `${SITE_URL}/property/${publicPropertyNo(row)}`,
             name: sanitizeListingText(row.title_zh) ?? row.title_zh,
             image: row.images?.[0] ?? null,
           })),

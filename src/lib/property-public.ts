@@ -22,7 +22,13 @@ type PublicProperty = {
 export function publicPropertyNo(
   property: Pick<PublicProperty, "listing_no" | "public_listing_no">,
 ) {
-  return property.public_listing_no || property.listing_no;
+  const candidate = (property.public_listing_no || property.listing_no).trim();
+  // Imported SYNC IDs and raw UUIDs are storage identities, not customer
+  // listing numbers. Surfaces without a verified public number use contact.
+  return /^SYNC(?:[-_]|$)/i.test(candidate) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)
+    ? ""
+    : candidate;
 }
 export function activePropertyOfferings(property: PublicProperty): PublicOffering[] {
   const offerings = property.offerings ?? [

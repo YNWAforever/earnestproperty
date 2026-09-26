@@ -72,3 +72,12 @@ test("public cards use actual available update times for new and legacy inventor
     propertyUpdatedAt({ created_at: "invalid", updated_at: null, last_seen_at: null }),
   ).toBeNull();
 });
+test("an imported internal SYNC identifier is never a customer listing number", () => {
+  expect(publicPropertyNo({ listing_no: "SYNC-00000000-0000-4000-8000-000000000001" })).toBe("");
+  expect(
+    publicPropertyNo({
+      listing_no: "SYNC-00000000-0000-4000-8000-000000000001",
+      public_listing_no: "A074714",
+    }),
+  ).toBe("A074714");
+});
