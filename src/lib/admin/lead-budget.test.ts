@@ -23,3 +23,9 @@ test("negative bounds are rejected on either side", () => {
   // and naming it first is what tells the user what to actually change.
   expect(leadBudgetError(-5, -9)).toBe("預算不可為負數。");
 });
+
+test("non-finite bounds are rejected before they reach CRM numeric columns", () => {
+  expect(leadBudgetError(Number.POSITIVE_INFINITY, null)).toBe("預算必須為有效數字。");
+  expect(leadBudgetError(null, Number.NEGATIVE_INFINITY)).toBe("預算必須為有效數字。");
+  expect(leadBudgetError(Number.NaN, 1)).toBe("預算必須為有效數字。");
+});

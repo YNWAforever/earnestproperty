@@ -1,4 +1,4 @@
-/** Budget-range validation for the CRM lead detail panel.
+/** Shared budget-range validation for CRM lead writes.
  *
  * Lives here rather than in admin.leads.tsx so that file exports only
  * components (react-refresh/only-export-components), and so the rule that gates
@@ -9,6 +9,9 @@
  * WhatsApp blast.
  */
 export function leadBudgetError(min: number | null, max: number | null) {
+  if ((min !== null && !Number.isFinite(min)) || (max !== null && !Number.isFinite(max))) {
+    return "預算必須為有效數字。";
+  }
   if ((min !== null && min < 0) || (max !== null && max < 0)) {
     return "預算不可為負數。";
   }

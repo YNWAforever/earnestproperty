@@ -326,3 +326,52 @@ test("getAdminTransaction adds an agent_id scope predicate for a scoped agent, n
   assert.match(calls[0].text, /agent_id = \$2/);
   assert.deepEqual(calls[0].params, ["txn-1", "agent-1"]);
 });
+
+test("updateAdminLead rejects invalid budgets before CRM SQL", async () => {
+  const base = {
+    id: "lead-1",
+    stage: "contacted",
+    intent: "buyer",
+    budget_min: null,
+    budget_max: null,
+    preferred_estates: [],
+    assigned_agent_id: null,
+    note: null,
+  };
+  for (const budget of [
+    { budget_min: -1, budget_max: 100 },
+    { budget_min: 200, budget_max: 100 },
+    { budget_min: 0, budget_max: -1 },
+    { budget_min: Number.POSITIVE_INFINITY, budget_max: null },
+  ]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    await assert.rejects(
+      server.updateAdminLead({ ...base, ...budget }, ADMIN_ACTOR),
+      (error) => error instanceof Response && error.status === 400,
+    );
+    assert.equal(calls.length, 0);
+  }
+});
+
+test("updateAdminLead keeps a valid budget in its CRM update", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  const result = await server.updateAdminLead(
+    {
+      id: "lead-1",
+      stage: "contacted",
+      intent: "buyer",
+      budget_min: 0,
+      budget_max: 100,
+      preferred_estates: [],
+      assigned_agent_id: null,
+      note: null,
+    },
+    ADMIN_ACTOR,
+  );
+  assert.deepEqual(result, { ok: false, error: "Not found" });
+  assert.match(calls[0].text, /UPDATE crm_leads SET/);
+  assert.equal(calls[0].params[2], 0);
+  assert.equal(calls[0].params[3], 100);
+});
