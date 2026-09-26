@@ -9,7 +9,7 @@ export async function startHistoryImport(staffId: string, mode: "forward" | "bac
     .update(JSON.stringify([channel, mode]))
     .digest("hex");
   const { queryRows } = await import("../neon/db.server.ts");
-  const rows = await queryRows<{ id: string; completed: boolean }>(
+  const rows = await queryRows<{ id: string; completed: boolean; job_queued: boolean }>(
     `WITH run AS (
  INSERT INTO woztell_history_imports(id) VALUES($1) ON CONFLICT(id) DO UPDATE SET id=EXCLUDED.id RETURNING *
  ), job AS (
@@ -17,11 +17,12 @@ export async function startHistoryImport(staffId: string, mode: "forward" | "bac
  SELECT 'woztell.history.import',1,jsonb_build_object('importId',id,'cursor',cursor,'mode',$2::text,'channelId',$4::text),'queued',5,now(),
  'woztell.history:'||id||':'||md5(COALESCE(cursor,'')),$3::uuid FROM run WHERE NOT completed
  ON CONFLICT(idempotency_key) DO UPDATE SET status=CASE WHEN ops_jobs.status='failed' THEN 'queued' ELSE ops_jobs.status END,
- attempt_count=CASE WHEN ops_jobs.status='failed' THEN 0 ELSE ops_jobs.attempt_count END RETURNING id
- ) SELECT id,completed FROM run`,
+ attempt_count=CASE WHEN ops_jobs.status='failed' THEN 0 ELSE ops_jobs.attempt_count END
+ WHERE ops_jobs.status='failed' RETURNING status
+ ) SELECT run.id,run.completed,EXISTS(SELECT 1 FROM job WHERE status='queued') AS job_queued FROM run`,
     [id, mode, staffId, channel],
   );
-  if (rows[0] && !rows[0].completed) wakeAfterCommit("general");
+  if (rows[0]?.job_queued) wakeAfterCommit("general");
   return rows[0];
 }
 export type HistoryJobPayload = {
