@@ -668,6 +668,7 @@ test("YouTube URL helper accepts only video URLs with IDs", () => {
     ["https://youtube.com/watch?v=abc123", "https://www.youtube.com/embed/abc123"],
     ["https://m.youtube.com/watch?v=abc123", "https://www.youtube.com/embed/abc123"],
     ["https://youtu.be/abc123", "https://www.youtube.com/embed/abc123"],
+    ["https://youtu.be/%61bc123", "https://www.youtube.com/embed/abc123"],
     ["https://www.youtube.com/embed/abc123", "https://www.youtube.com/embed/abc123"],
     ["https://www.youtube.com/shorts/abc123", "https://www.youtube.com/embed/abc123"],
   ];
@@ -684,6 +685,10 @@ test("YouTube URL helper accepts only video URLs with IDs", () => {
     "https://example.com/watch?v=abc123",
     "https://www.youtube.com/watch",
     "https://www.youtube.com/watch?v=",
+    "https://www.youtube.com/watch?v=abc123%3Fautoplay%3D1",
+    "https://www.youtube.com/watch?v=../redirect",
+    "https://youtu.be/abc123%2Fredirect",
+    "ftp://www.youtube.com/watch?v=abc123",
     "https://youtu.be/",
     "https://www.youtube.com/embed/",
     "https://www.youtube.com/shorts/",

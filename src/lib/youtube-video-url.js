@@ -12,17 +12,23 @@ export function getYouTubeVideoId(value) {
   try {
     const url = new URL(value.trim());
     const host = url.hostname.toLowerCase();
-    if (!isYouTubeHost(host)) return null;
+    const webProtocol = url.protocol === "https:" || url.protocol === "http:";
+    if (!webProtocol || !isYouTubeHost(host)) return null;
 
+    let videoId;
     if (host === "youtu.be") {
-      return url.pathname.split("/").filter(Boolean)[0] ?? null;
+      videoId = url.pathname.split("/").filter(Boolean)[0];
+    } else if (url.pathname.startsWith("/embed/")) {
+      videoId = firstPathSegment(url.pathname, "embed");
+    } else if (url.pathname.startsWith("/shorts/")) {
+      videoId = firstPathSegment(url.pathname, "shorts");
+    } else {
+      videoId = url.searchParams.get("v")?.trim();
     }
 
-    if (url.pathname.startsWith("/embed/")) return firstPathSegment(url.pathname, "embed");
-    if (url.pathname.startsWith("/shorts/")) return firstPathSegment(url.pathname, "shorts");
-
-    const videoId = url.searchParams.get("v")?.trim();
-    return videoId || null;
+    // Only a decoded, path-safe token may enter iframe and thumbnail URLs.
+    const normalizedId = decodeURIComponent(videoId ?? "");
+    return /^[A-Za-z0-9_-]+$/.test(normalizedId) ? normalizedId : null;
   } catch {
     return null;
   }
