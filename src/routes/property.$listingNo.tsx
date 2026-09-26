@@ -1,4 +1,5 @@
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
+import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
 import {
   activePropertyOfferings,
   selectPropertyOffering,
@@ -175,15 +176,26 @@ export const Route = createFileRoute("/property/$listingNo")({
       // exactly like before this table existed.
       fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
     ]);
-    const enquiryLinks = await resolveWhatsappLinks({
-      data: {
-        offers: activePropertyOfferings(property).map((offer) => ({
-          propertyId: offer.id,
-          publicListingNo: publicPropertyNo(property),
-          dealType: offer.deal_type,
+    const offers = activePropertyOfferings(property)
+      .filter(() => publicPropertyNo(property))
+      .map((offer) => ({
+        propertyId: offer.id,
+        publicListingNo: publicPropertyNo(property),
+        dealType: offer.deal_type,
+        title: sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh,
+      }));
+    const enquiryLinks = await resolveWhatsappLinks({ data: { offers } }).catch((error) => {
+      console.error("WA_TRACKING_RESOLVER_FAILED", error);
+      return {
+        enabled: false,
+        fallbackHref: null,
+        links: [],
+        actions: offers.map((offer) => ({
+          propertyId: offer.propertyId,
+          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
         })),
-      },
-    }).catch(() => ({ enabled: true, fallbackHref: "/contact", links: [] }));
+      };
+    });
     return { property, similar, txns, branches, enquiryLinks };
   },
   head: ({ loaderData }) => {
@@ -221,6 +233,7 @@ export const Route = createFileRoute("/property/$listingNo")({
         { name: "description", content: desc },
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
+        { property: "og:url", content: canonical.href },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: desc },
         ...(img ? [{ property: "og:image", content: img }] : []),
@@ -851,11 +864,7 @@ function PropertyPage() {
               branchContact={branchContact}
               branches={branches}
               enquiryHref={
-                enquiryLinks?.enabled
-                  ? (enquiryLinks.links.find((link) => link.propertyId === property.id)?.href ??
-                    enquiryLinks.fallbackHref ??
-                    "/contact")
-                  : undefined
+                enquiryLinks.actions.find((action) => action.propertyId === property.id)?.href
               }
               fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
               listingNo={publicListingNo}
@@ -1028,11 +1037,7 @@ function PropertyPage() {
                 branchContact={branchContact}
                 branches={branches}
                 enquiryHref={
-                  enquiryLinks?.enabled
-                    ? (enquiryLinks.links.find((link) => link.propertyId === property.id)?.href ??
-                      enquiryLinks.fallbackHref ??
-                      "/contact")
-                    : undefined
+                  enquiryLinks.actions.find((action) => action.propertyId === property.id)?.href
                 }
                 fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
                 listingNo={publicListingNo}

@@ -55,7 +55,7 @@ describe("PropertyDecisionActions", () => {
     expect($("[data-property-mobile-actions] a")).toHaveLength(3);
   });
 
-  test("WhatsApp CTA is a real wa.me link with the 852 country code and price context", () => {
+  test("WhatsApp fallback keeps the public listing and deal context", () => {
     const $ = renderActions(8_880_000);
     // fallbackWhatsapp "85291234567" already carries the 852 country code;
     // the link must not double it up, and must not drop it either (the old
@@ -68,11 +68,9 @@ describe("PropertyDecisionActions", () => {
     expect(mobileLink).toHaveLength(1);
 
     const decoded = decodeURIComponent(mobileLink.attr("href") ?? "");
-    // title_zh-style strings already bake in the deal label and listing
-    // number (e.g. "測試售盤"), so the prefill must not repeat "編號 B059390".
-    expect(decoded).toContain("測試售盤");
-    expect(decoded).toContain("$8,880,000");
-    expect(decoded).not.toContain("編號");
+    expect(decoded).toContain("B059390（出售）：測試售盤");
+    expect(decoded).not.toContain("EPWA:");
+    expect(decoded).not.toContain("$8,880,000");
     expect(mobileLink.attr("target")).toBe("_blank");
   });
 

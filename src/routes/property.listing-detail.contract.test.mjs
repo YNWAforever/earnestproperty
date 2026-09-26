@@ -113,7 +113,8 @@ function buildLoader() {
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no } = deps;
+  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}) } = deps;
+  const SITE_CONTACT = { whatsappPhone: "" };
   ${body}
 }
 exports.loader = loader;
@@ -534,6 +535,10 @@ test("head canonical points to the unit even when representative offering change
     },
   });
   assert.equal(result.links[0].href, "https://example.test/property/B054645");
+  assert.equal(
+    result.meta.find((meta) => meta.property === "og:url")?.content,
+    result.links[0].href,
+  );
 });
 
 test("selected sale and rent retain shared page copy and separate sanitized notes", async () => {
@@ -609,5 +614,5 @@ test("tracking resolver failure retains public listing and uses company contact 
     },
   );
   assert.equal(result.property, property);
-  assert.equal(result.enquiryLinks.fallbackHref, "/contact");
+  assert.equal(result.enquiryLinks.actions[0].href, "/contact");
 });

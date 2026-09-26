@@ -10,11 +10,11 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 |---|---|---|---|---|
 | F01 | Public listing number search misses current listing | T01 | fixed-local | T01 commit; PGlite real COUNT SQL red 0 then green 1; alias, case, whitespace, withdrawn tested; staging pending |
 | F02 | Internal SYNC identifier reaches customer UI | T01 | fixed-local | T01 commit; helper red/green and public route replacements; staged browser review pending |
-| F03 | WhatsApp entry points lose property context | T02 | open | Audit report; current branch retest pending |
+| F03 | WhatsApp entry points lose property context | T02 | fixed-local | Shared per-offer action and batch resolver across homepage, list, detail desktop/mobile; pure test passed; staging browser pending |
 | F04 | Internal copy and estate location mismatch | T11 | open | Audit report; source owner review pending |
 | F05 | Five-minute response promise unsupported | T11 | open | Audit report; actual human SLA unverified |
 | F06 | Listing content and media claims mismatch | T11 | open | Audit report; source and override review pending |
-| F07 | Detail page social URL points to homepage | T02 | open | Audit report; SSR head retest pending |
+| F07 | Detail page social URL points to homepage | T02 | fixed-local | Property og:url now matches canonical public URL; SEO suite passed; SSR/browser pending |
 | F08 | Assignment evidence panel errors | T03 | open | Audit report; enum SQL cause is a hypothesis until reproduced |
 | F09 | Active staff is conflated with routing readiness | T04 | open | Audit report; current readiness review pending |
 | F10 | Inbox assignment, private note and staff phone conflated | T04 | open | Audit report; capability and evidence review pending |
@@ -52,3 +52,9 @@ Ruling: keep the audit HTML in the supplied pack rather than committing it — i
 - Focused post-change checks: `test:listing-search` Node 90/90 plus Bun 12/12; `test:property-experience` exit 0, Node 146/146; `typecheck` exit 0. No staging or production claim.
 
 Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while the guarded Neon test branch credentials are absent — it executes PostgreSQL syntax and enum types with synthetic rows, but it cannot prove Neon network, migration or production data behavior.
+
+## T02 evidence
+
+- `public-context.test.mjs` failed before the shared action existed and passes with tracked `/w/`, contextual company fallback, and `/contact` for a missing phone or internal number. No fallback fabricates an EPWA token.
+- Homepage and listing loaders batch resolve the visible offers once; detail resolves active offerings once and selects the current sale/rent action by property ID. Resolver failures log `WA_TRACKING_RESOLVER_FAILED` and still provide a contextual fallback. Normal missing links remain observable as `WA_TRACKING_LINK_UNPROVISIONED`.
+- Property and listing `og:url` now match their canonical public URLs. Live SSR, social preview and provider receipt checks are still pending.

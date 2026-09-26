@@ -51,7 +51,12 @@ import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
 import responsiveImages from "@/lib/media/responsive-images.generated.json";
 const companyLogo = "/brand/earnest-company-logo-2026.jpg";
-import { whatsappUrl, SITE_BRANCHES } from "@/config/site";
+import { whatsappUrl, SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
+import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
+import {
+  resolvePublicWaAction,
+  type PublicWaAction,
+} from "@/lib/whatsapp-enquiries/public-context";
 import {
   coreEstates,
   estateFigure,
@@ -127,10 +132,28 @@ export const Route = createFileRoute("/")({
       // must not take down the whole homepage.
       fetchCmsVideos().catch(() => []),
     ]);
+    const offers = featured
+      .filter((p) => publicPropertyNo(p))
+      .map((p) => ({
+        propertyId: p.id,
+        publicListingNo: publicPropertyNo(p),
+        dealType: p.deal_type === "rent" ? ("rent" as const) : ("sale" as const),
+        title: publicPropertyTitle(p),
+      }));
+    const featuredEnquiryActions = await resolveWhatsappLinks({ data: { offers } })
+      .then((result) => result.actions)
+      .catch((error) => {
+        console.error("WA_TRACKING_RESOLVER_FAILED", error);
+        return offers.map((offer) => ({
+          propertyId: offer.propertyId,
+          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
+        }));
+      });
     return {
       estates,
       castlePeakRoadDbEstates,
       featured,
+      featuredEnquiryActions,
       faqs,
       corridorFaqs,
       counts: Object.fromEntries(counts),
@@ -164,6 +187,7 @@ export const Route = createFileRoute("/")({
         name: "twitter:description",
         content: pageSeo.home.description,
       },
+      { property: "og:url", content: SITE_URL },
       { property: "og:image", content: HERO_OG_IMAGE },
       { name: "twitter:image", content: HERO_OG_IMAGE },
     ],
@@ -203,6 +227,7 @@ function HomePage() {
     estates,
     castlePeakRoadDbEstates,
     featured,
+    featuredEnquiryActions,
     faqs: faqRows,
     corridorFaqs: corridorFaqRows,
     counts,
@@ -384,7 +409,11 @@ function HomePage() {
           ) : (
             <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {featured.map((p: FeaturedProperty) => (
-                <PropertyCard key={p.id} property={p} />
+                <PropertyCard
+                  key={p.id}
+                  property={p}
+                  enquiryAction={featuredEnquiryActions.find((a) => a.propertyId === p.id)}
+                />
               ))}
             </div>
           )}
@@ -910,8 +939,26 @@ type PropertyItem = {
   estates?: { name_zh: string; slug: string } | null;
 };
 
-function PropertyCard({ property }: { property: PropertyItem }) {
+function PropertyCard({
+  property,
+  enquiryAction,
+}: {
+  property: PropertyItem;
+  enquiryAction?: PublicWaAction;
+}) {
   const isRent = property.deal_type === "rent";
+  const whatsappAction =
+    enquiryAction ??
+    resolvePublicWaAction(
+      {
+        propertyId: property.id,
+        publicListingNo: publicPropertyNo(property),
+        dealType: property.deal_type === "rent" ? "rent" : "sale",
+        title: publicPropertyTitle(property),
+      },
+      null,
+      SITE_CONTACT.whatsappPhone,
+    );
   const priceDisplay = propertyPriceSummary(property);
   const psf =
     !isRent && property.price && property.saleable_area
@@ -1044,10 +1091,8 @@ function PropertyCard({ property }: { property: PropertyItem }) {
           </span>
         </div>
         <a
-          href={whatsappUrl(
-            `你好，我想查詢樓盤 ${publicPropertyNo(property)} (${publicPropertyTitle(property)})`,
-          )}
-          target="_blank"
+          href={whatsappAction.href}
+          target={whatsappAction.mode === "contact" ? undefined : "_blank"}
           rel="noopener noreferrer"
           className="mt-4"
         >

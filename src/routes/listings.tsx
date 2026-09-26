@@ -18,6 +18,7 @@ import {
   Heart,
   Maximize2,
   MapPin,
+  MessageCircle,
   ChevronLeft,
   ChevronRight,
   LayoutGrid,
@@ -59,6 +60,12 @@ import {
 } from "@/lib/saved-listings";
 import { AppImage } from "@/components/media/AppImage";
 import { searchListings, fetchEstateOptions, type ListingRow } from "@/lib/queries";
+import { SITE_CONTACT } from "@/config/site";
+import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
+import {
+  resolvePublicWaAction,
+  type PublicWaAction,
+} from "@/lib/whatsapp-enquiries/public-context";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
 import { createListingAlert } from "@/lib/neon/admin-data";
 import { LISTING_ALERT_CONSENT_TEXT } from "@/lib/neon/listing-alerts.js";
@@ -111,9 +118,27 @@ export const Route = createFileRoute("/listings")({
       }),
       fetchEstateOptions(),
     ]);
+    const offers = result.rows
+      .filter((row) => publicPropertyNo(row))
+      .map((row) => ({
+        propertyId: row.id,
+        publicListingNo: publicPropertyNo(row),
+        dealType: row.deal_type,
+        title: sanitizeListingText(publicPropertyTitle(row)) ?? row.title_zh,
+      }));
+    const listingEnquiryActions = await resolveWhatsappLinks({ data: { offers } })
+      .then((response) => response.actions)
+      .catch((error) => {
+        console.error("WA_TRACKING_RESOLVER_FAILED", error);
+        return offers.map((offer) => ({
+          propertyId: offer.propertyId,
+          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
+        }));
+      });
     return {
       ...result,
       estates,
+      listingEnquiryActions,
       page: deps.page,
       // head() receives loaderData, not the search params, so the facts its
       // title/description need travel with the result. The estate's real name
@@ -150,6 +175,12 @@ export const Route = createFileRoute("/listings")({
         { name: "description", content: description },
         { property: "og:title", content: title },
         { property: "og:description", content: description },
+        {
+          property: "og:url",
+          content: canonicalLink(
+            page > 1 ? `${pageSeo.listings.path}?page=${page}` : pageSeo.listings.path,
+          ).href,
+        },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
         // A filter combination with no rows is a soft-404 if indexed; the
@@ -1155,7 +1186,7 @@ function ListingsErrorComponent({ error }: { error: Error }) {
 
 function ListingsPage() {
   const search = Route.useSearch();
-  const { rows, total, estates } = Route.useLoaderData();
+  const { rows, total, estates, listingEnquiryActions } = Route.useLoaderData();
   const filters = useListingFiltersState(search);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -1279,13 +1310,21 @@ function ListingsPage() {
           ) : viewMode === "grid" ? (
             <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {rows.map((p: ListingRow) => (
-                <ListingCard key={p.id} p={p} />
+                <ListingCard
+                  key={p.id}
+                  p={p}
+                  enquiryAction={listingEnquiryActions.find((a) => a.propertyId === p.id)}
+                />
               ))}
             </ul>
           ) : (
             <ul className="space-y-3">
               {rows.map((p: ListingRow) => (
-                <ListingCardRow key={p.id} p={p} />
+                <ListingCardRow
+                  key={p.id}
+                  p={p}
+                  enquiryAction={listingEnquiryActions.find((a) => a.propertyId === p.id)}
+                />
               ))}
             </ul>
           )}
@@ -1328,9 +1367,21 @@ function handleCardShare(title: string, listingNo: string) {
   void shareUrl(title, `${SITE_URL}/property/${listingNo}`);
 }
 
-function ListingCard({ p }: { p: ListingRow }) {
+function ListingCard({ p, enquiryAction }: { p: ListingRow; enquiryAction?: PublicWaAction }) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
   const { favourited, toggle } = useFavourite(publicPropertyNo(p), p.listing_aliases);
+  const action =
+    enquiryAction ??
+    resolvePublicWaAction(
+      {
+        propertyId: p.id,
+        publicListingNo: publicPropertyNo(p),
+        dealType: p.deal_type,
+        title: safeTitle,
+      },
+      null,
+      SITE_CONTACT.whatsappPhone,
+    );
 
   return (
     <li className="group relative overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
@@ -1383,6 +1434,15 @@ function ListingCard({ p }: { p: ListingRow }) {
           </div>
         </div>
       </Link>
+      <a
+        href={action.href}
+        target={action.mode === "contact" ? undefined : "_blank"}
+        rel="noopener noreferrer"
+        className="mx-4 mb-4 flex min-h-10 items-center justify-center gap-2 rounded-md border text-sm font-medium text-primary hover:bg-accent"
+      >
+        <MessageCircle className="h-4 w-4" aria-hidden="true" />
+        WhatsApp 查詢
+      </a>
       {/* Both siblings of <Link>, not nested inside it -- a <button> inside
           an <a> is invalid HTML and would confuse screen readers about
           which element the click activates (same structural fix the share
@@ -1411,9 +1471,21 @@ function ListingCard({ p }: { p: ListingRow }) {
 // Same data as ListingCard, horizontal row layout for the list view toggle
 // -- deliberately not a fully independent component: it shares
 // deriveListingCardData() rather than re-deriving price itself.
-function ListingCardRow({ p }: { p: ListingRow }) {
+function ListingCardRow({ p, enquiryAction }: { p: ListingRow; enquiryAction?: PublicWaAction }) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
   const { favourited, toggle } = useFavourite(publicPropertyNo(p), p.listing_aliases);
+  const action =
+    enquiryAction ??
+    resolvePublicWaAction(
+      {
+        propertyId: p.id,
+        publicListingNo: publicPropertyNo(p),
+        dealType: p.deal_type,
+        title: safeTitle,
+      },
+      null,
+      SITE_CONTACT.whatsappPhone,
+    );
 
   return (
     <li className="group overflow-hidden rounded-lg border bg-card transition hover:shadow-md">
@@ -1468,6 +1540,15 @@ function ListingCardRow({ p }: { p: ListingRow }) {
             </div>
           </div>
         </Link>
+        <a
+          href={action.href}
+          target={action.mode === "contact" ? undefined : "_blank"}
+          rel="noopener noreferrer"
+          aria-label={`WhatsApp 查詢：${safeTitle}`}
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-md border text-primary hover:bg-accent"
+        >
+          <MessageCircle className="h-4 w-4" aria-hidden="true" />
+        </a>
         {/* Both siblings of <Link>, self-start-aligned so they sit at the
             row's top-right rather than stretching to its full height. */}
         <div className="flex flex-shrink-0 items-start gap-1 self-start">

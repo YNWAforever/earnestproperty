@@ -12,6 +12,7 @@ import {
   shouldMintReference,
   companyWhatsappHref,
 } from "../whatsapp-enquiries/links.ts";
+import { resolvePublicWaAction, type PublicWaOffer } from "../whatsapp-enquiries/public-context.ts";
 const fields = `l.id,l.code,v.*,l.created_at`;
 export function companyChannel() {
   const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
@@ -188,13 +189,14 @@ export async function provisionTrackingLinks(inputs: TrackingLinkInput[], actor:
   ).map(linkDto);
 }
 export async function resolveTrackingLinks(
-  offers: { propertyId: string; publicListingNo: string; dealType: "sale" | "rent" }[],
+  offers: (Omit<PublicWaOffer, "title"> & { title?: string })[],
   query = queryRows,
 ) {
   const enabled = trackingEnabled();
+  const companyPhone = process.env.EP_WA_COMPANY_PHONE ?? process.env.VITE_CONTACT_WHATSAPP_PHONE;
   const fallbackHref = enabled
-    ? process.env.EP_WA_COMPANY_PHONE
-      ? companyWhatsappHref(process.env.EP_WA_COMPANY_PHONE, "您好，我想向晉誠地產查詢。")
+    ? companyPhone
+      ? companyWhatsappHref(companyPhone, "您好，我想向晉誠地產查詢。")
       : "/contact"
     : null;
   if (!enabled)
@@ -202,6 +204,10 @@ export async function resolveTrackingLinks(
       enabled,
       fallbackHref,
       links: offers.map((o) => ({ propertyId: o.propertyId, href: null })),
+      actions: offers.map((o) => ({
+        propertyId: o.propertyId,
+        ...resolvePublicWaAction({ ...o, title: o.title ?? "" }, null, companyPhone),
+      })),
     };
   const channel = companyChannel();
   // One batch read; public reads cannot provision or reveal internal requested staff/branch metadata.
@@ -227,6 +233,16 @@ export async function resolveTrackingLinks(
       href: rows.find((r) => r.propertyId === o.propertyId)
         ? `/w/${rows.find((r) => r.propertyId === o.propertyId)!.code}`
         : null,
+    })),
+    actions: offers.map((o) => ({
+      propertyId: o.propertyId,
+      ...resolvePublicWaAction(
+        { ...o, title: o.title ?? "" },
+        rows.find((r) => r.propertyId === o.propertyId)
+          ? `/w/${rows.find((r) => r.propertyId === o.propertyId)!.code}`
+          : null,
+        companyPhone,
+      ),
     })),
   };
 }

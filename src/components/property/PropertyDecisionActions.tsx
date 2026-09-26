@@ -3,9 +3,10 @@ import { Calculator, MapPin, MessageCircle, Phone } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { propertyEnquiryMessage, type PropertyBranchContact } from "@/config/site";
+import { type PropertyBranchContact } from "@/config/site";
 import { agentBranchName } from "@/lib/agent-directory";
-import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
+import { toTelHref } from "@/lib/contact-links";
+import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
 import { calculateMortgage } from "@/lib/mortgage";
 import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
 import { buildContext, track } from "@/lib/analytics/events";
@@ -73,13 +74,20 @@ export function PropertyMobileContactSummary({
   // resolves exactly like before -- agent's own number, then the company
   // fallback -- until that data lands, at which point it becomes agent →
   // branch → company automatically with no further code change.
-  const branchWhatsapp = "phone" in branchContact ? branchContact.whatsapp : null;
-  const enquiryMessage = propertyEnquiryMessage({ title, dealType, price });
   const phoneHref = toTelHref(phone) ?? "/contact";
   const whatsappHref =
     enquiryHref ??
-    toWhatsAppHref(agent?.whatsapp || branchWhatsapp || fallbackWhatsapp, enquiryMessage);
-  const hasWhatsapp = whatsappHref !== null;
+    resolvePublicWaAction(
+      {
+        propertyId: "",
+        publicListingNo: listingNo,
+        dealType,
+        title,
+      },
+      null,
+      fallbackWhatsapp,
+    ).href;
+  const hasWhatsapp = whatsappHref !== "/contact";
   function handleWhatsAppClick() {
     track(
       { name: "listing_whatsapp_click", payload: { listingNo, dealType } },
@@ -174,13 +182,20 @@ export function PropertyDecisionActions({
   // resolves exactly like before -- agent's own number, then the company
   // fallback -- until that data lands, at which point it becomes agent →
   // branch → company automatically with no further code change.
-  const branchWhatsapp = "phone" in branchContact ? branchContact.whatsapp : null;
-  const enquiryMessage = propertyEnquiryMessage({ title, dealType, price });
   const phoneHref = toTelHref(phone) ?? "/contact";
   const whatsappHref =
     enquiryHref ??
-    toWhatsAppHref(agent?.whatsapp || branchWhatsapp || fallbackWhatsapp, enquiryMessage);
-  const hasWhatsapp = whatsappHref !== null;
+    resolvePublicWaAction(
+      {
+        propertyId: "",
+        publicListingNo: listingNo,
+        dealType,
+        title,
+      },
+      null,
+      fallbackWhatsapp,
+    ).href;
+  const hasWhatsapp = whatsappHref !== "/contact";
   function handleWhatsAppClick() {
     track(
       { name: "listing_whatsapp_click", payload: { listingNo, dealType } },
