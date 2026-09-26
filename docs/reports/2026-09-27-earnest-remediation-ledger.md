@@ -15,7 +15,7 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F05 | Five-minute response promise unsupported | T11 | open | Audit report; actual human SLA unverified |
 | F06 | Listing content and media claims mismatch | T11 | open | Audit report; source and override review pending |
 | F07 | Detail page social URL points to homepage | T02 | fixed-local | Property og:url now matches canonical public URL; SEO suite passed; SSR/browser pending |
-| F08 | Assignment evidence panel errors | T03 | open | Audit report; enum SQL cause is a hypothesis until reproduced |
+| F08 | Assignment evidence panel errors | T03 | fixed-local | True staff_role enum PGlite failed with SQLSTATE 42883 before cast; after enum[] cast, admin/manager/assigned agent pass and viewer/inactive/cross-conversation fail; staging pending |
 | F09 | Active staff is conflated with routing readiness | T04 | open | Audit report; current readiness review pending |
 | F10 | Inbox assignment, private note and staff phone conflated | T04 | open | Audit report; capability and evidence review pending |
 | F11 | Staff template send and delivery unverified | T04 | blocked | Needs approved provider template contract and device delivery evidence; code work remains |
@@ -58,3 +58,9 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - `public-context.test.mjs` failed before the shared action existed and passes with tracked `/w/`, contextual company fallback, and `/contact` for a missing phone or internal number. No fallback fabricates an EPWA token.
 - Homepage and listing loaders batch resolve the visible offers once; detail resolves active offerings once and selects the current sale/rent action by property ID. Resolver failures log `WA_TRACKING_RESOLVER_FAILED` and still provide a contextual fallback. Normal missing links remain observable as `WA_TRACKING_LINK_UNPROVISIONED`.
 - Property and listing `og:url` now match their canonical public URLs. Live SSR, social preview and provider receipt checks are still pending.
+
+## T03 evidence
+
+- The isolated PostgreSQL fixture uses the production `staff_role` enum plus its later `viewer` value. The original `r.role=ANY($2::text[])` returned SQLSTATE `42883`, `operator does not exist: staff_role = text`. The corrected query uses `staff_role[]`; the fixture adapts JavaScript arrays into PostgreSQL array literals because PGlite's parameter encoder does not mirror Neon's.
+- Authorized admin, manager and assigned agent can read. Inactive staff, viewer, staff without a persisted role and an agent assigned to another conversation receive 403. A missing conversation returns 404 only to an authorized global role; agents receive 403 to avoid enumeration.
+- The client wrapper returns a safe error code, status code and correlation request ID. The panel displays distinct messages and its retry only re-reads assignment evidence. The existing Neon branch database suite still needs its guarded test branch; its skipped state is not counted as passing.

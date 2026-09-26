@@ -22,29 +22,51 @@ export function WhatsappEnquiryContext({
   selectedId: string;
   onSelect: (id: string) => void;
 }) {
-  const [context, setContext] = useState<Awaited<ReturnType<typeof getWhatsappAssignment>>>(null);
-  const [error, setError] = useState(false);
+  const [result, setResult] = useState<Awaited<ReturnType<typeof getWhatsappAssignment>> | null>(
+    null,
+  );
+  const [networkError, setNetworkError] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    setContext(null);
-    setError(false);
+    setResult(null);
+    setNetworkError(false);
     getWhatsappAssignment({ conversationId })
-      .then((v) => {
-        if (!cancelled) setContext(v);
+      .then((value) => {
+        if (!cancelled) setResult(value);
       })
       .catch(() => {
-        if (!cancelled) setError(true);
+        if (!cancelled) setNetworkError(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [conversationId, refreshKey]);
-  if (error)
+  }, [conversationId, refreshKey, retry]);
+  if (networkError || result?.kind === "error") {
+    const message = networkError
+      ? "網絡暫時無法連接。"
+      : result?.code === "unauthenticated"
+        ? "登入已失效，請重新登入。"
+        : result?.code === "forbidden"
+          ? "沒有查看此對話分派證據的權限。"
+          : result?.code === "not_found"
+            ? "找不到此對話。"
+            : result?.code === "schema_unavailable"
+              ? "分派證據功能暫時未備妥。"
+              : "未能載入查詢及分派證據。";
     return (
-      <p role="alert" className="p-4 text-sm text-destructive">
-        未能載入查詢及分派證據，請重新整理。
-      </p>
+      <div role="alert" className="space-y-2 p-4 text-sm text-destructive">
+        <p>
+          {message}
+          {result?.kind === "error" ? `（參考編號：${result.requestId}）` : null}
+        </p>
+        <button type="button" className="underline" onClick={() => setRetry((value) => value + 1)}>
+          重新整理
+        </button>
+      </div>
     );
+  }
+  const context = result?.kind === "ok" ? result.context : null;
   if (!context) return null;
   const episodes = (context.enquiries ?? []) as Episode[];
   return (
