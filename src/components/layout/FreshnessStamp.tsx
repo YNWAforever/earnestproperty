@@ -5,8 +5,7 @@ import { cn } from "@/lib/utils";
 
 import type { DataAttributes } from "./types";
 
-export interface FreshnessStampProps
-  extends React.HTMLAttributes<HTMLSpanElement>, DataAttributes {
+export interface FreshnessStampProps extends React.HTMLAttributes<HTMLSpanElement>, DataAttributes {
   updatedAt: string | number | Date | null | undefined;
 }
 
@@ -15,11 +14,7 @@ const FreshnessStamp = React.forwardRef<HTMLSpanElement, FreshnessStampProps>(
     const label = formatFreshness(updatedAt);
     if (!label) return null;
     return (
-      <span
-        ref={ref}
-        className={cn("text-xs text-muted-foreground", className)}
-        {...props}
-      >
+      <span ref={ref} className={cn("text-xs text-muted-foreground", className)} {...props}>
         {label}
       </span>
     );

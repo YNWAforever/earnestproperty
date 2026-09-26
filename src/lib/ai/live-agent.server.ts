@@ -1,11 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import {
-  queryRows,
-  numberOrNull,
-  stringOrEmpty,
-  stringOrNull,
-} from "@/lib/neon/db.server";
+import { queryRows, numberOrNull, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { LiveAgentMessage, LiveAgentSession } from "./ai-types";
 import { answerFromPublicKnowledge } from "./knowledge.server";

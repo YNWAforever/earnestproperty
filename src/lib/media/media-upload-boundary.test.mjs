@@ -141,8 +141,8 @@ test("real JPEG, PNG, and WebP headers pass the upload boundary", async () => {
 
 test("AVIF compatible brand passes the upload boundary", async () => {
   const avifHeader = Uint8Array.from([
-    0, 0, 0, 24, 102, 116, 121, 112, 109, 105, 102, 49,
-    0, 0, 0, 0, 97, 118, 105, 102, 109, 105, 102, 49,
+    0, 0, 0, 24, 102, 116, 121, 112, 109, 105, 102, 49, 0, 0, 0, 0, 97, 118, 105, 102, 109, 105,
+    102, 49,
   ]);
   const f = route();
   const file = new File([avifHeader], "image.avif", { type: "image/avif" });

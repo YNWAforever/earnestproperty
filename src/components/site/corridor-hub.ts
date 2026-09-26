@@ -42,9 +42,7 @@ export type EstateDirectoryEntry = {
  * the correct, current state to render gracefully -- not a bug to paper over
  * by inventing corridor membership that doesn't exist in the registry.
  */
-export function estateDirectoryForSegment(
-  segment: CorridorSegment,
-): EstateDirectoryEntry[] {
+export function estateDirectoryForSegment(segment: CorridorSegment): EstateDirectoryEntry[] {
   return segment.estateSlugs.map((slug) => {
     const entry = getEstateEntry(slug);
     return {
@@ -85,11 +83,7 @@ export function summarizeSegmentInventory(
   };
 }
 
-export type AreaComparisonRowKey =
-  | "housingProfile"
-  | "buyerFit"
-  | "transport"
-  | "schoolNet";
+export type AreaComparisonRowKey = "housingProfile" | "buyerFit" | "transport" | "schoolNet";
 
 export type AreaComparisonRow = {
   key: AreaComparisonRowKey;
@@ -114,15 +108,11 @@ const AREA_COMPARISON_FIELDS: Array<{
  * `schoolNet` (optional on CorridorSegment), which falls back to an explicit
  * "—" rather than an empty cell or a fabricated net code.
  */
-export function buildAreaComparisonRows(
-  segments: CorridorSegment[],
-): AreaComparisonRow[] {
+export function buildAreaComparisonRows(segments: CorridorSegment[]): AreaComparisonRow[] {
   return AREA_COMPARISON_FIELDS.map(({ key, label }) => ({
     key,
     label,
-    values: Object.fromEntries(
-      segments.map((segment) => [segment.slug, segment[key] ?? "—"]),
-    ),
+    values: Object.fromEntries(segments.map((segment) => [segment.slug, segment[key] ?? "—"])),
   }));
 }
 
@@ -137,12 +127,9 @@ export function buildAreaComparisonRows(
  * segments' real `buyerFit` text.
  */
 export function buyerFitHighlights(buyerFit: string): string[] {
-  const withoutPrefix = buyerFit.startsWith("適合")
-    ? buyerFit.slice(2)
-    : buyerFit;
+  const withoutPrefix = buyerFit.startsWith("適合") ? buyerFit.slice(2) : buyerFit;
   const lastDe = withoutPrefix.lastIndexOf("的");
-  const qualities =
-    lastDe === -1 ? withoutPrefix : withoutPrefix.slice(0, lastDe);
+  const qualities = lastDe === -1 ? withoutPrefix : withoutPrefix.slice(0, lastDe);
   return qualities
     .split(/[、和]/)
     .map((item) => item.trim())
@@ -171,9 +158,7 @@ export type PriceSnapshot = {
  * caller can omit the section for that segment entirely rather than render a
  * fabricated figure.
  */
-export function computePriceSnapshot(
-  transactions: TransactionLike[],
-): PriceSnapshot | null {
+export function computePriceSnapshot(transactions: TransactionLike[]): PriceSnapshot | null {
   const buckets = new Map<string, { sum: number; n: number }>();
   for (const row of transactions) {
     if (!row.deal_date || !row.saleable_psf) continue;
@@ -189,10 +174,7 @@ export function computePriceSnapshot(
   const latestKey = months[months.length - 1];
   const latestBucket = buckets.get(latestKey);
   if (!latestBucket) return null;
-  const transactionCount = Array.from(buckets.values()).reduce(
-    (sum, b) => sum + b.n,
-    0,
-  );
+  const transactionCount = Array.from(buckets.values()).reduce((sum, b) => sum + b.n, 0);
 
   return {
     latestPsf: Math.round(latestBucket.sum / latestBucket.n),

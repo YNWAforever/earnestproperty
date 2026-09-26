@@ -35,7 +35,8 @@ export function wakeAfterCommit(lane: JobLane) {
         console.info("[job-wake] general fallback", counts);
       }
     },
-    report: (code) => console.error(`[job-wake] ${code}; inspect the queued jobs and scheduler alarm`),
+    report: (code) =>
+      console.error(`[job-wake] ${code}; inspect the queued jobs and scheduler alarm`),
   })(lane);
 }
 

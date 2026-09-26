@@ -9,9 +9,7 @@ export function formatHkd(amount: number | null | undefined): string | null {
   return `$${Math.round(amount).toLocaleString(HK_NUMBER_LOCALE)}`;
 }
 
-export function formatManDisplay(
-  amount: number | null | undefined,
-): string | null {
+export function formatManDisplay(amount: number | null | undefined): string | null {
   if (!isFiniteNumber(amount) || amount <= 0) return null;
   const man = amount / 10000;
   const rounded = Math.round(man * 10) / 10;
@@ -24,9 +22,7 @@ export function formatManDisplay(
   return `${display}萬`;
 }
 
-export function formatSaleDisplay(
-  price: number | null | undefined,
-): string | null {
+export function formatSaleDisplay(price: number | null | undefined): string | null {
   if (!isFiniteNumber(price) || price <= 0) return null;
   return `$${(price / 1_000_000).toFixed(2)}M`;
 }
@@ -49,17 +45,13 @@ export function formatPsf(
 const HK_TIME_ZONE = "Asia/Hong_Kong";
 const HK_DATE_LOCALE = "zh-HK";
 
-function toValidDate(
-  input: string | number | Date | null | undefined,
-): Date | null {
+function toValidDate(input: string | number | Date | null | undefined): Date | null {
   if (input === null || input === undefined) return null;
   const date = input instanceof Date ? input : new Date(input);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function formatHkDate(
-  input: string | number | Date | null | undefined,
-): string | null {
+export function formatHkDate(input: string | number | Date | null | undefined): string | null {
   const date = toValidDate(input);
   if (!date) return null;
   return new Intl.DateTimeFormat(HK_DATE_LOCALE, {
@@ -70,9 +62,7 @@ export function formatHkDate(
   }).format(date);
 }
 
-export function formatHkDateTime(
-  input: string | number | Date | null | undefined,
-): string | null {
+export function formatHkDateTime(input: string | number | Date | null | undefined): string | null {
   const date = toValidDate(input);
   if (!date) return null;
   return new Intl.DateTimeFormat(HK_DATE_LOCALE, {
@@ -112,9 +102,7 @@ const WRAPPING_QUOTES_PATTERN = /^"+|"+$/g;
 const REPEATED_DELIMITER_PATTERN = /,{2,}/g;
 const EXACT_MALFORMED_TOKEN_PATTERN = /^(NaN|null|undefined|-\s*房|\$0)$/;
 
-export function sanitizeListingText(
-  input: string | null | undefined,
-): string | null {
+export function sanitizeListingText(input: string | null | undefined): string | null {
   if (input === null || input === undefined) return null;
 
   let text = input.replace(CONTROL_CHAR_PATTERN, "");

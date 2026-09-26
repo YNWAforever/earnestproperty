@@ -161,9 +161,7 @@ describe("formatFreshness", () => {
 
   test("falls back to a full date at 30 days or older", () => {
     const fortyDaysAgo = new Date(now.getTime() - 40 * 24 * 60 * 60_000);
-    expect(formatFreshness(fortyDaysAgo, now)).toBe(
-      `${formatHkDate(fortyDaysAgo)} 更新`,
-    );
+    expect(formatFreshness(fortyDaysAgo, now)).toBe(`${formatHkDate(fortyDaysAgo)} 更新`);
   });
 
   test("returns null for null, undefined, and an unparseable string", () => {
@@ -183,9 +181,7 @@ describe("sanitizeListingText", () => {
   });
 
   test("collapses runs of whitespace and trims", () => {
-    expect(sanitizeListingText("  海景   單位   \n\n望向大海  ")).toBe(
-      "海景 單位 望向大海",
-    );
+    expect(sanitizeListingText("  海景   單位   \n\n望向大海  ")).toBe("海景 單位 望向大海");
   });
 
   test("strips wrapping quotes left over from a CSV export", () => {
@@ -217,9 +213,7 @@ describe("sanitizeListingText", () => {
   });
 
   test("passes through well-formed text unchanged", () => {
-    expect(sanitizeListingText("三房兩廳，向南，望花園")).toBe(
-      "三房兩廳，向南，望花園",
-    );
+    expect(sanitizeListingText("三房兩廳，向南，望花園")).toBe("三房兩廳，向南，望花園");
   });
 });
 

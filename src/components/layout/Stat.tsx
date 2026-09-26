@@ -4,8 +4,7 @@ import { cn } from "@/lib/utils";
 
 import type { DataAttributes } from "./types";
 
-export interface StatProps
-  extends React.HTMLAttributes<HTMLDivElement>, DataAttributes {
+export interface StatProps extends React.HTMLAttributes<HTMLDivElement>, DataAttributes {
   label: React.ReactNode;
   value: React.ReactNode;
 }

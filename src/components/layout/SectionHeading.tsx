@@ -13,22 +13,14 @@ export interface SectionHeadingProps
 }
 
 const SectionHeading = React.forwardRef<HTMLDivElement, SectionHeadingProps>(
-  (
-    { className, id, eyebrow, title, as: Heading = "h2", action, ...props },
-    ref,
-  ) => (
+  ({ className, id, eyebrow, title, as: Heading = "h2", action, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn(
-        "flex flex-wrap items-end justify-between gap-4",
-        className,
-      )}
+      className={cn("flex flex-wrap items-end justify-between gap-4", className)}
       {...props}
     >
       <div>
-        {eyebrow ? (
-          <p className="text-sm font-semibold text-primary">{eyebrow}</p>
-        ) : null}
+        {eyebrow ? <p className="text-sm font-semibold text-primary">{eyebrow}</p> : null}
         <Heading
           id={id}
           className="mt-1 text-2xl font-bold tracking-tight text-primary sm:text-3xl"

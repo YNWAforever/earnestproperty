@@ -37,7 +37,11 @@ test("viewer holds exactly system.health.read and audit.read, nothing else", () 
     "system.migrations.plan",
     "system.migrations.apply",
   ]) {
-    assert.equal(hasPermission(["viewer"], permission), false, `viewer must not hold ${permission}`);
+    assert.equal(
+      hasPermission(["viewer"], permission),
+      false,
+      `viewer must not hold ${permission}`,
+    );
   }
 });
 

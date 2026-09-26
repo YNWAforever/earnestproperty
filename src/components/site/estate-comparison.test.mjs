@@ -57,9 +57,7 @@ test("buildComparisonColumns: 0 comparables -> null, so the whole section is abs
 test("every row's missing-fact cell renders as an em dash via estateFigure's convention, never blank or 0", () => {
   const missing = estate({ slug: "missing", nameZh: "缺資料屋苑" });
   const rows = buildComparisonRowDefs();
-  const cells = Object.fromEntries(
-    rows.map((row) => [row.key, row.formatCell(missing)]),
-  );
+  const cells = Object.fromEntries(rows.map((row) => [row.key, row.formatCell(missing)]));
 
   // Directly checking the rendered/computed cell value for each specific
   // missing-fact case, not just that buildComparisonRowDefs exists.
@@ -71,11 +69,7 @@ test("every row's missing-fact cell renders as an em dash via estateFigure's con
   // Never a fabricated "0" or "$0" -- the literal characters "0" must not
   // appear anywhere in a missing-fact cell.
   for (const value of Object.values(cells)) {
-    assert.equal(
-      value.includes("0"),
-      false,
-      `"${value}" must not contain a fabricated 0`,
-    );
+    assert.equal(value.includes("0"), false, `"${value}" must not contain a fabricated 0`);
   }
 });
 
@@ -88,9 +82,7 @@ test("a present fact renders its real value, correctly formatted, not just a non
     developer: "新鴻基地產",
   });
   const rows = buildComparisonRowDefs();
-  const cells = Object.fromEntries(
-    rows.map((row) => [row.key, row.formatCell(filled)]),
-  );
+  const cells = Object.fromEntries(rows.map((row) => [row.key, row.formatCell(filled)]));
 
   assert.equal(cells.avgPsf, "$12,345");
   assert.equal(cells.totalUnits, "3,345 個");

@@ -4,8 +4,7 @@ import { cn } from "@/lib/utils";
 
 import type { DataAttributes } from "./types";
 
-export interface DataNoteProps
-  extends React.HTMLAttributes<HTMLDivElement>, DataAttributes {
+export interface DataNoteProps extends React.HTMLAttributes<HTMLDivElement>, DataAttributes {
   source: React.ReactNode;
   sourceUrl?: string;
   asOf?: React.ReactNode;

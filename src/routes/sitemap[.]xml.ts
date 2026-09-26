@@ -104,12 +104,10 @@ export const Route = createFileRoute("/sitemap.xml")({
             degraded = true;
             return [];
           }),
-          fetchSitemapTimestamps().catch(
-            (): Awaited<ReturnType<typeof fetchSitemapTimestamps>> => {
-              degraded = true;
-              return { estates: {}, articles: {} };
-            },
-          ),
+          fetchSitemapTimestamps().catch((): Awaited<ReturnType<typeof fetchSitemapTimestamps>> => {
+            degraded = true;
+            return { estates: {}, articles: {} };
+          }),
           // The listing detail pages are the site's money pages and the only
           // ones carrying RealEstateListing JSON-LD; they were absent here.
           fetchSitemapListings().catch((error: unknown) => {
@@ -202,9 +200,7 @@ export const Route = createFileRoute("/sitemap.xml")({
         return new Response(body, {
           headers: {
             "content-type": "application/xml; charset=utf-8",
-            "cache-control": degraded
-              ? "no-store"
-              : "public, max-age=3600, s-maxage=3600",
+            "cache-control": degraded ? "no-store" : "public, max-age=3600, s-maxage=3600",
           },
         });
       },

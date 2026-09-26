@@ -16,10 +16,7 @@ const EmptyState = React.forwardRef<HTMLDivElement, EmptyStateProps>(
   ({ className, icon: Icon, title, description, action, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn(
-        "rounded-lg border bg-card p-8 text-center shadow-card",
-        className,
-      )}
+      className={cn("rounded-lg border bg-card p-8 text-center shadow-card", className)}
       {...props}
     >
       {Icon ? <Icon className="mx-auto h-8 w-8 text-primary" /> : null}
