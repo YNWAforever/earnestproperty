@@ -1960,6 +1960,14 @@ export async function fetchAdminCmsVideos() {
 }
 
 export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffAccess) {
+  if (
+    typeof input.title !== "string" ||
+    !input.title.trim() ||
+    !Number.isSafeInteger(input.sort_order) ||
+    typeof input.published !== "boolean"
+  ) {
+    throw new Response("Invalid CMS video", { status: 400 });
+  }
   if (!isYouTubeVideoUrl(input.video_url)) {
     return { id: "", error: "請輸入有效 YouTube 連結" };
   }

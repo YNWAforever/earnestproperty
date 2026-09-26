@@ -422,6 +422,37 @@ test("saveAdminProperty rejects invalid public listing values before SQL", async
   assert.match(calls[0].text, /INSERT INTO properties/);
 });
 
+test("saveAdminCmsVideo rejects invalid title, order and publication flag before SQL", async () => {
+  const base = {
+    title: "Video tour",
+    video_url: "https://youtu.be/dQw4w9WgXcQ",
+    description: null,
+    sort_order: 0,
+    published: false,
+    category: null,
+  };
+  for (const change of [
+    { title: "" },
+    { title: "  " },
+    { sort_order: Number.NaN },
+    { sort_order: 1.5 },
+    { published: "false" },
+  ]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    await assert.rejects(
+      server.saveAdminCmsVideo({ ...base, ...change }, ADMIN_ACTOR),
+      (error) => error instanceof Response && error.status === 400,
+    );
+    assert.equal(calls.length, 0, "invalid CMS video input reached SQL");
+  }
+
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await server.saveAdminCmsVideo(base, ADMIN_ACTOR);
+  assert.match(calls[0].text, /INSERT INTO cms_videos/);
+});
+
 test("updateAdminLead rejects invalid budgets before CRM SQL", async () => {
   const base = {
     id: "lead-1",
