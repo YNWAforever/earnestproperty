@@ -6,32 +6,32 @@ Evidence: [text audit](../superpowers/plans/references/EarnestProperty_Audit_202
 
 Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-production`, `blocked`, `no-longer-reproducible`. A local test or code change does not imply staging or production verification.
 
-| Finding | Audit issue | Task | Status | Commit and fresh evidence |
-|---|---|---|---|---|
-| F01 | Public listing number search misses current listing | T01 | fixed-local | T01 commit; PGlite real COUNT SQL red 0 then green 1; alias, case, whitespace, withdrawn tested; staging pending |
-| F02 | Internal SYNC identifier reaches customer UI | T01 | fixed-local | T01 commit; helper red/green and public route replacements; staged browser review pending |
-| F03 | WhatsApp entry points lose property context | T02 | fixed-local | Shared per-offer action and batch resolver across homepage, list, detail desktop/mobile; pure test passed; staging browser pending |
-| F04 | Internal copy and estate location mismatch | T11 | fixed-local | Engineering copy removed, shared transport gated by registry corridor and valuation CTA neutralized; source owner review pending |
-| F05 | Five-minute response promise unsupported | T11 | fixed-local | Homepage time promise removed; T10 separates human-response sample; real SLA remains unverified |
-| F06 | Listing content and media claims mismatch | T11 | fixed-local | Display-only title cleanup and admin review prompts; A074714 exact row, CMS override and source facts still unverified |
-| F07 | Detail page social URL points to homepage | T02 | fixed-local | Property og:url now matches canonical public URL; SEO suite passed; SSR/browser pending |
-| F08 | Assignment evidence panel errors | T03 | fixed-local | True staff_role enum PGlite failed with SQLSTATE 42883 before cast; after enum[] cast, admin/manager/assigned agent pass and viewer/inactive/cross-conversation fail; staging pending |
-| F09 | Active staff is conflated with routing readiness | T04 | fixed-local | Separate readiness query includes unmapped staff; PGlite enum fixture and revoked endpoint test passed; staging pending |
-| F10 | Inbox assignment, private note and staff phone conflated | T04 | fixed-local | Three capability states shown separately; provider acceptance, signed delivery and read timestamps are distinct; staging/device evidence pending |
-| F11 | Staff template send and delivery unverified | T04 | blocked | Session text and readiness implemented; template guard retained pending approved name, language, parameters, WOZTELL JSON and device receipt |
-| F12 | Mapping and test-send workflow unclear | T05 | fixed-local | Four-step staff wizard, source/account selector, masked test preview, durable one-shot job, PGlite revoke/idempotency/rate/unknown tests; staging and real recipient pending |
-| F13 | Runtime mode and policy UI disagree | T10 | fixed-local | Effective policy summary and separate draft editor; runtime capabilities use T04 readiness; staging pending |
-| F14 | Single link creation can become generic enquiry | T08 | fixed-local | New wizard requires a current offering, route and placement before preview; staging browser pending |
-| F15 | Link list is capped and lacks management | T07 | fixed-local | Keyset page 25/50/100 and 650-link synthetic traversal; versioned export snapshot; UI migration/staging pending |
-| F16 | Bulk API lacks UI and retry identity | T06 | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI and Neon concurrency/staging pending |
-| F17 | Expired reference may block disable | T07 | fixed-local | PGlite expired reference: disable succeeds, stale version conflicts, re-enable remains blocked |
-| F18 | Shared redirect capacity bucket | T12 | fixed-local | 32 fixed global shards plus registered-link bucket, contextual untracked fallback and bounded retention; 92 WhatsApp tests including synthetic capacity and PGlite prune; staging load pending |
-| F19 | Active member count masks account readiness | T09 | fixed-local | Team DTO separates active, invitation, verified email, identity, role/branch, Inbox and phone; local tests passed; staging pending |
-| F20 | Invitation and first-login loop incomplete | T09 | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending |
-| F21 | Health misses eligible staff and due work | T10 | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending |
-| F22 | Missing agent/link/mapping/content tasks lack entry points | T08 | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; content review remains T11 |
-| F23 | External response latency needs measured diagnosis | T12 | blocked | No HK staging endpoint, region or trace sample; performance report records protocol and open 30%/300 ms targets |
-| F24 | Oversized thumbnails and serial bulk reads | T12 | blocked | Local 128/256 px variants and gallery sizes, T06 set-based batch; remote property thumbnail transfer and Neon 50-row timing still unmeasured |
+| Finding | Audit issue                                                | Task | Status      | Commit and fresh evidence                                                                                                                                                                      |
+| ------- | ---------------------------------------------------------- | ---- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F01     | Public listing number search misses current listing        | T01  | fixed-local | T01 commit; PGlite real COUNT SQL red 0 then green 1; alias, case, whitespace, withdrawn tested; staging pending                                                                               |
+| F02     | Internal SYNC identifier reaches customer UI               | T01  | fixed-local | T01 commit; helper red/green and public route replacements; staged browser review pending                                                                                                      |
+| F03     | WhatsApp entry points lose property context                | T02  | fixed-local | Shared per-offer action and batch resolver across homepage, list, detail desktop/mobile; pure test passed; staging browser pending                                                             |
+| F04     | Internal copy and estate location mismatch                 | T11  | fixed-local | Engineering copy removed, shared transport gated by registry corridor and valuation CTA neutralized; source owner review pending                                                               |
+| F05     | Five-minute response promise unsupported                   | T11  | fixed-local | Homepage time promise removed; T10 separates human-response sample; real SLA remains unverified                                                                                                |
+| F06     | Listing content and media claims mismatch                  | T11  | fixed-local | Display-only title cleanup and admin review prompts; A074714 exact row, CMS override and source facts still unverified                                                                         |
+| F07     | Detail page social URL points to homepage                  | T02  | fixed-local | Property og:url now matches canonical public URL; SEO suite passed; SSR/browser pending                                                                                                        |
+| F08     | Assignment evidence panel errors                           | T03  | fixed-local | True staff_role enum PGlite failed with SQLSTATE 42883 before cast; after enum[] cast, admin/manager/assigned agent pass and viewer/inactive/cross-conversation fail; staging pending          |
+| F09     | Active staff is conflated with routing readiness           | T04  | fixed-local | Separate readiness query includes unmapped staff; PGlite enum fixture and revoked endpoint test passed; staging pending                                                                        |
+| F10     | Inbox assignment, private note and staff phone conflated   | T04  | fixed-local | Three capability states shown separately; provider acceptance, signed delivery and read timestamps are distinct; staging/device evidence pending                                               |
+| F11     | Staff template send and delivery unverified                | T04  | blocked     | Session text and readiness implemented; template guard retained pending approved name, language, parameters, WOZTELL JSON and device receipt                                                   |
+| F12     | Mapping and test-send workflow unclear                     | T05  | fixed-local | Four-step staff wizard, source/account selector, masked test preview, durable one-shot job, PGlite revoke/idempotency/rate/unknown tests; staging and real recipient pending                   |
+| F13     | Runtime mode and policy UI disagree                        | T10  | fixed-local | Effective policy summary and separate draft editor; runtime capabilities use T04 readiness; staging pending                                                                                    |
+| F14     | Single link creation can become generic enquiry            | T08  | fixed-local | New wizard requires a current offering, route and placement before preview; staging browser pending                                                                                            |
+| F15     | Link list is capped and lacks management                   | T07  | fixed-local | Keyset page 25/50/100 and 650-link synthetic traversal; versioned export snapshot; management UI consumes paged service; staging pending                                                       |
+| F16     | Bulk API lacks UI and retry identity                       | T06  | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI consumes service; Neon concurrency/staging pending                                         |
+| F17     | Expired reference may block disable                        | T07  | fixed-local | PGlite expired reference: disable succeeds, stale version conflicts, re-enable remains blocked                                                                                                 |
+| F18     | Shared redirect capacity bucket                            | T12  | fixed-local | 32 fixed global shards plus registered-link bucket, contextual untracked fallback and bounded retention; 92 WhatsApp tests including synthetic capacity and PGlite prune; staging load pending |
+| F19     | Active member count masks account readiness                | T09  | fixed-local | Team DTO separates active, invitation, verified email, identity, role/branch, Inbox and phone; local tests passed; staging pending                                                             |
+| F20     | Invitation and first-login loop incomplete                 | T09  | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending                                                                                |
+| F21     | Health misses eligible staff and due work                  | T10  | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending                                                                                   |
+| F22     | Missing agent/link/mapping/content tasks lack entry points | T08  | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; T11 content review prompts added; staging pending                                       |
+| F23     | External response latency needs measured diagnosis         | T12  | blocked     | No HK staging endpoint, region or trace sample; performance report records protocol and open 30%/300 ms targets                                                                                |
+| F24     | Oversized thumbnails and serial bulk reads                 | T12  | blocked     | Local 128/256 px variants and gallery sizes, T06 set-based batch; remote property thumbnail transfer and Neon 50-row timing still unmeasured                                                   |
 
 ## T00 baseline
 
@@ -124,3 +124,26 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Registered redirects use 32 fixed global rate shards and a bucket keyed only after an enabled registered link resolves. Default caps are 5,000/minute per shard and 600/minute per link; bounded environment settings and effective values appear in operations health. HEAD/prefetch exits before all database writes. A limited registered link redirects to the contextual company WhatsApp URL with `X-WA-Tracking: untracked`, without minting an EPWA reference or open. Global overload returns 429. Bounded opportunistic stale-bucket pruning has a window-start index; the new migration and SQL executed in synthetic PGlite.
 - `test:whatsapp-enquiries` passed Node 92/92 including over-300 synthetic decision, hot-link fallback, prefetch and retention SQL. `test:listing-search` passed Node 90/90 and Bun 12/12 after aligning the list-row contract with its new property-specific action. `test:media` passed Bun 12/12; `typecheck` passed. `test:public-performance:db` exited 0 with 0 pass and 3 skipped because verified isolated Neon credentials are absent.
 - The generated inventory contains 20 local static images, 7,124,290 original bytes, 77,598 selected 128 px bytes and 284,828 selected 256 px bytes. These are file-size sums, not page transfer. The property gallery declares 80 px thumbnail sizes, but remote property photos do not gain local variants. No Hong Kong warm/cold, region, DB p95 or staging load data was obtained. F23 and F24 remain blocked on those specific measurements and remote-photo delivery.
+
+## Reviewable commit index
+
+Each F row above names its owning task; the commit below supplies that row's implementation revision. This is code/local evidence only, not a verified staging or production result.
+
+| Task | Commit                             | Primary evidence                                                   |
+| ---- | ---------------------------------- | ------------------------------------------------------------------ |
+| T00  | `64e1e1a`                          | Audit SHA, original findings, isolated branch and gates            |
+| T01  | `38d7da7`                          | A074714 PGlite search red/green and public identity                |
+| T02  | `fb8cf4e`                          | Per-offer WhatsApp action and canonical OG                         |
+| T03  | `199a880`                          | Real `staff_role` enum failure SQLSTATE 42883 then authorized read |
+| T04  | `2d27613`                          | Separate routing/notes/phone capability and signed receipt states  |
+| T05  | `a1052bd`                          | Mapping wizard and one-shot synthetic test attempt                 |
+| T06  | `40c4485`                          | Durable 50-row chunks and lost-response replay                     |
+| T07  | `9e3dd51`                          | 650-link pages, version checks, snapshot CSV                       |
+| T08  | `4687623`                          | Five-step bulk wizard and client recovery                          |
+| T09  | `8c6ff7c`                          | Team readiness and verified identity bind                          |
+| T10  | `33f01e6`                          | Runtime health, migration registry and CI wiring                   |
+| T11  | `7b6d70f`                          | Scoped public copy and content review prompts                      |
+| T12  | `b307dd8`                          | Redirect capacity, retention and local image variants              |
+| T13  | release-evidence commit at PR head | Final validation, recipient manifest and rollout/rollback          |
+
+All 24 findings have an owning task. F11 remains blocked on the approved template and device-level evidence; F23 and F24 remain blocked on comparable staging measurements and remote property image transfer. The `fixed-local` rows still require the stated staging checks before any production claim. No live message was sent and no external delivery was verified.
