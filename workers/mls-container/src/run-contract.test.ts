@@ -170,14 +170,22 @@ describe("Cloudflare MLS run identity", () => {
   });
 });
 
-function config(name: string): Record<string, unknown> {
+type WranglerConfig = {
+  workers_dev: boolean;
+  routes?: unknown;
+  containers: Array<Record<string, unknown>>;
+  migrations: Array<{ new_sqlite_classes?: string[] }>;
+  workflows: Array<{ schedules?: unknown }>;
+};
+
+function config(name: string): WranglerConfig {
   return JSON.parse(
     readFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url).toString()), "utf8"),
   );
 }
 
 test("base deploy is private, unscheduled, and single-container", () => {
-  const value = config("wrangler.jsonc") as any;
+  const value = config("wrangler.jsonc");
   expect(value.workers_dev).toBe(false);
   expect(value.routes).toBeUndefined();
   expect(value.containers).toEqual([
@@ -194,8 +202,8 @@ test("base deploy is private, unscheduled, and single-container", () => {
 });
 
 test("both MLS deployment configs explicitly disable recurring Workflow runs", () => {
-  const base = config("wrangler.jsonc") as any;
-  const scheduled = config("wrangler.scheduled.jsonc") as any;
+  const base = config("wrangler.jsonc");
+  const scheduled = config("wrangler.scheduled.jsonc");
   expect(scheduled.workflows[0].schedules).toBeUndefined();
   expect(scheduled).toEqual(base);
   expect(JSON.stringify(base)).not.toMatch(
