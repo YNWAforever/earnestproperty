@@ -30,7 +30,7 @@ test("blog detail is a root-owned non-nested route that can render independently
   // no children to render -- if a future route re-nests under it, this pairs
   // with the generic layout-outlet guard below to catch the same bug again.
   const blogList = read("src/routes/blog.tsx");
-  assert.doesNotMatch(blogList, /<Outlet\s*\/>/);
+  assert.doesNotMatch(blogList, /<Outlet\b[^>]*\/>/);
 });
 
 // Generalises the bug this suite exists to prevent: blog.tsx had layout-route
@@ -93,7 +93,7 @@ test("every route with children in the generated tree renders an Outlet", () => 
     const source = read(tsxPath);
     assert.match(
       source,
-      /<Outlet\s*\/>/,
+      /<Outlet\b[^>]*\/>/,
       `${tsxPath} has nested children in routeTree.gen.ts and must render <Outlet/> ` +
         `(if it should instead be a standalone page, its children should opt out of nesting ` +
         `with the '_' suffix, as blog_.$slug.tsx and agents_.$slug.tsx do)`,
