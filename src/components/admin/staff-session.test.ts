@@ -54,6 +54,28 @@ describe("staff session store", () => {
     expect(store.getSnapshot()).toMatchObject({ userId: null, session: null, loading: false });
   });
 
+  test("an older same-user lookup cannot replace the result of a new sign-in", async () => {
+    const resolvers: Array<(value: StaffSession) => void> = [];
+    const store = createStaffSessionStore(
+      () => new Promise<StaffSession>((resolve) => resolvers.push(resolve)),
+    );
+
+    const oldLookup = store.refresh("user-1");
+    store.reset();
+    const newLookup = store.refresh("user-1");
+
+    resolvers[1]!(adminSession);
+    await newLookup;
+    resolvers[0]!({ status: "denied", reason: "forbidden" });
+    await oldLookup;
+
+    expect(store.getSnapshot()).toMatchObject({
+      userId: "user-1",
+      session: adminSession,
+      loading: false,
+    });
+  });
+
   test("a failed lookup leaves the session unknown rather than denied", async () => {
     const store = createStaffSessionStore(async () => {
       throw new Error("network");
