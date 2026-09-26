@@ -75,7 +75,8 @@ test("staff upload identity and credential come from the same live response", as
 });
 
 test("an Auth service failure is not reported as a missing login token", async () => {
-  globalThis.fetch = (async () => Response.json({ error: "unavailable" }, { status: 503 })) as unknown as typeof fetch;
+  globalThis.fetch = (async () =>
+    Response.json({ error: "unavailable" }, { status: 503 })) as unknown as typeof fetch;
 
   const { withStaffAuthHeaders } = await import("./auth");
   await assert.rejects(withStaffAuthHeaders());
@@ -100,10 +101,12 @@ test("a new account does not reuse another account's pending session response", 
   const { withStaffUploadIdentity } = await import("./auth");
   const first = withStaffUploadIdentity();
   const second = withStaffUploadIdentity();
-  completeFirst(Response.json({
-    session: { id: "session-1", token: "opaque-session-1" },
-    user: { id: "user-1", email: "staff@example.test" },
-  }));
+  completeFirst(
+    Response.json({
+      session: { id: "session-1", token: "opaque-session-1" },
+      user: { id: "user-1", email: "staff@example.test" },
+    }),
+  );
 
   assert.equal((await first).actorId, "user-1");
   const identity = await second;
@@ -112,7 +115,8 @@ test("a new account does not reuse another account's pending session response", 
 });
 
 test("a malformed Auth response is not reported as a missing login token", async () => {
-  globalThis.fetch = (async () => new Response("not-json", { status: 200 })) as unknown as typeof fetch;
+  globalThis.fetch = (async () =>
+    new Response("not-json", { status: 200 })) as unknown as typeof fetch;
 
   const { withStaffAuthHeaders } = await import("./auth");
   await assert.rejects(withStaffAuthHeaders());
