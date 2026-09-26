@@ -19,7 +19,7 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F09 | Active staff is conflated with routing readiness | T04 | fixed-local | Separate readiness query includes unmapped staff; PGlite enum fixture and revoked endpoint test passed; staging pending |
 | F10 | Inbox assignment, private note and staff phone conflated | T04 | fixed-local | Three capability states shown separately; provider acceptance, signed delivery and read timestamps are distinct; staging/device evidence pending |
 | F11 | Staff template send and delivery unverified | T04 | blocked | Session text and readiness implemented; template guard retained pending approved name, language, parameters, WOZTELL JSON and device receipt |
-| F12 | Mapping and test-send workflow unclear | T05 | open | Audit report; UI and service review pending |
+| F12 | Mapping and test-send workflow unclear | T05 | fixed-local | Four-step staff wizard, source/account selector, masked test preview, durable one-shot job, PGlite revoke/idempotency/rate/unknown tests; staging and real recipient pending |
 | F13 | Runtime mode and policy UI disagree | T10 | open | Audit report; current runtime review pending |
 | F14 | Single link creation can become generic enquiry | T08 | open | Audit screenshot and report; current UI review pending |
 | F15 | Link list is capped and lacks management | T07 | open | Audit screenshot and report; paging retest pending |
@@ -71,3 +71,10 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - The production dispatcher reloads the same readiness policy and still performs its existing database boundary check immediately before send. Staff destination isolation, Inbox preflight, job lease and template guard remain in place.
 - An additive migration records provider acceptance, signed delivery and signed read timestamps with separate sources. A PGlite test executes the actual update SQL and proves duplicate read receipt stability. No source code or provider response has been treated as device delivery.
 - WOZTELL official Bot API guidance describes using the platform-generated JSON for an approved template. This tenant's approved template name, language, parameter mapping and response fixture have not been supplied, so template sending remains blocked.
+
+## T05 evidence
+
+- Staff configuration now follows one selected colleague through Inbox mapping, source/account reference and independent notification destinations, then shows each readiness state and an explicit test preview. A deep link can select a known staff ID; switching staff resets unsaved destination fields.
+- Preview stores a five-minute opaque token and displays `[測試]`, name, transport, masked destination, version and exact copy. Only an explicit submit writes a purpose-specific test attempt and leased job. Test attempts do not reference customer enquiries or contribute to enquiry SLA.
+- The one-minute actor/endpoint cap and request ID are enforced in a transaction with current endpoint, mapping, staff role and message-window checks. The worker checks these again before provider dispatch. A started but uncertain provider request becomes `unknown` and is never automatically resent; `accepted` is not delivered.
+- Isolated PGlite executed the new migration and enqueue SQL, with one synthetic accepted transport and one post-boundary timeout. No WOZTELL network request was made. Inbox note testing requires a dedicated synthetic provider thread ID that does not belong to a customer conversation. No designated colleague or verified endpoint was supplied for the real T13 send.

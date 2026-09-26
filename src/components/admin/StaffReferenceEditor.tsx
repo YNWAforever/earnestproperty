@@ -8,8 +8,10 @@ import {
 } from "@/lib/neon/staff-reference-admin";
 export function StaffReferenceEditor({
   agents,
+  selectedStaffId,
 }: {
   agents: { id: string; name: string | null; active: boolean }[];
+  selectedStaffId?: string;
 }) {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof fetchStaffReferences>>>([]),
     [error, setError] = useState(""),
@@ -20,6 +22,15 @@ export function StaffReferenceEditor({
       staffId: "",
       verificationRef: "",
     });
+  useEffect(() => {
+    if (selectedStaffId)
+      setForm({
+        namespace: "",
+        externalReference: "",
+        staffId: selectedStaffId,
+        verificationRef: "",
+      });
+  }, [selectedStaffId]);
   useEffect(() => {
     let active = true;
     fetchStaffReferences()
@@ -56,24 +67,52 @@ export function StaffReferenceEditor({
           }
         }}
       >
-        {(
-          [
-            ["namespace", "來源／帳戶命名空間"],
-            ["externalReference", "原始同事代碼"],
-            ["verificationRef", "核實紀錄編號"],
-          ] as const
-        ).map(([key, label]) => (
-          <label key={key}>
-            {label}
-            <Input
-              required
-              maxLength={160}
-              value={form[key]}
-              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-            />
-          </label>
-        ))}
         <label>
+          來源／帳戶
+          <select
+            required
+            value={form.namespace.split("/")[0] ?? ""}
+            onChange={(e) =>
+              setForm({ ...form, namespace: e.target.value ? `${e.target.value}/` : "" })
+            }
+          >
+            <option value="">選擇來源</option>
+            <option value="28hse">28Hse</option>
+            <option value="youtube">YouTube</option>
+            <option value="website">網站</option>
+            <option value="other">其他已核實來源</option>
+          </select>
+        </label>
+        <label>
+          來源帳戶識別碼
+          <Input
+            required
+            maxLength={120}
+            value={form.namespace.split("/").slice(1).join("/")}
+            onChange={(e) =>
+              setForm({ ...form, namespace: `${form.namespace.split("/")[0]}/${e.target.value}` })
+            }
+          />
+        </label>
+        <label>
+          原始同事代碼
+          <Input
+            required
+            maxLength={160}
+            value={form.externalReference}
+            onChange={(e) => setForm({ ...form, externalReference: e.target.value })}
+          />
+        </label>
+        <label>
+          核實紀錄編號
+          <Input
+            required
+            maxLength={160}
+            value={form.verificationRef}
+            onChange={(e) => setForm({ ...form, verificationRef: e.target.value })}
+          />
+        </label>
+        <label className={selectedStaffId ? "hidden" : undefined}>
           同事
           <select
             required
@@ -92,33 +131,36 @@ export function StaffReferenceEditor({
         </label>
         <Button disabled={busy}>儲存核實映射</Button>
       </form>
-      {rows.map((r) => (
-        <article className="rounded border p-2 text-sm" key={String(r.id)}>
-          {String(r.namespace)} / {String(r.external_reference)} →{" "}
-          {String(r.staff_name ?? r.staff_id)} · v{String(r.mapping_version)} ·{" "}
-          {r.valid_until ? "已停用" : "有效"}
-          <p>映射編號：{String(r.id)}</p>
-          {!r.valid_until ? (
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await disableStaffReference({ id: String(r.id) });
-                  setRows(await fetchStaffReferences());
-                } catch {
-                  setError("停用未完成，請重新核對。");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              停用映射
-            </Button>
-          ) : null}
-        </article>
-      ))}
+      {rows
+        .filter((r) => !selectedStaffId || String(r.staff_id) === selectedStaffId)
+        .map((r) => (
+          <article className="rounded border p-2 text-sm" key={String(r.id)}>
+            {String(r.namespace)} / {String(r.external_reference)} →{" "}
+            {String(r.staff_name ?? r.staff_id)} · v{String(r.mapping_version)} ·{" "}
+            {r.valid_until ? "已停用" : "有效"} · 生效 {String(r.valid_from)} · 核實{" "}
+            {String(r.verified_at ?? "未核實")}
+            <p>映射編號：{String(r.id)}</p>
+            {!r.valid_until ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await disableStaffReference({ id: String(r.id) });
+                    setRows(await fetchStaffReferences());
+                  } catch {
+                    setError("停用未完成，請重新核對。");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                停用映射
+              </Button>
+            ) : null}
+          </article>
+        ))}
     </section>
   );
 }

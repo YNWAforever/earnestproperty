@@ -11,8 +11,10 @@ import {
 } from "@/lib/neon/staff-endpoints";
 export function StaffEndpointEditor({
   agents,
+  selectedStaffId,
 }: {
   agents: { id: string; name: string | null; active: boolean }[];
+  selectedStaffId?: string;
 }) {
   const [events, setEvents] = useState<Awaited<ReturnType<typeof fetchStaffEventReview>>>([]);
   const [attention, setAttention] = useState<Awaited<ReturnType<typeof fetchStaffAttention>>>([]);
@@ -31,6 +33,20 @@ export function StaffEndpointEditor({
     enabled: false,
   });
   const [edit, setEdit] = useState<{ id: string; expectedVersion: number } | null>(null);
+  useEffect(() => {
+    if (!selectedStaffId) return;
+    setEdit(null);
+    setForm({
+      staffId: selectedStaffId,
+      transport: "inbox_private_note",
+      channelId: "",
+      destinationReference: "",
+      verificationRef: "",
+      permissionRef: "",
+      allowAllHours: false,
+      enabled: false,
+    });
+  }, [selectedStaffId]);
   useEffect(() => {
     let current = true;
     Promise.all([
@@ -136,7 +152,7 @@ export function StaffEndpointEditor({
           }
         }}
       >
-        <label>
+        <label className={selectedStaffId ? "hidden" : undefined}>
           同事
           <select
             required
@@ -200,54 +216,58 @@ export function StaffEndpointEditor({
           />
           啟用此目的地（仍受全域功能及傳送能力驗證限制）
         </label>
-        <Button disabled={busy}>{edit ? "儲存目的地新版本" : "建立通知目的地"}</Button>
+        <Button disabled={busy || !form.staffId}>
+          {edit ? "儲存目的地新版本" : "建立通知目的地"}
+        </Button>
       </form>
-      {rows.map((r) => (
-        <article key={r.id} className="rounded border p-2">
-          <p>
-            {agents.find((a) => a.id === r.staffId)?.name ?? r.staffId} · {r.transport} · v
-            {r.version} · {r.enabled ? "啟用" : "關閉"} · 目的地 {r.maskedDestination ?? "未設定"}
-            {" · "}核實 {r.verifiedAt ?? "未核實"} · 權限{" "}
-            {r.permissionGranted ? "已核實" : "未核實"}
-          </p>
-          <Button
-            variant="outline"
-            disabled={busy || r.retired}
-            onClick={() => {
-              setEdit({ id: r.id, expectedVersion: r.version });
-              setForm({
-                staffId: r.staffId,
-                transport: r.transport as typeof form.transport,
-                channelId: r.channelId,
-                destinationReference: "",
-                verificationRef: "",
-                permissionRef: "",
-                allowAllHours: false,
-                enabled: false,
-              });
-            }}
-          >
-            重新核實
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || !r.enabled}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                await turnOffStaffEndpoint({ id: r.id, expectedVersion: r.version });
-                setRows(await fetchStaffEndpoints());
-              } catch {
-                setError("關閉未完成，請重新整理版本後再試。");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            關閉通知目的地
-          </Button>
-        </article>
-      ))}
+      {rows
+        .filter((r) => !selectedStaffId || r.staffId === selectedStaffId)
+        .map((r) => (
+          <article key={r.id} className="rounded border p-2">
+            <p>
+              {agents.find((a) => a.id === r.staffId)?.name ?? r.staffId} · {r.transport} · v
+              {r.version} · {r.enabled ? "啟用" : "關閉"} · 目的地 {r.maskedDestination ?? "未設定"}
+              {" · "}核實 {r.verifiedAt ?? "未核實"} · 權限{" "}
+              {r.permissionGranted ? "已核實" : "未核實"}
+            </p>
+            <Button
+              variant="outline"
+              disabled={busy || r.retired}
+              onClick={() => {
+                setEdit({ id: r.id, expectedVersion: r.version });
+                setForm({
+                  staffId: r.staffId,
+                  transport: r.transport as typeof form.transport,
+                  channelId: r.channelId,
+                  destinationReference: "",
+                  verificationRef: "",
+                  permissionRef: "",
+                  allowAllHours: false,
+                  enabled: false,
+                });
+              }}
+            >
+              重新核實
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !r.enabled}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await turnOffStaffEndpoint({ id: r.id, expectedVersion: r.version });
+                  setRows(await fetchStaffEndpoints());
+                } catch {
+                  setError("關閉未完成，請重新整理版本後再試。");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              關閉通知目的地
+            </Button>
+          </article>
+        ))}
     </section>
   );
 }

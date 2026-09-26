@@ -44,3 +44,14 @@ The PGlite fixture neither connects to Neon nor supplies a false branch identity
 The receipt test executes the additive migration and the actual acceptance and signed-receipt UPDATE SQL in isolated PGlite. It cannot establish that any phone received a message. The assignment fixture mirrors the `staff_role` enum and its later `viewer` value; its adapter converts JavaScript arrays to PostgreSQL array literals for PGlite, while the production Neon branch remains untested.
 
 Official WOZTELL Bot API guidance: https://doc.woztell.com/docs/reference/bot-api-reference . The repository has no approved tenant template JSON, name, language or parameter fixture; the template path remains blocked. No external provider request was made during these tests.
+
+## T05 local verification
+
+| Command | Result | Scope |
+|---|---|---|
+| `node --test src/lib/whatsapp-enquiries/staff-test-notification.db.test.mjs` | exit 0; 1/1, 0 skipped | Fresh PGlite schema, migration, revoke, retry, rate cap, leased synthetic provider acceptance and timeout |
+| `npm run test:staff-notifications` | exit 0; Node 17/17 and Bun 4/4, 0 skipped | Includes new test job fixture and existing notification contracts |
+| `npm run typecheck` | exit 0 | Staff wizard, server functions and worker job contract |
+| targeted `npx eslint` | exit 0 | Changed T05 TypeScript and TSX files |
+
+No live test notification was queued or sent. The fixture's synthetic recipient is not a designated colleague, and provider acceptance is not device delivery. Browser/staging validation remains pending.
