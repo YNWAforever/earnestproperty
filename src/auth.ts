@@ -11,10 +11,6 @@ type ServerFnCallOptions = {
   [key: string]: unknown;
 };
 
-type NeonAuthClientWithStaffToken = typeof authClient & {
-  getSession?: () => Promise<unknown>;
-};
-
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -37,28 +33,48 @@ function sessionTokenFromValue(value: unknown): string | null {
   return stringToken(session?.token) ?? stringToken(session?.access_token);
 }
 
-async function readStaffAuthToken() {
-  if (typeof window === "undefined") return null;
+type StaffAuthSession = { actorId: string; token: string };
 
-  // getJWTToken() is not called here: on the installed @neondatabase/auth
-  // 0.4.2-beta, calling it always 404s. createAuthClient() returns the raw
-  // better-auth client instance (not NeonAuthAdapterCore), so
-  // authClient.getJWTToken routes through better-auth's dynamic-path Proxy,
-  // which derives the REST endpoint by kebab-casing the method name letter by
-  // letter -- "getJWTToken" becomes "/get-j-w-t-token" instead of the real
-  // "/get-jwt-token", since it does not recognise "JWT" as one acronym. Every
-  // call was therefore a guaranteed-failing round-trip before falling back to
-  // getSession() below, which already covers every case this app needs.
-  // Revisit if the SDK is upgraded past this version.
-  //
-  // The admin client sends the session token returned by getSession(). The
-  // server checks it in neon_auth.session for every bearer request, so logout
-  // and staff session revocation invalidate it. Standalone JWTs are not admin
-  // sessions. Neon Auth admin operations require a cookie session, so identity
-  // reads, revocation, and invitations use the local neon_auth tables.
-  const client = authClient as NeonAuthClientWithStaffToken;
-  const session = await client.getSession?.().catch(() => null);
-  return sessionTokenFromValue(session);
+function staffAuthUnavailable() {
+  return new Error("登入服務暫時無法使用，請稍後再試。");
+}
+
+async function readStaffAuthSession(): Promise<StaffAuthSession | null> {
+  if (typeof window === "undefined") return null;
+  const authUrl = import.meta.env.VITE_NEON_AUTH_URL?.replace(/\/$/, "");
+  if (!authUrl) throw staffAuthUnavailable();
+
+  // Neon Auth's SDK replaces getSession().data.session.token with a JWT from
+  // set-auth-jwt. Staff access requires the opaque token in neon_auth.session
+  // so revocation takes effect immediately. Read the unmodified response with
+  // the same cookie credentials used by the SDK.
+  const response = await fetch(`${authUrl}/get-session`, {
+    credentials: "include",
+    headers: { accept: "application/json" },
+    cache: "no-store",
+  }).catch(() => {
+    throw staffAuthUnavailable();
+  });
+  if (response.status === 401) return null;
+  if (!response.ok) throw staffAuthUnavailable();
+
+  const raw = await response.json().catch(() => {
+    throw staffAuthUnavailable();
+  });
+  if (raw === null) return null;
+  const value = asRecord(raw);
+  if (!value) throw staffAuthUnavailable();
+
+  const data = asRecord(value.data) ?? value;
+  const actorId = stringToken(asRecord(data.user)?.id);
+  const token = sessionTokenFromValue(data);
+  if (!actorId && !token) return null;
+  if (!actorId || !token) throw staffAuthUnavailable();
+  return { actorId, token };
+}
+
+async function readStaffAuthToken() {
+  return (await readStaffAuthSession())?.token ?? null;
 }
 
 // Overloaded so the no-argument form resolves to exactly `{ headers: Headers }`.
@@ -88,15 +104,9 @@ export async function withStaffAuthHeaders(
 
 /** Read identity and credential from one session snapshot for actor-scoped recovery. */
 export async function withStaffUploadIdentity(): Promise<{ actorId: string; headers: Headers }> {
-  const client = authClient as NeonAuthClientWithStaffToken;
-  const value = await client.getSession?.().catch(() => null);
-  const record = asRecord(value);
-  const data = asRecord(record?.data);
-  const user = asRecord(record?.user) ?? asRecord(data?.user);
-  const actorId = stringToken(user?.id);
-  if (!actorId) throw new Error("請重新登入後再上載。");
+  const session = await readStaffAuthSession();
+  if (!session) throw new Error("請重新登入後再上載。");
   const headers = new Headers();
-  const token = sessionTokenFromValue(value);
-  if (token) headers.set("authorization", `Bearer ${token}`);
-  return { actorId, headers };
+  headers.set("authorization", `Bearer ${session.token}`);
+  return { actorId: session.actorId, headers };
 }
