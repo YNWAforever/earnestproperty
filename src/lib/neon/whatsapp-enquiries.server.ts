@@ -401,9 +401,9 @@ export async function trackedRedirect(request: Request, code: string, query = qu
 export async function searchLinkOffers(q: string) {
   const rows = await queryRows(
     `WITH ranked AS (
- SELECT p.id,p.title_zh,p.deal_type,p.status,m.public_listing_no,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC) rn
+ SELECT p.id,p.title_zh,p.deal_type,p.status,p.price,p.rent,p.agent_id,m.public_listing_no,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC) rn
  FROM properties p JOIN property_public_members m ON m.property_id=p.id
- ) SELECT id,title_zh,deal_type,public_listing_no FROM ranked WHERE rn=1 AND status::text='active' AND (public_listing_no ILIKE $1 OR title_zh ILIKE $1) ORDER BY public_listing_no,deal_type LIMIT 50`,
+ ) SELECT r.id,r.title_zh,r.deal_type,r.public_listing_no,r.price,r.rent,r.agent_id,COALESCE(s.name_zh,s.name_en) AS agent_name FROM ranked r LEFT JOIN staff_users s ON s.id=r.agent_id WHERE r.rn=1 AND r.status::text='active' AND (r.public_listing_no ILIKE $1 OR r.title_zh ILIKE $1) ORDER BY r.public_listing_no,r.deal_type LIMIT 50`,
     ["%" + q.slice(0, 100) + "%"],
   );
   return rows.map((r) => ({
@@ -411,5 +411,15 @@ export async function searchLinkOffers(q: string) {
     publicListingNo: String(r.public_listing_no),
     dealType: r.deal_type as "sale" | "rent",
     title: String(r.title_zh),
+    price:
+      r.deal_type === "sale"
+        ? r.price == null
+          ? null
+          : Number(r.price)
+        : r.rent == null
+          ? null
+          : Number(r.rent),
+    agentId: r.agent_id ? String(r.agent_id) : null,
+    agentName: r.agent_name ? String(r.agent_name) : null,
   }));
 }

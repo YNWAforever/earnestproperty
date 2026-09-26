@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { fetchAdminAgents, fetchAdminEstateOptions } from "@/lib/neon/admin-data";
 import { fetchAdminPropertyGroups } from "@/lib/neon/admin-properties";
+import { snapshotWhatsappLinkOffers } from "@/lib/neon/whatsapp-link-selection";
+import {
+  linkOffersFromGroups,
+  linkSeedKey,
+  type LinkOfferSelection,
+} from "@/lib/admin/whatsapp-link-selection";
 import type { PropertyGroupFilters, PropertyGroupPage } from "@/lib/neon/admin-properties.types";
 import { propertyStatusLabels, canSelectProperty } from "@/lib/admin/property-management-ui";
 import { AdminPropertyTable } from "@/components/admin/AdminPropertyTable";
@@ -59,6 +65,7 @@ function AdminListings() {
   const [retry, setRetry] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
   // A submitted batch cannot be cancelled by leaving; preserve its outcome UI,
   // including same-path filter/page history changes until all responses settle.
   useBlocker({
@@ -142,6 +149,21 @@ function AdminListings() {
       sequence.current = request + 1;
     };
   }, [user, search, retry]);
+  function openLinkWizard(offers: LinkOfferSelection[], scope: string) {
+    if (!offers.length) {
+      setError("所選範圍沒有目前公開的租售盤。");
+      return;
+    }
+    if (offers.length > 1000) {
+      setError("展開後超過 1000 筆，請縮小篩選。");
+      return;
+    }
+    sessionStorage.setItem(
+      linkSeedKey,
+      JSON.stringify({ offers, scope, capturedAt: new Date().toISOString() }),
+    );
+    window.location.assign("/admin/whatsapp-links");
+  }
   const selectClass = "h-11 min-w-0 rounded-md border bg-background px-3 text-sm";
   return (
     <AdminShell
@@ -265,6 +287,34 @@ function AdminListings() {
           <p className="mb-3 text-sm text-muted-foreground">
             共 {data.total} 個物業 · 同一物業的租售只計一次
           </p>
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm">
+            <span>
+              連結建立範圍：本頁已選 {selected.size} 個；全部符合目前篩選 {data.total} 個物業。
+            </span>
+            <Button
+              variant="outline"
+              disabled={linkBusy || busy || bulkBusy || !data.total || data.total > 1000}
+              onClick={() => {
+                setLinkBusy(true);
+                setError(null);
+                void snapshotWhatsappLinkOffers({ ...search, page: 1, pageSize: 100 })
+                  .then((snapshot) =>
+                    openLinkWizard(
+                      snapshot.offers,
+                      `全部符合篩選 ${snapshot.totalProperties} 個物業；展開 ${snapshot.activeOffers} 筆租售`,
+                    ),
+                  )
+                  .catch((cause) =>
+                    setError(cause instanceof Error ? cause.message : "未能擷取符合篩選的樓盤"),
+                  )
+                  .finally(() => setLinkBusy(false));
+              }}
+            >
+              建立 WhatsApp 連結（全部符合篩選）
+            </Button>
+            {data.total > 1000 ? <span>超過 1000 個物業，請縮小篩選。</span> : null}
+            {linkBusy ? <span role="status">正在擷取實際放盤 ID…</span> : null}
+          </div>
           <AdminPropertyBulkActions
             key={JSON.stringify(search)}
             rows={data.rows.filter((row) => selected.has(row.propertyNo))}
@@ -273,6 +323,9 @@ function AdminListings() {
             onBusy={setBulkBusy}
             onClear={() => setSelected(new Set())}
             onReload={() => setRetry((v) => v + 1)}
+            onWhatsappLinks={(rows) =>
+              openLinkWizard(linkOffersFromGroups(rows), `本頁已選 ${rows.length} 個物業`)
+            }
             onSettled={(results) => {
               setSelected(
                 (current) =>

@@ -17,6 +17,7 @@ export function AdminPropertyBulkActions({
   onSettled,
   onClear,
   onReload,
+  onWhatsappLinks,
 }: {
   rows: ManagedPropertySummary[];
   agents: { id: string; name: string | null; email: string | null }[];
@@ -25,6 +26,7 @@ export function AdminPropertyBulkActions({
   onSettled: (results: BulkClientResult[]) => void;
   onClear: () => void;
   onReload: () => void;
+  onWhatsappLinks: (rows: ManagedPropertySummary[]) => void;
 }) {
   const [scope, setScope] = useState<Scope>("sale");
   const [actionType, setActionType] = useState("offline");
@@ -175,6 +177,9 @@ export function AdminPropertyBulkActions({
             }
           >
             核對修改（{ready.length}）
+          </Button>
+          <Button variant="outline" disabled={!rows.length} onClick={() => onWhatsappLinks(rows)}>
+            建立 WhatsApp 連結（本頁已選 {rows.length} 個）
           </Button>
           <Button variant="ghost" disabled={!rows.length} onClick={onClear}>
             取消勾選
