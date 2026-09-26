@@ -29,7 +29,7 @@ const invitation = {
     className: "border-amber-700/20 bg-amber-700/10 text-amber-900",
   },
   sent: {
-    label: "已邀請",
+    label: "待人工分享",
     icon: CheckCircle2,
     className: "border-emerald-700/20 bg-emerald-700/10 text-emerald-800",
   },

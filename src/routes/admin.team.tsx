@@ -151,6 +151,7 @@ function AdminTeam() {
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRoles, setInviteRoles] = useState<StaffRole[]>(["agent"]);
+  const [manualShareUrl, setManualShareUrl] = useState("");
   const requestRef = useRef(0);
   const teamRef = useRef<AdminTeamList | null>(null);
   const detailRef = useRef<AdminTeamMemberDetail | null>(null);
@@ -315,6 +316,18 @@ function AdminTeam() {
     setInviteRoles((roles) =>
       roles.includes(role) ? roles.filter((item) => item !== role) : [...roles, role],
     );
+  async function copyRegistrationLink() {
+    const url = `${window.location.origin}/auth/sign-up`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setManualShareUrl("");
+      toast.success("已複製註冊連結；請由你親自分享給已核實的成員。");
+    } catch {
+      setManualShareUrl(url);
+      toast.error("未能自動複製，請從欄位手動複製註冊連結。");
+    }
+  }
+
   const beginInviteConfirmation = () => {
     if (!inviteEmail.trim() || !inviteRoles.length) {
       setConfirmError("請提供有效電郵並選擇至少一個角色。");
@@ -406,7 +419,11 @@ function AdminTeam() {
         setInviteEmail("");
         setInviteRoles(["agent"]);
       }
-      toast.success("團隊資料已更新。");
+      toast.success(
+        pending.action === "invite" || pending.action === "resend"
+          ? "邀請記錄已更新；請人工分享註冊連結，系統沒有寄出邀請電郵。"
+          : "團隊資料已更新。",
+      );
       closeConfirmation(false);
       await refreshAll();
     } catch (reason) {
@@ -511,6 +528,25 @@ function AdminTeam() {
       }
     >
       <div className="space-y-4">
+        {canManage ? (
+          <div className="rounded-lg border bg-card p-3 text-sm">
+            <p>職員註冊連結由管理員人工分享；邀請記錄不代表電郵已寄出。</p>
+            <Button
+              className="mt-2"
+              variant="outline"
+              type="button"
+              onClick={() => void copyRegistrationLink()}
+            >
+              複製職員註冊連結
+            </Button>
+            {manualShareUrl ? (
+              <label className="mt-2 block">
+                手動複製連結
+                <Input readOnly value={manualShareUrl} onFocus={(event) => event.target.select()} />
+              </label>
+            ) : null}
+          </div>
+        ) : null}
         <AdminTeamFilters
           filters={filters}
           onChange={(change) => replaceSearch({ ...search, ...change, cursor: undefined })}
@@ -522,7 +558,7 @@ function AdminTeam() {
           {(
             [
               ["已啟用", directory.counts.active],
-              ["已邀請", directory.counts.invited],
+              ["待人工分享", directory.counts.invited],
               ["已停用", directory.counts.suspended],
               ["需要跟進", directory.counts.attention],
             ] as const

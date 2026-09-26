@@ -15,7 +15,7 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   Unauthorized: "登入狀態已過期，請重新登入。",
   Forbidden: "你的帳戶沒有權限查看這項資料，請聯絡系統管理員。",
   "staff-email-unverified":
-    "你的登入電郵尚未完成驗證，帳戶未連結職員記錄。請聯絡管理員在「團隊成員」為你連結帳戶。",
+    "你的登入電郵尚未完成驗證，帳戶未連結職員記錄。請先完成電郵驗證，然後重新登入；如沒有驗證途徑，請聯絡管理員。",
   "Failed to fetch": "無法連線到伺服器，請檢查網絡後重試。",
 };
 

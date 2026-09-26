@@ -48,6 +48,12 @@ function Auth() {
   return (
     <section className="flex min-h-[calc(100vh-12rem)] items-center justify-center bg-background px-4 py-12">
       <div className="w-full max-w-md">
+        <header className="mb-6 text-center">
+          <a href="/" className="text-lg font-semibold text-primary">
+            晉誠地產
+          </a>
+          <p className="mt-1 text-sm text-muted-foreground">職員登入 · 只供已授權團隊使用</p>
+        </header>
         <AuthView pathname={pathname} redirectTo={redirectTo} />
       </div>
     </section>

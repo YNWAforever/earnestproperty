@@ -30,6 +30,19 @@ const member: AdminTeamMember = {
   createdAt: "2026-08-16T00:00:00.000Z",
   updatedAt: "2026-08-16T01:00:00.000Z",
   needsAttention: false,
+  onboarding: {
+    steps: {
+      staffActive: "ready",
+      invitation: "not_required",
+      emailVerified: "ready",
+      identityBound: "ready",
+      roleBranch: "ready",
+      inboxAssignment: "unknown",
+      inboxPrivateNote: "unknown",
+      staffPhone: "not_required",
+    },
+    attentionReasons: [],
+  },
 };
 
 const detail: AdminTeamMemberDetail = {
@@ -81,7 +94,7 @@ describe("Admin Team responsive directory", () => {
       ),
     );
 
-    for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "已邀請"]) {
+    for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "待人工分享"]) {
       expect(table.text()).toContain(value);
       expect(card.text()).toContain(value);
     }
@@ -302,16 +315,13 @@ describe("Admin Team request safety", () => {
 });
 
 describe("Admin Team account linking", () => {
-  // Neon Auth leaves emailVerified false unless the project turns verification
-  // on, so an invited member who signs up is never auto-bound by
-  // auth.server.ts. The detail panel must say which state the member is in and
-  // give admins the explicit link action that unblocks them.
+  // Unverified sign-ups remain unbound even when an admin opens Team detail.
   const unverified: AdminTeamMemberDetail = {
     ...detail,
     identity: { authUserLinked: false, account: "unverified" },
   };
 
-  test("an unlinked member with an unverified sign-up gets a link action for admins only", () => {
+  test("an unlinked member with an unverified sign-up cannot be linked", () => {
     const admin = render(
       createElement(AdminTeamDetailPanel, {
         detail: unverified,
@@ -327,9 +337,9 @@ describe("Admin Team account linking", () => {
       }),
     );
 
-    expect(admin.text()).toContain("電郵未驗證");
-    expect(admin.text()).toContain("連結帳戶");
-    expect(manager.text()).toContain("電郵未驗證");
+    expect(admin.text()).toContain("電郵尚未驗證");
+    expect(admin.text()).not.toContain("連結帳戶");
+    expect(manager.text()).toContain("電郵尚未驗證");
     expect(manager.text()).not.toContain("連結帳戶");
   });
 
