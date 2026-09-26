@@ -1,6 +1,6 @@
 # Earnest Property rollout and rollback
 
-State: source branch only; no deployment, production migration, data update or external message send authorized by this implementation request.
+State: source branch and PR-triggered Vercel preview only; no manual or production deployment, production migration, data update or external message send was performed.
 
 1. Verify the PR and isolated SQL/browser results before staging. Keep the existing tracking codes and immutable versions readable.
 2. Apply only additive batch schema in an isolated staging database, then deploy compatible code. Preview exact legacy rows before any backfill; any uncertain placement remains for manual review.
@@ -38,7 +38,7 @@ Apply `neon/migrations/20260927100000_whatsapp_redirect_bucket_retention.sql` af
 5. Run authenticated desktop/mobile/keyboard browser journeys with synthetic staff fixtures. Measure five warm and separate cold samples from Hong Kong on homepage, listing after redirects, detail and staff screens. Record regions, TTFB, DB/SSR timings, request count, transferred bytes and remote property-photo size. Run `EXPLAIN (ANALYZE, BUFFERS)` on canonical/count/page queries before indexes or caching. Run >300/minute normal campaign, single hot link and simultaneous-campaign load only on this isolated staging setup under two bounded limiter configurations.
 6. Complete the private recipient manifest and verify provider template JSON and endpoint isolation. Submit one explicit test to one designated colleague, using one test handset and one current link; keep Inbox private note and staff WhatsApp evidence separate. Do not expand notifications or placement publishing on provider acceptance alone. Require signed delivery/handset confirmation, then verify the colleague's work-item response before any wider pilot.
 
-No isolated Neon URL/branch identity, staging browser fixture, designated colleague, verified endpoint or approved tenant template contract was supplied in this session. Steps 1–6 are prepared, **not executed**. This branch/PR is source review only: no deploy, production migration, production data/config change, backfill or real message was performed.
+No isolated Neon URL/branch identity, staging browser fixture, designated colleague, verified endpoint or approved tenant template contract was supplied in this session. Steps 1–6 are prepared, **not executed**. This branch/PR is for source review; Vercel created its automatic PR preview. No manual or production deployment, production migration, production data/config change, backfill or real message was performed.
 
 ## Rollback decisions
 

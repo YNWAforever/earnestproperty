@@ -79,7 +79,7 @@ Neon staging migration and browser export remain unverified.
 
 ## Final local verification after T12
 
-This is the current branch's fresh check, not the earlier audit's count. The command exit code is reported separately from test skips. The build emitted Vite/Rollup dependency warnings but completed; no deployment was made.
+This is the current branch's fresh check, not the earlier audit's count. The command exit code is reported separately from test skips. The build emitted Vite/Rollup dependency warnings but completed; no deployment was made by this local command.
 
 | Command                                                             | Result                                   | Evidence boundary                                                                        |
 | ------------------------------------------------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
@@ -109,3 +109,7 @@ No `ASTRA_TEST_DATABASE_URL`/verified `ASTRA_TEST_BRANCH_ID`, `PLAYWRIGHT_BASE_U
 ## Message test and performance evidence
 
 The designated-colleague test was **not sent**. The required staff identity, verified phone/Inbox endpoint, channel and outside-window approved template contract are listed in `2026-09-27-recipient-test-manifest.md`. Provider `accepted`, signed delivery/read receipt and handset confirmation remain unknown for this assignment. Synthetic accepted/timeout cases are local tests only. The T12 performance report records file-size measurements and synthetic redirect decisions; there is no comparable Hong Kong TTFB or Neon DB p95 baseline.
+
+## PR checks after publication
+
+Draft PR #200 points to commit `551e1b3d8e6c9f078ae8d9aa7aa4ffe4356e8885` before this evidence update. GitHub Actions `ci` ended as failure before a runner started: the job has zero steps and its annotation says recent account payments failed or the spending limit needs adjustment. This is an account billing gate, not a failed test. The `browser-staging` check was skipped by its environment gate. Vercel reported its automatic PR preview check successful; it is not a verified isolated staging environment and was not used for browser, DB, provider or performance acceptance. No production deployment was initiated.
