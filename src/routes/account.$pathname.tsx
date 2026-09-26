@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { ClientOnly, createFileRoute } from "@tanstack/react-router";
 import { AccountView } from "@neondatabase/auth-ui";
 
 export const Route = createFileRoute("/account/$pathname")({
@@ -32,7 +32,15 @@ function Account() {
   return (
     <section className="flex min-h-[calc(100vh-12rem)] items-start justify-center bg-background px-4 py-12">
       <div className="w-full max-w-3xl">
-        <AccountView pathname={pathname} />
+        <ClientOnly
+          fallback={
+            <p role="status" aria-busy="true">
+              正在載入帳戶設定…
+            </p>
+          }
+        >
+          <AccountView pathname={pathname} />
+        </ClientOnly>
       </div>
     </section>
   );
