@@ -18,20 +18,13 @@ const sectionVariants = cva("py-12 sm:py-14", {
 });
 
 export interface SectionProps
-  extends
-    React.HTMLAttributes<HTMLElement>,
-    VariantProps<typeof sectionVariants>,
-    DataAttributes {}
+  extends React.HTMLAttributes<HTMLElement>, VariantProps<typeof sectionVariants>, DataAttributes {}
 
 const Section = React.forwardRef<HTMLElement, SectionProps>(
   ({ className, tone, ...props }, ref) => (
-    <section
-      ref={ref}
-      className={cn(sectionVariants({ tone }), className)}
-      {...props}
-    />
+    <section ref={ref} className={cn(sectionVariants({ tone }), className)} {...props} />
   ),
 );
 Section.displayName = "Section";
 
-export { Section, sectionVariants };
+export { Section };
