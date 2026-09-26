@@ -160,7 +160,7 @@ test("admin route modules cover CMS, CRM, WhatsApp, and blasts", () => {
 
   const adminLayout = read("src/routes/admin.tsx");
   assert.match(adminLayout, /Outlet/);
-  assert.match(adminLayout, /<Outlet\s*\/>/);
+  assert.match(adminLayout, /<Outlet\b[^>]*\/>/);
   assert.doesNotMatch(adminLayout, /fetchAdminOverview/);
   // Regression guard: the /admin layout must stay a passthrough with NO server-side
   // beforeLoad auth check. This app authenticates server functions with a client-held
