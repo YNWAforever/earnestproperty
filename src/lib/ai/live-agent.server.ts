@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { queryRows, numberOrNull, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
+import { leadBudgetError } from "@/lib/admin/lead-budget";
 
 import type { LiveAgentMessage, LiveAgentSession } from "./ai-types";
 import { answerFromPublicKnowledge } from "./knowledge.server";
@@ -167,6 +168,15 @@ export async function requestLiveAgentHandoff(input: {
     throw new LiveAgentPublicError("Invalid handoff session.", 400);
   }
 
+  const budgetMin = input.budget_min ?? null;
+  const budgetMax = input.budget_max ?? null;
+  if (
+    (budgetMin !== null && !Number.isFinite(budgetMin)) ||
+    (budgetMax !== null && !Number.isFinite(budgetMax)) ||
+    leadBudgetError(budgetMin, budgetMax)
+  ) {
+    throw new LiveAgentPublicError("Invalid handoff budget.", 400);
+  }
   const session = await getLiveAgentSessionForHandoff(sessionId, accessToken);
   if (session.status === "handoff_requested") {
     return { ok: true, status: "handoff_requested" as const };
