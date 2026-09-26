@@ -1297,6 +1297,17 @@ export async function getAdminTransaction(
 }
 
 export async function saveAdminTransaction(input: AdminTransactionInput, actor: StaffAccess) {
+  // Server functions can be called without the browser form. Reject forged
+  // values before computing psf or writing a published transaction.
+  if (
+    !Number.isFinite(input.price) ||
+    input.price <= 0 ||
+    !Number.isSafeInteger(input.saleable_area) ||
+    input.saleable_area <= 0 ||
+    typeof input.verified !== "boolean"
+  ) {
+    throw new Response("Invalid transaction", { status: 400 });
+  }
   const scope = agentScope(actor);
   const saleablePsf =
     input.saleable_area > 0 ? Math.round(input.price / input.saleable_area) : null;
