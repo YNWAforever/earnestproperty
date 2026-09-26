@@ -56,7 +56,7 @@ test("oversized session body returns 413 without writing a rate-limit bucket", a
 });
 
 test("malformed session bodies return 400 without database writes", async () => {
-  for (const body of ["{broken", "[1,2,3]"]) {
+  for (const body of ["{broken", "[1,2,3]", "   "]) {
     const calls = { rateLimit: 0, session: 0 };
     const response = await sessionHandler(calls)({
       request: new Request("https://example.com/api/live-agent/session", {

@@ -37,7 +37,7 @@ export async function readPublicJsonBody(
   }
 
   const text = new TextDecoder().decode(bytes);
-  if (rejectMalformed && !text.trim()) return {};
+  if (rejectMalformed && byteLength === 0) return {};
 
   let body: unknown;
   try {
