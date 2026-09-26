@@ -74,7 +74,7 @@ export async function enqueueOutboundIntent(
   injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
 ) {
   const queryRows = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
-  const rows = await queryRows<{ id: string; state: OutboundState }>(
+  const rows = await queryRows<{ id: string; state: OutboundState; job_queued: boolean }>(
     `WITH authorized AS (
     SELECT wc.* FROM whatsapp_conversations wc WHERE wc.id=$2::uuid
     AND ($7::uuid IS NULL OR wc.assigned_agent_id=$7::uuid)
@@ -95,7 +95,7 @@ export async function enqueueOutboundIntent(
     INSERT INTO ops_jobs (job_type,payload_version,payload,status,max_attempts,run_after,idempotency_key,actor_staff_id)
     SELECT 'woztell.reply.deliver',1,jsonb_build_object('intentId',id),'queued',5,now(),'woztell.reply:'||id,actor_staff_id FROM intent
     ON CONFLICT (idempotency_key) DO NOTHING RETURNING id
-  ), recency AS (UPDATE whatsapp_conversations wc SET last_message_at=now(),updated_at=now() FROM intent i WHERE wc.id=i.conversation_id RETURNING wc.id) SELECT id,state FROM intent`,
+  ), recency AS (UPDATE whatsapp_conversations wc SET last_message_at=now(),updated_at=now() FROM intent i JOIN message m ON m.id=i.message_id WHERE wc.id=i.conversation_id RETURNING wc.id) SELECT intent.id,intent.state,EXISTS(SELECT 1 FROM job) AS job_queued FROM intent`,
     [
       input.requestId,
       input.conversationId,
@@ -110,9 +110,10 @@ export async function enqueueOutboundIntent(
       randomUUID(),
     ],
   );
-  if (!rows[0]) throw invalid("OUTBOUND_CONFLICT_OR_NOT_FOUND");
-  if (rows[0].state === "queued") wakeAfterCommit("service");
-  return rows[0];
+  const row = rows[0];
+  if (!row) throw invalid("OUTBOUND_CONFLICT_OR_NOT_FOUND");
+  if (row.job_queued) wakeAfterCommit("service");
+  return { id: row.id, state: row.state };
 }
 
 type Reservation = { memberId: string; response: Record<string, unknown>[] };
