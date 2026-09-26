@@ -14,6 +14,14 @@ export const Route = createFileRoute("/api/live-agent/session")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        let body: Record<string, unknown>;
+        try {
+          body = await readPublicJsonBody(request, { rejectMalformed: true });
+        } catch (error) {
+          if (error instanceof Response) return error;
+          throw error;
+        }
+
         try {
           await enforceRateLimit({
             key: `live-agent:session:ip:${clientIpFromRequest(request)}`,
@@ -23,14 +31,6 @@ export const Route = createFileRoute("/api/live-agent/session")({
         } catch (err) {
           if (err instanceof Response) return err;
           throw err;
-        }
-
-        let body: Record<string, unknown>;
-        try {
-          body = await readPublicJsonBody(request);
-        } catch (error) {
-          if (error instanceof Response) return error;
-          throw error;
         }
         const { session, accessToken } = await createLiveAgentSession({
           anonymousId: typeof body.anonymousId === "string" ? body.anonymousId : null,

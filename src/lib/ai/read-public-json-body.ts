@@ -1,6 +1,9 @@
 const MAX_PUBLIC_JSON_BYTES = 16 * 1024;
 
-export async function readPublicJsonBody(request: Request): Promise<Record<string, unknown>> {
+export async function readPublicJsonBody(
+  request: Request,
+  { rejectMalformed = false }: { rejectMalformed?: boolean } = {},
+): Promise<Record<string, unknown>> {
   const declaredLength = Number(request.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_PUBLIC_JSON_BYTES) {
     throw new Response("Request body too large", { status: 413 });
@@ -33,12 +36,19 @@ export async function readPublicJsonBody(request: Request): Promise<Record<strin
     offset += chunk.byteLength;
   }
 
+  const text = new TextDecoder().decode(bytes);
+  if (rejectMalformed && !text.trim()) return {};
+
+  let body: unknown;
   try {
-    const body: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    return body && typeof body === "object" && !Array.isArray(body)
-      ? (body as Record<string, unknown>)
-      : {};
+    body = JSON.parse(text);
   } catch {
+    if (rejectMalformed) throw new Response("Invalid JSON body", { status: 400 });
     return {};
   }
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    return body as Record<string, unknown>;
+  }
+  if (rejectMalformed) throw new Response("Invalid JSON body", { status: 400 });
+  return {};
 }
