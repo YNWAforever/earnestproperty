@@ -121,13 +121,12 @@ test("CI runs every test script that does not need a database or browser server"
   );
 });
 
-test("CI fails when lint or typecheck tooling exits unexpectedly", () => {
+test("CI requires zero lint and typecheck errors", () => {
   const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
 
-  assert.match(workflow, /ESLINT_EXIT=\$\?/);
-  assert.match(workflow, /if \[ "\$ESLINT_EXIT" -gt 1 \]/);
-  assert.match(workflow, /TSC_EXIT=\$\?/);
-  assert.match(workflow, /if \[ "\$TSC_EXIT" -ne 0 \]/);
+  assert.match(workflow, /^        run: npm run lint$/m);
+  assert.match(workflow, /^        run: npm run typecheck$/m);
+  assert.doesNotMatch(workflow, /ESLINT_BASELINE|TSC_BASELINE/);
 });
 
 test("CI exposes the browser suite as an explicit staging environment gate", () => {

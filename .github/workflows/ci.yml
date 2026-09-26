@@ -1,14 +1,4 @@
-# Added in P0 of the frontend revamp (docs/superpowers/plans/2026-08-28-frontend-revamp.md):
-# the first CI gate this repo has had beyond migration-drift.yml. Runs on every PR and
-# push to main so a regression is caught before merge instead of found in production.
-#
-# Lint and typecheck below are ratchets against a recorded baseline, not zero-defect
-# gates -- see the comment on the lint step for why. The seven pre-existing test
-# failures recorded at P0 baseline (docs/superpowers/reports/2026-08-28-revamp-baseline.md)
-# that used to run continue-on-error here were all fixed by 2026-08-30 (PRs #81, #82,
-# #83, and one folded into P4's own merge prep) -- every test:* script below now runs
-# as a real gate. Add continue-on-error back only for a new, genuinely pre-existing
-# failure a PR's own description explains and justifies, not as a default.
+# CI gates run on every pull request and push to main.
 name: CI
 
 on:
@@ -42,66 +32,11 @@ jobs:
           bun-version: 1.3.12
       - run: npm ci
 
-      # Ratchet, not a zero-error gate. At P0, `npm run lint` reported 6185 problems,
-      # 6182 of them "prettier/prettier" formatting drift caused by package.json's
-      # top-level "prettier" key shadowing .prettierrc entirely (Prettier stops at
-      # the first config source it finds, so it silently resolved its default
-      # printWidth: 80 instead of this repo's documented 100-col convention, for
-      # both the bare CLI and eslint-plugin-prettier's internal resolution). This
-      # ratchet climbed to 6321 across P0-P4 of the frontend revamp
-      # (docs/superpowers/plans/2026-08-28-frontend-revamp.md) as each phase's own
-      # correctly-100-col code kept getting linted under the wrong resolved width --
-      # never new real violations, confirmed at every phase boundary by isolating
-      # each commit's own diff. Root cause fixed in PR #76
-      # (fix/prettier-config-resolution, merged 2026-08-29); the whole stack was
-      # reformatted under the corrected config before P4's final merge (PR #80,
-      # commit c26ffdc). **Reset to the real, current baseline: 381 problems (377
-      # prettier/prettier -- pre-existing drift in files this revamp never touched
-      # -- plus the same 4 real violations, 3 no-explicit-any + 1
-      # react-refresh/only-export-components, unchanged since P0).** Raise this
-      # again only when a PR's own description explains and justifies it, the same
-      # discipline every phase above followed.
-      - name: Lint (ratchet against recorded baseline)
-        env:
-          ESLINT_BASELINE: 381
-        run: |
-          set +e
-          npx eslint . --format json > eslint-report.json
-          ESLINT_EXIT=$?
-          set -e
-          PROBLEM_COUNT=$(jq '[.[] | (.errorCount + .warningCount)] | add // 0' eslint-report.json)
-          echo "eslint reported $PROBLEM_COUNT problem(s); baseline is $ESLINT_BASELINE"
-          if [ "$ESLINT_EXIT" -gt 1 ]; then
-            echo "::error::eslint process failed with exit $ESLINT_EXIT before a trustworthy ratchet result"
-            exit "$ESLINT_EXIT"
-          fi
-          if [ "$PROBLEM_COUNT" -gt "$ESLINT_BASELINE" ]; then
-            npx eslint . || true
-            echo "::error::eslint problem count ($PROBLEM_COUNT) exceeds the recorded baseline ($ESLINT_BASELINE) -- this PR introduced new lint problems"
-            exit 1
-          fi
+      - name: Lint
+        run: npm run lint
 
-      # Ratchet, not a zero-error gate. The P0 baseline measured 0 tsc errors (the
-      # CHANGELOG's older "56 errors" note is stale) -- this fails on any new error.
-      - name: Typecheck (ratchet against recorded baseline)
-        env:
-          TSC_BASELINE: 0
-        run: |
-          set +e
-          npx tsc --noEmit > tsc-output.txt 2>&1
-          TSC_EXIT=$?
-          set -e
-          cat tsc-output.txt
-          ERROR_COUNT=$(grep -c "error TS" tsc-output.txt || true)
-          echo "tsc reported $ERROR_COUNT error(s); baseline is $TSC_BASELINE"
-          if [ "$TSC_EXIT" -ne 0 ] && [ "$ERROR_COUNT" -le "$TSC_BASELINE" ]; then
-            echo "::error::tsc process failed with exit $TSC_EXIT without a parsed TypeScript regression"
-            exit "$TSC_EXIT"
-          fi
-          if [ "$ERROR_COUNT" -gt "$TSC_BASELINE" ]; then
-            echo "::error::tsc error count ($ERROR_COUNT) exceeds the recorded baseline ($TSC_BASELINE) -- this PR introduced new type errors"
-            exit 1
-          fi
+      - name: Typecheck
+        run: npm run typecheck
 
       - run: npm run build
 
