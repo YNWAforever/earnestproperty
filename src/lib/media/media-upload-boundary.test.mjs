@@ -126,6 +126,20 @@ test("unsupported, oversized, empty, malformed bodies and missing credentials ne
   assert.equal(missing.provider, 0);
 });
 
+test("unsupported owner type is rejected before storage", async () => {
+  const f = route();
+  const body = new FormData();
+  body.set("file", new File([pngSignature], "a.png", { type: "image/png" }));
+  body.set("ownerType", "unsupported");
+  body.set("uploadId", "22222222-2222-4222-8222-222222222222");
+  const response = await f.post(
+    new Request("https://app.test/api/admin/media/upload", { method: "POST", body }),
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "INVALID_OWNER_TYPE");
+  assert.equal(f.provider, 0);
+});
+
 test("real JPEG, PNG, and WebP headers pass the upload boundary", async () => {
   for (const [path, type] of [
     ["public/og-cover.jpg", "image/jpeg"],
