@@ -16,12 +16,15 @@ export const Route = createFileRoute("/api/admin/woztell/backfill")({
             },
             { status: 503 },
           );
-        const body = (await request.json().catch(() => null)) as { mode?: unknown } | null;
-        if (body?.mode !== undefined && body.mode !== "forward" && body.mode !== "backward")
+        const body: unknown = request.body ? await request.json().catch(() => null) : {};
+        if (!body || typeof body !== "object" || Array.isArray(body))
+          return Response.json({ ok: false, error: "VALIDATION_ERROR" }, { status: 400 });
+        const mode = (body as { mode?: unknown }).mode;
+        if (mode !== undefined && mode !== "forward" && mode !== "backward")
           return Response.json({ ok: false, error: "VALIDATION_ERROR" }, { status: 400 });
         const run = await startHistoryImport(
           staff.staffId,
-          body?.mode === "backward" ? "backward" : "forward",
+          mode === "backward" ? "backward" : "forward",
         );
         return Response.json(
           { ok: true, importId: run.id, reachedEnd: run.completed, queued: !run.completed },
