@@ -40,7 +40,7 @@ export async function requestConversationAssignment(
   actor: Actor,
   ports: Ports = defaultPorts,
 ) {
-  const { query: queryRows, transaction: transactionRows } = ports;
+  const { transaction: transactionRows } = ports;
   manager(actor);
   const input = requestSchema.parse(value);
   const result = await transactionRows([
@@ -49,18 +49,35 @@ export async function requestConversationAssignment(
       params: [actor.staffId, input.reason],
     },
     {
-      statement: `UPDATE whatsapp_conversations SET assigned_agent_id=$2::uuid,updated_at=now() WHERE id=$1::uuid AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$3::uuid AND s.active AND r.role IN ('admin','manager')) RETURNING pending_assignment_id,assignment_version,assigned_agent_id`,
+      statement: `SELECT w.pending_assignment_id,w.assignment_version,w.assigned_agent_id FROM whatsapp_conversations w
+WHERE w.id=$1::uuid AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$2::uuid AND s.active AND r.role IN ('admin','manager'))
+FOR UPDATE OF w`,
+      params: [input.conversationId, actor.staffId],
+    },
+    {
+      statement: `UPDATE whatsapp_conversations w SET assigned_agent_id=$2::uuid,updated_at=now()
+WHERE w.id=$1::uuid AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$3::uuid AND s.active AND r.role IN ('admin','manager'))
+AND w.assigned_agent_id IS DISTINCT FROM $2::uuid
+AND NOT EXISTS(SELECT 1 FROM whatsapp_assignment_requests r WHERE r.id=w.pending_assignment_id AND r.desired_staff_id IS NOT DISTINCT FROM $2::uuid AND r.state IN ('pending','executing','unknown'))
+RETURNING pending_assignment_id,assignment_version,assigned_agent_id`,
       params: [input.conversationId, input.staffId, actor.staffId],
     },
   ]);
-  if (!result[1]?.[0]) throw new Response("Forbidden", { status: 403 });
-  if (result[1][0].pending_assignment_id) wakeAfterCommit("service");
+  const previous = result[1]?.[0];
+  if (!previous) throw new Response("Forbidden", { status: 403 });
+  const updated = result[2]?.[0];
+  const assignment = updated ?? previous;
+  if (
+    updated?.pending_assignment_id &&
+    Number(updated.assignment_version) > Number(previous.assignment_version)
+  )
+    wakeAfterCommit("service");
   return {
     ok: true,
     assignment: {
-      pending_assignment_id: result[1][0].pending_assignment_id as string | null,
-      assignment_version: Number(result[1][0].assignment_version),
-      assigned_agent_id: result[1][0].assigned_agent_id as string | null,
+      pending_assignment_id: assignment.pending_assignment_id as string | null,
+      assignment_version: Number(assignment.assignment_version),
+      assigned_agent_id: assignment.assigned_agent_id as string | null,
     },
     notice: "分派要求已記錄；待 WOZTELL 確認。",
   };
