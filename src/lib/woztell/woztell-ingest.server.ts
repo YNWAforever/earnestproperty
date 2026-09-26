@@ -228,7 +228,10 @@ export async function ingestWoztellEvent(
     throw Object.assign(new Error("WOZTELL_IDENTITY_CONFLICT"), {
       code: "WOZTELL_IDENTITY_CONFLICT",
     });
-  if (workflowStatements.length > 0) (options.wake ?? (() => wakeAfterCommit("service")))();
+  const queuedJob = workflowStatements.length
+    ? (results[keys.length + workflowStatements.length]?.[0] as { status?: string } | undefined)
+    : undefined;
+  if (queuedJob?.status === "queued") (options.wake ?? (() => wakeAfterCommit("service")))();
   return {
     contactId: row.contact_id,
     conversationId: row.conversation_id,

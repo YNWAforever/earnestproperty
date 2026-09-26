@@ -130,11 +130,35 @@ test("live workflow wake follows commit even in a history/live transcript race",
     "live_webhook",
     async (statements) => {
       order.push("commit");
-      return statements.map(() => [{ contact_id: "c", conversation_id: "v", inserted: false }]);
+      return statements.map(({ statement }) =>
+        statement.includes("INSERT INTO ops_jobs")
+          ? [{ status: "queued" }]
+          : statement.includes("INSERT INTO whatsapp_enquiry_events")
+            ? []
+            : [{ contact_id: "c", conversation_id: "v", inserted: false }],
+      );
     },
     { mode: "observe", schemaAvailable: async () => true, wake: () => order.push("wake") },
   );
   assert.deepEqual(order, ["commit", "wake"]);
+});
+test("duplicate or missing enquiry jobs do not schedule an empty drain", async () => {
+  for (const jobRows of [[], [{ status: "completed" }], [{ status: "running" }]]) {
+    let wakes = 0;
+    await ingestWoztellEvent(
+      event,
+      "live_webhook",
+      async (statements) =>
+        statements.map(({ statement }) => {
+          if (statement.includes("INSERT INTO ops_jobs")) return jobRows;
+          if (statement.includes("WITH matched AS"))
+            return [{ contact_id: "c", conversation_id: "v", inserted: false }];
+          return [];
+        }),
+      { mode: "observe", schemaAvailable: async () => true, wake: () => wakes++ },
+    );
+    assert.equal(wakes, 0, JSON.stringify(jobRows));
+  }
 });
 test("failed commit and history imports never wake live enquiry processing", async () => {
   let wakes = 0;
