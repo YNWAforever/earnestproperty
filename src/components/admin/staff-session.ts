@@ -59,9 +59,9 @@ export function createStaffSessionStore(fetcher: () => Promise<StaffSession>) {
       .then((session): StaffSession | null => session)
       .catch((): StaffSession | null => null)
       .then((session) => {
-        if (inFlight?.promise === promise) inFlight = null;
-        // The user may have signed out (reset) or changed while this was in
-        // flight; only the current user's answer is published.
+        // A sign-out or a newer lookup for the same user supersedes this result.
+        if (inFlight?.promise !== promise) return session;
+        inFlight = null;
         if (state.userId === userId) publish({ userId, session, loading: false });
         return session;
       });
