@@ -2,7 +2,7 @@
 
 ## Scope and measurement status
 
-The audit's latency observations are a starting point, not a comparable before/after baseline. The Neon staging branch and its aws-ap-southeast-1 region are verified, but there is no application deployment proven to use its database and Auth, no Hong Kong test point, no verified isolated synthetic database credentials, and no confirmed deployment region. The supplied PR Preview has production Neon Auth and cannot serve as isolated staging evidence. Consequently there are **no** five-sample warm/cold TTFB, DB p95, LCP, INP, CLS, or request-waterfall measurements for homepage, listings, detail, staff links, and settings. The 30% TTFB and 300 ms DB targets remain open. No cache, index, region move, or public/private response sharing was introduced without the required trace and EXPLAIN evidence.
+The audit latency observations are a starting point, not a comparable before/after baseline. The Neon staging branch and aws-ap-southeast-1 region are verified, and a branch-scoped Preview redeploy plus an empty synthetic acceptance database now exist. The deployed runtime DB host is redacted on Vercel readback; application DB binding has not been independently attested. A five-request Preview detail HTTP spot sample is below, but no authenticated desktop/mobile browser, Hong Kong test point, separate cold/warm set for all routes, DB p95, LCP, INP, CLS or request waterfall has been obtained. The 30% TTFB and 300 ms DB targets remain open. No cache, index, region move or public/private response sharing was introduced without the required trace and EXPLAIN evidence.
 
 ## Public deployment spot check (read-only, 2026-09-27)
 
@@ -44,3 +44,7 @@ Synthetic unit cases cover 301 normal opens, 601 same-link opens, 5,001 same-sha
 ## Pending measurement protocol
 
 From a Hong Kong test point, capture at least five warm samples and separate cold samples on desktop and mobile for homepage, listing after redirects, detail, and staff links/settings. Record deployment and DB regions, TTFB, DB/SSR timings, request count and transferred bytes per route. On the isolated Neon branch run `EXPLAIN (ANALYZE, BUFFERS)` for canonical offering, count and page queries before index work. Compare same-condition warm median TTFB to audit baseline; target at least 30% reduction or below 1 second, and core DB p95 at most 300 ms. LCP ≤2.5 s, INP ≤200 ms and CLS ≤0.1 are later field p75 targets, not conclusions from five synthetic runs.
+
+## Protected staging Preview detail HTTP sample
+
+After one separate A074714 detail request returned 200 with a 4.398 s TTFB, five sequential requests to the READY branch-scoped Preview deployment dpl_69QvF5Wx7RTCR8KJs1cnGCecJvWH were measured with Vercel CLI curl using its authenticated deployment-protection path. Each followed redirects and returned 200. The five time_starttransfer values in seconds were 3.408, 3.470, 3.540, 3.266 and 3.344 (median 3.408); corresponding total times were 3.737, 3.807, 3.855, 3.611 and 3.683 (median 3.737). These values are curl network timings from this workstation for this protected Preview, not browser paint or production TTFB. Geographic egress, cache state, SSR/DB split and runtime DB host were not independently verified. They cannot be compared directly to the anonymous public deployment samples above or used to close F23/F24.

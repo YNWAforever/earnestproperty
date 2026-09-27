@@ -125,3 +125,21 @@ The user supplied staging Neon branch br-young-breeze-ao85rtx1. Its five additiv
 The supplied Vercel Preview alias resolves to the PR head, but its Preview variables have `NEON_BRANCH=production` and production Neon Auth hosts. The database connection-string hosts were redacted by Vercel; their branch could not be verified. No staging browser journey was run on that deployment. The user confirmed that Willy's staff WhatsApp endpoint and tenant-approved template do not yet exist.
 
 Read-only staging `EXPLAIN ANALYZE` on the source-matched unfiltered canonical listing count and first 24-row page gave five subsequent server-time medians of 4.087 ms and 7.737 ms respectively. These are DB-only observations on the inherited snapshot, not TTFB, DB p95 or browser acceptance; sample details are in `2026-09-27-performance-baseline.md`.
+
+## T13 isolated staging acceptance continuation
+
+The named Neon branch was confirmed by the database server itself as br-young-breeze-ao85rtx1. The separate database earnest_audit_acceptance_20260927 began empty and was used only for synthetic fixtures. The migration runner first failed on LOCK TABLE with SQLSTATE 25P01 after 42 versions. Its transactional fix applied the remaining 18 versions; the read-only drift check then reported all 60/60 applied. Production was read separately: 55 versions, no audit batch preview table.
+
+| Check | Actual result | Boundary |
+| --- | --- | --- |
+| Migration runner red/green | SQLSTATE 25P01 before fix; 18 remaining files applied after fix | Empty acceptance database only; multi-statement files and registry row now share a transaction |
+| Disposable target guard | 3/3 pass, 0 skipped | Rejects absent confirmation, default database, false branch or endpoint identity |
+| Combined real Neon synthetic DB suite | 79 pass, 0 fail, 0 skip; 95.41 s | 13 files; random synthetic schemas; public/admin/CRM/WhatsApp SQL; no provider delivery |
+| Residual fixture schemas | 0 | Server query after the test run |
+| TypeScript typecheck | exit 0 | Source branch after the migration runner/test changes |
+| Targeted ESLint | exit 0 | All 15 changed runner and DB test files |
+| Preview public HTTP smoke | Home, listing redirect, A074714 keyword and detail reached app HTML | Vercel-protected Preview via authenticated CLI curl; no logged-in browser E2E |
+
+The initial DB suite run had 68 pass, 4 fail due to two stale synthetic fixtures and their parent tests. The assignment fixture had text instead of the real staff_role enum; the service fixture omitted a later notification table and branch field; the separate public test fixture lacked SEO columns and a data-URL dynamic-import resolution. These were corrected without changing production authorization or service health requirements. Only the final 79/79 result is passing evidence. Earlier skipped gated suites are still recorded as skipped at the earlier point in time.
+
+The Preview branch configuration and real DB evidence are detailed in 2026-09-27-staging-acceptance-evidence.md. The deployed runtime DB host remains redacted on Vercel readback; authenticated desktop/mobile journeys, staging load and full performance measures, approved template, Willy staff WhatsApp endpoint, designated handset, live message and device delivery are not verified. F11, F23 and F24 remain open.
