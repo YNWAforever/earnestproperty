@@ -20,7 +20,7 @@ function NewAdminTransactionPage() {
   return (
     <AdminShell
       title="新增成交"
-      description="登記一筆晉誠地產自己促成的成交。"
+      description="先登記成交資料，再於編輯頁記錄私有歸因及佣金。"
       breadcrumb={
         <nav aria-label="麵包屑">
           <Link to="/admin" className="hover:underline">
@@ -43,7 +43,7 @@ function NewAdminTransactionPage() {
         </Button>
         <TransactionForm
           staffName={user?.name ?? undefined}
-          onSaved={() => navigate({ to: "/admin/transactions" })}
+          onSaved={(id) => navigate({ to: "/admin/transactions/$id", params: { id } })}
         />
       </div>
     </AdminShell>

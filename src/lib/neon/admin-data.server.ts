@@ -1228,6 +1228,21 @@ export async function listAdminTransactions(
   if (scope !== null) {
     where.push(`t.agent_id = ${addParam(params, scope)}`);
   }
+  const financeScope =
+    !actor || actor.roles.includes("admin")
+      ? "TRUE"
+      : actor.roles.includes("manager")
+        ? `EXISTS (SELECT 1 FROM staff_users finance_manager JOIN staff_users finance_owner ON finance_owner.id=t.agent_id WHERE finance_manager.id=${addParam(params, actor.staffId)}::uuid AND finance_manager.branch_id IS NOT NULL AND finance_manager.branch_id=finance_owner.branch_id)`
+        : "FALSE";
+  if (input.attribution_status && input.attribution_status !== "all") {
+    if (financeScope === "FALSE") throw new Response("Forbidden", { status: 403 });
+    where.push(financeScope);
+    where.push(
+      input.attribution_status === "missing"
+        ? "perf.attribution_status IS NULL"
+        : `perf.attribution_status = ${addParam(params, input.attribution_status)}`,
+    );
+  }
 
   if (input.q?.trim()) {
     where.push(`e.name_zh ILIKE ${addParam(params, `%${input.q.trim()}%`)}`);
@@ -1252,10 +1267,12 @@ export async function listAdminTransactions(
       t.verification_state, t.published, t.agent_id,
       e.name_zh AS estate_name_zh,
       s.name_zh AS agent_name_zh,
-      s.name_en AS agent_name_en
+      s.name_en AS agent_name_en,
+      perf.attribution_status, ${financeScope} AS finance_visible
     FROM transactions t
     LEFT JOIN estates e ON e.id = t.estate_id
     LEFT JOIN staff_users s ON s.id = t.agent_id
+    LEFT JOIN transaction_performance perf ON perf.transaction_id=t.id AND ${financeScope}
     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY t.deal_date DESC NULLS LAST, t.created_at DESC
     LIMIT 200
@@ -1280,6 +1297,8 @@ export async function listAdminTransactions(
     published: booleanOrFalse(row.published),
     agent_id: stringOrNull(row.agent_id),
     agent_name: stringOrNull(row.agent_name_zh) ?? stringOrNull(row.agent_name_en),
+    attribution_status: stringOrNull(row.attribution_status),
+    finance_visible: row.finance_visible === true,
   }));
 }
 
@@ -1325,6 +1344,8 @@ export async function getAdminTransaction(
     published: booleanOrFalse(row.published),
     agent_id: stringOrNull(row.agent_id),
     agent_name: stringOrNull(row.agent_name_zh) ?? stringOrNull(row.agent_name_en),
+    attribution_status: null,
+    finance_visible: false,
   };
 }
 
@@ -1336,7 +1357,9 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
     input.price <= 0 ||
     !Number.isSafeInteger(input.saleable_area) ||
     input.saleable_area <= 0 ||
-    typeof input.verified !== "boolean"
+    typeof input.verified !== "boolean" ||
+    (input.published !== undefined && typeof input.published !== "boolean") ||
+    (input.published === true && !input.verified)
   ) {
     throw new Response("Invalid transaction", { status: 400 });
   }
@@ -1344,7 +1367,7 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
   const saleablePsf =
     input.saleable_area > 0 ? Math.round(input.price / input.saleable_area) : null;
   const verificationState = input.verified ? "verified" : "unverified";
-  const published = input.verified;
+  const published = input.published ?? input.verified;
 
   // Shared by both branches -- but agent_id is deliberately NOT one of them.
   // Unlike saveAdminProperty, AdminTransactionInput has no agent_id field at
@@ -1385,7 +1408,7 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           source_url = $11,
           verification_state = $12::transaction_verification_state,
           published = $13,
-          verified_at = CASE WHEN $13 THEN COALESCE(verified_at, now()) ELSE NULL END
+          verified_at = CASE WHEN $12::transaction_verification_state = 'verified' THEN COALESCE(verified_at, now()) ELSE NULL END
         WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
           AND NOT EXISTS (
             SELECT 1 FROM transaction_performance performance
@@ -1409,7 +1432,7 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           unit, block, floor_band, source, source_url, verification_state,
           published, verified_at, agent_id
         )
-        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $13 THEN now() ELSE NULL END, $14)
+        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $12::transaction_verification_state = 'verified' THEN now() ELSE NULL END, $14)
         RETURNING id
         `,
         [...params, actor.staffId],

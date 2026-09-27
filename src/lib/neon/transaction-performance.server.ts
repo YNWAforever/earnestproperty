@@ -2,10 +2,13 @@ import "@tanstack/react-start/server-only";
 
 import type { StaffAccess } from "./auth.server.ts";
 import { queryRows } from "./db.server.ts";
+import { canonicalListingCte } from "./public-listing-query.js";
 import { buildSavePerformanceQuery } from "./transaction-performance.mjs";
 import type {
   TransactionPerformance,
   TransactionPerformanceInput,
+  TransactionAttributionLookup,
+  TransactionAttributionOption,
 } from "./transaction-performance.types.ts";
 
 function requirePerformanceRole(actor: StaffAccess) {
@@ -54,8 +57,11 @@ export async function getTransactionPerformance(
   const version = Number(row.version ?? 0);
   const creditRows = version
     ? await queryRows(
-        `SELECT staff_id::text AS staff_id,branch_id_at_close::text AS branch_id_at_close,share_bps
-     FROM transaction_agent_credits WHERE transaction_id=$1::uuid AND version=$2::integer ORDER BY staff_id`,
+        `SELECT c.staff_id::text AS staff_id,c.branch_id_at_close::text AS branch_id_at_close,c.share_bps,
+       COALESCE(s.name_zh,s.name_en,s.email) AS staff_name,b.name AS branch_name
+     FROM transaction_agent_credits c JOIN staff_users s ON s.id=c.staff_id
+     LEFT JOIN branches b ON b.id=c.branch_id_at_close
+     WHERE c.transaction_id=$1::uuid AND c.version=$2::integer ORDER BY c.staff_id`,
         [transactionId, version],
       )
     : [];
@@ -81,6 +87,67 @@ export async function getTransactionPerformance(
       branchIdAtClose:
         credit.branch_id_at_close === null ? null : String(credit.branch_id_at_close),
       shareBps: Number(credit.share_bps),
+      staffName: credit.staff_name === null ? null : String(credit.staff_name),
+      branchName: credit.branch_name === null ? null : String(credit.branch_name),
     })),
   };
+}
+
+export async function searchTransactionAttributionOptions(
+  input: { kind: TransactionAttributionLookup; q: string; dealType?: "sale" | "rent" },
+  actor: StaffAccess,
+): Promise<TransactionAttributionOption[]> {
+  requirePerformanceRole(actor);
+  const q = input.q.trim();
+  if (!q || q.length > 80) return [];
+  const isAdmin = actor.roles.includes("admin");
+  if (input.kind === "staff") {
+    const rows = await queryRows(
+      `SELECT s.id::text AS id,COALESCE(s.name_zh,s.name_en,s.email,s.id::text) AS label,
+       s.branch_id::text AS branch_id,b.name AS branch_name
+       FROM staff_users s LEFT JOIN branches b ON b.id=s.branch_id WHERE s.active=true
+       AND (s.name_zh ILIKE $1 OR s.name_en ILIKE $1 OR s.email ILIKE $1 OR s.id::text=$2)
+       AND ($3::boolean OR EXISTS(SELECT 1 FROM staff_users manager
+         WHERE manager.id=$4::uuid AND manager.branch_id IS NOT NULL AND manager.branch_id=s.branch_id))
+       ORDER BY label,s.id LIMIT 10`,
+      [`%${q}%`, q, isAdmin, actor.staffId],
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      label: String(row.label),
+      branchId: row.branch_id === null ? null : String(row.branch_id),
+      branchName: row.branch_name === null ? null : String(row.branch_name),
+    }));
+  }
+  if (input.kind === "lead") {
+    const rows = await queryRows(
+      `SELECT l.id::text AS id,COALESCE(NULLIF(c.name,''),l.id::text) AS label
+       FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id
+       LEFT JOIN staff_users owner ON owner.id=l.assigned_agent_id
+       WHERE (l.id::text=$2 OR c.name ILIKE $1)
+       AND ($3::boolean OR EXISTS(SELECT 1 FROM staff_users manager
+         WHERE manager.id=$4::uuid AND manager.branch_id IS NOT NULL AND manager.branch_id=owner.branch_id))
+       ORDER BY l.created_at DESC,l.id LIMIT 10`,
+      [`%${q}%`, q, isAdmin, actor.staffId],
+    );
+    return rows.map((row) => ({ id: String(row.id), label: String(row.label) }));
+  }
+  if (input.kind === "listing" && (input.dealType === "sale" || input.dealType === "rent")) {
+    const rows = await queryRows(
+      canonicalListingCte("TRUE", true) +
+        ` SELECT c.public_listing_no AS id,COALESCE(NULLIF(p.title_zh,''),c.public_listing_no) AS label,
+          p.deal_type::text AS deal_type
+          FROM current_offerings c JOIN properties p ON p.id=c.id
+          WHERE p.status='active' AND p.deal_type=$2::deal_type
+            AND c.public_listing_no ILIKE $1
+          ORDER BY c.public_listing_no LIMIT 10`,
+      [`%${q}%`, input.dealType],
+    );
+    return rows.map((row) => ({
+      id: String(row.id),
+      label: String(row.label),
+      dealType: row.deal_type === "rent" ? "rent" : "sale",
+    }));
+  }
+  throw new Response("Invalid attribution lookup", { status: 400 });
 }

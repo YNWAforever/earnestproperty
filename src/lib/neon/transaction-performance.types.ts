@@ -4,7 +4,13 @@ export type TransactionAttributionStatus =
   | "verified_attributed"
   | "verified_unattributed"
   | "cancelled";
-export type AgentCredit = { staffId: string; branchIdAtClose: string | null; shareBps: number };
+export type AgentCredit = {
+  staffId: string;
+  branchIdAtClose: string | null;
+  shareBps: number;
+  staffName?: string | null;
+  branchName?: string | null;
+};
 export type TransactionPerformanceInput = {
   transactionId: string;
   expectedVersion: number;
@@ -24,4 +30,13 @@ export type TransactionPerformance = Omit<
 > & {
   version: number;
   credits: AgentCredit[];
+};
+
+export type TransactionAttributionLookup = "staff" | "lead" | "listing";
+export type TransactionAttributionOption = {
+  id: string;
+  label: string;
+  branchId?: string | null;
+  branchName?: string | null;
+  dealType?: "sale" | "rent";
 };

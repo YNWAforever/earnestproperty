@@ -43,9 +43,10 @@ async function fixture() {
     CREATE TABLE transactions(id uuid PRIMARY KEY, deal_type deal_type NOT NULL,
       price numeric, deal_date date, verification_state transaction_verification_state NOT NULL,
       agent_id uuid REFERENCES staff_users(id), published boolean NOT NULL DEFAULT false);
-    CREATE TABLE crm_leads(id uuid PRIMARY KEY);
+    CREATE TABLE crm_leads(id uuid PRIMARY KEY, assigned_agent_id uuid REFERENCES staff_users(id));
     CREATE TABLE property_public_groups(public_listing_no text PRIMARY KEY);
-    CREATE TABLE properties(id uuid PRIMARY KEY, deal_type deal_type NOT NULL, status text NOT NULL);
+    CREATE TABLE properties(id uuid PRIMARY KEY, deal_type deal_type NOT NULL, status text NOT NULL,
+      source_updated_at timestamptz, last_seen_at timestamptz, updated_at timestamptz, created_at timestamptz);
     CREATE TABLE property_public_members(property_id uuid PRIMARY KEY REFERENCES properties(id),
       public_listing_no text REFERENCES property_public_groups(public_listing_no));
   `);
@@ -217,6 +218,60 @@ test("manager writes only for a transaction owned by their current branch", asyn
       save(db, { ...base, expectedVersion: 1, reason: "Correction" }, manager),
       (e) => e.status === 409,
     );
+  } finally {
+    await db.close();
+  }
+});
+
+test("manager cannot forge a cross-branch lead or credited staff", async () => {
+  const db = await fixture();
+  const otherBranch = "00000000-0000-4000-8000-000000000006";
+  const lead = "00000000-0000-4000-8000-000000000007";
+  try {
+    await db.query("INSERT INTO branches(id) VALUES ($1)", [otherBranch]);
+    await db.query("UPDATE staff_users SET branch_id=$1 WHERE id=$2", [otherBranch, ids.b]);
+    await db.query("INSERT INTO crm_leads(id,assigned_agent_id) VALUES ($1,$2)", [lead, ids.b]);
+    const manager = { staffId: ids.actor, roles: ["manager"] };
+    await assert.rejects(
+      save(
+        db,
+        { ...base, credits: [{ staffId: ids.b, branchIdAtClose: otherBranch, shareBps: 10000 }] },
+        manager,
+      ),
+      (e) => e.status === 409,
+    );
+    await assert.rejects(
+      save(
+        db,
+        {
+          ...base,
+          leadId: lead,
+          credits: [{ staffId: ids.a, branchIdAtClose: ids.branch, shareBps: 10000 }],
+        },
+        manager,
+      ),
+      (e) => e.status === 409,
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("newer withdrawn public offer cannot be linked to a verified transaction", async () => {
+  const db = await fixture();
+  const old = "00000000-0000-4000-8000-000000000008";
+  const withdrawn = "00000000-0000-4000-8000-000000000009";
+  try {
+    await db.query("INSERT INTO property_public_groups(public_listing_no) VALUES ('A001')");
+    await db.query(
+      "INSERT INTO properties(id,deal_type,status,source_updated_at,created_at) VALUES ($1,'sale','active','2026-09-01','2026-09-01'),($2,'sale','withdrawn','2026-09-20','2026-09-20')",
+      [old, withdrawn],
+    );
+    await db.query(
+      "INSERT INTO property_public_members(property_id,public_listing_no) VALUES ($1,'A001'),($2,'A001')",
+      [old, withdrawn],
+    );
+    await assert.rejects(save(db, { ...base, publicListingNo: "A001" }), (e) => e.status === 409);
   } finally {
     await db.close();
   }

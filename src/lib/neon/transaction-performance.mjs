@@ -84,10 +84,19 @@ WITH credit_input AS (
  AND ($2::integer=0 OR EXISTS(SELECT 1 FROM transaction_performance p WHERE p.transaction_id=t.id AND p.version=$2::integer))
  AND ($4::text IS NULL OR EXISTS(
    SELECT 1 FROM property_public_members m JOIN properties p ON p.id=m.property_id
-   WHERE m.public_listing_no=$4::text AND p.deal_type=t.deal_type AND p.status='active'))
+   WHERE m.public_listing_no=$4::text AND p.deal_type=t.deal_type AND p.status='active'
+     AND p.id=(SELECT latest.id FROM property_public_members member
+       JOIN properties latest ON latest.id=member.property_id
+       WHERE member.public_listing_no=$4::text AND latest.deal_type=t.deal_type
+       ORDER BY latest.source_updated_at DESC NULLS LAST,latest.last_seen_at DESC NULLS LAST,
+         latest.updated_at DESC NULLS LAST,latest.created_at DESC,latest.id ASC LIMIT 1)))
+ AND ($3::uuid IS NULL OR EXISTS(
+   SELECT 1 FROM crm_leads lead LEFT JOIN staff_users lead_owner ON lead_owner.id=lead.assigned_agent_id
+   WHERE lead.id=$3::uuid AND ($13::boolean OR lead_owner.branch_id=(SELECT branch_id FROM staff_users WHERE id=$12::uuid))))
  AND (SELECT count(*) FROM credit_input)=(
    SELECT count(*) FROM credit_input c JOIN staff_users s ON s.id=c.staff_id
-   WHERE s.branch_id IS NOT DISTINCT FROM c.branch_id_at_close)
+   WHERE s.branch_id IS NOT DISTINCT FROM c.branch_id_at_close
+     AND ($13::boolean OR s.branch_id=(SELECT branch_id FROM staff_users WHERE id=$12::uuid)))
  AND ($13::boolean OR ($14::boolean AND EXISTS(
    SELECT 1 FROM staff_users manager JOIN staff_users owner ON owner.id=t.agent_id
    WHERE manager.id=$12::uuid AND manager.branch_id IS NOT NULL AND manager.branch_id=owner.branch_id)))

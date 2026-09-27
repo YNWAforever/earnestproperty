@@ -69,6 +69,8 @@ export type AdminTransactionRow = {
   published: boolean;
   agent_id: string | null;
   agent_name: string | null;
+  attribution_status: string | null;
+  finance_visible: boolean;
 };
 
 export type AdminTransactionInput = {
@@ -84,6 +86,7 @@ export type AdminTransactionInput = {
   source: string | null;
   source_url: string | null;
   verified: boolean;
+  published?: boolean;
 };
 
 export type AdminTransactionFiltersInput = {
@@ -91,6 +94,13 @@ export type AdminTransactionFiltersInput = {
   deal_type?: "sale" | "rent" | "all";
   estate_id?: string;
   verification_state?: "unverified" | "pending" | "verified" | "all";
+  attribution_status?:
+    | "all"
+    | "missing"
+    | "draft"
+    | "verified_attributed"
+    | "verified_unattributed"
+    | "cancelled";
 };
 
 export type AdminEstateCmsRow = AdminEstateInput & {

@@ -14,6 +14,8 @@ import { requireStaffPermission } from "../control-plane/permissions";
 import { ServerFnResponseError, unwrapServerFnResponse } from "./server-fn-response.ts";
 import { deriveAgentProfileEditorContext } from "./staff-security-policy";
 import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
+import type { TransactionPerformanceInput } from "./transaction-performance.types.ts";
+
 import type {
   AdminAgentEditorContext,
   AdminAgentProfileInput,
@@ -1140,6 +1142,98 @@ const saveAdminTransactionServer = createServerFn({ method: "POST" })
 export async function saveAdminTransaction(options: { data: AdminTransactionInput }) {
   return callStaffServerFn(async () =>
     saveAdminTransactionServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const transactionPerformanceInputSchema = z
+  .object({
+    transactionId: z.string().uuid(),
+    expectedVersion: z.number().int().min(0),
+    leadId: z.string().uuid().nullable(),
+    publicListingNo: z.string().trim().min(1).max(120).nullable(),
+    dealType: z.enum(["sale", "rent"]),
+    confirmedAt: z.string().datetime().nullable(),
+    commissionReceivable: z
+      .string()
+      .regex(/^(?:0|[1-9]\\d{0,13})(?:\\.\\d{1,2})?$/)
+      .nullable(),
+    commissionReceived: z
+      .string()
+      .regex(/^(?:0|[1-9]\\d{0,13})(?:\\.\\d{1,2})?$/)
+      .nullable(),
+    credits: z
+      .array(
+        z
+          .object({
+            staffId: z.string().uuid(),
+            branchIdAtClose: z.string().uuid().nullable(),
+            shareBps: z.number().int().min(1).max(10000),
+          })
+          .strict(),
+      )
+      .max(20),
+    attributionStatus: z.enum([
+      "draft",
+      "verified_attributed",
+      "verified_unattributed",
+      "cancelled",
+    ]),
+    reason: z.string().trim().min(1).max(2000),
+  })
+  .strict();
+
+const fetchTransactionPerformanceServer = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) =>
+    z.object({ transactionId: z.string().uuid() }).strict().parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const performance = await import("./transaction-performance.server");
+    return performance.getTransactionPerformance(data.transactionId, staff);
+  });
+
+export async function fetchTransactionPerformance(options: { data: { transactionId: string } }) {
+  return callStaffServerFn(async () =>
+    fetchTransactionPerformanceServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const saveTransactionPerformanceServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => transactionPerformanceInputSchema.parse(data))
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const performance = await import("./transaction-performance.server");
+    return performance.saveTransactionPerformance(data, staff);
+  });
+
+export async function saveTransactionPerformance(options: { data: TransactionPerformanceInput }) {
+  return callStaffServerFn(async () =>
+    saveTransactionPerformanceServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+const searchTransactionAttributionOptionsServer = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) =>
+    z
+      .object({
+        kind: z.enum(["staff", "lead", "listing"]),
+        q: z.string().trim().min(1).max(80),
+        dealType: z.enum(["sale", "rent"]).optional(),
+      })
+      .strict()
+      .parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const performance = await import("./transaction-performance.server");
+    return performance.searchTransactionAttributionOptions(data, staff);
+  });
+
+export async function searchTransactionAttributionOptions(options: {
+  data: { kind: "staff" | "lead" | "listing"; q: string; dealType?: "sale" | "rent" };
+}) {
+  return callStaffServerFn(async () =>
+    searchTransactionAttributionOptionsServer(await withStaffAuthHeaders(options)),
   );
 }
 

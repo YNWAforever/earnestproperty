@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminShell } from "@/components/admin/AdminShell";
 import { TransactionForm } from "@/components/dashboard/TransactionForm";
+import { TransactionAttributionEditor } from "@/components/admin/TransactionAttributionEditor";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
@@ -21,7 +23,10 @@ export const Route = createFileRoute("/admin/transactions_/$id")({
 function EditAdminTransactionPage() {
   const { id } = Route.useParams();
   const { user, loading } = useNeonAuth();
-  const navigate = useNavigate();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const canSeeFinance =
+    staffSession?.status === "ok" &&
+    (staffSession.roles.includes("admin") || staffSession.roles.includes("manager"));
   const [transaction, setTransaction] = useState<AdminTransactionRow | null>(null);
   const [fetching, setFetching] = useState(true);
 
@@ -95,10 +100,26 @@ function EditAdminTransactionPage() {
           </div>
         ) : null}
         {!loading && !fetching && transaction ? (
-          <TransactionForm
-            transaction={transaction}
-            onSaved={() => navigate({ to: "/admin/transactions" })}
-          />
+          <>
+            <TransactionForm
+              transaction={transaction}
+              onSaved={() => {
+                void fetchAdminTransaction({ data: { id } })
+                  .then((data) => setTransaction(data as AdminTransactionRow | null))
+                  .catch((error) =>
+                    toast.error(error instanceof Error ? error.message : String(error)),
+                  );
+              }}
+            />
+            {canSeeFinance ? (
+              <TransactionAttributionEditor
+                transactionId={transaction.id}
+                dealType={transaction.deal_type === "rent" ? "rent" : "sale"}
+                publicationVerified={transaction.published}
+                sourceVerified={transaction.verification_state === "verified"}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
     </AdminShell>
