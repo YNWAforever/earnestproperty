@@ -108,7 +108,7 @@ No `ASTRA_TEST_DATABASE_URL`/verified `ASTRA_TEST_BRANCH_ID`, `PLAYWRIGHT_BASE_U
 
 ## Message test and performance evidence
 
-The designated-colleague test was **not sent**. The required staff identity, verified phone/Inbox endpoint, channel and outside-window approved template contract are listed in `2026-09-27-recipient-test-manifest.md`. Provider `accepted`, signed delivery/read receipt and handset confirmation remain unknown for this assignment. Synthetic accepted/timeout cases are local tests only. The T12 performance report records file-size measurements and synthetic redirect decisions; there is no comparable Hong Kong TTFB or Neon DB p95 baseline.
+The designated-colleague test was **not sent**. Willy's staff account and Inbox private-note endpoint were confirmed during T13, but its staff WhatsApp endpoint and outside-window approved template have not been created. The remaining fields are listed in `2026-09-27-recipient-test-manifest.md`. Provider `accepted`, signed delivery/read receipt and handset confirmation remain unknown for this assignment. Synthetic accepted/timeout cases are local tests only. The T12 performance report records file-size measurements and synthetic redirect decisions; there is no comparable Hong Kong TTFB or Neon DB p95 baseline.
 
 ## PR checks after publication
 
@@ -116,7 +116,7 @@ The designated-colleague test was **not sent**. The required staff identity, ver
 - At audit baseline, `media-upload-boundary.test.mjs` still evaluated `src/auth.ts` in a CommonJS VM, replaced only the first `import.meta.env` occurrence, and expected a cookie-only upload identity. Commit `cf69017` updated that fixture to exercise the current credentialed raw-session request, require an opaque token, and reject incomplete/401 sessions without weakening `src/auth.ts`. Local `test:mls` then passed 639/639, the focused auth tests passed, and remote `test:mls` passed.
 - The Team route contract prohibited every `window.location` reference, including the read-only `origin` needed for the manually shared registration link. Commit `461b328` narrowed that negative assertion to client storage, token use, and navigation/mutation. Local `test:command-center` and `test:team` passed; remote `test:command-center` passed.
 - GitHub Actions run `36273289277` for code commit `461b328` completed `ci` successfully through the final analytics test. The `browser-staging` job remained skipped by its environment gate. Vercel reported its automatic PR preview check successful. The preview was not used as a verified isolated staging environment, and no production deployment was initiated.
-- GitHub Actions run `36273584492` for documentation commit `07d3888` completed `ci` successfully. `browser-staging` remained skipped; the PR is still a mergeable draft. The public read-only spot check is recorded in `2026-09-27-performance-baseline.md` and does not close F23/F24.
+- GitHub Actions run `36273584492` for documentation commit `07d3888` completed `ci` successfully. `browser-staging` remained skipped; PR readiness is checked at the current head separately. The public read-only spot check is recorded in `2026-09-27-performance-baseline.md` and does not close F23/F24.
 
 ## T13 staging schema evidence
 

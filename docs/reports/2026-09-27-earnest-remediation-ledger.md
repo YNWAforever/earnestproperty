@@ -30,7 +30,7 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F20     | Invitation and first-login loop incomplete                 | T09  | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending                                                                                |
 | F21     | Health misses eligible staff and due work                  | T10  | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending                                                                                   |
 | F22     | Missing agent/link/mapping/content tasks lack entry points | T08  | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; T11 content review prompts added; staging pending                                       |
-| F23     | External response latency needs measured diagnosis         | T12  | blocked     | No HK staging endpoint, region or trace sample; performance report records protocol and open 30%/300 ms targets                                                                                |
+| F23     | External response latency needs measured diagnosis         | T12  | blocked     | Neon region and DB-only count/page plans measured; no isolated app, HK warm/cold, SSR trace or comparable 30%/300 ms evidence                                                                                |
 | F24     | Oversized thumbnails and serial bulk reads                 | T12  | blocked     | Local 128/256 px variants and gallery sizes, T06 set-based batch; remote property thumbnail transfer and Neon 50-row timing still unmeasured                                                   |
 
 ## T00 baseline
@@ -77,7 +77,7 @@ Ruling: use PGlite's isolated in-memory PostgreSQL for new SQL regressions while
 - Staff configuration now follows one selected colleague through Inbox mapping, source/account reference and independent notification destinations, then shows each readiness state and an explicit test preview. A deep link can select a known staff ID; switching staff resets unsaved destination fields.
 - Preview stores a five-minute opaque token and displays `[測試]`, name, transport, masked destination, version and exact copy. Only an explicit submit writes a purpose-specific test attempt and leased job. Test attempts do not reference customer enquiries or contribute to enquiry SLA.
 - The one-minute actor/endpoint cap and request ID are enforced in a transaction with current endpoint, mapping, staff role and message-window checks. The worker checks these again before provider dispatch. A started but uncertain provider request becomes `unknown` and is never automatically resent; `accepted` is not delivered.
-- Isolated PGlite executed the new migration and enqueue SQL, with one synthetic accepted transport and one post-boundary timeout. No WOZTELL network request was made. Inbox note testing requires a dedicated synthetic provider thread ID that does not belong to a customer conversation. No designated colleague or verified endpoint was supplied for the real T13 send.
+- Isolated PGlite executed the new migration and enqueue SQL, with one synthetic accepted transport and one post-boundary timeout. No WOZTELL network request was made. Inbox note testing requires a dedicated synthetic provider thread ID that does not belong to a customer conversation. At the T05 boundary no colleague was named. T13 later confirmed Willy's staff account; the staff WhatsApp endpoint and approved template have not been created.
 
 ## T06 evidence
 
@@ -144,7 +144,7 @@ Each F row above names its owning task; the commit below supplies that row's imp
 | T10  | `33f01e6`                          | Runtime health, migration registry and CI wiring                   |
 | T11  | `7b6d70f`                          | Scoped public copy and content review prompts                      |
 | T12  | `b307dd8`                          | Redirect capacity, retention and local image variants              |
-| T13  | release-evidence commit at PR head | Final validation, recipient manifest and rollout/rollback          |
+| T13  | `551e1b3`, `3a7650b`, `16b3d0a`, `82e62d9` | Release evidence, staging schema, Preview isolation, query plans and rollback |
 
 All 24 findings have an owning task. F11 remains blocked on the approved template and device-level evidence; F23 and F24 remain blocked on comparable staging measurements and remote property image transfer. The `fixed-local` rows still require the stated staging checks before any production claim. No live message was sent and no external delivery was verified.
 
