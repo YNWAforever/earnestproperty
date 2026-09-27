@@ -154,3 +154,9 @@ All 24 findings have an owning task. F11 remains blocked on the approved templat
 - `461b328`: narrowed the Team route contract to allow a read-only sign-up origin while still banning browser token state and navigation; `test:command-center` and `test:team` passed locally and remotely.
 - GitHub Actions run `36273289277` completed the full `ci` job successfully at `461b328`. The fixture-gated `browser-staging` job was skipped; staging, delivery and performance evidence gates in the F ledger remain open.
 - GitHub Actions run `36273584492` completed `ci` successfully at `07d3888`; `browser-staging` remained skipped. A 2026-09-27 public-site spot check measured homepage/listing/detail TTFB and A074714 Blob source lengths, but it is not isolated staging or proof that F23/F24 are fixed.
+
+## T13 staging schema expansion
+
+The explicitly identified nondefault staging branch br-young-breeze-ao85rtx1 now has all five additive audit migrations, with 60/60 repository migration rows. Transactional per-file read-back found the new schema and zero operation rows; checked old link/version/open digests matched before and after. The production branch still has 55 migration rows and no audit schema. See 2026-09-27-staging-migration-evidence.md. No F row was promoted to verified-staging: application deployment, isolated synthetic DB/browser fixtures, provider evidence and the designated colleague handset journey remain open.
+
+- T13 Preview isolation check: the supplied PR Preview alias resolves to the current audit head, but Preview config has production Neon Auth and `NEON_BRANCH=production`; database hosts are redacted. Browser staging remains blocked. The designated Willy staff account was confirmed, but its staff WhatsApp endpoint and approved template have not been created.
