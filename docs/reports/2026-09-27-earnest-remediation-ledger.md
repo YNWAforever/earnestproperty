@@ -153,3 +153,4 @@ All 24 findings have an owning task. F11 remains blocked on the approved templat
 - `cf69017`: updated the stale media-upload VM fixture to current live Neon session behavior; `test:mls` passed locally 639/639 and in GitHub Actions.
 - `461b328`: narrowed the Team route contract to allow a read-only sign-up origin while still banning browser token state and navigation; `test:command-center` and `test:team` passed locally and remotely.
 - GitHub Actions run `36273289277` completed the full `ci` job successfully at `461b328`. The fixture-gated `browser-staging` job was skipped; staging, delivery and performance evidence gates in the F ledger remain open.
+- GitHub Actions run `36273584492` completed `ci` successfully at `07d3888`; `browser-staging` remained skipped. A 2026-09-27 public-site spot check measured homepage/listing/detail TTFB and A074714 Blob source lengths, but it is not isolated staging or proof that F23/F24 are fixed.
