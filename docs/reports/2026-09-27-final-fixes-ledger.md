@@ -22,8 +22,8 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R02 technical ID setup       | T02–T03     | fixed-local   | not-started    | not-started       | Audit: wizard requires manual Inbox IDs.                                                                                                                  |
 | R03 verification evidence    | T01,T04     | fixed-local   | not-started    | external-blocked  | Versioned mapping and distinct accepted, signed-delivered, manual-confirmed evidence tested locally; real provider receipt remains unverified.            |
 | R04 Folder semantics         | T02,T03,T05 | partial-local | not-started    | external-blocked  | Audit: direct assignment requires matching Folder; tenant capability unverified.                                                                          |
-| R05 sales performance        | T12–T14     | not-started   | not-started    | not-started       | Audit: current analytics lacks attributable sales/agent metrics.                                                                                          |
-| R06 transaction attribution  | T10–T11     | partial-local | not-started    | not-started       | T10 private versioned model passes embedded DB tests; transaction editor and staging migration remain T11/external gates.                                 |
+| R05 sales performance        | T12–T14     | partial-local   | not-started    | not-started       | Audit: current analytics lacks attributable sales/agent metrics.                                                                                          |
+| R06 transaction attribution  | T10–T11     | fixed-local | not-started    | not-started       | T10 private versioned model passes embedded DB tests; transaction editor and staging migration remain T11/external gates.                                 |
 | R07 public inventory count   | T09         | fixed-local   | not-started    | not-started       | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending.                         |
 | R08 website tracking         | T08         | fixed-local   | not-started    | not-started       | Coverage, explicit backfill preview and public contextual resolver pass local tests; staging acceptance pending.                                          |
 | R09 batch input              | T06         | fixed-local   | not-started    | not-started       | Multi-source expansion, CSV/TSV paste, strict 28hse/YouTube URL parsing and source-scoped staff lookup pass local tests; live browser acceptance pending. |
@@ -31,13 +31,13 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R11 notification setup       | T03–T04     | fixed-local   | not-started    | external-blocked  | Company Channel and private Inbox destination now derive server-side from a reviewed mapping; live tenant setup unverified.                               |
 | R12 test-send workflow       | T03–T04     | fixed-local   | not-started    | external-blocked  | Transport-specific actions, repair links, version guards, scoped request recovery and evidence-specific status pass local tests.                          |
 | R13 mapping races            | T01         | fixed-local   | not-started    | not-started       | Audit: no expectedVersion on mapping save.                                                                                                                |
-| R14 analytics definitions    | T12–T13     | not-started   | not-started    | not-started       | Audit: test/spam and cohort/current backlog not distinguished.                                                                                            |
+| R14 analytics definitions    | T12–T13     | partial-local   | not-started    | not-started       | Audit: test/spam and cohort/current backlog not distinguished.                                                                                            |
 | R15 media and transport copy | T15         | not-started   | not-started    | not-started       | Audit: VR claim and mismatched transport text.                                                                                                            |
 | R16 remote image variants    | T16–T17     | not-started   | not-started    | not-started       | Audit: thumbnail and hero share original URL, without srcset.                                                                                             |
 
 ## Task progress
 
-T00, T01–T04 and T06–T11 code slices are locally complete; T05 is documented but awaits real Haze evidence. T12–T18 remain, with isolated Neon, tenant and browser gates pending where stated below.
+T00, T01–T04 and T06–T12 code slices are locally complete; T05 is documented but awaits real Haze evidence. T13–T18 remain, with isolated Neon, tenant and browser gates pending where stated below.
 
 ## Decisions and external gates
 
@@ -45,6 +45,7 @@ T00, T01–T04 and T06–T11 code slices are locally complete; T05 is documented
 - Ruling: `bun.lockb` shows a file-mode-only difference in this Windows worktree. It is excluded from staged changes.
 - Haze production acceptance requires her confirmed provider identity, named Folder with actual access, configured capability and destination, a test conversation, provider readback, and recipient confirmation. No display-name-only send.
 - Production migration, provider send, and deployment remain separate external operations after reviewable code and isolated verification.
+- The user confirmed that no disposable staging URL/database, Haze test tenant, or consenting test recipient is available for this run. External acceptance remains blocked; local synthetic tests do not clear that gate.
 
 ### T09 — public inventory count (R07)
 
@@ -146,3 +147,11 @@ T00, T01–T04 and T06–T11 code slices are locally complete; T05 is documented
 - The panel supports draft, verified attributed, verified unattributed and cancelled states; lead, current public number, 60/40 credits, branch snapshot, HKD receivable/received and a reason. Complete attribution requires 100%; unknown commission remains null, explicit zero remains zero. Hong Kong dates round trip over UTC midnight. Stale version errors require a deliberate reload. The list shows missing/draft/unattributed/cancelled quality states with a server-side filter, while hiding finance status outside an actor's scope.
 - The base form now separates verified source evidence from public publication. An internally verified transaction may remain unpublished; public pages still filter `published` and `verification_state`, and their DTO has no private commission or lead join.
 - `bun test src/components/admin/TransactionAttributionEditor.test.tsx`: 5 pass. `node --test src/lib/neon/transaction-performance.db.test.mjs`: 9 pass. Admin transaction contract: 17 pass (including embedded branch visibility). Admin route + public transaction contracts: 22 pass. Typecheck and changed-file lint pass. No external migration or authenticated staging browser run was performed; those are staging gates before rollout.
+
+### T12 — source-backed performance events and quality (R05, R14)
+
+- Added an idempotent event projection, captured by SQL triggers in the same transaction as explicit lead qualification, completed viewing, provider-confirmed assignment, trusted first human response and versioned deal confirmation/cancellation. The original CRM, WhatsApp and transaction rows remain authoritative. A server-only repair interface reselects those source rows; caller-supplied quality, staff and event time cannot create metrics.
+- New events start with unknown quality. Admin-only reasoned corrections append quality revisions; earlier verified human response timestamps append occurrence revisions. The effective view applies the latest revision, so day-filtered reports recalculate on read. History rows and lead qualification evidence cannot be deleted or edited. Ambiguous assignment episodes keep a null inquiry link rather than guessing.
+- Explicit lead qualification requires evidence, a qualifying CRM stage and admin/manager branch scope. A CRM stage alone does not generate the event. Cancellation uses the cancellation decision time; a prior confirmation remains as history for the report to exclude when the current version is cancelled.
+- `node --test src/lib/analytics/performance-events.test.mjs src/lib/analytics/performance-events.db.test.mjs`: 9 pass. Combined event/assignment regression: 16 pass, 1 pre-existing synthetic fixture skip, 0 fail. Typecheck and changed-file lint pass. Migration `20260927170000_performance_event_quality.sql` is registered but has not been applied externally.
+- T13 must use the effective event view with current deal versions to avoid counting corrected or cancelled deals twice, and must report unknown coverage. T14 will expose the reasoned quality correction in the admin UI. Staging and real provider acceptance remain blocked by the unavailable test environment and recipient.
