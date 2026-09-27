@@ -30,8 +30,8 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F20     | Invitation and first-login loop incomplete                 | T09  | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending                                                                                |
 | F21     | Health misses eligible staff and due work                  | T10  | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending                                                                                   |
 | F22     | Missing agent/link/mapping/content tasks lack entry points | T08  | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; T11 content review prompts added; staging pending                                       |
-| F23     | External response latency needs measured diagnosis         | T12  | blocked     | DB count/page plans and Preview detail median TTFB 3.408 s measured; HK warm/cold, SSR and comparable target pending                                                                                |
-| F24     | Oversized thumbnails and serial bulk reads                 | T12  | blocked     | Local 128/256 px variants and set-based batch; Neon 50-row 256/189 ms; remote photo transfer pending                                                   |
+| F23     | External response latency needs measured diagnosis         | T12  | blocked     | DB count/page and Preview detail TTFB measured; link lookup now overlaps side reads; HK warm/cold, SSR and comparable target pending                                                                                |
+| F24     | Oversized thumbnails and serial bulk reads                 | T12  | blocked     | Local variants and set-based batch; Neon 50-row 256/189 ms; direct GET: 1200px, 274,212 B reused at 200px; browser transfer pending                                                   |
 
 ## T00 baseline
 
@@ -144,7 +144,7 @@ Each F row above names its owning task; the commit below supplies that row's imp
 | T10  | `33f01e6`                          | Runtime health, migration registry and CI wiring                   |
 | T11  | `7b6d70f`                          | Scoped public copy and content review prompts                      |
 | T12  | `b307dd8`                          | Redirect capacity, retention and local image variants              |
-| T13  | `551e1b3`, `3a7650b`, `16b3d0a`, `82e62d9`, `ef798b6`, `bc15e26`, `df1ad05`, `51c889a`, `c97a6c3` | Release evidence, staging schema, Preview isolation, real Neon acceptance, query plans and rollback |
+| T13  | `551e1b3`, `3a7650b`, `16b3d0a`, `82e62d9`, `ef798b6`, `bc15e26`, `df1ad05`, `51c889a`, `c97a6c3`, `2ae5049` | Release evidence, staging schema, Preview isolation, real Neon acceptance, query plans and rollback |
 
 All 24 findings have an owning task. F11 remains blocked on the approved template and device-level evidence; F23 and F24 remain blocked on comparable staging measurements and remote property image transfer. The `fixed-local` rows still require the stated staging checks before any production claim. No live message was sent and no external delivery was verified.
 
