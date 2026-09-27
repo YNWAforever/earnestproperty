@@ -86,7 +86,7 @@ function WhatsappLinks() {
               agents={agents}
               onCreated={() => setRevision((value) => value + 1)}
             />
-            <WhatsappLinksTable revision={revision} staff={agents} />
+            <WhatsappLinksTable revision={revision} staff={agents} actorScope={user.id} />
           </>
         ) : null}
       </div>

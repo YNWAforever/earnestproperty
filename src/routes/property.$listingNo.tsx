@@ -1,5 +1,8 @@
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
-import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
+import {
+  resolvePublicWaAction,
+  resolveWebsiteActions,
+} from "@/lib/whatsapp-enquiries/public-context";
 import {
   activePropertyOfferings,
   selectPropertyOffering,
@@ -189,10 +192,7 @@ export const Route = createFileRoute("/property/$listingNo")({
           enabled: false,
           fallbackHref: null,
           links: [],
-          actions: offers.map((offer) => ({
-            propertyId: offer.propertyId,
-            ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
-          })),
+          actions: resolveWebsiteActions(offers, [], SITE_CONTACT.whatsappPhone).actions,
         };
       }),
     ]);

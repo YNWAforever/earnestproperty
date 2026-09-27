@@ -55,6 +55,7 @@ import { whatsappUrl, SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
 import {
   resolvePublicWaAction,
+  resolveWebsiteActions,
   type PublicWaAction,
 } from "@/lib/whatsapp-enquiries/public-context";
 import {
@@ -144,10 +145,7 @@ export const Route = createFileRoute("/")({
       .then((result) => result.actions)
       .catch((error) => {
         console.error("WA_TRACKING_RESOLVER_FAILED", error);
-        return offers.map((offer) => ({
-          propertyId: offer.propertyId,
-          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
-        }));
+        return resolveWebsiteActions(offers, [], SITE_CONTACT.whatsappPhone).actions;
       });
     return {
       estates,

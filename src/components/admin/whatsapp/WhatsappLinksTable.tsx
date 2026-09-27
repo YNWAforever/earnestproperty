@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { WhatsappCoveragePanel } from "./WhatsappCoveragePanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { withStaffAuthHeaders } from "@/auth";
@@ -19,8 +20,10 @@ const codeUrl = (code: string) => `${window.location.origin}/w/${code}`;
 export function WhatsappLinksTable({
   revision,
   staff,
+  actorScope,
 }: {
   revision: number;
+  actorScope: string;
   staff: { id: string; name: string | null; email: string | null }[];
 }) {
   const [draftQ, setDraftQ] = useState("");
@@ -169,6 +172,7 @@ export function WhatsappLinksTable({
   const items = page?.items ?? [];
   return (
     <section aria-label="WhatsApp 連結管理" className="space-y-4 rounded-xl border bg-card p-4">
+      <WhatsappCoveragePanel actorScope={actorScope} revision={revision} />
       <h2 className="text-lg font-semibold">連結管理</h2>
       <div className="flex flex-wrap items-end gap-2">
         <form
