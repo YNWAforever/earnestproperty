@@ -86,3 +86,7 @@ T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed 
 - The first step distinguishes local branch from provider Folder. External 28hse/YouTube staff references moved into an advanced section. Empty Folder state has an explicit setup action. Existing notification/test components remain until T04.
 - bun test src/components/admin/whatsapp/StaffMappingWizard.test.tsx: 6 pass, 0 fail. npm run test:staff-notifications: 21 Node + 10 Bun pass, 0 fail. Admin route contracts: 41 pass. Typecheck and changed-file ESLint: pass.
 - Route search accepts only UUID staffId/draftId and steps 0–3. Actor-scoped draft restoration belongs to T07; this route does not load a draft yet. Narrow-screen/keyboard live browser acceptance and real Haze connection remain staging/external gates because this worktree has no authenticated test session or tenant credentials. No provider send was made.
+
+### Migration manifest correction
+
+- The explicit migration manifest contract was run after T02 and failed: the T01 and T02 SQL files were absent from MIGRATION_VERSIONS. Added both in chronological order. node --test src/lib/control-plane/migration-versions.test.mjs now passes 6/6. This is source health registration only; no database migration has been applied.
