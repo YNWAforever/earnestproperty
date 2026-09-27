@@ -156,3 +156,39 @@ test("unverified or predating human response is omitted from measured sample and
   assert.equal(selectPerformanceRecords(input, "responses", null).records.length, 0);
   assert.equal(selectPerformanceRecords(input, "unanswered", null).records.length, 1);
 });
+
+test("quality queues retain unknown, test and spam events and deals for restoration", () => {
+  const i = inquiry(1);
+  const events = [
+    event("viewing_completed", 1, { eventKey: "viewing_completed:one", quality: "unknown" }),
+    event("human_response", 1, { eventKey: "human_response:two", quality: "test" }),
+    event("assignment_confirmed", 1, { eventKey: "assignment_confirmed:three", quality: "spam" }),
+  ];
+  const deals = [
+    deal(1, { quality: "unknown", eventKey: "deal_confirmed:one" }),
+    deal(2, { quality: "test", eventKey: "deal_confirmed:two" }),
+    deal(3, { quality: "spam", eventKey: "deal_confirmed:three" }),
+  ];
+  const input = {
+    inquiries: [i],
+    events,
+    deals,
+    credits: [],
+    backlog: { openInquiries: 0, unknownQuality: 0 },
+    backlogRows: [],
+    filters: base,
+    asOf,
+  };
+  const report = calculateSalesPerformance(input);
+  assert.deepEqual(report.qualityCoverage.events, { production: 0, test: 1, spam: 1, unknown: 1 });
+  assert.equal(report.qualityCoverage.deals.test, 1);
+  assert.equal(
+    selectPerformanceRecords(input, "quality_unknown_events", null).records[0].eventKey,
+    "viewing_completed:one",
+  );
+  assert.equal(
+    selectPerformanceRecords(input, "quality_test_deals", null).records[0].eventKey,
+    "deal_confirmed:two",
+  );
+  assert.equal(selectPerformanceRecords(input, "quality_spam_events", null).records.length, 1);
+});

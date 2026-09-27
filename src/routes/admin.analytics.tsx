@@ -1,7 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminShell, AdminError } from "@/components/admin/AdminShell";
+import { PerformanceDashboard } from "@/components/admin/analytics/PerformanceDashboard";
+import { PerformanceTable } from "@/components/admin/analytics/PerformanceTable";
+import {
+  correctInquiryQuality,
+  correctPerformanceEventQuality,
+  fetchPerformanceFilterOptions,
+  fetchSalesPerformance,
+  fetchSalesPerformanceRecords,
+  qualifyPerformanceLead,
+} from "@/lib/analytics/sales-performance-client";
+import { parsePerformanceFilters } from "@/lib/analytics/sales-performance.mjs";
+import { parsePerformanceSearch as parsePerformanceSearchInput } from "@/lib/analytics/performance-route-search.mjs";
+import type {
+  PerformanceFilterOptions,
+  PerformanceFilters,
+  PerformanceRecord,
+  PerformanceRecordPage,
+  PerformanceReport,
+} from "@/lib/analytics/sales-performance.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +28,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fetchOperationalAnalytics } from "@/lib/analytics/reporting-client";
 import { defaultAnalyticsDateRange, parseAnalyticsDateRange } from "@/lib/analytics/reporting";
 import type { OperationalAnalyticsReport } from "@/lib/analytics/reporting";
+function parsePerformanceSearch(search: Record<string, unknown>) {
+  return parsePerformanceSearchInput(search, defaultAnalyticsDateRange());
+}
 export const Route = createFileRoute("/admin/analytics")({
+  validateSearch: parsePerformanceSearch,
   head: () => ({
     meta: [
       { title: "營運及轉換統計｜Earnest Admin" },
@@ -19,6 +42,143 @@ export const Route = createFileRoute("/admin/analytics")({
   component: AdminAnalytics,
 });
 function AdminAnalytics() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const performanceFilters: PerformanceFilters = useMemo(
+    () => ({
+      start: search.start,
+      end: search.end,
+      branchId: search.branchId,
+      staffId: search.staffId,
+      source: search.source,
+      dealType: search.dealType,
+      cohortWindowDays: search.cohortWindowDays,
+    }),
+    [
+      search.start,
+      search.end,
+      search.branchId,
+      search.staffId,
+      search.source,
+      search.dealType,
+      search.cohortWindowDays,
+    ],
+  );
+  const [performance, setPerformance] = useState<PerformanceReport | null>(null);
+  const [performanceOptions, setPerformanceOptions] = useState<PerformanceFilterOptions | null>(
+    null,
+  );
+  const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [performanceError, setPerformanceError] = useState<string | null>(null);
+  const [drilldownKey, setDrilldownKey] = useState<string | null>(null);
+  const [recordPage, setRecordPage] = useState<PerformanceRecordPage | null>(null);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
+  const recordRequest = useRef(0);
+  const [performanceRevision, setPerformanceRevision] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetchPerformanceFilterOptions()
+      .then((value) => {
+        if (!cancelled) setPerformanceOptions(value);
+      })
+      .catch(() => {
+        if (!cancelled) setPerformanceOptions(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    recordRequest.current++;
+    setDrilldownKey(null);
+    setRecordPage(null);
+  }, [performanceFilters]);
+  useEffect(() => {
+    if (search.invalidFilter) {
+      setPerformance(null);
+      setPerformanceLoading(false);
+      setPerformanceError("網址中的篩選條件無效，請清除後重試。");
+      return;
+    }
+    let cancelled = false;
+    setPerformanceLoading(true);
+    setPerformance(null);
+    setPerformanceError(null);
+    fetchSalesPerformance(performanceFilters)
+      .then((value) => {
+        if (!cancelled) setPerformance(value);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPerformance(null);
+          setPerformanceError("未能載入績效，請檢查權限或稍後再試。");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPerformanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [performanceFilters, performanceRevision, search.invalidFilter]);
+  async function openRecords(key: string, cursor: string | null = null, append = false) {
+    if (search.invalidFilter) return;
+    const requestId = ++recordRequest.current;
+    setDrilldownKey(key);
+    setRecordsLoading(true);
+    setRecordsError(null);
+    if (!append) setRecordPage(null);
+    try {
+      const next = await fetchSalesPerformanceRecords({
+        filters: performanceFilters,
+        drilldownKey: key,
+        cursor,
+      });
+      if (requestId !== recordRequest.current) return;
+      setRecordPage((current) =>
+        append && current
+          ? { records: [...current.records, ...next.records], nextCursor: next.nextCursor }
+          : next,
+      );
+    } catch {
+      if (requestId === recordRequest.current) setRecordsError("未能載入對應記錄，請重試。");
+    } finally {
+      if (requestId === recordRequest.current) setRecordsLoading(false);
+    }
+  }
+  async function correctQuality(input: {
+    record: PerformanceRecord;
+    quality: "production" | "test" | "spam" | "unknown";
+    reason: string;
+  }) {
+    if (input.record.kind === "inquiry")
+      await correctInquiryQuality({
+        inquiryId: input.record.id,
+        quality: input.quality,
+        reason: input.reason,
+      });
+    else if (input.record.eventKey)
+      await correctPerformanceEventQuality({
+        eventKey: input.record.eventKey,
+        quality: input.quality,
+        reason: input.reason,
+      });
+    else throw new Error("Missing event evidence");
+    setPerformanceRevision((v) => v + 1);
+    if (drilldownKey) await openRecords(drilldownKey);
+  }
+  async function qualifyLead(input: { leadId: string; qualifiedAt: string; evidence: string }) {
+    await qualifyPerformanceLead(input);
+    setPerformanceRevision((value) => value + 1);
+    if (drilldownKey) await openRecords(drilldownKey);
+  }
+  function applyPerformanceFilters(next: PerformanceFilters) {
+    recordRequest.current++;
+    setDrilldownKey(null);
+    setRecordPage(null);
+    void navigate({ search: parsePerformanceFilters(next) });
+  }
   const [range, setRange] = useState(defaultAnalyticsDateRange);
   const [requested, setRequested] = useState(range);
   const [revision, setRevision] = useState(0);
@@ -171,6 +331,52 @@ function AdminAnalytics() {
               </div>
             </section>
           </>
+        ) : null}
+        {search.invalidFilter ? (
+          <div className="rounded border border-destructive p-3">
+            <AdminError message="網址中的績效篩選無效。報表未載入，以免擴大查詢範圍。" />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                void navigate({
+                  search: parsePerformanceFilters({
+                    ...defaultAnalyticsDateRange(),
+                    cohortWindowDays: 90,
+                  }),
+                })
+              }
+            >
+              清除網址篩選
+            </Button>
+          </div>
+        ) : null}
+        <PerformanceDashboard
+          filters={performanceFilters}
+          report={performance}
+          options={performanceOptions}
+          loading={performanceLoading}
+          error={performanceError}
+          onApplyFilters={applyPerformanceFilters}
+          onOpenRecords={(key) => void openRecords(key)}
+        />
+        {drilldownKey ? (
+          <PerformanceTable
+            drilldownKey={drilldownKey}
+            page={recordPage}
+            canCorrect={performanceOptions?.canCorrect ?? false}
+            canQualify={performanceOptions !== null}
+            loading={recordsLoading}
+            error={recordsError}
+            onClose={() => {
+              recordRequest.current++;
+              setDrilldownKey(null);
+              setRecordPage(null);
+            }}
+            onMore={() => void openRecords(drilldownKey, recordPage?.nextCursor ?? null, true)}
+            onCorrect={correctQuality}
+            onQualify={qualifyLead}
+          />
         ) : null}
       </div>
     </AdminShell>

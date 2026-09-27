@@ -5,6 +5,7 @@ import { unwrapServerFnResponse } from "../neon/server-fn-response.ts";
 import { parsePerformanceFilters } from "./sales-performance.mjs";
 import type {
   PerformanceFilters,
+  PerformanceFilterOptions,
   PerformanceRecordPage,
   PerformanceReport,
 } from "./sales-performance.types.ts";
@@ -17,6 +18,12 @@ const fetchReportServer = createServerFn({ method: "GET" })
     ).requireStaffAccess(getRequest(), ["admin", "manager"]);
     return (await import("./sales-performance.server.ts")).getSalesPerformance(data, actor);
   });
+const fetchFilterOptionsServer = createServerFn({ method: "GET" }).handler(async () => {
+  const actor = await (
+    await import("../neon/auth.server.ts")
+  ).requireStaffAccess(getRequest(), ["admin", "manager"]);
+  return (await import("./sales-performance.server.ts")).getPerformanceFilterOptions(actor);
+});
 const fetchRecordsServer = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => {
     if (!input || typeof input !== "object") throw new Error("Invalid drilldown");
@@ -32,6 +39,22 @@ const fetchRecordsServer = createServerFn({ method: "GET" })
       await import("../neon/auth.server.ts")
     ).requireStaffAccess(getRequest(), ["admin", "manager"]);
     return (await import("./sales-performance.server.ts")).listPerformanceRecords(data, actor);
+  });
+const qualifyLeadServer = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => {
+    if (!input || typeof input !== "object") throw new Error("Invalid qualification");
+    const row = input as Record<string, unknown>;
+    return {
+      leadId: String(row.leadId ?? ""),
+      qualifiedAt: String(row.qualifiedAt ?? ""),
+      evidence: String(row.evidence ?? ""),
+    };
+  })
+  .handler(async ({ data }) => {
+    const actor = await (
+      await import("../neon/auth.server.ts")
+    ).requireStaffAccess(getRequest(), ["admin", "manager"]);
+    return (await import("./performance-events.server.ts")).qualifyLeadForPerformance(data, actor);
   });
 const reviseEventQualityServer = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => {
@@ -98,4 +121,16 @@ export async function correctInquiryQuality(input: {
   return unwrapServerFnResponse(
     reviseInquiryQualityServer(await withStaffAuthHeaders({ data: input })),
   );
+}
+
+export async function fetchPerformanceFilterOptions(): Promise<PerformanceFilterOptions> {
+  return unwrapServerFnResponse(fetchFilterOptionsServer(await withStaffAuthHeaders({})));
+}
+
+export async function qualifyPerformanceLead(input: {
+  leadId: string;
+  qualifiedAt: string;
+  evidence: string;
+}) {
+  return unwrapServerFnResponse(qualifyLeadServer(await withStaffAuthHeaders({ data: input })));
 }

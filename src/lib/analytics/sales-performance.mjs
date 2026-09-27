@@ -202,8 +202,28 @@ export function calculateSalesPerformance({
         spam: inquiries.filter((i) => i.quality === "spam").length,
         unknown: unknownInquiries,
       },
+      events: {
+        production: events.filter((e) => e.quality === "production").length,
+        test: events.filter((e) => e.quality === "test").length,
+        spam: events.filter((e) => e.quality === "spam").length,
+        unknown: events.filter((e) => e.quality === "unknown").length,
+      },
       deals: {
         production: rangeDeals.length,
+        test: deals.filter(
+          (d) =>
+            d.current &&
+            d.quality === "test" &&
+            timestamp(d.confirmedAt) >= rangeStart &&
+            timestamp(d.confirmedAt) < rangeEnd,
+        ).length,
+        spam: deals.filter(
+          (d) =>
+            d.current &&
+            d.quality === "spam" &&
+            timestamp(d.confirmedAt) >= rangeStart &&
+            timestamp(d.confirmedAt) < rangeEnd,
+        ).length,
         unknown: unknownDeals,
         unattributed: legacyTransactions,
       },

@@ -20,7 +20,14 @@ export type PerformanceReport = {
   asOf: string;
   qualityCoverage: {
     inquiries: { production: number; test: number; spam: number; unknown: number };
-    deals: { production: number; unknown: number; unattributed: number };
+    events: { production: number; test: number; spam: number; unknown: number };
+    deals: {
+      production: number;
+      test: number;
+      spam: number;
+      unknown: number;
+      unattributed: number;
+    };
   };
   acquisition: {
     inquiries: PerformanceMetric;
@@ -67,5 +74,12 @@ export type PerformanceRecord = {
   inquiryId: string | null;
   leadId: string | null;
   transactionId: string | null;
+  eventKey: string | null;
 };
 export type PerformanceRecordPage = { records: PerformanceRecord[]; nextCursor: string | null };
+
+export type PerformanceFilterOptions = {
+  canCorrect: boolean;
+  branches: Array<{ id: string; name: string }>;
+  staff: Array<{ id: string; name: string; branchId: string | null }>;
+};

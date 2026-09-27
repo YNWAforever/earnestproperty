@@ -152,3 +152,28 @@ export async function reviseInquiryQuality(
   if (!rows[0]) throw new Response("Inquiry not found", { status: 404 });
   return { inquiryId: rows[0].inquiry_id, affectedHkDay: rows[0].affected_hk_day };
 }
+
+export async function getPerformanceFilterOptions(actor: StaffAccess) {
+  const branch = await resolveBranchScope(actor, null);
+  const [branchRows, staffRows] = await Promise.all([
+    queryRows(
+      `SELECT id::text AS id,name FROM branches WHERE $1::uuid IS NULL OR id=$1::uuid ORDER BY name,id LIMIT 200`,
+      [branch],
+    ),
+    queryRows(
+      `SELECT id::text AS id,COALESCE(name_zh,name_en,email) AS name,branch_id::text AS "branchId"
+       FROM staff_users WHERE active AND ($1::uuid IS NULL OR branch_id=$1::uuid)
+       ORDER BY name_zh,name_en,id LIMIT 500`,
+      [branch],
+    ),
+  ]);
+  return {
+    canCorrect: actor.roles.includes("admin"),
+    branches: branchRows.map((row) => ({ id: String(row.id), name: String(row.name) })),
+    staff: staffRows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      branchId: row.branchId === null ? null : String(row.branchId),
+    })),
+  };
+}

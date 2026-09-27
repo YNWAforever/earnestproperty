@@ -174,7 +174,23 @@ test("rendered aggregate view shows real zero counts and unavailable GA4 without
       inquiryConversions: null,
     },
   };
-  const states = [range, range, 0, report, false, null];
+  const states = [
+    null,
+    null,
+    false,
+    null,
+    null,
+    null,
+    false,
+    null,
+    0,
+    range,
+    range,
+    0,
+    report,
+    false,
+    null,
+  ];
   let index = 0,
     definition;
   const passthrough = ({ children }) => React.createElement("div", null, children);
@@ -194,16 +210,32 @@ test("rendered aggregate view shows real zero counts and unavailable GA4 without
     "@tanstack/react-router": {
       createFileRoute: () => (options) => {
         definition = options;
-        return {};
+        return {
+          useSearch: () => ({
+            ...range,
+            branchId: null,
+            staffId: null,
+            source: null,
+            dealType: null,
+            cohortWindowDays: 90,
+            invalidFilter: false,
+          }),
+          useNavigate: () => () => {},
+        };
       },
       Link: ({ children, to }) => React.createElement("a", { href: to }, children),
     },
     "@/components/admin/AdminShell": { AdminShell: passthrough, AdminError: passthrough },
+    "@/components/admin/analytics/PerformanceDashboard": { PerformanceDashboard: passthrough },
+    "@/components/admin/analytics/PerformanceTable": { PerformanceTable: passthrough },
     "@/components/ui/button": { Button: passthrough },
     "@/components/ui/input": { Input: (props) => React.createElement("input", props) },
     "@/components/ui/label": { Label: (props) => React.createElement("label", props) },
     "@/components/ui/skeleton": { Skeleton: passthrough },
     "@/lib/analytics/reporting-client": { fetchOperationalAnalytics: () => {} },
+    "@/lib/analytics/sales-performance-client": {},
+    "@/lib/analytics/sales-performance.mjs": { parsePerformanceFilters: (v) => v },
+    "@/lib/analytics/performance-route-search.mjs": { parsePerformanceSearch: (v) => v },
     "@/lib/analytics/reporting": reporting,
   };
   new Function("exports", "require", code)({}, (name) => dependencies[name]);

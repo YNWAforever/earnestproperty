@@ -39,7 +39,7 @@ export const DEAL_ROWS_SQL = `SELECT p.transaction_id::text AS "transactionId",p
   p.attribution_status AS status,p.lead_id::text AS "leadId",
   p.confirmed_at AS "confirmedAt",t.price::text AS price,t.deal_type::text AS "dealType",
   p.commission_receivable::text AS "commissionReceivable",
-  COALESCE(e.quality,'unknown') AS quality,true AS current
+  COALESCE(e.quality,'unknown') AS quality,e.event_key AS "eventKey",true AS current
   FROM transaction_performance p JOIN transactions t ON t.id=p.transaction_id
   LEFT JOIN staff_users owner ON owner.id=t.agent_id
   LEFT JOIN performance_event_records e ON e.event_key='deal_confirmed:'||

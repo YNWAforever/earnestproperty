@@ -25,6 +25,15 @@ export const PERFORMANCE_DRILLDOWN_KEYS = new Set([
   "commission",
   "open_inquiries",
   "unknown_backlog",
+  "quality_unknown_inquiries",
+  "quality_test_inquiries",
+  "quality_spam_inquiries",
+  "quality_unknown_deals",
+  "quality_unknown_events",
+  "quality_test_events",
+  "quality_spam_events",
+  "quality_test_deals",
+  "quality_spam_deals",
 ]);
 export function selectPerformanceRecords(
   { inquiries, events, deals, backlogRows, filters, asOf },
@@ -74,6 +83,7 @@ export function selectPerformanceRecords(
     inquiryId: row.inquiryId || null,
     leadId: row.leadId || row.crmLeadId || null,
     transactionId: row.transactionId || null,
+    eventKey: row.eventKey || null,
   });
   let rows;
   switch (key) {
@@ -156,6 +166,52 @@ export function selectPerformanceRecords(
     case "commission":
       rows = selectedDeals
         .filter((d) => d.commissionReceivable != null)
+        .map((d) => asRecord("deal", d, d.transactionId, d.confirmedAt));
+      break;
+    case "quality_unknown_inquiries":
+      rows = inquiries
+        .filter((i) => i.quality === "unknown")
+        .map((i) => asRecord("inquiry", i, i.id, i.createdAt));
+      break;
+    case "quality_test_inquiries":
+      rows = inquiries
+        .filter((i) => i.quality === "test")
+        .map((i) => asRecord("inquiry", i, i.id, i.createdAt));
+      break;
+    case "quality_spam_inquiries":
+      rows = inquiries
+        .filter((i) => i.quality === "spam")
+        .map((i) => asRecord("inquiry", i, i.id, i.createdAt));
+      break;
+    case "quality_unknown_events":
+      rows = events
+        .filter((e) => e.quality === "unknown" && time(e.occurredAt) <= time(asOf))
+        .map((e) => asRecord("event", e, e.eventKey || e.inquiryId || e.leadId, e.occurredAt));
+      break;
+    case "quality_test_events":
+    case "quality_spam_events":
+      rows = events
+        .filter(
+          (e) =>
+            e.quality === (key === "quality_test_events" ? "test" : "spam") &&
+            time(e.occurredAt) <= time(asOf),
+        )
+        .map((e) => asRecord("event", e, e.eventKey || e.inquiryId || e.leadId, e.occurredAt));
+      break;
+    case "quality_test_deals":
+    case "quality_spam_deals":
+      rows = deals
+        .filter(
+          (d) =>
+            d.current &&
+            d.quality === (key === "quality_test_deals" ? "test" : "spam") &&
+            inRange(d.confirmedAt, filters),
+        )
+        .map((d) => asRecord("deal", d, d.transactionId, d.confirmedAt));
+      break;
+    case "quality_unknown_deals":
+      rows = deals
+        .filter((d) => d.current && d.quality === "unknown" && inRange(d.confirmedAt, filters))
         .map((d) => asRecord("deal", d, d.transactionId, d.confirmedAt));
       break;
     case "open_inquiries":
