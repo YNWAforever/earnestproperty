@@ -46,3 +46,34 @@ export const enqueueStaffTestNotification = async (
 ) => submit(await withStaffAuthHeaders({ data }));
 export const getStaffTestNotification = async (attemptId: string) =>
   read(await withStaffAuthHeaders({ data: { attemptId } }));
+
+const manualConfirmation = createServerFn({ method: "POST" })
+  .inputValidator(
+    z
+      .object({
+        attemptId: z.string().uuid(),
+        evidenceRef: z.string().trim().min(1).max(160),
+      })
+      .strict(),
+  )
+  .handler(async ({ data }) => {
+    const { requireStaffAccess } = await import("./auth.server");
+    return (await import("./whatsapp-test-notification.server")).recordStaffTestManualConfirmation(
+      data,
+      await requireStaffAccess(getRequest(), ["admin", "manager"]),
+    );
+  });
+export const confirmStaffTestReceipt = async (data: { attemptId: string; evidenceRef: string }) =>
+  manualConfirmation(await withStaffAuthHeaders({ data }));
+
+const readByRequest = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ requestId: z.string().uuid() }).strict())
+  .handler(async ({ data }) => {
+    const { requireStaffAccess } = await import("./auth.server");
+    return (await import("./whatsapp-test-notification.server")).readStaffTestNotificationByRequest(
+      data.requestId,
+      await requireStaffAccess(getRequest(), ["admin", "manager"]),
+    );
+  });
+export const findStaffTestNotificationByRequest = async (requestId: string) =>
+  readByRequest(await withStaffAuthHeaders({ data: { requestId } }));

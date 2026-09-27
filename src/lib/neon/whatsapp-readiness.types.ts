@@ -43,6 +43,7 @@ export type StaffMappingEvidence = {
 export type StaffEndpointEvidence = {
   channelId: string;
   version: number;
+  mappingVersion?: number | null;
   transport: "inbox_private_note" | "staff_whatsapp";
   destinationReference: string;
   enabled: boolean;

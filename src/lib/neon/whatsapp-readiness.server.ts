@@ -77,6 +77,7 @@ function endpoint(value: unknown): StaffReadinessInput["staffEndpoint"] {
   return {
     channelId: String(r.channel_id),
     version: Number(r.version),
+    mappingVersion: r.mapping_version == null ? null : Number(r.mapping_version),
     transport: r.transport === "inbox_private_note" ? "inbox_private_note" : "staff_whatsapp",
     destinationReference: String(r.destination_reference ?? ""),
     enabled: r.enabled === true,
