@@ -19,9 +19,9 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | Finding | Tasks | Code status | Staging status | Production status | Current evidence / next check |
 |---|---|---|---|---|---|
 | R01 Haze readiness | T03–T05 | not-started | not-started | external-blocked | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence. |
-| R02 technical ID setup | T02–T03 | not-started | not-started | not-started | Audit: wizard requires manual Inbox IDs. |
+| R02 technical ID setup | T02–T03 | partial-local | not-started | not-started | Audit: wizard requires manual Inbox IDs. |
 | R03 verification evidence | T01,T04 | partial-local | not-started | not-started | Audit: manual evidence cannot imply provider verification or delivery. |
-| R04 Folder semantics | T02,T03,T05 | not-started | not-started | external-blocked | Audit: direct assignment requires matching Folder; tenant capability unverified. |
+| R04 Folder semantics | T02,T03,T05 | partial-local | not-started | external-blocked | Audit: direct assignment requires matching Folder; tenant capability unverified. |
 | R05 sales performance | T12–T14 | not-started | not-started | not-started | Audit: current analytics lacks attributable sales/agent metrics. |
 | R06 transaction attribution | T10–T11 | not-started | not-started | not-started | Audit: form lacks CRM/property links, credits, and commission. |
 | R07 public inventory count | T09 | fixed-local | not-started | not-started | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending. |
@@ -37,7 +37,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 
 ## Task progress
 
-T00 complete. T09 and T01 code fixed locally (isolated Neon gate pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
+T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed locally (isolated Neon and tenant gates pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
 
 ## Decisions and external gates
 
@@ -68,3 +68,12 @@ T00 complete. T09 and T01 code fixed locally (isolated Neon gate pending). Sugge
 - npm run test:staff-notifications: 21 Node pass + 4 Bun pass, 0 fail, 0 skip.
 - npm run typecheck: pass. Changed-file ESLint: pass.
 - Disposable Neon migration and tenant-specific review evidence are not yet available; these remain staging gates. No production migration or provider call was made.
+
+### T02 — scoped Inbox directory and named Folder catalog (R02, R04)
+
+- Official WOZTELL Public Integration API documentation checked on 2026-09-27: https://support.woztell.com/portal/en/kb/articles/public-a documents list-users with channelId, folderId, userId, limit and after cursor. It does not document a Folder listing endpoint. WOZTELL Folder documentation describes public and private Folder access: https://doc.woztell.com/docs/integrations/inbox/inbox-manage-folder/.
+- Added server-only list-users reads with pinned configured URL, bounded fetch, response validation, exact Channel/user scope, pagination, and distinct status codes for authorization, rate limiting and upstream failure. Name/email filtering stays local to each loaded page; an empty filtered page with a cursor remains incomplete.
+- Added a tenant and Channel scoped named Folder catalog, maintained through an authenticated advanced server function; no Folder is seeded or inferred. Candidate browsing caches only 30-second scoped pages. Verification makes a fresh provider read filtered by Channel, Folder and exact user ID, then records a version-bound, append-only review event only if local actor, staff, Folder and mapping versions still match.
+- node --test src/lib/woztell/inbox-directory.test.mjs: 4 pass, 0 fail, 0 skip (pagination, duplicate names, wrong Channel/user, malformed and repeated cursor, 401/403/429/5xx, agent rejection, tenant/Channel cache separation, Folder denial, timeout).
+- npm run test:woztell: 150 Node pass + 8 Bun pass, 0 fail, 0 skip. npm run typecheck and changed-file ESLint: pass.
+- No tenant credentials or Folder names were supplied. Provider readback and disposable Neon migration remain external staging gates; no production provider request was made.
