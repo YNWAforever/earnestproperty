@@ -34,10 +34,14 @@ export function WhatsappLinkWizard({
   seed,
   agents,
   onCreated,
+  seedScope,
+  onSeedConsumed,
 }: {
   seed: LinkOfferSelection[];
   agents: Staff[];
   onCreated: () => void;
+  seedScope?: string;
+  onSeedConsumed?: () => void;
 }) {
   const [step, setStep] = useState(1);
   const [mode, setMode] = useState<"sales" | "reception">("sales");
@@ -51,11 +55,13 @@ export function WhatsappLinkWizard({
   const [staffId, setStaffId] = useState("");
   const [perRowStaff, setPerRowStaff] = useState<Record<string, string>>({});
   const [progress, setProgress] = useState<LinkBatchProgress | null>(null);
+  const [incomingPending, setIncomingPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const key = (offer: LinkOfferSelection) => offer.propertyId;
   useEffect(() => {
     if (seed.length) {
+      setIncomingPending(true);
       setSelected(seed);
       setMode("sales");
     }
@@ -67,7 +73,9 @@ export function WhatsappLinkWizard({
       const stored = JSON.parse(raw) as LinkBatchProgress;
       if (stored.batchId && Array.isArray(stored.rows) && Array.isArray(stored.chunkIds)) {
         setProgress(stored);
-        setStep(5);
+        setStep(
+          stored.nextChunk === 0 && !stored.uncertain && stored.completed.length === 0 ? 4 : 5,
+        );
       }
     } catch {
       sessionStorage.removeItem(linkBatchProgressKey);
@@ -150,6 +158,8 @@ export function WhatsappLinkWizard({
       uncertain: false,
     };
     save(next);
+    setIncomingPending(false);
+    onSeedConsumed?.();
     setStep(4);
   }
   async function submit() {
@@ -168,6 +178,7 @@ export function WhatsappLinkWizard({
         throw new Error("資料已改變，請核對新的預覽阻止原因。");
       }
     }
+    setStep(5);
     const result = await runWhatsappLinkBatch(current, api, save);
     save(result);
     setStep(5);
@@ -185,6 +196,25 @@ export function WhatsappLinkWizard({
         : [...current, offer],
     );
   const hasActiveBatch = progress && progress.nextChunk < progress.chunkIds.length;
+  const canReplace =
+    !progress ||
+    (!progress.uncertain &&
+      (progress.nextChunk === 0 ||
+        !hasActiveBatch ||
+        progress.completed.some((chunk) => chunk.state === "rejected")));
+  const conflict = incomingPending && seed.length > 0 && progress !== null;
+  function useIncoming() {
+    if (!canReplace || busy) return;
+    sessionStorage.removeItem(linkBatchProgressKey);
+    setProgress(null);
+    setSelected(seed);
+    setMode("sales");
+    setVerified(false);
+    setPlacement({});
+    setPerRowStaff({});
+    setError("");
+    setStep(1);
+  }
   return (
     <section aria-label="建立 WhatsApp 連結" className="space-y-4 rounded-xl border bg-card p-4">
       <h2 className="text-lg font-semibold">建立 WhatsApp 連結</h2>
@@ -196,6 +226,35 @@ export function WhatsappLinkWizard({
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
+      ) : null}
+      {incomingPending && seed.length > 0 ? (
+        <div className="space-y-2 rounded-lg border bg-muted/30 p-3" role="status">
+          <p className="font-medium">已從物業管理帶入 {seed.length} 筆租售</p>
+          {seedScope ? <p className="text-sm">{seedScope}</p> : null}
+          <p className="text-sm">
+            請核對樓盤 → 選擇來源及跟進路線 → 預覽 → 確認建立。此時尚未建立連結。
+          </p>
+          {conflict ? (
+            <>
+              <ul className="max-h-36 overflow-auto text-sm">
+                {seed.map((offer) => (
+                  <li key={offer.propertyId}>{label(offer)}</li>
+                ))}
+              </ul>
+              <p className="text-sm">
+                另有之前的批次。下方顯示之前批次；你可選擇使用這次樓盤選取。
+              </p>
+              {!canReplace ? (
+                <p className="text-sm">
+                  之前批次仍在提交或結果未確認，請先查回結果並繼續同一批次。
+                </p>
+              ) : null}
+              <Button disabled={busy || !canReplace} onClick={useIncoming}>
+                使用這次選擇
+              </Button>
+            </>
+          ) : null}
+        </div>
       ) : null}
       {step === 1 ? (
         <div className="space-y-3">
@@ -442,10 +501,11 @@ export function WhatsappLinkWizard({
           <div className="flex gap-2">
             <Button
               variant="outline"
+              disabled={busy || !canReplace}
               onClick={() => {
                 sessionStorage.removeItem(linkBatchProgressKey);
                 setProgress(null);
-                setStep(3);
+                setStep(1);
               }}
             >
               修改設定
@@ -474,9 +534,10 @@ export function WhatsappLinkWizard({
                 繼續同一批次
               </Button>
             ) : null}
-            {!hasActiveBatch ? (
+            {canReplace && !conflict ? (
               <Button
                 variant="outline"
+                disabled={busy}
                 onClick={() => {
                   sessionStorage.removeItem(linkBatchProgressKey);
                   setProgress(null);

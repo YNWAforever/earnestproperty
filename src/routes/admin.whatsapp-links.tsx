@@ -21,15 +21,16 @@ function WhatsappLinks() {
   const { user, loading } = useNeonAuth();
   const [agents, setAgents] = useState<Awaited<ReturnType<typeof fetchAdminAgents>>>([]);
   const [seed, setSeed] = useState<LinkOfferSelection[]>([]);
+  const [seedScope, setSeedScope] = useState("");
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState("");
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem(linkSeedKey);
       if (stored) {
-        const parsed = JSON.parse(stored) as { offers: LinkOfferSelection[] };
+        const parsed = JSON.parse(stored) as { offers: LinkOfferSelection[]; scope?: string };
         if (Array.isArray(parsed.offers)) setSeed(parsed.offers);
-        sessionStorage.removeItem(linkSeedKey);
+        setSeedScope(typeof parsed.scope === "string" ? parsed.scope : "");
       }
     } catch {
       setError("之前的物業選擇未能恢復，請重新選擇。");
@@ -74,6 +75,12 @@ function WhatsappLinks() {
           <>
             <WhatsappLinkWizard
               seed={seed}
+              seedScope={seedScope}
+              onSeedConsumed={() => {
+                sessionStorage.removeItem(linkSeedKey);
+                setSeed([]);
+                setSeedScope("");
+              }}
               agents={agents}
               onCreated={() => setRevision((value) => value + 1)}
             />

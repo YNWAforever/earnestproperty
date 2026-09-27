@@ -122,3 +122,28 @@ test("second chunk failure resumes with the same durable chunk ID", async () => 
   expect(result.nextChunk).toBe(2);
   expect(seen).toEqual([id(101), id(102), id(102)]);
 });
+
+test("persist an uncertain marker before a request can commit and the tab can close", async () => {
+  let persisted = initial();
+  await runWhatsappLinkBatch(
+    initial(),
+    {
+      preview: async () => initial().preview,
+      commit: async (input) => {
+        expect(persisted.uncertain).toBe(true);
+        expect(persisted.chunkIds[persisted.nextChunk]).toBe(input.chunkId);
+        return { batchId: input.batchId, chunkId: input.chunkId, state: "committed", rows: [] };
+      },
+      read: async () => ({ operations: [] }),
+    },
+    (value) => {
+      persisted = value;
+    },
+  );
+  expect(persisted.uncertain).toBe(false);
+});
+
+test("an empty lookup cannot clear an in-flight submission", () => {
+  const pending = { ...initial(), uncertain: true };
+  expect(reconcileLinkBatch(pending, []).uncertain).toBe(true);
+});

@@ -41,7 +41,15 @@ export function reconcileLinkBatch(
     completed.push(operation);
     if (operation.state === "rejected") break;
   }
-  return { ...progress, completed, nextChunk: completed.length, uncertain: false };
+  return {
+    ...progress,
+    completed,
+    nextChunk: completed.length,
+    // A read can race an in-flight transaction. Only its committed operation resolves it.
+    uncertain:
+      progress.uncertain &&
+      !completed.some((operation) => operation.chunkId === progress.chunkIds[progress.nextChunk]),
+  };
 }
 
 /** Persist before every request. An ambiguous response is reconciled by operation ID. */
@@ -58,6 +66,7 @@ export async function runWhatsappLinkBatch(
   while (progress.nextChunk < chunks.length) {
     const index = progress.nextChunk;
     const chunkId = progress.chunkIds[index];
+    progress = { ...progress, uncertain: true };
     save(progress);
     try {
       const result = await api.commit({

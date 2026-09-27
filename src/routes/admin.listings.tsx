@@ -158,11 +158,15 @@ function AdminListings() {
       setError("展開後超過 1000 筆，請縮小篩選。");
       return;
     }
-    sessionStorage.setItem(
-      linkSeedKey,
-      JSON.stringify({ offers, scope, capturedAt: new Date().toISOString() }),
-    );
-    window.location.assign("/admin/whatsapp-links");
+    try {
+      sessionStorage.setItem(
+        linkSeedKey,
+        JSON.stringify({ offers, scope, capturedAt: new Date().toISOString() }),
+      );
+      window.location.assign("/admin/whatsapp-links");
+    } catch {
+      setError("未能保存樓盤選取，請允許此網站使用瀏覽器儲存空間後重試。尚未建立連結。");
+    }
   }
   const selectClass = "h-11 min-w-0 rounded-md border bg-background px-3 text-sm";
   return (
@@ -310,7 +314,7 @@ function AdminListings() {
                   .finally(() => setLinkBusy(false));
               }}
             >
-              建立 WhatsApp 連結（全部符合篩選）
+              下一步：預覽 WhatsApp 連結（全部符合篩選）
             </Button>
             {data.total > 1000 ? <span>超過 1000 個物業，請縮小篩選。</span> : null}
             {linkBusy ? <span role="status">正在擷取實際放盤 ID…</span> : null}

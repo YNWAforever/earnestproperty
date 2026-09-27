@@ -164,3 +164,7 @@ The explicitly identified staging branch br-young-breeze-ao85rtx1 has all five a
 ## T13 populated public browser fixture
 
 A dedicated guarded runner now passes 23/23 public browser cases with 0 skips against the actual migrated acceptance database, including the former data-dependent pagination/gallery/detail checks and six new audit identity cases. Its first run had six URL-expectation failures, corrected in tests with no product behavior change. Exact cleanup left 0 properties/groups/memberships/inquiries. See the staging acceptance evidence for timings and scope; authenticated Preview, provider and performance gates remain open. Finding statuses remain 21 fixed-local and 3 blocked.
+
+### Listings-to-link handoff correction
+
+The all-filtered listings handoff now exposes the incoming scope/count and explicit preview/confirm flow, retains selections through reload until preview succeeds, and prevents saved batches silently hiding new selections. Uncertain and partial submissions retain their batch/chunk IDs and cannot be discarded by a new selection. Browser component regression evidence and rollout/rollback boundaries are recorded in the validation report. This follow-up does not change the F11/F23/F24 blocked status or claim live production link creation/delivery verification.
