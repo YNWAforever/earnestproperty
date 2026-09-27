@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import {
   requestConversationAssignment,
   executeAssignment,
@@ -48,7 +49,7 @@ function splitSqlStatements(query) {
 
 const url = process.env.ASTRA_TEST_DATABASE_URL;
 test("Phase3 isolated synthetic assignment and response evidence", { skip: !url }, async (t) => {
-  assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+  await assertDisposableNeonTestTarget(url);
   const db = neon(url),
     schema = "wa_p3_" + randomUUID().replaceAll("-", "");
   const tx = async (statements) =>
@@ -91,7 +92,8 @@ test("Phase3 isolated synthetic assignment and response evidence", { skip: !url 
     await db.query(`CREATE SCHEMA ${schema}`);
     for (const statement of [
       `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text)`,
-      `CREATE TABLE staff_roles(staff_user_id uuid,role text)`,
+      `CREATE TYPE staff_role AS ENUM ('admin','manager','agent','viewer')`,
+      `CREATE TABLE staff_roles(staff_user_id uuid,role staff_role)`,
       `CREATE TABLE properties(id uuid PRIMARY KEY,agent_id uuid,deal_type text)`,
       `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY,assigned_agent_id uuid,channel_id text DEFAULT 'fixture',woztell_member_id text DEFAULT 'synthetic',updated_at timestamptz DEFAULT now())`,
       `CREATE TABLE inquiries(id uuid PRIMARY KEY,conversation_id uuid,property_id uuid,created_at timestamptz DEFAULT now(),source text DEFAULT 'whatsapp',status text DEFAULT 'new',customer_message_at timestamptz DEFAULT '2026-09-12T00:00:00Z',webhook_received_at timestamptz DEFAULT '2026-09-12T00:00:00Z',first_human_response_at timestamptz,first_human_response_message_id uuid,first_human_response_staff_id uuid,public_listing_no text,placement_source text,requested_staff_id uuid,response_due_at timestamptz,association_review boolean DEFAULT false)`,

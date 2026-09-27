@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
 import { staffReassignStatements } from "./staff-ownership.ts";
 const databaseUrl = process.env.ASTRA_TEST_DATABASE_URL;
 function splitSql(sql) {
@@ -42,7 +43,7 @@ test(
   "atomic management protects scoped offers, imports, history, audit, and concurrent saves",
   { skip: !databaseUrl },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(databaseUrl);
     const db = neon(databaseUrl);
     const schema = "management_" + randomUUID().replaceAll("-", "");
     const query = async (sql, params = []) =>

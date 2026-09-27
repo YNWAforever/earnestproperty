@@ -110,24 +110,37 @@ for (const file of migrationFiles) {
   const query = readFileSync(join(migrationsDir, file), "utf8");
   const statements = splitSqlStatements(query);
 
-  for (let index = 0; index < statements.length; index += 1) {
-    const statement = statements[index];
-    try {
-      await sql.query(statement);
-    } catch (error) {
-      const cause = error instanceof Error ? error.message : String(error);
-      const preview = statement.length > 200 ? `${statement.slice(0, 200)}…` : statement;
-      throw new Error(
-        `Migration "${file}" failed at statement #${index + 1} of ${statements.length} ` +
-          `(not marked as applied): ${cause}\nStatement: ${preview}`,
-        { cause: error },
-      );
-    }
+  const enumAddition = statements.some((statement) =>
+    /^ALTER TYPE\s+\S+\s+ADD VALUE\b/i.test(statement),
+  );
+  if (enumAddition && statements.length !== 1) {
+    throw new Error(
+      `Migration "${file}" adds an enum value alongside other statements; split it into its own migration.`,
+    );
   }
 
-  // Only record the migration after every statement has succeeded, so a
-  // mid-migration failure leaves app_migrations unwritten and the run is retried.
-  await sql.query("INSERT INTO app_migrations (version) VALUES ($1)", [file]);
+  try {
+    if (enumAddition) {
+      // An enum value may not be used by another statement until the ALTER TYPE
+      // transaction commits. This one-statement migration is retryable because
+      // it uses IF NOT EXISTS.
+      await sql.query(statements[0]);
+      await sql.query("INSERT INTO app_migrations (version) VALUES ($1)", [file]);
+    } else {
+      // Keep table locks, schema changes, and the version record in the same
+      // transaction. A failed statement leaves neither partial DDL nor a
+      // misleading app_migrations row behind.
+      await sql.transaction([
+        ...statements.map((statement) => sql.query(statement)),
+        sql.query("INSERT INTO app_migrations (version) VALUES ($1)", [file]),
+      ]);
+    }
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : String(error);
+    throw new Error(`Migration "${file}" failed (rolled back or not marked as applied): ${cause}`, {
+      cause: error,
+    });
+  }
   results.push({ file, status: "applied" });
 }
 

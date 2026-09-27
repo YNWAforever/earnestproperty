@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
 
 function splitSqlStatements(query) {
   const statements = [];
@@ -45,11 +46,7 @@ test(
   "disposable PostgreSQL keeps offerings, groups every canonical number despite conflicting source facts",
   { skip: !databaseUrl },
   async () => {
-    assert.equal(
-      process.env.ASTRA_TEST_BRANCH_ID,
-      "br-quiet-hat-aoxbj2ue",
-      "Approved disposable Neon branch required",
-    );
+    await assertDisposableNeonTestTarget(databaseUrl);
     const db = neon(databaseUrl);
     const schema = `identity_${randomUUID().replaceAll("-", "")}`;
     const migration = readFileSync(

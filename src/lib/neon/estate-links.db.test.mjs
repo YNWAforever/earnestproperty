@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
 function splitSqlStatements(query) {
   const statements = [];
   let current = "",
@@ -43,7 +44,7 @@ test(
   "estate identity backfill and future intake link exact named estates only",
   { skip: !process.env.ASTRA_TEST_DATABASE_URL },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     const db = neon(process.env.ASTRA_TEST_DATABASE_URL),
       schema = "estate_link_" + randomUUID().replaceAll("-", "");
     const run = async (q, params = []) =>

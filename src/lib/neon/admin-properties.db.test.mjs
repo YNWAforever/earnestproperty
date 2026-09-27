@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
 import {
   buildAdminPropertyGroupsQuery,
   buildAdminManagedPropertyQuery,
@@ -15,7 +16,7 @@ test(
   "grouped reads rank globally, page groups, retain history and deny sibling disclosure",
   { skip: !url },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(url);
     const db = neon(url),
       schema = `admin_groups_${randomUUID().replaceAll("-", "")}`;
     const run = async (statement, params = []) => {

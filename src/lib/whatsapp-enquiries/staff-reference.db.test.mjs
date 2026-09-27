@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import {
   saveStaffReference,
   retireStaffReference,
@@ -46,7 +47,7 @@ function splitSqlStatements(query) {
 
 const url = process.env.ASTRA_TEST_DATABASE_URL;
 test("Staff reference actual migration and immutable intake", { skip: !url }, async (t) => {
-  assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+  await assertDisposableNeonTestTarget(url);
   const db = neon(url),
     schema = "staff_ref_" + randomUUID().replaceAll("-", "");
   const transaction = async (statements) =>

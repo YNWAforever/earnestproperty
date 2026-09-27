@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import ts from "typescript";
@@ -37,6 +38,9 @@ async function importPublicDataServerWithInjectedQuery(query) {
       .replace('import "@tanstack/react-start/server-only";', "")
       .replace('from "./db.server"', `from "${dbUrl}"`),
     "src/lib/neon",
+  ).replaceAll(
+    "../mls/public-source-metadata.mjs",
+    pathToFileURL(join(root, "src/lib/mls/public-source-metadata.mjs")).href,
   );
 
   return import(dataUrl(executable));
@@ -70,7 +74,7 @@ test(
       );
       await query(`CREATE TABLE properties(id text PRIMARY KEY,listing_no text,canonical_property_no text,title_zh text,
    deal_type deal_type,price numeric,rent numeric,saleable_area numeric,bedrooms integer,bathrooms integer,
-   features text[],images text[],video_url text,estate_id text,district_slug text,address text,status text,
+   features text[],images text[],video_url text,seo_title text,seo_description text,estate_id text,district_slug text,address text,status text,
    featured boolean,last_seen_at timestamptz,created_at timestamptz,updated_at timestamptz,source_site text,
    title_en text,gross_area numeric,floor text,orientation text,management_fee numeric,description text,
    floorplan_url text,legacy_detail_id text,legacy_property_no text,legacy_url text,source_url text,
