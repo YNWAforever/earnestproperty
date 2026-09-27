@@ -23,15 +23,15 @@ Statuses: `open`, `reproduced`, `fixed-local`, `verified-staging`, `verified-pro
 | F13     | Runtime mode and policy UI disagree                        | T10  | fixed-local | Effective policy summary and separate draft editor; runtime capabilities use T04 readiness; staging pending                                                                                    |
 | F14     | Single link creation can become generic enquiry            | T08  | fixed-local | New wizard requires a current offering, route and placement before preview; staging browser pending                                                                                            |
 | F15     | Link list is capped and lacks management                   | T07  | fixed-local | Keyset page 25/50/100 and 650-link synthetic traversal; versioned export snapshot; management UI consumes paged service; staging pending                                                       |
-| F16     | Bulk API lacks UI and retry identity                       | T06  | fixed-local | Durable batch/chunk operation SQL, canonical placement locks, 60-row 50+10 PGlite fixture; admin UI consumes service; Neon concurrency/staging pending                                         |
+| F16     | Bulk API lacks UI and retry identity                       | T06  | fixed-local | Durable chunks, placement locks and admin UI; PGlite and two-client Neon 50+10 replay/race passed; browser pending                                         |
 | F17     | Expired reference may block disable                        | T07  | fixed-local | PGlite expired reference: disable succeeds, stale version conflicts, re-enable remains blocked                                                                                                 |
 | F18     | Shared redirect capacity bucket                            | T12  | fixed-local | 32 fixed global shards plus registered-link bucket, contextual untracked fallback and bounded retention; 92 WhatsApp tests including synthetic capacity and PGlite prune; staging load pending |
 | F19     | Active member count masks account readiness                | T09  | fixed-local | Team DTO separates active, invitation, verified email, identity, role/branch, Inbox and phone; local tests passed; staging pending                                                             |
 | F20     | Invitation and first-login loop incomplete                 | T09  | fixed-local | Manual share and copy feedback, expiry, verified-before-bind and staff shell/checklist; staging browser pending                                                                                |
 | F21     | Health misses eligible staff and due work                  | T10  | fixed-local | Scoped staff denominator, due/lease alarm, policy version and schema guard; synthetic tests; staging pending                                                                                   |
 | F22     | Missing agent/link/mapping/content tasks lack entry points | T08  | fixed-local | Listings selection to bulk wizard, property agent checks, staff mapping deep link and result recovery; T11 content review prompts added; staging pending                                       |
-| F23     | External response latency needs measured diagnosis         | T12  | blocked     | Neon region and DB-only count/page plans measured; no isolated app, HK warm/cold, SSR trace or comparable 30%/300 ms evidence                                                                                |
-| F24     | Oversized thumbnails and serial bulk reads                 | T12  | blocked     | Local 128/256 px variants and gallery sizes, T06 set-based batch; remote property thumbnail transfer and Neon 50-row timing still unmeasured                                                   |
+| F23     | External response latency needs measured diagnosis         | T12  | blocked     | DB count/page plans and Preview detail median TTFB 3.408 s measured; HK warm/cold, SSR and comparable target pending                                                                                |
+| F24     | Oversized thumbnails and serial bulk reads                 | T12  | blocked     | Local 128/256 px variants and set-based batch; Neon 50-row 256/189 ms; remote photo transfer pending                                                   |
 
 ## T00 baseline
 
@@ -144,7 +144,7 @@ Each F row above names its owning task; the commit below supplies that row's imp
 | T10  | `33f01e6`                          | Runtime health, migration registry and CI wiring                   |
 | T11  | `7b6d70f`                          | Scoped public copy and content review prompts                      |
 | T12  | `b307dd8`                          | Redirect capacity, retention and local image variants              |
-| T13  | `551e1b3`, `3a7650b`, `16b3d0a`, `82e62d9` | Release evidence, staging schema, Preview isolation, query plans and rollback |
+| T13  | `551e1b3`, `3a7650b`, `16b3d0a`, `82e62d9`, `ef798b6`, `bc15e26`, `df1ad05`, `51c889a`, `c97a6c3` | Release evidence, staging schema, Preview isolation, real Neon acceptance, query plans and rollback |
 
 All 24 findings have an owning task. F11 remains blocked on the approved template and device-level evidence; F23 and F24 remain blocked on comparable staging measurements and remote property image transfer. The `fixed-local` rows still require the stated staging checks before any production claim. No live message was sent and no external delivery was verified.
 
