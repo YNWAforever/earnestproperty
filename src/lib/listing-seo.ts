@@ -6,7 +6,11 @@ import {
   truncateToWidth,
 } from "@/content/seo-budget.js";
 import { formatArea, formatManDisplay, formatHkd, formatPsf, sanitizeListingText } from "./format";
-import { activePropertyOfferings, publicPropertyNo } from "./property-public";
+import {
+  activePropertyOfferings,
+  publicPropertyNo,
+  stripUnsupportedVrClaim,
+} from "./property-public";
 
 /**
  * Deterministic SEO 標題 / SEO 描述 for a listing detail page.
@@ -79,6 +83,7 @@ export type ListingSeoInput = {
   title_zh?: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
+  video_url?: string | null;
   description?: string | null;
   deal_type?: string | null;
   price?: number | null;
@@ -141,7 +146,7 @@ function districtLabel(input: ListingSeoInput): string | null {
  * The deal state and the listing number are both stated elsewhere in the copy
  * from real columns, so they are stripped rather than reworded.
  */
-function cleanSourceTitle(value: unknown): string | null {
+function cleanSourceTitle(value: unknown, videoUrl?: string | null): string | null {
   const raw = text(value);
   if (!raw) return null;
   const cleaned = raw
@@ -149,7 +154,7 @@ function cleanSourceTitle(value: unknown): string | null {
     .replace(/\s*[#＃]\S+\s*$/, "")
     .replace(/\s+(售盤|租盤|放盤)$/, "")
     .trim();
-  return sanitizeListingText(cleaned);
+  return sanitizeListingText(stripUnsupportedVrClaim(cleaned, videoUrl));
 }
 
 /**
@@ -278,11 +283,11 @@ export function listingSeoTitle(input: ListingSeoInput): string {
   // can be 4x the SERP budget -- and a truncated-by-Google title is exactly
   // what this module exists to prevent, author or generator.
   if (authoredTitle) {
-    return `${truncateToWidth(authoredTitle, TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX))}${BRAND_SUFFIX}`;
+    return `${truncateToWidth(stripUnsupportedVrClaim(authoredTitle, input.video_url), TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX))}${BRAND_SUFFIX}`;
   }
 
   const estate = text(input.estates?.name_zh);
-  const sourceTitle = cleanSourceTitle(input.title_zh);
+  const sourceTitle = cleanSourceTitle(input.title_zh, input.video_url);
   const district = districtLabel(input);
   const head = estate ?? sourceTitle ?? (district ? `${district}放盤` : "放盤");
 
@@ -338,10 +343,14 @@ export function listingSeoTitle(input: ListingSeoInput): string {
  */
 export function listingSeoDescription(input: ListingSeoInput): string {
   const authored = text(input.seo_description);
-  if (authored) return truncateToWidth(authored, DESCRIPTION_MAX_UNITS);
+  if (authored)
+    return truncateToWidth(
+      stripUnsupportedVrClaim(authored, input.video_url),
+      DESCRIPTION_MAX_UNITS,
+    );
 
   const estate = text(input.estates?.name_zh);
-  const sourceTitle = cleanSourceTitle(input.title_zh);
+  const sourceTitle = cleanSourceTitle(input.title_zh, input.video_url);
   // Capped: with no estate to name, the subject is the source title, and a
   // 40-glyph marketing headline ("…連天台花園及雙車位全屋豪華裝修即買即住")
   // consumed the whole snippet and pushed the area and the price out of it.

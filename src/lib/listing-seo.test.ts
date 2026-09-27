@@ -460,3 +460,18 @@ describe("listingSearchSeo", () => {
     expect(two.description).toContain("第 2 頁");
   });
 });
+
+test("SEO and shared title agree on VR claims only with a supported tour", () => {
+  const withoutTour = {
+    ...bareUnit,
+    title_zh: "星堤 VR實景 3房",
+    seo_title: "星堤 VR 實景放盤",
+    seo_description: "星堤 VR實景，歡迎預約",
+    video_url: "https://youtu.be/abcdefghijk",
+  };
+  expect(listingSeoTitle(withoutTour)).not.toContain("VR");
+  expect(listingSeoDescription(withoutTour)).not.toContain("VR");
+  const tour = { ...withoutTour, video_url: "https://my.matterport.com/show/?m=abc123" };
+  expect(listingSeoTitle(tour)).toContain("VR");
+  expect(listingSeoDescription(tour)).toContain("VR");
+});
