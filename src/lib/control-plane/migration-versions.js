@@ -99,6 +99,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260927120000_named_inbox_folders.sql",
   "20260927130000_staff_notification_test_evidence.sql",
   "20260927140000_whatsapp_link_reference_scope.sql",
+  "20260927150000_whatsapp_link_batch_mapping_guard.sql",
 ]);
 
 /**

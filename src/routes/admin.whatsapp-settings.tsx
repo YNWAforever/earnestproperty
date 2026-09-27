@@ -47,6 +47,14 @@ function WhatsappSettings() {
           自動分派仍需核實 WOZTELL
           執行／查證介面及人工改派政策。儲存映射不會執行分派；試送只有明確提交才會進入專用工作佇列。
         </p>
+        {search.draftId ? (
+          <a
+            className="inline-block text-sm underline"
+            href={"/admin/whatsapp-links?draftId=" + search.draftId}
+          >
+            返回連結草稿，重新預覽核對
+          </a>
+        ) : null}
         {error ? <p role="alert">{error}</p> : null}
         {agents.length ? (
           <StaffMappingWizard

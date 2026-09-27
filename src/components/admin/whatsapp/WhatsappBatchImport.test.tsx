@@ -19,6 +19,7 @@ test("the existing wizard exposes paste-table import before preview", () => {
     createElement(WhatsappLinkWizard, {
       seed: [],
       agents: [],
+      actorScope: "actor-test",
       onCreated: () => {},
     }),
   );

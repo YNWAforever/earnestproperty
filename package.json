@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:admin-properties:db": "node --test src/lib/neon/admin-properties.db.test.mjs src/lib/neon/admin-property-management.db.test.mjs",
-    "test:admin-properties": "node --test src/lib/neon/public-inventory-counts.db.test.mjs src/lib/neon/admin-properties.test.mjs src/lib/neon/admin-properties.read.test.mjs src/lib/neon/admin-property-management.test.mjs src/lib/neon/admin-property-bulk.test.mjs && bun test src/lib/admin/property-management-ui.test.ts src/lib/admin/property-bulk-client.test.ts src/lib/admin/whatsapp-link-batch-client.test.ts src/lib/admin/whatsapp-link-export.test.ts src/components/admin/whatsapp/WhatsappBatchImport.test.tsx",
+    "test:admin-properties": "node --test src/lib/neon/public-inventory-counts.db.test.mjs src/lib/neon/admin-properties.test.mjs src/lib/neon/admin-properties.read.test.mjs src/lib/neon/admin-property-management.test.mjs src/lib/neon/admin-property-bulk.test.mjs && bun test src/lib/admin/property-management-ui.test.ts src/lib/admin/property-bulk-client.test.ts src/lib/admin/whatsapp-link-batch-client.test.ts src/lib/admin/whatsapp-batch-draft.test.ts src/lib/admin/whatsapp-link-export.test.ts src/components/admin/whatsapp/WhatsappBatchImport.test.tsx",
     "test:format": "bun test src/lib/format.test.ts",
     "test:layout": "bun test src/components/layout/layout.test.tsx",
     "test:estate-grid": "bun test src/components/site/EstateGroupGrid.test.tsx",

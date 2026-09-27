@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import {
   reconcileLinkBatch,
   runWhatsappLinkBatch,
+  batchResultCsv,
+  knownFailedBatchRows,
   type LinkBatchProgress,
 } from "./whatsapp-link-batch-client.ts";
 import type { BatchRowDraft } from "../whatsapp-enquiries/link-batch-policy.ts";
@@ -146,4 +148,50 @@ test("persist an uncertain marker before a request can commit and the tab can cl
 test("an empty lookup cannot clear an in-flight submission", () => {
   const pending = { ...initial(), uncertain: true };
   expect(reconcileLinkBatch(pending, []).uncertain).toBe(true);
+});
+
+test("results export only known successful links and failed-row repair excludes unknown work", () => {
+  const progress = initial();
+  progress.rows = [{ ...rows[0], placementId: "=unsafe" }, ...rows.slice(1)];
+  progress.completed = [
+    {
+      batchId: progress.batchId,
+      chunkId: progress.chunkIds[0],
+      state: "rejected",
+      rows: [
+        {
+          rowKey: rows[0].rowKey,
+          outcome: "created",
+          code: "=unsafe",
+          linkId: id(300),
+          version: 1,
+          reasonCode: null,
+        },
+        {
+          rowKey: rows[1].rowKey,
+          outcome: "blocked",
+          code: null,
+          linkId: null,
+          version: null,
+          reasonCode: "WA_LINK_STAFF_NOT_READY",
+        },
+        {
+          rowKey: rows[2].rowKey,
+          outcome: "failed",
+          code: null,
+          linkId: null,
+          version: null,
+          reasonCode: "CHUNK_NOT_COMMITTED",
+        },
+      ],
+    },
+  ];
+  progress.nextChunk = 1;
+  expect(knownFailedBatchRows(progress).map((row) => row.rowKey)).toEqual([
+    rows[1].rowKey,
+    rows[2].rowKey,
+  ]);
+  expect(batchResultCsv(progress, "website")).toContain("'=unsafe");
+  expect(batchResultCsv(progress, "youtube")).not.toContain("unsafe");
+  expect(knownFailedBatchRows({ ...progress, uncertain: true })).toEqual([]);
 });

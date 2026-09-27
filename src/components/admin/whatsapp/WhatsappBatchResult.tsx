@@ -1,8 +1,41 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import type { LinkBatchProgress } from "@/lib/admin/whatsapp-link-batch-client";
-import { batchRowsOf } from "@/lib/admin/whatsapp-link-batch-client";
+import { batchResultCsv, batchRowsOf } from "@/lib/admin/whatsapp-link-batch-client";
 
 export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress }) {
+  const [copyStatus, setCopyStatus] = useState("");
   const results = batchRowsOf(progress);
+  const successful = results.filter(
+    (row) => (row.outcome === "created" || row.outcome === "reused") && row.code,
+  );
+  const byKey = new Map(progress.rows.map((row) => [row.rowKey, row]));
+  const sources = [
+    ...new Set(
+      successful
+        .map((result) => byKey.get(result.rowKey)?.input.placementSource)
+        .filter((source): source is NonNullable<typeof source> => Boolean(source)),
+    ),
+  ];
+  async function copyAll() {
+    try {
+      await navigator.clipboard.writeText(
+        successful.map((row) => `${window.location.origin}/w/${row.code}`).join("\n"),
+      );
+      setCopyStatus("已複製全部已確認連結。");
+    } catch {
+      setCopyStatus("複製失敗，請逐行選取連結。");
+    }
+  }
+  function download(source: (typeof sources)[number]) {
+    const blob = new Blob([batchResultCsv(progress, source)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `whatsapp-links-${source}-${progress.batchId}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
   const counts = {
     created: results.filter((row) => row.outcome === "created").length,
     reused: results.filter((row) => row.outcome === "reused").length,
@@ -23,6 +56,23 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
       {progress.uncertain ? (
         <p role="alert" className="text-sm text-amber-800">
           連線中斷，結果未確認。請先查回伺服器紀錄，再繼續同一批次；不要建立新批次。
+        </p>
+      ) : null}
+      {successful.length ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void copyAll()}>
+            複製全部已確認連結
+          </Button>
+          {sources.map((source) => (
+            <Button key={source} variant="outline" onClick={() => download(source)}>
+              匯出 {source} CSV
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {copyStatus ? (
+        <p role="status" className="text-sm">
+          {copyStatus}
         </p>
       ) : null}
       <ul className="max-h-80 space-y-2 overflow-auto text-sm">

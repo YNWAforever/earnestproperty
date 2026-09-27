@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { safeCsvCell } from "./csv-safe-cell.ts";
+export { safeCsvCell } from "./csv-safe-cell.ts";
 import { linkPageInput } from "../neon/whatsapp-link-management.types.ts";
 export const exportInput = z
   .object({
@@ -23,14 +25,6 @@ export const linkCsvColumns = [
   "投放核實時間",
 ] as const;
 
-/** Text cells are kept literal in spreadsheet apps; numeric counters remain numeric. */
-export function safeCsvCell(value: unknown, numeric = false): string {
-  const raw = value == null ? "" : String(value);
-  const first = raw.charCodeAt(0);
-  const startsWithControl = Number.isFinite(first) && (first <= 31 || first === 127);
-  const escaped = !numeric && (/^[\s]*[=+\-@]/u.test(raw) || startsWithControl) ? `'${raw}` : raw;
-  return `"${escaped.replaceAll('"', '""')}"`;
-}
 export type LinkCsvRow = {
   publicListingNo: string | null;
   dealType: string | null;

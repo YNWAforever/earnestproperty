@@ -13,12 +13,19 @@ import { expandBatchDraft, type ImportSource } from "@/lib/whatsapp-enquiries/li
 import type { LinkOfferSelection } from "@/lib/admin/whatsapp-link-selection";
 import {
   linkBatchProgressKey,
+  knownFailedBatchRows,
   reconcileLinkBatch,
   runWhatsappLinkBatch,
   type LinkBatchProgress,
 } from "@/lib/admin/whatsapp-link-batch-client";
 import { WhatsappBatchResult } from "./WhatsappBatchResult";
 import { WhatsappBatchImport } from "./WhatsappBatchImport";
+import {
+  clearDraft,
+  loadDraft,
+  prepareEligibleSubset,
+  saveDraft,
+} from "@/lib/admin/whatsapp-batch-draft";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
 type Source = BatchRowDraft["input"]["placementSource"];
@@ -35,17 +42,26 @@ const api = {
 export function WhatsappLinkWizard({
   seed,
   agents,
+  actorScope,
   onCreated,
   seedScope,
   onSeedConsumed,
 }: {
   seed: LinkOfferSelection[];
   agents: Staff[];
+  actorScope: string;
   onCreated: () => void;
   seedScope?: string;
   onSeedConsumed?: () => void;
 }) {
   const [step, setStep] = useState(1);
+  const [draftId, setDraftId] = useState<string>(() => crypto.randomUUID());
+  const [draftReady, setDraftReady] = useState(false);
+  const [repairRows, setRepairRows] = useState<BatchRowDraft[] | null>(null);
+  const [previewDirty, setPreviewDirty] = useState(false);
+  const [selectedEligible, setSelectedEligible] = useState<string[]>([]);
+  const [confirmSubset, setConfirmSubset] = useState(false);
+  const [deferredCount, setDeferredCount] = useState(0);
   const [mode, setMode] = useState<"sales" | "reception">("sales");
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<LinkOfferSelection[]>([]);
@@ -78,21 +94,46 @@ export function WhatsappLinkWizard({
   }, [seed]);
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(linkBatchProgressKey);
+      const raw = sessionStorage.getItem(linkBatchProgressKey(actorScope));
       if (!raw) return;
       const stored = JSON.parse(raw) as LinkBatchProgress;
       if (stored.batchId && Array.isArray(stored.rows) && Array.isArray(stored.chunkIds)) {
         setProgress(stored);
+        setRepairRows(stored.rows);
+        setSelectedEligible(
+          stored.preview.rows.filter((row) => row.decision !== "blocked").map((row) => row.rowKey),
+        );
         setStep(
           stored.nextChunk === 0 && !stored.uncertain && stored.completed.length === 0 ? 4 : 5,
         );
       }
     } catch {
-      sessionStorage.removeItem(linkBatchProgressKey);
+      sessionStorage.removeItem(linkBatchProgressKey(actorScope));
     }
-  }, []);
+  }, [actorScope]);
+  useEffect(() => {
+    try {
+      const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
+      const pointer = localStorage.getItem(pointerKey);
+      if (pointer) {
+        const stored = loadDraft(actorScope, pointer);
+        if (stored?.rows.length) {
+          setDraftId(stored.draftId);
+          setImportedRows(stored.rows);
+          setMode("sales");
+          setSelected([]);
+          setVerified(false);
+          if (!sessionStorage.getItem(linkBatchProgressKey(actorScope))) setStep(2);
+        }
+      }
+    } catch {
+      // A disabled or corrupt local store must not make the editor unusable.
+    } finally {
+      setDraftReady(true);
+    }
+  }, [actorScope]);
   const save = (next: LinkBatchProgress) => {
-    sessionStorage.setItem(linkBatchProgressKey, JSON.stringify(next));
+    sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(next));
     setProgress(next);
   };
   const expansion = useMemo(
@@ -156,6 +197,18 @@ export function WhatsappLinkWizard({
     importedRows,
     expansion,
   ]);
+  useEffect(() => {
+    if (!draftReady || progress || !rows.length) return;
+    try {
+      saveDraft(actorScope, { draftId, rows });
+      localStorage.setItem(
+        `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
+        draftId,
+      );
+    } catch {
+      // The browser may disallow local storage; preview/commit still require server validation.
+    }
+  }, [actorScope, draftId, draftReady, progress, rows]);
   // rowKey must remain stable between dry-run and commit; preview stores this immutable copy.
   async function run(task: () => Promise<void>) {
     setBusy(true);
@@ -169,7 +222,8 @@ export function WhatsappLinkWizard({
     }
   }
   async function dryRun() {
-    if (mode === "sales" && !selected.length) throw new Error("請先選擇至少一筆樓盤租售。");
+    if (mode === "sales" && !selected.length && !importedRows)
+      throw new Error("請先選擇至少一筆樓盤租售。");
     if (rows.length > 1000 || (expansion?.rowCount ?? 0) > 1000)
       throw new Error("最多 1000 筆，請縮小篩選。");
     if (expansion?.errors.length) throw new Error("有投放位置或來源錯誤，請在第二步逐行修正。");
@@ -193,21 +247,134 @@ export function WhatsappLinkWizard({
       uncertain: false,
     };
     save(next);
+    setRepairRows(rows);
+    setPreviewDirty(false);
+    setSelectedEligible(
+      preview.rows.filter((row) => row.decision !== "blocked").map((row) => row.rowKey),
+    );
+    setConfirmSubset(false);
     setIncomingPending(false);
     onSeedConsumed?.();
     setStep(4);
   }
+  async function previewEdited(nextRows: BatchRowDraft[]) {
+    if (!canReplace || progress?.nextChunk) throw new Error("請先查回現有批次結果。");
+    const batchId = crypto.randomUUID();
+    const preview = await api.preview({ batchId, rows: nextRows });
+    const next: LinkBatchProgress = {
+      batchId,
+      rows: nextRows,
+      preview,
+      chunkIds: Array.from({ length: Math.ceil(nextRows.length / 50) }, () => crypto.randomUUID()),
+      nextChunk: 0,
+      completed: [],
+      uncertain: false,
+    };
+    save(next);
+    setRepairRows(nextRows);
+    setPreviewDirty(false);
+    setSelectedEligible(
+      preview.rows.filter((row) => row.decision !== "blocked").map((row) => row.rowKey),
+    );
+    setConfirmSubset(false);
+    setStep(4);
+  }
+  function patchRepairRow(
+    rowKey: string,
+    patch: Partial<BatchRowDraft["input"]> & { placementId?: string },
+  ) {
+    setRepairRows((current) =>
+      (current ?? progress?.rows ?? []).map((row) => {
+        if (row.rowKey !== rowKey) return row;
+        const { placementId: editedPlacementId, ...inputPatch } = patch;
+        const placementId = editedPlacementId ?? row.placementId;
+        const source = patch.placementSource ?? row.input.placementSource;
+        return {
+          ...row,
+          placementId,
+          input: {
+            ...row.input,
+            ...inputPatch,
+            placementSource: source,
+            externalListingId: source === "28hse" ? placementId : null,
+            videoId: source === "youtube" ? placementId : null,
+            referenceMappingId:
+              patch.requestedStaffId !== undefined &&
+              patch.requestedStaffId !== row.input.requestedStaffId
+                ? null
+                : row.input.referenceMappingId,
+            placementVerified:
+              patch.placementId !== undefined || patch.placementSource !== undefined
+                ? false
+                : (patch.placementVerified ?? row.input.placementVerified),
+          },
+        };
+      }),
+    );
+    setPreviewDirty(true);
+  }
+  async function previewSubset() {
+    if (!progress || previewDirty || !confirmSubset)
+      throw new Error("請先核對選取及重新預覽修正。");
+    const subset = prepareEligibleSubset(progress.rows, progress.preview, selectedEligible);
+    if (subset.rows.length === progress.rows.length) throw new Error("所有行均合格，請直接提交。");
+    const excluded = progress.rows.filter((row) => subset.excludedRowKeys.includes(row.rowKey));
+    setDeferredCount(excluded.length);
+    saveDraft(actorScope, { draftId, rows: excluded });
+    localStorage.setItem(
+      `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
+      draftId,
+    );
+    await previewEdited(subset.rows);
+  }
+  function recoverEditableRows() {
+    const previous = loadDraft(actorScope, draftId)?.rows ?? [];
+    const current = repairRows ?? progress?.rows ?? [];
+    const byKey = new Map(previous.map((row) => [row.rowKey, row]));
+    for (const row of current) byKey.set(row.rowKey, row);
+    return [...byKey.values()];
+  }
+  function returnToSettings() {
+    if (!progress || !canReplace) return;
+    const editable = recoverEditableRows();
+    saveDraft(actorScope, { draftId, rows: editable });
+    localStorage.setItem(
+      `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
+      draftId,
+    );
+    sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+    const staff = editable.find((row) => row.input.requestedStaffId)?.input.requestedStaffId;
+    const params = new URLSearchParams({ draftId });
+    if (staff) params.set("staffId", staff);
+    window.location.assign(`/admin/whatsapp-settings?${params.toString()}`);
+  }
+  function modifySettings() {
+    if (!progress || !canReplace) return;
+    const editable = recoverEditableRows();
+    setImportedRows(editable);
+    setMode("sales");
+    setVerified(editable.every((row) => row.input.placementVerified));
+    sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+    setProgress(null);
+    setPreviewDirty(false);
+    setStep(2);
+  }
   async function submit() {
     if (!progress) return;
+    if (previewDirty) throw new Error("行內內容已更改，請先重新預覽。");
     let current = progress;
     if (current.uncertain) {
       current = reconcileLinkBatch(current, (await api.read(current.batchId)).operations);
       save(current);
+      if (current.uncertain) throw new Error("提交結果仍未確認；請稍後查回伺服器結果，不要重新送出。");
     }
-    if (Date.parse(current.preview.expiresAt) <= Date.now() + 30_000) {
+    if (current.nextChunk === 0 || Date.parse(current.preview.expiresAt) <= Date.now() + 30_000) {
       const refreshed = await api.preview({ batchId: current.batchId, rows: current.rows });
       current = { ...current, preview: refreshed };
       save(current);
+      setSelectedEligible(
+        refreshed.rows.filter((row) => row.decision !== "blocked").map((row) => row.rowKey),
+      );
       if (refreshed.counts.blocked) {
         setStep(4);
         throw new Error("資料已改變，請核對新的預覽阻止原因。");
@@ -217,7 +384,35 @@ export function WhatsappLinkWizard({
     const result = await runWhatsappLinkBatch(current, api, save);
     save(result);
     setStep(5);
-    onCreated();
+    if (result.completed.some((chunk) => chunk.state === "committed")) onCreated();
+    if (
+      !result.uncertain &&
+      (result.nextChunk >= result.chunkIds.length ||
+        result.completed.some((chunk) => chunk.state === "rejected"))
+    ) {
+      const successful = new Set(
+        result.completed.flatMap((chunk) =>
+          chunk.rows
+            .filter((row) => row.outcome === "created" || row.outcome === "reused")
+            .map((row) => row.rowKey),
+        ),
+      );
+      const existing = loadDraft(actorScope, draftId)?.rows ?? [];
+      const unfinished = [
+        ...existing.filter((row) => !successful.has(row.rowKey)),
+        ...result.rows.filter(
+          (row) =>
+            !successful.has(row.rowKey) && !existing.some((item) => item.rowKey === row.rowKey),
+        ),
+      ];
+      if (unfinished.length) saveDraft(actorScope, { draftId, rows: unfinished });
+      else {
+        clearDraft(actorScope, draftId);
+        localStorage.removeItem(
+          `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
+        );
+      }
+    }
   }
   async function recover() {
     if (!progress) return;
@@ -243,7 +438,7 @@ export function WhatsappLinkWizard({
   const conflict = incomingPending && seed.length > 0 && progress !== null;
   function useIncoming() {
     if (!canReplace || busy) return;
-    sessionStorage.removeItem(linkBatchProgressKey);
+    sessionStorage.removeItem(linkBatchProgressKey(actorScope));
     setProgress(null);
     setSelected(seed);
     setMode("sales");
@@ -323,7 +518,7 @@ export function WhatsappLinkWizard({
               setRouting("reception");
               setVerified(false);
               setProgress(null);
-              sessionStorage.removeItem(linkBatchProgressKey);
+              sessionStorage.removeItem(linkBatchProgressKey(actorScope));
               setIncomingPending(false);
               onSeedConsumed?.();
               setStep(2);
@@ -409,6 +604,8 @@ export function WhatsappLinkWizard({
                   setImportedRows(null);
                   setImportSummary(null);
                   setSelected([]);
+                  setImportedRows(null);
+                  setImportSummary(null);
                   setStep(1);
                 }}
               >
@@ -634,36 +831,167 @@ export function WhatsappLinkWizard({
             {progress.preview.counts.blocked}；預覽有效至{" "}
             {new Date(progress.preview.expiresAt).toLocaleString("zh-HK")}
           </p>
-          <ul className="max-h-72 space-y-1 overflow-auto text-sm">
-            {progress.preview.rows.map((row, index) => (
-              <li key={row.rowKey} className="rounded border p-2">
-                {progress.rows[index]?.input.publicListingNo ?? "一般查詢"} ·{" "}
-                {progress.rows[index]?.input.dealType ?? "—"} · {row.decision}
-                {row.reasons.length
-                  ? `：${row.reasons.map((reason) => reason.message).join("；")}`
-                  : ""}
-              </li>
-            ))}
+          {previewDirty ? (
+            <p role="alert" className="text-sm text-amber-800">
+              已修改行內資料；原有預覽已失效，須重新預覽才可提交。
+            </p>
+          ) : null}
+          {deferredCount ? (
+            <p className="text-sm">另有 {deferredCount} 行保留在草稿待修正。</p>
+          ) : null}
+          <ul className="max-h-96 space-y-2 overflow-auto text-sm">
+            {progress.preview.rows.map((decision) => {
+              const row = (repairRows ?? progress.rows).find(
+                (item) => item.rowKey === decision.rowKey,
+              );
+              if (!row) return null;
+              return (
+                <li key={decision.rowKey} className="space-y-2 rounded border p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <strong>
+                      {row.input.placementSource} · {row.input.publicListingNo ?? "一般查詢"} ·{" "}
+                      {row.input.dealType ?? "—"}
+                    </strong>
+                    <span>{decision.decision}</span>
+                    {decision.decision !== "blocked" ? (
+                      <label className="inline-flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={selectedEligible.includes(row.rowKey)}
+                          onChange={(event) =>
+                            setSelectedEligible((current) =>
+                              event.target.checked
+                                ? [...current, row.rowKey]
+                                : current.filter((key) => key !== row.rowKey),
+                            )
+                          }
+                        />
+                        合格子集
+                      </label>
+                    ) : null}
+                  </div>
+                  <label className="block">
+                    投放 ID
+                    <Input
+                      value={row.placementId}
+                      onChange={(event) =>
+                        patchRepairRow(row.rowKey, { placementId: event.target.value })
+                      }
+                    />
+                  </label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <label>
+                      來源
+                      <select
+                        className={control}
+                        value={row.input.placementSource}
+                        onChange={(event) =>
+                          patchRepairRow(row.rowKey, {
+                            placementSource: event.target.value as Source,
+                          })
+                        }
+                      >
+                        <option value="website">網站</option>
+                        <option value="28hse">28hse</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="other">其他</option>
+                      </select>
+                    </label>
+                    <label>
+                      查詢路線
+                      <select
+                        className={control}
+                        value={row.input.requestedStaffId ?? ""}
+                        onChange={(event) =>
+                          patchRepairRow(row.rowKey, {
+                            requestedStaffId: event.target.value || null,
+                          })
+                        }
+                      >
+                        <option value="">總台／不指定同事</option>
+                        {agents
+                          .filter((agent) => agent.active !== false)
+                          .map((agent) => (
+                            <option key={agent.id} value={agent.id}>
+                              {agent.name ?? agent.email ?? agent.id}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={row.input.placementVerified === true}
+                      onChange={(event) =>
+                        patchRepairRow(row.rowKey, {
+                          placementVerified: event.target.checked,
+                        })
+                      }
+                    />
+                    已核對此行投放位置
+                  </label>
+                  {row.input.referenceMappingId ? (
+                    <p className="text-xs">
+                      同事來源映射已選；更改路線會清除映射，請重新匯入或核對。
+                    </p>
+                  ) : null}
+                  {decision.reasons.length ? (
+                    <p className="text-destructive">
+                      {decision.reasons.map((reason) => reason.message).join("；")}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              disabled={busy || !canReplace}
-              onClick={() => {
-                sessionStorage.removeItem(linkBatchProgressKey);
-                setProgress(null);
-                setStep(1);
-              }}
-            >
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" disabled={busy || !canReplace} onClick={modifySettings}>
               修改設定
             </Button>
             <Button
-              disabled={busy || progress.preview.counts.blocked > 0}
-              onClick={() => void run(submit)}
+              variant="outline"
+              disabled={busy || !canReplace}
+              onClick={() => void run(async () => returnToSettings())}
             >
-              確認建立 {progress.rows.length} 筆
+              修正 Haze 設定
+            </Button>
+            <Button
+              variant="outline"
+              disabled={busy || !previewDirty}
+              onClick={() => void run(() => previewEdited(repairRows ?? progress.rows))}
+            >
+              重新預覽修正
             </Button>
           </div>
+          {progress.preview.counts.blocked || selectedEligible.length < progress.rows.length ? (
+            <div className="space-y-2 rounded border p-3">
+              <p>
+                合格 {selectedEligible.length} 行；排除{" "}
+                {progress.rows.length - selectedEligible.length} 行。排除行保留草稿。
+              </p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={confirmSubset}
+                  onChange={(event) => setConfirmSubset(event.target.checked)}
+                />
+                我已核對並確認只處理所選合格行
+              </label>
+              <Button
+                disabled={busy || previewDirty || !confirmSubset || !selectedEligible.length}
+                onClick={() => void run(previewSubset)}
+              >
+                只提交已核對的合格行：先重新預覽
+              </Button>
+            </div>
+          ) : null}
+          <Button
+            disabled={busy || previewDirty || progress.preview.counts.blocked > 0}
+            onClick={() => void run(submit)}
+          >
+            確認建立 {progress.rows.length} 筆
+          </Button>
         </div>
       ) : null}
       {step === 5 && progress ? (
@@ -681,12 +1009,29 @@ export function WhatsappLinkWizard({
                 繼續同一批次
               </Button>
             ) : null}
+            {canReplace && knownFailedBatchRows(progress).length ? (
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  const failed = knownFailedBatchRows(progress);
+                  setImportedRows(failed);
+                  setSelected([]);
+                  setVerified(false);
+                  sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+                  setProgress(null);
+                  setStep(2);
+                }}
+              >
+                只修正已知失敗的 {knownFailedBatchRows(progress).length} 行
+              </Button>
+            ) : null}
             {canReplace && !conflict ? (
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={() => {
-                  sessionStorage.removeItem(linkBatchProgressKey);
+                  sessionStorage.removeItem(linkBatchProgressKey(actorScope));
                   setProgress(null);
                   setSelected([]);
                   setStep(1);

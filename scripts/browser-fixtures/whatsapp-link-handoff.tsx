@@ -9,6 +9,8 @@ function Harness() {
   useEffect(() => {
     Object.assign(window, { injectSelection: setSeed, fixtureReady: true });
   }, []);
-  return <WhatsappLinkWizard seed={seed} agents={[]} onCreated={() => {}} />;
+  return (
+    <WhatsappLinkWizard seed={seed} agents={[]} actorScope="fixture-admin" onCreated={() => {}} />
+  );
 }
 createRoot(document.getElementById("root")!).render(<Harness />);

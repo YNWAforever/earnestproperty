@@ -74,6 +74,8 @@ function WhatsappLinks() {
         {!loading && user ? (
           <>
             <WhatsappLinkWizard
+              key={user.id}
+              actorScope={user.id}
               seed={seed}
               seedScope={seedScope}
               onSeedConsumed={() => {
