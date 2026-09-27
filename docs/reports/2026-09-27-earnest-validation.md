@@ -135,6 +135,7 @@ The named Neon branch was confirmed by the database server itself as br-young-br
 | Migration runner red/green | SQLSTATE 25P01 before fix; 18 remaining files applied after fix | Empty acceptance database only; multi-statement files and registry row now share a transaction |
 | Disposable target guard | 3/3 pass, 0 skipped | Rejects absent confirmation, default database, false branch or endpoint identity |
 | Combined real Neon synthetic DB suite | 79 pass, 0 fail, 0 skip; 95.41 s | 13 files; random synthetic schemas; public/admin/CRM/WhatsApp SQL; no provider delivery |
+| Real Neon batch-concurrency fixture | 1 pass, 0 fail, 0 skip; 5.44 s; 50-row chunk 256 ms | Separate 2-client 50+10, lost-response replay and one created/one reused placement; schema and rows removed |
 | Residual fixture schemas | 0 | Server query after the test run |
 | TypeScript typecheck | exit 0 | Source branch after the migration runner/test changes |
 | Targeted ESLint | exit 0 | All 15 changed runner and DB test files |

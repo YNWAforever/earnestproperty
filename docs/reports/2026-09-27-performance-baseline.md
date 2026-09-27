@@ -22,7 +22,7 @@ An anonymous HEAD request to `/` returned `X-Vercel-Cache: MISS` and `X-Vercel-I
 
 `AppImage` already resolves local sources against the generated manifest. The detail gallery now asks for an 80 px thumbnail with `sizes="80px"`, and its primary image declares a responsive display size. The new 128/256 px variants allow the browser to select for a roughly 76–80 px thumbnail at DPR 1 or 2. The primary image retains eager/priority loading and gallery thumbnails are lazy with intrinsic dimensions. Remote listing photo URLs are outside this local manifest. Their actual transferred size, including the audit's 1200 px A074714 thumbnail, remains unverified and may still be oversized. A source-host inventory and supported image transformation path are needed before calling F24 fully fixed.
 
-T06's 50-row chunk commit uses a set-based preview/read and one database transaction. Synthetic PostgreSQL fixtures prove the 50+10 sequence and unchanged retry result, but no real Neon round-trip timing or `EXPLAIN` was available. T04 combines staff readiness evidence into one read rather than separate per-staff checks. The staff/private routes were not added to any public cache.
+T06's 50-row chunk commit uses a set-based preview/read and one database transaction. PGlite and a separate real Neon synthetic fixture proved 50+10, same-result retry, and two-connection placement serialization. One 50-row Neon chunk took 256 ms in that test, including its HTTP round trip; this is one sample, not p95 or an `EXPLAIN` plan. T04 combines staff readiness evidence into one read rather than separate per-staff checks. The staff/private routes were not added to any public cache.
 
 ## Isolated staging database query plan sample
 
