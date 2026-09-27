@@ -33,29 +33,35 @@ const blankToNull = (value: unknown) => {
 
 const optionalText = z.preprocess(blankToNull, z.string().trim().max(60).nullable());
 
-const schema = z.object({
-  estate_id: z.string().uuid("請選擇屋苑"),
-  deal_type: z.enum(["sale", "rent"], { message: "請選擇買賣或租賃" }),
-  price: z.coerce.number({ invalid_type_error: "請輸入數字" }).positive("請輸入大於 0 的數字"),
-  saleable_area: z.coerce
-    .number({ invalid_type_error: "請輸入數字" })
-    .positive("請輸入大於 0 的數字")
-    .int("請輸入整數，不要小數點"),
-  deal_date: z.string().trim().min(1, "請輸入成交日期"),
-  unit: optionalText,
-  block: optionalText,
-  floor_band: optionalText,
-  source: optionalText,
-  source_url: z
-    .string()
-    .trim()
-    .url("請輸入有效連結")
-    .max(500)
-    .optional()
-    .or(z.literal(""))
-    .transform((v) => v || null),
-  verified: z.boolean(),
-});
+const schema = z
+  .object({
+    estate_id: z.string().uuid("請選擇屋苑"),
+    deal_type: z.enum(["sale", "rent"], { message: "請選擇買賣或租賃" }),
+    price: z.coerce.number({ invalid_type_error: "請輸入數字" }).positive("請輸入大於 0 的數字"),
+    saleable_area: z.coerce
+      .number({ invalid_type_error: "請輸入數字" })
+      .positive("請輸入大於 0 的數字")
+      .int("請輸入整數，不要小數點"),
+    deal_date: z.string().trim().min(1, "請輸入成交日期"),
+    unit: optionalText,
+    block: optionalText,
+    floor_band: optionalText,
+    source: optionalText,
+    source_url: z
+      .string()
+      .trim()
+      .url("請輸入有效連結")
+      .max(500)
+      .optional()
+      .or(z.literal(""))
+      .transform((v) => v || null),
+    verified: z.boolean(),
+    published: z.boolean(),
+  })
+  .refine((value) => !value.published || value.verified, {
+    path: ["published"],
+    message: "公開發布前請先核實成交來源",
+  });
 
 function createInitialForm(transaction?: Transaction, staffName?: string) {
   return {
@@ -69,7 +75,8 @@ function createInitialForm(transaction?: Transaction, staffName?: string) {
     floor_band: transaction?.floor_band ?? "",
     source: transaction?.source ?? staffName ?? "",
     source_url: transaction?.source_url ?? "",
-    verified: transaction?.published ?? false,
+    verified: transaction?.verification_state === "verified",
+    published: transaction?.published ?? false,
   };
 }
 
@@ -158,6 +165,7 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
       source: d.source,
       source_url: d.source_url,
       verified: d.verified,
+      published: d.published,
     };
 
     setSubmitting(true);
@@ -288,16 +296,33 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
             maxLength={500}
           />
         </Field>
-        <Field label="已核實並發布" htmlFor="verified" error={fieldErrors.verified}>
+        <Field label="成交來源已核實" htmlFor="verified" error={fieldErrors.verified}>
           <div className="flex h-10 items-center">
             <Switch
               id="verified"
               {...fieldProps("verified")}
               checked={form.verified}
-              onCheckedChange={(v) => set("verified", v)}
+              onCheckedChange={(v) => {
+                set("verified", v);
+                if (!v) set("published", false);
+              }}
             />
           </div>
         </Field>
+        <Field label="公開發布" htmlFor="published" error={fieldErrors.published}>
+          <div className="flex h-10 items-center">
+            <Switch
+              id="published"
+              {...fieldProps("published")}
+              checked={form.published}
+              disabled={!form.verified}
+              onCheckedChange={(v) => set("published", v)}
+            />
+          </div>
+        </Field>
+        <p className="text-sm text-muted-foreground">
+          公開發布只控制網站成交展示；內部績效核實在下方成交歸因區處理。
+        </p>
       </Section>
 
       <div className="flex justify-end gap-2 border-t pt-4">

@@ -13,6 +13,7 @@ const messages: Record<string, string> = {
   mapping_missing: "尚未連接 Inbox 映射",
   mapping_unverified: "Inbox 映射未核實",
   mapping_retired: "Inbox 映射已停用",
+  mapping_changed: "Inbox 映射版本已更新，通知目的地需要重新核實",
   channel_mismatch: "公司頻道不符",
   endpoint_missing: "尚未設定通知目的地",
   endpoint_unverified: "通知目的地未核實",
@@ -57,6 +58,32 @@ export function maskStaffDestination(value: string | null | undefined): string |
   return tail ? `••••${tail}` : null;
 }
 
+function withRepairActions(capability: Capability, staffId: string): Capability {
+  const target = (code: string) => {
+    const step =
+      code === "mapping_missing" || code === "mapping_retired" || code === "channel_mismatch"
+        ? 1
+        : code === "mapping_unverified"
+          ? 3
+          : null;
+    if (step !== null)
+      return `/admin/whatsapp-settings?staffId=${encodeURIComponent(staffId)}&step=${step}`;
+    if (
+      code.startsWith("endpoint_") ||
+      code === "mapping_changed" ||
+      code === "permission_missing" ||
+      code === "outside_message_window" ||
+      code === "template_unverified"
+    )
+      return `/admin/whatsapp-settings?staffId=${encodeURIComponent(staffId)}&step=3#staff-notifications`;
+    return "/admin/operations";
+  };
+  return {
+    ...capability,
+    reasons: capability.reasons.map((reason) => ({ ...reason, actionHref: target(reason.code) })),
+  };
+}
+
 export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappReadiness {
   const { mapping, runtime, inboxEndpoint, staffEndpoint } = input;
   const base: string[] = [];
@@ -69,6 +96,11 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
   else {
     if (mapping.channelId !== runtime.channelId) base.push("channel_mismatch");
     if (mapping.retiredAt) base.push("mapping_retired");
+    if (
+      mapping.reviewEnforced &&
+      (mapping.reviewBasis !== "provider_verified" || !mapping.reviewEvidenceId)
+    )
+      base.push("mapping_unverified");
     if (
       !mapping.eligible ||
       !mapping.verifiedAt ||
@@ -87,6 +119,8 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
   if (!runtime.inboxProviderVerified) inboxReasons.push("provider_unverified");
   if (mapping && inboxEndpoint && mapping.inboxUserId !== inboxEndpoint.destinationReference)
     inboxReasons.push("endpoint_unverified");
+  if (mapping?.reviewEnforced && inboxEndpoint?.mappingVersion !== mapping.version)
+    inboxReasons.push("mapping_changed");
   const staffReasons = [
     ...base,
     ...endpointReasons(staffEndpoint, "staff_whatsapp", runtime.channelId),
@@ -94,6 +128,8 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
   if (!runtime.notificationsEnabled || !runtime.staffWhatsAppEnabled)
     staffReasons.push("runtime_disabled");
   if (!runtime.staffTransportVerified) staffReasons.push("provider_unverified");
+  if (mapping?.reviewEnforced && staffEndpoint?.mappingVersion !== mapping.version)
+    staffReasons.push("mapping_changed");
   if (staffEndpoint) {
     const lastInbound = staffEndpoint.lastInboundAt
       ? new Date(staffEndpoint.lastInboundAt).getTime()
@@ -119,11 +155,11 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
     staffId: input.staffId,
     displayName: input.displayName,
     active: input.active,
-    assignment,
-    inboxPrivateNote: blocked(...new Set(inboxReasons)),
-    staffWhatsapp: blocked(...new Set(staffReasons)),
+    assignment: withRepairActions(assignment, input.staffId),
+    inboxPrivateNote: withRepairActions(blocked(...new Set(inboxReasons)), input.staffId),
+    staffWhatsapp: withRepairActions(blocked(...new Set(staffReasons)), input.staffId),
     maskedDestination: maskStaffDestination(staffEndpoint?.destinationReference),
-    mappingVersion: null,
+    mappingVersion: mapping?.version ?? null,
     endpointVersion: staffEndpoint?.version ?? null,
     checkedAt: input.checkedAt,
   };

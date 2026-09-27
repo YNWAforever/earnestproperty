@@ -93,12 +93,13 @@ test("direct Inbox mapping accepts no chatbot node and keeps routing disabled", 
         branchId: null,
         verificationRef: "synthetic-readback",
         eligible: false,
+        expectedVersion: null,
       },
       { staffId: id, roles: ["admin"] },
       {
         query: async (_sql, params) => {
           parameters = params;
-          return [{ id }];
+          return [{ id, version: 1 }];
         },
         transaction: async () => {
           throw new Error("Unexpected transaction");
@@ -117,6 +118,7 @@ test("direct Inbox mapping accepts no chatbot node and keeps routing disabled", 
           branchId: null,
           verificationRef: "synthetic-readback",
           eligible: false,
+          expectedVersion: null,
         },
         { staffId: id, roles: ["admin"] },
       ),

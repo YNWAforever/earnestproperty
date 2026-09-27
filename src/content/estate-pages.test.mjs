@@ -5,6 +5,7 @@ import {
   buildEstateAnswerSummary,
   estatePageContent,
   getEstatePageContent,
+  resolveEstateTransport,
 } from "./estate-pages.ts";
 import { estateRegistry } from "./estate-registry.ts";
 
@@ -114,4 +115,12 @@ test("Estate Expansion 17: every relatedLinks /estate/{slug} cross-reference tar
 
 test("Estate Expansion 17: estatePageContent has exactly 22 entries (5 original + 17 new)", () => {
   assert.equal(Object.keys(estatePageContent).length, 22);
+});
+
+test("transport copy requires an exact estate corridor match", () => {
+  assert.equal(resolveEstateTransport("sing-tai"), null);
+  assert.equal(resolveEstateTransport("not-an-estate"), null);
+  const bellagioTransport = resolveEstateTransport("bellagio");
+  assert.ok(bellagioTransport?.text);
+  assert.match(bellagioTransport.sourceRef, /castle-peak-road/);
 });

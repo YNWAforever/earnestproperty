@@ -45,3 +45,38 @@ export function resolvePublicWaAction(
     ? { href, mode: "untracked", ...identity }
     : { href: "/contact", mode: "contact", ...identity };
 }
+
+export type WebsiteLinkCandidate = {
+  propertyId: string;
+  candidateCount: number;
+  code: string | null;
+};
+
+/** A conflicting or invalid tracking link falls back to a contextual public action. */
+export function resolveWebsiteActions(
+  offers: (Omit<PublicWaOffer, "title"> & { title?: string })[],
+  candidates: WebsiteLinkCandidate[],
+  companyPhone: string | null | undefined,
+) {
+  const byId = new Map(candidates.map((candidate) => [candidate.propertyId, candidate]));
+  const links = offers.map((offer) => {
+    const candidate = byId.get(offer.propertyId);
+    const href =
+      candidate?.candidateCount === 1 && candidate.code && /^[A-Za-z0-9_-]+$/.test(candidate.code)
+        ? `/w/${candidate.code}`
+        : null;
+    return { propertyId: offer.propertyId, href };
+  });
+  const hrefById = new Map(links.map((link) => [link.propertyId, link.href]));
+  return {
+    links,
+    actions: offers.map((offer) => ({
+      propertyId: offer.propertyId,
+      ...resolvePublicWaAction(
+        { ...offer, title: offer.title ?? "" },
+        hrefById.get(offer.propertyId),
+        companyPhone,
+      ),
+    })),
+  };
+}

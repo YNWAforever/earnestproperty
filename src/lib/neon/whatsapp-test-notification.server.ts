@@ -82,8 +82,8 @@ export async function previewStaffTestNotification(
   if (ready) {
     previewToken = randomUUID();
     await query(
-      `INSERT INTO staff_notification_test_previews(token_hash,actor_staff_id,staff_id,transport,endpoint_id,endpoint_version,message,expires_at)
-       VALUES($1,$2::uuid,$3::uuid,$4,$5::uuid,$6,$7,now()+interval '5 minutes')`,
+      `INSERT INTO staff_notification_test_previews(token_hash,actor_staff_id,staff_id,transport,endpoint_id,endpoint_version,mapping_version,message,expires_at)
+       VALUES($1,$2::uuid,$3::uuid,$4,$5::uuid,$6,$7,$8,now()+interval '5 minutes')`,
       [
         digest(previewToken),
         actor.staffId,
@@ -91,6 +91,7 @@ export async function previewStaffTestNotification(
         input.transport,
         endpoint.id,
         input.endpointVersion,
+        readiness.mappingVersion,
         message,
       ],
     );
@@ -106,6 +107,7 @@ export async function previewStaffTestNotification(
     ),
     message,
     endpointVersion: input.endpointVersion,
+    mappingVersion: readiness.mappingVersion,
   };
 }
 
@@ -159,14 +161,16 @@ export async function enqueueStaffTestNotification(
     },
     {
       statement: `WITH eligible AS (
-        SELECT p.id AS preview_id,p.endpoint_id,p.endpoint_version,p.staff_id,p.transport
+        SELECT p.id AS preview_id,p.endpoint_id,p.endpoint_version,p.mapping_version,p.staff_id,p.transport,
+          e.channel_id,e.destination_reference
         FROM staff_notification_test_previews p
         JOIN staff_users s ON s.id=p.staff_id AND s.active
         JOIN staff_notification_endpoints e ON e.id=p.endpoint_id AND e.staff_id=p.staff_id AND e.transport=p.transport
         JOIN whatsapp_staff_channels m ON m.staff_id=s.id AND m.channel_id=e.channel_id
         WHERE p.token_hash=$1 AND p.actor_staff_id=$2::uuid AND p.staff_id=$3::uuid AND p.transport=$4
           AND p.endpoint_version=$5 AND p.expires_at>now()
-          AND e.version=p.endpoint_version AND e.channel_id=$9 AND e.enabled AND e.retired_at IS NULL AND e.verified_at IS NOT NULL
+          AND e.version=p.endpoint_version AND e.channel_id=$9
+          AND m.version=p.mapping_version AND (e.mapping_version IS NULL OR e.mapping_version=p.mapping_version) AND e.enabled AND e.retired_at IS NULL AND e.verified_at IS NOT NULL
           AND e.permission_granted AND e.permission_ref IS NOT NULL
           AND e.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb
           AND m.eligible AND m.retired_at IS NULL AND m.verified_at IS NOT NULL
@@ -180,8 +184,8 @@ export async function enqueueStaffTestNotification(
             AND t.endpoint_id=e.id AND t.created_at>now()-interval '1 minute')
           FOR UPDATE OF s,e,m
        ), inserted AS (
-         INSERT INTO staff_notification_test_attempts(request_id,preview_id,actor_staff_id,staff_id,transport,endpoint_id,endpoint_version,payload_hash)
-         SELECT $6::uuid,preview_id,$2::uuid,staff_id,transport,endpoint_id,endpoint_version,$7 FROM eligible
+         INSERT INTO staff_notification_test_attempts(request_id,preview_id,actor_staff_id,staff_id,transport,endpoint_id,endpoint_version,mapping_version,channel_id_snapshot,destination_reference_snapshot,payload_hash)
+         SELECT $6::uuid,preview_id,$2::uuid,staff_id,transport,endpoint_id,endpoint_version,mapping_version,channel_id,destination_reference,$7 FROM eligible
          ON CONFLICT(request_id) DO NOTHING RETURNING id
        ), queued AS (
          INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,idempotency_key,actor_staff_id)
@@ -232,19 +236,24 @@ export async function enqueueStaffTestNotification(
   throw new Response("TEST_PREVIEW_EXPIRED_OR_RATE_LIMITED", { status: 409 });
 }
 
-export async function readStaffTestNotification(attemptId: string, actor: Actor) {
+export async function readStaffTestNotification(
+  attemptId: string,
+  actor: Actor,
+  query = queryRows,
+) {
   z.string().uuid().parse(attemptId);
-  await authorize(actor);
-  await queryRows(
+  await authorize(actor, query);
+  await query(
     `UPDATE staff_notification_test_attempts t SET state='unknown',safe_error='job_lease_expired',finished_at=now(),updated_at=now()
      FROM ops_jobs j WHERE t.id=$1::uuid AND t.actor_staff_id=$2::uuid AND t.state='dispatching'
        AND j.job_type='woztell.enquiry.staff.test' AND j.payload->>'attemptId'=t.id::text
        AND (j.status<>'running' OR j.lease_expires_at<now())`,
     [attemptId, actor.staffId],
   );
-  const [row] = await queryRows(
+  const [row] = await query(
     `SELECT t.id,t.state,t.transport,t.created_at,t.accepted_at,t.evidence_kind,t.safe_error,t.provider_operation_id,
-            e.version AS current_endpoint_version,j.id AS job_id
+            t.provider_delivered_at,t.recipient_confirmed_at,t.acknowledgement_at,t.evidence_source,
+            t.endpoint_version,t.mapping_version,j.id AS job_id
      FROM staff_notification_test_attempts t JOIN staff_notification_endpoints e ON e.id=t.endpoint_id
      LEFT JOIN ops_jobs j ON j.job_type='woztell.enquiry.staff.test' AND j.payload->>'attemptId'=t.id::text
      WHERE t.id=$1::uuid AND t.actor_staff_id=$2::uuid`,
@@ -256,13 +265,90 @@ export async function readStaffTestNotification(attemptId: string, actor: Actor)
     state: String(row.state),
     transport: String(row.transport),
     jobId: row.job_id ? String(row.job_id) : null,
-    acceptedAt: row.accepted_at ? new Date(String(row.accepted_at)).toISOString() : null,
+    providerAcceptedAt: row.accepted_at ? new Date(String(row.accepted_at)).toISOString() : null,
+    providerDeliveredAt: row.provider_delivered_at
+      ? new Date(String(row.provider_delivered_at)).toISOString()
+      : null,
+    recipientConfirmedAt: row.recipient_confirmed_at
+      ? new Date(String(row.recipient_confirmed_at)).toISOString()
+      : null,
+    acknowledgementAt: row.acknowledgement_at
+      ? new Date(String(row.acknowledgement_at)).toISOString()
+      : null,
+    evidenceSource: row.evidence_source ? String(row.evidence_source) : null,
+    endpointVersion: Number(row.endpoint_version),
+    mappingVersion: row.mapping_version == null ? null : Number(row.mapping_version),
     evidenceKind: row.evidence_kind ? String(row.evidence_kind) : null,
     providerOperationId: row.provider_operation_id ? String(row.provider_operation_id) : null,
     safeError: row.safe_error ? String(row.safe_error) : null,
-    deliveredAt: null,
-    readAt: null,
   };
+}
+
+export async function readStaffTestNotificationByRequest(
+  requestId: string,
+  actor: Actor,
+  query = queryRows,
+) {
+  z.string().uuid().parse(requestId);
+  await authorize(actor, query);
+  const [row] = await query(
+    "SELECT id FROM staff_notification_test_attempts WHERE request_id=$1::uuid AND actor_staff_id=$2::uuid",
+    [requestId, actor.staffId],
+  );
+  return row ? readStaffTestNotification(String(row.id), actor, query) : null;
+}
+
+export async function recordStaffTestManualConfirmation(
+  value: unknown,
+  actor: Actor,
+  ports: { query: typeof queryRows; transaction: typeof transactionRows } = {
+    query: queryRows,
+    transaction: transactionRows,
+  },
+) {
+  const input = z
+    .object({
+      attemptId: z.string().uuid(),
+      evidenceRef: z.string().trim().min(1).max(160),
+    })
+    .strict()
+    .parse(value);
+  await authorize(actor, ports.query);
+  const rows = await ports.transaction([
+    {
+      statement: `WITH eligible AS (
+      SELECT t.id FROM staff_notification_test_attempts t
+      WHERE t.id=$1::uuid AND t.actor_staff_id=$2::uuid AND t.state IN ('accepted','unknown')
+      FOR UPDATE
+    ), inserted AS (
+      INSERT INTO staff_notification_test_evidence(attempt_id,kind,source,source_ref,occurred_at,actor_staff_id)
+      SELECT id,'recipient_confirmed','manual_confirmation',$3,now(),$2::uuid FROM eligible
+      ON CONFLICT(attempt_id,kind,source,source_ref) DO NOTHING
+      RETURNING attempt_id,occurred_at
+    ), changed AS (
+      UPDATE staff_notification_test_attempts t
+      SET recipient_confirmed_at=COALESCE(t.recipient_confirmed_at,i.occurred_at),
+          evidence_source='manual_confirmation',updated_at=now()
+      FROM inserted i WHERE t.id=i.attempt_id RETURNING t.id
+    ), audit AS (
+      INSERT INTO ops_audit_logs(actor_staff_id,permission,action,resource_type,resource_id,outcome,metadata)
+      SELECT $2::uuid,'staff.notification.test','manual_receipt','staff_notification_test',id::text,
+             'success',jsonb_build_object('evidenceRef',$3) FROM changed RETURNING id
+    ) SELECT id FROM changed`,
+      params: [input.attemptId, actor.staffId, input.evidenceRef],
+    },
+  ]);
+  if (rows[0]?.length) return { ok: true };
+  const [existing] = await ports.query(
+    `SELECT e.id FROM staff_notification_test_evidence e
+      JOIN staff_notification_test_attempts t ON t.id=e.attempt_id
+      WHERE t.id=$1::uuid AND t.actor_staff_id=$2::uuid
+        AND e.kind='recipient_confirmed' AND e.source='manual_confirmation'
+        AND e.source_ref=$3 AND e.actor_staff_id=$2::uuid`,
+    [input.attemptId, actor.staffId, input.evidenceRef],
+  );
+  if (existing) return { ok: true };
+  throw new Response("TEST_CONFIRMATION_CONFLICT", { status: 409 });
 }
 
 export async function dispatchStaffTestNotification(
@@ -290,7 +376,10 @@ export async function dispatchStaffTestNotification(
   const readiness = await inspect(String(attempt.staff_id));
   const capability =
     attempt.transport === "staff_whatsapp" ? readiness?.staffWhatsapp : readiness?.inboxPrivateNote;
-  if (capability?.state !== "ready") {
+  if (
+    capability?.state !== "ready" ||
+    readiness?.mappingVersion !== Number(attempt.mapping_version)
+  ) {
     await query(
       "UPDATE staff_notification_test_attempts SET state='blocked',safe_error='readiness_changed',finished_at=now() WHERE id=$1::uuid AND state='queued'",
       [attemptId],
@@ -309,7 +398,8 @@ export async function dispatchStaffTestNotification(
     const live = await inspect(String(attempt.staff_id));
     const ready =
       attempt.transport === "staff_whatsapp" ? live?.staffWhatsapp : live?.inboxPrivateNote;
-    if (ready?.state !== "ready") throw new Error("TEST_READINESS_CHANGED");
+    if (ready?.state !== "ready" || live?.mappingVersion !== Number(attempt.mapping_version))
+      throw new Error("TEST_READINESS_CHANGED");
     const member = attempt.transport === "inbox_private_note" ? syntheticInboxMember() : null;
     const [valid] = await query(
       `SELECT t.id FROM staff_notification_test_attempts t
@@ -325,6 +415,7 @@ export async function dispatchStaffTestNotification(
          AND e.verified_at IS NOT NULL AND e.permission_granted AND e.permission_ref IS NOT NULL
          AND e.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb
          AND m.eligible AND m.retired_at IS NULL AND m.verified_at IS NOT NULL
+         AND m.version=t.mapping_version AND (e.mapping_version IS NULL OR e.mapping_version=t.mapping_version)
          AND (t.transport<>'inbox_private_note' OR (e.destination_reference=m.inbox_user_id AND $5::text IS NOT NULL
            AND NOT EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.channel_id=e.channel_id AND w.woztell_member_id=$5)))
          AND (t.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now())
@@ -377,6 +468,7 @@ export async function dispatchStaffTestNotification(
   const state = result.state === "suppressed" ? "blocked" : result.state;
   await query(
     `UPDATE staff_notification_test_attempts SET state=$3,evidence_kind=$4,provider_operation_id=$5,
+       evidence_source=CASE WHEN $3='accepted' THEN 'provider_acceptance' ELSE evidence_source END,
       safe_error=CASE WHEN $3='unknown' THEN 'provider_outcome_unknown' WHEN $3='failed' THEN 'provider_refused'
         WHEN $3='blocked' THEN 'preflight_blocked' ELSE NULL END,
       accepted_at=CASE WHEN $3='accepted' THEN now() ELSE accepted_at END,

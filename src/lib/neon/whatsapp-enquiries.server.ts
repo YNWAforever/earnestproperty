@@ -18,7 +18,12 @@ import {
   shouldMintReference,
   companyWhatsappHref,
 } from "../whatsapp-enquiries/links.ts";
-import { resolvePublicWaAction, type PublicWaOffer } from "../whatsapp-enquiries/public-context.ts";
+import {
+  resolvePublicWaAction,
+  resolveWebsiteActions,
+  type PublicWaOffer,
+} from "../whatsapp-enquiries/public-context.ts";
+import { websiteCandidateLateral } from "./whatsapp-coverage-query.mjs";
 import {
   redirectBucketKey,
   redirectCapacity,
@@ -239,52 +244,49 @@ export async function resolveTrackingLinks(
       : "/contact"
     : null;
   if (!enabled)
-    return {
-      enabled,
-      fallbackHref,
-      links: offers.map((o) => ({ propertyId: o.propertyId, href: null })),
-      actions: offers.map((o) => ({
-        propertyId: o.propertyId,
-        ...resolvePublicWaAction({ ...o, title: o.title ?? "" }, null, companyPhone),
-      })),
-    };
+    return { enabled, fallbackHref, ...resolveWebsiteActions(offers, [], companyPhone) };
   const channel = companyChannel();
-  // One batch read; public reads cannot provision or reveal internal requested staff/branch metadata.
+  // One batch read. Only an exact current, verified website:primary sales link is usable.
   const rows = await query(
-    `WITH wanted AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS x("propertyId" uuid,"publicListingNo" text,"dealType" text)), ranked AS (SELECT p.id,m.public_listing_no,p.deal_type,p.status,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC) rn FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE m.public_listing_no IN(SELECT "publicListingNo" FROM wanted)) SELECT DISTINCT ON (w."propertyId") w."propertyId",l.code FROM wanted w JOIN ranked p ON p.id=w."propertyId" AND p.public_listing_no=w."publicListingNo" AND p.deal_type::text=w."dealType" AND p.rn=1 AND p.status::text='active' JOIN whatsapp_tracking_link_versions v ON v.property_id=p.id AND v.public_listing_no=p.public_listing_no AND v.deal_type=p.deal_type::text AND v.enabled AND v.placement_source='website' AND v.channel_id=$2 JOIN whatsapp_tracking_links l ON l.id=v.link_id AND l.current_version=v.version ORDER BY w."propertyId",l.created_at,l.id`,
+    `WITH wanted AS (
+       SELECT * FROM jsonb_to_recordset($1::jsonb)
+         AS x("propertyId" uuid,"publicListingNo" text,"dealType" text)
+     ), ranked AS (
+       SELECT p.id,m.public_listing_no,p.deal_type,p.status,
+         row_number() OVER(
+           PARTITION BY m.public_listing_no,p.deal_type
+           ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
+             p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC
+         ) rn
+       FROM properties p JOIN property_public_members m ON m.property_id=p.id
+       WHERE m.public_listing_no IN(SELECT "publicListingNo" FROM wanted)
+     )
+     SELECT w."propertyId",site.candidate_count AS "candidateCount",site.code
+     FROM wanted w JOIN ranked p ON p.id=w."propertyId"
+       AND p.public_listing_no=w."publicListingNo"
+       AND p.deal_type::text=w."dealType" AND p.rn=1 AND p.status::text='active'
+     ${websiteCandidateLateral("p.id", "p.public_listing_no", "p.deal_type::text", "$2")}`,
     [JSON.stringify(offers), channel],
   );
-  const missing = offers.filter((o) => !rows.some((r) => r.propertyId === o.propertyId));
-  if (missing.length)
+  const candidates = rows.map((row) => ({
+    propertyId: String(row.propertyId),
+    candidateCount: Number(row.candidateCount ?? 0),
+    code: row.code ? String(row.code) : null,
+  }));
+  const resolved = resolveWebsiteActions(offers, candidates, companyPhone);
+  const gaps = candidates.filter((candidate) => candidate.candidateCount !== 1);
+  if (gaps.length)
     console.warn(
-      "WA_TRACKING_LINK_UNPROVISIONED",
+      "WA_TRACKING_LINK_GAP",
       JSON.stringify(
-        missing
-          .map((o) => ({ propertyId: o.propertyId, publicListingNo: o.publicListingNo }))
-          .slice(0, 50),
+        gaps
+          .slice(0, 50)
+          .map((item) => ({ propertyId: item.propertyId, candidates: item.candidateCount })),
       ),
     );
-  return {
-    enabled,
-    fallbackHref,
-    links: offers.map((o) => ({
-      propertyId: o.propertyId,
-      href: rows.find((r) => r.propertyId === o.propertyId)
-        ? `/w/${rows.find((r) => r.propertyId === o.propertyId)!.code}`
-        : null,
-    })),
-    actions: offers.map((o) => ({
-      propertyId: o.propertyId,
-      ...resolvePublicWaAction(
-        { ...o, title: o.title ?? "" },
-        rows.find((r) => r.propertyId === o.propertyId)
-          ? `/w/${rows.find((r) => r.propertyId === o.propertyId)!.code}`
-          : null,
-        companyPhone,
-      ),
-    })),
-  };
+  return { enabled, fallbackHref, ...resolved };
 }
+
 export async function listEnquiries(
   conversationId: string,
   actor: StaffAccess,

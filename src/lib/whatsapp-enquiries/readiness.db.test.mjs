@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import {
@@ -56,6 +57,9 @@ test("readiness reads every staff member with real enum roles and masks destinat
       ('30000000-0000-4000-8000-000000000002',$1,'company','staff_whatsapp','85291234567',3,true,now(),null,true,'granted','{"approved":true,"allowAllHours":true}',now(),null,null,null,now())`,
       [mapped],
     );
+    await db.exec(
+      readFileSync("neon/migrations/20260927110000_staff_mapping_review_versions.sql", "utf8"),
+    );
     const query = async (sql, params = []) => (await db.query(sql, params)).rows;
     const rows = await listWhatsappStaffReadiness(
       { staffId: admin, roles: ["admin"] },
@@ -64,6 +68,7 @@ test("readiness reads every staff member with real enum roles and masks destinat
     assert.equal(rows.length, 3);
     const selected = rows.find((row) => row.staffId === mapped);
     assert.equal(selected.assignment.state, "ready");
+    assert.equal(selected.mappingVersion, 1);
     assert.equal(selected.inboxPrivateNote.state, "ready");
     assert.equal(selected.staffWhatsapp.state, "ready");
     assert.equal(selected.maskedDestination, "••••4567");

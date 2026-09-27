@@ -141,11 +141,21 @@ function AdminHome() {
           />
           <OverviewMetricCard
             icon={Building2}
-            label="公開放盤"
+            label="目前公開物業"
             loading={overview.loading}
             error={overview.error}
             to="/admin/listings"
-            value={overview.data?.properties}
+            search={{ publication: "public", status: "active" }}
+            value={overview.data?.publicProperties}
+          />
+          <OverviewMetricCard
+            icon={Building2}
+            label="公開租售盤"
+            loading={overview.loading}
+            error={overview.error}
+            to="/admin/listings"
+            search={{ publication: "public", status: "active" }}
+            value={overview.data?.publicOffers}
           />
           <OverviewMetricCard
             icon={MessageCircle}
@@ -245,16 +255,18 @@ function OverviewMetricCard({
   to,
   loading,
   error,
+  search,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: number | string | undefined;
   to: MetricTarget;
+  search?: { publication: "public"; status: "active" };
   loading: boolean;
   error: string | null;
 }) {
   return (
-    <Link to={to}>
+    <Link to={to} search={search}>
       <Card className="h-full border-slate-200 bg-card transition hover:border-primary/50 hover:shadow-sm focus-within:ring-2 focus-within:ring-ring">
         <CardContent className="flex items-start justify-between gap-3 p-4">
           <div>

@@ -1,0 +1,75 @@
+# Final remediation rollout and recovery
+
+**State, 2026-09-28:** source changes are on `codex/final-fixes-20260927`. There is no disposable staging URL/database, Haze test tenant or consenting recipient. No new migration was applied to Neon, no provider test message was sent, and no production deployment occurred. The steps below are a reviewable sequence, not evidence that rollout happened.
+
+## 1. Freeze target and evidence
+
+Record the commit SHA, intended Neon project, exact database name, branch ID, endpoint ID, staging URL, fixture owner, backup/snapshot ID and operator before running any migration or provider check. Use a disposable branch/database whose name matches the repository's `earnest_audit_acceptance_YYYYMMDD` guard. Set the test confirmation and exact branch ID only after inspecting that target. Keep secrets in the deployment environment; do not put them in the runbook, CSV, logs or commits.
+
+For the T17 evaluator, create the following registry only inside the disposable database and seed one row per documented fixture ID with the same unique owner label:
+
+```sql
+CREATE TABLE acceptance_fixture_registry (
+  fixture_id text PRIMARY KEY,
+  owner_label text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+The evaluator reads this table; the fixture loader must record ownership after it creates the actual synthetic rows. The registry alone is not a substitute for the fixture data.
+
+Run the existing schema inventory and pending-migration check against that isolated target. Verify current `app_migrations` rows, table/column existence, FK counts and a pre-change row-count snapshot. Preserve an actual restore point before any write. Compare the app at the prior commit against the expanded schema, then compare the new app against the fully migrated schema.
+
+## 2. Expand schema, in repository order
+
+All nine migrations are additive; inspect each SQL file and the resolved target before applying. The repository migration runner records versions in `app_migrations`. The pending list is:
+
+1. `20260927110000_staff_mapping_review_versions.sql`
+2. `20260927120000_named_inbox_folders.sql`
+3. `20260927130000_staff_notification_test_evidence.sql`
+4. `20260927140000_whatsapp_link_reference_scope.sql`
+5. `20260927150000_whatsapp_link_batch_mapping_guard.sql`
+6. `20260927160000_transaction_sales_attribution.sql`
+7. `20260927170000_performance_event_quality.sql`
+8. `20260927171000_inquiry_quality.sql`
+9. `20260927172000_media_asset_variants.sql`
+
+For each stage, confirm the version row exactly once, constraints and FKs, old and new row counts, and the relevant embedded/isolated DB tests. Keep legacy mapping evidence and transaction rows; unknown attribution remains unknown. Do not rewrite historical commission or fabricate event quality. The original media URLs remain available. No destructive down migration is part of rollback; a data correction needs a separate, reviewed compensating migration.
+
+## 3. Verify and enable by capability
+
+| Capability | Initial gate | Pilot evidence required before wider use |
+| --- | --- | --- |
+| Staff directory and Folder | Tenant and Channel configured; provider exact-user and named-Folder readback | Haze local staff, Inbox user, Folder access and version-bound review evidence |
+| Strict staff routing | Per-staff reviewed mapping stays disabled until its own evidence is complete | Assignment, private-note and staff-phone capabilities checked independently; unknown/failed receipt does not imply delivery |
+| Batch link import | Actor role, source-scoped staff reference, preview token and 50-row commit guards | 1/50/300/1,000 preview fixtures; 60-to-59 eligible subset; reconnect recovery without duplicate commit |
+| Website link coverage | Exact sale/rent current-offer denominator and explicit preview | Missing/conflicted rows reviewed; small backfill committed only after confirmation |
+| Sales performance | Attribution migration and source event projection complete | Scoped totals reconcile to transaction/detail rows, 60/40 credits, null commission and unknown/test/spam coverage |
+| Responsive media | `MLS_MEDIA_VARIANTS_ENABLED=false`; exact owned Blob host allowlist | Dry-run and limited checkpointed backfill, real WebP response bytes/dimensions and mobile `currentSrc`/layout checks |
+
+The build-time UI switches `VITE_STAFF_DIRECTORY_SETUP`, `VITE_STAFF_REVIEW_ENFORCEMENT`, `VITE_LINK_BATCH_IMPORT` and `VITE_SALES_PERFORMANCE_REPORTING` default to false in production when unset. Set each to the exact string `true` only after its migration and isolated evidence pass, then rebuild and redeploy the tested SHA. The directory switch shows the staff setup wizard; review enforcement separately permits its reviewed-save action. The batch switch shows paste/CSV import inside the existing link wizard; single-link creation and existing link management remain available. The reporting switch enables the new performance fetch and dashboard while preserving the older operational analytics. These switches control UI availability only; authenticated server checks still enforce role, branch, version and source scope. Per-staff review and explicit commit remain the fine-grained gates. `MLS_MEDIA_VARIANTS_ENABLED` is a separate server setting and remains false until owned variants are verified.
+
+Backfill: run `scripts/media/backfill-remote-variants.mjs` in dry-run mode first. An apply run requires `MEDIA_BACKFILL_TARGET=staging`, a Blob token, exact `MLS_OWNED_BLOB_HOSTS` and a bounded `--limit`/checkpoint. Review the dry-run candidate count and ownership before applying. A rerun must reuse matching source hashes rather than regenerate files.
+
+## 4. Acceptance before any live change
+
+Run the repository's named local suites, typecheck, lint and build. On the disposable target, run the guarded DB suites and authenticated browser journeys, record target identity and SHA, inspect SQL plans on 10k/100k event fixtures, and fill the performance evidence file described in `docs/reports/final-remediation-performance.md`. An exit code of zero with skipped cases is not approval.
+
+For Haze, use the specific test card in `docs/runbooks/whatsapp-staff-onboarding.md`. Confirm recipient consent, test conversation and destination before the first send. Preserve assignment, provider acceptance, signed delivery receipt, manual recipient confirmation and acknowledgement as different evidence. Do not resend an unknown outcome. No production smoke should create arbitrary messages.
+
+## 5. Production gate and smoke checklist
+
+Only after the isolated evidence is reviewed: record a fresh production backup/restore point, apply the reviewed expand migrations, deploy the exact tested SHA, and verify configuration. Check public listing date and public-number search, six contextual CTAs, listing/detail breadcrumb and SEO copy, Haze readiness without a send, dashboard inventory count, report filters/detail totals and original-image fallback. Record actual deployment SHA, environment, sample IDs, timestamps and pass/fail evidence. A production-verified label requires those observations.
+
+## 6. Stop and recover
+
+If schema or data checks fail, stop pending migrations and new work. If UI or report behavior fails, set the relevant `VITE_*` UI switch to `false` and rebuild/redeploy, disable the media flag as applicable, pause new batch/notification jobs and return to the last compatible app revision after checking its compatibility with the expanded schema. Preserve additive columns, mapping evidence, link/audit rows and original media. Do not drop new tables as a reflex, erase history, replay a provider send, or reissue an unknown batch chunk. For a wrong committed link or attribution, use the existing reasoned correction/retirement flow or a reviewed compensating migration. Restore a snapshot only after determining that it will not erase legitimate writes made after it.
+
+## Open handoff gates
+
+- Disposable Neon and browser target identity, backup/restore point and owned fixtures: unavailable.
+- Haze tenant, exact Folder/user capability readback, test conversation and consenting recipient: unavailable.
+- Actual baseline/revised load measurements, SQL plans, browser currentSrc/Core Web Vitals and production smoke: unverified.
+- Production migration, deployment and provider send: not authorized or performed in this run.
+
+See `docs/runbooks/final-remediation-operations-zhHK.md` for the staff operating guide, `docs/reports/2026-09-27-final-fixes-ledger.md` for each finding and local tests, and `docs/reports/final-remediation-results.json` for the explicit performance skips.

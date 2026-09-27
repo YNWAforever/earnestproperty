@@ -57,6 +57,10 @@ function mapping(value: unknown): StaffReadinessInput["mapping"] {
   return r
     ? {
         channelId: String(r.channel_id),
+        version: Number(r.version),
+        reviewBasis: r.review_basis === "provider_verified" ? "provider_verified" : "legacy_manual",
+        reviewEnforced: r.review_enforced === true,
+        reviewEvidenceId: str(r.review_evidence_id),
         eligible: r.eligible === true,
         verificationRef: str(r.verification_ref),
         verifiedAt: stamp(r.verified_at),
@@ -73,6 +77,7 @@ function endpoint(value: unknown): StaffReadinessInput["staffEndpoint"] {
   return {
     channelId: String(r.channel_id),
     version: Number(r.version),
+    mappingVersion: r.mapping_version == null ? null : Number(r.mapping_version),
     transport: r.transport === "inbox_private_note" ? "inbox_private_note" : "staff_whatsapp",
     destinationReference: String(r.destination_reference ?? ""),
     enabled: r.enabled === true,

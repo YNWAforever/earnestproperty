@@ -25,7 +25,6 @@ export function StaffEndpointEditor({
   const [form, setForm] = useState({
     staffId: "",
     transport: "inbox_private_note" as "inbox_private_note" | "staff_whatsapp",
-    channelId: "",
     destinationReference: "",
     verificationRef: "",
     permissionRef: "",
@@ -39,7 +38,6 @@ export function StaffEndpointEditor({
     setForm({
       staffId: selectedStaffId,
       transport: "inbox_private_note",
-      channelId: "",
       destinationReference: "",
       verificationRef: "",
       permissionRef: "",
@@ -71,7 +69,7 @@ export function StaffEndpointEditor({
     };
   }, []);
   return (
-    <section aria-label="同事通知設定" className="space-y-3 border-t pt-4">
+    <section id="staff-notifications" aria-label="同事通知設定" className="space-y-3 border-t pt-4">
       <h2 className="font-semibold">同事通知及待處理工作</h2>
       <p className="text-sm">
         此處記錄獨立通知目的地及核實證據。私有 Inbox 目的地必須是該同事的已核實 Inbox ID；WhatsApp
@@ -182,24 +180,41 @@ export function StaffEndpointEditor({
             <option value="staff_whatsapp">同事 WhatsApp</option>
           </select>
         </label>
-        {(
-          [
-            ["channelId", "公司頻道 ID"],
-            ["destinationReference", "已核實收件 ID"],
-            ["verificationRef", "核實紀錄編號"],
-            ["permissionRef", "同事接收授權紀錄"],
-          ] as const
-        ).map(([key, label]) => (
-          <label key={key}>
-            {label}
-            <Input
-              required
-              maxLength={key === "destinationReference" ? 256 : 160}
-              value={form[key]}
-              onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-            />
-          </label>
-        ))}
+        {form.transport === "inbox_private_note" ? (
+          <p className="text-sm">
+            Inbox 目的地與核實證據由已核實同事映射取得；儲存時會綁定該映射版本。
+          </p>
+        ) : (
+          <>
+            <label>
+              已核實同事 WhatsApp 收件 ID
+              <Input
+                required
+                maxLength={256}
+                value={form.destinationReference}
+                onChange={(e) => setForm({ ...form, destinationReference: e.target.value })}
+              />
+            </label>
+            <label>
+              收件 ID 核實紀錄編號
+              <Input
+                required
+                maxLength={160}
+                value={form.verificationRef}
+                onChange={(e) => setForm({ ...form, verificationRef: e.target.value })}
+              />
+            </label>
+          </>
+        )}
+        <label>
+          同事接收授權紀錄
+          <Input
+            required
+            maxLength={160}
+            value={form.permissionRef}
+            onChange={(e) => setForm({ ...form, permissionRef: e.target.value })}
+          />
+        </label>
         <label>
           <input
             type="checkbox"
@@ -238,7 +253,6 @@ export function StaffEndpointEditor({
                 setForm({
                   staffId: r.staffId,
                   transport: r.transport as typeof form.transport,
-                  channelId: r.channelId,
                   destinationReference: "",
                   verificationRef: "",
                   permissionRef: "",

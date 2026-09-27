@@ -57,13 +57,15 @@ test("historical columns and ownership columns do not overlap", () => {
     assert.equal(owned.has(historical), false, `${historical} cannot be both`);
   }
   assert.ok(STAFF_HISTORICAL_COLUMNS.includes("updated_by"));
-  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 23);
+  assert.equal(STAFF_HISTORICAL_COLUMNS.length, 25);
   for (const column of [
     "property_responsible_staff_id_at_intake",
     "requested_staff_id_snapshot",
     "recipient_staff_id",
     "acknowledged_by",
     "attended_staff_id",
+    "changed_by",
+    "qualified_by",
   ])
     assert.ok(STAFF_HISTORICAL_COLUMNS.includes(column));
 });

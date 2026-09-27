@@ -12,6 +12,7 @@ import {
   transactionRows,
 } from "./db.server";
 import { leadBudgetError } from "../admin/lead-budget";
+import { getPublicInventoryCounts } from "./public-inventory-counts.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { isMissingBranchesTableError } from "./branches-schema";
 import type { StaffAccess } from "./auth.server";
@@ -932,8 +933,8 @@ async function resolveAudienceFilters(input: { audience_id?: string; filters?: A
 }
 
 export async function getAdminOverview() {
-  const [properties, leads, contacts, conversations, campaigns] = await Promise.all([
-    queryRows("SELECT count(*)::int AS total FROM properties"),
+  const [inventory, leads, contacts, conversations, campaigns] = await Promise.all([
+    getPublicInventoryCounts(),
     queryRows(
       "SELECT count(*)::int AS total FROM crm_leads WHERE stage NOT IN ('closed_won', 'closed_lost')",
     ),
@@ -944,7 +945,9 @@ export async function getAdminOverview() {
     ),
   ]);
   return {
-    properties: Number(properties[0]?.total ?? 0),
+    publicProperties: inventory.publicProperties,
+    publicOffers: inventory.publicOffers,
+    inventoryCheckedAt: inventory.checkedAt,
     openLeads: Number(leads[0]?.total ?? 0),
     contacts: Number(contacts[0]?.total ?? 0),
     openConversations: Number(conversations[0]?.total ?? 0),
@@ -1225,6 +1228,21 @@ export async function listAdminTransactions(
   if (scope !== null) {
     where.push(`t.agent_id = ${addParam(params, scope)}`);
   }
+  const financeScope =
+    !actor || actor.roles.includes("admin")
+      ? "TRUE"
+      : actor.roles.includes("manager")
+        ? `EXISTS (SELECT 1 FROM staff_users finance_manager JOIN staff_users finance_owner ON finance_owner.id=t.agent_id WHERE finance_manager.id=${addParam(params, actor.staffId)}::uuid AND finance_manager.branch_id IS NOT NULL AND finance_manager.branch_id=finance_owner.branch_id)`
+        : "FALSE";
+  if (input.attribution_status && input.attribution_status !== "all") {
+    if (financeScope === "FALSE") throw new Response("Forbidden", { status: 403 });
+    where.push(financeScope);
+    where.push(
+      input.attribution_status === "missing"
+        ? "perf.attribution_status IS NULL"
+        : `perf.attribution_status = ${addParam(params, input.attribution_status)}`,
+    );
+  }
 
   if (input.q?.trim()) {
     where.push(`e.name_zh ILIKE ${addParam(params, `%${input.q.trim()}%`)}`);
@@ -1249,10 +1267,12 @@ export async function listAdminTransactions(
       t.verification_state, t.published, t.agent_id,
       e.name_zh AS estate_name_zh,
       s.name_zh AS agent_name_zh,
-      s.name_en AS agent_name_en
+      s.name_en AS agent_name_en,
+      perf.attribution_status, ${financeScope} AS finance_visible
     FROM transactions t
     LEFT JOIN estates e ON e.id = t.estate_id
     LEFT JOIN staff_users s ON s.id = t.agent_id
+    LEFT JOIN transaction_performance perf ON perf.transaction_id=t.id AND ${financeScope}
     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
     ORDER BY t.deal_date DESC NULLS LAST, t.created_at DESC
     LIMIT 200
@@ -1277,6 +1297,8 @@ export async function listAdminTransactions(
     published: booleanOrFalse(row.published),
     agent_id: stringOrNull(row.agent_id),
     agent_name: stringOrNull(row.agent_name_zh) ?? stringOrNull(row.agent_name_en),
+    attribution_status: stringOrNull(row.attribution_status),
+    finance_visible: row.finance_visible === true,
   }));
 }
 
@@ -1322,6 +1344,8 @@ export async function getAdminTransaction(
     published: booleanOrFalse(row.published),
     agent_id: stringOrNull(row.agent_id),
     agent_name: stringOrNull(row.agent_name_zh) ?? stringOrNull(row.agent_name_en),
+    attribution_status: null,
+    finance_visible: false,
   };
 }
 
@@ -1333,7 +1357,9 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
     input.price <= 0 ||
     !Number.isSafeInteger(input.saleable_area) ||
     input.saleable_area <= 0 ||
-    typeof input.verified !== "boolean"
+    typeof input.verified !== "boolean" ||
+    (input.published !== undefined && typeof input.published !== "boolean") ||
+    (input.published === true && !input.verified)
   ) {
     throw new Response("Invalid transaction", { status: 400 });
   }
@@ -1341,7 +1367,7 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
   const saleablePsf =
     input.saleable_area > 0 ? Math.round(input.price / input.saleable_area) : null;
   const verificationState = input.verified ? "verified" : "unverified";
-  const published = input.verified;
+  const published = input.published ?? input.verified;
 
   // Shared by both branches -- but agent_id is deliberately NOT one of them.
   // Unlike saveAdminProperty, AdminTransactionInput has no agent_id field at
@@ -1382,8 +1408,19 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           source_url = $11,
           verification_state = $12::transaction_verification_state,
           published = $13,
-          verified_at = CASE WHEN $13 THEN COALESCE(verified_at, now()) ELSE NULL END
+          verified_at = CASE WHEN $12::transaction_verification_state = 'verified' THEN COALESCE(verified_at, now()) ELSE NULL END
         WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
+          AND NOT EXISTS (
+            SELECT 1 FROM transaction_performance performance
+            WHERE performance.transaction_id = transactions.id
+              AND performance.attribution_status IN ('verified_attributed', 'verified_unattributed')
+              AND (
+                transactions.deal_type IS DISTINCT FROM $2::deal_type OR
+                transactions.price IS DISTINCT FROM $3::numeric OR
+                transactions.deal_date IS DISTINCT FROM $6::date OR
+                $12::transaction_verification_state <> 'verified'
+              )
+          )
         RETURNING id
         `,
         scope !== null ? [...params, input.id, scope] : [...params, input.id],
@@ -1395,7 +1432,7 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           unit, block, floor_band, source, source_url, verification_state,
           published, verified_at, agent_id
         )
-        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $13 THEN now() ELSE NULL END, $14)
+        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $12::transaction_verification_state = 'verified' THEN now() ELSE NULL END, $14)
         RETURNING id
         `,
         [...params, actor.staffId],
@@ -1403,6 +1440,10 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
 
   if (input.id && !rows[0]) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    const existing = await queryRows("SELECT id FROM transactions WHERE id = $1", [input.id]);
+    if (existing[0]) {
+      throw new Response("Verified attribution requires a reasoned correction", { status: 409 });
+    }
     return { id: "", error: "Not found" };
   }
   const id = stringOrEmpty(rows[0]?.id);
@@ -1421,6 +1462,7 @@ export async function fetchAdminAgents() {
       s.id,
       COALESCE(s.name_zh, s.name_en) AS name,
       s.email,
+      s.branch,
       s.active,
       COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
     FROM staff_users s
@@ -1432,6 +1474,7 @@ export async function fetchAdminAgents() {
     id: stringOrEmpty(row.id),
     name: stringOrNull(row.name),
     email: stringOrNull(row.email),
+    branch: stringOrNull(row.branch),
     active: row.active === true,
     roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
   }));

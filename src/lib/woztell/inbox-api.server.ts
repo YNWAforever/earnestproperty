@@ -84,7 +84,17 @@ export function createInboxApi(
       },
       { fetchImpl },
     );
-    if (!response.ok) throw new Error("WOZTELL_INBOX_REQUEST_FAILED");
+    if (!response.ok) {
+      const code =
+        response.status === 401 || response.status === 403
+          ? "WOZTELL_INBOX_AUTH_DENIED"
+          : response.status === 429
+            ? "WOZTELL_INBOX_RATE_LIMITED"
+            : response.status >= 500
+              ? "WOZTELL_INBOX_UNAVAILABLE"
+              : "WOZTELL_INBOX_REQUEST_FAILED";
+      throw new Error(code);
+    }
     let result: Record<string, unknown>;
     try {
       result = JSON.parse(text);
@@ -93,6 +103,79 @@ export function createInboxApi(
     }
     if (result.ok !== 1) throw new Error("WOZTELL_INBOX_RESULT_UNCONFIRMED");
     return result;
+  }
+  async function listUsers(scope: {
+    channelId: string;
+    folderId?: string;
+    userId?: string;
+    after?: string | null;
+    limit?: number;
+  }) {
+    if (scope.channelId !== c.channelId) throw new Error("WOZTELL_INBOX_SCOPE_MISMATCH");
+    if (
+      scope.limit !== undefined &&
+      (!Number.isInteger(scope.limit) || scope.limit < 1 || scope.limit > 100)
+    )
+      throw new Error("WOZTELL_INBOX_INPUT_INVALID");
+    for (const value of [scope.folderId, scope.userId, scope.after]) {
+      if (
+        value !== undefined &&
+        value !== null &&
+        (typeof value !== "string" || !value || value.length > 500)
+      )
+        throw new Error("WOZTELL_INBOX_INPUT_INVALID");
+    }
+    const url = new URL(c.listUsersUrl);
+    url.searchParams.set("channelId", c.channelId);
+    url.searchParams.set("limit", String(scope.limit ?? 50));
+    if (scope.folderId) url.searchParams.set("folderId", scope.folderId);
+    if (scope.userId) url.searchParams.set("userId", scope.userId);
+    if (scope.after) url.searchParams.set("after", scope.after);
+    const result = await call(url.toString());
+    const paging = result.paging as Record<string, unknown> | undefined;
+    const cursors = paging?.cursors as Record<string, unknown> | undefined;
+    if (!Array.isArray(result.data) || !paging || typeof paging.hasNext !== "boolean")
+      throw new Error("WOZTELL_INBOX_RESULT_INVALID");
+    const nextCursor = paging.hasNext === true ? cursors?.after : null;
+    if (
+      paging.hasNext &&
+      (typeof nextCursor !== "string" || !nextCursor || nextCursor === scope.after)
+    )
+      throw new Error("WOZTELL_INBOX_RESULT_INVALID");
+    const seen = new Set<string>();
+    const items = result.data.map((value: unknown) => {
+      if (!value || typeof value !== "object" || Array.isArray(value))
+        throw new Error("WOZTELL_INBOX_RESULT_INVALID");
+      const item = value as Record<string, unknown>;
+      if (
+        typeof item.userId !== "string" ||
+        !item.userId ||
+        typeof item.name !== "string" ||
+        !item.name ||
+        typeof item.channel !== "string" ||
+        item.channel !== c.channelId ||
+        (item.email != null && typeof item.email !== "string") ||
+        (item.agentRole != null && typeof item.agentRole !== "string") ||
+        (item.role != null && typeof item.role !== "string") ||
+        (scope.userId && item.userId !== scope.userId) ||
+        seen.has(item.userId)
+      )
+        throw new Error("WOZTELL_INBOX_RESULT_INVALID");
+      seen.add(item.userId);
+      return {
+        userId: item.userId,
+        name: item.name,
+        email: typeof item.email === "string" ? item.email : null,
+        channelId: item.channel,
+        role:
+          typeof item.agentRole === "string"
+            ? item.agentRole
+            : typeof item.role === "string"
+              ? item.role
+              : null,
+      };
+    });
+    return { items, nextCursor: typeof nextCursor === "string" ? nextCursor : null };
   }
   async function readAuthoritativeAssignment(scope: { channelId: string; memberId: string }) {
     if (scope.channelId !== c.channelId) throw new Error("WOZTELL_INBOX_SCOPE_MISMATCH");
@@ -119,6 +202,7 @@ export function createInboxApi(
   }
   return {
     verificationRef: c.verificationRef,
+    listUsers,
     readAuthoritativeAssignment,
     async execute(scope: {
       beforeSend?: () => Promise<void>;

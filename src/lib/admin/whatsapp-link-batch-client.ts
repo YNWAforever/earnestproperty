@@ -1,3 +1,4 @@
+import { safeCsvCell } from "./csv-safe-cell.ts";
 import type { BatchRowDraft } from "../whatsapp-enquiries/link-batch-policy.ts";
 import type {
   BatchPreview,
@@ -25,10 +26,47 @@ export type LinkBatchApi = {
   read: (batchId: string) => Promise<{ operations: CommitChunkResult[] }>;
 };
 
-export const linkBatchProgressKey = "earnest:whatsapp-link-batch:v1";
+export const linkBatchProgressKey = (actorScope: string) =>
+  `earnest:whatsapp-link-batch:v2:${encodeURIComponent(actorScope)}`;
 export function batchRowsOf(progress: LinkBatchProgress): BatchRowResult[] {
   return progress.completed.flatMap((chunk) => chunk.rows);
 }
+export function knownFailedBatchRows(progress: LinkBatchProgress): BatchRowDraft[] {
+  if (progress.uncertain) return [];
+  const failed = new Set(
+    batchRowsOf(progress)
+      .filter((row) => row.outcome === "blocked" || row.outcome === "failed")
+      .map((row) => row.rowKey),
+  );
+  return progress.rows.filter((row) => failed.has(row.rowKey));
+}
+
+export function batchResultCsv(
+  progress: LinkBatchProgress,
+  source?: BatchRowDraft["input"]["placementSource"],
+) {
+  const byKey = new Map(progress.rows.map((row) => [row.rowKey, row]));
+  const header = ["public_listing_no", "deal_type", "source", "placement_id", "outcome", "link"];
+  const lines = batchRowsOf(progress).flatMap((result) => {
+    const row = byKey.get(result.rowKey);
+    if (!row || !result.code || !["created", "reused"].includes(result.outcome)) return [];
+    if (source && row.input.placementSource !== source) return [];
+    return [
+      [
+        row.input.publicListingNo,
+        row.input.dealType,
+        row.input.placementSource,
+        row.placementId,
+        result.outcome,
+        `/w/${result.code}`,
+      ]
+        .map((cell) => safeCsvCell(cell))
+        .join(","),
+    ];
+  });
+  return `\ufeff${header.map((cell) => safeCsvCell(cell)).join(",")}\r\n${lines.join("\r\n")}${lines.length ? "\r\n" : ""}`;
+}
+
 export function reconcileLinkBatch(
   progress: LinkBatchProgress,
   operations: CommitChunkResult[],

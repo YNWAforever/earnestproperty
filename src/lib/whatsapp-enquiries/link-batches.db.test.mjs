@@ -43,13 +43,16 @@ test("batch migration commits 50+10, returns lost responses, and rejects changed
       CREATE TABLE staff_roles(staff_user_id uuid,role staff_role);
       CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,deal_type text,status text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz);
       CREATE TABLE property_public_members(property_id uuid,public_listing_no text);
-      CREATE TABLE whatsapp_staff_channels(staff_id uuid,channel_id text,eligible boolean,retired_at timestamptz,verified_at timestamptz,verification_ref text);
-      CREATE TABLE staff_external_references(id uuid PRIMARY KEY,staff_id uuid,valid_from timestamptz,valid_until timestamptz,verified_at timestamptz);
+      CREATE TABLE whatsapp_staff_channels(staff_id uuid,channel_id text,eligible boolean,retired_at timestamptz,verified_at timestamptz,verification_ref text,version integer NOT NULL DEFAULT 1);
+      CREATE TABLE staff_external_references(id uuid PRIMARY KEY,namespace text,staff_id uuid,valid_from timestamptz,valid_until timestamptz,verified_at timestamptz);
       CREATE TABLE whatsapp_tracking_links(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),code text NOT NULL UNIQUE,current_version integer NOT NULL DEFAULT 1,created_by uuid,created_at timestamptz DEFAULT now());
       CREATE TABLE whatsapp_tracking_link_versions(link_id uuid,version integer,channel_id text,placement_source text,entry_point_type text,public_listing_no text,property_id uuid,deal_type text,requested_staff_id uuid,branch_id text,external_listing_id text,video_id text,enabled boolean,created_by uuid,placement_verified_at timestamptz,reference_mapping_id uuid,PRIMARY KEY(link_id,version));
     `);
     await db.exec(
       readFileSync("neon/migrations/20260927090000_whatsapp_link_batch_operations.sql", "utf8"),
+    );
+    await db.exec(
+      readFileSync("neon/migrations/20260927150000_whatsapp_link_batch_mapping_guard.sql", "utf8"),
     );
     await query(
       "INSERT INTO staff_users VALUES($1,true,'管理員',null),($2,true,'經理',null),($3,true,'代理',null)",
@@ -154,6 +157,46 @@ test("batch migration commits 50+10, returns lost responses, and rejects changed
     assert.equal(blocked.rows[0].reasonCode, "WA_LINK_STAFF_NOT_READY");
     assert.equal((await query("SELECT count(*)::int n FROM whatsapp_tracking_links"))[0].n, 60);
     await query("UPDATE whatsapp_staff_channels SET eligible=true WHERE staff_id=$1", [agentId]);
+    const changedMapping = makeRow("mapping-changed");
+    const changedPreview = await previewWhatsappLinkBatch(
+      { batchId: randomUUID(), rows: [changedMapping] },
+      admin,
+      query,
+    );
+    await query("UPDATE whatsapp_staff_channels SET version=version+1 WHERE staff_id=$1", [
+      agentId,
+    ]);
+    await assert.rejects(
+      commitWhatsappLinkChunk(
+        {
+          batchId: changedPreview.batchId,
+          chunkId: randomUUID(),
+          previewToken: changedPreview.previewToken,
+          rows: [changedMapping],
+        },
+        admin,
+        query,
+      ),
+      (error) => error instanceof Response && error.status === 409,
+    );
+    const changedAgain = await previewWhatsappLinkBatch(
+      { batchId: randomUUID(), rows: [changedMapping] },
+      admin,
+      query,
+    );
+    await assert.rejects(
+      commitWhatsappLinkChunk(
+        {
+          batchId: changedAgain.batchId,
+          chunkId: randomUUID(),
+          previewToken: changedPreview.previewToken,
+          rows: [changedMapping],
+        },
+        admin,
+        query,
+      ),
+      (error) => error instanceof Response && error.status === 409,
+    );
     const rival = makeRow("rival");
     const rivalA = await previewWhatsappLinkBatch(
       { batchId: randomUUID(), rows: [rival] },

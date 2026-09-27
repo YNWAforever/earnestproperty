@@ -7,6 +7,7 @@ import {
 } from "./source-contract.mjs";
 import { nextLifecycleState, normalizeCanonicalFieldValue } from "./reconcile.mjs";
 import { savePromotionTiers } from "./promotion-tier-repository.mjs";
+import { findMediaVariantSet, saveMediaVariantSet } from "../media/remote-variants-db.mjs";
 
 const SOURCES = new Set([SOURCE_28HSE, SOURCE_OLD_SITE]);
 const DEAL_TYPES = new Set(["sale", "rent"]);
@@ -5889,6 +5890,20 @@ export function createSyncRepository(options = {}) {
     return rows.length === 0 ? null : validateRunRow(rows[0]);
   }
 
+  async function findOwnedMediaVariantSet(assetId, sourceHash, operation) {
+    return findMediaVariantSet(
+      (statement, params) => query(statement, params, "media variant lookup", operation),
+      assetId,
+      sourceHash,
+    );
+  }
+  async function saveOwnedMediaVariantSet(set, operation) {
+    return saveMediaVariantSet(
+      (statement, params) => query(statement, params, "save media variants", operation),
+      set,
+    );
+  }
+
   return Object.freeze({
     approveShadowRun,
     assertLockSession,
@@ -5898,6 +5913,7 @@ export function createSyncRepository(options = {}) {
     loadCanonicalReadModels,
     findMediaByHash,
     findMediaByUrls,
+    findOwnedMediaVariantSet,
     finishRun,
     getApprovedHealthyShadowStreak,
     getHealthyCountHistory,
@@ -5911,6 +5927,7 @@ export function createSyncRepository(options = {}) {
     recordRunEvaluation,
     registerOwnedMedia,
     saveMediaRecord,
+    saveOwnedMediaVariantSet,
     saveObservations,
     savePromotionTiers: savePromotionTiersForRun,
     saveProposedLinks,

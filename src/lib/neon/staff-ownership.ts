@@ -78,6 +78,9 @@ export const STAFF_HISTORICAL_COLUMNS = [
   "recipient_staff_id",
   "acknowledged_by",
   "attended_staff_id",
+  // Append-only finance and quality revisions retain the actor who made the decision.
+  "changed_by",
+  "qualified_by",
 ] as const;
 
 /**
@@ -117,6 +120,9 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
 export const STAFF_HISTORICAL_PAIR_COLUMNS = [
   { table: "staff_notification_test_previews", column: "staff_id" },
   { table: "staff_notification_test_attempts", column: "staff_id" },
+  // Review subject and saved deal-credit identity are historical, not handover targets.
+  { table: "whatsapp_staff_mapping_reviews", column: "staff_id" },
+  { table: "transaction_agent_credits", column: "staff_id" },
 ] as const;
 
 /** Provider-confirmed ownership requires reconciliation; mappings retire on staff exit.

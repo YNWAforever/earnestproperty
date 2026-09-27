@@ -78,7 +78,7 @@ async function check(
       ({ key, value }) => {
         if (value) sessionStorage.setItem(key, JSON.stringify(value));
       },
-      { key: linkBatchProgressKey, value: saved },
+      { key: linkBatchProgressKey("fixture-admin"), value: saved },
     );
     await page.goto(server.url.toString());
     await page.waitForFunction(() =>
@@ -128,7 +128,7 @@ try {
       });
       const saved = await page.evaluate(
         (key) => JSON.parse(sessionStorage.getItem(key)!),
-        linkBatchProgressKey,
+        linkBatchProgressKey("fixture-admin"),
       );
       expect(saved.batchId).toBe(previous.batchId);
       expect(saved.uncertain).toBe(true);
@@ -151,10 +151,15 @@ try {
       await inject(page);
       await page.getByRole("button", { name: "查回伺服器結果" }).click();
       await expect(page.getByRole("button", { name: "使用這次選擇" })).toBeDisabled();
+      await page.getByRole("button", { name: "繼續同一批次" }).click();
+      await expect(page.getByRole("alert").first()).toContainText("結果仍未確認");
+      expect(
+        await page.evaluate(() => (window as unknown as { commitCalls?: number }).commitCalls ?? 0),
+      ).toBe(0);
       expect(
         await page.evaluate(
           (key) => JSON.parse(sessionStorage.getItem(key)!).uncertain,
-          linkBatchProgressKey,
+          linkBatchProgressKey("fixture-admin"),
         ),
       ).toBe(true);
     },
@@ -187,9 +192,44 @@ try {
       await expect(page.getByRole("button", { name: "下一步：來源" })).toBeEnabled();
     },
   );
-  await check("editing a restored preview starts at selection", previous, async (page) => {
+  await check("editing a restored preview returns to source step", previous, async (page) => {
     await page.getByRole("button", { name: "修改設定" }).click();
-    await expect(page.getByRole("button", { name: "下一步：來源" })).toBeVisible({ timeout: 1500 });
+    await expect(page.getByRole("button", { name: "下一步：跟進" })).toBeVisible({ timeout: 1500 });
+  });
+  await check("one blocked row permits a freshly previewed 59-row subset", null, async (page) => {
+    await page.evaluate(() => {
+      (window as unknown as { blockLastRow: boolean }).blockLastRow = true;
+    });
+    const offers = Array.from({ length: 60 }, (_, index) => ({
+      ...offer,
+      propertyId: id(index + 1000),
+      publicListingNo: `A${String(index + 1).padStart(6, "0")}`,
+    }));
+    await page.evaluate(
+      (value) =>
+        (window as unknown as { injectSelection: (offers: unknown[]) => void }).injectSelection(
+          value,
+        ),
+      offers,
+    );
+    await page.getByRole("button", { name: "下一步：來源" }).click();
+    await page.getByLabel("已人工核對刊登位置").check();
+    await page.getByRole("button", { name: "下一步：跟進" }).click();
+    await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+    await expect(page.getByText(/阻止 1/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "確認建立 60 筆" })).toBeDisabled();
+    const before = await page.evaluate(
+      (key) => JSON.parse(sessionStorage.getItem(key)!).batchId,
+      linkBatchProgressKey("fixture-admin"),
+    );
+    await page.getByLabel("我已核對並確認只處理所選合格行").check();
+    await page.getByRole("button", { name: /只提交已核對的合格行/ }).click();
+    await expect(page.getByRole("button", { name: "確認建立 59 筆" })).toBeEnabled();
+    const after = await page.evaluate(
+      (key) => JSON.parse(sessionStorage.getItem(key)!).batchId,
+      linkBatchProgressKey("fixture-admin"),
+    );
+    expect(after).not.toBe(before);
   });
 } finally {
   await browser.close();

@@ -34,6 +34,59 @@ export async function isolateSignedStaffEvent(
     [event.channelId, event.woztellMemberId, external, replyTo],
   );
   const classification = classifyWoztellEvent(event.payload);
+  const [testSchema] =
+    !correlated && (external || replyTo)
+      ? await query("SELECT to_regclass('staff_notification_test_events') IS NOT NULL AS available")
+      : [];
+  const [testAttempt] = testSchema?.available
+    ? await query(
+        `SELECT t.id FROM staff_notification_test_attempts t
+         WHERE t.transport='staff_whatsapp' AND t.channel_id_snapshot=$1
+           AND t.destination_reference_snapshot=$2 AND t.provider_operation_id IN ($3,$4)
+           AND t.state IN ('accepted','unknown') LIMIT 1`,
+        [event.channelId, event.woztellMemberId, external, replyTo],
+      )
+    : [];
+  if (testAttempt) {
+    const key = createHash("sha256")
+      .update(
+        JSON.stringify([
+          event.appId,
+          event.channelId,
+          event.woztellMemberId,
+          event.externalMessageId,
+          event.messageType,
+        ]),
+      )
+      .digest("hex");
+    const occurredAt = classification.occurredAt ?? new Date().toISOString();
+    const delivered = ["DELIVERED", "READ"].includes(event.messageType.toUpperCase());
+    await transaction([
+      {
+        statement: `INSERT INTO staff_notification_test_events(attempt_id,external_event_key,event_kind,occurred_at)
+          VALUES($1::uuid,$2,$3,$4::timestamptz) ON CONFLICT(external_event_key) DO NOTHING`,
+        params: [testAttempt.id, key, event.messageType, occurredAt],
+      },
+      ...(delivered
+        ? [
+            {
+              statement: `INSERT INTO staff_notification_test_evidence(attempt_id,kind,source,source_ref,occurred_at)
+            VALUES($1::uuid,'provider_delivered','signed_provider_receipt',$2,$3::timestamptz)
+            ON CONFLICT(attempt_id,kind,source,source_ref) DO NOTHING`,
+              params: [testAttempt.id, key, occurredAt],
+            },
+            {
+              statement: `UPDATE staff_notification_test_attempts SET
+            provider_delivered_at=COALESCE(provider_delivered_at,$2::timestamptz),
+            evidence_source='signed_provider_receipt',updated_at=now()
+            WHERE id=$1::uuid AND state IN ('accepted','unknown')`,
+              params: [testAttempt.id, occurredAt],
+            },
+          ]
+        : []),
+    ]);
+    return true;
+  }
   if (!correlated) {
     const reference = extractReferences(event.text ?? "");
     if (

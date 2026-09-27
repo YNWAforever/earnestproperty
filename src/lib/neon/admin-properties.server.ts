@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { CURRENT_PUBLIC_OFFERING_ORDER } from "./public-listing-query.js";
 import { queryRows, numberOrNull, stringOrNull, type DbRow } from "./db.server.ts";
 import type { StaffAccess } from "./auth.server.ts";
 import {
@@ -15,7 +16,7 @@ import {
 // Shared with the mutation function. Hash every member, including historical rows,
 // so imports, membership changes and ownership transfers invalidate an open editor.
 export const ADMIN_PROPERTY_VERSION_SQL = `md5(string_agg(p.id::text || ':' || coalesce(extract(epoch from p.updated_at)::text,'') || ':' || coalesce(extract(epoch from p.source_updated_at)::text,'') || ':' || coalesce(extract(epoch from p.last_seen_at)::text,'') || ':' || p.deal_type::text || ':' || coalesce(p.agent_id::text,''), '|' ORDER BY p.id))`;
-export const ADMIN_PROPERTY_ORDER_SQL = `p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC`;
+export const ADMIN_PROPERTY_ORDER_SQL = CURRENT_PUBLIC_OFFERING_ORDER;
 function actorScope(actor: StaffAccess) {
   if (actor.roles.some((role) => role === "admin" || role === "manager")) return null;
   if (actor.roles.includes("agent")) return actor.staffId;
@@ -67,6 +68,7 @@ export function buildAdminPropertyGroupsQuery(input: PropertyGroupFilters, actor
     return `$${params.length}`;
   };
   if (filters.status !== "all") conditions.push(`p.status::text=${param(filters.status)}`);
+  if (filters.publication === "public") conditions.push("NOT p.unlinked");
   if (filters.deal && filters.deal !== "all")
     conditions.push(`p.deal_type::text=${param(filters.deal)}`);
   if (filters.estateId) conditions.push(`p.estate_id=${param(filters.estateId)}::uuid`);

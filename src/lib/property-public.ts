@@ -18,6 +18,7 @@ type PublicProperty = {
   rent: number | null;
   status?: string;
   offerings?: PublicOffering[];
+  video_url?: string | null;
 };
 export function publicPropertyNo(
   property: Pick<PublicProperty, "listing_no" | "public_listing_no">,
@@ -70,12 +71,32 @@ export function propertyPriceSummary(property: PublicProperty) {
 }
 // A display-only cleanup. Source titles and manual CMS overrides are never rewritten.
 // Bedroom and helper-room numbers remain untouched until a human verifies them.
-export function normalizePublicListingTitle(raw: string) {
-  const cleaned = raw
-    .replace(/^(?:[!！★☆🔥✨\s]|【(?:筍盤|獨家|急售|推介|VR睇樓)】)+/gu, "")
+export function verifiedVrTourUrl(value?: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password) return null;
+    const host = url.hostname.toLowerCase();
+    if (host === "my.matterport.com" && url.pathname === "/show/" && url.searchParams.has("m"))
+      return url.href;
+    if (host === "kuula.co" && /^\/post\/[A-Za-z0-9_-]+\/?$/.test(url.pathname)) return url.href;
+  } catch {
+    return null;
+  }
+  return null;
+}
+export function stripUnsupportedVrClaim(raw: string, videoUrl?: string | null): string {
+  if (verifiedVrTourUrl(videoUrl)) return raw;
+  return raw
+    .replace(/【\s*VR\s*(?:實景|睇樓|全景)\s*】/gi, " ")
+    .replace(/\bVR\s*(?:實景|睇樓|全景)/gi, " ")
+    .replace(/(?:^|\s)VR(?=\s|$|[!！])/gi, " ");
+}
+export function normalizePublicListingTitle(raw: string, videoUrl?: string | null) {
+  const cleaned = stripUnsupportedVrClaim(raw, videoUrl)
+    .replace(/^(?:[!！★☆🔥✨\s]|【(?:筍盤|獨家|急售|推介)】)+/gu, "")
     .replace(/\bPatry\b/gi, "Party")
     .replace(/(?:\s*[!！]){2,}/g, "")
-    .replace(/(?:^|\s)VR(?:睇樓|全景)?(?=\s|$|[!！])/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
   return cleaned || "物業放盤";
@@ -85,7 +106,7 @@ export function publicPropertyTitle(property: PublicProperty & { title_zh: strin
     activePropertyOfferings(property).length > 1
       ? property.title_zh.replace(/售盤|租盤/g, "放盤")
       : property.title_zh;
-  return normalizePublicListingTitle(title);
+  return normalizePublicListingTitle(title, property.video_url);
 }
 
 /** Latest actual record update or source check; never substitutes the current clock. */

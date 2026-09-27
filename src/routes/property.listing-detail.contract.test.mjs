@@ -113,7 +113,7 @@ function buildLoader() {
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}) } = deps;
+  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}), resolveWebsiteActions=offers=>({actions:offers.map(offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}))}) } = deps;
   const SITE_CONTACT = { whatsappPhone: "" };
   ${body}
 }
@@ -449,20 +449,19 @@ test("findCastlePeakRoadSegmentByDistrictSlug resolves a property's district_slu
   assert.equal(findCastlePeakRoadSegmentByDistrictSlug(undefined), null);
 });
 
-test("the property page renders a nearby-transport card only when the district resolves to a corridor segment, and links through to that segment's page", () => {
-  assert.match(routeSource, /from "@\/content\/castle-peak-road"/);
-  assert.match(routeSource, /const transportSegment = findCastlePeakRoadSegmentByDistrictSlug\(/);
+test("the property page uses exact estate transport and a neutral fallback", () => {
+  assert.match(routeSource, /resolveEstateTransport\(estate\.slug\)/);
+  assert.doesNotMatch(routeSource, /findCastlePeakRoadSegmentByDistrictSlug\(/);
   const cardStart = routeSource.indexOf("data-property-transport-card");
-  assert.ok(cardStart !== -1, "expected a data-property-transport-card section");
-  // The card is gated behind `{transportSegment && (` -- omitted entirely
-  // (not an empty-state placeholder) when there's no match.
-  const gateStart = routeSource.lastIndexOf("{transportSegment && (", cardStart);
+  assert.ok(cardStart !== -1);
+  const gateStart = routeSource.lastIndexOf("{transportInfo && (", cardStart);
   assert.ok(gateStart !== -1 && gateStart < cardStart);
   const cardEnd = routeSource.indexOf(")}", cardStart);
   const cardBody = routeSource.slice(cardStart, cardEnd);
-  assert.match(cardBody, /\{transportSegment\.transport\}/);
-  assert.match(cardBody, /to="\/castle-peak-road\/\$segment"/);
-  assert.match(cardBody, /params={{ segment: transportSegment\.slug }}/);
+  assert.match(cardBody, /\{transportInfo\.text\}/);
+  assert.match(cardBody, /params=\{\{ segment: transportInfo\.segmentSlug \}\}/);
+  assert.match(routeSource, /data-property-transport-fallback/);
+  assert.match(routeSource, /此屋苑的交通資料仍待核對/);
 });
 
 test("loader: optional similar listings and transactions fail independently without losing the primary listing", async () => {

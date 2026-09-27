@@ -14,7 +14,9 @@ const contact = dataUrl(transpile(readFileSync(join(root, "src/lib/contact-links
 const source = transpile(
   readFileSync(join(root, "src/lib/whatsapp-enquiries/public-context.ts"), "utf8"),
 ).replace('from "../contact-links.ts"', 'from "' + contact + '"');
-const { buildPublicWhatsappMessage, resolvePublicWaAction } = await import(dataUrl(source));
+const { buildPublicWhatsappMessage, resolvePublicWaAction, resolveWebsiteActions } = await import(
+  dataUrl(source)
+);
 const offer = {
   propertyId: "00000000-0000-4000-8000-000000000001",
   publicListingNo: "A074714",
@@ -77,7 +79,7 @@ test("resolver batches tracked and missing offers without provisioning", async (
     };
     const result = await resolveTrackingLinks([offer, other], async (sql, params) => {
       calls.push({ sql, params });
-      return [{ propertyId: offer.propertyId, code: "tracked-code" }];
+      return [{ propertyId: offer.propertyId, candidateCount: 1, code: "tracked-code" }];
     });
     assert.equal(calls.length, 1);
     assert.match(calls[0].sql, /^WITH wanted AS/);
@@ -103,4 +105,15 @@ test("resolver batches tracked and missing offers without provisioning", async (
       else process.env[key] = value;
     }
   }
+});
+
+test("ambiguous website links never select an arbitrary code", () => {
+  const resolved = resolveWebsiteActions(
+    [offer],
+    [{ propertyId: offer.propertyId, candidateCount: 2, code: "arbitrary" }],
+    "85291234567",
+  );
+  assert.equal(resolved.links[0].href, null);
+  assert.equal(resolved.actions[0].mode, "untracked");
+  assert.match(decodeURIComponent(resolved.actions[0].href), /A074714（出租）/);
 });

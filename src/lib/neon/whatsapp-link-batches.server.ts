@@ -56,8 +56,14 @@ export async function previewWhatsappLinkBatch(
            (SELECT ref.staff_id FROM staff_external_references ref WHERE ref.id=NULLIF(w.d->>'referenceMappingId','')::uuid))
            AND s.active AND sr.role IN ('admin','manager','agent')
            AND m.eligible AND m.retired_at IS NULL AND m.verified_at IS NOT NULL AND m.verification_ref IS NOT NULL)) AS staff_ok,
+       (SELECT m.version FROM whatsapp_staff_channels m
+          WHERE m.staff_id=COALESCE(NULLIF(w.d->>'requestedStaffId','')::uuid,
+            (SELECT ref.staff_id FROM staff_external_references ref
+              WHERE ref.id=NULLIF(w.d->>'referenceMappingId','')::uuid))
+            AND m.channel_id=$2) AS mapping_version,
        (w.d->>'referenceMappingId' IS NULL OR EXISTS(
          SELECT 1 FROM staff_external_references sr WHERE sr.id=(w.d->>'referenceMappingId')::uuid
+           AND sr.namespace LIKE (w.d->>'placementSource')||'/%'
            AND sr.valid_from<=now() AND (sr.valid_until IS NULL OR sr.valid_until>now()) AND sr.verified_at<=now()
            AND (w.d->>'requestedStaffId' IS NULL OR sr.staff_id=(w.d->>'requestedStaffId')::uuid))) AS reference_ok,
        reserved.link_id AS reserved_id,candidates.n AS candidate_count,candidates.link_id AS candidate_id
@@ -107,15 +113,29 @@ export async function previewWhatsappLinkBatch(
     };
   });
   const previewToken = randomUUID();
+  const mappingVersions = Object.fromEntries(
+    evidence
+      .filter((row) => row.mapping_version != null)
+      .map((row) => [String(row.row_key), Number(row.mapping_version)]),
+  );
   const [snapshot] = await query(
-    `INSERT INTO whatsapp_link_batch_previews(batch_id,actor_staff_id,channel_id,token_hash,payload_hash,rows,expires_at)
-     VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::jsonb,now()+interval '10 minutes')
-     ON CONFLICT(batch_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,expires_at=EXCLUDED.expires_at
+    `INSERT INTO whatsapp_link_batch_previews(batch_id,actor_staff_id,channel_id,token_hash,payload_hash,rows,mapping_versions,expires_at)
+     VALUES($1::uuid,$2::uuid,$3,$4,$5,$6::jsonb,$7::jsonb,now()+interval '10 minutes')
+     ON CONFLICT(batch_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,
+       mapping_versions=EXCLUDED.mapping_versions,expires_at=EXCLUDED.expires_at
        WHERE whatsapp_link_batch_previews.actor_staff_id=EXCLUDED.actor_staff_id
          AND whatsapp_link_batch_previews.payload_hash=EXCLUDED.payload_hash
          AND whatsapp_link_batch_previews.channel_id=EXCLUDED.channel_id
      RETURNING expires_at`,
-    [batchId, actor.staffId, channel, hash(previewToken), payloadHash, JSON.stringify(rows)],
+    [
+      batchId,
+      actor.staffId,
+      channel,
+      hash(previewToken),
+      payloadHash,
+      JSON.stringify(rows),
+      JSON.stringify(mappingVersions),
+    ],
   );
   if (!snapshot) throw new Response("BATCH_PAYLOAD_CONFLICT", { status: 409 });
   return {
@@ -161,6 +181,8 @@ export async function commitWhatsappLinkChunk(
     return result.result as CommitChunkResult;
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
+    if (/WA_LINK_MAPPING_CHANGED|WA_LINK_REFERENCE_SCOPE_CHANGED/.test(message))
+      throw new Response("BATCH_MAPPING_CHANGED", { status: 409 });
     if (/BATCH_PAYLOAD_CONFLICT/.test(message))
       throw new Response("BATCH_PAYLOAD_CONFLICT", { status: 409 });
     if (/BATCH_PREVIEW_EXPIRED_OR_UNAUTHORIZED/.test(message))

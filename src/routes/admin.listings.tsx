@@ -26,6 +26,7 @@ function parseListingSearch(search: Record<string, unknown>): PropertyGroupFilte
     )
   )
     result.status = search.status as PropertyGroupFilters["status"];
+  if (search.publication === "public") result.publication = "public";
   const deal = search.deal ?? search.deal_type;
   if (deal === "sale" || deal === "rent") result.deal = deal;
   for (const [key, legacy] of [
@@ -195,6 +196,17 @@ function AdminListings() {
               {propertyStatusLabels[s]}
             </option>
           ))}
+        </select>
+        <select
+          className={selectClass}
+          aria-label="刊登範圍"
+          value={search.publication ?? "all"}
+          onChange={(e) =>
+            filter({ publication: e.target.value as PropertyGroupFilters["publication"] })
+          }
+        >
+          <option value="all">所有管理紀錄</option>
+          <option value="public">有公開樓編</option>
         </select>
         <select
           className={selectClass}

@@ -1,5 +1,8 @@
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
-import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
+import {
+  resolvePublicWaAction,
+  resolveWebsiteActions,
+} from "@/lib/whatsapp-enquiries/public-context";
 import {
   activePropertyOfferings,
   selectPropertyOffering,
@@ -7,6 +10,7 @@ import {
   propertyPriceSummary,
   propertyDealLabel,
   publicPropertyTitle,
+  verifiedVrTourUrl,
 } from "@/lib/property-public";
 import { useState } from "react";
 import { createFileRoute, Link, notFound, redirect, useRouter } from "@tanstack/react-router";
@@ -79,7 +83,7 @@ import {
   getPropertyDecision,
 } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
-import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
+import { resolveEstateTransport } from "@/content/estate-pages";
 import { listingSeo } from "@/lib/listing-seo";
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
@@ -106,6 +110,7 @@ type PropertyHeadData = {
     | "status"
     | "seo_title"
     | "seo_description"
+    | "video_url"
     | "estates"
     | "district_slug"
     | "saleable_area"
@@ -189,10 +194,7 @@ export const Route = createFileRoute("/property/$listingNo")({
           enabled: false,
           fallbackHref: null,
           links: [],
-          actions: offers.map((offer) => ({
-            propertyId: offer.propertyId,
-            ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
-          })),
+          actions: resolveWebsiteActions(offers, [], SITE_CONTACT.whatsappPhone).actions,
         };
       }),
     ]);
@@ -290,11 +292,6 @@ const inquirySchema = z.object({
   message: z.string().trim().max(1000, "訊息過長").optional(),
 });
 
-function isVrUrl(u?: string | null) {
-  if (!u) return false;
-  return /vr|kuula|matterport|panor|360|my\.matterport/i.test(u);
-}
-
 function toEmbed(u: string) {
   // YouTube
   const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
@@ -342,6 +339,7 @@ function PropertyPage() {
   // placeholder is a photo of the flat.
   const images: (string | null)[] = property.images?.length ? property.images : [null];
   const realImages = images.filter((src): src is string => Boolean(src));
+  const imageVariant = (src: string | null) => (src ? property.image_variants?.[src] : null);
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
@@ -377,20 +375,9 @@ function PropertyPage() {
     estateSlug: estate?.slug,
     districtSlug: estate?.district_slug ?? property.district_slug,
   });
-  // Nearby transport: reuses the corridor content's already-curated copy, keyed
-  // by segment rather than district_slug directly (a segment can absorb more
-  // than one district_slug -- see findCastlePeakRoadSegmentByDistrictSlug's own
-  // comment). Renders nothing (not a placeholder) when the listing's district
-  // isn't part of a corridor segment.
-  const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(
-    estate?.district_slug ?? property.district_slug,
-  );
-
-  // Narrowed values rather than booleans: TypeScript cannot carry a
-  // `!!property.video_url` guard through a separate const into the JSX below,
-  // so the nullable field was being passed straight into src/toEmbed.
-  const videoUrl = property.video_url && !isVrUrl(property.video_url) ? property.video_url : null;
-  const vrUrl = property.video_url && isVrUrl(property.video_url) ? property.video_url : null;
+  const transportInfo = estate?.slug ? resolveEstateTransport(estate.slug) : null;
+  const vrUrl = verifiedVrTourUrl(property.video_url);
+  const videoUrl = property.video_url && !vrUrl ? property.video_url : null;
   const floorplanUrl = property.floorplan_url ?? null;
   const hasVideo = videoUrl !== null;
   const hasVR = vrUrl !== null;
@@ -732,6 +719,7 @@ function PropertyPage() {
               >
                 <AppImage
                   src={images[activeImg]}
+                  variantSet={imageVariant(images[activeImg])}
                   alt={safeTitle}
                   width={1200}
                   height={900}
@@ -783,6 +771,7 @@ function PropertyPage() {
                     >
                       <AppImage
                         src={src}
+                        variantSet={imageVariant(src)}
                         alt={`${safeTitle} ${i + 1}`}
                         width={80}
                         height={60}
@@ -941,9 +930,9 @@ function PropertyPage() {
               </Card>
             )}
 
-            {/* Nearby transport -- omitted entirely (not a placeholder) when the
-                listing's district isn't part of a known corridor segment. */}
-            {transportSegment && (
+            {/* Exact estate mapping controls curated corridor copy. Other estates
+                receive a neutral guide link while their transport detail is checked. */}
+            {transportInfo && (
               <Card className="mt-6" data-property-transport-card>
                 <CardHeader>
                   <CardTitle as="h2" className="flex items-center gap-2 text-base">
@@ -952,18 +941,38 @@ function PropertyPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm leading-7 text-muted-foreground">
-                    {transportSegment.transport}
-                  </p>
+                  <p className="text-sm leading-7 text-muted-foreground">{transportInfo.text}</p>
                   <div className="mt-4">
                     <Link
                       to="/castle-peak-road/$segment"
-                      params={{ segment: transportSegment.slug }}
+                      params={{ segment: transportInfo.segmentSlug }}
                       className="text-sm text-primary underline"
                     >
-                      查看{transportSegment.nameZh}交通及生活資訊 →
+                      查看{transportInfo.nameZh}交通及生活資訊 →
                     </Link>
                   </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {!transportInfo && estate?.slug && (
+              <Card className="mt-6" data-property-transport-fallback>
+                <CardHeader>
+                  <CardTitle as="h2" className="flex items-center gap-2 text-base">
+                    <TrainFront className="h-4 w-4" />
+                    地區交通
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-7 text-muted-foreground">
+                    此屋苑的交通資料仍待核對。請按實際出發地及時段查閱路線。
+                  </p>
+                  <Link
+                    to="/castle-peak-road"
+                    className="mt-4 inline-block text-sm text-primary underline"
+                  >
+                    查看地區指南 →
+                  </Link>
                 </CardContent>
               </Card>
             )}
@@ -1196,6 +1205,8 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
       <div className="aspect-[4/3] overflow-hidden bg-muted">
         <AppImage
           src={img}
+          variantSet={img ? listing.image_variants?.[img] : null}
+          sizes="(min-width: 1024px) 260px, 50vw"
           alt={safeTitle}
           width={400}
           height={300}

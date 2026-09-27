@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   enqueueStaffTestNotification,
+  confirmStaffTestReceipt,
+  findStaffTestNotificationByRequest,
   getStaffTestNotification,
   previewStaffTestNotification,
 } from "@/lib/neon/whatsapp-test-notification";
@@ -25,12 +28,37 @@ export function StaffTestNotificationDialog({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [evidenceRef, setEvidenceRef] = useState("");
+  const storageKey = `staff-test:${staffId}:${transport}`;
+  useEffect(() => {
+    const id = window.sessionStorage.getItem(storageKey);
+    if (!id) return;
+    let active = true;
+    findStaffTestNotificationByRequest(id)
+      .then((saved) => {
+        if (!active) return;
+        setRequestId(id);
+        if (saved) {
+          setStatus(saved);
+          setOpen(true);
+        } else {
+          setError("先前提交的試送尚無紀錄；請核對狀態，不會自動重發。");
+        }
+      })
+      .catch(() => {
+        if (active) setError("未能查閱先前試送，請稍後重試。");
+      });
+    return () => {
+      active = false;
+    };
+  }, [storageKey]);
   async function showPreview() {
     if (!endpointVersion) return;
     setBusy(true);
     setError("");
     setStatus(null);
     setRequestId(null);
+    window.sessionStorage.removeItem(storageKey);
     try {
       setPreview(await previewStaffTestNotification({ staffId, transport, endpointVersion }));
       setOpen(true);
@@ -44,6 +72,7 @@ export function StaffTestNotificationDialog({
     if (!preview?.ready || !preview.previewToken || !endpointVersion) return;
     const id = requestId ?? crypto.randomUUID();
     setRequestId(id);
+    window.sessionStorage.setItem(storageKey, id);
     setBusy(true);
     setError("");
     try {
@@ -69,33 +98,43 @@ export function StaffTestNotificationDialog({
         disabled={!endpointVersion || busy}
         onClick={showPreview}
       >
-        預覽同事通知試送
+        {transport === "staff_whatsapp" ? "測試同事 WhatsApp" : "測試 Inbox 私有備註"}
       </Button>
-      {open && preview ? (
+      {open && (preview || status) ? (
         <section role="dialog" aria-label="同事通知試送" className="space-y-3 rounded border p-4">
           <h4 className="font-semibold">[測試] 同事通知</h4>
-          <dl className="grid gap-1 text-sm">
-            <div>
-              <dt className="inline">同事：</dt>
-              <dd className="inline">{preview.staffName}</dd>
-            </div>
-            <div>
-              <dt className="inline">方式：</dt>
-              <dd className="inline">
-                {transport === "staff_whatsapp" ? "同事 WhatsApp" : "Inbox 私有備註"}
-              </dd>
-            </div>
-            <div>
-              <dt className="inline">收件端：</dt>
-              <dd className="inline">{preview.maskedDestination ?? "未設定"}</dd>
-            </div>
-            <div>
-              <dt className="inline">端點版本：</dt>
-              <dd className="inline">v{endpointVersion}</dd>
-            </div>
-          </dl>
-          <p className="whitespace-pre-wrap rounded bg-muted p-2 text-sm">{preview.message}</p>
-          {preview.reasons.length ? (
+          {preview ? (
+            <dl className="grid gap-1 text-sm">
+              <div>
+                <dt className="inline">同事：</dt>
+                <dd className="inline">{preview.staffName}</dd>
+              </div>
+              <div>
+                <dt className="inline">方式：</dt>
+                <dd className="inline">
+                  {transport === "staff_whatsapp" ? "同事 WhatsApp" : "Inbox 私有備註"}
+                </dd>
+              </div>
+              <div>
+                <dt className="inline">收件端：</dt>
+                <dd className="inline">{preview.maskedDestination ?? "未設定"}</dd>
+              </div>
+              <div>
+                <dt className="inline">端點版本：</dt>
+                <dd className="inline">v{endpointVersion}</dd>
+              </div>
+              <div>
+                <dt className="inline">Inbox 映射版本：</dt>
+                <dd className="inline">
+                  {preview.mappingVersion ? `v${preview.mappingVersion}` : "未設定"}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+          {preview ? (
+            <p className="whitespace-pre-wrap rounded bg-muted p-2 text-sm">{preview.message}</p>
+          ) : null}
+          {preview?.reasons.length ? (
             <p role="alert">未可試送：{preview.reasons.join("、")}</p>
           ) : null}
           {error ? <p role="alert">{error}</p> : null}
@@ -104,15 +143,57 @@ export function StaffTestNotificationDialog({
               <p>
                 狀態：
                 {status.state === "accepted"
-                  ? "供應商已接納，等待手機送達核對"
+                  ? "供應商已接納，尚未核實送達"
                   : status.state === "unknown"
                     ? "結果不明，請核對；不會自動重發"
                     : status.state}
               </p>
               <p>
-                送達：{status.deliveredAt ?? "未核實"}；已讀：{status.readAt ?? "未核實"}
+                供應商送達：{status.providerDeliveredAt ?? "未核實"}；同事收件確認：
+                {status.recipientConfirmedAt ?? "未核實"}；接手確認：
+                {status.acknowledgementAt ?? "未核實"}
+              </p>
+              <p>
+                供應商接納：{status.providerAcceptedAt ?? "未核實"}；證據來源：
+                {status.evidenceSource ?? "未有"}
               </p>
               <p>試送編號：{status.attemptId}</p>
+              {status.recipientConfirmedAt ? (
+                <p>同事已確認收件（人工紀錄）：{status.recipientConfirmedAt}</p>
+              ) : status.state === "accepted" || status.state === "unknown" ? (
+                <div className="space-y-2">
+                  <label>
+                    收件確認證據編號
+                    <Input
+                      value={evidenceRef}
+                      maxLength={160}
+                      onChange={(event) => setEvidenceRef(event.target.value)}
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || !evidenceRef.trim()}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError("");
+                      try {
+                        await confirmStaffTestReceipt({
+                          attemptId: status.attemptId,
+                          evidenceRef: evidenceRef.trim(),
+                        });
+                        setStatus(await getStaffTestNotification(status.attemptId));
+                      } catch {
+                        setError("未能記錄人工收件確認；請核對證據編號與權限。");
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    記錄同事收件確認
+                  </Button>
+                </div>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
@@ -125,7 +206,7 @@ export function StaffTestNotificationDialog({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              disabled={busy || !preview.ready || Boolean(status)}
+              disabled={busy || !preview?.ready || Boolean(status)}
               onClick={send}
             >
               明確提交試送

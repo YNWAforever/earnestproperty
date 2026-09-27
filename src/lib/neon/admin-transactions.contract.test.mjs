@@ -5,6 +5,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import test, { after } from "node:test";
 import { pathToFileURL } from "node:url";
 import ts from "typescript";
+import { PGlite } from "@electric-sql/pglite";
 
 // admin-data.server.ts (unlike public-data.server.ts, whose harness this was
 // originally modeled on) pulls in a much deeper module graph -- ai/*.server.ts,
@@ -500,4 +501,153 @@ test("updateAdminLead keeps a valid budget in its CRM update", async () => {
   assert.match(calls[0].text, /UPDATE crm_leads SET/);
   assert.equal(calls[0].params[2], 0);
   assert.equal(calls[0].params[3], 100);
+});
+
+test("verified performance blocks silent base price, date, deal type or provenance rewrites", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await server.saveAdminTransaction(
+    {
+      id: "txn-1",
+      estate_id: "estate-1",
+      deal_type: "sale",
+      price: 10000000,
+      saleable_area: 500,
+      deal_date: "2026-08-01",
+      unit: null,
+      block: null,
+      floor_band: null,
+      source: null,
+      source_url: null,
+      verified: true,
+    },
+    ADMIN_ACTOR,
+  );
+  assert.match(calls[0].text, /transaction_performance performance/);
+  assert.match(calls[0].text, /transactions\.price IS DISTINCT FROM \$3::numeric/);
+  assert.match(calls[0].text, /transactions\.deal_date IS DISTINCT FROM \$6::date/);
+  assert.match(calls[0].text, /transactions\.deal_type IS DISTINCT FROM \$2::deal_type/);
+});
+
+test("blocked base transaction edit reports a conflict instead of not found", async () => {
+  const calls = [];
+  const server = await loadAdminDataServerWithInjectedQuery(async (statement, params) => {
+    calls.push({ statement, params });
+    return /SELECT id FROM transactions WHERE id/.test(statement) ? [{ id: "txn-1" }] : [];
+  });
+  await assert.rejects(
+    server.saveAdminTransaction(
+      {
+        id: "txn-1",
+        estate_id: "estate-1",
+        deal_type: "sale",
+        price: 10000000,
+        saleable_area: 500,
+        deal_date: "2026-08-01",
+        unit: null,
+        block: null,
+        floor_band: null,
+        source: null,
+        source_url: null,
+        verified: true,
+      },
+      ADMIN_ACTOR,
+    ),
+    (error) => error instanceof Response && error.status === 409,
+  );
+  assert.equal(calls.length, 2);
+});
+
+test("source verification can stay private while public publication remains off", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await server.saveAdminTransaction(
+    {
+      estate_id: "estate-1",
+      deal_type: "sale",
+      price: 10000000,
+      saleable_area: 500,
+      deal_date: "2026-08-01",
+      unit: null,
+      block: null,
+      floor_band: null,
+      source: null,
+      source_url: null,
+      verified: true,
+      published: false,
+    },
+    ADMIN_ACTOR,
+  );
+  assert.equal(calls[0].params[11], "verified");
+  assert.equal(calls[0].params[12], false);
+  assert.match(calls[0].text, /CASE WHEN \$12::transaction_verification_state = 'verified'/);
+});
+
+test("attribution filters use server actor scope and reject agent request forgery", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await assert.rejects(
+    server.listAdminTransactions({ attribution_status: "missing" }, AGENT_ACTOR),
+    (error) => error instanceof Response && error.status === 403,
+  );
+  assert.equal(calls.length, 0);
+  await server.listAdminTransactions(
+    { attribution_status: "verified_unattributed" },
+    { staffId: "manager-1", roles: ["manager"] },
+  );
+  assert.match(calls[0].text, /finance_manager\.id=\$1::uuid/);
+  assert.match(calls[0].text, /perf\.attribution_status = \$2/);
+  assert.deepEqual(calls[0].params, ["manager-1", "verified_unattributed"]);
+});
+
+test("embedded DB hides cross-branch finance status and filters only visible transactions", async () => {
+  const db = new PGlite();
+  const branchA = "00000000-0000-4000-8000-000000000011";
+  const branchB = "00000000-0000-4000-8000-000000000012";
+  const manager = "00000000-0000-4000-8000-000000000013";
+  const agentA = "00000000-0000-4000-8000-000000000014";
+  const agentB = "00000000-0000-4000-8000-000000000015";
+  const txA = "00000000-0000-4000-8000-000000000016";
+  const txB = "00000000-0000-4000-8000-000000000017";
+  try {
+    await db.exec(`CREATE TYPE deal_type AS ENUM ('sale','rent');
+      CREATE TYPE transaction_verification_state AS ENUM ('unverified','pending','verified');
+      CREATE TABLE staff_users(id uuid PRIMARY KEY,branch_id uuid,name_zh text,name_en text);
+      CREATE TABLE estates(id uuid PRIMARY KEY,name_zh text);
+      CREATE TABLE transactions(id uuid PRIMARY KEY,estate_id uuid,deal_type deal_type,price numeric,
+        saleable_area integer,saleable_psf numeric,deal_date date,unit text,block text,floor_band text,
+        source text,source_url text,verification_state transaction_verification_state,
+        published boolean,agent_id uuid,created_at timestamptz DEFAULT now());
+      CREATE TABLE transaction_performance(transaction_id uuid PRIMARY KEY,attribution_status text);`);
+    await db.query(
+      "INSERT INTO staff_users(id,branch_id,name_zh) VALUES ($1,$4,'Manager'),($2,$4,'A'),($3,$5,'B')",
+      [manager, agentA, agentB, branchA, branchB],
+    );
+    await db.query(
+      "INSERT INTO transactions(id,deal_type,verification_state,published,agent_id) VALUES ($1,'sale','verified',false,$3),($2,'rent','verified',false,$4)",
+      [txA, txB, agentA, agentB],
+    );
+    await db.query(
+      "INSERT INTO transaction_performance(transaction_id,attribution_status) VALUES ($1,'verified_attributed'),($2,'verified_unattributed')",
+      [txA, txB],
+    );
+    const server = await loadAdminDataServerWithInjectedQuery(
+      async (statement, params = []) => (await db.query(statement, params)).rows,
+    );
+    const rows = await server.listAdminTransactions({}, { staffId: manager, roles: ["manager"] });
+    assert.equal(rows.length, 2);
+    assert.equal(rows.find((row) => row.id === txA).attribution_status, "verified_attributed");
+    assert.equal(rows.find((row) => row.id === txB).attribution_status, null);
+    assert.equal(rows.find((row) => row.id === txB).finance_visible, false);
+    const filtered = await server.listAdminTransactions(
+      { attribution_status: "verified_unattributed" },
+      { staffId: manager, roles: ["manager"] },
+    );
+    assert.equal(filtered.length, 0);
+    const agentRows = await server.listAdminTransactions({}, { staffId: agentA, roles: ["agent"] });
+    assert.equal(agentRows.length, 1);
+    assert.equal(agentRows[0].attribution_status, null);
+  } finally {
+    await db.close();
+  }
 });

@@ -1,3 +1,4 @@
+import { ensureMediaVariants } from "../media/remote-variants.mjs";
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
@@ -1840,6 +1841,30 @@ export async function prepareListingMedia(rawInput) {
         asset = registrationOutcome.asset;
         orphanedUploadUrl = registrationOutcome.orphanedUploadUrl;
         localAssets.set(contentHash, asset);
+      }
+      if (
+        mode === "upload" &&
+        process.env.MLS_MEDIA_VARIANTS_ENABLED === "true" &&
+        asset &&
+        typeof repository.findOwnedMediaVariantSet === "function" &&
+        typeof repository.saveOwnedMediaVariantSet === "function"
+      ) {
+        try {
+          const ownedHost = new URL(asset.url).hostname.toLowerCase();
+          await ensureMediaVariants(
+            { assetId: asset.id, sourceHash: contentHash, sourceUrl: asset.url },
+            {
+              allowedHosts: [ownedHost],
+              readSource: async () => downloaded.bytes,
+              find: (id, hash) => repository.findOwnedMediaVariantSet(id, hash, { signal }),
+              put: (value) => blobStore.put({ ...value, signal }),
+              save: (set) => repository.saveOwnedMediaVariantSet(set, { signal }),
+            },
+          );
+        } catch {
+          // Variant processing is optional; keep the validated owned original.
+          throwIfAborted(signal);
+        }
       }
       const result = resultFor(candidate, identity, {
         contentHash,

@@ -67,6 +67,7 @@ const saveServer = createServerFn({ method: "POST" })
       branchId: string | null;
       verificationRef: string;
       eligible: boolean;
+      expectedVersion: number | null;
     }) => data,
   )
   .handler(async ({ data }) => {
@@ -86,4 +87,45 @@ const queueServer = createServerFn({ method: "GET" }).handler(async () => {
 });
 export async function getWhatsappEnquiryQueue() {
   return queueServer(await withStaffAuthHeaders({}));
+}
+const reviewedSaveServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    z
+      .object({
+        staffId: z.string().uuid(),
+        expectedVersion: z.number().int().positive().nullable(),
+        evidenceId: z.string().uuid(),
+        eligible: z.boolean(),
+      })
+      .strict(),
+  )
+  .handler(async ({ data }) => {
+    const { requireStaffAccess } = await import("./auth.server");
+    const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);
+    return (await import("./staff-mapping-review.server")).saveReviewedStaffChannel(data, actor);
+  });
+export async function saveReviewedWhatsappStaffChannel(
+  data: Parameters<typeof reviewedSaveServer>[0]["data"],
+) {
+  return reviewedSaveServer(await withStaffAuthHeaders({ data }));
+}
+const retireChannelServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    z
+      .object({
+        mappingId: z.string().uuid(),
+        expectedVersion: z.number().int().positive(),
+        reason: z.string().trim().min(3).max(300),
+      })
+      .strict(),
+  )
+  .handler(async ({ data }) => {
+    const { requireStaffAccess } = await import("./auth.server");
+    const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);
+    return (await import("./staff-mapping-review.server")).retireStaffChannel(data, actor);
+  });
+export async function retireWhatsappStaffChannel(
+  data: Parameters<typeof retireChannelServer>[0]["data"],
+) {
+  return retireChannelServer(await withStaffAuthHeaders({ data }));
 }

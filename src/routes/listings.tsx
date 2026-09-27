@@ -64,6 +64,7 @@ import { SITE_CONTACT } from "@/config/site";
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
 import {
   resolvePublicWaAction,
+  resolveWebsiteActions,
   type PublicWaAction,
 } from "@/lib/whatsapp-enquiries/public-context";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
@@ -130,10 +131,7 @@ export const Route = createFileRoute("/listings")({
       .then((response) => response.actions)
       .catch((error) => {
         console.error("WA_TRACKING_RESOLVER_FAILED", error);
-        return offers.map((offer) => ({
-          propertyId: offer.propertyId,
-          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
-        }));
+        return resolveWebsiteActions(offers, [], SITE_CONTACT.whatsappPhone).actions;
       });
     return {
       ...result,
@@ -1393,6 +1391,8 @@ function ListingCard({ p, enquiryAction }: { p: ListingRow; enquiryAction?: Publ
         <div className="relative aspect-[4/3] overflow-hidden bg-muted">
           <AppImage
             src={cover}
+            variantSet={cover ? p.image_variants?.[cover] : null}
+            sizes="(min-width: 1280px) 300px, (min-width: 640px) 50vw, 100vw"
             alt={safeTitle}
             width={400}
             height={300}
@@ -1499,6 +1499,8 @@ function ListingCardRow({ p, enquiryAction }: { p: ListingRow; enquiryAction?: P
           <div className="relative aspect-[4/3] w-28 flex-shrink-0 overflow-hidden rounded-md bg-muted sm:w-44">
             <AppImage
               src={cover}
+              variantSet={cover ? p.image_variants?.[cover] : null}
+              sizes="(min-width: 640px) 176px, 112px"
               alt={safeTitle}
               width={200}
               height={150}

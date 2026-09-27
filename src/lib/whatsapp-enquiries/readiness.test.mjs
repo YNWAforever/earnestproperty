@@ -10,6 +10,10 @@ const base = {
   roles: ["agent"],
   mapping: {
     channelId: "company",
+    version: 1,
+    reviewBasis: "legacy_manual",
+    reviewEnforced: false,
+    reviewEvidenceId: null,
     eligible: true,
     verificationRef: "approved",
     verifiedAt: now,
@@ -69,7 +73,7 @@ test("readiness keeps assignment, private note and staff phone separate", () => 
   assert.equal(ready.inboxPrivateNote.state, "ready");
   assert.equal(ready.staffWhatsapp.state, "ready");
   assert.equal(ready.maskedDestination, "••••4567");
-  assert.equal(ready.mappingVersion, null);
+  assert.equal(ready.mappingVersion, 1);
   assert.equal(ready.endpointVersion, 3);
   const noPhone = evaluate({ staffEndpoint: null });
   assert.equal(noPhone.assignment.state, "ready");

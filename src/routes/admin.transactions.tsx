@@ -5,6 +5,7 @@ import { Pencil, Plus } from "lucide-react";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +39,13 @@ type TransactionFilters = {
   deal_type: "all" | "sale" | "rent";
   estate_id: string;
   verification_state: "all" | "unverified" | "pending" | "verified";
+  attribution_status:
+    | "all"
+    | "missing"
+    | "draft"
+    | "verified_attributed"
+    | "verified_unattributed"
+    | "cancelled";
 };
 
 const defaultFilters: TransactionFilters = {
@@ -45,6 +53,7 @@ const defaultFilters: TransactionFilters = {
   deal_type: "all",
   estate_id: "all",
   verification_state: "all",
+  attribution_status: "all",
 };
 
 const verificationLabels: Record<string, string> = {
@@ -62,6 +71,10 @@ export const Route = createFileRoute("/admin/transactions")({
 
 function AdminTransactions() {
   const { user } = useNeonAuth();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const canSeeFinance =
+    staffSession?.status === "ok" &&
+    (staffSession.roles.includes("admin") || staffSession.roles.includes("manager"));
   const [rows, setRows] = useState<AdminTransactionRow[] | null>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
   const [filters, setFilters] = useState<TransactionFilters>(defaultFilters);
@@ -101,7 +114,7 @@ function AdminTransactions() {
   }, [refreshTransactions]);
 
   return (
-    <AdminShell title="成交管理" description="登記、核實及發布晉誠地產自己促成的成交記錄。">
+    <AdminShell title="成交管理" description="登記成交、核實來源、管理公開發布及內部歸因。">
       <AdminToolbar
         filters={
           <>
@@ -162,6 +175,29 @@ function AdminTransactions() {
                 <SelectItem value="verified">已核實</SelectItem>
               </SelectContent>
             </Select>
+            {canSeeFinance ? (
+              <Select
+                value={filters.attribution_status}
+                onValueChange={(v) =>
+                  setFilters((f) => ({
+                    ...f,
+                    attribution_status: v as TransactionFilters["attribution_status"],
+                  }))
+                }
+              >
+                <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="歸因狀態">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部歸因</SelectItem>
+                  <SelectItem value="missing">未建歸因</SelectItem>
+                  <SelectItem value="draft">待核實</SelectItem>
+                  <SelectItem value="verified_unattributed">已核實未歸因</SelectItem>
+                  <SelectItem value="verified_attributed">完整歸因</SelectItem>
+                  <SelectItem value="cancelled">已取消</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : null}
           </>
         }
         actions={
@@ -199,7 +235,8 @@ function AdminTransactions() {
                     <TableHead className="text-right">價錢</TableHead>
                     <TableHead>成交日</TableHead>
                     <TableHead>負責人</TableHead>
-                    <TableHead>狀態</TableHead>
+                    <TableHead>公開狀態</TableHead>
+                    {canSeeFinance ? <TableHead>成交歸因</TableHead> : null}
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -229,6 +266,31 @@ function AdminTransactions() {
                               transaction.verification_state)}
                         </Badge>
                       </TableCell>
+                      {canSeeFinance ? (
+                        <TableCell>
+                          {transaction.finance_visible ? (
+                            <Badge
+                              variant={
+                                transaction.attribution_status === "verified_attributed"
+                                  ? "default"
+                                  : "outline"
+                              }
+                            >
+                              {transaction.attribution_status === "verified_attributed"
+                                ? "完整歸因"
+                                : transaction.attribution_status === "verified_unattributed"
+                                  ? "已核實未歸因"
+                                  : transaction.attribution_status === "cancelled"
+                                    ? "已取消"
+                                    : transaction.attribution_status === "draft"
+                                      ? "待核實"
+                                      : "未建歸因"}
+                            </Badge>
+                          ) : (
+                            "權限外"
+                          )}
+                        </TableCell>
+                      ) : null}
                       <TableCell>
                         <div className="flex justify-end">
                           <Button asChild variant="outline" size="sm" className="h-11 px-2 lg:h-8">

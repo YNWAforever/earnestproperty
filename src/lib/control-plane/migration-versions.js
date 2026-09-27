@@ -95,6 +95,15 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260927090000_whatsapp_link_batch_operations.sql",
   "20260927093000_whatsapp_link_management_indexes.sql",
   "20260927100000_whatsapp_redirect_bucket_retention.sql",
+  "20260927110000_staff_mapping_review_versions.sql",
+  "20260927120000_named_inbox_folders.sql",
+  "20260927130000_staff_notification_test_evidence.sql",
+  "20260927140000_whatsapp_link_reference_scope.sql",
+  "20260927150000_whatsapp_link_batch_mapping_guard.sql",
+  "20260927160000_transaction_sales_attribution.sql",
+  "20260927170000_performance_event_quality.sql",
+  "20260927171000_inquiry_quality.sql",
+  "20260927172000_media_asset_variants.sql",
 ]);
 
 /**

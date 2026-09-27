@@ -2,6 +2,7 @@ import { describe, test, expect } from "bun:test";
 import {
   publicPropertyNo,
   publicPropertyTitle,
+  verifiedVrTourUrl,
   propertyUpdatedAt,
   propertyPriceSummary,
   propertyDealLabel,
@@ -88,4 +89,19 @@ test("public title removes promotional artifacts without rewriting source room c
   const property = { ...sale, title_zh: raw };
   expect(publicPropertyTitle(property)).toBe("3房套工 Party Room");
   expect(property.title_zh).toBe(raw);
+});
+
+test("VR claims need a supported HTTPS tour rather than a video or title keyword", () => {
+  const title = "星堤 VR實景 3房套";
+  expect(
+    publicPropertyTitle({ ...sale, title_zh: title, video_url: "https://youtu.be/abcdefghijk" }),
+  ).toBe("星堤 3房套");
+  expect(publicPropertyTitle({ ...sale, title_zh: "VR 實景 3房套", video_url: null })).toBe(
+    "3房套",
+  );
+  expect(verifiedVrTourUrl("https://youtu.be/abcdefghijk?feature=vr")).toBeNull();
+  const tour = "https://my.matterport.com/show/?m=abc123";
+  expect(verifiedVrTourUrl(tour)).toBe(tour);
+  expect(publicPropertyTitle({ ...sale, title_zh: title, video_url: tour })).toBe(title);
+  expect(verifiedVrTourUrl("http://my.matterport.com/show/?m=abc123")).toBeNull();
 });

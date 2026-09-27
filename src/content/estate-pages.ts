@@ -1,4 +1,5 @@
-import { getEstateEntry } from "./estate-registry.ts";
+import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
+import { getCastlePeakRoadSegment } from "./castle-peak-road.ts";
 
 export type EstateContentLink = {
   href: string;
@@ -999,4 +1000,26 @@ export function buildEstateAnswerSummary(
   }
 
   return parts.join(" ");
+}
+
+/** Exact estate-to-curated-corridor mapping, reviewed as a mapping on 2026-09-27.
+ * This does not verify current route schedules; pages link to the source guide. */
+export function resolveEstateTransport(estateKey: string): {
+  text: string;
+  sourceRef: string;
+  verifiedAt: string;
+  segmentSlug: string;
+  nameZh: string;
+} | null {
+  const estate = estateRegistry.find((entry) => entry.slug === estateKey);
+  if (!estate?.corridorSegment) return null;
+  const segment = getCastlePeakRoadSegment(estate.corridorSegment);
+  if (!segment || !segment.estateSlugs.includes(estateKey)) return null;
+  return {
+    text: segment.transport,
+    sourceRef: "/castle-peak-road/" + segment.slug,
+    verifiedAt: "2026-09-27",
+    segmentSlug: segment.slug,
+    nameZh: segment.nameZh,
+  };
 }

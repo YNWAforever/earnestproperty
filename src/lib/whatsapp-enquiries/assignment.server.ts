@@ -1,3 +1,4 @@
+import { mappingConflict } from "../neon/staff-mapping-review.server.ts";
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import "@tanstack/react-start/server-only";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
@@ -132,42 +133,87 @@ const mappingSchema = z
     branchId: z.string().trim().max(120).nullable(),
     verificationRef: z.string().trim().min(1).max(160),
     eligible: z.boolean(),
+    expectedVersion: z.number().int().positive().nullable(),
   })
   .strict();
 export async function saveStaffChannel(value: unknown, actor: Actor, ports: Ports = defaultPorts) {
-  const { query: queryRows, transaction: transactionRows } = ports;
+  const { query: queryRows } = ports;
   manager(actor);
   const input = mappingSchema.parse(value);
   const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
   if (!channel) throw new Response("COMPANY_CHANNEL_NOT_CONFIGURED", { status: 409 });
-  // Administrative evidence records a reviewed mapping. It does not certify a provider readback capability.
-  const [row] = await queryRows(
-    `WITH changed AS (
- INSERT INTO whatsapp_staff_channels(staff_id,channel_id,inbox_user_id,folder_id,routing_node_id,branch_id,verification_ref,eligible,verified_at,verified_by)
- SELECT s.id,$2,$3,$4,$5,$6,$7,$8,now(),$9::uuid FROM staff_users s WHERE s.id=$1::uuid AND s.active
- AND EXISTS(SELECT 1 FROM staff_users a JOIN staff_roles r ON r.staff_user_id=a.id WHERE a.id=$9::uuid AND a.active AND r.role IN ('admin','manager'))
- ON CONFLICT(channel_id,staff_id) DO UPDATE SET inbox_user_id=EXCLUDED.inbox_user_id,folder_id=EXCLUDED.folder_id,routing_node_id=EXCLUDED.routing_node_id,branch_id=EXCLUDED.branch_id,verification_ref=EXCLUDED.verification_ref,eligible=EXCLUDED.eligible,verified_at=EXCLUDED.verified_at,verified_by=EXCLUDED.verified_by,retired_at=NULL RETURNING id
- ),audit AS (INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT $9::uuid,'whatsapp.mapping.review','staff_channel',id,jsonb_build_object('evidenceRef',$7::text) FROM changed RETURNING id) SELECT id FROM changed`,
-    [
-      input.staffId,
-      channel,
-      input.inboxUserId,
-      input.folderId,
-      input.routingNodeId,
-      input.branchId,
-      input.verificationRef,
-      input.eligible,
-      actor.staffId,
-    ],
-  );
-  if (!row) throw new Response("ACTIVE_STAFF_REQUIRED", { status: 409 });
-  return { ok: true };
+  // This is the legacy manual-review path. It never upgrades evidence to provider verification.
+  // A provider-reviewed mapping cannot be overwritten through this compatibility endpoint.
+  let row: { id: string; version: number } | undefined;
+  try {
+    [row] = await queryRows<{ id: string; version: number }>(
+      `WITH candidate AS (
+         SELECT s.id FROM staff_users s WHERE s.id=$1::uuid AND s.active
+         AND EXISTS(SELECT 1 FROM staff_users a JOIN staff_roles r ON r.staff_user_id=a.id
+           WHERE a.id=$9::uuid AND a.active AND r.role IN ('admin','manager'))
+         AND (($10::int IS NULL AND NOT EXISTS(
+           SELECT 1 FROM whatsapp_staff_channels m WHERE m.staff_id=s.id AND m.channel_id=$2
+         )) OR ($10::int IS NOT NULL AND EXISTS(
+           SELECT 1 FROM whatsapp_staff_channels m WHERE m.staff_id=s.id AND m.channel_id=$2
+             AND m.version=$10::int AND NOT m.review_enforced
+         )))
+       ), changed AS (
+         INSERT INTO whatsapp_staff_channels(
+           staff_id,channel_id,inbox_user_id,folder_id,routing_node_id,branch_id,
+           verification_ref,eligible,verified_at,verified_by,review_basis,review_enforced
+         )
+         SELECT id,$2,$3,$4,$5,$6,$7,$8,now(),$9::uuid,'legacy_manual',false FROM candidate
+         ON CONFLICT(channel_id,staff_id) DO UPDATE SET
+           inbox_user_id=EXCLUDED.inbox_user_id,folder_id=EXCLUDED.folder_id,
+           routing_node_id=EXCLUDED.routing_node_id,branch_id=EXCLUDED.branch_id,
+           verification_ref=EXCLUDED.verification_ref,eligible=EXCLUDED.eligible,
+           verified_at=EXCLUDED.verified_at,verified_by=EXCLUDED.verified_by,
+           retired_at=NULL,review_basis='legacy_manual',review_evidence_id=NULL
+         WHERE whatsapp_staff_channels.version=$10::int
+           AND NOT whatsapp_staff_channels.review_enforced
+         RETURNING id,version
+       ), audit AS (
+         INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata)
+         SELECT $9::uuid,'whatsapp.mapping.review','staff_channel',id,
+           jsonb_build_object('evidenceRef',$7::text,'basis','legacy_manual','version',version)
+         FROM changed RETURNING id
+       )
+       SELECT id,version FROM changed`,
+      [
+        input.staffId,
+        channel,
+        input.inboxUserId,
+        input.folderId,
+        input.routingNodeId,
+        input.branchId,
+        input.verificationRef,
+        input.eligible,
+        actor.staffId,
+        input.expectedVersion,
+      ],
+    );
+  } catch (error) {
+    if ((error as { code?: string })?.code === "23505")
+      return mappingConflict(
+        queryRows,
+        "staff",
+        input.staffId,
+        channel,
+        "MAPPING_IDENTITY_CONFLICT",
+      );
+    throw error;
+  }
+  if (!row) return mappingConflict(queryRows, "staff", input.staffId, channel);
+  return { ok: true, version: Number(row.version) };
 }
 export async function listStaffChannels(actor: Actor, ports: Ports = defaultPorts) {
-  const { query: queryRows, transaction: transactionRows } = ports;
+  const { query: queryRows } = ports;
   await requireActiveManager(actor, queryRows);
+  const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  if (!channel) throw new Response("COMPANY_CHANNEL_NOT_CONFIGURED", { status: 409 });
   return queryRows<StaffChannelDto>(
-    `SELECT m.*,COALESCE(s.name_zh,s.name_en) AS name FROM whatsapp_staff_channels m JOIN staff_users s ON s.id=m.staff_id ORDER BY COALESCE(s.name_zh,s.name_en),m.id`,
+    `SELECT m.*,COALESCE(s.name_zh,s.name_en) AS name FROM whatsapp_staff_channels m JOIN staff_users s ON s.id=m.staff_id WHERE m.channel_id=$1 ORDER BY COALESCE(s.name_zh,s.name_en),m.id`,
+    [channel],
   );
 }
 export async function proposedConversationAssignment(
@@ -383,6 +429,11 @@ export type AssignmentContextDto = {
 export type StaffChannelDto = {
   id: string;
   staff_id: string;
+  channel_id: string;
+  version: number;
+  review_basis: "legacy_manual" | "provider_verified";
+  review_enforced: boolean;
+  retired_at: string | null;
   name: string | null;
   inbox_user_id: string;
   folder_id: string;

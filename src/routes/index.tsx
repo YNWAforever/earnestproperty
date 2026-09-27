@@ -55,6 +55,7 @@ import { whatsappUrl, SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
 import {
   resolvePublicWaAction,
+  resolveWebsiteActions,
   type PublicWaAction,
 } from "@/lib/whatsapp-enquiries/public-context";
 import {
@@ -144,10 +145,7 @@ export const Route = createFileRoute("/")({
       .then((result) => result.actions)
       .catch((error) => {
         console.error("WA_TRACKING_RESOLVER_FAILED", error);
-        return offers.map((offer) => ({
-          propertyId: offer.propertyId,
-          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
-        }));
+        return resolveWebsiteActions(offers, [], SITE_CONTACT.whatsappPhone).actions;
       });
     return {
       estates,
@@ -930,6 +928,7 @@ type PropertyItem = {
   bathrooms: number | null;
   features: string[] | null;
   images?: string[] | null;
+  image_variants?: FeaturedProperty["image_variants"];
   video_url?: string | null;
   // Real record timestamps also cover new ingestion rows without legacy metadata.
   created_at?: string | null;
@@ -975,7 +974,7 @@ function PropertyCard({
   // coverFailed used to do locally -- see AppImage.tsx.
   const cover = property.images?.[0] ?? null;
   // `video_url` is shared with VR-tour links (matterport/kuula) elsewhere in
-  // this codebase (see property.$listingNo.tsx's isVrUrl) -- a bare truthiness
+  // this codebase (see the shared verifiedVrTourUrl classifier) -- a bare truthiness
   // check badged those as "影片" too, promising a video tab the listing page
   // doesn't have.
   const hasVideo = isYouTubeVideoUrl(property.video_url);
@@ -995,6 +994,8 @@ function PropertyCard({
       >
         <AppImage
           src={cover}
+          variantSet={cover ? property.image_variants?.[cover] : null}
+          sizes="(min-width: 1280px) 384px, (min-width: 640px) 50vw, 100vw"
           alt={`${publicPropertyTitle(property)} 相片`}
           width={640}
           height={480}

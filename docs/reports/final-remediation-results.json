@@ -1,0 +1,149 @@
+{
+  "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+  "generatedAt": "2026-09-27T18:37:03.739Z",
+  "records": [
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_1",
+      "caseId": "batch_preview_1",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_50",
+      "caseId": "batch_preview_50",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_300",
+      "caseId": "batch_preview_300",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_1000",
+      "caseId": "batch_preview_1000",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_50",
+      "caseId": "batch_commit_50",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_20_each_source",
+      "caseId": "batch_sources_20x3",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_duplicate",
+      "caseId": "batch_duplicate",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_expired",
+      "caseId": "batch_expired",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_revoked",
+      "caseId": "batch_revoked",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "links_disconnect",
+      "caseId": "batch_disconnect",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "events_10000",
+      "caseId": "report_90d_10k",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "events_100000",
+      "caseId": "report_90d_100k",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    },
+    {
+      "sha": "fe9fffd2f73e304bf4955d950bc48621f84ed41d",
+      "target": "unconfigured",
+      "fixtureId": "public_mobile",
+      "caseId": "mobile_public_lcp_cls",
+      "durationMs": null,
+      "passed": false,
+      "skipped": true,
+      "reason": "No disposable staging target, owned fixtures or measurement evidence supplied",
+      "evidencePath": null
+    }
+  ]
+}
