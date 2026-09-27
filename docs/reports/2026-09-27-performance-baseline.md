@@ -24,6 +24,17 @@ An anonymous HEAD request to `/` returned `X-Vercel-Cache: MISS` and `X-Vercel-I
 
 T06's 50-row chunk commit uses a set-based preview/read and one database transaction. Synthetic PostgreSQL fixtures prove the 50+10 sequence and unchanged retry result, but no real Neon round-trip timing or `EXPLAIN` was available. T04 combines staff readiness evidence into one read rather than separate per-staff checks. The staff/private routes were not added to any public cache.
 
+## Isolated staging database query plan sample
+
+On Neon staging branch `br-young-breeze-ao85rtx1` in `aws-ap-southeast-1`, read-only `EXPLAIN ANALYZE` used the current `searchListings` canonical CTE for the unfiltered listing count and first 24-row page with newest ordering and the listing-card projection. The branch contains an inherited parent-data snapshot; this is a query-plan observation on that snapshot, not a synthetic test fixture or browser acceptance. No application endpoint or provider was called.
+
+| Query | First run in this sequence (ms) | Five subsequent server execution times (ms) | Warm median (ms) | Rows |
+| --- | ---: | --- | ---: | ---: |
+| Canonical count | 6.139 | 4.032, 4.188, 4.087, 4.080, 4.292 | 4.087 | 1 aggregate |
+| Page, newest, 24 rows | 39.244 | 8.160, 7.697, 7.948, 7.737, 7.697 | 7.737 | 24 |
+
+These are PostgreSQL server execution times, excluding Vercel runtime, network, authentication, rendering and browser transfer. The count had been queried once before this sequence, so its first run is not a clean cold sample. The page first run also had 56.496 ms planning time and 19 shared read blocks; its subsequent runs had zero shared read blocks. This evidence does not establish the DB p95 or the 30% page TTFB target.
+
 ## Redirect capacity
 
 The old single 300/minute row is replaced by 32 fixed global shards (default 5,000/minute each) and a bucket per **registered enabled link** (default 600/minute). The limits are bounded configuration values displayed in operations health. Invalid codes cannot create unbounded per-code buckets. HEAD/prefetch does not touch the buckets or mint a reference. A registered hot link beyond its per-link limit returns a contextual company WhatsApp redirect marked `X-WA-Tracking: untracked`, without an open/reference write. Global overload returns 429 with `Retry-After: 60`. Existing bucket cleanup remains in place.
