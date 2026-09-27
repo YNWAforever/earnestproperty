@@ -149,3 +149,7 @@ The Preview branch configuration and real DB evidence are detailed in 2026-09-27
 ## T13 remote-photo and loader follow-up
 
 After commit `2ae5049`, `npm.cmd run typecheck`, `npm.cmd run test:property-experience`, `npm.cmd run test:whatsapp-enquiries` (92/92) and targeted ESLint all exited 0. The property route retained its existing optional-fetch fallback tests. The change overlaps independent read calls; no measured TTFB improvement is claimed. A direct public A074714 photo GET found a 1,200 × 900 WebP of 274,212 bytes used by a 200 × 150 thumbnail tag without `srcSet`. This is a source-size observation, not browser transfer or a verified remote responsive variant. F23/F24 remain blocked.
+
+## T13 browser continuation
+
+A server-attested, initially empty Neon acceptance DB backed a local Vite browser run. First cold/two-worker attempt: 12 pass, 4 skip, 1 estate axe timeout; isolated estate rerun: 1 pass in 6.4 s; warm one-worker repeat: 14 pass, 3 skip, 0 fail. The three skips are explicitly not counted as passes. This tests local branch code and synthetic data, not the deployed Preview. After `014891e`, the former unconditional property-detail a11y skip became fixture discovery, and every a11y request is limited to read methods. Targeted TypeScript, ESLint and test-wiring checks passed; the complete read-only public-site a11y suite ran 6/6, including property detail. That public-site result exercises the test's non-skip path but is not PR staging acceptance.
