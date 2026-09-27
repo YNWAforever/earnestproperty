@@ -99,6 +99,13 @@ T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed 
 - PGlite test covers stale mapping and endpoint versions, disabled endpoint, idempotent request, one provider send, unknown timeout without resend, signed receipt deduplication, manual confirmation deduplication, and server-derived Channel/Inbox destination. Opening or saving the UI does not enqueue work.
 - `npm run test:staff-notifications`: 21 Node + 13 Bun pass; `npm run test:woztell`: 150 Node + 8 Bun pass; migration manifest 6 pass; typecheck and changed-file ESLint pass. No tenant provider call or production migration was run.
 
+### T05 — Haze handoff runbook and acceptance gate (R01, R04)
+
+- Added an isolated browser fixture preflight: synthetic target marker, same-origin URLs, existing authenticated storageState paths, distinct notification IDs and no production UUID in fixtures. The prepared-state Playwright journeys still require a separately confirmed target.
+- Added `docs/runbooks/whatsapp-staff-onboarding.md` with a capability-by-capability test card, exact synthetic message, independent assignment/private-note/staff-phone/receipt/recipient evidence and audit-preserving cleanup.
+- Added `docs/reports/haze-routing-acceptance.md`. Real Haze assignment and delivery are explicitly external-blocked: no staging URL or fixture was configured, and no recipient or test conversation was supplied. `npm run test:staff-notifications:e2e` failed before browser launch with missing `PLAYWRIGHT_BASE_URL`.
+- `node --test scripts/staff-handoff-fixture.test.mjs`: 1 pass. `npm run test:staff-notifications`: 21 Node + 13 Bun pass. These are local contracts, not provider readback or Haze receipt evidence. No live send occurred.
+
 ### T06 — multi-source link batch import (R09)
 
 - Reproduced missing parser/module with a red test. The existing wizard offered one source for all selected offers and required manual IDs.
