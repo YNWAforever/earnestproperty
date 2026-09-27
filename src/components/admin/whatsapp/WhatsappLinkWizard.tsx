@@ -9,6 +9,7 @@ import {
   getWhatsappLinkBatchResult,
 } from "@/lib/neon/whatsapp-link-batches";
 import type { BatchRowDraft } from "@/lib/whatsapp-enquiries/link-batch-policy";
+import { expandBatchDraft, type ImportSource } from "@/lib/whatsapp-enquiries/link-batch-import";
 import type { LinkOfferSelection } from "@/lib/admin/whatsapp-link-selection";
 import {
   linkBatchProgressKey,
@@ -17,6 +18,7 @@ import {
   type LinkBatchProgress,
 } from "@/lib/admin/whatsapp-link-batch-client";
 import { WhatsappBatchResult } from "./WhatsappBatchResult";
+import { WhatsappBatchImport } from "./WhatsappBatchImport";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
 type Source = BatchRowDraft["input"]["placementSource"];
@@ -49,6 +51,14 @@ export function WhatsappLinkWizard({
   const [found, setFound] = useState<LinkOfferSelection[]>([]);
   const [selected, setSelected] = useState<LinkOfferSelection[]>([]);
   const [source, setSource] = useState<Source>("website");
+  const [sources, setSources] = useState<ImportSource[]>(["website"]);
+  const [importedRows, setImportedRows] = useState<BatchRowDraft[] | null>(null);
+  const [importSummary, setImportSummary] = useState<{
+    offerCount: number;
+    saleCount: number;
+    rentCount: number;
+    sourceCount: number;
+  } | null>(null);
   const [placement, setPlacement] = useState<Record<string, string>>({});
   const [verified, setVerified] = useState(false);
   const [routing, setRouting] = useState<Routing>("reception");
@@ -85,45 +95,67 @@ export function WhatsappLinkWizard({
     sessionStorage.setItem(linkBatchProgressKey, JSON.stringify(next));
     setProgress(next);
   };
+  const expansion = useMemo(
+    () =>
+      mode === "sales" && !importedRows ? expandBatchDraft(selected, sources, placement) : null,
+    [mode, importedRows, selected, sources, placement],
+  );
   const rows = useMemo<BatchRowDraft[]>(() => {
-    const offers = mode === "reception" ? [null] : selected;
-    return offers.map((offer) => {
-      const placementId = offer
-        ? source === "website"
-          ? "website:primary"
-          : source === "other"
-            ? placement[key(offer)] || "other:primary"
-            : placement[key(offer)] || ""
-        : source === "website"
-          ? "website:reception"
-          : placement.reception || "";
-      const requestedStaffId =
-        routing === "property-agent"
-          ? offer?.agentId || null
-          : routing === "uniform"
-            ? staffId || null
-            : routing === "per-row"
-              ? perRowStaff[offer ? key(offer) : "reception"] || null
-              : null;
-      return {
+    if (importedRows)
+      return importedRows.map((row) => ({
+        ...row,
+        input: { ...row.input, placementVerified: verified },
+      }));
+    if (mode === "sales") {
+      const byId = new Map(selected.map((offer) => [offer.propertyId, offer]));
+      return (expansion?.rows ?? []).map((row) => {
+        const offer = byId.get(row.input.propertyId ?? "");
+        const requestedStaffId =
+          routing === "property-agent"
+            ? (offer?.agentId ?? null)
+            : routing === "uniform"
+              ? staffId || null
+              : routing === "per-row"
+                ? perRowStaff[row.input.propertyId ?? ""] || null
+                : null;
+        return {
+          ...row,
+          input: { ...row.input, requestedStaffId, placementVerified: verified },
+        };
+      });
+    }
+    const placementId = source === "website" ? "website:reception" : placement.reception || "";
+    return [
+      {
         rowKey: crypto.randomUUID(),
         placementId,
         input: {
           placementSource: source,
-          entryPointType: mode,
-          propertyId: offer?.propertyId ?? null,
-          publicListingNo: offer?.publicListingNo ?? null,
-          dealType: offer?.dealType ?? null,
-          requestedStaffId,
+          entryPointType: "reception",
+          propertyId: null,
+          publicListingNo: null,
+          dealType: null,
+          requestedStaffId: routing === "uniform" ? staffId || null : null,
           referenceMappingId: null,
           externalListingId: source === "28hse" ? placementId : null,
           videoId: source === "youtube" ? placementId : null,
           placementVerified: verified,
           enabled: true,
         },
-      };
-    });
-  }, [mode, selected, source, placement, routing, staffId, perRowStaff, verified]);
+      },
+    ];
+  }, [
+    mode,
+    selected,
+    source,
+    placement,
+    routing,
+    staffId,
+    perRowStaff,
+    verified,
+    importedRows,
+    expansion,
+  ]);
   // rowKey must remain stable between dry-run and commit; preview stores this immutable copy.
   async function run(task: () => Promise<void>) {
     setBusy(true);
@@ -138,13 +170,16 @@ export function WhatsappLinkWizard({
   }
   async function dryRun() {
     if (mode === "sales" && !selected.length) throw new Error("請先選擇至少一筆樓盤租售。");
-    if (rows.length > 1000) throw new Error("最多 1000 筆，請縮小篩選。");
+    if (rows.length > 1000 || (expansion?.rowCount ?? 0) > 1000)
+      throw new Error("最多 1000 筆，請縮小篩選。");
+    if (expansion?.errors.length) throw new Error("有投放位置或來源錯誤，請在第二步逐行修正。");
+    if (!rows.length) throw new Error("請先選擇來源及有效投放位置。");
     if (!verified) throw new Error("請先人工核對刊登位置。");
     if (rows.some((row) => !row.placementId)) throw new Error("每筆投放都需要來源識別碼。");
-    if (routing === "property-agent" && selected.some((offer) => !offer.agentId))
+    if (!importedRows && routing === "property-agent" && selected.some((offer) => !offer.agentId))
       throw new Error("有樓盤未指派代理；請先補指派，或明確選總台。");
-    if (routing === "uniform" && !staffId) throw new Error("請選擇指定同事。");
-    if (routing === "per-row" && rows.some((row) => !row.input.requestedStaffId))
+    if (!importedRows && routing === "uniform" && !staffId) throw new Error("請選擇指定同事。");
+    if (!importedRows && routing === "per-row" && rows.some((row) => !row.input.requestedStaffId))
       throw new Error("請逐行選擇同事。");
     const batchId = crypto.randomUUID();
     const preview = await api.preview({ batchId, rows });
@@ -189,12 +224,15 @@ export function WhatsappLinkWizard({
     const result = reconcileLinkBatch(progress, (await api.read(progress.batchId)).operations);
     save(result);
   }
-  const toggle = (offer: LinkOfferSelection) =>
+  const toggle = (offer: LinkOfferSelection) => {
+    setImportedRows(null);
+    setImportSummary(null);
     setSelected((current) =>
       current.some((item) => item.propertyId === offer.propertyId)
         ? current.filter((item) => item.propertyId !== offer.propertyId)
         : [...current, offer],
     );
+  };
   const hasActiveBatch = progress && progress.nextChunk < progress.chunkIds.length;
   const canReplace =
     !progress ||
@@ -212,6 +250,8 @@ export function WhatsappLinkWizard({
     setVerified(false);
     setPlacement({});
     setPerRowStaff({});
+    setImportedRows(null);
+    setImportSummary(null);
     setError("");
     setStep(1);
   }
@@ -273,6 +313,22 @@ export function WhatsappLinkWizard({
               公司一般查詢
             </label>
           </fieldset>
+          <WhatsappBatchImport
+            disabled={busy || !canReplace}
+            onImported={(result) => {
+              setImportedRows(result.rows);
+              setImportSummary(result);
+              setSelected(result.offers);
+              setMode("sales");
+              setRouting("reception");
+              setVerified(false);
+              setProgress(null);
+              sessionStorage.removeItem(linkBatchProgressKey);
+              setIncomingPending(false);
+              onSeedConsumed?.();
+              setStep(2);
+            }}
+          />
           {mode === "sales" ? (
             <>
               <form
@@ -339,45 +395,126 @@ export function WhatsappLinkWizard({
       ) : null}
       {step === 2 ? (
         <div className="space-y-3">
-          <label className="block text-sm">
-            刊登來源
-            <select
-              className={control}
-              value={source}
-              onChange={(event) => {
-                setSource(event.target.value as Source);
-                setPlacement({});
-              }}
-            >
-              <option value="website">網站</option>
-              <option value="28hse">28hse</option>
-              <option value="youtube">YouTube</option>
-              <option value="other">其他</option>
-            </select>
-          </label>
-          {source !== "website" ? (
-            <div className="max-h-72 space-y-2 overflow-auto">
-              {(mode === "sales" ? selected : [null]).map((offer) => {
-                const offerKey = offer ? key(offer) : "reception";
-                return (
-                  <label key={offerKey} className="block text-sm">
-                    {offer ? label(offer) : "一般查詢"} ·{" "}
-                    {source === "28hse"
-                      ? "28hse 廣告 ID"
-                      : source === "youtube"
-                        ? "YouTube 影片 ID"
-                        : "投放識別碼"}
-                    <Input
-                      value={placement[offerKey] ?? ""}
+          {importedRows ? (
+            <div className="space-y-2 rounded border p-3 text-sm">
+              <p>
+                已匯入 {importedRows.length} 行 · {importSummary?.offerCount ?? 0} 筆租售 （售{" "}
+                {importSummary?.saleCount ?? 0}、租 {importSummary?.rentCount ?? 0}）·
+                {importSummary?.sourceCount ?? 0} 個來源。
+              </p>
+              <p>每行保留原來來源與投放 ID；同事代碼只使用已核實的來源映射。</p>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setImportedRows(null);
+                  setImportSummary(null);
+                  setSelected([]);
+                  setStep(1);
+                }}
+              >
+                移除匯入批次
+              </Button>
+            </div>
+          ) : mode === "sales" ? (
+            <>
+              <fieldset className="flex flex-wrap gap-3">
+                <legend className="font-medium">刊登來源（可多選）</legend>
+                {(["website", "28hse", "youtube", "other"] as const).map((option) => (
+                  <label key={option} className="flex items-center gap-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={sources.includes(option)}
                       onChange={(event) =>
-                        setPlacement((current) => ({ ...current, [offerKey]: event.target.value }))
+                        setSources((current) =>
+                          event.target.checked
+                            ? [...current, option]
+                            : current.filter((item) => item !== option),
+                        )
                       }
                     />
+                    {option}
                   </label>
-                );
-              })}
-            </div>
-          ) : null}
+                ))}
+              </fieldset>
+              <p className="text-sm">
+                已選 {selected.length} 筆租售 × {sources.length} 個來源＝
+                {expansion?.rowCount ?? 0} 行（最多 1000 行）。
+              </p>
+              <div className="max-h-72 space-y-2 overflow-auto">
+                {selected.flatMap((offer) =>
+                  sources
+                    .filter((item) => item !== "website")
+                    .map((item) => (
+                      <label key={offer.propertyId + ":" + item} className="block text-sm">
+                        {label(offer)} · {item} 網址或投放 ID
+                        <Input
+                          value={placement[offer.propertyId + ":" + item] ?? ""}
+                          onChange={(event) =>
+                            setPlacement((current) => ({
+                              ...current,
+                              [offer.propertyId + ":" + item]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                    )),
+                )}
+              </div>
+              {expansion?.errors.length ? (
+                <ul role="alert" className="text-sm text-destructive">
+                  {expansion.errors.slice(0, 30).map((item, index) => (
+                    <li key={index}>
+                      第 {item.row || "全部"} 筆 · {item.column}：
+                      {(
+                        {
+                          BATCH_LIMIT: "最多 1000 行，請減少選取",
+                          PLACEMENT_REQUIRED: "請輸入已核對的投放網址或 ID",
+                          SOURCE_URL_MISMATCH: "網址與所選來源不符",
+                          UNRECOGNIZED_URL: "未辨識網址，請核對原輸入",
+                          DEAL_TYPE_MISMATCH: "28hse 網址的售租與樓盤不符",
+                          DUPLICATE_SOURCE: "來源選取重複",
+                        } as Record<string, string>
+                      )[item.errorCode] ?? item.errorCode}
+                      {item.value ? `（${item.value.slice(0, 80)}）` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <label className="block text-sm">
+                刊登來源
+                <select
+                  className={control}
+                  value={source}
+                  onChange={(event) => {
+                    setSource(event.target.value as Source);
+                    setPlacement({});
+                  }}
+                >
+                  <option value="website">網站</option>
+                  <option value="28hse">28hse</option>
+                  <option value="youtube">YouTube</option>
+                  <option value="other">其他</option>
+                </select>
+              </label>
+              {source !== "website" ? (
+                <label className="block text-sm">
+                  一般查詢 · 投放識別碼
+                  <Input
+                    value={placement.reception ?? ""}
+                    onChange={(event) =>
+                      setPlacement((current) => ({
+                        ...current,
+                        reception: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              ) : null}
+            </>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -397,62 +534,44 @@ export function WhatsappLinkWizard({
       ) : null}
       {step === 3 ? (
         <div className="space-y-3">
-          <label className="block text-sm">
-            指定路線
-            <select
-              className={control}
-              value={routing}
-              onChange={(event) => setRouting(event.target.value as Routing)}
-            >
-              {mode === "sales" ? <option value="property-agent">跟樓盤已指派代理</option> : null}
-              <option value="uniform">全部指定同一同事</option>
-              {mode === "sales" ? <option value="per-row">逐行指定同事</option> : null}
-              <option value="reception">總台／不指定同事</option>
-            </select>
-          </label>
-          {routing === "property-agent" ? (
-            <ul className="text-sm">
-              {selected.map((offer) => (
-                <li key={offer.propertyId}>
-                  {offer.publicListingNo} {offer.dealType}：
-                  {offer.agentName ?? "未指派代理（會被阻止）"}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {routing === "uniform" ? (
-            <label className="block text-sm">
-              指定同事
-              <select
-                className={control}
-                value={staffId}
-                onChange={(event) => setStaffId(event.target.value)}
-              >
-                <option value="">請選擇</option>
-                {agents
-                  .filter((agent) => agent.active !== false)
-                  .map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name ?? agent.email ?? agent.id}
-                    </option>
+          {importedRows ? (
+            <p className="text-sm">
+              按匯入表格內已核實的來源同事映射；未提供同事代碼的行使用總台。每行可在預覽核對。
+            </p>
+          ) : (
+            <>
+              <label className="block text-sm">
+                指定路線
+                <select
+                  className={control}
+                  value={routing}
+                  onChange={(event) => setRouting(event.target.value as Routing)}
+                >
+                  {mode === "sales" ? (
+                    <option value="property-agent">跟樓盤已指派代理</option>
+                  ) : null}
+                  <option value="uniform">全部指定同一同事</option>
+                  {mode === "sales" ? <option value="per-row">逐行指定同事</option> : null}
+                  <option value="reception">總台／不指定同事</option>
+                </select>
+              </label>
+              {routing === "property-agent" ? (
+                <ul className="text-sm">
+                  {selected.map((offer) => (
+                    <li key={offer.propertyId}>
+                      {offer.publicListingNo} {offer.dealType}：
+                      {offer.agentName ?? "未指派代理（會被阻止）"}
+                    </li>
                   ))}
-              </select>
-            </label>
-          ) : null}
-          {routing === "per-row" ? (
-            <div className="max-h-72 space-y-2 overflow-auto">
-              {selected.map((offer) => (
-                <label key={offer.propertyId} className="block text-sm">
-                  {label(offer)}
+                </ul>
+              ) : null}
+              {routing === "uniform" ? (
+                <label className="block text-sm">
+                  指定同事
                   <select
                     className={control}
-                    value={perRowStaff[offer.propertyId] ?? ""}
-                    onChange={(event) =>
-                      setPerRowStaff((current) => ({
-                        ...current,
-                        [offer.propertyId]: event.target.value,
-                      }))
-                    }
+                    value={staffId}
+                    onChange={(event) => setStaffId(event.target.value)}
                   >
                     <option value="">請選擇</option>
                     {agents
@@ -464,12 +583,40 @@ export function WhatsappLinkWizard({
                       ))}
                   </select>
                 </label>
-              ))}
-            </div>
-          ) : null}
-          <p className="text-xs text-muted-foreground">
-            指定同事只表示查詢路線；Inbox 指派與手機送達另有獨立證據。
-          </p>
+              ) : null}
+              {routing === "per-row" ? (
+                <div className="max-h-72 space-y-2 overflow-auto">
+                  {selected.map((offer) => (
+                    <label key={offer.propertyId} className="block text-sm">
+                      {label(offer)}
+                      <select
+                        className={control}
+                        value={perRowStaff[offer.propertyId] ?? ""}
+                        onChange={(event) =>
+                          setPerRowStaff((current) => ({
+                            ...current,
+                            [offer.propertyId]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">請選擇</option>
+                        {agents
+                          .filter((agent) => agent.active !== false)
+                          .map((agent) => (
+                            <option key={agent.id} value={agent.id}>
+                              {agent.name ?? agent.email ?? agent.id}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                指定同事只表示查詢路線；Inbox 指派與手機送達另有獨立證據。
+              </p>
+            </>
+          )}
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setStep(2)}>
               上一步

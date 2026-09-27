@@ -26,7 +26,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R06 transaction attribution | T10–T11 | not-started | not-started | not-started | Audit: form lacks CRM/property links, credits, and commission. |
 | R07 public inventory count | T09 | fixed-local | not-started | not-started | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending. |
 | R08 website tracking | T08 | not-started | not-started | not-started | Audit: sampled 6/6 CTAs use direct wa.me. |
-| R09 batch input | T06 | not-started | not-started | not-started | Audit: wizard has one source per batch and manual placement IDs. |
+| R09 batch input | T06 | fixed-local | not-started | not-started | Multi-source expansion, CSV/TSV paste, strict 28hse/YouTube URL parsing and source-scoped staff lookup pass local tests; live browser acceptance pending. |
 | R10 blocked batch rows | T07 | not-started | not-started | not-started | Audit: one blocked row blocks submit; keep snapshots/chunks. |
 | R11 notification setup | T03–T04 | fixed-local | not-started | external-blocked | Company Channel and private Inbox destination now derive server-side from a reviewed mapping; live tenant setup unverified. |
 | R12 test-send workflow | T03–T04 | fixed-local | not-started | external-blocked | Transport-specific actions, repair links, version guards, scoped request recovery and evidence-specific status pass local tests. |
@@ -37,7 +37,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 
 ## Task progress
 
-T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed locally; T03 wizard and T04 notification code fixed locally (isolated Neon, tenant and browser gates pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
+T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed locally; T03 wizard, T04 notification and T06 batch-import code fixed locally (isolated Neon, tenant and browser gates pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
 
 ## Decisions and external gates
 
@@ -98,3 +98,11 @@ T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed 
 - Preview, enqueue, and dispatch compare current endpoint/mapping versions. A scoped request ID finds a prior attempt after refresh; unknown state does not trigger a resend. Signed provider delivery receipts are isolated from customer messages, deduplicated, and stored separately from provider acceptance. Manual recipient confirmation requires an evidence reference and writes an audit entry; acknowledgement remains null without its own evidence.
 - PGlite test covers stale mapping and endpoint versions, disabled endpoint, idempotent request, one provider send, unknown timeout without resend, signed receipt deduplication, manual confirmation deduplication, and server-derived Channel/Inbox destination. Opening or saving the UI does not enqueue work.
 - `npm run test:staff-notifications`: 21 Node + 13 Bun pass; `npm run test:woztell`: 150 Node + 8 Bun pass; migration manifest 6 pass; typecheck and changed-file ESLint pass. No tenant provider call or production migration was run.
+
+### T06 — multi-source link batch import (R09)
+
+- Reproduced missing parser/module with a red test. The existing wizard offered one source for all selected offers and required manual IDs.
+- Added multi-source expansion for selected sale/rent offers and CSV/TSV paste with fixed column order. Parser handles BOM, full-width whitespace, quoted commas, duplicates and 1001-row rejection. It recognizes exact HTTPS 28hse buy/rent detail shapes from repo fixtures and YouTube watch, short and shorts URLs; unrecognized or mismatched URLs stay visible for correction without fetching or following links.
+- Pasted rows resolve exact current public offers through T09 canonical selection. Optional staff_reference uses source/account|external-code and only a current, exact source-scoped mapping; names are never guessed. Preview checks source scope and a new final-write trigger rejects wrong-source references. Website rows use website:primary; the existing preview/50-row commit and CSV formula neutralization paths are preserved.
+- `node --test src/lib/whatsapp-enquiries/link-batch-import.test.mjs src/lib/whatsapp-enquiries/link-batch-import.db.test.mjs`: 5 pass; `npm run test:whatsapp-enquiries`: 98 pass; `npm run test:admin-properties`: 29 Node + 20 Bun pass; migration manifest 6 pass; typecheck and changed-file ESLint pass. A first batch-suite run exposed a stale PGlite reference fixture lacking namespace; the fixture was updated and the suite reran cleanly.
+- Live browser workflow and isolated Neon migration remain staging gates. No external site or provider was fetched or sent to.

@@ -44,7 +44,7 @@ test("batch migration commits 50+10, returns lost responses, and rejects changed
       CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,deal_type text,status text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz);
       CREATE TABLE property_public_members(property_id uuid,public_listing_no text);
       CREATE TABLE whatsapp_staff_channels(staff_id uuid,channel_id text,eligible boolean,retired_at timestamptz,verified_at timestamptz,verification_ref text);
-      CREATE TABLE staff_external_references(id uuid PRIMARY KEY,staff_id uuid,valid_from timestamptz,valid_until timestamptz,verified_at timestamptz);
+      CREATE TABLE staff_external_references(id uuid PRIMARY KEY,namespace text,staff_id uuid,valid_from timestamptz,valid_until timestamptz,verified_at timestamptz);
       CREATE TABLE whatsapp_tracking_links(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),code text NOT NULL UNIQUE,current_version integer NOT NULL DEFAULT 1,created_by uuid,created_at timestamptz DEFAULT now());
       CREATE TABLE whatsapp_tracking_link_versions(link_id uuid,version integer,channel_id text,placement_source text,entry_point_type text,public_listing_no text,property_id uuid,deal_type text,requested_staff_id uuid,branch_id text,external_listing_id text,video_id text,enabled boolean,created_by uuid,placement_verified_at timestamptz,reference_mapping_id uuid,PRIMARY KEY(link_id,version));
     `);

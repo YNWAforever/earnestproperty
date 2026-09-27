@@ -58,6 +58,7 @@ export async function previewWhatsappLinkBatch(
            AND m.eligible AND m.retired_at IS NULL AND m.verified_at IS NOT NULL AND m.verification_ref IS NOT NULL)) AS staff_ok,
        (w.d->>'referenceMappingId' IS NULL OR EXISTS(
          SELECT 1 FROM staff_external_references sr WHERE sr.id=(w.d->>'referenceMappingId')::uuid
+           AND sr.namespace LIKE (w.d->>'placementSource')||'/%'
            AND sr.valid_from<=now() AND (sr.valid_until IS NULL OR sr.valid_until>now()) AND sr.verified_at<=now()
            AND (w.d->>'requestedStaffId' IS NULL OR sr.staff_id=(w.d->>'requestedStaffId')::uuid))) AS reference_ok,
        reserved.link_id AS reserved_id,candidates.n AS candidate_count,candidates.link_id AS candidate_id
