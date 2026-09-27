@@ -1,3 +1,4 @@
+import type { VariantSet } from "../media/remote-variants.mjs";
 import type { PublicSourceMetadata } from "../mls/public-source-metadata.mjs";
 export type NeonListingSort = "newest" | "price_asc" | "price_desc" | "area" | "psf";
 
@@ -118,6 +119,7 @@ export type NeonPropertyRow = {
   seo_title?: string | null;
   seo_description?: string | null;
   images: string[] | null;
+  image_variants?: Record<string, VariantSet>;
   video_url: string | null;
   floorplan_url: string | null;
   status: string;

@@ -339,6 +339,7 @@ function PropertyPage() {
   // placeholder is a photo of the flat.
   const images: (string | null)[] = property.images?.length ? property.images : [null];
   const realImages = images.filter((src): src is string => Boolean(src));
+  const imageVariant = (src: string | null) => (src ? property.image_variants?.[src] : null);
   const [activeImg, setActiveImg] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
@@ -718,6 +719,7 @@ function PropertyPage() {
               >
                 <AppImage
                   src={images[activeImg]}
+                  variantSet={imageVariant(images[activeImg])}
                   alt={safeTitle}
                   width={1200}
                   height={900}
@@ -769,6 +771,7 @@ function PropertyPage() {
                     >
                       <AppImage
                         src={src}
+                        variantSet={imageVariant(src)}
                         alt={`${safeTitle} ${i + 1}`}
                         width={80}
                         height={60}
@@ -1202,6 +1205,8 @@ function SimilarCard({ listing }: { listing: SimilarListing }) {
       <div className="aspect-[4/3] overflow-hidden bg-muted">
         <AppImage
           src={img}
+          variantSet={img ? listing.image_variants?.[img] : null}
+          sizes="(min-width: 1024px) 260px, 50vw"
           alt={safeTitle}
           width={400}
           height={300}

@@ -2,6 +2,8 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 import responsiveImages from "@/lib/media/responsive-images.generated.json";
+import { responsiveSrcSet } from "@/lib/media/responsive-srcset.mjs";
+import type { VariantSet } from "@/lib/media/remote-variants.mjs";
 
 export interface AppImageProps extends Omit<
   React.ImgHTMLAttributes<HTMLImageElement>,
@@ -13,6 +15,7 @@ export interface AppImageProps extends Omit<
   height: number;
   loading?: "eager" | "lazy";
   fallback?: React.ReactNode;
+  variantSet?: VariantSet | null;
 }
 
 const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
@@ -26,6 +29,7 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
       decoding = "async",
       className,
       fallback,
+      variantSet,
       srcSet,
       sizes,
       onError,
@@ -55,12 +59,13 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
     }
 
     const responsive = (responsiveImages as Record<string, { srcSet: string }>)[src];
+    const remoteSrcSet = responsiveSrcSet(variantSet);
     return (
       <img
         ref={ref}
         src={src}
-        srcSet={srcSet ?? responsive?.srcSet}
-        sizes={sizes ?? (responsive ? "100vw" : undefined)}
+        srcSet={srcSet ?? remoteSrcSet ?? responsive?.srcSet}
+        sizes={sizes ?? (remoteSrcSet || responsive ? "100vw" : undefined)}
         alt={alt}
         width={width}
         height={height}

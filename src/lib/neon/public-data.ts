@@ -28,14 +28,21 @@ export const searchNeonListings = createServerFn({ method: "GET" })
   .inputValidator((data: NeonListingFiltersInput) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.searchListings(data);
+    const result = await neonData.searchListings(data);
+    return (await import("../media/remote-variants.server")).attachRemoteVariantsToSearch(result);
   });
 
 export const fetchNeonCorridorInventory = createServerFn({ method: "GET" })
   .inputValidator((data: NeonCorridorInventoryInput) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchCorridorInventory(data);
+    const result = await neonData.fetchCorridorInventory(data);
+    const { attachRemoteVariants } = await import("../media/remote-variants.server");
+    const [saleRows, rentRows] = await Promise.all([
+      attachRemoteVariants(result.saleRows),
+      attachRemoteVariants(result.rentRows),
+    ]);
+    return { ...result, saleRows, rentRows };
   });
 
 export const fetchNeonFeaturedProperties = createServerFn({ method: "GET" })
@@ -50,28 +57,38 @@ export const fetchNeonFeaturedProperties = createServerFn({ method: "GET" })
   )
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchFeaturedProperties(data);
+    return (await import("../media/remote-variants.server")).attachRemoteVariants(
+      await neonData.fetchFeaturedProperties(data),
+    );
   });
 
 export const fetchNeonListingsForEstate = createServerFn({ method: "GET" })
   .inputValidator((data: { estateSlug: string; limit: number }) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchListingsForEstate(data);
+    return (await import("../media/remote-variants.server")).attachRemoteVariants(
+      await neonData.fetchListingsForEstate(data),
+    );
   });
 
 export const fetchNeonListingsForAgent = createServerFn({ method: "GET" })
   .inputValidator((data: { agentId: string; limit: number }) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchListingsForAgent(data);
+    return (await import("../media/remote-variants.server")).attachRemoteVariants(
+      await neonData.fetchListingsForAgent(data),
+    );
   });
 
 export const fetchNeonPropertyByListingNo = createServerFn({ method: "GET" })
   .inputValidator((data: { listingNo: string }) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchPropertyByListingNo(data);
+    const property = await neonData.fetchPropertyByListingNo(data);
+    if (!property) return null;
+    return (await import("../media/remote-variants.server"))
+      .attachRemoteVariants([property])
+      .then((rows) => rows[0]);
   });
 
 export const fetchNeonPropertyByLegacyDetailId = createServerFn({ method: "GET" })
@@ -85,7 +102,9 @@ export const fetchNeonSimilarListings = createServerFn({ method: "GET" })
   .inputValidator((data: NeonSimilarListingsInput) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchSimilarListings(data);
+    return (await import("../media/remote-variants.server")).attachRemoteVariants(
+      await neonData.fetchSimilarListings(data),
+    );
   });
 
 export const fetchNeonListingCountsByEstate = createServerFn({ method: "GET" }).handler(

@@ -1,3 +1,4 @@
+import type { VariantSet } from "../media/remote-variants.mjs";
 import type { DealType, MlsSource, SourceObservation } from "./source-contract.mjs";
 
 export interface QueryResult<Row = Record<string, unknown>> {
@@ -398,6 +399,12 @@ export interface SyncRepository {
   loadLifecycleStates(propertyIds: string[]): Promise<PropertySyncState[]>;
   findMediaByHash(hash: string, operation?: RepositoryOperation): Promise<MediaAsset | null>;
   findMediaByUrls(urls: string[], operation?: RepositoryOperation): Promise<MediaAsset[]>;
+  findOwnedMediaVariantSet(
+    assetId: string,
+    sourceHash: string,
+    operation?: RepositoryOperation,
+  ): Promise<VariantSet | null>;
+  saveOwnedMediaVariantSet(set: VariantSet, operation?: RepositoryOperation): Promise<VariantSet>;
   registerOwnedMedia(
     input: OwnedMediaInput,
     operation?: RepositoryOperation,

@@ -1,3 +1,4 @@
+import type { VariantSet } from "./media/remote-variants.mjs";
 import type { PublicOffering } from "./property-public";
 import {
   fetchNeonArticleBySlug,
@@ -100,6 +101,7 @@ export type FeaturedProperty = {
   bathrooms: number | null;
   features: string[] | null;
   images: string[] | null;
+  image_variants?: Record<string, VariantSet>;
   // Already selected by `listingColumns`; surfaced here so the homepage's
   // featured cards can badge which listings have a walkthrough video.
   video_url: string | null;
@@ -345,6 +347,7 @@ export type ListingRow = Pick<
   | "last_seen_at"
   | "source_site"
   | "images"
+  | "image_variants"
   | "video_url"
   | "district_slug"
   | "address"
@@ -566,6 +569,7 @@ export type SimilarListing = {
   saleable_area: number | null;
   bedrooms: number | null;
   images: string[] | null;
+  image_variants?: Record<string, VariantSet>;
 };
 
 export async function fetchSimilarListings(

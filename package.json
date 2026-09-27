@@ -16,7 +16,7 @@
     "test:format": "bun test src/lib/format.test.ts",
     "test:layout": "bun test src/components/layout/layout.test.tsx",
     "test:estate-grid": "bun test src/components/site/EstateGroupGrid.test.tsx",
-    "test:media": "bun test src/components/media/AppImage.test.tsx",
+    "test:media": "bun test src/components/media/AppImage.test.tsx && node --test src/lib/media/remote-variants.test.mjs src/lib/media/remote-variants.db.test.mjs scripts/media/backfill-remote-variants.test.mjs",
     "test:styles": "node --test src/styles.test.mjs",
     "format": "prettier --write .",
     "test:corridor": "node --test src/content/castle-peak-road.test.mjs src/lib/neon/corridor-scope.contract.test.mjs",

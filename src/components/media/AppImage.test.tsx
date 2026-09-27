@@ -203,3 +203,42 @@ test("generated candidates exist, match width descriptors and preserve aspect ra
   );
   await Promise.all(checks);
 });
+
+test("remote MLS thumbnail uses only generated variants and falls back to the original", () => {
+  const source = "https://owned.public.blob.vercel-storage.com/mls/source.jpg";
+  const ready = render(
+    createElement(AppImage, {
+      src: source,
+      alt: "listing",
+      width: 76,
+      height: 76,
+      sizes: "76px",
+      variantSet: {
+        status: "ready",
+        sourceHash: "a".repeat(64),
+        variants: [
+          {
+            width: 160,
+            url: "https://owned.public.blob.vercel-storage.com/mls-variants/160.webp",
+            bytes: 3000,
+            format: "webp",
+          },
+        ],
+      },
+    }),
+  );
+  expect(ready("img").attr("src")).toBe(source);
+  expect(ready("img").attr("srcset")).toContain("160.webp 160w");
+  expect(ready("img").attr("sizes")).toBe("76px");
+  const failed = render(
+    createElement(AppImage, {
+      src: source,
+      alt: "listing",
+      width: 76,
+      height: 76,
+      variantSet: { status: "failed", sourceHash: "a".repeat(64), variants: [] },
+    }),
+  );
+  expect(failed("img").attr("srcset")).toBeUndefined();
+  expect(failed("img").attr("src")).toBe(source);
+});

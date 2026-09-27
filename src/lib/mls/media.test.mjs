@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { deflateSync } from "node:zlib";
+import sharp from "sharp";
 
 import {
   MAX_IMAGE_BYTES,
@@ -2239,4 +2240,78 @@ test("malformed identity and dependency inputs fail before side effects", async 
     await assert.rejects(prepareListingMedia({ ...base, ...override }), /invalid|required|must/i);
   }
   assert.equal(sideEffects, 0);
+});
+
+test("publish pipeline writes ready variants from validated bytes without replacing original", async () => {
+  const previousFlag = process.env.MLS_MEDIA_VARIANTS_ENABLED;
+  process.env.MLS_MEDIA_VARIANTS_ENABLED = "true";
+  try {
+    const bytes = await sharp({
+      create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
+    })
+      .png()
+      .toBuffer();
+    let saved = null;
+    const repository = fakeRepository({
+      registerOwnedMedia: async (input) => ({
+        outcome: "inserted",
+        asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
+      }),
+    });
+    repository.findOwnedMediaVariantSet = async () => saved;
+    repository.saveOwnedMediaVariantSet = async (set) => {
+      saved = set;
+      return set;
+    };
+    const blobStore = fakeBlobStore();
+    const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+    assert.equal(result.publishable, true);
+    assert.equal(result.uploadCount, 1);
+    assert.equal(saved.status, "ready");
+    assert.deepEqual(
+      saved.variants.map((item) => item.width),
+      [160, 320],
+    );
+    assert.equal(blobStore.puts.length, 3);
+    assert.equal(
+      result.images[0],
+      blobStore.puts.length ? "https://owned.example/" + blobStore.puts[0].pathname : null,
+    );
+  } finally {
+    if (previousFlag === undefined) delete process.env.MLS_MEDIA_VARIANTS_ENABLED;
+    else process.env.MLS_MEDIA_VARIANTS_ENABLED = previousFlag;
+  }
+});
+
+test("variant lookup failure leaves the original owned image publishable", async () => {
+  const previousFlag = process.env.MLS_MEDIA_VARIANTS_ENABLED;
+  process.env.MLS_MEDIA_VARIANTS_ENABLED = "true";
+  try {
+    const bytes = await sharp({
+      create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
+    })
+      .png()
+      .toBuffer();
+    const repository = fakeRepository({
+      registerOwnedMedia: async (input) => ({
+        outcome: "inserted",
+        asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
+      }),
+    });
+    repository.findOwnedMediaVariantSet = async () => {
+      throw new Error("variant metadata unavailable");
+    };
+    repository.saveOwnedMediaVariantSet = async () => {
+      throw new Error("variant save should not run");
+    };
+    const blobStore = fakeBlobStore();
+    const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+    assert.equal(result.publishable, true);
+    assert.equal(result.uploadCount, 1);
+    assert.equal(blobStore.puts.length, 1);
+    assert.equal(result.images[0], "https://owned.example/" + blobStore.puts[0].pathname);
+  } finally {
+    if (previousFlag === undefined) delete process.env.MLS_MEDIA_VARIANTS_ENABLED;
+    else process.env.MLS_MEDIA_VARIANTS_ENABLED = previousFlag;
+  }
 });
