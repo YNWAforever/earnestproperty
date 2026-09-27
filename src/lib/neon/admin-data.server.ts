@@ -1424,6 +1424,7 @@ export async function fetchAdminAgents() {
       s.id,
       COALESCE(s.name_zh, s.name_en) AS name,
       s.email,
+      s.branch,
       s.active,
       COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles
     FROM staff_users s
@@ -1435,6 +1436,7 @@ export async function fetchAdminAgents() {
     id: stringOrEmpty(row.id),
     name: stringOrNull(row.name),
     email: stringOrNull(row.email),
+    branch: stringOrNull(row.branch),
     active: row.active === true,
     roles: Array.isArray(row.roles) ? row.roles.map(String) : [],
   }));

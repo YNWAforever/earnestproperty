@@ -18,8 +18,8 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 
 | Finding | Tasks | Code status | Staging status | Production status | Current evidence / next check |
 |---|---|---|---|---|---|
-| R01 Haze readiness | T03–T05 | not-started | not-started | external-blocked | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence. |
-| R02 technical ID setup | T02–T03 | partial-local | not-started | not-started | Audit: wizard requires manual Inbox IDs. |
+| R01 Haze readiness | T03–T05 | partial-local | not-started | external-blocked | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence. |
+| R02 technical ID setup | T02–T03 | fixed-local | not-started | not-started | Audit: wizard requires manual Inbox IDs. |
 | R03 verification evidence | T01,T04 | partial-local | not-started | not-started | Audit: manual evidence cannot imply provider verification or delivery. |
 | R04 Folder semantics | T02,T03,T05 | partial-local | not-started | external-blocked | Audit: direct assignment requires matching Folder; tenant capability unverified. |
 | R05 sales performance | T12–T14 | not-started | not-started | not-started | Audit: current analytics lacks attributable sales/agent metrics. |
@@ -28,8 +28,8 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R08 website tracking | T08 | not-started | not-started | not-started | Audit: sampled 6/6 CTAs use direct wa.me. |
 | R09 batch input | T06 | not-started | not-started | not-started | Audit: wizard has one source per batch and manual placement IDs. |
 | R10 blocked batch rows | T07 | not-started | not-started | not-started | Audit: one blocked row blocks submit; keep snapshots/chunks. |
-| R11 notification setup | T03–T04 | not-started | not-started | not-started | Audit: technical fields and external mapping mixed into primary flow. |
-| R12 test-send workflow | T03–T04 | not-started | not-started | not-started | Audit: same-name buttons and unclear repair actions. |
+| R11 notification setup | T03–T04 | partial-local | not-started | not-started | Audit: technical fields and external mapping mixed into primary flow. |
+| R12 test-send workflow | T03–T04 | partial-local | not-started | not-started | Audit: same-name buttons and unclear repair actions. |
 | R13 mapping races | T01 | fixed-local | not-started | not-started | Audit: no expectedVersion on mapping save. |
 | R14 analytics definitions | T12–T13 | not-started | not-started | not-started | Audit: test/spam and cohort/current backlog not distinguished. |
 | R15 media and transport copy | T15 | not-started | not-started | not-started | Audit: VR claim and mismatched transport text. |
@@ -37,7 +37,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 
 ## Task progress
 
-T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed locally (isolated Neon and tenant gates pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
+T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed locally; T03 wizard code fixed locally (isolated Neon, tenant and browser gates pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
 
 ## Decisions and external gates
 
@@ -77,3 +77,12 @@ T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed 
 - node --test src/lib/woztell/inbox-directory.test.mjs: 4 pass, 0 fail, 0 skip (pagination, duplicate names, wrong Channel/user, malformed and repeated cursor, 401/403/429/5xx, agent rejection, tenant/Channel cache separation, Folder denial, timeout).
 - npm run test:woztell: 150 Node pass + 8 Bun pass, 0 fail, 0 skip. npm run typecheck and changed-file ESLint: pass.
 - No tenant credentials or Folder names were supplied. Provider readback and disposable Neon migration remain external staging gates; no production provider request was made.
+
+### T03 — staff Inbox onboarding wizard (R01, R02, R04, R11, R12)
+
+- Reproduced: the old second step required manual Inbox User ID, Folder ID, Routing Node ID and a verification reference, then allowed a manual eligible save. The new UI tests initially failed because account picker and wizard state helpers did not exist.
+- The primary four-step flow now shows local staff name, work email and branch; selects named Folder and exact Inbox account from T02; requires an explicit provider access check; then consumes its evidence ID in T01's versioned save. Provider IDs appear only in advanced details. Routing Node is no longer edited by this direct-assignment wizard.
+- Changing staff, Folder or account clears review evidence. A stale async lookup cannot populate a new staff selection. A 409 keeps the account and Folder inputs, clears stale evidence, refreshes current versions, and explains the difference. A separate reasoned action retires a mapping without requiring new provider evidence. Unsaved inputs are guarded on navigation and staff switch.
+- The first step distinguishes local branch from provider Folder. External 28hse/YouTube staff references moved into an advanced section. Empty Folder state has an explicit setup action. Existing notification/test components remain until T04.
+- bun test src/components/admin/whatsapp/StaffMappingWizard.test.tsx: 6 pass, 0 fail. npm run test:staff-notifications: 21 Node + 10 Bun pass, 0 fail. Admin route contracts: 41 pass. Typecheck and changed-file ESLint: pass.
+- Route search accepts only UUID staffId/draftId and steps 0–3. Actor-scoped draft restoration belongs to T07; this route does not load a draft yet. Narrow-screen/keyboard live browser acceptance and real Haze connection remain staging/external gates because this worktree has no authenticated test session or tenant credentials. No provider send was made.

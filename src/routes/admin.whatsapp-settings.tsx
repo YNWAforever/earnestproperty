@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { StaffMappingWizard } from "@/components/admin/whatsapp/StaffMappingWizard";
+import { parseWhatsappSettingsSearch } from "@/components/admin/whatsapp/staff-mapping-wizard-state";
 import { WhatsappServicePolicyEditor } from "@/components/admin/WhatsappServicePolicyEditor";
 import { fetchAdminAgents } from "@/lib/neon/admin-data";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 
 export const Route = createFileRoute("/admin/whatsapp-settings")({
+  validateSearch: parseWhatsappSettingsSearch,
   component: WhatsappSettings,
   head: () => ({
     meta: [
@@ -17,6 +19,7 @@ export const Route = createFileRoute("/admin/whatsapp-settings")({
 });
 
 function WhatsappSettings() {
+  const search = Route.useSearch();
   const { user, loading } = useNeonAuth();
   const [agents, setAgents] = useState<Awaited<ReturnType<typeof fetchAdminAgents>>>([]);
   const [error, setError] = useState("");
@@ -45,7 +48,13 @@ function WhatsappSettings() {
           執行／查證介面及人工改派政策。儲存映射不會執行分派；試送只有明確提交才會進入專用工作佇列。
         </p>
         {error ? <p role="alert">{error}</p> : null}
-        {agents.length ? <StaffMappingWizard agents={agents} /> : null}
+        {agents.length ? (
+          <StaffMappingWizard
+            agents={agents}
+            initialStaffId={search.staffId}
+            initialStep={search.step}
+          />
+        ) : null}
         <WhatsappServicePolicyEditor agents={agents} />
       </div>
     </AdminShell>

@@ -431,6 +431,9 @@ export type StaffChannelDto = {
   staff_id: string;
   channel_id: string;
   version: number;
+  review_basis: "legacy_manual" | "provider_verified";
+  review_enforced: boolean;
+  retired_at: string | null;
   name: string | null;
   inbox_user_id: string;
   folder_id: string;
