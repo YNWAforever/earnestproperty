@@ -161,7 +161,15 @@ export const Route = createFileRoute("/property/$listingNo")({
         }),
       });
     }
-    const [similar, txns, branches] = await Promise.all([
+    const offers = activePropertyOfferings(property)
+      .filter(() => publicPropertyNo(property))
+      .map((offer) => ({
+        propertyId: offer.id,
+        publicListingNo: publicPropertyNo(property),
+        dealType: offer.deal_type,
+        title: sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh,
+      }));
+    const [similar, txns, branches, enquiryLinks] = await Promise.all([
       property.estate_id
         ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4).catch(
             () => [] as SimilarListing[],
@@ -175,27 +183,19 @@ export const Route = createFileRoute("/property/$listingNo")({
       // a failed fetch just falls back to the agent's free-text `branch`,
       // exactly like before this table existed.
       fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
+      resolveWhatsappLinks({ data: { offers } }).catch((error) => {
+        console.error("WA_TRACKING_RESOLVER_FAILED", error);
+        return {
+          enabled: false,
+          fallbackHref: null,
+          links: [],
+          actions: offers.map((offer) => ({
+            propertyId: offer.propertyId,
+            ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
+          })),
+        };
+      }),
     ]);
-    const offers = activePropertyOfferings(property)
-      .filter(() => publicPropertyNo(property))
-      .map((offer) => ({
-        propertyId: offer.id,
-        publicListingNo: publicPropertyNo(property),
-        dealType: offer.deal_type,
-        title: sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh,
-      }));
-    const enquiryLinks = await resolveWhatsappLinks({ data: { offers } }).catch((error) => {
-      console.error("WA_TRACKING_RESOLVER_FAILED", error);
-      return {
-        enabled: false,
-        fallbackHref: null,
-        links: [],
-        actions: offers.map((offer) => ({
-          propertyId: offer.propertyId,
-          ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
-        })),
-      };
-    });
     return { property, similar, txns, branches, enquiryLinks };
   },
   head: ({ loaderData }) => {
