@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   publicPropertyNo,
+  publicPropertyTitle,
   propertyUpdatedAt,
   propertyPriceSummary,
   propertyDealLabel,
@@ -71,4 +72,20 @@ test("public cards use actual available update times for new and legacy inventor
   expect(
     propertyUpdatedAt({ created_at: "invalid", updated_at: null, last_seen_at: null }),
   ).toBeNull();
+});
+test("an imported internal SYNC identifier is never a customer listing number", () => {
+  expect(publicPropertyNo({ listing_no: "SYNC-00000000-0000-4000-8000-000000000001" })).toBe("");
+  expect(
+    publicPropertyNo({
+      listing_no: "SYNC-00000000-0000-4000-8000-000000000001",
+      public_listing_no: "A074714",
+    }),
+  ).toBe("A074714");
+});
+
+test("public title removes promotional artifacts without rewriting source room counts", () => {
+  const raw = "【筍盤】!!!3房套工 Patry Room VR睇樓!!";
+  const property = { ...sale, title_zh: raw };
+  expect(publicPropertyTitle(property)).toBe("3房套工 Party Room");
+  expect(property.title_zh).toBe(raw);
 });

@@ -270,13 +270,15 @@ test("upload recovery is isolated by account and survives same-account token rot
   assert.equal(ids[0], ids[3]);
 });
 
-test("upload session identity supports cookie and bearer envelopes and rejects absent identity", async () => {
-  const source = readFileSync("src/auth.ts", "utf8").replace(
-    'import.meta.env.VITE_NEON_AUTH_URL ?? ""',
-    '""',
+test("upload session identity uses one live opaque credential and rejects incomplete sessions", async () => {
+  const authUrl = "https://auth.example.test/neondb/auth";
+  const source = readFileSync("src/auth.ts", "utf8").replaceAll(
+    "import.meta.env.VITE_NEON_AUTH_URL",
+    JSON.stringify(authUrl),
   );
   const module = { exports: {} };
-  let value;
+  const requests = [];
+  let response = Response.json(null, { status: 401 });
   vm.runInNewContext(
     ts.transpileModule(source, {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -285,20 +287,34 @@ test("upload session identity supports cookie and bearer envelopes and rejects a
       module,
       exports: module.exports,
       Headers,
+      window: {},
+      fetch: async (url, init) => {
+        requests.push({ url, credentials: init.credentials, cache: init.cache });
+        return response;
+      },
       require: (name) =>
         name.endsWith("/react/adapters")
           ? { BetterAuthReactAdapter: () => ({}) }
-          : { createAuthClient: () => ({ getSession: async () => value }) },
+          : { createAuthClient: () => ({}) },
     },
   );
-  value = { data: { user: { id: "staff-a" }, session: { token: "one" } } };
+  response = Response.json({ data: { user: { id: "staff-a" }, session: { token: "opaque-one" } } });
   const first = await module.exports.withStaffUploadIdentity();
   assert.equal(first.actorId, "staff-a");
-  assert.equal(first.headers.get("authorization"), "Bearer one");
-  value = { user: { id: "staff-b" }, session: {} };
-  const cookie = await module.exports.withStaffUploadIdentity();
-  assert.equal(cookie.actorId, "staff-b");
-  assert.equal(cookie.headers.has("authorization"), false);
-  value = null;
+  assert.equal(first.headers.get("authorization"), "Bearer opaque-one");
+  response = Response.json({ user: { id: "staff-b" }, session: { token: "opaque-two" } });
+  const second = await module.exports.withStaffUploadIdentity();
+  assert.equal(second.actorId, "staff-b");
+  assert.equal(second.headers.get("authorization"), "Bearer opaque-two");
+  response = Response.json({ user: { id: "staff-b" }, session: {} });
+  await assert.rejects(module.exports.withStaffUploadIdentity(), /登入服務暫時無法使用/);
+  response = Response.json(null, { status: 401 });
   await assert.rejects(module.exports.withStaffUploadIdentity(), /重新登入/);
+  assert.equal(requests.length, 4);
+  assert.ok(
+    requests.every(
+      ({ url, credentials, cache }) =>
+        url === `${authUrl}/get-session` && credentials === "include" && cache === "no-store",
+    ),
+  );
 });

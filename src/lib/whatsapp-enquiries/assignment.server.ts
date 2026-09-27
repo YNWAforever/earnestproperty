@@ -93,7 +93,7 @@ export async function readAssignmentContext(
     throw new Response("Forbidden", { status: 403 });
   const global = actor.roles.some((r) => r === "admin" || r === "manager");
   const [authorized] = await queryRows(
-    `SELECT s.id FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$1::uuid AND s.active AND r.role=ANY($2::text[]) LIMIT 1`,
+    `SELECT s.id FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$1::uuid AND s.active AND r.role=ANY($2::staff_role[]) LIMIT 1`,
     [actor.staffId, global ? ["admin", "manager"] : ["agent"]],
   );
   if (!authorized) throw new Response("Forbidden", { status: 403 });
@@ -104,7 +104,17 @@ export async function readAssignmentContext(
  FROM whatsapp_conversations w LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE w.id=$1::uuid AND ($2::boolean OR w.assigned_agent_id=$3::uuid)`,
     [conversationId, global, actor.staffId],
   );
-  if (!row) throw new Response("Forbidden", { status: 403 });
+  if (!row) {
+    // Global staff may distinguish a missing conversation from an inaccessible
+    // one; agents must not be able to enumerate conversations they do not own.
+    if (global) {
+      const [exists] = await queryRows("SELECT id FROM whatsapp_conversations WHERE id=$1::uuid", [
+        conversationId,
+      ]);
+      if (!exists) throw new Response("Not Found", { status: 404 });
+    }
+    throw new Response("Forbidden", { status: 403 });
+  }
   const proposal = await proposedConversationAssignment(conversationId, ports);
   return {
     ...row,

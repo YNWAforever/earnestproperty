@@ -6,6 +6,7 @@ import {
   offeringDraft,
   offeringPatch,
   neutralPropertyTitle,
+  propertyContentReviewReasons,
 } from "./property-management-ui";
 describe("property management drafts", () => {
   test("unchanged unresolved shared values are never sent", () => {
@@ -74,4 +75,12 @@ test("offer summaries show only real offers and retain non-public statuses", () 
   expect(existingOfferingDeals({ sale, rent })).toEqual(["sale", "rent"]);
   expect(existingOfferingDeals({ sale: null, rent: null })).toEqual([]);
   expect(rent.status).toBe("inactive");
+});
+
+test("content review flags missing estate and contradictory rooms without changing facts", () => {
+  const source = { title_zh: "3房套工 VR睇樓", estate_id: null, bedrooms: 4, video_url: null };
+  const reasons = propertyContentReviewReasons(source);
+  expect(reasons).toHaveLength(3);
+  expect(reasons[1]).toContain("工人房不可自行加減");
+  expect(source.bedrooms).toBe(4);
 });

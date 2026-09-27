@@ -1,4 +1,5 @@
 import { resolveWhatsappLinks } from "@/lib/neon/whatsapp-enquiries";
+import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
 import {
   activePropertyOfferings,
   selectPropertyOffering,
@@ -160,7 +161,15 @@ export const Route = createFileRoute("/property/$listingNo")({
         }),
       });
     }
-    const [similar, txns, branches] = await Promise.all([
+    const offers = activePropertyOfferings(property)
+      .filter(() => publicPropertyNo(property))
+      .map((offer) => ({
+        propertyId: offer.id,
+        publicListingNo: publicPropertyNo(property),
+        dealType: offer.deal_type,
+        title: sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh,
+      }));
+    const [similar, txns, branches, enquiryLinks] = await Promise.all([
       property.estate_id
         ? fetchSimilarListings(property.estate_id, property.deal_type, property.id, 4).catch(
             () => [] as SimilarListing[],
@@ -174,16 +183,19 @@ export const Route = createFileRoute("/property/$listingNo")({
       // a failed fetch just falls back to the agent's free-text `branch`,
       // exactly like before this table existed.
       fetchNeonBranches().catch(() => [] as NeonBranchRecord[]),
+      resolveWhatsappLinks({ data: { offers } }).catch((error) => {
+        console.error("WA_TRACKING_RESOLVER_FAILED", error);
+        return {
+          enabled: false,
+          fallbackHref: null,
+          links: [],
+          actions: offers.map((offer) => ({
+            propertyId: offer.propertyId,
+            ...resolvePublicWaAction(offer, null, SITE_CONTACT.whatsappPhone),
+          })),
+        };
+      }),
     ]);
-    const enquiryLinks = await resolveWhatsappLinks({
-      data: {
-        offers: activePropertyOfferings(property).map((offer) => ({
-          propertyId: offer.id,
-          publicListingNo: publicPropertyNo(property),
-          dealType: offer.deal_type,
-        })),
-      },
-    }).catch(() => ({ enabled: true, fallbackHref: "/contact", links: [] }));
     return { property, similar, txns, branches, enquiryLinks };
   },
   head: ({ loaderData }) => {
@@ -221,6 +233,7 @@ export const Route = createFileRoute("/property/$listingNo")({
         { name: "description", content: desc },
         { property: "og:title", content: title },
         { property: "og:description", content: desc },
+        { property: "og:url", content: canonical.href },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: desc },
         ...(img ? [{ property: "og:image", content: img }] : []),
@@ -336,10 +349,8 @@ function PropertyPage() {
     publicPropertyNo(property),
     property.listing_aliases,
   );
-  // The breadcrumb shows the short id the title already uses (#C024131); the
-  // full "C024131-6714584-S" wrapped onto a second line on phones and is
-  // repeated verbatim in the badge row just below.
-  const shortListingNo = property.listing_no.split("-")[0] || property.listing_no;
+  // Use the canonical public number consistently in customer-facing surfaces.
+  const publicListingNo = publicPropertyNo(property);
 
   const isRent = property.deal_type === "rent";
   const priceLabel = formatDealPrice(isRent, Number(property.rent), Number(property.price));
@@ -390,8 +401,8 @@ function PropertyPage() {
     const url = `${SITE_URL}/property/${publicPropertyNo(property)}`;
     await shareUrl(safeTitle, url);
     track(
-      { name: "listing_share", payload: { listingNo: property.listing_no } },
-      buildContext({ listingNo: property.listing_no }),
+      { name: "listing_share", payload: { listingNo: publicListingNo } },
+      buildContext({ listingNo: publicListingNo }),
     );
   }
 
@@ -399,11 +410,11 @@ function PropertyPage() {
     () => ({
       event: {
         name: "listing_view",
-        payload: { listingNo: property.listing_no, dealType: property.deal_type },
+        payload: { listingNo: publicListingNo, dealType: property.deal_type },
       },
-      context: buildContext({ listingNo: property.listing_no, estateSlug: estate?.slug }),
+      context: buildContext({ listingNo: publicListingNo, estateSlug: estate?.slug }),
     }),
-    [property.listing_no],
+    [publicListingNo],
   );
 
   // Cycles through ALL images (not just the visible thumbnails), wrapping at
@@ -576,7 +587,7 @@ function PropertyPage() {
             { label: "首頁", href: "/" },
             { label: "搜尋放盤", href: "/listings" },
             ...(estate ? [{ label: estate.name_zh, href: `/estate/${estate.slug}` }] : []),
-            { label: `編號 ${shortListingNo}` },
+            { label: publicListingNo ? `編號 ${publicListingNo}` : "樓盤資料待核實" },
           ]}
         />
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -724,6 +735,7 @@ function PropertyPage() {
                   alt={safeTitle}
                   width={1200}
                   height={900}
+                  sizes="(min-width: 1024px) 800px, 100vw"
                   className="aspect-[4/3] w-full object-cover"
                   loading="eager"
                   fetchPriority="high"
@@ -772,8 +784,9 @@ function PropertyPage() {
                       <AppImage
                         src={src}
                         alt={`${safeTitle} ${i + 1}`}
-                        width={200}
-                        height={150}
+                        width={80}
+                        height={60}
+                        sizes="80px"
                         className="h-full w-full object-cover"
                       />
                     </button>
@@ -853,14 +866,10 @@ function PropertyPage() {
               branchContact={branchContact}
               branches={branches}
               enquiryHref={
-                enquiryLinks?.enabled
-                  ? (enquiryLinks.links.find((link) => link.propertyId === property.id)?.href ??
-                    enquiryLinks.fallbackHref ??
-                    "/contact")
-                  : undefined
+                enquiryLinks.actions.find((action) => action.propertyId === property.id)?.href
               }
               fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
-              listingNo={property.listing_no}
+              listingNo={publicListingNo}
               title={safeTitle}
               dealType={property.deal_type}
               price={dealPrice}
@@ -1030,14 +1039,10 @@ function PropertyPage() {
                 branchContact={branchContact}
                 branches={branches}
                 enquiryHref={
-                  enquiryLinks?.enabled
-                    ? (enquiryLinks.links.find((link) => link.propertyId === property.id)?.href ??
-                      enquiryLinks.fallbackHref ??
-                      "/contact")
-                    : undefined
+                  enquiryLinks.actions.find((action) => action.propertyId === property.id)?.href
                 }
                 fallbackWhatsapp={SITE_CONTACT.whatsappPhone}
-                listingNo={property.listing_no}
+                listingNo={publicListingNo}
                 title={safeTitle}
                 dealType={property.deal_type}
                 price={dealPrice}
@@ -1076,7 +1081,9 @@ function PropertyPage() {
                         name="message"
                         maxLength={1000}
                         rows={3}
-                        placeholder={`想查詢編號 ${property.listing_no}`}
+                        placeholder={
+                          publicListingNo ? `想查詢編號 ${publicListingNo}` : "想查詢此樓盤"
+                        }
                       />
                     </div>
                     <div className="flex items-start gap-2">

@@ -12,6 +12,13 @@ import {
   shouldMintReference,
   companyWhatsappHref,
 } from "../whatsapp-enquiries/links.ts";
+import { resolvePublicWaAction, type PublicWaOffer } from "../whatsapp-enquiries/public-context.ts";
+import {
+  redirectBucketKey,
+  redirectCapacity,
+  redirectCapacityDecision,
+  maybePruneRedirectBuckets,
+} from "../whatsapp-enquiries/redirect-capacity.ts";
 const fields = `l.id,l.code,v.*,l.created_at`;
 export function companyChannel() {
   const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
@@ -25,7 +32,7 @@ function admin(actor: StaffAccess) {
   if (!actor.roles.some((r) => r === "admin" || r === "manager"))
     throw new Response("Forbidden", { status: 403 });
 }
-function linkDto(row: DbRow): TrackingLink {
+export function linkDto(row: DbRow): TrackingLink {
   return {
     id: String(row.id),
     referenceMappingId: row.reference_mapping_id ? String(row.reference_mapping_id) : null,
@@ -95,6 +102,7 @@ function versionStatement(
   input: TrackingLinkInput,
   actor: StaffAccess,
   channel: string,
+  verifiedAt?: string | null,
 ): TransactionStatement {
   const statement: TransactionStatement = {
     statement: `INSERT INTO whatsapp_tracking_link_versions(link_id,version,channel_id,placement_source,entry_point_type,public_listing_no,property_id,deal_type,requested_staff_id,branch_id,external_listing_id,video_id,enabled,created_by,placement_verified_at) SELECT $1::uuid,$2,$3,$4,$5,$6,$7::uuid,$8,$9::uuid,$10,$11,$12,$13,$14::uuid,$15::timestamptz WHERE EXISTS(SELECT 1 FROM whatsapp_tracking_links WHERE id=$1::uuid AND current_version=$2) RETURNING *`,
@@ -113,7 +121,11 @@ function versionStatement(
       input.videoId ?? null,
       input.enabled,
       actor.staffId,
-      input.placementVerified ? new Date().toISOString() : null,
+      verifiedAt === undefined
+        ? input.placementVerified
+          ? new Date().toISOString()
+          : null
+        : verifiedAt,
     ],
   };
   if (input.referenceMappingId) {
@@ -131,20 +143,39 @@ export async function saveTrackingLink(
 ) {
   const { query, transaction } = dependencies;
   admin(actor);
-  await validateLink(input, query);
+  if (input.id && !input.expectedVersion) throw new Error("WA_LINK_VERSION_REQUIRED");
+  if (input.enabled || !input.id) await validateLink(input, query);
   const previous =
     input.id && !input.enabled
       ? (
           await query(
-            "SELECT channel_id FROM whatsapp_tracking_link_versions WHERE link_id=$1::uuid AND version=$2",
+            "SELECT v.* FROM whatsapp_tracking_link_versions v JOIN whatsapp_tracking_links l ON l.id=v.link_id AND l.current_version=v.version WHERE v.link_id=$1::uuid AND v.version=$2",
             [input.id, input.expectedVersion],
           )
         )[0]
       : null;
+  if (input.id && !input.enabled && !previous) throw new Error("WA_LINK_VERSION_CONFLICT");
+  // Disable copies the prior immutable identity. The caller may omit or alter stale
+  // offer/reference fields; neither can prevent an authorized shutdown.
+  const effectiveInput: TrackingLinkInput = previous
+    ? {
+        referenceMappingId: previous.reference_mapping_id as string | null,
+        placementSource: previous.placement_source as TrackingLinkInput["placementSource"],
+        entryPointType: previous.entry_point_type as TrackingLinkInput["entryPointType"],
+        publicListingNo: previous.public_listing_no as string | null,
+        propertyId: previous.property_id as string | null,
+        dealType: previous.deal_type as TrackingLinkInput["dealType"],
+        requestedStaffId: previous.requested_staff_id as string | null,
+        branchId: previous.branch_id as string | null,
+        externalListingId: previous.external_listing_id as string | null,
+        videoId: previous.video_id as string | null,
+        placementVerified: Boolean(previous.placement_verified_at),
+        enabled: false,
+      }
+    : input;
   const channel = previous ? String(previous.channel_id) : companyChannel(),
     id = input.id ?? randomUUID(),
     version = input.id ? (input.expectedVersion ?? 0) + 1 : 1;
-  if (input.id && !input.expectedVersion) throw new Error("WA_LINK_VERSION_REQUIRED");
   const first: TransactionStatement = input.id
     ? {
         statement:
@@ -157,7 +188,10 @@ export async function saveTrackingLink(
         params: [id, mintReference(), actor.staffId],
       };
   // The immutable version is inserted only when the optimistic update succeeded. Lock/read current version in one CTE.
-  const result = await transaction([first, versionStatement(id, version, input, actor, channel)]);
+  const result = await transaction([
+    first,
+    versionStatement(id, version, effectiveInput, actor, channel),
+  ]);
   if (!result[0].length) throw new Error("WA_LINK_VERSION_CONFLICT");
   const [row] = await query(
     `SELECT ${fields} FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v ON v.link_id=l.id WHERE l.id=$1::uuid AND v.version=$2`,
@@ -188,13 +222,14 @@ export async function provisionTrackingLinks(inputs: TrackingLinkInput[], actor:
   ).map(linkDto);
 }
 export async function resolveTrackingLinks(
-  offers: { propertyId: string; publicListingNo: string; dealType: "sale" | "rent" }[],
+  offers: (Omit<PublicWaOffer, "title"> & { title?: string })[],
   query = queryRows,
 ) {
   const enabled = trackingEnabled();
+  const companyPhone = process.env.EP_WA_COMPANY_PHONE ?? process.env.VITE_CONTACT_WHATSAPP_PHONE;
   const fallbackHref = enabled
-    ? process.env.EP_WA_COMPANY_PHONE
-      ? companyWhatsappHref(process.env.EP_WA_COMPANY_PHONE, "您好，我想向晉誠地產查詢。")
+    ? companyPhone
+      ? companyWhatsappHref(companyPhone, "您好，我想向晉誠地產查詢。")
       : "/contact"
     : null;
   if (!enabled)
@@ -202,6 +237,10 @@ export async function resolveTrackingLinks(
       enabled,
       fallbackHref,
       links: offers.map((o) => ({ propertyId: o.propertyId, href: null })),
+      actions: offers.map((o) => ({
+        propertyId: o.propertyId,
+        ...resolvePublicWaAction({ ...o, title: o.title ?? "" }, null, companyPhone),
+      })),
     };
   const channel = companyChannel();
   // One batch read; public reads cannot provision or reveal internal requested staff/branch metadata.
@@ -227,6 +266,16 @@ export async function resolveTrackingLinks(
       href: rows.find((r) => r.propertyId === o.propertyId)
         ? `/w/${rows.find((r) => r.propertyId === o.propertyId)!.code}`
         : null,
+    })),
+    actions: offers.map((o) => ({
+      propertyId: o.propertyId,
+      ...resolvePublicWaAction(
+        { ...o, title: o.title ?? "" },
+        rows.find((r) => r.propertyId === o.propertyId)
+          ? `/w/${rows.find((r) => r.propertyId === o.propertyId)!.code}`
+          : null,
+        companyPhone,
+      ),
     })),
   };
 }
@@ -289,16 +338,20 @@ export async function trackedRedirect(request: Request, code: string, query = qu
   if (!shouldMintReference(request)) return new Response(null, { status: 204, headers });
   if (!trackingEnabled() || !/^[A-Za-z0-9_-]{16,64}$/.test(code)) return fallback();
   const channel = companyChannel();
-  // A finite global bucket bounds storage under arbitrary code/IP input; no IP is retained.
-  const key = createHash("sha256").update("wa-redirect-global").digest("hex");
-  const [limit] = await query(
-    `INSERT INTO whatsapp_link_rate_buckets(bucket_key,window_start,request_count) VALUES($1,date_trunc('minute',now()),1) ON CONFLICT(bucket_key) DO UPDATE SET window_start=date_trunc('minute',now()),request_count=CASE WHEN whatsapp_link_rate_buckets.window_start=date_trunc('minute',now()) THEN whatsapp_link_rate_buckets.request_count+1 ELSE 1 END RETURNING request_count`,
-    [key],
-  );
-  if (Number(limit.request_count) > 300)
+  // Fixed-size global shards bound arbitrary-code traffic without one hot row.
+  // Per-link buckets are created only after a registered enabled link is found.
+  const capacity = redirectCapacity();
+  const rateSql =
+    "INSERT INTO whatsapp_link_rate_buckets(bucket_key,window_start,request_count) VALUES($1,date_trunc('minute',now()),1) ON CONFLICT(bucket_key) DO UPDATE SET window_start=date_trunc('minute',now()),request_count=CASE WHEN whatsapp_link_rate_buckets.window_start=date_trunc('minute',now()) THEN whatsapp_link_rate_buckets.request_count+1 ELSE 1 END RETURNING request_count";
+  const globalKey = redirectBucketKey("global", code, capacity.globalShards);
+  const [globalRate] = await query(rateSql, [globalKey]);
+  await maybePruneRedirectBuckets((sql) => query(sql), Number(globalRate.request_count));
+  if (
+    redirectCapacityDecision(Number(globalRate.request_count), null, capacity) === "global_limited"
+  )
     return new Response("請稍後再試，或聯絡公司總台。", {
       status: 429,
-      headers: { ...headers, "Retry-After": "60" },
+      headers: { ...headers, "Retry-After": "60", "X-WA-Tracking": "untracked" },
     });
   const [row] = await query(
     `SELECT ${fields} FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v ON v.link_id=l.id AND v.version=l.current_version WHERE l.code=$1 AND v.enabled AND v.channel_id=$2`,
@@ -316,6 +369,33 @@ export async function trackedRedirect(request: Request, code: string, query = qu
     if (!offer) return fallback();
     title = String(offer.title_zh).slice(0, 160);
     propertyResponsibleStaffIdAtIntake = offer.agent_id ? String(offer.agent_id) : null;
+  }
+  const [linkRate] = await query(rateSql, [redirectBucketKey("registered", String(row.id))]);
+  if (
+    redirectCapacityDecision(
+      Number(globalRate.request_count),
+      Number(linkRate.request_count),
+      capacity,
+    ) === "link_limited"
+  ) {
+    const action = resolvePublicWaAction(
+      {
+        propertyId: String(row.property_id ?? ""),
+        publicListingNo: String(row.public_listing_no ?? ""),
+        dealType: row.deal_type === "rent" ? "rent" : "sale",
+        title,
+      },
+      null,
+      process.env.EP_WA_COMPANY_PHONE,
+    );
+    const location = row.property_id
+      ? action.href
+      : (fallback().headers.get("Location") ?? "/contact");
+    console.warn("WA_REDIRECT_LINK_LIMITED", JSON.stringify({ linkId: String(row.id) }));
+    return new Response(null, {
+      status: 302,
+      headers: { ...headers, Location: location, "X-WA-Tracking": "untracked" },
+    });
   }
   const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
   companyWhatsappHref(phone, "");
@@ -358,9 +438,9 @@ export async function trackedRedirect(request: Request, code: string, query = qu
 export async function searchLinkOffers(q: string) {
   const rows = await queryRows(
     `WITH ranked AS (
- SELECT p.id,p.title_zh,p.deal_type,p.status,m.public_listing_no,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC) rn
+ SELECT p.id,p.title_zh,p.deal_type,p.status,p.price,p.rent,p.agent_id,m.public_listing_no,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC) rn
  FROM properties p JOIN property_public_members m ON m.property_id=p.id
- ) SELECT id,title_zh,deal_type,public_listing_no FROM ranked WHERE rn=1 AND status::text='active' AND (public_listing_no ILIKE $1 OR title_zh ILIKE $1) ORDER BY public_listing_no,deal_type LIMIT 50`,
+ ) SELECT r.id,r.title_zh,r.deal_type,r.public_listing_no,r.price,r.rent,r.agent_id,COALESCE(s.name_zh,s.name_en) AS agent_name FROM ranked r LEFT JOIN staff_users s ON s.id=r.agent_id WHERE r.rn=1 AND r.status::text='active' AND (r.public_listing_no ILIKE $1 OR r.title_zh ILIKE $1) ORDER BY r.public_listing_no,r.deal_type LIMIT 50`,
     ["%" + q.slice(0, 100) + "%"],
   );
   return rows.map((r) => ({
@@ -368,5 +448,15 @@ export async function searchLinkOffers(q: string) {
     publicListingNo: String(r.public_listing_no),
     dealType: r.deal_type as "sale" | "rent",
     title: String(r.title_zh),
+    price:
+      r.deal_type === "sale"
+        ? r.price == null
+          ? null
+          : Number(r.price)
+        : r.rent == null
+          ? null
+          : Number(r.rent),
+    agentId: r.agent_id ? String(r.agent_id) : null,
+    agentName: r.agent_name ? String(r.agent_name) : null,
   }));
 }

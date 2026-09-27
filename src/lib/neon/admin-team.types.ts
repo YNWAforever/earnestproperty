@@ -1,4 +1,5 @@
 import type { StaffRole } from "./auth.server.ts";
+import type { TeamOnboarding } from "./team-onboarding-policy.ts";
 
 export type AdminTeamInvitationState = "none" | "pending" | "sent" | "expired" | "failed";
 export type AdminTeamAccessState = "active" | "suspended";
@@ -16,6 +17,7 @@ export type AdminTeamMember = {
   createdAt: string;
   updatedAt: string;
   needsAttention: boolean;
+  onboarding: TeamOnboarding;
 };
 
 export type AdminTeamList = {

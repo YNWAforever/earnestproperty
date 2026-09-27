@@ -181,18 +181,11 @@ function RootComponent() {
   );
 }
 
-// AdminShell renders its own header, nav, and identity block, so the public
-// marketing SiteHeader/SiteFooter were pure duplication on every /admin
-// page -- a second, redundant "banner" landmark above AdminShell's own, and a
-// full district/estate/legal marketing footer at the bottom of an internal
-// CRM tool, past which agents had to scroll on every long WhatsApp thread.
-// Deliberately narrower than isPublicWidgetPath/shouldShowStickyWhatsAppBar
-// below: /auth and /account render a bare AuthView/AccountView with no header
-// of their own (see auth.$pathname.tsx, account.$pathname.tsx), so excluding
-// them here the same way would leave staff on an unbranded, logo-less sign-in
-// page instead of removing a duplicate.
+// Private staff and account routes use their own compact identity shell.
 function isPublicSitePath(pathname: string) {
-  return pathname !== "/admin" && !pathname.startsWith("/admin/");
+  return !["/admin", "/auth", "/account"].some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
 }
 
 function isPublicWidgetPath(pathname: string) {

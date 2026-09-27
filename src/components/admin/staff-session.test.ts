@@ -103,12 +103,12 @@ describe("staff session store", () => {
 // The shell now names the actual reason so the member and the admin know what
 // to do next.
 describe("staffSessionDenialCopy", () => {
-  test("unverified email tells the member to ask an admin to link the account", () => {
+  test("unverified email asks for verification before staff binding", () => {
     const copy = staffSessionDenialCopy("staff-email-unverified");
     expect(copy.title).toContain("尚未連結");
     expect(copy.description).toContain("驗證");
     expect(copy.description).toContain("管理員");
-    expect(copy.description).toContain("連結帳戶");
+    expect(copy.description).toContain("完成驗證後");
   });
 
   test("forbidden explains the account is not a staff record", () => {

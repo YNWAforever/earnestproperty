@@ -318,13 +318,11 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
       // roles, up to admin.
       if (!(await isNeonAuthEmailVerified(authUserId, email))) {
         // Neon Auth does not verify emails unless the project enables it, so
-        // this is where every invited member lands by default. Say so: the
-        // denial reason reaches the member's screen, and the admin's Team page
-        // offers the explicit link that activates them without the provider
-        // setting (linkStaffIdentity in staff-lifecycle.server.ts).
+        // this is where every invited member lands until verification is
+        // enabled and completed. The denial reason reaches the member's screen.
         console.warn(
           "[auth] Staff row matched by email but the Neon Auth account's email is unverified; " +
-            "refusing to bind. An admin can link the account from 團隊成員.",
+            "refusing to bind until email verification completes.",
           { staffId: stringOrEmpty(row.id), authUserId },
         );
         return { staff: null, denial: STAFF_EMAIL_UNVERIFIED };

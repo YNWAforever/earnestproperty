@@ -180,7 +180,7 @@ export function OwnerValuationPanel({
       <div className="mx-auto grid max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[1.2fr_0.8fr] lg:px-8">
         <div>
           <p className="text-sm font-semibold text-coral">業主放盤 / 免費估價</p>
-          <h2 className="mt-2 text-2xl font-bold text-primary">索取深井業主估價報告</h2>
+          <h2 className="mt-2 text-2xl font-bold text-primary">查詢物業估價及放盤建議</h2>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             提供屋苑、實用面積、樓層景觀同放售或放租意向，晉誠地舖團隊會按近期放盤、成交和可睇盤情況回覆。
           </p>

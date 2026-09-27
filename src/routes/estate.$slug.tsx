@@ -278,7 +278,7 @@ function EstatePage() {
   ]);
   const ctaContext = {
     estateName: seo?.nameZh ?? estate.name_zh,
-    districtName: registryEntry?.locationLabelZh ?? "深井 / 青山公路",
+    districtName: registryEntry?.locationLabelZh ?? "屋苑所在地",
     source: `estate-${estate.slug}`,
   };
   const estateFacts = [
@@ -299,7 +299,9 @@ function EstatePage() {
   // without real, sourced school-net data (school-nets.ts) -- see that
   // file's own comment for why other districts intentionally render nothing
   // here rather than invented figures.
-  const transportSegment = findCastlePeakRoadSegmentByDistrictSlug(estate.district_slug);
+  const transportSegment = registryEntry?.corridorSegment
+    ? findCastlePeakRoadSegmentByDistrictSlug(estate.district_slug)
+    : null;
   const schoolNet = getSchoolNet(schoolNetCodeForDistrict(registryEntry?.districtSlug));
   const estateName = seo?.nameZh ?? estate.name_zh;
   // The visible trail and the BreadcrumbList JSON-LD are built from the same
@@ -371,7 +373,7 @@ function EstatePage() {
       <PageHero
         tone="brand"
         breadcrumb={<Breadcrumbs tone="inverse" items={breadcrumbItems} />}
-        eyebrow={registryEntry?.heroEyebrow ?? "屋苑獨立 SEO 頁"}
+        eyebrow={registryEntry?.heroEyebrow ?? "屋苑資料"}
         title={estateName}
         lead={content?.heroPositioning ?? seo?.fit ?? "即時查看放盤、成交和屋苑資料。"}
       >
@@ -641,7 +643,7 @@ function EstatePage() {
           <div>
             <h2 className="text-2xl font-bold text-primary">最新放盤</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              已接入舊站公開 MLS 匯入流程，盤源會以最新抓取時間排序。
+              以下放盤以網站現時資料為準；如需確認是否仍可睇樓，歡迎聯絡團隊。
             </p>
           </div>
           <Link

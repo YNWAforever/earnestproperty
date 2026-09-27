@@ -485,8 +485,9 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
   // importer only links an estate via a handful of hardcoded regexes.
   const keyword = normalizeKeyword(input.keyword);
   if (keyword) {
-    where.push(`lower(
-      concat_ws(' ',
+    const term = addParam(params, keyword);
+    where.push(`(
+      lower(concat_ws(' ',
         p.title_zh,
         p.title_en,
         p.address,
@@ -495,8 +496,22 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
         e.name_zh,
         e.name_en,
         e.slug
+      )) LIKE '%' || lower(${term}) || '%' ESCAPE '\\'
+      OR EXISTS (
+        SELECT 1
+        FROM property_public_members search_member
+        JOIN property_public_members alias_member
+          ON alias_member.public_listing_no = search_member.public_listing_no
+        JOIN properties alias_property ON alias_property.id = alias_member.property_id
+        WHERE search_member.property_id = p.id
+          AND (
+            lower(search_member.public_listing_no)
+              LIKE '%' || lower(${term}) || '%' ESCAPE '\\'
+            OR lower(alias_property.listing_no)
+              LIKE '%' || lower(${term}) || '%' ESCAPE '\\'
+          )
       )
-    ) LIKE '%' || lower(${addParam(params, keyword)}) || '%' ESCAPE '\\'`);
+    )`);
   }
 
   return where.join(" AND ");
@@ -721,6 +736,11 @@ export async function searchListings(
   const candidateOrder =
     !input.sort || input.sort === "newest" ? LISTING_NEWEST_ORDER : LISTING_FRESHNESS_ORDER;
   const rowParams = [...params];
+  // The keyword is listingWhere's final bound value. Public exact matches
+  // lead the selected sort without changing the canonical source ranking.
+  const exactPublicRank = normalizeKeyword(input.keyword)
+    ? `CASE WHEN lower(c.public_listing_no) = lower($${params.length}) THEN 0 ELSE 1 END, `
+    : "";
   const limitParam = addParam(rowParams, pageSize);
   const offsetParam = addParam(rowParams, offset);
   // Both reads are independent; list totals may reflect a concurrent import until the next refresh.
@@ -734,7 +754,7 @@ export async function searchListings(
       `${canonicalListingCte(where, false, candidateOrder)}
       SELECT ${listingCardColumns} FROM properties p JOIN canonical c ON c.id=p.id
       LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}
-      ORDER BY ${listingOrderBy(input.sort)} LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      ORDER BY ${exactPublicRank}${listingOrderBy(input.sort)} LIMIT ${limitParam} OFFSET ${offsetParam}`,
       rowParams,
     ),
   ]);

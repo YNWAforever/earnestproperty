@@ -15,6 +15,7 @@ import type { AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
 import type { StaffRole } from "@/lib/neon/auth.server";
 
 import { AdminTeamStatusBadge, teamRoleLabel } from "./AdminTeamStatusBadge";
+import { AdminTeamOnboarding } from "./AdminTeamOnboarding";
 
 export type TeamMemberAction = "resend" | "roles" | "suspend" | "reactivate" | "reset" | "link";
 
@@ -28,9 +29,7 @@ function accountStateCopy(identity: AdminTeamMemberDetail["identity"]) {
     case "unregistered":
       return "帳戶身份未連結：此成員尚未註冊登入帳戶，請分享註冊連結（/auth/sign-up）並提醒使用相同電郵。";
     case "unverified":
-      // Neon Auth's default: the member signed up, nothing verified the email,
-      // so sign-in never auto-binds. Only an admin link gets them in.
-      return "帳戶身份未連結：此成員已註冊登入帳戶，但電郵未驗證，系統未有自動連結。管理員可在此為成員完成連結。";
+      return "帳戶身份未連結：此成員已註冊，但電郵尚未驗證。請先完成電郵驗證；驗證前不能連結職員身份。";
     case "verified":
       return "帳戶身份未連結：此成員已註冊並驗證電郵，下次登入時會自動連結，亦可立即完成連結。";
     default:
@@ -68,7 +67,7 @@ export function AdminTeamDetailPanel({
     canManage &&
     active &&
     !detail.identity.authUserLinked &&
-    detail.identity.account !== "unregistered";
+    detail.identity.account === "verified";
   const [roles, setRoles] = useState<StaffRole[]>(member.roles);
   const [successorId, setSuccessorId] = useState("");
 
@@ -96,6 +95,20 @@ export function AdminTeamDetailPanel({
           </div>
         </div>
         <p className="mt-3 text-sm text-muted-foreground">{accountStateCopy(detail.identity)}</p>
+        {member.invitationExpiresAt ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            邀請有效期至{" "}
+            {new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
+              new Date(member.invitationExpiresAt),
+            )}
+            ；註冊連結需由管理員人工分享。
+          </p>
+        ) : null}
+        {active && !detail.identity.authUserLinked && member.invitationState !== "none" ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            如需撤回此成員的後台邀請，使用下方「停用帳戶」；通用註冊網址不會因此失效，但停用的職員記錄不能取得後台權限。
+          </p>
+        ) : null}
         {canLink ? (
           <Button
             className="mt-3"
@@ -109,6 +122,7 @@ export function AdminTeamDetailPanel({
           </Button>
         ) : null}
       </section>
+      <AdminTeamOnboarding value={member.onboarding} />
       <section aria-labelledby="team-roles-heading" className="rounded-lg border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <h3 id="team-roles-heading" className="font-semibold">

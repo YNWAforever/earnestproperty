@@ -14,6 +14,24 @@ export const propertyStatusLabels: Record<string, string> = {
 export function neutralPropertyTitle(title: string) {
   return title.replace(/\s*[租售]盤\s*#[A-Za-z0-9-]+\s*$/, "").trim();
 }
+export function propertyContentReviewReasons(input: {
+  title_zh: string;
+  estate_id: string | null;
+  bedrooms: number | null;
+  video_url: string | null;
+}) {
+  const reasons: string[] = [];
+  if (!input.estate_id) reasons.push("屋苑未填，請核實來源及地址");
+  const rooms = /(?:^|[^0-9])(\d{1,2})\s*房/u.exec(input.title_zh);
+  if (rooms && input.bedrooms !== null && Number(rooms[1]) !== input.bedrooms)
+    reasons.push(
+      "標題寫 " + rooms[1] + " 房，結構化資料寫 " + input.bedrooms + " 房；工人房不可自行加減",
+    );
+  if (/\bVR\b|VR睇樓|虛擬睇樓/iu.test(input.title_zh) && !input.video_url)
+    reasons.push("標題提及 VR，但未有可用媒體網址");
+  return reasons;
+}
+
 export function changedFields<T extends object>(baseline: T, draft: T): Partial<T> {
   return Object.fromEntries(
     Object.entries(draft).filter(

@@ -687,19 +687,7 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       return { ...result, requestId };
     },
 
-    /**
-     * Bind a staff row to the Neon Auth account registered with the same
-     * email, on an admin's say-so.
-     *
-     * auth.server.ts only auto-binds by email once Neon Auth reports the
-     * address verified, and Neon Auth does not verify emails unless the
-     * project enables it -- so by default an invited member who signs up is
-     * refused on every request, indefinitely, however their roles are set.
-     * An explicit admin confirmation is at least as strong an identity claim
-     * as a verification click, and it works regardless of the provider
-     * setting. Same-email only: an admin who wants a different address must
-     * first correct the member's email, so the audit trail stays honest.
-     */
+    /** Bind only a verified Neon Auth account with the same staff email. */
     async linkStaffIdentity(input: LinkStaffIdentityInput, actor: StaffAccess, _request: Request) {
       requireAdmin(actor);
       const requestId = nextRequestId();
@@ -716,6 +704,7 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
       const account = accounts[0];
       const authUserId = typeof account?.id === "string" && account.id ? account.id : null;
       if (!authUserId) throw new Response("account-not-found", { status: 404 });
+      if (account.email_verified !== true) throw new Response("email-unverified", { status: 403 });
 
       // staff_users.auth_user_id is UNIQUE; check first so a clash is a clear
       // 409 instead of a constraint error surfacing as a 500.

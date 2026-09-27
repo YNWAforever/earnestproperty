@@ -1,13 +1,23 @@
 {
   "method": "Authorized source inventory; WebP quality78, no upscaling; 960px width proxy, not browser transfer",
-  "originalBytes": 6811023,
-  "selected960Bytes": 2651334,
-  "reduction": 0.6107289609798705,
+  "originalBytes": 7124290,
+  "selected960Bytes": 2772130,
+  "reduction": 0.6108903483715571,
   "images": [
     {
       "source": "/hero-front.jpg",
       "originalBytes": 340869,
       "variants": [
+        {
+          "src": "/responsive/hero-front-2b0f006c1f-128.webp",
+          "width": 128,
+          "bytes": 1692
+        },
+        {
+          "src": "/responsive/hero-front-2b0f006c1f-256.webp",
+          "width": 256,
+          "bytes": 5448
+        },
         {
           "src": "/responsive/hero-front-2b0f006c1f-320.webp",
           "width": 320,
@@ -40,6 +50,16 @@
       "originalBytes": 360140,
       "variants": [
         {
+          "src": "/responsive/estates-bellagio-30d4f308bb-128.webp",
+          "width": 128,
+          "bytes": 3166
+        },
+        {
+          "src": "/responsive/estates-bellagio-30d4f308bb-256.webp",
+          "width": 256,
+          "bytes": 12704
+        },
+        {
           "src": "/responsive/estates-bellagio-30d4f308bb-320.webp",
           "width": 320,
           "bytes": 19868
@@ -66,6 +86,16 @@
       "originalBytes": 330832,
       "variants": [
         {
+          "src": "/responsive/estates-chun-wong-kui-ed84b4c2f2-128.webp",
+          "width": 128,
+          "bytes": 4538
+        },
+        {
+          "src": "/responsive/estates-chun-wong-kui-ed84b4c2f2-256.webp",
+          "width": 256,
+          "bytes": 15736
+        },
+        {
           "src": "/responsive/estates-chun-wong-kui-ed84b4c2f2-320.webp",
           "width": 320,
           "bytes": 23896
@@ -86,6 +116,16 @@
       "source": "/estates/hoi-wan-hin.jpg",
       "originalBytes": 446221,
       "variants": [
+        {
+          "src": "/responsive/estates-hoi-wan-hin-918b92179b-128.webp",
+          "width": 128,
+          "bytes": 6396
+        },
+        {
+          "src": "/responsive/estates-hoi-wan-hin-918b92179b-256.webp",
+          "width": 256,
+          "bytes": 24362
+        },
         {
           "src": "/responsive/estates-hoi-wan-hin-918b92179b-320.webp",
           "width": 320,
@@ -108,6 +148,16 @@
       "originalBytes": 241034,
       "variants": [
         {
+          "src": "/responsive/estates-hoi-wan-toi-1e1db16404-128.webp",
+          "width": 128,
+          "bytes": 3020
+        },
+        {
+          "src": "/responsive/estates-hoi-wan-toi-1e1db16404-256.webp",
+          "width": 256,
+          "bytes": 9906
+        },
+        {
           "src": "/responsive/estates-hoi-wan-toi-1e1db16404-320.webp",
           "width": 320,
           "bytes": 14790
@@ -129,6 +179,16 @@
       "originalBytes": 269897,
       "variants": [
         {
+          "src": "/responsive/estates-lido-garden-f80b0b9a39-128.webp",
+          "width": 128,
+          "bytes": 4662
+        },
+        {
+          "src": "/responsive/estates-lido-garden-f80b0b9a39-256.webp",
+          "width": 256,
+          "bytes": 17542
+        },
+        {
           "src": "/responsive/estates-lido-garden-f80b0b9a39-320.webp",
           "width": 320,
           "bytes": 27294
@@ -149,6 +209,16 @@
       "source": "/estates/mun-ming-shan.jpg",
       "originalBytes": 573732,
       "variants": [
+        {
+          "src": "/responsive/estates-mun-ming-shan-ba9487e80b-128.webp",
+          "width": 128,
+          "bytes": 4816
+        },
+        {
+          "src": "/responsive/estates-mun-ming-shan-ba9487e80b-256.webp",
+          "width": 256,
+          "bytes": 18990
+        },
         {
           "src": "/responsive/estates-mun-ming-shan-ba9487e80b-320.webp",
           "width": 320,
@@ -176,6 +246,16 @@
       "originalBytes": 417916,
       "variants": [
         {
+          "src": "/responsive/estates-oi-kam-hoi-ngon-2782056d65-128.webp",
+          "width": 128,
+          "bytes": 2438
+        },
+        {
+          "src": "/responsive/estates-oi-kam-hoi-ngon-2782056d65-256.webp",
+          "width": 256,
+          "bytes": 9044
+        },
+        {
           "src": "/responsive/estates-oi-kam-hoi-ngon-2782056d65-320.webp",
           "width": 320,
           "bytes": 14040
@@ -201,6 +281,16 @@
       "source": "/estates/rhine-garden.jpg",
       "originalBytes": 355338,
       "variants": [
+        {
+          "src": "/responsive/estates-rhine-garden-07a0ba64d5-128.webp",
+          "width": 128,
+          "bytes": 3712
+        },
+        {
+          "src": "/responsive/estates-rhine-garden-07a0ba64d5-256.webp",
+          "width": 256,
+          "bytes": 14192
+        },
         {
           "src": "/responsive/estates-rhine-garden-07a0ba64d5-320.webp",
           "width": 320,
@@ -228,6 +318,16 @@
       "originalBytes": 118896,
       "variants": [
         {
+          "src": "/responsive/estates-sea-crest-villa-b5fb29969d-128.webp",
+          "width": 128,
+          "bytes": 2950
+        },
+        {
+          "src": "/responsive/estates-sea-crest-villa-b5fb29969d-256.webp",
+          "width": 256,
+          "bytes": 11030
+        },
+        {
           "src": "/responsive/estates-sea-crest-villa-b5fb29969d-320.webp",
           "width": 320,
           "bytes": 16648
@@ -243,6 +343,16 @@
       "source": "/estates/seong-yuen.jpg",
       "originalBytes": 284116,
       "variants": [
+        {
+          "src": "/responsive/estates-seong-yuen-5655a66ffd-128.webp",
+          "width": 128,
+          "bytes": 2330
+        },
+        {
+          "src": "/responsive/estates-seong-yuen-5655a66ffd-256.webp",
+          "width": 256,
+          "bytes": 8588
+        },
         {
           "src": "/responsive/estates-seong-yuen-5655a66ffd-320.webp",
           "width": 320,
@@ -270,6 +380,16 @@
       "originalBytes": 356834,
       "variants": [
         {
+          "src": "/responsive/estates-sing-tai-67dd3cea91-128.webp",
+          "width": 128,
+          "bytes": 2694
+        },
+        {
+          "src": "/responsive/estates-sing-tai-67dd3cea91-256.webp",
+          "width": 256,
+          "bytes": 9690
+        },
+        {
           "src": "/responsive/estates-sing-tai-67dd3cea91-320.webp",
           "width": 320,
           "bytes": 14264
@@ -295,6 +415,16 @@
       "source": "/estates/tai-tou-waan.jpg",
       "originalBytes": 301696,
       "variants": [
+        {
+          "src": "/responsive/estates-tai-tou-waan-92bb3e9405-128.webp",
+          "width": 128,
+          "bytes": 2368
+        },
+        {
+          "src": "/responsive/estates-tai-tou-waan-92bb3e9405-256.webp",
+          "width": 256,
+          "bytes": 9030
+        },
         {
           "src": "/responsive/estates-tai-tou-waan-92bb3e9405-320.webp",
           "width": 320,
@@ -322,6 +452,16 @@
       "originalBytes": 382921,
       "variants": [
         {
+          "src": "/responsive/estates-tai-wah-hin-11242d4b36-128.webp",
+          "width": 128,
+          "bytes": 5958
+        },
+        {
+          "src": "/responsive/estates-tai-wah-hin-11242d4b36-256.webp",
+          "width": 256,
+          "bytes": 20776
+        },
+        {
           "src": "/responsive/estates-tai-wah-hin-11242d4b36-320.webp",
           "width": 320,
           "bytes": 31252
@@ -342,6 +482,16 @@
       "source": "/estates/the-carmel.jpg",
       "originalBytes": 239030,
       "variants": [
+        {
+          "src": "/responsive/estates-the-carmel-901d3797de-128.webp",
+          "width": 128,
+          "bytes": 2520
+        },
+        {
+          "src": "/responsive/estates-the-carmel-901d3797de-256.webp",
+          "width": 256,
+          "bytes": 8166
+        },
         {
           "src": "/responsive/estates-the-carmel-901d3797de-320.webp",
           "width": 320,
@@ -369,6 +519,16 @@
       "originalBytes": 369185,
       "variants": [
         {
+          "src": "/responsive/estates-wong-gam-hoi-ngon-8b9effe63d-128.webp",
+          "width": 128,
+          "bytes": 3104
+        },
+        {
+          "src": "/responsive/estates-wong-gam-hoi-ngon-8b9effe63d-256.webp",
+          "width": 256,
+          "bytes": 11434
+        },
+        {
           "src": "/responsive/estates-wong-gam-hoi-ngon-8b9effe63d-320.webp",
           "width": 320,
           "bytes": 16902
@@ -395,6 +555,16 @@
       "originalBytes": 491777,
       "variants": [
         {
+          "src": "/responsive/branches-hong-kong-garden-c86d414b62-128.webp",
+          "width": 128,
+          "bytes": 6640
+        },
+        {
+          "src": "/responsive/branches-hong-kong-garden-c86d414b62-256.webp",
+          "width": 256,
+          "bytes": 25914
+        },
+        {
           "src": "/responsive/branches-hong-kong-garden-c86d414b62-320.webp",
           "width": 320,
           "bytes": 39092
@@ -417,9 +587,55 @@
       ]
     },
     {
+      "source": "/branches/lido-2026-09.jpeg",
+      "originalBytes": 313267,
+      "variants": [
+        {
+          "src": "/responsive/branches-lido-2026-09-e283d11b0f-128.webp",
+          "width": 128,
+          "bytes": 3868
+        },
+        {
+          "src": "/responsive/branches-lido-2026-09-e283d11b0f-256.webp",
+          "width": 256,
+          "bytes": 12596
+        },
+        {
+          "src": "/responsive/branches-lido-2026-09-e283d11b0f-320.webp",
+          "width": 320,
+          "bytes": 18432
+        },
+        {
+          "src": "/responsive/branches-lido-2026-09-e283d11b0f-640.webp",
+          "width": 640,
+          "bytes": 63050
+        },
+        {
+          "src": "/responsive/branches-lido-2026-09-e283d11b0f-960.webp",
+          "width": 960,
+          "bytes": 120796
+        },
+        {
+          "src": "/responsive/branches-lido-2026-09-e283d11b0f-1100.webp",
+          "width": 1100,
+          "bytes": 154554
+        }
+      ]
+    },
+    {
       "source": "/branches/lido.jpg",
       "originalBytes": 481966,
       "variants": [
+        {
+          "src": "/responsive/branches-lido-314203b3a3-128.webp",
+          "width": 128,
+          "bytes": 3742
+        },
+        {
+          "src": "/responsive/branches-lido-314203b3a3-256.webp",
+          "width": 256,
+          "bytes": 12634
+        },
         {
           "src": "/responsive/branches-lido-314203b3a3-320.webp",
           "width": 320,
@@ -451,6 +667,16 @@
       "source": "/branches/rhine.jpg",
       "originalBytes": 448623,
       "variants": [
+        {
+          "src": "/responsive/branches-rhine-a55a0e541b-128.webp",
+          "width": 128,
+          "bytes": 6984
+        },
+        {
+          "src": "/responsive/branches-rhine-a55a0e541b-256.webp",
+          "width": 256,
+          "bytes": 27046
+        },
         {
           "src": "/responsive/branches-rhine-a55a0e541b-320.webp",
           "width": 320,

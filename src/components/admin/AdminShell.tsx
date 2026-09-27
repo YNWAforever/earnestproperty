@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -385,6 +385,16 @@ export function AdminShell({
     refresh: refreshStaffSession,
   } = useStaffSession(user?.id ?? null);
   const staffRoles = staffSession?.status === "ok" ? staffSession.roles : null;
+  const [showFirstLogin, setShowFirstLogin] = useState(false);
+  useEffect(() => {
+    if (staffSession?.status !== "ok") {
+      setShowFirstLogin(false);
+      return;
+    }
+    setShowFirstLogin(
+      sessionStorage.getItem(`earnest:first-login-checklist:${staffSession.staffId}`) !== "done",
+    );
+  }, [staffSession]);
 
   async function handleSignOut() {
     // Sat one item below 群發 in the sidebar with no confirmation, no pending
@@ -510,6 +520,37 @@ export function AdminShell({
             </div>
             {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
           </header>
+          {showFirstLogin && staffSession?.status === "ok" ? (
+            <section
+              aria-label="首次登入核對"
+              className="mb-4 rounded-lg border bg-card p-4 text-sm"
+            >
+              <h2 className="font-semibold">首次登入核對</h2>
+              <ol className="mt-2 list-decimal space-y-1 pl-5">
+                <li>
+                  <a className="underline" href="/account/settings">
+                    核對本人登入姓名及帳戶資料
+                  </a>
+                </li>
+                <li>確認職員角色及所屬分行；資料不符時聯絡管理員。</li>
+                <li>需要 Inbox 分派或手機通知時，請管理員在映射設定核實各條路線。</li>
+              </ol>
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  sessionStorage.setItem(
+                    `earnest:first-login-checklist:${staffSession.staffId}`,
+                    "done",
+                  );
+                  setShowFirstLogin(false);
+                }}
+              >
+                我已核對
+              </Button>
+            </section>
+          ) : null}
           {staffSession?.status === "denied" ? (
             <StaffAccessDenied
               reason={staffSession.reason}

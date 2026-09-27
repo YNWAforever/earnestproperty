@@ -139,8 +139,7 @@ test("site config exposes segmented whatsapp intent helpers", () => {
   assert.match(source, /export function whatsappIntentUrl/);
   assert.match(source, /我要買樓/);
   assert.match(source, /我要租樓/);
-  assert.match(source, /我要放盤估價/);
-  assert.match(source, /深井業主估價報告/);
+  assert.match(source, /查詢物業估價及放盤建議/);
 });
 
 test("site config exposes all public branch contact details", () => {
@@ -714,7 +713,7 @@ test("listing admin can save property video urls", () => {
 
 test("valuation whatsapp intent includes search summary context", () => {
   const source = readFileSync("src/config/site.ts", "utf8");
-  const valuationStart = source.indexOf('"你好，我要放盤估價');
+  const valuationStart = source.indexOf('"你好，我想查詢物業估價');
   const valuationEnd = source.indexOf("].join", valuationStart);
   const valuationMessage = source.slice(valuationStart, valuationEnd);
 

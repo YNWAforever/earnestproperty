@@ -30,6 +30,12 @@ const item: StaffNotificationItem = {
       state: "accepted",
       evidenceKind: "private_note_posted",
       error: null,
+      acceptedAt: "2026-09-12T11:01:00Z",
+      acceptedSource: "woztell_send_responses",
+      deliveredAt: null,
+      deliveredSource: null,
+      readAt: null,
+      readSource: null,
     },
   ],
 };
@@ -70,6 +76,7 @@ test("NT-13/14/21 rendering FYI or stale work creates no acceptance action", () 
 test("NT-15 accepted transport and explicit acknowledgement never fabricate customer response", () => {
   const html = render({ workState: "acknowledged", acknowledgedAt: "2026-09-12T11:05:00Z" });
   expect(html).toContain("仍待人手回覆");
+  expect(html).toContain("未證實送達");
   expect(html).not.toContain("已有核實人手回覆");
 });
 test("NT-24 response resolution does not invent acknowledgement", () => {

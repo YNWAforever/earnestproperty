@@ -347,6 +347,7 @@ export const woztellEnquiryProcessHandler = registerJobHandler<{ eventId: string
 });
 
 export const SERVICE_CAPABILITIES = [
+  "woztell.enquiry.staff.test@1",
   "woztell.enquiry.staff.notify@1",
   "woztell.enquiry.staff.notify.reconcile@1",
   "woztell.enquiry.staff.ack.check@1",
@@ -459,3 +460,24 @@ for (const jobType of [
     },
   });
 }
+
+// Purpose-specific test work has no customer conversation or SLA side effects.
+registerJobHandler({
+  jobType: "woztell.enquiry.staff.test",
+  payloadVersion: 1,
+  parsePayload: (input) => idPayload(input, "attemptId"),
+  async run(payload, context) {
+    await context.checkpoint();
+    if (!context.workerId)
+      throw Object.assign(new Error("Test notification requires a leased job"), {
+        code: "JOB_LEASE_REQUIRED",
+      });
+    const { dispatchStaffTestNotification } =
+      await import("../neon/whatsapp-test-notification.server.ts");
+    return dispatchStaffTestNotification(payload.attemptId, {
+      jobId: context.jobId,
+      workerId: context.workerId,
+      checkpoint: context.checkpoint,
+    });
+  },
+});

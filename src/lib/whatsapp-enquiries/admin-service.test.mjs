@@ -77,6 +77,7 @@ test("health separates opens, enquiry attribution and human evidence; unknowns r
   const rows = [
     [{ id }],
     [{ available: true, heartbeat: true }],
+    [],
     [
       {
         opens: 12,
@@ -88,13 +89,14 @@ test("health separates opens, enquiry attribution and human evidence; unknowns r
         routing_unknown: 1,
         sending_unknown: 2,
         blocked_surveys: 3,
-        unverified_staff: 4,
-        missing_approval: true,
+        overdue_jobs: 1,
+        oldest_due: "2026-01-01T00:00:00Z",
       },
     ],
     [],
+    [{ id }],
   ];
-  const health = await getServiceHealth(actor, async () => rows[calls++]);
+  const health = await getServiceHealth(actor, async () => rows[calls++], { readiness: [] });
   assert.deepEqual(health.counts, {
     opens: 12,
     enquiries: 7,
@@ -104,7 +106,7 @@ test("health separates opens, enquiry attribution and human evidence; unknowns r
     surveyAnswers: 0,
   });
   assert.ok(health.reasons.includes("SEND_RECONCILIATION_REQUIRED"));
-  assert.ok(health.reasons.includes("SERVICE_WORKER_NOT_OBSERVED"));
+  assert.ok(health.reasons.includes("SERVICE_DUE_WORK_OVERDUE"));
 });
 
 test("routing-only policy can be approved without customer-service rules", async () => {

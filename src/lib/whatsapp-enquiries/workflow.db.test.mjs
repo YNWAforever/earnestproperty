@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import { ingestWoztellEvent } from "../woztell/woztell-ingest.server.ts";
 import { parseWoztellProviderResult } from "../woztell/provider-result.ts";
 import { normalizeWoztellEvent } from "../woztell/woztell.server.ts";
@@ -50,7 +51,7 @@ test(
   "Phase 1 integrated capture, replay, rollback and observation (disposable)",
   { skip: !url },
   async (t) => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(url);
     const db = neon(url),
       schema = "wa_p1_" + randomUUID().replaceAll("-", "");
     const tx = async (statements) =>

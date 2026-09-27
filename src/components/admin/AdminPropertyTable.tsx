@@ -55,6 +55,7 @@ function Identity({ row }: { row: ManagedPropertySummary }) {
         <p className="line-clamp-2 max-w-72 text-xs text-muted-foreground">
           {neutralPropertyTitle(row.title)}
         </p>
+        {!row.estateName ? <p className="text-xs text-amber-800">屋苑待核實</p> : null}
         {(row.reviewRequired || row.unlinked) && (
           <p className="text-xs text-amber-800">
             {row.unlinked ? "編號待核實" : "資料有差異，待核實"}

@@ -148,7 +148,7 @@ const megaMenus: MegaMenuGroup[] = [
       {
         href: "/#owner-valuation",
         label: "業主放盤 / 免費估價",
-        description: "提交物業資料，獲取深井業主估價報告。",
+        description: "提交物業資料，查詢估價及放盤建議。",
       },
       { to: "/mortgage", label: "按揭計算機", description: "預覽供款、壓力測試及置業開支。" },
       { to: "/agents", label: "代理團隊", description: "認識熟悉區內屋苑的前線代理。" },

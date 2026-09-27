@@ -105,7 +105,7 @@ export function whatsappIntentMessage(intent: WhatsAppIntent, context: WhatsAppI
   }
 
   return [
-    "你好，我要放盤估價，想索取深井業主估價報告。",
+    "你好，我想查詢物業估價及放盤建議。",
     contextLine("屋苑/大廈", context.estateName),
     contextLine("地區", context.districtName),
     contextLine("搜尋條件", context.searchSummary),

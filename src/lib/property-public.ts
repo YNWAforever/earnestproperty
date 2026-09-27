@@ -22,7 +22,13 @@ type PublicProperty = {
 export function publicPropertyNo(
   property: Pick<PublicProperty, "listing_no" | "public_listing_no">,
 ) {
-  return property.public_listing_no || property.listing_no;
+  const candidate = (property.public_listing_no || property.listing_no).trim();
+  // Imported SYNC IDs and raw UUIDs are storage identities, not customer
+  // listing numbers. Surfaces without a verified public number use contact.
+  return /^SYNC(?:[-_]|$)/i.test(candidate) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)
+    ? ""
+    : candidate;
 }
 export function activePropertyOfferings(property: PublicProperty): PublicOffering[] {
   const offerings = property.offerings ?? [
@@ -62,10 +68,24 @@ export function propertyPriceSummary(property: PublicProperty) {
       .join(" · ") || "暫無放盤"
   );
 }
+// A display-only cleanup. Source titles and manual CMS overrides are never rewritten.
+// Bedroom and helper-room numbers remain untouched until a human verifies them.
+export function normalizePublicListingTitle(raw: string) {
+  const cleaned = raw
+    .replace(/^(?:[!！★☆🔥✨\s]|【(?:筍盤|獨家|急售|推介|VR睇樓)】)+/gu, "")
+    .replace(/\bPatry\b/gi, "Party")
+    .replace(/(?:\s*[!！]){2,}/g, "")
+    .replace(/(?:^|\s)VR(?:睇樓|全景)?(?=\s|$|[!！])/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "物業放盤";
+}
 export function publicPropertyTitle(property: PublicProperty & { title_zh: string }) {
-  return activePropertyOfferings(property).length > 1
-    ? property.title_zh.replace(/售盤|租盤/g, "放盤")
-    : property.title_zh;
+  const title =
+    activePropertyOfferings(property).length > 1
+      ? property.title_zh.replace(/售盤|租盤/g, "放盤")
+      : property.title_zh;
+  return normalizePublicListingTitle(title);
 }
 
 /** Latest actual record update or source check; never substitutes the current clock. */

@@ -3,6 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { neon } from "@neondatabase/serverless";
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import {
   activateServiceGeneration,
   scheduleServiceForEvent,
@@ -60,7 +61,7 @@ function splitSqlStatements(query) {
 
 const url = process.env.ASTRA_TEST_DATABASE_URL;
 test("Phase4 isolated service transactions and capability lane", { skip: !url }, async (t) => {
-  assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+  await assertDisposableNeonTestTarget(url);
   const db = neon(url),
     schema = "wa_p4_" + randomUUID().replaceAll("-", "");
   const tx = async (statements) =>
@@ -155,7 +156,7 @@ test("Phase4 isolated service transactions and capability lane", { skip: !url },
     await db.query(`CREATE SCHEMA ${schema}`);
     for (const statement of [
       `CREATE TABLE audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_id uuid,action text,subject_type text,subject_id uuid,metadata jsonb)`,
-      `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text)`,
+      `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text,branch_id text)`,
       `CREATE TABLE staff_roles(staff_user_id uuid,role text)`,
       `CREATE TABLE properties(id uuid PRIMARY KEY,agent_id uuid,deal_type text)`,
       `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text)`,
@@ -165,6 +166,8 @@ test("Phase4 isolated service transactions and capability lane", { skip: !url },
       `CREATE TABLE whatsapp_messages(id uuid PRIMARY KEY,conversation_id uuid,contact_id uuid,direction text,message_type text,text text,channel_id text,woztell_member_id text,external_message_id text UNIQUE,sent_by uuid,status text,payload jsonb,error text)`,
       `CREATE TABLE inquiries(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),source text DEFAULT 'website',name text NOT NULL,crm_contact_id uuid,property_id uuid,status text DEFAULT 'new',created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
       `CREATE TABLE ops_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_type text,payload_version integer,payload jsonb,status text,attempt_count integer DEFAULT 0,max_attempts integer,run_after timestamptz,lease_owner text,lease_expires_at timestamptz,last_error_code text,last_error_summary text,idempotency_key text UNIQUE,actor_staff_id uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
+      // Health reads presence of the later notification schema; notification writes are tested separately.
+      `CREATE TABLE staff_notification_endpoints(id uuid PRIMARY KEY)`,
     ])
       await query(statement);
     for (const file of [

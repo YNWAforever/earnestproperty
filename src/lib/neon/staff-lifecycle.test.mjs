@@ -975,11 +975,7 @@ test("lifecycle actions generate a request id without depending on crypto.random
 });
 
 test("linking binds an invited member to the Neon Auth account registered with the same email", async () => {
-  // Neon Auth leaves emailVerified false unless the project enables
-  // verification, so auth.server.ts's verified-email bind never fires: the
-  // member is 403 on every admin page no matter which roles the admin assigns,
-  // and nothing says why. An explicit admin link is the activation path that
-  // does not depend on the provider setting.
+  // Manual and automatic staff binding require the same verified-email evidence.
   const queries = [];
   const { service, calls } = fixture({
     queryRows: async (statement, params = []) => {
@@ -990,7 +986,7 @@ test("linking binds an invited member to the Neon Auth account registered with t
         ];
       }
       if (statement.includes('neon_auth."user"'))
-        return [{ id: "auth-kevin", email_verified: false }];
+        return [{ id: "auth-kevin", email_verified: true }];
       if (statement.includes("UPDATE staff_users")) return [{ id: targetId }];
       return [];
     },
@@ -1000,7 +996,7 @@ test("linking binds an invited member to the Neon Auth account registered with t
 
   assert.deepEqual(result, {
     ok: true,
-    emailVerified: false,
+    emailVerified: true,
     requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   });
   const lookup = queries.find((query) => query.statement.includes('neon_auth."user"'));
@@ -1012,7 +1008,7 @@ test("linking binds an invited member to the Neon Auth account registered with t
   assert.equal(calls.audit.at(-1).action, "staff.identity_linked");
   assert.equal(calls.audit.at(-1).permission, "staff.manage");
   assert.equal(calls.audit.at(-1).outcome, "success");
-  assert.deepEqual(calls.audit.at(-1).metadata, { emailVerified: false });
+  assert.deepEqual(calls.audit.at(-1).metadata, { emailVerified: true });
 });
 
 test("linking refuses without a registered account, for an already-linked member, and for an account owned by another member", async () => {
@@ -1024,6 +1020,14 @@ test("linking refuses without a registered account, for an already-linked member
       conflict: [],
       status: 404,
       body: "account-not-found",
+    },
+    {
+      name: "email not verified",
+      member: { auth_user_id: null },
+      neonUser: [{ id: "auth-kevin", email_verified: false }],
+      conflict: [],
+      status: 403,
+      body: "email-unverified",
     },
     {
       name: "already linked",

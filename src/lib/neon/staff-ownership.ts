@@ -111,6 +111,14 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
   }));
 }
 
+/** Test rows retain the colleague who was tested as historical evidence. They are
+ * never reassigned during staff handover. Scoped pairs avoid treating provider
+ * mappings with the same staff_id column as ordinary historical fields. */
+export const STAFF_HISTORICAL_PAIR_COLUMNS = [
+  { table: "staff_notification_test_previews", column: "staff_id" },
+  { table: "staff_notification_test_attempts", column: "staff_id" },
+] as const;
+
 /** Provider-confirmed ownership requires reconciliation; mappings retire on staff exit.
  * Neither may be relabelled by a bulk local handover. Evidence records retain their subject. */
 export const STAFF_RECONCILED_COLUMNS = [

@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { z } from "zod";
+import { maskStaffDestination } from "./whatsapp-readiness-policy.ts";
 import { queryRows, transactionRows } from "./db.server.ts";
 import type { StaffAccess } from "./auth.server";
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
@@ -32,7 +33,7 @@ async function authorize(actor: Actor, query = queryRows) {
 export async function listStaffEndpoints(actor: Actor, query = queryRows) {
   await authorize(actor, query);
   const rows = await query(
-    "SELECT id,staff_id,transport,channel_id,version,enabled,retired_at,verification_ref FROM staff_notification_endpoints ORDER BY updated_at DESC LIMIT 200",
+    "SELECT id,staff_id,transport,channel_id,version,enabled,retired_at,verification_ref,destination_reference,verified_at,permission_granted,last_inbound_at,template_verified_at FROM staff_notification_endpoints ORDER BY updated_at DESC LIMIT 200",
   );
   return rows.map((r) => ({
     id: String(r.id),
@@ -43,6 +44,13 @@ export async function listStaffEndpoints(actor: Actor, query = queryRows) {
     enabled: r.enabled === true,
     retired: r.retired_at !== null,
     verificationRef: String(r.verification_ref ?? ""),
+    maskedDestination: maskStaffDestination(String(r.destination_reference ?? "")),
+    verifiedAt: r.verified_at ? new Date(String(r.verified_at)).toISOString() : null,
+    permissionGranted: r.permission_granted === true,
+    lastInboundAt: r.last_inbound_at ? new Date(String(r.last_inbound_at)).toISOString() : null,
+    templateVerifiedAt: r.template_verified_at
+      ? new Date(String(r.template_verified_at)).toISOString()
+      : null,
   }));
 }
 export async function saveStaffEndpoint(

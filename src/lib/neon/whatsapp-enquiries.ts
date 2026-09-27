@@ -23,6 +23,7 @@ const offerSchema = z
     publicListingNo: z.string().min(1).max(160),
     propertyId: z.string().uuid(),
     dealType: z.enum(["sale", "rent"]),
+    title: z.string().trim().max(160).optional(),
   })
   .strict();
 export const getWhatsappTrackingLinks = createServerFn({ method: "GET" }).handler(async () => {

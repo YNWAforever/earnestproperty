@@ -218,7 +218,7 @@ test("a list-row card variant exists alongside the grid card, both fed by the sa
   assert.match(source, /function ListingCardRow\(/);
   assert.match(source, /function deriveListingCardData\(/);
   assert.match(source, /viewMode === "grid" \? \(/);
-  assert.match(source, /<ListingCardRow key={p\.id} p={p} \/>/);
+  assert.match(source, /<ListingCardRow\s+key=\{p\.id\}\s+p=\{p\}\s+enquiryAction=\{/);
 });
 
 test("the route defines pendingComponent and errorComponent", () => {

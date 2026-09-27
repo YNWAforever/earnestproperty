@@ -27,7 +27,7 @@ async function authorize(actor: Actor, query = queryRows) {
 export async function listStaffReferences(actor: Actor, query = queryRows) {
   await authorize(actor, query);
   const rows = await query(
-    "SELECT r.id,r.namespace,r.external_reference,r.staff_id,r.mapping_version,r.valid_from,r.valid_until,r.verification_ref,COALESCE(s.name_zh,s.name_en) AS staff_name FROM staff_external_references r JOIN staff_users s ON s.id=r.staff_id ORDER BY r.verified_at DESC,r.id DESC LIMIT 200",
+    "SELECT r.id,r.namespace,r.external_reference,r.staff_id,r.mapping_version,r.valid_from,r.valid_until,r.verified_at,r.verification_ref,COALESCE(s.name_zh,s.name_en) AS staff_name FROM staff_external_references r JOIN staff_users s ON s.id=r.staff_id ORDER BY r.verified_at DESC,r.id DESC LIMIT 200",
   );
   return rows.map((r) => ({
     id: String(r.id),
@@ -37,6 +37,7 @@ export async function listStaffReferences(actor: Actor, query = queryRows) {
     mapping_version: Number(r.mapping_version),
     valid_from: String(r.valid_from),
     valid_until: r.valid_until ? String(r.valid_until) : null,
+    verified_at: r.verified_at ? String(r.verified_at) : null,
     verification_ref: String(r.verification_ref),
     staff_name: r.staff_name ? String(r.staff_name) : null,
   }));

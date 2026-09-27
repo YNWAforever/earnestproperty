@@ -2,6 +2,8 @@ import "@tanstack/react-start/server-only";
 
 import type { StaffAccess, StaffRole } from "./auth.server.ts";
 import { queryRows, type DbRow } from "./db.server.ts";
+import { deriveTeamOnboarding } from "./team-onboarding-policy.ts";
+import type { StaffWhatsappReadiness } from "./whatsapp-readiness.types.ts";
 import type {
   AdminTeamAccountState,
   AdminTeamFilterState,
@@ -158,11 +160,34 @@ function invitationState(input: {
   return "sent";
 }
 
-function memberFromRow(row: Record<string, unknown>): AdminTeamMember {
+function memberFromRow(
+  row: Record<string, unknown>,
+  readiness: StaffWhatsappReadiness | null = null,
+): AdminTeamMember {
   const expiresAt = dateString(row.latest_provider_expires_at);
   const action = safeAction(row.latest_action);
   const state = safeActionState(row.latest_action_state);
   const stateLabel = invitationState({ action, state, expiresAt });
+  const authUserLinked = typeof row.auth_user_id === "string" && row.auth_user_id.length > 0;
+  const registered = typeof row.neon_auth_user_id === "string" && row.neon_auth_user_id.length > 0;
+  const account: AdminTeamAccountState = authUserLinked
+    ? "linked"
+    : !registered
+      ? "unregistered"
+      : row.neon_auth_email_verified === true
+        ? "verified"
+        : "unverified";
+  const roles = safeRoles(row.roles);
+  const onboarding = deriveTeamOnboarding({
+    active: row.active === true,
+    email: typeof row.email === "string" ? row.email : null,
+    roles,
+    branchId: typeof row.branch_id === "string" ? row.branch_id : null,
+    account,
+    emailVerified: row.neon_auth_email_verified === true ? true : registered ? false : null,
+    invitation: stateLabel,
+    readiness,
+  });
   return {
     id:
       typeof row.id === "string" && uuidPattern.test(row.id)
@@ -170,15 +195,15 @@ function memberFromRow(row: Record<string, unknown>): AdminTeamMember {
         : invalid("Invalid Team member."),
     name: typeof row.name === "string" ? row.name.trim() || null : null,
     email: typeof row.email === "string" ? row.email : null,
-    roles: safeRoles(row.roles),
+    roles,
     accessState: row.active === true ? "active" : "suspended",
     invitationState: stateLabel,
     invitationRetryAfter: dateString(row.latest_retry_after),
     invitationExpiresAt: expiresAt,
     createdAt: requiredDate(row.created_at),
     updatedAt: requiredDate(row.updated_at),
-    needsAttention:
-      state === "retryable_failure" || state === "terminal_failure" || stateLabel === "expired",
+    needsAttention: onboarding.attentionReasons.length > 0,
+    onboarding,
   };
 }
 
@@ -195,10 +220,24 @@ export function createAdminTeamReadModel(
   dependencies: {
     queryRows?: QueryRows;
     fetchStaffAccessSummary?: FetchStaffAccessSummary;
+    fetchStaffReadiness?: (actor: StaffAccess) => Promise<StaffWhatsappReadiness[]>;
   } = {},
 ) {
   const runQuery = dependencies.queryRows ?? queryRows;
   const readAccess = dependencies.fetchStaffAccessSummary;
+  const readReadiness =
+    dependencies.fetchStaffReadiness ??
+    (dependencies.queryRows
+      ? async () => []
+      : async (actor: StaffAccess) => {
+          try {
+            return await (
+              await import("./whatsapp-readiness.server.ts")
+            ).listWhatsappStaffReadiness(actor);
+          } catch {
+            return [];
+          }
+        });
 
   return {
     async listAdminTeam(input: AdminTeamListInput, _actor: StaffAccess): Promise<AdminTeamList> {
@@ -208,11 +247,15 @@ export function createAdminTeamReadModel(
            SELECT s.id::text AS id,
                   COALESCE(NULLIF(s.name_zh, ''), NULLIF(s.name_en, '')) AS name,
                   s.email,
+                  s.auth_user_id, s.branch_id,
+                  neon_user.id AS neon_auth_user_id,
+                  neon_user.email_verified AS neon_auth_email_verified,
                   s.active,
                   s.created_at,
                   s.updated_at,
                   to_char(s.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor,
                   COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles,
+                  COUNT(r.role) AS role_count, BOOL_OR(r.role='agent') AS agent_role,
                   latest_action.action AS latest_action,
                   latest_action.state AS latest_action_state,
                   latest_action.retry_after AS latest_retry_after,
@@ -220,6 +263,10 @@ export function createAdminTeamReadModel(
              FROM staff_users s
              LEFT JOIN staff_roles r ON r.staff_user_id = s.id
              ${latestActionSql}
+             LEFT JOIN LATERAL (
+               SELECT u.id::text AS id, u."emailVerified" AS email_verified
+               FROM neon_auth."user" u WHERE s.email IS NOT NULL AND lower(u.email)=lower(s.email) LIMIT 1
+             ) neon_user ON TRUE
             WHERE ($1::text IS NULL
                     OR COALESCE(NULLIF(s.name_zh, ''), NULLIF(s.name_en, '')) ILIKE '%' || $1 || '%'
                     OR s.email ILIKE '%' || $1 || '%')
@@ -230,24 +277,34 @@ export function createAdminTeamReadModel(
               AND ($3::text IS NULL
                     OR ($3 = 'active' AND s.active = true)
                     OR ($3 = 'suspended' AND s.active = false)
-                    OR ($3 = 'invited' AND latest_action.action IN ('invite', 'resend_invitation')
+                    OR ($3 = 'invited' AND s.auth_user_id IS NULL
+                        AND latest_action.action IN ('invite', 'resend_invitation')
                         AND latest_action.state IN ('pending', 'succeeded'))
                     OR ($3 = 'attention' AND (
                          latest_action.state IN ('retryable_failure', 'terminal_failure')
                          OR (latest_action.action IN ('invite', 'resend_invitation')
                              AND latest_action.provider_expires_at <= now())
+                         OR (s.active AND (
+                           NULLIF(btrim(s.email),'') IS NULL OR s.auth_user_id IS NULL
+                           OR neon_user.email_verified IS DISTINCT FROM TRUE
+                           OR NOT EXISTS(SELECT 1 FROM staff_roles sr WHERE sr.staff_user_id=s.id)
+                           OR (s.branch_id IS NULL AND EXISTS(SELECT 1 FROM staff_roles sr WHERE sr.staff_user_id=s.id AND sr.role='agent'))
+                         ))
                        )))
               AND ($4::timestamptz IS NULL OR (s.created_at, s.id) < ($4::timestamptz, $5::uuid))
             GROUP BY s.id, latest_action.action, latest_action.state, latest_action.retry_after,
-                     latest_action.provider_expires_at
+                     latest_action.provider_expires_at, neon_user.id, neon_user.email_verified
          ), team_counts AS (
            SELECT COUNT(*) FILTER (WHERE active) AS active_count,
                   COUNT(*) FILTER (WHERE NOT active) AS suspended_count,
-                  COUNT(*) FILTER (WHERE latest_action IN ('invite', 'resend_invitation')
+                  COUNT(*) FILTER (WHERE auth_user_id IS NULL AND latest_action IN ('invite', 'resend_invitation')
                                    AND latest_action_state IN ('pending', 'succeeded')) AS invited_count,
                   COUNT(*) FILTER (WHERE latest_action_state IN ('retryable_failure', 'terminal_failure')
                                    OR (latest_action IN ('invite', 'resend_invitation')
-                                       AND latest_provider_expires_at <= now())) AS attention_count
+                                       AND latest_provider_expires_at <= now())
+                                   OR (active AND (NULLIF(btrim(email),'') IS NULL OR auth_user_id IS NULL
+                                     OR neon_auth_email_verified IS DISTINCT FROM TRUE OR role_count=0
+                                     OR (agent_role AND branch_id IS NULL)))) AS attention_count
            FROM team_base
          ), team_page AS (
            SELECT * FROM team_base
@@ -274,8 +331,9 @@ export function createAdminTeamReadModel(
       const count = (value: unknown) =>
         Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0);
       const last = page.at(-1);
+      const readiness = new Map((await readReadiness(_actor)).map((item) => [item.staffId, item]));
       return {
-        members: page.map(memberFromRow),
+        members: page.map((row) => memberFromRow(row, readiness.get(String(row.id)) ?? null)),
         counts: {
           active: count(countsRow.active_count),
           invited: count(countsRow.invited_count),
@@ -300,7 +358,7 @@ export function createAdminTeamReadModel(
       const rows = await runQuery<Record<string, unknown>>(
         `SELECT s.id::text AS id,
                 COALESCE(NULLIF(s.name_zh, ''), NULLIF(s.name_en, '')) AS name,
-                s.email, s.auth_user_id, s.active, s.created_at, s.updated_at,
+                s.email, s.auth_user_id, s.branch_id, s.active, s.created_at, s.updated_at,
                 COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles,
                 latest_action.action AS latest_action, latest_action.state AS latest_action_state,
                 latest_action.safe_error_code AS latest_safe_error_code,
@@ -335,7 +393,9 @@ export function createAdminTeamReadModel(
       );
       const row = rows[0];
       if (!row) throw new Response("Team member not found.", { status: 404 });
-      const member = memberFromRow(row);
+      const readiness =
+        (await readReadiness(actor)).find((item) => item.staffId === input.staffId) ?? null;
+      const member = memberFromRow(row, readiness);
       const access = readAccess
         ? await readAccess({ staffId: input.staffId }, actor)
         : await (

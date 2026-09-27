@@ -7,6 +7,12 @@ import AxeBuilder from "@axe-core/playwright";
 // OwnerValuationPanel embedded on / and /estate/$slug -- so both are covered
 // by scanning the pages that actually render those widgets, not separate
 // URLs.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/*", (route) => {
+    if (!["GET", "HEAD", "OPTIONS"].includes(route.request().method())) return route.abort();
+    return route.continue();
+  });
+});
 const PAGES: Array<{ name: string; path: string }> = [
   { name: "home (valuation panel embedded)", path: "/" },
   { name: "listings (search)", path: "/listings?deal=all&page=1" },
@@ -40,8 +46,21 @@ for (const { name, path } of PAGES) {
   });
 }
 
-// property detail needs a real listing_no, which this environment's DB
-// doesn't have -- skip unconditionally here rather than hardcoding a slug
-// that may not exist even against real data, and note it as the one surface
-// this suite can't self-discover a fixture for.
-test.skip("property detail has zero axe violations", async () => {});
+test("property detail has zero axe violations", async ({ page }, testInfo) => {
+  const listingResponse = await page.goto("/listings?deal=all&page=1");
+  if (!listingResponse || listingResponse.status() >= 500) {
+    testInfo.skip(true, "Listing discovery needs a readable synthetic database.");
+    return;
+  }
+  const cards = page.locator('a[href^="/property/"]');
+  if ((await cards.count()) === 0) {
+    testInfo.skip(true, "Synthetic fixture has no current property detail link.");
+    return;
+  }
+  const href = await cards.first().getAttribute("href");
+  expect(href).toBeTruthy();
+  const detailResponse = await page.goto(href!);
+  expect(detailResponse?.status()).toBe(200);
+  const results = await new AxeBuilder({ page }).exclude("iframe").analyze();
+  expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
+});

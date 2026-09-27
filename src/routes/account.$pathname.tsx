@@ -32,6 +32,14 @@ function Account() {
   return (
     <section className="flex min-h-[calc(100vh-12rem)] items-start justify-center bg-background px-4 py-12">
       <div className="w-full max-w-3xl">
+        <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <a href="/admin" className="text-lg font-semibold text-primary">
+            晉誠地產 · 職員帳戶
+          </a>
+          <a href="/admin" className="text-sm underline">
+            返回後台
+          </a>
+        </header>
         <ClientOnly
           fallback={
             <p role="status" aria-busy="true">

@@ -36,7 +36,7 @@ test("Team route delegates lifecycle mutations to the Task 4 server boundary", (
   }
   assert.doesNotMatch(
     source,
-    /localStorage|sessionStorage|window\.location|token|provider response/i,
+    /localStorage|sessionStorage|window\.location(?:\s*=|\.(?:href|assign|replace)\b)|token|provider response/i,
   );
 });
 

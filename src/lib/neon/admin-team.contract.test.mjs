@@ -38,6 +38,10 @@ function fixture({ detailRow = {} } = {}) {
             id: staffId,
             name: "  Ada Lovelace  ",
             email: "Ada@Example.Test",
+            auth_user_id: "auth-ada",
+            neon_auth_user_id: "auth-ada",
+            neon_auth_email_verified: true,
+            branch_id: null,
             roles: ["admin", "manager"],
             active: true,
             created_at: "2026-08-16T00:00:00.123Z",
@@ -141,6 +145,19 @@ test("listAdminTeam projects safe filtered members, counts, and a keyset cursor"
     createdAt: "2026-08-16T00:00:00.123Z",
     updatedAt: "2026-08-16T01:00:00.456Z",
     needsAttention: false,
+    onboarding: {
+      steps: {
+        staffActive: "ready",
+        invitation: "not_required",
+        emailVerified: "ready",
+        identityBound: "ready",
+        roleBranch: "ready",
+        inboxAssignment: "not_required",
+        inboxPrivateNote: "not_required",
+        staffPhone: "not_required",
+      },
+      attentionReasons: [],
+    },
   });
   assert.deepEqual(decodeAdminTeamCursor(result.nextCursor), {
     createdAt: "2026-08-16T00:00:00.123456Z",

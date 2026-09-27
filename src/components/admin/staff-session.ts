@@ -111,7 +111,7 @@ export function staffSessionDenialCopy(reason: StaffSessionDenialReason): {
     return {
       title: "帳戶尚未連結職員記錄",
       description:
-        "你已成功登入，但登入電郵尚未完成驗證，系統未有自動連結你的職員記錄。請聯絡管理員在「團隊成員」的成員詳情按「連結帳戶」，連結後即可使用後台。",
+        "你已成功登入，但登入電郵尚未完成驗證，系統未有自動連結你的職員記錄。請先完成登入電郵驗證；如未收到驗證通知，請聯絡管理員檢查登入服務設定。完成驗證後再登入。",
     };
   }
   if (reason === "unauthorized") {

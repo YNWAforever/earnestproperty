@@ -29,7 +29,7 @@ for (const source of sources) {
     .replaceAll("/", "-");
   const widths = [
     ...new Set(
-      [320, 640, 960, 1440, 1920]
+      [128, 256, 320, 640, 960, 1440, 1920]
         .filter((w) => w < sourceWidth)
         .concat(Math.min(sourceWidth, 1920)),
     ),
