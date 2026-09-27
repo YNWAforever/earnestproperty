@@ -2,7 +2,7 @@
 
 ## Scope and measurement status
 
-The audit's latency observations are a starting point, not a comparable before/after baseline. This worktree has no reachable staging URL, Hong Kong test point, deployment/Neon region confirmation, or verified isolated Neon database credentials. Consequently there are **no** five-sample warm/cold TTFB, DB p95, LCP, INP, CLS, or request-waterfall measurements for homepage, listings, detail, staff links, and settings. The 30% TTFB and 300 ms DB targets remain open. No cache, index, region move, or public/private response sharing was introduced without the required trace and EXPLAIN evidence.
+The audit's latency observations are a starting point, not a comparable before/after baseline. The Neon staging branch and its aws-ap-southeast-1 region are verified, but there is no application deployment proven to use its database and Auth, no Hong Kong test point, no verified isolated synthetic database credentials, and no confirmed deployment region. The supplied PR Preview has production Neon Auth and cannot serve as isolated staging evidence. Consequently there are **no** five-sample warm/cold TTFB, DB p95, LCP, INP, CLS, or request-waterfall measurements for homepage, listings, detail, staff links, and settings. The 30% TTFB and 300 ms DB targets remain open. No cache, index, region move, or public/private response sharing was introduced without the required trace and EXPLAIN evidence.
 
 ## Public deployment spot check (read-only, 2026-09-27)
 
