@@ -1387,6 +1387,17 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           published = $13,
           verified_at = CASE WHEN $13 THEN COALESCE(verified_at, now()) ELSE NULL END
         WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
+          AND NOT EXISTS (
+            SELECT 1 FROM transaction_performance performance
+            WHERE performance.transaction_id = transactions.id
+              AND performance.attribution_status IN ('verified_attributed', 'verified_unattributed')
+              AND (
+                transactions.deal_type IS DISTINCT FROM $2::deal_type OR
+                transactions.price IS DISTINCT FROM $3::numeric OR
+                transactions.deal_date IS DISTINCT FROM $6::date OR
+                $12::transaction_verification_state <> 'verified'
+              )
+          )
         RETURNING id
         `,
         scope !== null ? [...params, input.id, scope] : [...params, input.id],
@@ -1406,6 +1417,10 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
 
   if (input.id && !rows[0]) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
+    const existing = await queryRows("SELECT id FROM transactions WHERE id = $1", [input.id]);
+    if (existing[0]) {
+      throw new Response("Verified attribution requires a reasoned correction", { status: 409 });
+    }
     return { id: "", error: "Not found" };
   }
   const id = stringOrEmpty(rows[0]?.id);

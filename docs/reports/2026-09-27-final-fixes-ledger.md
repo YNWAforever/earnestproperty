@@ -16,28 +16,28 @@
 
 The audit and fetched main have the same SHA. These are audit findings on the current code commit, not new production verification. Statuses advance only with fresh implementation and acceptance evidence.
 
-| Finding | Tasks | Code status | Staging status | Production status | Current evidence / next check |
-|---|---|---|---|---|---|
-| R01 Haze readiness | T03–T05 | partial-local | not-started | external-blocked | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence. |
-| R02 technical ID setup | T02–T03 | fixed-local | not-started | not-started | Audit: wizard requires manual Inbox IDs. |
-| R03 verification evidence | T01,T04 | fixed-local | not-started | external-blocked | Versioned mapping and distinct accepted, signed-delivered, manual-confirmed evidence tested locally; real provider receipt remains unverified. |
-| R04 Folder semantics | T02,T03,T05 | partial-local | not-started | external-blocked | Audit: direct assignment requires matching Folder; tenant capability unverified. |
-| R05 sales performance | T12–T14 | not-started | not-started | not-started | Audit: current analytics lacks attributable sales/agent metrics. |
-| R06 transaction attribution | T10–T11 | not-started | not-started | not-started | Audit: form lacks CRM/property links, credits, and commission. |
-| R07 public inventory count | T09 | fixed-local | not-started | not-started | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending. |
-| R08 website tracking | T08 | not-started | not-started | not-started | Audit: sampled 6/6 CTAs use direct wa.me. |
-| R09 batch input | T06 | fixed-local | not-started | not-started | Multi-source expansion, CSV/TSV paste, strict 28hse/YouTube URL parsing and source-scoped staff lookup pass local tests; live browser acceptance pending. |
-| R10 blocked batch rows | T07 | not-started | not-started | not-started | Audit: one blocked row blocks submit; keep snapshots/chunks. |
-| R11 notification setup | T03–T04 | fixed-local | not-started | external-blocked | Company Channel and private Inbox destination now derive server-side from a reviewed mapping; live tenant setup unverified. |
-| R12 test-send workflow | T03–T04 | fixed-local | not-started | external-blocked | Transport-specific actions, repair links, version guards, scoped request recovery and evidence-specific status pass local tests. |
-| R13 mapping races | T01 | fixed-local | not-started | not-started | Audit: no expectedVersion on mapping save. |
-| R14 analytics definitions | T12–T13 | not-started | not-started | not-started | Audit: test/spam and cohort/current backlog not distinguished. |
-| R15 media and transport copy | T15 | not-started | not-started | not-started | Audit: VR claim and mismatched transport text. |
-| R16 remote image variants | T16–T17 | not-started | not-started | not-started | Audit: thumbnail and hero share original URL, without srcset. |
+| Finding                      | Tasks       | Code status   | Staging status | Production status | Current evidence / next check                                                                                                                             |
+| ---------------------------- | ----------- | ------------- | -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R01 Haze readiness           | T03–T05     | partial-local | not-started    | external-blocked  | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence.                                                  |
+| R02 technical ID setup       | T02–T03     | fixed-local   | not-started    | not-started       | Audit: wizard requires manual Inbox IDs.                                                                                                                  |
+| R03 verification evidence    | T01,T04     | fixed-local   | not-started    | external-blocked  | Versioned mapping and distinct accepted, signed-delivered, manual-confirmed evidence tested locally; real provider receipt remains unverified.            |
+| R04 Folder semantics         | T02,T03,T05 | partial-local | not-started    | external-blocked  | Audit: direct assignment requires matching Folder; tenant capability unverified.                                                                          |
+| R05 sales performance        | T12–T14     | not-started   | not-started    | not-started       | Audit: current analytics lacks attributable sales/agent metrics.                                                                                          |
+| R06 transaction attribution  | T10–T11     | partial-local | not-started    | not-started       | T10 private versioned model passes embedded DB tests; transaction editor and staging migration remain T11/external gates.                                 |
+| R07 public inventory count   | T09         | fixed-local   | not-started    | not-started       | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending.                         |
+| R08 website tracking         | T08         | fixed-local   | not-started    | not-started       | Coverage, explicit backfill preview and public contextual resolver pass local tests; staging acceptance pending.                                          |
+| R09 batch input              | T06         | fixed-local   | not-started    | not-started       | Multi-source expansion, CSV/TSV paste, strict 28hse/YouTube URL parsing and source-scoped staff lookup pass local tests; live browser acceptance pending. |
+| R10 blocked batch rows       | T07         | fixed-local   | not-started    | not-started       | Eligible subset, mapping-version guard and actor-scoped recovery pass local tests; staging acceptance pending.                                            |
+| R11 notification setup       | T03–T04     | fixed-local   | not-started    | external-blocked  | Company Channel and private Inbox destination now derive server-side from a reviewed mapping; live tenant setup unverified.                               |
+| R12 test-send workflow       | T03–T04     | fixed-local   | not-started    | external-blocked  | Transport-specific actions, repair links, version guards, scoped request recovery and evidence-specific status pass local tests.                          |
+| R13 mapping races            | T01         | fixed-local   | not-started    | not-started       | Audit: no expectedVersion on mapping save.                                                                                                                |
+| R14 analytics definitions    | T12–T13     | not-started   | not-started    | not-started       | Audit: test/spam and cohort/current backlog not distinguished.                                                                                            |
+| R15 media and transport copy | T15         | not-started   | not-started    | not-started       | Audit: VR claim and mismatched transport text.                                                                                                            |
+| R16 remote image variants    | T16–T17     | not-started   | not-started    | not-started       | Audit: thumbnail and hero share original URL, without srcset.                                                                                             |
 
 ## Task progress
 
-T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed locally; T03 wizard, T04 notification and T06 batch-import code fixed locally (isolated Neon, tenant and browser gates pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
+T00, T01–T04, T06–T10 code slices are locally complete; T05 is documented but awaits real Haze evidence. T11–T18 remain, with isolated Neon, tenant and browser gates pending where stated below.
 
 ## Decisions and external gates
 
@@ -45,7 +45,6 @@ T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed 
 - Ruling: `bun.lockb` shows a file-mode-only difference in this Windows worktree. It is excluded from staged changes.
 - Haze production acceptance requires her confirmed provider identity, named Folder with actual access, configured capability and destination, a test conversation, provider readback, and recipient confirmation. No display-name-only send.
 - Production migration, provider send, and deployment remain separate external operations after reviewable code and isolated verification.
-
 
 ### T09 — public inventory count (R07)
 
@@ -131,3 +130,11 @@ T00 complete. T09 and T01 code fixed locally; T02 provider directory code fixed 
 - Public home, listing and detail loaders share contextual fallback actions. The batched resolver accepts only one current, enabled, verified, exact website:primary sales link; disabled, missing, stale or conflicting links use the public listing number and sale/rent fallback. It does not disclose staff or provider identity. The existing redirect tests continue to guard HEAD/prefetch from click attribution.
 - `node --test src/lib/whatsapp-enquiries/coverage.test.mjs src/lib/whatsapp-enquiries/coverage.db.test.mjs src/lib/whatsapp-enquiries/coverage.preview.test.mjs src/lib/whatsapp-enquiries/public-context.test.mjs`: 6 pass. `npm run test:whatsapp-enquiries`: 102 pass. `npm run test:listing-search`: 90 Node + 12 Bun pass. Typecheck and changed-file ESLint: pass.
 - Authenticated public browser acceptance requires a confirmed disposable Neon target; it was not run against production. The backfill preview and real CTA attribution remain staging gates. No live backfill, provider call, or database migration was run.
+
+### T10 — transaction attribution model (R06)
+
+- Reproduced: no private attribution table or write API existed; the first database test failed on the missing module. Existing `transactions` had author and public provenance, but no separate agent credits or commission.
+- Added a private current row, append-only version history and per-agent credits keyed by transaction/version. Existing rows are not backfilled. Decimal HKD receivable/received amounts distinguish null from zero; negative/overpaid values fail. A single SQL statement serializes the transaction row, performs expected-version CAS and writes the history/credits. Branch IDs must match current staff assignment when saved, then remain historical snapshots.
+- Admin writes are allowed; manager writes and reads are scoped to the current owner branch. Agents cannot access private finance. Verified attributed deals require exactly 10,000 bps; verified unattributed deals have no credits. Cancellation keeps history. Each correction requires a reason and increments the version. Existing editor updates cannot silently change confirmed price, date, deal type or provenance; both SQL trigger and server boundary guard this. The public transaction reader has no finance join.
+- `node --test src/lib/neon/transaction-performance.db.test.mjs`: 7 pass (embedded PostgreSQL; 60/40, invalid shares, duplicate, null/zero, CAS, sale/rent mismatch, branch snapshot/scope, legacy rows, append-only history and public boundary). `node --test src/lib/neon/admin-transactions.contract.test.mjs`: 14 pass. Migration manifest: 6 pass. Typecheck and changed-file ESLint pass.
+- Migration is registered as `20260927160000_transaction_sales_attribution.sql` but has not been applied to an external database. Isolated Neon migration, form integration, and authenticated browser acceptance remain T11/staging gates. No production data was changed.

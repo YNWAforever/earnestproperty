@@ -501,3 +501,58 @@ test("updateAdminLead keeps a valid budget in its CRM update", async () => {
   assert.equal(calls[0].params[2], 0);
   assert.equal(calls[0].params[3], 100);
 });
+
+test("verified performance blocks silent base price, date, deal type or provenance rewrites", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await server.saveAdminTransaction(
+    {
+      id: "txn-1",
+      estate_id: "estate-1",
+      deal_type: "sale",
+      price: 10000000,
+      saleable_area: 500,
+      deal_date: "2026-08-01",
+      unit: null,
+      block: null,
+      floor_band: null,
+      source: null,
+      source_url: null,
+      verified: true,
+    },
+    ADMIN_ACTOR,
+  );
+  assert.match(calls[0].text, /transaction_performance performance/);
+  assert.match(calls[0].text, /transactions\.price IS DISTINCT FROM \$3::numeric/);
+  assert.match(calls[0].text, /transactions\.deal_date IS DISTINCT FROM \$6::date/);
+  assert.match(calls[0].text, /transactions\.deal_type IS DISTINCT FROM \$2::deal_type/);
+});
+
+test("blocked base transaction edit reports a conflict instead of not found", async () => {
+  const calls = [];
+  const server = await loadAdminDataServerWithInjectedQuery(async (statement, params) => {
+    calls.push({ statement, params });
+    return /SELECT id FROM transactions WHERE id/.test(statement) ? [{ id: "txn-1" }] : [];
+  });
+  await assert.rejects(
+    server.saveAdminTransaction(
+      {
+        id: "txn-1",
+        estate_id: "estate-1",
+        deal_type: "sale",
+        price: 10000000,
+        saleable_area: 500,
+        deal_date: "2026-08-01",
+        unit: null,
+        block: null,
+        floor_band: null,
+        source: null,
+        source_url: null,
+        verified: true,
+      },
+      ADMIN_ACTOR,
+    ),
+    (error) => error instanceof Response && error.status === 409,
+  );
+  assert.equal(calls.length, 2);
+});
