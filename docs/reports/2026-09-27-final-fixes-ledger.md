@@ -14,30 +14,30 @@
 
 ## Audit finding to implementation map
 
-The audit and fetched main have the same SHA. These are audit findings on the current code commit, not new production verification. Statuses advance only with fresh implementation and acceptance evidence.
+`fixed-local` means the code and local contracts exist. `partial-local` means a provider capability or operational step cannot be established locally. All staging and production acceptance remains unverified because the user has no disposable target or Haze test tenant.
 
-| Finding                      | Tasks       | Code status   | Staging status | Production status | Current evidence / next check                                                                                                                             |
-| ---------------------------- | ----------- | ------------- | -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R01 Haze readiness           | T03–T05     | partial-local | not-started    | external-blocked  | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence.                                                  |
-| R02 technical ID setup       | T02–T03     | fixed-local   | not-started    | not-started       | Audit: wizard requires manual Inbox IDs.                                                                                                                  |
-| R03 verification evidence    | T01,T04     | fixed-local   | not-started    | external-blocked  | Versioned mapping and distinct accepted, signed-delivered, manual-confirmed evidence tested locally; real provider receipt remains unverified.            |
-| R04 Folder semantics         | T02,T03,T05 | partial-local | not-started    | external-blocked  | Audit: direct assignment requires matching Folder; tenant capability unverified.                                                                          |
-| R05 sales performance        | T12–T14     | partial-local   | not-started    | not-started       | Audit: current analytics lacks attributable sales/agent metrics.                                                                                          |
-| R06 transaction attribution  | T10–T11     | fixed-local | not-started    | not-started       | T10 private versioned model passes embedded DB tests; transaction editor and staging migration remain T11/external gates.                                 |
-| R07 public inventory count   | T09         | fixed-local   | not-started    | not-started       | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending.                         |
-| R08 website tracking         | T08         | fixed-local   | not-started    | not-started       | Coverage, explicit backfill preview and public contextual resolver pass local tests; staging acceptance pending.                                          |
-| R09 batch input              | T06         | fixed-local   | not-started    | not-started       | Multi-source expansion, CSV/TSV paste, strict 28hse/YouTube URL parsing and source-scoped staff lookup pass local tests; live browser acceptance pending. |
-| R10 blocked batch rows       | T07         | fixed-local   | not-started    | not-started       | Eligible subset, mapping-version guard and actor-scoped recovery pass local tests; staging acceptance pending.                                            |
-| R11 notification setup       | T03–T04     | fixed-local   | not-started    | external-blocked  | Company Channel and private Inbox destination now derive server-side from a reviewed mapping; live tenant setup unverified.                               |
-| R12 test-send workflow       | T03–T04     | fixed-local   | not-started    | external-blocked  | Transport-specific actions, repair links, version guards, scoped request recovery and evidence-specific status pass local tests.                          |
-| R13 mapping races            | T01         | fixed-local   | not-started    | not-started       | Audit: no expectedVersion on mapping save.                                                                                                                |
-| R14 analytics definitions    | T12–T13     | fixed-local   | not-started    | not-started       | Audit: test/spam and cohort/current backlog not distinguished.                                                                                            |
-| R15 media and transport copy | T15         | not-started   | not-started    | not-started       | Audit: VR claim and mismatched transport text.                                                                                                            |
-| R16 remote image variants    | T16–T17     | not-started   | not-started    | not-started       | Audit: thumbnail and hero share original URL, without srcset.                                                                                             |
+| Finding | Tasks | Code status | Staging | Production | Evidence / next gate |
+| --- | --- | --- | --- | --- | --- |
+| R01 Haze readiness | T03–T05 | partial-local | blocked | unverified | Wizard and capability-specific handoff card exist; real tenant identity, Folder, conversation and recipient are absent. |
+| R02 technical ID setup | T02–T03 | fixed-local | blocked | unverified | Exact account picker and advanced-only IDs pass local contracts; provider readback pending. |
+| R03 verification evidence | T01,T04 | fixed-local | blocked | unverified | Versioned mapping, acceptance, receipt and recipient-confirmation states pass local tests; live receipt pending. |
+| R04 Folder semantics | T02,T03,T05 | partial-local | blocked | unverified | Named scoped catalog and exact-user verification exist; no tenant Folder access evidence. |
+| R05 sales performance | T12–T14 | fixed-local | blocked | unverified | Scoped source-backed reports and UI pass embedded tests; staging reconciliation pending. |
+| R06 transaction attribution | T10–T11 | fixed-local | blocked | unverified | Private versioned credits and editor pass tests; migration and browser verification pending. |
+| R07 public inventory count | T09 | fixed-local | blocked | unverified | Shared canonical selection passes embedded 1-property/2-offer fixture; live snapshot pending. |
+| R08 website tracking | T08 | fixed-local | blocked | unverified | Coverage, explicit preview and contextual resolver pass local tests; live backfill pending. |
+| R09 batch input | T06 | fixed-local | blocked | unverified | Multi-source import and URL/source validation pass local tests; authenticated staging pending. |
+| R10 blocked batch rows | T07 | fixed-local | blocked | unverified | Eligible subset and durable recovery pass synthetic browser; staging pending. |
+| R11 notification setup | T03–T04 | fixed-local | blocked | unverified | Server-derived Channel and reviewed destination pass local tests; tenant setup pending. |
+| R12 test-send workflow | T03–T04 | fixed-local | blocked | unverified | Explicit actions, version guards and distinct evidence states pass local tests; no live send. |
+| R13 mapping races | T01 | fixed-local | blocked | unverified | Expected-version CAS and stale-review tests pass; external migration pending. |
+| R14 analytics definitions | T12–T13 | fixed-local | blocked | unverified | Quality, cohort, backlog and weighted-value definitions pass embedded tests; reconciliation pending. |
+| R15 media and transport copy | T15 | fixed-local | blocked | unverified | Verified-tour classifier and exact estate mapping pass tests; live A074714 check pending. |
+| R16 remote image variants | T16–T17 | fixed-local | blocked | unverified | Real WebP variants and original fallback pass local tests; flag off until staging media checks. |
 
 ## Task progress
 
-T00, T01–T04 and T06–T13 code slices are locally complete; T05 is documented but awaits real Haze evidence. T14–T18 remain, with isolated Neon, tenant and browser gates pending where stated below.
+T00–T04 and T06–T16 have local implementation and recorded tests. T05 is a prepared Haze acceptance card awaiting an actual tenant. T17 records structured skips for unavailable load and browser measurements. T18 documents the release sequence and rollback; no deployment or external migration was performed.
 
 ## Decisions and external gates
 
@@ -185,3 +185,15 @@ T00, T01–T04 and T06–T13 code slices are locally complete; T05 is documented
 - Registered additive migration 20260927172000_media_asset_variants.sql. Added a staging-only, allowlisted, limited and checkpointed backfill with dry-run default. No external migration or backfill was run.
 - npm run test:media: 13 Bun + 5 Node pass. npm run test:mls: 641 Node pass. npm run test:property-experience: 199 Bun + 146 Node pass. npm run test:listing-search: 90 Node + 12 Bun pass. Typecheck, changed-file ESLint and migration manifest pass. The MLS repository surface test was updated for the two new methods after it exposed the mismatch.
 - Browser currentSrc, actual remote bytes/dimensions and layout shift, cache behavior, and backfill idempotence require the unavailable disposable staging target and owned Blob fixtures. The feature flag remains off; no production media was changed.
+
+### T17 — final regression and performance acceptance (R09, R10, R16, cross-domain)
+
+- Added `scripts/acceptance/final-remediation.mjs` and its CI-wired control-plane test. The evaluator checks a 13-case matrix, target/fixture identity, paired cold and at least 20 warm baseline/revised samples, row counts, errors, SQL plans, p50/p95 and stated product targets. Without evidence it writes explicit skips. Its result JSON records 0 passed, 0 failed and 13 skipped, not a performance pass.
+- The user confirmed there is no disposable staging URL/database, Haze test tenant or consenting recipient. No 1/50/300/1,000-row load, 20×3-source load, 10k/100k-event report load, SQL EXPLAIN, mobile currentSrc/Core Web Vitals, authenticated staging journey or provider send was run. `docs/reports/final-remediation-performance.md` lists exact unverified targets and the evidence contract.
+- Final local suites: control-plane 104 Node; transactions 69 Node + 5 Bun; WhatsApp enquiries 102 Node; analytics 65 Node + 3 Bun; SEO 61 Node + 6 Bun; listing search 90 Node + 12 Bun; admin properties 29 Node + 23 Bun; staff notifications 21 Node + 13 Bun; media 13 Bun + 5 Node; MLS 641 Node; property experience 199 Bun + 146 Node. Each completed with zero failures. Typecheck and production build passed. The build emitted dependency-version and large-chunk warnings, with no build error.
+- The control-plane wiring guard exposed two transaction tests missing from all named scripts. They were added to `test:transactions`, whose full run passed. The acceptance evaluator test was added to the CI-run `test:control-plane` script.
+
+### T18 — release handoff (R01–R16)
+
+- Added `docs/runbooks/final-remediation-rollout.md` with the nine pending additive migrations in order, identity/backup preflight, old/new reader checks, per-capability pilot evidence, media backfill gate, production smoke and audit-preserving rollback. No external migration, backfill, provider send, production seed or deployment was performed.
+- No global staff-directory, batch-import or sales-report UI flag exists in this codebase; the runbook names actual per-staff evidence, actor authorization, explicit commit controls and the disabled media flag rather than claiming rollout switches exist. Wider rollout remains gated on the missing isolated environment and evidence.
