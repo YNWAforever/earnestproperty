@@ -85,8 +85,9 @@ CREATE OR REPLACE FUNCTION capture_qualified_lead_event() RETURNS trigger LANGUA
 BEGIN
   INSERT INTO performance_events(event_key,event_type,source_id,lead_id,staff_id,branch_id_at_event,occurred_at,source)
   SELECT 'lead_qualified:'||NEW.lead_id::text,'lead_qualified',NEW.lead_id::text,NEW.lead_id,
-    NEW.qualified_by,s.branch_id,NEW.qualified_at,'crm_lead:'||NEW.lead_id::text
-  FROM staff_users s WHERE s.id=NEW.qualified_by
+    COALESCE(l.assigned_agent_id,NEW.qualified_by),s.branch_id,NEW.qualified_at,'crm_lead:'||NEW.lead_id::text
+  FROM crm_leads l JOIN staff_users s ON s.id=COALESCE(l.assigned_agent_id,NEW.qualified_by)
+  WHERE l.id=NEW.lead_id
   ON CONFLICT DO NOTHING;
   RETURN NEW;
 END $$;

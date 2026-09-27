@@ -102,6 +102,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260927150000_whatsapp_link_batch_mapping_guard.sql",
   "20260927160000_transaction_sales_attribution.sql",
   "20260927170000_performance_event_quality.sql",
+  "20260927171000_inquiry_quality.sql",
 ]);
 
 /**

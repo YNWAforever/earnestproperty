@@ -31,13 +31,13 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R11 notification setup       | T03–T04     | fixed-local   | not-started    | external-blocked  | Company Channel and private Inbox destination now derive server-side from a reviewed mapping; live tenant setup unverified.                               |
 | R12 test-send workflow       | T03–T04     | fixed-local   | not-started    | external-blocked  | Transport-specific actions, repair links, version guards, scoped request recovery and evidence-specific status pass local tests.                          |
 | R13 mapping races            | T01         | fixed-local   | not-started    | not-started       | Audit: no expectedVersion on mapping save.                                                                                                                |
-| R14 analytics definitions    | T12–T13     | partial-local   | not-started    | not-started       | Audit: test/spam and cohort/current backlog not distinguished.                                                                                            |
+| R14 analytics definitions    | T12–T13     | fixed-local   | not-started    | not-started       | Audit: test/spam and cohort/current backlog not distinguished.                                                                                            |
 | R15 media and transport copy | T15         | not-started   | not-started    | not-started       | Audit: VR claim and mismatched transport text.                                                                                                            |
 | R16 remote image variants    | T16–T17     | not-started   | not-started    | not-started       | Audit: thumbnail and hero share original URL, without srcset.                                                                                             |
 
 ## Task progress
 
-T00, T01–T04 and T06–T12 code slices are locally complete; T05 is documented but awaits real Haze evidence. T13–T18 remain, with isolated Neon, tenant and browser gates pending where stated below.
+T00, T01–T04 and T06–T13 code slices are locally complete; T05 is documented but awaits real Haze evidence. T14–T18 remain, with isolated Neon, tenant and browser gates pending where stated below.
 
 ## Decisions and external gates
 
@@ -155,3 +155,11 @@ T00, T01–T04 and T06–T12 code slices are locally complete; T05 is documented
 - Explicit lead qualification requires evidence, a qualifying CRM stage and admin/manager branch scope. A CRM stage alone does not generate the event. Cancellation uses the cancellation decision time; a prior confirmation remains as history for the report to exclude when the current version is cancelled.
 - `node --test src/lib/analytics/performance-events.test.mjs src/lib/analytics/performance-events.db.test.mjs`: 9 pass. Combined event/assignment regression: 16 pass, 1 pre-existing synthetic fixture skip, 0 fail. Typecheck and changed-file lint pass. Migration `20260927170000_performance_event_quality.sql` is registered but has not been applied externally.
 - T13 must use the effective event view with current deal versions to avoid counting corrected or cancelled deals twice, and must report unknown coverage. T14 will expose the reasoned quality correction in the admin UI. Staging and real provider acceptance remain blocked by the unavailable test environment and recipient.
+
+### T13 — sales and agent performance API (R05, R14)
+
+- Added an authenticated admin/manager report and paged drilldown API. The server resolves a manager's actual branch and applies parameterized branch, staff, source and sale/rent predicates. Acquisition and current backlog use current staff assignment; verified deal reporting uses saved credit branch snapshots, including after an agent moves branch. Agents have no report route access.
+- Acquisition uses Hong Kong date bounds and the earliest inquiry for a lead, with 30/90 calendar-day sale conversion against the inquiry cohort. Immature cohorts are provisional and empty denominators are null. Follow-up reports elapsed median/p90, unanswered and overdue rows, and approved-policy due-time SLA only where evidence exists. Current backlog is labelled as current, not reconstructed history.
+- Company deal counts deduplicate transactions; current cancelled/superseded versions are excluded. Sale price excludes rent, commission is separate and null when unknown, and saved credit basis points produce per-agent weighted values. Quality coverage shows production/test/spam/unknown inquiry rows, unknown deal events and legacy verified transactions with no attribution. Unique customer count is unavailable until verified contact identity exists.
+- Explicit inquiry quality corrections require admin role and an audit reason; the append-only revision view recalculates results on the next read. Drilldown records apply the same scoped source queries, use keyset pagination and omit customer PII.
+- `node --test src/lib/analytics/sales-performance.test.mjs src/lib/analytics/sales-performance.db.test.mjs`: 9 pass; embedded PostgreSQL covers Hong Kong midnight, branch snapshots, cross-branch filtering, legacy attribution and current backlog. Typecheck and changed-file lint pass. The new inquiry quality migration is registered but has not been applied externally; no authenticated staging report or live provider state was verified.

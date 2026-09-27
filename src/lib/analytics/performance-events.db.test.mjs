@@ -17,13 +17,14 @@ const ids = {
   assignment: "00000000-0000-4000-8000-000000000006",
   inquiry: "00000000-0000-4000-8000-000000000007",
   transaction: "00000000-0000-4000-8000-000000000008",
+  reviewer: "00000000-0000-4000-8000-000000000009",
 };
 async function fixture() {
   const db = new PGlite();
   await db.exec(`
     CREATE TABLE branches(id uuid PRIMARY KEY);
     CREATE TABLE staff_users(id uuid PRIMARY KEY,branch_id uuid REFERENCES branches(id));
-    CREATE TABLE crm_leads(id uuid PRIMARY KEY);
+    CREATE TABLE crm_leads(id uuid PRIMARY KEY,assigned_agent_id uuid);
     CREATE TABLE crm_activities(id uuid PRIMARY KEY,lead_id uuid,staff_user_id uuid,
       activity_type text,completed_at timestamptz);
     CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY);
@@ -36,8 +37,12 @@ async function fixture() {
   `);
   await db.exec(migration);
   await db.query("INSERT INTO branches VALUES ($1)", [ids.branch]);
-  await db.query("INSERT INTO staff_users VALUES ($1,$2)", [ids.staff, ids.branch]);
-  await db.query("INSERT INTO crm_leads VALUES ($1)", [ids.lead]);
+  await db.query("INSERT INTO staff_users VALUES ($1,$3),($2,$3)", [
+    ids.staff,
+    ids.reviewer,
+    ids.branch,
+  ]);
+  await db.query("INSERT INTO crm_leads VALUES ($1,$2)", [ids.lead, ids.staff]);
   await db.query("INSERT INTO whatsapp_conversations VALUES ($1)", [ids.conversation]);
   await db.query(
     "INSERT INTO inquiries(id,conversation_id,source,created_at) VALUES ($1,$2,'whatsapp','2026-09-26T15:58:00Z')",
@@ -144,6 +149,11 @@ test("quality correction is audited, effective immediately, and history cannot b
       [ids.lead, ids.staff],
     );
     const key = "lead_qualified:" + ids.lead;
+    const attributed = await db.query(
+      "SELECT staff_id::text AS staff_id FROM performance_event_records WHERE event_key=$1",
+      [key],
+    );
+    assert.equal(attributed.rows[0].staff_id, ids.staff);
     await db.query(
       "INSERT INTO performance_event_quality_revisions(event_key,quality,reason,changed_by) VALUES ($1,'test','Internal test lead',$2)",
       [key, ids.staff],

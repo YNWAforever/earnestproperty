@@ -56,9 +56,10 @@ export function buildRecordPerformanceEventQuery(event) {
   let params = [parsed.idempotencyKey, parsed.type, parsed.sourceId, id];
   switch (parsed.type) {
     case "lead_qualified":
-      sourceSelect = `SELECT $1,$2,$3,NULL::uuid,q.lead_id,NULL::uuid,q.qualified_by,s.branch_id,
+      sourceSelect = `SELECT $1,$2,$3,NULL::uuid,q.lead_id,NULL::uuid,COALESCE(l.assigned_agent_id,q.qualified_by),s.branch_id,
         q.qualified_at,'crm_lead:'||q.lead_id::text,NULL::text
-        FROM crm_lead_qualifications q JOIN staff_users s ON s.id=q.qualified_by
+        FROM crm_lead_qualifications q JOIN crm_leads l ON l.id=q.lead_id
+        JOIN staff_users s ON s.id=COALESCE(l.assigned_agent_id,q.qualified_by)
         WHERE q.lead_id=$4::uuid`;
       break;
     case "viewing_completed":
