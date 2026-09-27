@@ -153,7 +153,9 @@ try {
       await expect(page.getByRole("button", { name: "使用這次選擇" })).toBeDisabled();
       await page.getByRole("button", { name: "繼續同一批次" }).click();
       await expect(page.getByRole("alert").first()).toContainText("結果仍未確認");
-      expect(await page.evaluate(() => (window as unknown as { commitCalls?: number }).commitCalls ?? 0)).toBe(0);
+      expect(
+        await page.evaluate(() => (window as unknown as { commitCalls?: number }).commitCalls ?? 0),
+      ).toBe(0);
       expect(
         await page.evaluate(
           (key) => JSON.parse(sessionStorage.getItem(key)!).uncertain,

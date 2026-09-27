@@ -366,7 +366,8 @@ export function WhatsappLinkWizard({
     if (current.uncertain) {
       current = reconcileLinkBatch(current, (await api.read(current.batchId)).operations);
       save(current);
-      if (current.uncertain) throw new Error("提交結果仍未確認；請稍後查回伺服器結果，不要重新送出。");
+      if (current.uncertain)
+        throw new Error("提交結果仍未確認；請稍後查回伺服器結果，不要重新送出。");
     }
     if (current.nextChunk === 0 || Date.parse(current.preview.expiresAt) <= Date.now() + 30_000) {
       const refreshed = await api.preview({ batchId: current.batchId, rows: current.rows });

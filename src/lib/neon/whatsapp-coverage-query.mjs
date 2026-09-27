@@ -1,6 +1,11 @@
 import { canonicalListingCte } from "./public-listing-query.js";
 
-export function websiteCandidateLateral(propertyId, publicListingNo, dealType, channelParam = "$1") {
+export function websiteCandidateLateral(
+  propertyId,
+  publicListingNo,
+  dealType,
+  channelParam = "$1",
+) {
   return `LEFT JOIN LATERAL (
     SELECT count(*)::int AS candidate_count, min(l.code) AS code
     FROM whatsapp_tracking_links l

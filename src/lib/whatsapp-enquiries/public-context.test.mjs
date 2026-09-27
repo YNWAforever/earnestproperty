@@ -14,7 +14,9 @@ const contact = dataUrl(transpile(readFileSync(join(root, "src/lib/contact-links
 const source = transpile(
   readFileSync(join(root, "src/lib/whatsapp-enquiries/public-context.ts"), "utf8"),
 ).replace('from "../contact-links.ts"', 'from "' + contact + '"');
-const { buildPublicWhatsappMessage, resolvePublicWaAction, resolveWebsiteActions } = await import(dataUrl(source));
+const { buildPublicWhatsappMessage, resolvePublicWaAction, resolveWebsiteActions } = await import(
+  dataUrl(source)
+);
 const offer = {
   propertyId: "00000000-0000-4000-8000-000000000001",
   publicListingNo: "A074714",

@@ -163,7 +163,9 @@ test("batch migration commits 50+10, returns lost responses, and rejects changed
       admin,
       query,
     );
-    await query("UPDATE whatsapp_staff_channels SET version=version+1 WHERE staff_id=$1", [agentId]);
+    await query("UPDATE whatsapp_staff_channels SET version=version+1 WHERE staff_id=$1", [
+      agentId,
+    ]);
     await assert.rejects(
       commitWhatsappLinkChunk(
         {

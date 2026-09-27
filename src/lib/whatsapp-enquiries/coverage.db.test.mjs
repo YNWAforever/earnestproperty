@@ -25,39 +25,76 @@ test("coverage uses current public sale/rent offers and only current verified we
       CREATE TABLE whatsapp_tracking_link_placements(link_id uuid,placement_id text);
     `);
     for (let i = 1; i <= 7; i++) {
-      await db.query("INSERT INTO properties VALUES($1,$2,$3,$4,now(),now(),now(),now(),null,false,null,null)", [
-        id(i), `L${i}`, i === 2 ? "rent" : "sale", i === 7 ? "inactive" : "active",
+      await db.query(
+        "INSERT INTO properties VALUES($1,$2,$3,$4,now(),now(),now(),now(),null,false,null,null)",
+        [id(i), `L${i}`, i === 2 ? "rent" : "sale", i === 7 ? "inactive" : "active"],
+      );
+      await db.query("INSERT INTO property_public_members VALUES($1,$2)", [
+        id(i),
+        i <= 2 ? "A000001" : `A${String(i).padStart(6, "0")}`,
       ]);
-      await db.query("INSERT INTO property_public_members VALUES($1,$2)", [id(i), i <= 2 ? "A000001" : `A${String(i).padStart(6,"0")}`]);
     }
     // A newer withdrawn scrape suppresses an older active sale.
-    await db.query("INSERT INTO properties VALUES($1,'withdrawn','sale','withdrawn',now()+interval '1 day',now(),now(),now(),null,false,null,null)", [id(8)]);
+    await db.query(
+      "INSERT INTO properties VALUES($1,'withdrawn','sale','withdrawn',now()+interval '1 day',now(),now(),now(),null,false,null,null)",
+      [id(8)],
+    );
     await db.query("INSERT INTO property_public_members VALUES($1,'A000006')", [id(8)]);
-    async function link(n, property, source = "website", placement = "website:primary", verified = true) {
+    async function link(
+      n,
+      property,
+      source = "website",
+      placement = "website:primary",
+      verified = true,
+    ) {
       await db.query("INSERT INTO whatsapp_tracking_links VALUES($1,$2,1)", [id(n), `code-${n}`]);
-      await db.query("INSERT INTO whatsapp_tracking_link_versions VALUES($1,1,'company',$2,'sales',$3,$4,$5,true,$6)", [
-        id(n), source, property <= 2 ? "A000001" : `A${String(property).padStart(6,"0")}`,
-        id(property), property === 2 ? "rent" : "sale", verified ? new Date() : null,
+      await db.query(
+        "INSERT INTO whatsapp_tracking_link_versions VALUES($1,1,'company',$2,'sales',$3,$4,$5,true,$6)",
+        [
+          id(n),
+          source,
+          property <= 2 ? "A000001" : `A${String(property).padStart(6, "0")}`,
+          id(property),
+          property === 2 ? "rent" : "sale",
+          verified ? new Date() : null,
+        ],
+      );
+      await db.query("INSERT INTO whatsapp_tracking_link_placements VALUES($1,$2)", [
+        id(n),
+        placement,
       ]);
-      await db.query("INSERT INTO whatsapp_tracking_link_placements VALUES($1,$2)", [id(n), placement]);
     }
-    await link(101,1);
-    await link(102,2);
-    await link(103,3,"28hse","external");
-    await link(104,4,"website","website:primary",false);
-    await link(105,5);
-    await link(106,5);
-    const rows = (await db.query(buildWebsiteCoverageQuery(), ["company", null, null, null])).rows.map((row) =>
+    await link(101, 1);
+    await link(102, 2);
+    await link(103, 3, "28hse", "external");
+    await link(104, 4, "website", "website:primary", false);
+    await link(105, 5);
+    await link(106, 5);
+    const rows = (
+      await db.query(buildWebsiteCoverageQuery(), ["company", null, null, null])
+    ).rows.map((row) =>
       classifyWebsiteCoverage({
-        propertyId: row.property_id, publicListingNo: row.public_listing_no,
-        dealType: row.deal_type, candidateCount: Number(row.candidate_count), code: row.code,
+        propertyId: row.property_id,
+        publicListingNo: row.public_listing_no,
+        dealType: row.deal_type,
+        candidateCount: Number(row.candidate_count),
+        code: row.code,
       }),
     );
     assert.deepEqual(summarizeWebsiteCoverage(rows), {
-      eligibleOffers: 5, coveredOffers: 2, missingOffers: 2, conflictedOffers: 1,
+      eligibleOffers: 5,
+      coveredOffers: 2,
+      missingOffers: 2,
+      conflictedOffers: 1,
     });
-    assert.equal(rows.some((row) => row.propertyId === id(6)), false);
-    assert.equal(rows.some((row) => row.propertyId === id(7)), false);
+    assert.equal(
+      rows.some((row) => row.propertyId === id(6)),
+      false,
+    );
+    assert.equal(
+      rows.some((row) => row.propertyId === id(7)),
+      false,
+    );
     assert.equal(rows.find((row) => row.propertyId === id(5)).status, "conflicted");
     const previous = {
       enabled: process.env.EP_WA_TRACKED_LINKS_ENABLED,
@@ -72,11 +109,14 @@ test("coverage uses current public sale/rent offers and only current verified we
       console.warn = () => {};
       const offers = [1, 2, 3, 5, 6].map((number) => ({
         propertyId: id(number),
-        publicListingNo: number <= 2 ? "A000001" : `A${String(number).padStart(6,"0")}`,
+        publicListingNo: number <= 2 ? "A000001" : `A${String(number).padStart(6, "0")}`,
         dealType: number === 2 ? "rent" : "sale",
         title: "Synthetic public offer",
       }));
-      const resolved = await resolveTrackingLinks(offers, async (sql, params) => (await db.query(sql, params)).rows);
+      const resolved = await resolveTrackingLinks(
+        offers,
+        async (sql, params) => (await db.query(sql, params)).rows,
+      );
       assert.equal(resolved.actions[0].mode, "tracked");
       assert.equal(resolved.actions[1].mode, "tracked");
       assert.equal(resolved.actions[2].mode, "untracked");

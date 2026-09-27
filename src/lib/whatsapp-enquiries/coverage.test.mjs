@@ -12,7 +12,10 @@ test("six canonical offers count two tracked, three missing and one conflicted",
   }));
   const classified = rows.map(classifyWebsiteCoverage);
   assert.deepEqual(summarizeWebsiteCoverage(classified), {
-    eligibleOffers: 6, coveredOffers: 2, missingOffers: 3, conflictedOffers: 1,
+    eligibleOffers: 6,
+    coveredOffers: 2,
+    missingOffers: 3,
+    conflictedOffers: 1,
   });
   assert.equal(classified[5].status, "conflicted");
   assert.equal(classified[5].code, null);

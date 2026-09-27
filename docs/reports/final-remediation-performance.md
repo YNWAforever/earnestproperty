@@ -34,7 +34,7 @@ When an isolated target exists, create and record a reversible fixture ownership
 - `npm run test:property-experience`: 199 Bun + 146 Node passed.
 - `npm run test:listing-search`: 90 Node + 12 Bun passed.
 - `node --test scripts/acceptance/final-remediation.test.mjs`: 4 passed.
-- `npm run typecheck`, changed-file ESLint and `npm run build`: passed. The build emitted dependency and large-chunk warnings; no build error.
+- `npm run typecheck`, repository-wide `npm run lint` and `npm run build`: passed. The build emitted dependency and large-chunk warnings; no build error.
 - The remaining named suites are recorded in the task ledger after their final run.
 
 Performance targets, database migration checks, authenticated browser journeys and provider delivery remain unverified until the disposable environment and owned fixtures exist.
