@@ -26,3 +26,17 @@ test("the existing wizard exposes paste-table import before preview", () => {
   expect(html).toContain("貼表格匯入多來源");
   expect(html).toContain("第 1／5 步");
 });
+
+test("pausing batch import keeps the ordinary link wizard available", () => {
+  const html = renderToStaticMarkup(
+    createElement(WhatsappLinkWizard, {
+      seed: [],
+      agents: [],
+      actorScope: "actor-test",
+      enableBatchImport: false,
+      onCreated: () => {},
+    }),
+  );
+  expect(html).not.toContain("貼表格匯入多來源");
+  expect(html).toContain("第 1／5 步");
+});

@@ -226,6 +226,7 @@ test("rendered aggregate view shows real zero counts and unavailable GA4 without
       Link: ({ children, to }) => React.createElement("a", { href: to }, children),
     },
     "@/components/admin/AdminShell": { AdminShell: passthrough, AdminError: passthrough },
+    "@/lib/admin/final-fix-rollout": { finalFixUiFlags: { salesPerformanceReporting: false } },
     "@/components/admin/analytics/PerformanceDashboard": { PerformanceDashboard: passthrough },
     "@/components/admin/analytics/PerformanceTable": { PerformanceTable: passthrough },
     "@/components/ui/button": { Button: passthrough },

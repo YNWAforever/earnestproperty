@@ -47,10 +47,12 @@ export function StaffMappingWizard({
   agents,
   initialStaffId,
   initialStep = 0,
+  allowReviewedSave = true,
 }: {
   agents: Agent[];
   initialStaffId?: string;
   initialStep?: number;
+  allowReviewedSave?: boolean;
 }) {
   const [step, setStep] = useState(initialStep);
   const [draft, setDraft] = useState<ConnectionDraft>(emptyDraft);
@@ -243,6 +245,7 @@ export function StaffMappingWizard({
     }
   }
   async function save() {
+    if (!allowReviewedSave) return;
     if (
       !canSaveReviewedMapping(draft, reviewedVersion, version, new Date().toISOString()) ||
       !draft.review
@@ -416,12 +419,19 @@ export function StaffMappingWizard({
               type="button"
               disabled={
                 busy ||
+                !allowReviewedSave ||
                 !canSaveReviewedMapping(draft, reviewedVersion, version, new Date().toISOString())
               }
               onClick={() => void save()}
+              title={!allowReviewedSave ? "核實映射的儲存功能尚未啟用" : undefined}
             >
               儲存已核實映射
             </Button>
+            {!allowReviewedSave ? (
+              <p role="status" className="text-sm">
+                核實映射的儲存功能尚未啟用。
+              </p>
+            ) : null}
           </div>
           <StaffConnectionSummary
             mapping={mapping}

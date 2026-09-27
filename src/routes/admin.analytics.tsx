@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminShell, AdminError } from "@/components/admin/AdminShell";
 import { PerformanceDashboard } from "@/components/admin/analytics/PerformanceDashboard";
+import { finalFixUiFlags } from "@/lib/admin/final-fix-rollout";
 import { PerformanceTable } from "@/components/admin/analytics/PerformanceTable";
 import {
   correctInquiryQuality,
@@ -77,6 +78,7 @@ function AdminAnalytics() {
   const recordRequest = useRef(0);
   const [performanceRevision, setPerformanceRevision] = useState(0);
   useEffect(() => {
+    if (!finalFixUiFlags.salesPerformanceReporting) return;
     let cancelled = false;
     fetchPerformanceFilterOptions()
       .then((value) => {
@@ -95,6 +97,7 @@ function AdminAnalytics() {
     setRecordPage(null);
   }, [performanceFilters]);
   useEffect(() => {
+    if (!finalFixUiFlags.salesPerformanceReporting) return;
     if (search.invalidFilter) {
       setPerformance(null);
       setPerformanceLoading(false);
@@ -123,7 +126,7 @@ function AdminAnalytics() {
     };
   }, [performanceFilters, performanceRevision, search.invalidFilter]);
   async function openRecords(key: string, cursor: string | null = null, append = false) {
-    if (search.invalidFilter) return;
+    if (!finalFixUiFlags.salesPerformanceReporting || search.invalidFilter) return;
     const requestId = ++recordRequest.current;
     setDrilldownKey(key);
     setRecordsLoading(true);
@@ -332,7 +335,7 @@ function AdminAnalytics() {
             </section>
           </>
         ) : null}
-        {search.invalidFilter ? (
+        {finalFixUiFlags.salesPerformanceReporting && search.invalidFilter ? (
           <div className="rounded border border-destructive p-3">
             <AdminError message="網址中的績效篩選無效。報表未載入，以免擴大查詢範圍。" />
             <Button
@@ -351,32 +354,36 @@ function AdminAnalytics() {
             </Button>
           </div>
         ) : null}
-        <PerformanceDashboard
-          filters={performanceFilters}
-          report={performance}
-          options={performanceOptions}
-          loading={performanceLoading}
-          error={performanceError}
-          onApplyFilters={applyPerformanceFilters}
-          onOpenRecords={(key) => void openRecords(key)}
-        />
-        {drilldownKey ? (
-          <PerformanceTable
-            drilldownKey={drilldownKey}
-            page={recordPage}
-            canCorrect={performanceOptions?.canCorrect ?? false}
-            canQualify={performanceOptions !== null}
-            loading={recordsLoading}
-            error={recordsError}
-            onClose={() => {
-              recordRequest.current++;
-              setDrilldownKey(null);
-              setRecordPage(null);
-            }}
-            onMore={() => void openRecords(drilldownKey, recordPage?.nextCursor ?? null, true)}
-            onCorrect={correctQuality}
-            onQualify={qualifyLead}
-          />
+        {finalFixUiFlags.salesPerformanceReporting ? (
+          <>
+            <PerformanceDashboard
+              filters={performanceFilters}
+              report={performance}
+              options={performanceOptions}
+              loading={performanceLoading}
+              error={performanceError}
+              onApplyFilters={applyPerformanceFilters}
+              onOpenRecords={(key) => void openRecords(key)}
+            />
+            {drilldownKey ? (
+              <PerformanceTable
+                drilldownKey={drilldownKey}
+                page={recordPage}
+                canCorrect={performanceOptions?.canCorrect ?? false}
+                canQualify={performanceOptions !== null}
+                loading={recordsLoading}
+                error={recordsError}
+                onClose={() => {
+                  recordRequest.current++;
+                  setDrilldownKey(null);
+                  setRecordPage(null);
+                }}
+                onMore={() => void openRecords(drilldownKey, recordPage?.nextCursor ?? null, true)}
+                onCorrect={correctQuality}
+                onQualify={qualifyLead}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
     </AdminShell>

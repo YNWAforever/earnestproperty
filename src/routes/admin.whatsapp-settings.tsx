@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { finalFixUiFlags } from "@/lib/admin/final-fix-rollout";
 import { StaffMappingWizard } from "@/components/admin/whatsapp/StaffMappingWizard";
 import { parseWhatsappSettingsSearch } from "@/components/admin/whatsapp/staff-mapping-wizard-state";
 import { WhatsappServicePolicyEditor } from "@/components/admin/WhatsappServicePolicyEditor";
@@ -56,9 +57,15 @@ function WhatsappSettings() {
           </a>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
-        {agents.length ? (
+        {!finalFixUiFlags.staffDirectorySetup ? (
+          <p role="status" className="rounded border p-3 text-sm">
+            同事 Inbox 設定尚未啟用。
+          </p>
+        ) : null}
+        {finalFixUiFlags.staffDirectorySetup && agents.length ? (
           <StaffMappingWizard
             agents={agents}
+            allowReviewedSave={finalFixUiFlags.staffReviewEnforcement}
             initialStaffId={search.staffId}
             initialStep={search.step}
           />
