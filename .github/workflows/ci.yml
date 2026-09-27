@@ -109,6 +109,23 @@ jobs:
       - run: npm run test:admin-estates
       - run: npm run test:legal
       - run: npm run test:analytics
+  browser-handoff:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Real wizard UI with synthetic API; no database or provider credentials.
+      - run: npm run acceptance:whatsapp-link-handoff
   browser-staging:
     if: ${{ vars.STAGING_BASE_URL != '' }}
     runs-on: ubuntu-latest
