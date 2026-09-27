@@ -47,7 +47,7 @@ For each stage, confirm the version row exactly once, constraints and FKs, old a
 | Sales performance | Attribution migration and source event projection complete | Scoped totals reconcile to transaction/detail rows, 60/40 credits, null commission and unknown/test/spam coverage |
 | Responsive media | `MLS_MEDIA_VARIANTS_ENABLED=false`; exact owned Blob host allowlist | Dry-run and limited checkpointed backfill, real WebP response bytes/dimensions and mobile `currentSrc`/layout checks |
 
-The existing per-staff evidence and explicit commit controls are the fine-grained gates for routing and link creation. The repository currently has no separate deployment-wide UI flag for staff directory, batch import or sales reporting; do not describe these as configurable flags. Their authenticated server boundaries still enforce role, branch, version and source scope. A phased deployment must use a confirmed isolated pilot first. The media flag is an actual server setting and remains off until its schema and owned variants are verified.
+The build-time UI switches `VITE_STAFF_DIRECTORY_SETUP`, `VITE_STAFF_REVIEW_ENFORCEMENT`, `VITE_LINK_BATCH_IMPORT` and `VITE_SALES_PERFORMANCE_REPORTING` default to false in production when unset. Set each to the exact string `true` only after its migration and isolated evidence pass, then rebuild and redeploy the tested SHA. The directory switch shows the staff setup wizard; review enforcement separately permits its reviewed-save action. The batch switch shows paste/CSV import inside the existing link wizard; single-link creation and existing link management remain available. The reporting switch enables the new performance fetch and dashboard while preserving the older operational analytics. These switches control UI availability only; authenticated server checks still enforce role, branch, version and source scope. Per-staff review and explicit commit remain the fine-grained gates. `MLS_MEDIA_VARIANTS_ENABLED` is a separate server setting and remains false until owned variants are verified.
 
 Backfill: run `scripts/media/backfill-remote-variants.mjs` in dry-run mode first. An apply run requires `MEDIA_BACKFILL_TARGET=staging`, a Blob token, exact `MLS_OWNED_BLOB_HOSTS` and a bounded `--limit`/checkpoint. Review the dry-run candidate count and ownership before applying. A rerun must reuse matching source hashes rather than regenerate files.
 
@@ -63,7 +63,7 @@ Only after the isolated evidence is reviewed: record a fresh production backup/r
 
 ## 6. Stop and recover
 
-If schema or data checks fail, stop pending migrations and new work. If UI or report behavior fails, disable the media flag, pause new batch/notification jobs and return to the last compatible app revision after checking its compatibility with the expanded schema. Preserve additive columns, mapping evidence, link/audit rows and original media. Do not drop new tables as a reflex, erase history, replay a provider send, or reissue an unknown batch chunk. For a wrong committed link or attribution, use the existing reasoned correction/retirement flow or a reviewed compensating migration. Restore a snapshot only after determining that it will not erase legitimate writes made after it.
+If schema or data checks fail, stop pending migrations and new work. If UI or report behavior fails, set the relevant `VITE_*` UI switch to `false` and rebuild/redeploy, disable the media flag as applicable, pause new batch/notification jobs and return to the last compatible app revision after checking its compatibility with the expanded schema. Preserve additive columns, mapping evidence, link/audit rows and original media. Do not drop new tables as a reflex, erase history, replay a provider send, or reissue an unknown batch chunk. For a wrong committed link or attribution, use the existing reasoned correction/retirement flow or a reviewed compensating migration. Restore a snapshot only after determining that it will not erase legitimate writes made after it.
 
 ## Open handoff gates
 
@@ -72,4 +72,4 @@ If schema or data checks fail, stop pending migrations and new work. If UI or re
 - Actual baseline/revised load measurements, SQL plans, browser currentSrc/Core Web Vitals and production smoke: unverified.
 - Production migration, deployment and provider send: not authorized or performed in this run.
 
-See `docs/reports/2026-09-27-final-fixes-ledger.md` for each finding and local tests, and `docs/reports/final-remediation-results.json` for the explicit performance skips.
+See `docs/runbooks/final-remediation-operations-zhHK.md` for the staff operating guide, `docs/reports/2026-09-27-final-fixes-ledger.md` for each finding and local tests, and `docs/reports/final-remediation-results.json` for the explicit performance skips.

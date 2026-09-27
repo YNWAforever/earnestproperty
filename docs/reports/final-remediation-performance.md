@@ -4,7 +4,7 @@
 
 No load measurement was run. The user confirmed that there is no disposable staging URL/database, Haze test tenant, or consenting test recipient. The structured run at `docs/reports/final-remediation-results.json` records 13 skipped cases, zero passed and zero failed. It is not performance evidence. Production traffic, customer records and provider sends were untouched.
 
-The local production build and contract suites check source integration, not response latency, Core Web Vitals, database plans or provider behavior. Baseline and revised timings, cold samples, warm p50/p95, error rates and `EXPLAIN (ANALYZE, BUFFERS)` are unavailable.
+The local production build and contract suites check source integration, not response latency, Core Web Vitals, database plans or provider behavior. Baseline and revised timings, cold samples, warm p50/p95, error rates and `EXPLAIN (ANALYZE, BUFFERS)` are unavailable. No authenticated staging screenshots were captured. Component render tests and a local build are not substitutes for browser images or measured mobile image requests.
 
 ## Acceptance matrix
 
