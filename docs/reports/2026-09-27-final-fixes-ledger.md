@@ -24,7 +24,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R04 Folder semantics | T02,T03,T05 | not-started | not-started | external-blocked | Audit: direct assignment requires matching Folder; tenant capability unverified. |
 | R05 sales performance | T12–T14 | not-started | not-started | not-started | Audit: current analytics lacks attributable sales/agent metrics. |
 | R06 transaction attribution | T10–T11 | not-started | not-started | not-started | Audit: form lacks CRM/property links, credits, and commission. |
-| R07 public inventory count | T09 | not-started | not-started | not-started | Audit: overview raw properties count differs from canonical public list. |
+| R07 public inventory count | T09 | fixed-local | not-started | not-started | Shared canonical public selection; 1 linked property / 2 active offers fixture passes. Isolated Neon snapshot comparison pending. |
 | R08 website tracking | T08 | not-started | not-started | not-started | Audit: sampled 6/6 CTAs use direct wa.me. |
 | R09 batch input | T06 | not-started | not-started | not-started | Audit: wizard has one source per batch and manual placement IDs. |
 | R10 blocked batch rows | T07 | not-started | not-started | not-started | Audit: one blocked row blocks submit; keep snapshots/chunks. |
@@ -37,7 +37,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 
 ## Task progress
 
-T00 complete. Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
+T00 complete. T09 code fixed locally (isolated Neon gate pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
 
 ## Decisions and external gates
 
@@ -46,3 +46,14 @@ T00 complete. Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T
 - Haze production acceptance requires her confirmed provider identity, named Folder with actual access, configured capability and destination, a test conversation, provider readback, and recipient confirmation. No display-name-only send.
 - Production migration, provider send, and deployment remain separate external operations after reviewable code and isolated verification.
 
+
+### T09 — public inventory count (R07)
+
+- Reproduced: `getAdminOverview` counted raw `properties` rows. The new PGlite fixture initially failed because the public count query did not exist.
+- Changed: public search and overview now share the current-offering selection SQL. The overview returns distinct `publicProperties` and `publicOffers` with a checked time. The management list has an explicit linked-public filter; overview cards open that matching active scope. Unlinked records remain available in the default diagnostic view.
+- `node --test src/lib/neon/public-inventory-counts.db.test.mjs`: 2 pass, 0 fail, 0 skip (embedded Postgres; linked sale/rent, duplicate source, newer withdrawal, draft, unlinked, empty set).
+- `npm run test:admin-properties`: 29 Node pass + 18 Bun pass; 0 fail, 0 skip.
+- `npm run test:listing-search`: 90 pass, 0 fail, 0 skip. The first run exposed a contract harness import error for a `.mjs` helper; changing it to the repository's `.js`/`.d.ts` pattern resolved that without altering the harness.
+- `npm run typecheck`: pass. Changed-file ESLint: pass.
+- `npm run test:admin-properties:db`: 0 pass, 0 fail, 2 skipped because no confirmed disposable Neon target. Same-snapshot comparison against the real management list remains staging-unverified.
+- Ruling: `publication=public` is an explicit management filter while the default view retains unlinked diagnostics. This preserves existing admin access to unlinked imports; if product expects the default active list itself to equal the overview, its default may need to change.

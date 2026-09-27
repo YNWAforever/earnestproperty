@@ -12,6 +12,7 @@ import {
   transactionRows,
 } from "./db.server";
 import { leadBudgetError } from "../admin/lead-budget";
+import { getPublicInventoryCounts } from "./public-inventory-counts.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { isMissingBranchesTableError } from "./branches-schema";
 import type { StaffAccess } from "./auth.server";
@@ -932,8 +933,8 @@ async function resolveAudienceFilters(input: { audience_id?: string; filters?: A
 }
 
 export async function getAdminOverview() {
-  const [properties, leads, contacts, conversations, campaigns] = await Promise.all([
-    queryRows("SELECT count(*)::int AS total FROM properties"),
+  const [inventory, leads, contacts, conversations, campaigns] = await Promise.all([
+    getPublicInventoryCounts(),
     queryRows(
       "SELECT count(*)::int AS total FROM crm_leads WHERE stage NOT IN ('closed_won', 'closed_lost')",
     ),
@@ -944,7 +945,9 @@ export async function getAdminOverview() {
     ),
   ]);
   return {
-    properties: Number(properties[0]?.total ?? 0),
+    publicProperties: inventory.publicProperties,
+    publicOffers: inventory.publicOffers,
+    inventoryCheckedAt: inventory.checkedAt,
     openLeads: Number(leads[0]?.total ?? 0),
     contacts: Number(contacts[0]?.total ?? 0),
     openConversations: Number(conversations[0]?.total ?? 0),

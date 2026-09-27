@@ -61,6 +61,7 @@ export const propertyGroupFiltersSchema = z
     status: z
       .enum(["all", "active", "draft", "offline", "inactive", "sold", "rented"])
       .default("active"),
+    publication: z.enum(["all", "public"]).default("all"),
     deal: z.enum(["all", "sale", "rent"]).optional(),
     estateId: z.string().uuid().optional(),
     agentId: z.string().uuid().optional(),
