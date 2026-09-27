@@ -12,7 +12,7 @@ Complete this manifest in the private staging operations record before any live 
 | Staff phone endpoint ID/version and masked destination                                    | Phone suffix 3493; no staff_whatsapp endpoint for confirmed staff account |
 | Chosen transport and verified provider channel                                            | Intended staff WhatsApp send remains blocked; Inbox note is a separate transport |
 | Approved template name, language, parameters and WOZTELL JSON when outside session window | Missing tenant-approved contract       |
-| Dedicated test handset and tester                                                         | Missing                                |
+| Dedicated test handset and tester                                                         | Willy is the named holder of the supplied number; dedicated handset/receive readiness unverified |
 | One current offering, placement and real tracking-link version                            | Staging provisioning pending           |
 | One-time request ID and preview token                                                     | Generated only at explicit test submit |
 
