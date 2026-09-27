@@ -54,6 +54,7 @@
     "test:migration": "node --test scripts/old-site-migration/__tests__/*.test.mjs",
     "test:legal": "node --test src/routes/legal-pages.contract.test.mjs",
     "test:a11y": "playwright test",
+    "acceptance:public:synthetic": "node scripts/test-public-synthetic-browser.mjs",
     "test:analytics": "node --test src/lib/analytics/attribution-conversion.test.mjs src/lib/analytics/events.test.mjs src/lib/analytics/ga4.test.mjs src/lib/analytics/privacy.test.mjs src/lib/analytics/provider.test.mjs src/lib/analytics/reporting-server.test.mjs src/lib/analytics/reporting.test.mjs src/lib/analytics/review-regressions.test.mjs src/lib/analytics/runtime.test.mjs src/lib/route-isolation.test.mjs",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",
     "migration:crawl": "node scripts/old-site-migration/crawl.mjs",

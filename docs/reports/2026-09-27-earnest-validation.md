@@ -11,7 +11,7 @@ Scope: branch `codex/earnest-audit-remediation-20260927`, initial SHA `098844e6a
 | Baseline | `npm.cmd run test:staff-notifications` | exit 0; Node 10/10, Bun 4/4   | Local synthetic tests         |
 | Baseline | `npm.cmd run test:team`                | exit 0; Node 91/91, Bun 31/31 | Local synthetic tests         |
 
-Pending: isolated database SQL, staged browser journeys, actual staff recipient and phone endpoint, template contract, provider delivery receipt, and Hong Kong performance baseline. No skipped database suite is counted as passing.
+Pending at baseline (superseded by the T13 follow-ups below): isolated database SQL, staged browser journeys, actual staff recipient and phone endpoint, template contract, provider delivery receipt, and Hong Kong performance baseline. No skipped database suite is counted as passing.
 
 Visual audit evidence reviewed from the supplied HTML: A074714 detail (public number plus SYNC breadcrumb), old single-link admin UI, and A074714 zero-result search. The private screenshots are excluded from the branch.
 
@@ -153,3 +153,13 @@ After commit `2ae5049`, `npm.cmd run typecheck`, `npm.cmd run test:property-expe
 ## T13 browser continuation
 
 A server-attested, initially empty Neon acceptance DB backed a local Vite browser run. First cold/two-worker attempt: 12 pass, 4 skip, 1 estate axe timeout; isolated estate rerun: 1 pass in 6.4 s; warm one-worker repeat: 14 pass, 3 skip, 0 fail. The three skips are explicitly not counted as passes. This tests local branch code and synthetic data, not the deployed Preview. After `014891e`, the former unconditional property-detail a11y skip became fixture discovery, and every a11y request is limited to read methods. Targeted TypeScript, ESLint and test-wiring checks passed; the complete read-only public-site a11y suite ran 6/6, including property detail. That public-site result exercises the test's non-skip path but is not PR staging acceptance.
+
+## Populated synthetic public browser acceptance — 2026-09-27
+
+`npm run acceptance:public:synthetic` now creates its own loopback Vite app and passes it the exact URL attested by Neon as `earnest_audit_acceptance_20260927` / `br-young-breeze-ao85rtx1` / `ep-square-leaf-aobruyvf`. It first requires empty property/identity/inquiry tables under a transaction lock, inserts 30 synthetic offerings into the real migrated schema and verifies the existing identity trigger produced 28 groups and 30 memberships. The actual `property_status` enum uses `offline` for this withdrawn-sale fixture; no substitute enum or invented branch identity is used. Images are local fixture assets, not remote-photo performance samples.
+
+The first populated run was **17 passed, 6 failed, 0 skipped** in 4.6 minutes. All six failures were new identity-test expectations that incorrectly required URLs without the existing deal query. The app correctly produced `?deal=rent` on rental cards and preserved the legacy alias's sale preference while selecting the only current active rental. Tests were corrected to verify that behavior, canonical/OG URLs without aliases, and public card content without internal identifiers. The local app was given an example-only contact number so WhatsApp href text could be inspected; no WhatsApp link was opened.
+
+The full corrected run started at `2026-09-27T07:31:38.057Z` and passed **23/23, 0 failed, 0 skipped, 0 flaky**, in **146,497.676 ms**. Coverage includes six axe page checks; A074714 exact/case/whitespace/legacy-alias search; latest offline sale precedence with the current rental retained; canonical/OG and rental WhatsApp text; 390 px and 1440 px accessibility/overflow; keyboard mobile menu; invalid enquiry/valuation submission; saved filters with pagination/back; and gallery keyboard controls. Every browser spec blocks non-GET/HEAD/OPTIONS requests. The runner explicitly fails a result containing any skipped test.
+
+Both failed and successful runs cleaned up only their own exact property IDs and newly created groups. After the final run, properties, public groups, memberships and inquiries were all **0**. The local app was stopped. Typecheck and targeted ESLint exited 0; the existing disposable-target safety and test-wiring suites passed **12/12**. This is current branch code against a real synthetic Neon database, not Vercel Preview browser evidence or authenticated admin coverage. The earlier empty-database skips remain historical, not passes. F11/F23/F24 remain blocked; no live provider request, production change or migration was made in this follow-up.
