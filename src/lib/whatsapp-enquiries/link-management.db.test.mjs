@@ -80,6 +80,12 @@ test("650 current links page without duplicates; disable expired reference prese
     assert.equal(all.length, 650);
     assert.equal(new Set(all.map((row) => row.id)).size, 650);
     const counted = all.find((row) => row.id === target.id);
+    assert.equal(
+      typeof counted.placementVerifiedAt,
+      "string",
+      "verified database timestamps must be renderable text, not Date objects",
+    );
+    assert.match(counted.placementVerifiedAt, /^\d{4}-\d{2}-\d{2}T/);
     assert.equal(counted.opens, 2);
     assert.equal(counted.enquiries, 1);
     assert.equal(counted.readiness, "unknown");

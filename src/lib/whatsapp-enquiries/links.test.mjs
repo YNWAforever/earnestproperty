@@ -1,3 +1,4 @@
+import { linkDto } from "../neon/whatsapp-enquiries.server.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -60,4 +61,14 @@ test("AT-24/25 followup and distinct property episodes; ambiguous messages remai
     inquiryId: null,
     review: true,
   });
+});
+
+test("tracking link DTO normalizes database Date values without changing null or string values", () => {
+  const timestamp = "2026-09-27T10:00:00.000Z";
+  assert.equal(
+    linkDto({ placement_verified_at: new Date(timestamp) }).placementVerifiedAt,
+    timestamp,
+  );
+  assert.equal(linkDto({ placement_verified_at: timestamp }).placementVerifiedAt, timestamp);
+  assert.equal(linkDto({ placement_verified_at: null }).placementVerifiedAt, null);
 });
