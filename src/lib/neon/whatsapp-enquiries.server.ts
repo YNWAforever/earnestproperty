@@ -1,6 +1,12 @@
 import "@tanstack/react-start/server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { queryRows, transactionRows, type DbRow, type TransactionStatement } from "./db.server.ts";
+import {
+  dateOrNull,
+  queryRows,
+  transactionRows,
+  type DbRow,
+  type TransactionStatement,
+} from "./db.server.ts";
 import type { StaffAccess } from "./auth.server.ts";
 import type {
   TrackingLinkInput,
@@ -48,7 +54,7 @@ export function linkDto(row: DbRow): TrackingLink {
     branchId: row.branch_id as string | null,
     externalListingId: row.external_listing_id as string | null,
     videoId: row.video_id as string | null,
-    placementVerifiedAt: row.placement_verified_at as string | null,
+    placementVerifiedAt: dateOrNull(row.placement_verified_at),
     placementVerified: Boolean(row.placement_verified_at),
     enabled: row.enabled === true,
     createdAt: String(row.created_at),

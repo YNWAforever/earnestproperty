@@ -177,3 +177,15 @@ Rollout: review the follow-up PR (PR #200 was already merged) and promote compat
 Separate prior authorized migration action: the five approved production files were committed transactionally on 2026-09-27 at 08:21:52–08:21:54 UTC. Independent migration drift verification reported 60/60 and pending []; the earlier 55/60 snapshots above are historical. This does not close F11/F23/F24 or establish message delivery.
 
 Final local verification: browser handoff 8/8 (0 failed, 0 skipped); admin-properties 26 Node + 18 Bun tests (44/44); test wiring 9/9; TypeScript and targeted ESLint exit 0. Browser tests cover fresh/old/uncertain/partial/rejected batches, empty recovery reads, and preview reload/edit. No performance benchmark was run for this UI change.
+
+## Post-create link management render failure
+
+Reported: a created row followed by the generic Chinese route error. Root cause reproduced independently: Neon timestamptz parser (OID 1184) returns Date; linkDto used a TypeScript cast for placement_verified_at, preserving the Date at runtime; WhatsappLinksTable renders placementVerifiedAt directly as a React child. React reproduces "Objects are not valid as a React child (found: [object Date])". The existing 650-link PGlite fixture failed the newly added text-boundary assertion (object rather than string).
+
+Fix uses the existing dateOrNull helper at the DTO boundary; Date becomes ISO text, null stays null, existing strings remain unchanged. No changes to authorization, schema, link codes, versions or provider behavior. Added Date/string/null coverage and verified the database-backed paging path. The earlier handoff browser fixture did not render this management table and therefore did not cover this bug.
+
+Production HEAD checks: admin page 200, supplied short-link route 204. HEAD does not mint an open and does not prove a GET redirect. Vercel error queries returned no entries; native authenticated browser inspection was blocked by the local sandbox kernel ACL failure. The user's exact failing screen remains pending clarification. No production link creation, normal tracked GET, DB write or message send performed.
+
+Rollout: review this follow-up PR; application deployment requires release authorization. No migration. Rollback: revert this DTO conversion if needed, preserving all immutable link versions and operation results.
+
+Date-render fix verification: WhatsApp enquiries suite 93/93 (0 failed, 0 skipped), 12,615 ms; targeted ESLint and TypeScript exit 0. Neon parser → DTO → React render now produces ISO timestamp text instead of a Date-child exception.
