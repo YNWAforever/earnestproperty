@@ -118,6 +118,7 @@ export function StaffMappingWizard({ agents }: { agents: Agent[] }) {
               try {
                 await saveWhatsappStaffChannel({
                   staffId,
+                  expectedVersion: rows.find((row) => row.staff_id === staffId)?.version ?? null,
                   ...form,
                   branchId: form.branchId || null,
                 });

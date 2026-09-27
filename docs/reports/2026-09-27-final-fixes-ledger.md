@@ -20,7 +20,7 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 |---|---|---|---|---|---|
 | R01 Haze readiness | T03–T05 | not-started | not-started | external-blocked | Audit: no verified mapping/destination; retain blocked preview until real identity and receipt evidence. |
 | R02 technical ID setup | T02–T03 | not-started | not-started | not-started | Audit: wizard requires manual Inbox IDs. |
-| R03 verification evidence | T01,T04 | not-started | not-started | not-started | Audit: manual evidence cannot imply provider verification or delivery. |
+| R03 verification evidence | T01,T04 | partial-local | not-started | not-started | Audit: manual evidence cannot imply provider verification or delivery. |
 | R04 Folder semantics | T02,T03,T05 | not-started | not-started | external-blocked | Audit: direct assignment requires matching Folder; tenant capability unverified. |
 | R05 sales performance | T12–T14 | not-started | not-started | not-started | Audit: current analytics lacks attributable sales/agent metrics. |
 | R06 transaction attribution | T10–T11 | not-started | not-started | not-started | Audit: form lacks CRM/property links, credits, and commission. |
@@ -30,14 +30,14 @@ The audit and fetched main have the same SHA. These are audit findings on the cu
 | R10 blocked batch rows | T07 | not-started | not-started | not-started | Audit: one blocked row blocks submit; keep snapshots/chunks. |
 | R11 notification setup | T03–T04 | not-started | not-started | not-started | Audit: technical fields and external mapping mixed into primary flow. |
 | R12 test-send workflow | T03–T04 | not-started | not-started | not-started | Audit: same-name buttons and unclear repair actions. |
-| R13 mapping races | T01 | not-started | not-started | not-started | Audit: no expectedVersion on mapping save. |
+| R13 mapping races | T01 | fixed-local | not-started | not-started | Audit: no expectedVersion on mapping save. |
 | R14 analytics definitions | T12–T13 | not-started | not-started | not-started | Audit: test/spam and cohort/current backlog not distinguished. |
 | R15 media and transport copy | T15 | not-started | not-started | not-started | Audit: VR claim and mismatched transport text. |
 | R16 remote image variants | T16–T17 | not-started | not-started | not-started | Audit: thumbnail and hero share original URL, without srcset. |
 
 ## Task progress
 
-T00 complete. T09 code fixed locally (isolated Neon gate pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
+T00 complete. T09 and T01 code fixed locally (isolated Neon gate pending). Suggested sequence: T09, T01, T02, T03, T04, T06, T07, T08, T10, T11, T12, T13, T14, T15, T16, T05, T17, T18.
 
 ## Decisions and external gates
 
@@ -57,3 +57,14 @@ T00 complete. T09 code fixed locally (isolated Neon gate pending). Suggested seq
 - `npm run typecheck`: pass. Changed-file ESLint: pass.
 - `npm run test:admin-properties:db`: 0 pass, 0 fail, 2 skipped because no confirmed disposable Neon target. Same-snapshot comparison against the real management list remains staging-unverified.
 - Ruling: `publication=public` is an explicit management filter while the default view retains unlinked diagnostics. This preserves existing admin access to unlinked imports; if product expects the default active list itself to equal the overview, its default may need to change.
+
+### T01 — versioned staff mapping evidence (R03, R13)
+
+- Reproduced with embedded PostgreSQL: before implementation, reviewed save was absent and mapping writes had no version conflict protection. The first red test failed because the service was absent; an earlier CAS test failed when expectedVersion was unrecognized.
+- Migration expands existing rows with version 1, review_basis legacy_manual, review_enforced false; legacy verification references are preserved. New append-only review events bind staff, company Channel, provider integration, actor, current mapping version, result, and expiry. A trigger increments mapping versions on update.
+- The reviewed save accepts only a current provider_verified and verified event in the exact scope. One SQL statement performs evidence validation, version compare-and-swap, mapping write, and audit. Retirement is a separate versioned write. Duplicate provider identity across staff is rejected. Manual compatibility saves cannot overwrite a strict reviewed mapping.
+- Readiness now reports mapping version and requires review evidence only for mappings explicitly marked strict. Legacy assignment eligibility remains unchanged until per-staff rollout.
+- node --test src/lib/whatsapp-enquiries/mapping-review.db.test.mjs: 3 pass, 0 fail, 0 skip (embedded PostgreSQL; legacy conservation, race, identity/scope/actor/basis/result/expiry, append-only, update, retire).
+- npm run test:staff-notifications: 21 Node pass + 4 Bun pass, 0 fail, 0 skip.
+- npm run typecheck: pass. Changed-file ESLint: pass.
+- Disposable Neon migration and tenant-specific review evidence are not yet available; these remain staging gates. No production migration or provider call was made.

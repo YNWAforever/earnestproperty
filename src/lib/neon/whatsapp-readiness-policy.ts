@@ -70,6 +70,11 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
     if (mapping.channelId !== runtime.channelId) base.push("channel_mismatch");
     if (mapping.retiredAt) base.push("mapping_retired");
     if (
+      mapping.reviewEnforced &&
+      (mapping.reviewBasis !== "provider_verified" || !mapping.reviewEvidenceId)
+    )
+      base.push("mapping_unverified");
+    if (
       !mapping.eligible ||
       !mapping.verifiedAt ||
       !mapping.verificationRef ||
@@ -123,7 +128,7 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
     inboxPrivateNote: blocked(...new Set(inboxReasons)),
     staffWhatsapp: blocked(...new Set(staffReasons)),
     maskedDestination: maskStaffDestination(staffEndpoint?.destinationReference),
-    mappingVersion: null,
+    mappingVersion: mapping?.version ?? null,
     endpointVersion: staffEndpoint?.version ?? null,
     checkedAt: input.checkedAt,
   };

@@ -28,6 +28,10 @@ export type WhatsappRuntimeStatus = {
 
 export type StaffMappingEvidence = {
   channelId: string;
+  version: number;
+  reviewBasis: "legacy_manual" | "provider_verified";
+  reviewEnforced: boolean;
+  reviewEvidenceId: string | null;
   eligible: boolean;
   verificationRef: string | null;
   verifiedAt: string | null;

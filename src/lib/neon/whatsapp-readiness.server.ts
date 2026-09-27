@@ -57,6 +57,10 @@ function mapping(value: unknown): StaffReadinessInput["mapping"] {
   return r
     ? {
         channelId: String(r.channel_id),
+        version: Number(r.version),
+        reviewBasis: r.review_basis === "provider_verified" ? "provider_verified" : "legacy_manual",
+        reviewEnforced: r.review_enforced === true,
+        reviewEvidenceId: str(r.review_evidence_id),
         eligible: r.eligible === true,
         verificationRef: str(r.verification_ref),
         verifiedAt: stamp(r.verified_at),
