@@ -1,17 +1,15 @@
 import { Link } from "@tanstack/react-router";
 import { MapPin, Phone, Mail } from "lucide-react";
-import { AppImage } from "@/components/media/AppImage";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
 import { clientAreaGroupsInNavOrder } from "@/content/client-area-presentation";
 import { SiteLink } from "@/components/site/SiteLink";
-const companyLogo = "/brand/earnest-company-logo-2026.jpg";
-
 // "2688 2988", matching how the same numbers are printed elsewhere on the
 // site (estate-pages.ts's contactPhones), instead of the raw "26882988".
 function displayPhone(phone: string) {
   return /^\d{8}$/.test(phone) ? `${phone.slice(0, 4)} ${phone.slice(4)}` : phone;
 }
+import logoSquare from "@/assets/logo-earnest-full.png";
 
 export function SiteFooter() {
   return (
@@ -19,13 +17,13 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>
-            <div className="flex items-center gap-2.5">
-              <AppImage
-                src={companyLogo}
-                alt="晉誠地產 Earnest Property"
-                width={1200}
-                height={400}
-                className="h-auto w-full max-w-[300px] object-contain"
+            <div>
+              <img
+                src={logoSquare}
+                alt="晉誠地產 Earnest Property Agency Ltd."
+                width={800}
+                height={800}
+                className="h-32 w-32 bg-white p-1 object-contain"
               />
             </div>
             <p className="mt-4 text-sm leading-relaxed opacity-80">
