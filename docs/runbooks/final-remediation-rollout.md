@@ -1,6 +1,14 @@
 # Final remediation rollout and recovery
 
-**State, 2026-09-28:** source changes are on `codex/final-fixes-20260927`. There is no disposable staging URL/database, Haze test tenant or consenting recipient. No new migration was applied to Neon, no provider test message was sent, and no production deployment occurred. The steps below are a reviewable sequence, not evidence that rollout happened.
+**State, 2026-09-28:** PR #203 is merged and production deployment `382bc7541c2c30eba40e47883b625a50b45fb795` is ready. The nine additive migrations in section 2 were applied to the approved Neon production branch. There is still no staging URL, Haze test tenant or consenting recipient. No provider test message was sent, feature switch enabled or further deployment made. After a signed-in refresh, the user reported that the migration warning cleared. The raw authenticated health response and full production smoke were not independently captured. The remaining steps below are a runbook, not evidence that those checks happened.
+
+### Production schema change recorded on 2026-09-28
+
+- Target: Neon project `dawn-meadow-79190048`, branch `production` (`br-polished-sea-aom4i1ct`), database `neondb`, endpoint `ep-divine-frost-aokzrg7f`. The database itself attested its branch and endpoint before the write.
+- Dry run: disposable branch `earnest_audit_acceptance_20260928` (`br-hidden-sunset-aookjknk`) was copied from production. All nine migrations applied there in order; the application drift check reported 69 of 69 versions recorded.
+- Restore point: branch `earnest_pre_final_fixes_20260928` (`br-divine-pine-ao49ud9d`) was copied from production immediately before the migration at parent LSN `0/23B94578`. It has no compute. Preserve it until the rollout is reviewed; restoring it over production would require a separate assessment of subsequent writes.
+- Production result: the repository migration runner skipped 60 existing versions and applied exactly the nine files listed in section 2. Its read-only drift check reported 69 of 69. An independent Neon query confirmed the branch identity, nine new version rows and the expected new tables. Running the merged source's read-only health function locally against this verified branch reported `database.tables` healthy (7/7), `database.columns` healthy (20/20) and `database.migrations` healthy (69/69). The public `/admin/operations` route returned HTTP 200.
+- Limit: the route's HTTP 200 response is unauthenticated and does not prove that its protected health panel cleared. Vercel exposes the production database variable names but withholds their sensitive values from the local read-only environment pull, so the live deployment's exact connection URL was not independently read. No authenticated post-migration health request was observed in the available Vercel logs at the time of the initial check. The user subsequently reported that the migration warning cleared after a signed-in refresh.
 
 ## 1. Freeze target and evidence
 
@@ -67,9 +75,9 @@ If schema or data checks fail, stop pending migrations and new work. If UI or re
 
 ## Open handoff gates
 
-- Disposable Neon and browser target identity, backup/restore point and owned fixtures: unavailable.
+- Disposable Neon migration dry run and pre-change restore branch: recorded above. An isolated browser target, named acceptance database and owned fixtures remain unavailable.
 - Haze tenant, exact Folder/user capability readback, test conversation and consenting recipient: unavailable.
-- Actual baseline/revised load measurements, SQL plans, browser currentSrc/Core Web Vitals and production smoke: unverified.
-- Production migration, deployment and provider send: not authorized or performed in this run.
+- Actual baseline/revised load measurements, SQL plans, browser currentSrc/Core Web Vitals and full production smoke: unverified. The user reported that the signed-in migration warning cleared, but the raw authenticated health response was not independently captured.
+- Production schema migration: completed as recorded above. The merged production deployment predates that migration; no later deployment, provider send or feature-switch change was performed.
 
 See `docs/runbooks/final-remediation-operations-zhHK.md` for the staff operating guide, `docs/reports/2026-09-27-final-fixes-ledger.md` for each finding and local tests, and `docs/reports/final-remediation-results.json` for the explicit performance skips.
