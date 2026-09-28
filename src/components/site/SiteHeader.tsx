@@ -10,12 +10,11 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { AppImage } from "@/components/media/AppImage";
 import { SiteLink } from "@/components/site/SiteLink";
 import { hrefPathname } from "@/lib/site-links";
 import { whatsappUrl } from "@/config/site";
 import { getClientAreaGroup } from "@/content/client-area-presentation";
-const companyLogo = "/brand/earnest-company-logo-2026.jpg";
+import logoHorizontal from "@/assets/logo-earnest-horizontal.png";
 
 type RouteTo =
   | "/about"
@@ -396,13 +395,13 @@ export function SiteHeader() {
       className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/70"
     >
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link to="/" className="flex items-center gap-2.5" onClick={() => setActiveMegaMenu(null)}>
-          <AppImage
-            src={companyLogo}
-            alt="晉誠地產 Earnest Property 主頁"
-            width={1200}
-            height={400}
-            loading="eager"
+        <Link to="/" className="flex items-center" onClick={() => setActiveMegaMenu(null)}>
+          <img
+            src={logoHorizontal}
+            alt="晉誠地產 Earnest Property Agency Ltd."
+            width={800}
+            height={227}
+            fetchPriority="high"
             className="h-auto w-[180px] shrink-0 object-contain sm:w-[210px]"
           />
         </Link>
