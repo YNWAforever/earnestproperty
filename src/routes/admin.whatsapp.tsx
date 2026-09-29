@@ -208,8 +208,6 @@ function AdminWhatsapp() {
   }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
-  const [newActivityAvailable, setNewActivityAvailable] = useState(false);
-  const pollFailuresRef = useRef(0);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const inboxQuery = search.q ?? "";
   const inboxStatus = search.status ?? "all";
@@ -297,7 +295,6 @@ function AdminWhatsapp() {
         setNextListCursor(data.nextCursor);
         setListTotal(data.total);
         setListUpdatedAt(Date.now());
-        if (cursor === null) setNewActivityAvailable(false);
         setError(null);
         return true;
       } catch (err) {
@@ -315,9 +312,7 @@ function AdminWhatsapp() {
     async (id: string, options: { background?: boolean } = {}) => {
       const requestId = aiAssistRequestRef.current + 1;
       aiAssistRequestRef.current = requestId;
-      // A background refresh must leave the current card on screen. The 30s poll
-      // called this unconditionally, so the AI assist panel blanked to a
-      // skeleton every tick while an agent was reading it.
+      // A background detail refresh must leave the current AI card on screen.
       if (!options.background) {
         setAiAssist(null);
         // Without this, a pending fetch and an outright failure both rendered the
@@ -331,7 +326,7 @@ function AdminWhatsapp() {
         setAiAssist(assist as AdminConversationAiAssist);
       } catch {
         if (requestId !== aiAssistRequestRef.current || !canApplyConversationDetail(id)) return;
-        // Keep the last good card rather than blanking it on a transient poll error.
+        // Keep the last good card rather than blanking it on a transient refresh error.
         if (!options.background) setAiAssist(null);
       } finally {
         if (requestId === aiAssistRequestRef.current && canApplyConversationDetail(id)) {
@@ -350,7 +345,7 @@ function AdminWhatsapp() {
       if (options.background && olderPending.current) return null;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
-      // A background poll must not flip the pane into its loading state or wipe
+      // A background detail refresh must not flip the pane into its loading state or wipe
       // the visible thread -- the agent may be mid-sentence in the composer.
       if (!options.background) {
         setDetailLoading(true);
@@ -409,7 +404,7 @@ function AdminWhatsapp() {
         return conversation;
       } catch (err) {
         if (requestId !== detailRequestRef.current || !canApplyConversationDetail(id)) return null;
-        // A failed background poll must not blank a thread the agent is reading.
+        // A failed background refresh must not blank a thread the agent is reading.
         if (options.background) return null;
 
         const message = errorText(err);
@@ -465,54 +460,6 @@ function AdminWhatsapp() {
     if (!user) return;
     void refreshConversations(null);
   }, [refreshConversations, user]);
-
-  // Only the active first page refreshes in place. An older page keeps its
-  // stable cursor until the agent explicitly returns to the latest activity.
-  useEffect(() => {
-    if (!user) return;
-    let timer: number | undefined;
-    let stopped = false;
-    let running = false;
-    const schedule = () => {
-      if (!stopped)
-        timer = window.setTimeout(tick, Math.min(60000, 10000 * 2 ** pollFailuresRef.current));
-    };
-    const tick = async () => {
-      if (stopped || document.hidden || running) {
-        schedule();
-        return;
-      }
-      running = true;
-      try {
-        if (listCursorRef.current) {
-          setNewActivityAvailable(true);
-        } else {
-          const ok = await refreshConversations(null);
-          pollFailuresRef.current = ok ? 0 : Math.min(pollFailuresRef.current + 1, 3);
-        }
-        const openId = selectedIdRef.current;
-        if (openId && !document.hidden) await loadConversationDetail(openId, { background: true });
-      } finally {
-        running = false;
-        schedule();
-      }
-    };
-    const onFocus = () => {
-      if (!document.hidden && !running) {
-        if (timer) window.clearTimeout(timer);
-        void tick();
-      }
-    };
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onFocus);
-    schedule();
-    return () => {
-      stopped = true;
-      if (timer) window.clearTimeout(timer);
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onFocus);
-    };
-  }, [user, refreshConversations, loadConversationDetail]);
 
   useEffect(() => {
     if (!user) return;
@@ -627,8 +574,8 @@ function AdminWhatsapp() {
       assertNoMutationError(result);
 
       // Claim the list request slot before refetching. This fetch ran outside
-      // listRequestRef entirely, so a 30s background poll started earlier could
-      // resolve afterwards and overwrite the freshly-saved row with its stale
+      // listRequestRef entirely, so an earlier list request could resolve
+      // afterwards and overwrite the freshly-saved row with its stale
       // copy -- the agent's status or assignment change silently reverted on
       // screen while the database held the new value.
       // Claiming the slot also means owning the loading flag: refreshConversations
@@ -968,10 +915,10 @@ function AdminWhatsapp() {
         }
       />
 
-      {newActivityAvailable ? (
-        <Button variant="outline" onClick={() => void refreshConversations(null)}>
-          返回最新活動並重新整理
-        </Button>
+      {listCursor ? (
+        <p className="text-sm text-muted-foreground">
+          你正查看較舊頁面。按「第一頁」查看最新活動。
+        </p>
       ) : null}
       <div className="flex items-center gap-2">
         <Button
