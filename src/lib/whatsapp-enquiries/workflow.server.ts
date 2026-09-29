@@ -118,19 +118,28 @@ export async function observeEnquiryEvent(
   const mode = enquiryMode();
   await checkpoint();
   const query = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  let portal = { recognized: false, handled: false };
   if (mode === "observe" || mode === "active") {
+    const { associatePortalEnquiry } = await import("./enquiry-association.server.ts");
+    portal = await associatePortalEnquiry(eventId, query);
     const { observeEpisode } = await import("./episodes.server.ts");
-    await observeEpisode(eventId, query);
+    if (!portal.handled) await observeEpisode(eventId, query);
     const { observeQualifiedHumanResponse } = await import("./assignment.server.ts");
     await observeQualifiedHumanResponse(eventId, query);
   }
-  if (mode === "active") {
+  if (mode === "active" && !portal.recognized) {
     const { scheduleServiceForEvent, processServiceAnswer } =
       await import("./service-workflow.server.ts");
     const { transactionRows } = await import("../neon/db.server.ts");
     const servicePorts = { query, transaction: transactionRows };
     await processServiceAnswer(eventId, servicePorts);
     await scheduleServiceForEvent(eventId, servicePorts);
+    await query(
+      "UPDATE whatsapp_enquiry_events SET processing_state='processed',processed_at=now() WHERE id=$1::uuid AND capture_mode='active' AND processing_state='pending'",
+      [eventId],
+    );
+  }
+  if (mode === "active" && portal.recognized) {
     await query(
       "UPDATE whatsapp_enquiry_events SET processing_state='processed',processed_at=now() WHERE id=$1::uuid AND capture_mode='active' AND processing_state='pending'",
       [eventId],

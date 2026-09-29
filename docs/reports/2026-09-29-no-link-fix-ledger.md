@@ -8,8 +8,8 @@
 | T01 | NL03 / UC01,09,12 | IMPLEMENTED | a5fbd85 | RED 2/3 → GREEN 13/13 (含 migration manifest)、typecheck、focused lint；40/40 baseline | 新 migration 僅本地 PGlite apply；isolated Neon BLOCKED |
 | T02 | NL04 / UC09,10 | IMPLEMENTED | 5cf75e0 | RED 4/4 → GREEN 19/19 receipt/identity tests；18/18 plan suite；6/6 manifest；40/40 baseline；typecheck／lint | 新 migration 僅 PGlite；多 session Neon/provider BLOCKED_EXTERNAL |
 | T03 | NL01 / UC01–04,07,08 | IMPLEMENTED | bc4f8c0 | RED module absent → GREEN 8/8 parser, 17/17 parser+links, typecheck/lint | PropertyHK live shape NOT_TESTED；未接DB resolver |
-| T04 | NL01,R01,R02 / UC01,03–05,08,15 | IMPLEMENTED | 本次 focused commit | RED module absent → GREEN 15/15 resolver+manifest, typecheck/lint；PGlite exact SQL | 新 migration 僅 PGlite；channel scope/real staff alias及Neon BLOCKED_EXTERNAL |
-| T05 | NL02 / UC01,06–09 | TODO | | | |
+| T04 | NL01,R01,R02 / UC01,03–05,08,15 | IMPLEMENTED | 863131a | RED module absent → GREEN 15/15 resolver+manifest, typecheck/lint；PGlite exact SQL | 新 migration 僅 PGlite；channel scope/real staff alias及Neon BLOCKED_EXTERNAL |
+| T05 | NL02 / UC01,06–09 | IMPLEMENTED | 本次 focused commit | RED P05 → GREEN 16/16 episodes+manifest；40/40 baseline；typecheck/lint | 新 migration 僅 PGlite；Neon concurrency、historic repair review BLOCKED_EXTERNAL |
 | T06 | UX01,NL02,R13 / UC05,06,12,14 | TODO | | | |
 | T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | TODO | | | |
 | T08 | UX01,WA01–06,SH01 / UC06,13,17 | TODO | | | |
@@ -62,4 +62,12 @@ ode --test src/lib/whatsapp-enquiries/portal-intake.test.mjs exit 1。GREEN：�
 - RED：resolver module 不存在，new unit exit 1。GREEN：
 ode --test src/lib/whatsapp-enquiries/portal-resolution.test.mjs src/lib/whatsapp-enquiries/portal-resolution.db.test.mjs src/lib/control-plane/migration-versions.test.mjs exit 0（15/15）。PGlite 測新 migration 無 authority seed、以實際 production SQL 配對 synthetic P1/S1、錯 channel 拒絕、snapshot 不可 UPDATE/DELETE。1000 refs 使用 3 次批量 port 呼叫。typecheck、focused lint exit 0。
 - 此時 resolver 尚未由收件流程調用；T05 要接 receipt→interpretation→enquiry。正式 source scope／Terence ID 未知，不能 seed；isolated Neon migration／真 MLS 資料核對 BLOCKED_EXTERNAL。
+
+## T05：多樓盤 enquiry 關聯
+
+- 新正向 P05 在舊 episode function 實際 PGlite SQL 下 red：第二個不同 portal ID 靜默沿用第一個 root。先令舊兼容路徑識別 portal references 並進 review；新增 migration 將舊 SQL 的 NULL property wildcard 改為嚴格 NULL/非NULL 比較，舊 migration 保持唯讀。
+- 新關聯表以(event_id,ref_index)保存一則訊息的全部 portal refs，保留原 event.inquiry_id／whatsapp_enquiry_messages 單指標作兼容但不能用來推多ref回覆歸屬。新 SQL 函數在 event/conversation 鎖下關聯；不同 ref key 建不同 root，同 ref續問重用 open root，closed後建新 root；一訊息多ref只建一個 primary root，其他可見 review。新 root 的 association_review=true／effects_eligible=false，從不改 conversation assignee。
+- Worker 以 event scoped external ID 找到同 channel/app/member 的 durable receipt，讀或新增不可改寫 interpretation/resolution snapshot，再入 SQL function。parser 認出的 portal 訊息不走舊 active service外發；migration/receipt 未齊時仍進 legacy review 路徑。
+- GREEN：
+ode --test src/lib/whatsapp-enquiries/no-link-episodes.test.mjs src/lib/whatsapp-enquiries/no-link-episodes.db.test.mjs src/lib/control-plane/migration-versions.test.mjs exit 0（16/16），typecheck、focused ESLint exit 0；T03–T05 合併 suite 32/32，原 baseline 40/40。PGlite 真 SQL 覆蓋不同盤、同盤續問、closed、新訊息多盤、缺映射 triage、錯 receipt scope 直接拒絕、P1/S1 synthetic golden 並保持原 conversation assignee。此證據不是多session Neon／真provider；historic mismerge 只可產生候選修復報表，尚未 remap。
 

@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 import { createHash } from "node:crypto";
 import { hasUntrustedStaffOverride } from "./staff-reference.ts";
 import { extractReferences } from "./links.ts";
+import { parsePortalEnquiry } from "./portal-intake.ts";
 import { queryRows } from "../neon/db.server.ts";
 /** Only protected transcript text is inspected. No message body is copied into attribution. */
 export async function observeEpisode(eventId: string, query = queryRows) {
@@ -14,10 +15,13 @@ export async function observeEpisode(eventId: string, query = queryRows) {
     [eventId],
   );
   if (!event) return null;
-  const parsed = extractReferences(String(event.text ?? ""));
+  const text = String(event.text ?? "");
+  const parsed = extractReferences(text);
+  const portal = parsePortalEnquiry(text);
   const invalid =
     parsed.invalid ||
     parsed.references.length > 1 ||
+    portal.references.length > 0 ||
     hasUntrustedStaffOverride(String(event.text ?? ""));
   const hash =
     parsed.references.length === 1 && !invalid
