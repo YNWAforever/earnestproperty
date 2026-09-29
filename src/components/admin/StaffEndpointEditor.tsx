@@ -72,8 +72,7 @@ export function StaffEndpointEditor({
     <section id="staff-notifications" aria-label="同事通知設定" className="space-y-3 border-t pt-4">
       <h2 className="font-semibold">同事通知及待處理工作</h2>
       <p className="text-sm">
-        此處記錄獨立通知目的地及核實證據。私有 Inbox 目的地必須是該同事的已核實 Inbox ID；WhatsApp
-        使用另外核實的同事收件 ID。儲存設定不代表已送達裝置。
+        同事手機通知是獨立可選功能，預設關閉。未設定不影響接收客戶查詢；只有核實目的地、同事授權及時段後才可啟用。
       </p>
       <dl className="flex flex-wrap gap-4">
         {Object.entries(health).map(([key, n]) => (
@@ -133,108 +132,114 @@ export function StaffEndpointEditor({
         </article>
       ))}
       {error ? <p role="alert">{error}</p> : null}
-      <form
-        className="grid max-w-xl gap-2"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setBusy(true);
-          setError("");
-          try {
-            await updateStaffEndpoint({ ...form, ...(edit ?? {}) });
-            setRows(await fetchStaffEndpoints());
-            setEdit(null);
-          } catch {
-            setError("未能儲存：請核對同事映射、目的地及版本，重新整理後再試。");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <label className={selectedStaffId ? "hidden" : undefined}>
-          同事
-          <select
-            required
-            disabled={!!edit}
-            value={form.staffId}
-            onChange={(e) => setForm({ ...form, staffId: e.target.value })}
-          >
-            <option value="">選擇同事</option>
-            {agents
-              .filter((a) => a.active)
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name ?? a.id}
-                </option>
-              ))}
-          </select>
-        </label>
-        <label>
-          通知方式
-          <select
-            value={form.transport}
-            onChange={(e) =>
-              setForm({ ...form, transport: e.target.value as typeof form.transport })
+      <details className="rounded border p-3">
+        <summary className="cursor-pointer font-medium">進階：由支援人員設定同事通知目的地</summary>
+        <p className="mt-2 text-sm">
+          一般接收查詢毋須設定同事手機通知。這是獨立可選功能；儲存設定不會試送。
+        </p>
+        <form
+          className="mt-3 grid max-w-xl gap-2"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError("");
+            try {
+              await updateStaffEndpoint({ ...form, ...(edit ?? {}) });
+              setRows(await fetchStaffEndpoints());
+              setEdit(null);
+            } catch {
+              setError("未能儲存：請核對同事映射、目的地及版本，重新整理後再試。");
+            } finally {
+              setBusy(false);
             }
-          >
-            <option value="inbox_private_note">私有 Inbox 備註</option>
-            <option value="staff_whatsapp">同事 WhatsApp</option>
-          </select>
-        </label>
-        {form.transport === "inbox_private_note" ? (
-          <p className="text-sm">
-            Inbox 目的地與核實證據由已核實同事映射取得；儲存時會綁定該映射版本。
-          </p>
-        ) : (
-          <>
-            <label>
-              已核實同事 WhatsApp 收件 ID
-              <Input
-                required
-                maxLength={256}
-                value={form.destinationReference}
-                onChange={(e) => setForm({ ...form, destinationReference: e.target.value })}
-              />
-            </label>
-            <label>
-              收件 ID 核實紀錄編號
-              <Input
-                required
-                maxLength={160}
-                value={form.verificationRef}
-                onChange={(e) => setForm({ ...form, verificationRef: e.target.value })}
-              />
-            </label>
-          </>
-        )}
-        <label>
-          同事接收授權紀錄
-          <Input
-            required
-            maxLength={160}
-            value={form.permissionRef}
-            onChange={(e) => setForm({ ...form, permissionRef: e.target.value })}
-          />
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={form.allowAllHours}
-            onChange={(e) => setForm({ ...form, allowAllHours: e.target.checked })}
-          />
-          已批准此目的地全天候通知（未批准會阻擋發送）
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={form.enabled}
-            onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-          />
-          啟用此目的地（仍受全域功能及傳送能力驗證限制）
-        </label>
-        <Button disabled={busy || !form.staffId}>
-          {edit ? "儲存目的地新版本" : "建立通知目的地"}
-        </Button>
-      </form>
+          }}
+        >
+          <label className={selectedStaffId ? "hidden" : undefined}>
+            同事
+            <select
+              required
+              disabled={!!edit}
+              value={form.staffId}
+              onChange={(e) => setForm({ ...form, staffId: e.target.value })}
+            >
+              <option value="">選擇同事</option>
+              {agents
+                .filter((a) => a.active)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name ?? a.id}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label>
+            通知方式
+            <select
+              value={form.transport}
+              onChange={(e) =>
+                setForm({ ...form, transport: e.target.value as typeof form.transport })
+              }
+            >
+              <option value="inbox_private_note">私有 Inbox 備註</option>
+              <option value="staff_whatsapp">同事 WhatsApp</option>
+            </select>
+          </label>
+          {form.transport === "inbox_private_note" ? (
+            <p className="text-sm">
+              Inbox 目的地與核實證據由已核實同事映射取得；儲存時會綁定該映射版本。
+            </p>
+          ) : (
+            <>
+              <label>
+                已核實同事 WhatsApp 收件 ID
+                <Input
+                  required
+                  maxLength={256}
+                  value={form.destinationReference}
+                  onChange={(e) => setForm({ ...form, destinationReference: e.target.value })}
+                />
+              </label>
+              <label>
+                收件 ID 核實紀錄編號
+                <Input
+                  required
+                  maxLength={160}
+                  value={form.verificationRef}
+                  onChange={(e) => setForm({ ...form, verificationRef: e.target.value })}
+                />
+              </label>
+            </>
+          )}
+          <label>
+            同事接收授權紀錄
+            <Input
+              required
+              maxLength={160}
+              value={form.permissionRef}
+              onChange={(e) => setForm({ ...form, permissionRef: e.target.value })}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={form.allowAllHours}
+              onChange={(e) => setForm({ ...form, allowAllHours: e.target.checked })}
+            />
+            已批准此目的地全天候通知（未批准會阻擋發送）
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={form.enabled}
+              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+            />
+            啟用此目的地（仍受全域功能及傳送能力驗證限制）
+          </label>
+          <Button disabled={busy || !form.staffId}>
+            {edit ? "儲存目的地新版本" : "建立通知目的地"}
+          </Button>
+        </form>
+      </details>
       {rows
         .filter((r) => !selectedStaffId || r.staffId === selectedStaffId)
         .map((r) => (

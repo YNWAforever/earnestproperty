@@ -104,8 +104,10 @@ export async function readAssignmentContext(
   if (!authorized) throw new Response("Forbidden", { status: 403 });
   const [row] = await queryRows(
     `SELECT w.assignment_version,w.assignment_lock,w.confirmed_staff_id,w.assigned_agent_id,
+ (SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=w.confirmed_staff_id) AS confirmed_staff_name,
  r.id AS request_id,r.desired_staff_id,r.state AS assignment_state,r.evidence,
- (SELECT jsonb_agg(jsonb_build_object('id',i.id,'property',i.public_listing_no,'source',i.placement_source,'requestedStaffId',i.requested_staff_id,'dealType',(SELECT p.deal_type FROM properties p WHERE p.id=i.property_id),'firstResponseAt',i.first_human_response_at,'dueAt',i.response_due_at,'review',i.association_review)) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND wa_can_read_enquiry($3::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam')) AS enquiries
+ (SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=r.desired_staff_id) AS desired_staff_name,
+ (SELECT jsonb_agg(jsonb_build_object('id',i.id,'property',i.public_listing_no,'source',i.placement_source,'requestedStaffId',i.requested_staff_id,'requestedStaffName',(SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=i.requested_staff_id),'dealType',(SELECT p.deal_type FROM properties p WHERE p.id=i.property_id),'firstResponseAt',i.first_human_response_at,'dueAt',i.response_due_at,'review',i.association_review)) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND wa_can_read_enquiry($3::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam')) AS enquiries
  FROM whatsapp_conversations w LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE w.id=$1::uuid AND wa_can_read_conversation($3::uuid,w.id)`,
     [conversationId, global, actor.staffId],
   );
@@ -121,8 +123,15 @@ export async function readAssignmentContext(
     throw new Response("Forbidden", { status: 403 });
   }
   const proposal = await proposedConversationAssignment(conversationId, ports);
+  const [proposedStaff] = proposal.staffId
+    ? await queryRows<{ name: string | null }>(
+        `SELECT COALESCE(NULLIF(name_zh,''),NULLIF(name_en,'')) AS name FROM staff_users WHERE id=$1::uuid`,
+        [proposal.staffId],
+      )
+    : [];
   return {
     ...row,
+    proposedStaffName: proposedStaff?.name ?? null,
     assignment_version: Number(row.assignment_version),
     proposedStaffId: proposal.staffId,
     proposalReason: proposal.reason,
@@ -421,13 +430,16 @@ export async function readEnquiryQueue(actor: Actor, ports: Ports = defaultPorts
 
 export type AssignmentContextDto = {
   proposedStaffId: string | null;
+  proposedStaffName: string | null;
   proposalReason: string;
   assignment_version: number;
   assignment_lock: boolean;
   confirmed_staff_id: string | null;
+  confirmed_staff_name: string | null;
   assigned_agent_id: string | null;
   request_id: string | null;
   desired_staff_id: string | null;
+  desired_staff_name: string | null;
   assignment_state: string | null;
   evidence: Record<string, string | boolean> | null;
   enquiries:
@@ -436,6 +448,7 @@ export type AssignmentContextDto = {
         property: string | null;
         source: string | null;
         requestedStaffId: string | null;
+        requestedStaffName: string | null;
         dealType: string | null;
         firstResponseAt: string | null;
         dueAt: string | null;

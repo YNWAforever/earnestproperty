@@ -1,3 +1,5 @@
+import { EnquiryResolutionPanel } from "@/components/admin/whatsapp/EnquiryResolutionPanel";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useEffect, useState } from "react";
 import { getWhatsappAssignment, getWhatsappEnquiryQueue } from "@/lib/neon/whatsapp-assignment";
@@ -7,6 +9,7 @@ type Episode = {
   source: string | null;
   dealType: string | null;
   requestedStaffId: string | null;
+  requestedStaffName: string | null;
   firstResponseAt: string | null;
   dueAt: string | null;
   review: boolean;
@@ -26,6 +29,7 @@ export function WhatsappEnquiryContext({
     null,
   );
   const [networkError, setNetworkError] = useState(false);
+  const [resolutionId, setResolutionId] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let cancelled = false;
@@ -70,59 +74,88 @@ export function WhatsappEnquiryContext({
   if (!context) return null;
   const episodes = (context.enquiries ?? []) as Episode[];
   return (
-    <section
-      className="max-h-32 shrink-0 space-y-2 overflow-y-auto border-b bg-muted/20 p-4"
-      aria-label="查詢及分派證據"
-    >
-      <h3 className="font-semibold">查詢跟進</h3>
-      <p className="text-xs text-muted-foreground">
-        觀察模式建議：{context.proposedStaffId ?? "需要總台人工處理"}（{context.proposalReason}
-        ）；尚未執行自動分派。
-      </p>
-      <p className="text-sm">
-        已確認負責人：{String(context.confirmed_staff_id ?? "未經 WOZTELL 確認")} · 分派：
-        {String(context.assignment_state ?? "未要求")}
-      </p>
-      {context.desired_staff_id ? (
-        <p className="text-sm">要求分派至：{String(context.desired_staff_id)}（未必已生效）</p>
-      ) : null}
-      <label className="block text-sm">
-        本次回覆對應查詢
-        <select
-          className="ml-2 rounded border p-2"
-          value={selectedId}
-          onChange={(e) => onSelect(e.target.value)}
-        >
-          <option value="">{episodes.length === 1 ? "自動對應唯一查詢" : "請選擇查詢"}</option>
-          {episodes.map((e) => (
-            <option key={e.id} value={e.id}>
+    <>
+      <section
+        className="max-h-32 shrink-0 space-y-2 overflow-y-auto border-b bg-muted/20 p-4"
+        aria-label="查詢及分派證據"
+      >
+        <h3 className="font-semibold">查詢跟進</h3>
+        <p className="text-xs text-muted-foreground">
+          觀察模式建議：{context.proposedStaffId ?? "需要總台人工處理"}（{context.proposalReason}
+          ）；尚未執行自動分派。
+        </p>
+        <p className="text-sm">
+          已確認負責人：{String(context.confirmed_staff_id ?? "未經 WOZTELL 確認")} · 分派：
+          {String(context.assignment_state ?? "未要求")}
+        </p>
+        {context.desired_staff_id ? (
+          <p className="text-sm">
+            要求分派至：{context.desired_staff_name ?? "未命名同事"}（待確認）
+          </p>
+        ) : null}
+        <label className="block text-sm">
+          本次回覆對應查詢
+          <select
+            className="ml-2 rounded border p-2"
+            value={selectedId}
+            onChange={(e) => onSelect(e.target.value)}
+          >
+            <option value="">{episodes.length === 1 ? "自動對應唯一查詢" : "請選擇查詢"}</option>
+            {episodes.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.property ?? "一般查詢"} ·{" "}
+                {e.dealType === "sale" ? "售" : e.dealType === "rent" ? "租" : "未指定交易"} ·{" "}
+                {e.source}
+              </option>
+            ))}
+          </select>
+        </label>
+        {episodes.map((e) => (
+          <article key={e.id} className="rounded border p-2 text-sm">
+            <strong>
               {e.property ?? "一般查詢"} ·{" "}
-              {e.dealType === "sale" ? "售" : e.dealType === "rent" ? "租" : "未指定交易"} ·{" "}
-              {e.source} · {e.id.slice(0, 8)}
-            </option>
-          ))}
-        </select>
-      </label>
-      {episodes.map((e) => (
-        <article key={e.id} className="rounded border p-2 text-sm">
-          <strong>
-            {e.property ?? "一般查詢"} ·{" "}
-            {e.dealType === "sale" ? "售" : e.dealType === "rent" ? "租" : "未指定交易"}
-          </strong>{" "}
-          · 來源 {e.source}
-          <p>
-            指定同事：{e.requestedStaffId ?? "沒有指定"} · {e.review ? "需要核實關聯" : "已有關聯"}
-          </p>
-          <p>
-            首個人手回覆：{e.firstResponseAt ?? "尚無合資格證據"} · 服務期限：
-            {e.dueAt ?? "尚未啟用服務政策"}
-          </p>
-        </article>
-      ))}
-      <p className="text-xs text-muted-foreground">
-        服務期限與 WhatsApp 24 小時回覆窗口分開計算。接納發送不代表送達。
-      </p>
-    </section>
+              {e.dealType === "sale" ? "售" : e.dealType === "rent" ? "租" : "未指定交易"}
+            </strong>{" "}
+            · 來源 {e.source}
+            <p>
+              指定同事：{e.requestedStaffId ?? "沒有指定"} ·{" "}
+              {e.review ? "需要核實關聯" : "已有關聯"}
+            </p>
+            {e.review ? (
+              <button type="button" className="underline" onClick={() => setResolutionId(e.id)}>
+                查看及修正本次查詢
+              </button>
+            ) : null}
+            <p>
+              首個人手回覆：{e.firstResponseAt ?? "尚無合資格證據"} · 服務期限：
+              {e.dueAt ?? "尚未啟用服務政策"}
+            </p>
+          </article>
+        ))}
+        <p className="text-xs text-muted-foreground">
+          服務期限與 WhatsApp 24 小時回覆窗口分開計算。接納發送不代表送達。
+        </p>
+      </section>
+      <Dialog
+        open={resolutionId !== null}
+        onOpenChange={(open) => {
+          if (!open) setResolutionId(null);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogTitle>本次查詢例外修正</DialogTitle>
+          <DialogDescription>
+            只查看及修改本次查詢；儲存不會發送訊息或轉移整段對話。
+          </DialogDescription>
+          {resolutionId ? (
+            <EnquiryResolutionPanel
+              inquiryId={resolutionId}
+              onClose={() => setResolutionId(null)}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 export function WhatsappEnquiryQueue() {

@@ -12,8 +12,8 @@
 | T05 | NL02 / UC01,06–09 | IMPLEMENTED | 90e923b | RED P05 → GREEN 16/16 episodes+manifest；40/40 baseline；typecheck/lint | 新 migration 僅 PGlite；Neon concurrency、historic repair review BLOCKED_EXTERNAL |
 | T06 | UX01,NL02,R13 / UC05,06,12,14 | IMPLEMENTED_LOCAL | 4ff9fa5 | PGlite ACL/CAS、第二盤隔離、分派policy、既有pagination；47/47 focused tests、typecheck/lint | 新 migration 只在 PGlite；isolated Neon/browser/provider BLOCKED_EXTERNAL |
 | T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | IMPLEMENTED_LOCAL | 5954c44 | RED 0/2 → 91/91 Node focused；PGlite 5/5；Bun card 5/5；typecheck/lint | 真 provider、isolated Neon、真同事手機／客戶回覆及整段 synthetic browser BLOCKED_EXTERNAL |
-| T08 | UX01,WA01–06,SH01 / UC06,13,17 | IMPLEMENTED_LOCAL | 本次 focused commit | RED inbox 4/7 → GREEN 23/23 paging+PGlite；route/permission 58/58；Bun UI 7/7；typecheck/lint | 無新 migration；真 authenticated synthetic browser 2 cases BLOCKED_EXTERNAL（缺 isolated app／storageState／30條 fixture） |
-| T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | TODO | | | |
+| T08 | UX01,WA01–06,SH01 / UC06,13,17 | IMPLEMENTED_LOCAL | 39a03c9 | RED inbox 4/7 → GREEN 23/23 paging+PGlite；route/permission 58/58；Bun UI 7/7；typecheck/lint | 無新 migration；真 authenticated synthetic browser 2 cases BLOCKED_EXTERNAL（缺 isolated app／storageState／30條 fixture） |
+| T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | IMPLEMENTED_LOCAL | 本次 focused commit | RED Folder module 0/1 → GREEN Bun 12/12；PGlite options/guard + assignment 10/10；typecheck；T09 field ledger | 新 migration 僅 PGlite；synthetic browser/isolated Neon/真 provider BLOCKED_EXTERNAL |
 | T10 | LE01–05 / UC11,13 | TODO | | | |
 | T11 | R05,R06,R14 / UC18 | TODO | | | |
 | T12 | BL01–08 / UC16,17 | TODO | | | |
@@ -90,3 +90,10 @@
 - 前線日常導航出現「WhatsApp 收件匣」，映射／來源連結／推廣維持 manager/admin。卡片用客戶名稱、來源、public no、外部 ID、指定同事、經供應商確認可回覆的查詢負責人及下一步，不拿 UUID 當日常標籤。非 thread owner 如由 query deep link 進入，只讀 `fetchWhatsappEnquiryDetail` 的本次入站訊息；不能看到 S1 其他歷史或在此發送。範本 loading/empty/forbidden/error 分開並可 retry；匯入歷史按 admin session 才顯示。
 - 活動首屏10秒可見頁輪詢、視窗 focus 重取、hidden頁不輪詢；舊頁只提示回首屏，保留 cursor。request generation 拒絕切對話後舊結果；背景 detail 更新不再每次抓 AI assist。手機工作區使用 dvh 限高，timeline/查詢脈絡獨立捲動，composer 及 send 行保持可達，草稿仍以 actor+conversation sessionStorage 分隔。實際 soft-keyboard/focus 行為需 browser fixture 量度，不能由 class 測試推斷已合格。
 - 指令：`node --test src/routes/admin.routes.test.mjs src/lib/neon/admin-data-permissions.test.mjs src/lib/whatsapp-enquiries/inbox-query.test.mjs src/lib/whatsapp-enquiries/inbox-query.db.test.mjs` exit 0（58/58）；`bun test --no-env-file src/components/admin/whatsapp/NoLinkInbox.test.tsx src/components/admin/StaffNotificationCard.test.tsx` exit 0（7/7）；`npm.cmd run typecheck`、focused ESLint exit 0。`npm.cmd exec -- playwright test e2e/whatsapp-no-link.spec.ts --list` 列出2個 case；`node scripts/test-whatsapp-no-link-browser.mjs` 因缺 `PLAYWRIGHT_BASE_URL`／`NO_LINK_BROWSER_FIXTURE` 明確 BLOCKED_EXTERNAL。新 runner 只允許 isolated loopback synthetic app，不對正式站 crawler 或發真訊息。無新 migration；Neon readback 仍 BLOCKED_EXTERNAL。
+
+## T09：例外修正及同事接駁
+
+- Folder 讀取區分 loading、ready、empty、forbidden、error；403/timeout 不再偽裝成空名單，retry 保留選擇，verified-only save guard 仍在。例外面板只向可修正此查詢的 manager/admin 顯示，原始外部參照／當下已核實候選／版本均從 server 讀取；改動只含 changed fields＋原因，CAS 衝突保留草稿；成功重新讀回。
+- DB 新 guard 在 requested salesperson override 寫入時重新核對 channel、source scope、原始 requestedStaffText、有效 verified alias 與 active staff；不能用單純同名或任意職員 ID 覆寫。原 migration 不變。
+- 同事手機通知預設關閉，技術目的地配置在支援進階區；保存設定不試送，現有試送獨立 preview/confirm 與 unknown reconciliation 保留。能力卡 inbound/assignment/customer reply/staff phone 分開，unknown 不冒充 ready。完整 audit05 欄位逐項狀態見 `2026-09-29-no-link-t09-fields.md`；未完部分保留在 T12／外部 gate。
+- Synthetic browser verify/save/reload/next actor 未執行：缺獨立 app、manager/agent storageState 及同意的合成 fixture；不是 UI 驗收 PASS。

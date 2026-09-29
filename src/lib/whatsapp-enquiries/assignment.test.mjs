@@ -60,7 +60,8 @@ test("AT36 bot outbound does not clear qualified waiting enquiry", () => {
     { staffId: "00000000-0000-4000-8000-000000000001", roles: ["admin"] },
     { enquiries: true },
   ).statement;
-  assert.match(sql, /bool_or\(i.first_human_response_at IS NULL\)/);
+  assert.match(sql, /EXISTS\(SELECT 1 FROM inquiries awaiting_i/);
+  assert.match(sql, /awaiting_i.first_human_response_at IS NULL/);
   assert.match(sql, /awaiting_human_response/);
 });
 

@@ -29,13 +29,14 @@ const detail = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { requireStaffAccess } = await import("./auth.server.ts");
     const actor = await requireStaffAccess(getRequest(), ["admin", "manager", "agent"]);
-    const { readEnquiryMessages, loadEnquiryAccess } =
+    const { readEnquiryMessages, loadEnquiryAccess, readEnquiryResolutionContext } =
       await import("../whatsapp-enquiries/enquiry-access.server.ts");
-    const [access, messages] = await Promise.all([
+    const [access, messages, context] = await Promise.all([
       loadEnquiryAccess(actor, data.inquiryId),
       readEnquiryMessages(actor, data.inquiryId),
+      readEnquiryResolutionContext(actor, data.inquiryId),
     ]);
-    return { access, messages };
+    return { access, messages, context };
   });
 export const fetchWhatsappEnquiryDetail = async (inquiryId: string) =>
   detail(await withStaffAuthHeaders({ data: { inquiryId } }));

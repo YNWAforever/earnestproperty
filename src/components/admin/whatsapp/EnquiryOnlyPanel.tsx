@@ -1,3 +1,5 @@
+import { EnquiryResolutionPanel } from "./EnquiryResolutionPanel";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useEffect, useState } from "react";
 import { fetchWhatsappEnquiryDetail } from "@/lib/neon/enquiry-resolution";
 
@@ -8,6 +10,7 @@ export function EnquiryOnlyPanel({ inquiryId }: { inquiryId: string }) {
   > | null>(null);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [reviewOpen, setReviewOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setResult(null);
@@ -44,6 +47,22 @@ export function EnquiryOnlyPanel({ inquiryId }: { inquiryId: string }) {
       <p className="text-sm text-muted-foreground">
         你只可查看與本次查詢相關的客戶來訊。其他樓盤的對話紀錄不會顯示；如需回覆，請由目前供應商確認的對話負責同事協調。
       </p>
+      {result.access.canCorrect ? (
+        <button type="button" className="underline" onClick={() => setReviewOpen(true)}>
+          查看及修正本次查詢
+        </button>
+      ) : null}
+      <Dialog open={reviewOpen} onOpenChange={setReviewOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogTitle>本次查詢例外修正</DialogTitle>
+          <DialogDescription>
+            只查看及修改本次查詢；儲存不會發送訊息或轉移整段對話。
+          </DialogDescription>
+          {reviewOpen ? (
+            <EnquiryResolutionPanel inquiryId={inquiryId} onClose={() => setReviewOpen(false)} />
+          ) : null}
+        </DialogContent>
+      </Dialog>
       {result.messages.length ? (
         <ul className="space-y-2">
           {result.messages.map((message) => (

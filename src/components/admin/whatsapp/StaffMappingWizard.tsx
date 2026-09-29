@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StaffEndpointEditor } from "@/components/admin/StaffEndpointEditor";
@@ -8,6 +8,7 @@ import { StaffReadinessBadge } from "./StaffReadinessBadge";
 import { StaffTestNotificationDialog } from "./StaffTestNotificationDialog";
 import { InboxAccountPicker } from "./InboxAccountPicker";
 import { StaffConnectionSummary } from "./StaffConnectionSummary";
+import { FolderLoadNotice, classifyFolderLoad, type FolderLoadState } from "./FolderLoadNotice";
 import {
   getWhatsappStaffChannels,
   retireWhatsappStaffChannel,
@@ -19,7 +20,7 @@ import {
   saveNamedInboxFolder,
   verifyInboxCandidate,
 } from "@/lib/neon/inbox-directory";
-import { getWhatsappStaffReadiness } from "@/lib/neon/whatsapp-readiness";
+import { getWhatsappStaffReadiness, getWhatsappRuntimeStatus } from "@/lib/neon/whatsapp-readiness";
 import { fetchStaffEndpoints } from "@/lib/neon/staff-endpoints";
 import type { InboxCandidate, InboxFolder } from "@/lib/neon/inbox-directory.types";
 import {
@@ -62,7 +63,11 @@ export function StaffMappingWizard({
     [],
   );
   const [endpoints, setEndpoints] = useState<Awaited<ReturnType<typeof fetchStaffEndpoints>>>([]);
+  const [runtime, setRuntime] = useState<Awaited<
+    ReturnType<typeof getWhatsappRuntimeStatus>
+  > | null>(null);
   const [folders, setFolders] = useState<InboxFolder[]>([]);
+  const [folderState, setFolderState] = useState<FolderLoadState>({ kind: "loading" });
   const [candidates, setCandidates] = useState<InboxCandidate[]>([]);
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
@@ -84,6 +89,16 @@ export function StaffMappingWizard({
   const hasUnsavedInput =
     draft.dirty || !!retireReason.trim() || Object.values(folderForm).some(Boolean);
   const { dialog: leaveGuard } = useRouteLeaveGuard(hasUnsavedInput);
+  const loadFolders = useCallback(async () => {
+    setFolderState({ kind: "loading" });
+    try {
+      const items = await getInboxFolders();
+      setFolders(items);
+      setFolderState({ kind: items.length ? "ready" : "empty" });
+    } catch (failure) {
+      setFolderState(classifyFolderLoad(failure));
+    }
+  }, []);
   useEffect(() => {
     if (initialStaffId && agents.some((agent) => agent.id === initialStaffId && agent.active))
       setDraft((current) =>
@@ -96,22 +111,23 @@ export function StaffMappingWizard({
       getWhatsappStaffChannels(),
       getWhatsappStaffReadiness(),
       fetchStaffEndpoints(),
-      getInboxFolders().catch(() => []),
+      getWhatsappRuntimeStatus().catch(() => null),
     ])
-      .then(([channels, capabilities, destinations, names]) => {
+      .then(([channels, capabilities, destinations, currentRuntime]) => {
         if (!live) return;
         setRows(channels);
         setReadiness(capabilities);
         setEndpoints(destinations);
-        setFolders(names);
+        setRuntime(currentRuntime);
       })
       .catch(() => {
         if (live) setError("未能載入連接設定；請檢查管理權限、公司連接及資料庫遷移。");
       });
+    void loadFolders();
     return () => {
       live = false;
     };
-  }, []);
+  }, [loadFolders]);
   const selected = agents.find((agent) => agent.id === draft.staffId);
   const mapping = rows.find((row) => row.staff_id === draft.staffId) ?? null;
   const version = mapping?.version ?? null;
@@ -124,16 +140,17 @@ export function StaffMappingWizard({
     )?.version ?? null;
   const titles = ["選同事", "連接 Inbox", "通知方式", "核實與試送"];
   async function refresh() {
-    const [channels, capabilities, destinations, names] = await Promise.all([
+    const [channels, capabilities, destinations, currentRuntime] = await Promise.all([
       getWhatsappStaffChannels(),
       getWhatsappStaffReadiness(),
       fetchStaffEndpoints(),
-      getInboxFolders().catch(() => []),
+      getWhatsappRuntimeStatus().catch(() => null),
     ]);
     setRows(channels);
     setReadiness(capabilities);
     setEndpoints(destinations);
-    setFolders(names);
+    setRuntime(currentRuntime);
+    await loadFolders();
   }
   async function explain(errorValue: unknown, fallback: string) {
     const status =
@@ -347,20 +364,18 @@ export function StaffMappingWizard({
             為 {selected.name ?? "未命名同事"} 選擇公司 Inbox 帳戶及 Folder。
             分行是本地同事資料，不代表供應商 Folder。搜尋及儲存均不會發送訊息。
           </p>
-          {!folders.length ? (
-            <div role="alert" className="space-y-2">
-              <p>需系統管理員完成公司 Inbox API 連接，並設定已確認的 Folder 名稱，才能核實同事。</p>
-              <Button type="button" variant="outline" onClick={() => setFolderSetupOpen(true)}>
-                前往 Folder 設定
-              </Button>
-            </div>
+          <FolderLoadNotice state={folderState} onRetry={() => void loadFolders()} />
+          {folderState.kind === "empty" ? (
+            <Button type="button" variant="outline" onClick={() => setFolderSetupOpen(true)}>
+              前往 Folder 設定
+            </Button>
           ) : null}
           <label className="block max-w-xl">
             Folder 名稱
             <select
               className="mt-1 block w-full rounded border p-2"
               value={draft.folderKey}
-              disabled={busy}
+              disabled={busy || folderState.kind !== "ready"}
               onChange={(event) => {
                 requestGeneration.current += 1;
                 setBusy(false);
@@ -384,7 +399,7 @@ export function StaffMappingWizard({
               ))}
             </select>
           </label>
-          {draft.folderKey ? (
+          {draft.folderKey && folderState.kind === "ready" ? (
             <InboxAccountPicker
               items={candidates}
               selectedUserId={draft.userId}
@@ -410,7 +425,7 @@ export function StaffMappingWizard({
             <Button
               type="button"
               variant="outline"
-              disabled={busy || !draft.userId || !draft.folderKey}
+              disabled={busy || folderState.kind !== "ready" || !draft.userId || !draft.folderKey}
               onClick={() => void verify()}
             >
               檢查連接
@@ -419,6 +434,7 @@ export function StaffMappingWizard({
               type="button"
               disabled={
                 busy ||
+                folderState.kind !== "ready" ||
                 !allowReviewedSave ||
                 !canSaveReviewedMapping(draft, reviewedVersion, version, new Date().toISOString())
               }
@@ -515,7 +531,7 @@ export function StaffMappingWizard({
                         folders.find((item) => item.folderKey === folderForm.folderKey)?.version ??
                         null,
                     });
-                    setFolders(await getInboxFolders());
+                    await loadFolders();
                     setFolderForm({ folderKey: "", displayName: "", providerFolderId: "" });
                     setNotice("Folder 名稱已儲存；現在請選同事帳戶並檢查連接。");
                   } catch {
@@ -534,7 +550,8 @@ export function StaffMappingWizard({
       {step === 2 && selected ? (
         <div className="space-y-4">
           <p className="text-sm">
-            為 {selected.name ?? "未命名同事"} 設定獨立通知目的地；儲存不代表已送達。
+            為 {selected.name ?? "未命名同事"}{" "}
+            設定可選的獨立通知目的地；手機通知預設停用。儲存不發送，也不代表已送達。
           </p>
           <StaffEndpointEditor agents={agents} selectedStaffId={draft.staffId} />
           <details className="rounded border p-3">
@@ -546,18 +563,58 @@ export function StaffMappingWizard({
       {step === 3 && selected ? (
         <div className="space-y-3">
           <p>核實 {selected.name ?? "未命名同事"} 的能力與試送預覽。開啟或儲存此頁不會發送訊息。</p>
-          {capability ? (
-            <div className="grid gap-2 sm:grid-cols-3">
-              <StaffReadinessBadge label="Inbox 分派" capability={capability.assignment} />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StaffReadinessBadge
+              label="客戶來訊"
+              capability={{
+                state: "unknown",
+                reasons: [
+                  {
+                    code: "signed_receipt_required",
+                    message: "需簽名 webhook 及耐久收件讀回；同事手機通知不影響收件",
+                  },
+                ],
+              }}
+            />
+            <StaffReadinessBadge
+              label="Inbox 分派"
+              capability={
+                capability?.assignment ?? {
+                  state: "unknown",
+                  reasons: [{ code: "staff_unavailable", message: "未能讀取同事映射" }],
+                }
+              }
+            />
+            <StaffReadinessBadge
+              label="客戶回覆"
+              capability={
+                runtime?.customerReply ?? {
+                  state: "unknown",
+                  reasons: [{ code: "runtime_unavailable", message: "未能核對發送能力" }],
+                }
+              }
+            />
+            <StaffReadinessBadge
+              label="同事手機通知（可選）"
+              capability={
+                capability?.staffWhatsapp ?? {
+                  state: "unknown",
+                  reasons: [{ code: "staff_unavailable", message: "未能讀取通知目的地" }],
+                }
+              }
+            />
+          </div>
+          <details className="text-sm">
+            <summary>內部備註能力</summary>
+            {capability ? (
               <StaffReadinessBadge
-                label="Inbox 私有備註"
+                label="Inbox 私有備註（不是手機通知）"
                 capability={capability.inboxPrivateNote}
               />
-              <StaffReadinessBadge label="同事 WhatsApp" capability={capability.staffWhatsapp} />
-            </div>
-          ) : (
-            <p role="alert">未能讀取此同事能力。</p>
-          )}
+            ) : (
+              "未能核實"
+            )}
+          </details>
           <p className="text-sm">
             同事手機：{capability?.maskedDestination ?? "未設定"}。供應商接納後仍須核對實際送達。
           </p>

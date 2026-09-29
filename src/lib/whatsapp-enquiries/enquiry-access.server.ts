@@ -122,3 +122,114 @@ export async function readEnquiryMessages(
   );
   return rows.map((row) => ({ id: row.id, text: row.text, createdAt: row.created_at }));
 }
+
+export type EnquiryResolutionContext = {
+  inquiryId: string;
+  version: number;
+  publicListingNo: string | null;
+  associationReview: boolean;
+  providerThreadReview: boolean;
+  ownerStaffId: string | null;
+  requestedStaffId: string | null;
+  propertyId: string | null;
+  references: { source: string; externalListingId: string | null; dealType: string | null }[];
+  ownerCandidates: { id: string; label: string }[];
+  propertyCandidates: { id: string; label: string }[];
+  requestedStaffCandidates: { id: string; label: string }[];
+};
+
+/** Every candidate is recomputed from current authority; the CAS write rechecks it. */
+export async function readEnquiryResolutionContext(
+  actor: Pick<StaffAccess, "staffId">,
+  inquiryId: string,
+  query: typeof queryRows = queryRows,
+): Promise<EnquiryResolutionContext> {
+  const [row] = await query<{
+    id: string;
+    enquiry_version: number;
+    public_listing_no: string | null;
+    association_review: boolean;
+    provider_thread_review: boolean;
+    enquiry_owner_staff_id: string | null;
+    requested_staff_id: string | null;
+    property_id: string | null;
+  }>(
+    `SELECT i.id,i.enquiry_version,i.public_listing_no,i.association_review,
+      i.provider_thread_review,i.enquiry_owner_staff_id,i.requested_staff_id,
+      CASE WHEN i.enquiry_resolution ? 'propertyId'
+        THEN NULLIF(i.enquiry_resolution->>'propertyId','')::uuid ELSE i.property_id END AS property_id
+      FROM inquiries i WHERE i.id=$1::uuid AND i.source='whatsapp'
+      AND wa_can_read_enquiry($2::uuid,i.id)`,
+    [inquiryId, actor.staffId],
+  );
+  if (!row) throw new Response("Forbidden", { status: 403 });
+  const references = await query<{
+    source: string;
+    external_listing_id: string | null;
+    deal_type: string | null;
+  }>(
+    `SELECT l.source,l.external_listing_id,l.deal_type FROM whatsapp_enquiry_reference_links l
+      WHERE l.inquiry_id=$1::uuid AND wa_can_read_enquiry($2::uuid,l.inquiry_id)
+      ORDER BY l.created_at,l.event_id,l.ref_index LIMIT 20`,
+    [inquiryId, actor.staffId],
+  );
+  const ownerCandidates = await query<{ id: string; label: string }>(
+    `SELECT s.id,COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,''),s.email,'未命名同事') AS label
+      FROM staff_users s JOIN staff_users a ON a.id=$2::uuid
+      WHERE wa_can_correct_enquiry($2::uuid,$1::uuid) AND s.active
+      AND (EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=a.id AND r.role::text='admin')
+        OR (a.branch_id IS NOT NULL AND s.branch_id=a.branch_id))
+      ORDER BY label,s.id LIMIT 100`,
+    [inquiryId, actor.staffId],
+  );
+  const propertyCandidates = await query<{ id: string; label: string }>(
+    `SELECT DISTINCT p.id,COALESCE(pm.public_listing_no,p.listing_no) || ' · ' ||
+      COALESCE(NULLIF(p.title_zh,''),'樓盤') AS label
+      FROM whatsapp_enquiry_reference_links l
+      JOIN mls_source_state state ON state.source=CASE WHEN l.source='28hse'
+        THEN '28hse_agent_540' ELSE 'propertyhk' END
+        AND state.scope_id=l.scope_id AND state.external_listing_id=l.external_listing_id
+        AND state.deal_type::text=l.deal_type
+      JOIN properties p ON p.id=state.property_id AND p.status::text='active'
+      LEFT JOIN property_public_members pm ON pm.property_id=p.id
+      WHERE l.inquiry_id=$1::uuid AND wa_can_correct_enquiry($2::uuid,l.inquiry_id)
+        AND state.source_status='active' AND state.last_accepted_at>=now()-interval '30 days'
+      ORDER BY label,p.id LIMIT 100`,
+    [inquiryId, actor.staffId],
+  );
+  const requestedStaffCandidates = await query<{ id: string; label: string }>(
+    `SELECT DISTINCT staff.id,COALESCE(NULLIF(staff.name_zh,''),NULLIF(staff.name_en,''),staff.email,'未命名同事') AS label
+      FROM whatsapp_enquiry_reference_links l
+      JOIN whatsapp_portal_interpretations pi ON pi.id=l.interpretation_id
+      JOIN whatsapp_inbound_receipts receipt ON receipt.id=l.receipt_id
+      JOIN whatsapp_portal_source_scopes scope ON scope.channel_id=receipt.channel_id
+        AND scope.source=CASE WHEN l.source='28hse' THEN '28hse_agent_540' ELSE 'propertyhk' END
+        AND scope.scope_id=l.scope_id AND scope.enabled
+      JOIN staff_external_references ref ON ref.namespace=scope.staff_namespace
+        AND ref.external_reference=pi.interpretation->>'requestedStaffText'
+        AND ref.valid_from<=now() AND (ref.valid_until IS NULL OR ref.valid_until>now())
+        AND ref.verified_at<=now()
+      JOIN staff_users staff ON staff.id=ref.staff_id AND staff.active
+      WHERE l.inquiry_id=$1::uuid AND wa_can_correct_enquiry($2::uuid,l.inquiry_id)
+      ORDER BY label,staff.id LIMIT 100`,
+    [inquiryId, actor.staffId],
+  );
+  return {
+    inquiryId: row.id,
+    version: Number(row.enquiry_version),
+    publicListingNo: row.public_listing_no,
+    associationReview: row.association_review,
+    providerThreadReview: row.provider_thread_review,
+    ownerStaffId: row.enquiry_owner_staff_id,
+    requestedStaffId: row.requested_staff_id,
+    propertyId: row.property_id,
+    references: references.map((ref) => ({
+      source: ref.source,
+      externalListingId: ref.external_listing_id,
+      dealType: ref.deal_type,
+    })),
+    ownerCandidates,
+    propertyCandidates,
+    requestedStaffCandidates,
+  };
+}
