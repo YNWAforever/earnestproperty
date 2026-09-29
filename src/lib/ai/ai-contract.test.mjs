@@ -289,7 +289,21 @@ test("AI suggestion flows cannot send WhatsApp, queue blasts, or publish CMS", (
   );
   assert.doesNotMatch(adminSegments, /onClick=\{materializeSegment\}/);
 
-  assert.match(adminBlasts, /onClick=\{\(\) => requestSendCampaign\(campaign, eligible\)\}/);
+  // The button opens a confirmation with the timestamp of the reviewed
+  // audience. A stale preview or missing provider review cannot queue a send.
+  assert.match(
+    adminBlasts,
+    /onClick=\{\(\) =>\s*requestSendCampaign\(campaign, eligible, stamped\?\.checkedAt \?\? 0\)\s*\}/,
+  );
+  assert.match(
+    adminBlasts,
+    /<AdminConfirmDialog[\s\S]*?onConfirm=\{\(\) => void handleConfirmSend\(\)\}/,
+  );
+  assert.match(
+    adminBlasts,
+    /if \(!pendingSend \|\| !providerReviewed \|\| sendingRef\.current\) return;/,
+  );
+  assert.match(adminBlasts, /Date\.now\(\) - pendingSend\.checkedAt > PREVIEW_FRESHNESS_MS/);
   assert.match(adminBlasts, /<AdminConfirmDialog/);
   assert.doesNotMatch(adminBlasts, /onClick=\{handleQueueCampaign\}/);
 });
