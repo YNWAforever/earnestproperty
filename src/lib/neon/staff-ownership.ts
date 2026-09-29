@@ -114,20 +114,26 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
   }));
 }
 
-/** Test rows retain the colleague who was tested as historical evidence. They are
- * never reassigned during staff handover. Scoped pairs avoid treating provider
- * mappings with the same staff_id column as ordinary historical fields. */
+/** Scoped historical evidence never moves during staff handover. The forwarded
+ * record keeps its original actor and selected owner for idempotent replay;
+ * the CRM lead assignment is the current follow-up owner. */
 export const STAFF_HISTORICAL_PAIR_COLUMNS = [
   { table: "staff_notification_test_previews", column: "staff_id" },
   { table: "staff_notification_test_attempts", column: "staff_id" },
   // Review subject and saved deal-credit identity are historical, not handover targets.
   { table: "whatsapp_staff_mapping_reviews", column: "staff_id" },
   { table: "transaction_agent_credits", column: "staff_id" },
+  { table: "whatsapp_no_link_effect_decisions", column: "candidate_staff_id" },
+  { table: "whatsapp_forwarded_enquiries", column: "forwarded_by" },
+  { table: "whatsapp_forwarded_enquiries", column: "responsible_staff_id" },
 ] as const;
 
 /** Provider-confirmed ownership requires reconciliation; mappings retire on staff exit.
  * Neither may be relabelled by a bulk local handover. Evidence records retain their subject. */
 export const STAFF_RECONCILED_COLUMNS = [
+  // Query ownership is current, but a staff exit cannot claim that the
+  // provider reassigned the whole conversation. Review it separately.
+  { table: "inquiries", column: "enquiry_owner_staff_id" },
   { table: "staff_external_references", column: "staff_id" },
   { table: "staff_notification_endpoints", column: "staff_id" },
   { table: "whatsapp_conversations", column: "confirmed_staff_id" },
