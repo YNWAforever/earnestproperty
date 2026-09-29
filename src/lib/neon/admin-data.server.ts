@@ -12,6 +12,7 @@ import {
   transactionRows,
 } from "./db.server";
 import { leadBudgetError } from "../admin/lead-budget";
+import { reviewAudienceRows, resolveAudienceSelection } from "../admin/blast-review";
 import { getPublicInventoryCounts } from "./public-inventory-counts.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { isMissingBranchesTableError } from "./branches-schema";
@@ -774,6 +775,9 @@ type AudienceSummary = {
   optedOut: number;
   missingPhone: number;
   notOptedIn: number;
+  uniqueExcluded: number;
+  identityUnsafe: number;
+  duplicatePhone: number;
 };
 
 // Extended to carry the same filter vocabulary as fetchSegmentContacts
@@ -905,18 +909,7 @@ function uniqueEligibleAudienceRows(rows: Record<string, unknown>[]) {
   });
 }
 function summarizeAudienceRows(rows: Record<string, unknown>[]): AudienceSummary {
-  const eligibleIds = new Set(uniqueEligibleAudienceRows(rows).map((row) => row.id));
-  return rows.reduce<AudienceSummary>(
-    (summary, row) => {
-      summary.total += 1;
-      if (eligibleIds.has(row.id)) summary.eligible += 1;
-      if (!row.normalized_phone) summary.missingPhone += 1;
-      if (row.opted_out_whatsapp === true) summary.optedOut += 1;
-      if (row.opt_in_whatsapp !== true) summary.notOptedIn += 1;
-      return summary;
-    },
-    { total: 0, eligible: 0, optedOut: 0, missingPhone: 0, notOptedIn: 0 },
-  );
+  return reviewAudienceRows(rows, normalizeAdminPhone);
 }
 
 async function fetchAudienceRecipientRows(filters: AudienceFilters) {
@@ -924,12 +917,39 @@ async function fetchAudienceRecipientRows(filters: AudienceFilters) {
 }
 
 async function resolveAudienceFilters(input: { audience_id?: string; filters?: AudienceFilters }) {
-  if (input.filters) return normalizeAudienceFilters(input.filters);
-  if (!input.audience_id) return {};
-  const rows = await queryRows("SELECT filters FROM whatsapp_audiences WHERE id = $1 LIMIT 1", [
-    input.audience_id,
-  ]);
-  return parseAudienceFilters(rows[0]?.filters);
+  const selected = await resolveAudienceSelection(input, async (audienceId) => {
+    const rows = await queryRows(
+      "SELECT filters FROM whatsapp_audiences WHERE id = $1::uuid LIMIT 1",
+      [audienceId],
+    );
+    return rows[0]?.filters ?? null;
+  });
+  return parseAudienceFilters(selected);
+}
+
+async function assertAudienceFilterChoices(filters: AudienceFilters) {
+  const estates = filters.estates ?? [];
+  if (estates.length) {
+    const rows = await queryRows<{ slug: string }>(
+      "SELECT slug FROM estates WHERE slug = ANY($1::text[])",
+      [estates],
+    );
+    if (new Set(rows.map((row) => row.slug)).size !== new Set(estates).size)
+      throw new Error("INVALID_ESTATE_SELECTION");
+  }
+  if (filters.district_slug) {
+    const rows = await queryRows("SELECT 1 FROM districts WHERE slug=$1 LIMIT 1", [
+      filters.district_slug,
+    ]);
+    if (!rows.length) throw new Error("INVALID_DISTRICT_SELECTION");
+  }
+  if (filters.assigned_agent_id) {
+    const rows = await queryRows(
+      "SELECT 1 FROM staff_users WHERE id=$1::uuid AND active=true LIMIT 1",
+      [filters.assigned_agent_id],
+    );
+    if (!rows.length) throw new Error("INVALID_AGENT_SELECTION");
+  }
 }
 
 export async function getAdminOverview() {
@@ -3169,7 +3189,7 @@ export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
 }
 
 export async function fetchAdminBlastOptions() {
-  const [templates, audiences] = await Promise.all([
+  const [templates, audiences, estates, districts, agents] = await Promise.all([
     queryRows(
       // category/description/components are selected so the send confirmation can
       // show staff everything this system knows about the template. The approved
@@ -3177,7 +3197,12 @@ export async function fetchAdminBlastOptions() {
       "SELECT id, element_name, language_code, status, category, description, components FROM whatsapp_templates ORDER BY element_name ASC",
     ),
     queryRows(
-      "SELECT id, name, description, filters FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
+      "SELECT id, name, description, filters, updated_at FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
+    ),
+    queryRows("SELECT slug, name_zh, district_slug FROM estates ORDER BY name_zh ASC"),
+    queryRows("SELECT slug, name_zh FROM districts ORDER BY name_zh ASC"),
+    queryRows(
+      "SELECT id, COALESCE(name_zh, name_en, email) AS name, branch FROM staff_users WHERE active=true ORDER BY name ASC",
     ),
   ]);
   return {
@@ -3194,9 +3219,24 @@ export async function fetchAdminBlastOptions() {
       id: stringOrEmpty(row.id),
       name: stringOrEmpty(row.name),
       description: stringOrNull(row.description),
+      updated_at: dateOrNull(row.updated_at),
       // Needed to reopen an audience in the editor; without it "edit" could only
       // ever rename, silently blanking the filters on save.
       filters: normalizeAudienceFilters(parseAudienceFilters(row.filters)),
+    })),
+    estates: estates.map((row) => ({
+      slug: stringOrEmpty(row.slug),
+      name: stringOrEmpty(row.name_zh),
+      district_slug: stringOrEmpty(row.district_slug),
+    })),
+    districts: districts.map((row) => ({
+      slug: stringOrEmpty(row.slug),
+      name: stringOrEmpty(row.name_zh),
+    })),
+    agents: agents.map((row) => ({
+      id: stringOrEmpty(row.id),
+      name: stringOrEmpty(row.name),
+      branch: stringOrNull(row.branch),
     })),
   };
 }
@@ -3228,6 +3268,7 @@ export async function fetchAdminWhatsappTemplates() {
 export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffAccess) {
   requireNonEmpty(input.name, "name");
   const filters = normalizeAudienceFilters(input.filters);
+  await assertAudienceFilterChoices(filters);
   const params = [input.name, input.description, JSON.stringify(filters)];
 
   const rows = input.id
@@ -3293,6 +3334,7 @@ export async function previewAdminAudience(input: {
   filters?: AudienceFilters;
 }): Promise<AdminAudiencePreview> {
   const filters = await resolveAudienceFilters(input);
+  await assertAudienceFilterChoices(filters);
   const rows = await fetchAudienceRecipientRows(filters);
   return summarizeAudienceRows(rows);
 }

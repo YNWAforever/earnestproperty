@@ -48,6 +48,7 @@ import {
 import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { describeTemplateParameters } from "@/lib/woztell/template-preview";
+import { isCampaignDraftDirty } from "@/lib/admin/blast-review";
 import {
   cancelAdminCampaign,
   fetchAdminBlastOptions,
@@ -84,6 +85,7 @@ type PendingSend = {
   audienceLabel: string;
   eligible: number;
   template: AdminBlastOptions["templates"][number] | null;
+  checkedAt: number;
 };
 
 // `draft` is deliberately excluded, mirroring canPrepareAdminCampaignQueue --
@@ -138,6 +140,11 @@ function AdminBlasts() {
   const [selectedPreviewAudienceId, setSelectedPreviewAudienceId] = useState("");
   const [preview, setPreview] = useState<AdminAudiencePreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewRetry, setPreviewRetry] = useState(0);
+  const [previewCheckedAt, setPreviewCheckedAt] = useState(0);
+  const [providerReviewed, setProviderReviewed] = useState(false);
+  const sendingRef = useRef(false);
   // Stamped with the fetch time: Queue must never be enabled by a count the
   // operator saw minutes ago, because the server materialises a fresh audience
   // at send time.
@@ -226,6 +233,8 @@ function AdminBlasts() {
     if (!user || !activePreview) {
       previewRequestRef.current += 1;
       setPreview(null);
+      setPreviewError(null);
+      setPreviewCheckedAt(0);
       setPreviewLoading(false);
       return;
     }
@@ -233,6 +242,8 @@ function AdminBlasts() {
     const requestId = previewRequestRef.current + 1;
     previewRequestRef.current = requestId;
     setPreview(null);
+    setPreviewError(null);
+    setPreviewCheckedAt(0);
     setPreviewLoading(true);
 
     const timeout = window.setTimeout(
@@ -241,11 +252,12 @@ function AdminBlasts() {
           .then((data) => {
             if (requestId === previewRequestRef.current) {
               setPreview(data as AdminAudiencePreview);
+              setPreviewCheckedAt(Date.now());
             }
           })
           .catch((err) => {
             if (requestId === previewRequestRef.current) {
-              toast.error(errorText(err));
+              setPreviewError(errorText(err));
               setPreview(null);
             }
           })
@@ -257,20 +269,21 @@ function AdminBlasts() {
     );
 
     return () => window.clearTimeout(timeout);
-  }, [activePreview, user]);
+  }, [activePreview, user, previewRetry]);
 
   function openCampaignDialog() {
     const template =
       options?.templates.find((item) => item.status.startsWith("active")) ?? options?.templates[0];
     const audienceId = selectedPreviewAudienceId || options?.audiences[0]?.id || null;
-    setSavedCampaignDraft(null);
-    setCampaignDraft({
+    const initialDraft: AdminCampaignInput = {
       name: "",
       template_id: template?.id ?? null,
       audience_id: audienceId,
       status: "draft",
       scheduled_at: null,
-    });
+    };
+    setSavedCampaignDraft(initialDraft);
+    setCampaignDraft(initialDraft);
   }
 
   function closeCampaignDialog() {
@@ -419,6 +432,11 @@ function AdminBlasts() {
       setPreview(data);
       toast.success("收件人預覽已更新");
     } catch (err) {
+      setRowPreviews((current) => {
+        const next = { ...current };
+        delete next[campaign.id];
+        return next;
+      });
       toast.error(errorText(err));
     } finally {
       setMutatingAction(null);
@@ -428,12 +446,17 @@ function AdminBlasts() {
   /** Opens the send confirmation. Nothing is dispatched here -- this is the
    * interstitial that used to be missing entirely, so a mis-click on Queue sent
    * thousands of irreversible WhatsApp messages. */
-  function requestSendCampaign(campaign: AdminCampaignRow, eligible: number) {
-    if (eligible <= 0) {
-      toast.error("沒有合資格收件人");
+  function requestSendCampaign(campaign: AdminCampaignRow, eligible: number, checkedAt: number) {
+    if (eligible <= 0 || Date.now() - checkedAt > PREVIEW_FRESHNESS_MS) {
+      toast.error("收件人預覽已過期或沒有合資格收件人，請重新預覽");
       return;
     }
     const template = options?.templates.find((item) => item.id === campaign.template_id) ?? null;
+    if (!template || !template.status.startsWith("active")) {
+      toast.error("範本未核准或無法讀取，請先核實");
+      return;
+    }
+    setProviderReviewed(false);
     setConfirmError(null);
     setPendingSend({
       campaignId: campaign.id,
@@ -444,11 +467,17 @@ function AdminBlasts() {
       audienceLabel: campaign.audience_name ?? "未設定收件群組",
       eligible,
       template,
+      checkedAt,
     });
   }
 
   async function handleConfirmSend() {
-    if (!pendingSend) return;
+    if (!pendingSend || !providerReviewed || sendingRef.current) return;
+    if (Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS) {
+      setConfirmError("收件人預覽已過期，請關閉視窗並重新預覽");
+      return;
+    }
+    sendingRef.current = true;
     const action = `queue:${pendingSend.campaignId}`;
     setMutatingAction(action);
     setConfirmError(null);
@@ -471,6 +500,7 @@ function AdminBlasts() {
       // reason next to the action they just authorised.
       setConfirmError(errorText(err));
     } finally {
+      sendingRef.current = false;
       setMutatingAction(null);
     }
   }
@@ -499,9 +529,7 @@ function AdminBlasts() {
   const canSubmitCampaign =
     Boolean(campaignDraft?.id) && isQueueableStatus(campaignDraft?.status ?? "");
   const hasUnsavedCampaignChanges = Boolean(
-    campaignDraft &&
-    (!savedCampaignDraft ||
-      campaignDraftSignature(campaignDraft) !== campaignDraftSignature(savedCampaignDraft)),
+    campaignDraft && isCampaignDraftDirty(campaignDraft, savedCampaignDraft),
   );
   // hasUnsavedCampaignChanges was computed purely to gate the send button; both
   // dialogs still threw the draft away on 關閉, Esc or an overlay click.
@@ -532,7 +560,11 @@ function AdminBlasts() {
       ? "草稿不可直接發送，請先將狀態改為「待審核」"
       : null;
   const canQueueDraft =
-    canSubmitCampaign && !hasUnsavedCampaignChanges && (preview?.eligible ?? 0) > 0;
+    canSubmitCampaign &&
+    !hasUnsavedCampaignChanges &&
+    !previewError &&
+    Date.now() - previewCheckedAt <= PREVIEW_FRESHNESS_MS &&
+    (preview?.eligible ?? 0) > 0;
 
   function requestSendCampaignDraft() {
     if (!campaignDraft?.id) return;
@@ -541,7 +573,7 @@ function AdminBlasts() {
       toast.error("找不到此 campaign，請重新整理後再試");
       return;
     }
-    requestSendCampaign(row, preview?.eligible ?? 0);
+    requestSendCampaign(row, preview?.eligible ?? 0, previewCheckedAt);
   }
 
   return (
@@ -720,7 +752,9 @@ function AdminBlasts() {
                                 type="button"
                                 size="sm"
                                 className="h-11 lg:h-9"
-                                onClick={() => requestSendCampaign(campaign, eligible)}
+                                onClick={() =>
+                                  requestSendCampaign(campaign, eligible, stamped?.checkedAt ?? 0)
+                                }
                                 disabled={!queueEnabled}
                                 title={
                                   isQueueableStatus(campaign.status)
@@ -777,7 +811,12 @@ function AdminBlasts() {
               <CardDescription>{activePreview?.label ?? "未選擇收件群組"}</CardDescription>
             </CardHeader>
             <CardContent>
-              <PreviewSummary preview={preview} loading={previewLoading} />
+              <PreviewSummary
+                preview={preview}
+                loading={previewLoading}
+                error={previewError}
+                onRetry={() => setPreviewRetry((value) => value + 1)}
+              />
             </CardContent>
           </Card>
 
@@ -798,6 +837,9 @@ function AdminBlasts() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium" title={audience.name}>
                           {audience.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          更新：{formatDate(audience.updated_at)} · 人數請按預覽核實
                         </p>
                         {audience.description ? (
                           <p
@@ -848,6 +890,8 @@ function AdminBlasts() {
         options={options}
         preview={preview}
         previewLoading={previewLoading}
+        previewError={previewError}
+        onRetryPreview={() => setPreviewRetry((value) => value + 1)}
         saving={saving}
         mutating={!!mutatingAction}
         canQueue={canQueueDraft}
@@ -866,8 +910,11 @@ function AdminBlasts() {
 
       <AudienceDialog
         audience={audienceDraft}
+        options={options}
         preview={preview}
         previewLoading={previewLoading}
+        previewError={previewError}
+        onRetryPreview={() => setPreviewRetry((value) => value + 1)}
         saving={saving}
         onChange={setAudienceDraft}
         onClose={requestCloseAudienceDialog}
@@ -884,16 +931,33 @@ function AdminBlasts() {
         confirmLabel={`確認發送給 ${pendingSend?.eligible ?? 0} 人`}
         confirmVariant="destructive"
         isPending={mutatingAction?.startsWith("queue:") ?? false}
+        disabled={
+          !providerReviewed ||
+          (pendingSend ? Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS : true)
+        }
         error={confirmError}
         onOpenChange={(open) => {
           if (!open) {
             setPendingSend(null);
+            setProviderReviewed(false);
             setConfirmError(null);
           }
         }}
         onConfirm={() => void handleConfirmSend()}
       >
-        {pendingSend ? <SendConfirmationDetails send={pendingSend} /> : null}
+        {pendingSend ? (
+          <>
+            <SendConfirmationDetails send={pendingSend} />
+            <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+              <Checkbox
+                checked={providerReviewed}
+                onCheckedChange={(checked) => setProviderReviewed(checked === true)}
+              />
+              我已在 Woztell
+              核對此範本的完整已批准內容、語言、媒體、按鈕及連結目的地，並確認收件人及排除人數。
+            </label>
+          </>
+        ) : null}
       </AdminConfirmDialog>
 
       <AdminConfirmDialog
@@ -959,6 +1023,8 @@ function CampaignDialog({
   options,
   preview,
   previewLoading,
+  previewError,
+  onRetryPreview,
   saving,
   mutating,
   canQueue,
@@ -973,6 +1039,8 @@ function CampaignDialog({
   options: AdminBlastOptions | null;
   preview: AdminAudiencePreview | null;
   previewLoading: boolean;
+  previewError: string | null;
+  onRetryPreview: () => void;
   saving: boolean;
   mutating: boolean;
   canQueue: boolean;
@@ -1036,7 +1104,8 @@ function CampaignDialog({
                     <SelectItem value="none">未選擇收件群組</SelectItem>
                     {options?.audiences.map((audience) => (
                       <SelectItem key={audience.id} value={audience.id}>
-                        {audience.name}
+                        {audience.name} · {audience.description || "未填用途"} · 更新{" "}
+                        {formatDate(audience.updated_at)} · 人數待預覽
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1067,7 +1136,7 @@ function CampaignDialog({
                   enabling unattended sending, which is the owner's call. */}
               <div>
                 <TextField
-                  label="預定發送時間（僅作記錄）"
+                  label="計劃發送時間（需人手確認）"
                   type="datetime-local"
                   value={campaign.scheduled_at ?? ""}
                   onChange={(value) => onChange({ ...campaign, scheduled_at: nullIfBlank(value) })}
@@ -1092,7 +1161,12 @@ function CampaignDialog({
                   {preview?.eligible ?? 0} 合資格
                 </Badge>
               </div>
-              <PreviewSummary preview={preview} loading={previewLoading} />
+              <PreviewSummary
+                preview={preview}
+                loading={previewLoading}
+                error={previewError}
+                onRetry={onRetryPreview}
+              />
             </div>
 
             <DialogFooter className="gap-2">
@@ -1136,16 +1210,22 @@ function CampaignDialog({
 
 function AudienceDialog({
   audience,
+  options,
   preview,
   previewLoading,
+  previewError,
+  onRetryPreview,
   saving,
   onChange,
   onClose,
   onSubmit,
 }: {
   audience: AdminAudienceInput | null;
+  options: AdminBlastOptions | null;
   preview: AdminAudiencePreview | null;
   previewLoading: boolean;
+  previewError: string | null;
+  onRetryPreview: () => void;
   saving: boolean;
   onChange: (audience: AdminAudienceInput | null) => void;
   onClose: () => void;
@@ -1207,39 +1287,90 @@ function AudienceDialog({
                   })
                 }
               />
-              <TextField
-                label="屋苑 slug（可用逗號分隔多個）"
-                value={(audience.filters.estates ?? []).join(", ")}
-                onChange={(value) =>
-                  onChange({
-                    ...audience,
-                    filters: { ...audience.filters, estates: splitCommaList(value) },
-                  })
-                }
-              />
-              <TextField
-                label="地區 slug"
-                value={audience.filters.district_slug ?? ""}
-                onChange={(value) =>
-                  onChange({
-                    ...audience,
-                    filters: { ...audience.filters, district_slug: undefinedIfBlank(value) },
-                  })
-                }
-              />
-              <TextField
-                label="負責代理 ID"
-                value={audience.filters.assigned_agent_id ?? ""}
-                onChange={(value) =>
-                  onChange({
-                    ...audience,
-                    filters: {
-                      ...audience.filters,
-                      assigned_agent_id: undefinedIfBlank(value),
-                    },
-                  })
-                }
-              />
+              <Field label="屋苑（可選多個）">
+                <div className="max-h-40 overflow-y-auto rounded-md border p-2">
+                  {options?.estates.length ? (
+                    options.estates.map((estate) => (
+                      <label
+                        key={estate.slug}
+                        className="flex items-center gap-2 px-2 py-1 text-sm"
+                      >
+                        <Checkbox
+                          checked={audience.filters.estates?.includes(estate.slug) ?? false}
+                          onCheckedChange={(checked) => {
+                            const selected = new Set(audience.filters.estates ?? []);
+                            if (checked === true) selected.add(estate.slug);
+                            else selected.delete(estate.slug);
+                            onChange({
+                              ...audience,
+                              filters: {
+                                ...audience.filters,
+                                estates: selected.size ? [...selected] : undefined,
+                              },
+                            });
+                          }}
+                        />
+                        {estate.name}
+                      </label>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">沒有可選屋苑</p>
+                  )}
+                </div>
+              </Field>
+              <Field label="地區">
+                <Select
+                  value={audience.filters.district_slug ?? "any"}
+                  onValueChange={(value) =>
+                    onChange({
+                      ...audience,
+                      filters: {
+                        ...audience.filters,
+                        district_slug: value === "any" ? undefined : value,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger aria-label="Audience district">
+                    <SelectValue placeholder="選擇地區" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">所有地區</SelectItem>
+                    {options?.districts.map((district) => (
+                      <SelectItem key={district.slug} value={district.slug}>
+                        {district.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="負責同事">
+                <Select
+                  value={audience.filters.assigned_agent_id ?? "any"}
+                  onValueChange={(value) =>
+                    onChange({
+                      ...audience,
+                      filters: {
+                        ...audience.filters,
+                        assigned_agent_id: value === "any" ? undefined : value,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger aria-label="Audience agent">
+                    <SelectValue placeholder="選擇同事" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">所有同事</SelectItem>
+                    {options?.agents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.name}
+                        {agent.branch ? `（${agent.branch}）` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
               <TextField
                 label="預算下限（HKD）"
                 type="number"
@@ -1302,7 +1433,12 @@ function AudienceDialog({
                   {preview?.optedOut ?? 0} 已拒收
                 </Badge>
               </div>
-              <PreviewSummary preview={preview} loading={previewLoading} />
+              <PreviewSummary
+                preview={preview}
+                loading={previewLoading}
+                error={previewError}
+                onRetry={onRetryPreview}
+              />
             </div>
 
             <DialogFooter className="gap-2">
@@ -1324,9 +1460,13 @@ function AudienceDialog({
 function PreviewSummary({
   preview,
   loading,
+  error,
+  onRetry,
 }: {
   preview: AdminAudiencePreview | null;
   loading: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }) {
   if (loading) {
     return (
@@ -1338,6 +1478,21 @@ function PreviewSummary({
     );
   }
 
+  if (error) {
+    return (
+      <div
+        role="alert"
+        className="rounded-md border border-destructive/30 p-4 text-sm text-destructive"
+      >
+        收件人預覽失敗：{error}
+        {onRetry ? (
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={onRetry}>
+            重試
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
   if (!preview) {
     return (
       <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
@@ -1348,20 +1503,26 @@ function PreviewSummary({
 
   const items = [
     { label: "總數", value: preview.total },
-    { label: "合資格", value: preview.eligible },
+    { label: "合資格（電話去重）", value: preview.eligible },
+    { label: "不合資格（按收件人去重）", value: preview.uniqueExcluded },
     { label: "已拒收", value: preview.optedOut },
     { label: "沒有電話", value: preview.missingPhone },
     { label: "未同意接收", value: preview.notOptedIn },
+    { label: "身分待核實", value: preview.identityUnsafe },
+    { label: "重複電話", value: preview.duplicatePhone },
   ];
 
   return (
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
-      {items.map((item) => (
-        <div key={item.label} className="rounded-md border bg-background p-3">
-          <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
-          <div className="mt-1 text-2xl font-semibold tracking-normal">{item.value}</div>
-        </div>
-      ))}
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">排除原因可重疊；不合資格總數按收件人去重。</p>
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-md border bg-background p-3">
+            <div className="text-xs font-medium text-muted-foreground">{item.label}</div>
+            <div className="mt-1 text-2xl font-semibold tracking-normal">{item.value}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1443,9 +1604,9 @@ function TemplateDetails({
         <p className="mt-3 text-xs text-muted-foreground">此範本沒有可變內容。</p>
       )}
 
-      <p className="mt-3 text-xs text-muted-foreground">
-        已審批的訊息全文由 WhatsApp／Woztell 保存，本系統沒有副本。發送前請在 Woztell
-        後台核對訊息內容。
+      <p role="status" className="mt-3 rounded-md border border-amber-500/40 p-3 text-sm">
+        preview_unavailable：本系統無法取得已批准範本全文及版本。請到 Woztell 核對內文、
+        變數、媒體、按鈕和連結目的地；這裡顯示的只是發送參數，不代表範本預覽完成。
       </p>
     </div>
   );
@@ -1550,17 +1711,6 @@ function audienceLabel(options: AdminBlastOptions | null, id: string) {
   return options?.audiences.find((audience) => audience.id === id)?.name ?? null;
 }
 
-function campaignDraftSignature(campaign: AdminCampaignInput) {
-  return JSON.stringify({
-    id: campaign.id ?? "",
-    name: campaign.name,
-    template_id: campaign.template_id ?? "",
-    audience_id: campaign.audience_id ?? "",
-    status: campaign.status,
-    scheduled_at: campaign.scheduled_at ?? "",
-  });
-}
-
 function normalizeAudienceFilters(filters: AdminAudienceInput["filters"]) {
   return {
     intent: undefinedIfBlank(filters.intent ?? ""),
@@ -1573,14 +1723,6 @@ function normalizeAudienceFilters(filters: AdminAudienceInput["filters"]) {
     last_activity_days: filters.last_activity_days,
     require_whatsapp_opt_in: filters.require_whatsapp_opt_in,
   };
-}
-
-function splitCommaList(value: string): string[] | undefined {
-  const items = value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return items.length ? items : undefined;
 }
 
 function undefinedIfBlankNumber(value: string): number | undefined {

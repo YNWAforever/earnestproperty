@@ -439,6 +439,9 @@ export type AdminAudiencePreview = {
   optedOut: number;
   missingPhone: number;
   notOptedIn: number;
+  uniqueExcluded: number;
+  identityUnsafe: number;
+  duplicatePhone: number;
 };
 
 export type AdminCampaignInput = {
@@ -466,8 +469,12 @@ export type AdminBlastOptions = {
     id: string;
     name: string;
     description: string | null;
+    updated_at: string | null;
     filters: AdminAudienceInput["filters"];
   }>;
+  estates: Array<{ slug: string; name: string; district_slug: string }>;
+  districts: Array<{ slug: string; name: string }>;
+  agents: Array<{ id: string; name: string; branch: string | null }>;
 };
 
 /** An approved WhatsApp template an agent can send outside the 24-hour reply
