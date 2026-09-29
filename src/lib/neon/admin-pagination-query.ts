@@ -37,9 +37,9 @@ export function buildAdminPageQuery(
   else if (input.resource === "contacts")
     source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT c.id,c.name,c.phone,c.email,c.opt_in_whatsapp,c.opted_out_whatsapp,c.created_at AS page_at FROM crm_contacts c WHERE ${scope ? `(EXISTS(SELECT 1 FROM crm_leads l WHERE l.contact_id=c.id AND l.assigned_agent_id=${own}::uuid) OR EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.contact_id=c.id AND w.assigned_agent_id=${own}::uuid))` : "true"}) item`;
   else if (input.resource === "conversations")
-    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT w.id,w.status,w.last_message_at,w.last_inbound_at,c.name,c.phone,c.opted_out_whatsapp,m.text AS last_text,m.direction AS last_direction,w.created_at AS page_at${options.enquiries ? ", (SELECT bool_or(i.first_human_response_at IS NULL) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND i.status NOT IN ('closed','resolved','spam')) AS awaiting_human_response" : ""} FROM whatsapp_conversations w LEFT JOIN crm_contacts c ON c.id=w.contact_id LEFT JOIN LATERAL (SELECT text,direction FROM whatsapp_messages WHERE conversation_id=w.id ORDER BY created_at DESC,id DESC LIMIT 1) m ON true WHERE ${scope ? `w.assigned_agent_id=${own}::uuid` : "true"}) item`;
+    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT w.id,w.status,w.last_message_at,w.last_inbound_at,c.name,c.phone,c.opted_out_whatsapp,m.text AS last_text,m.direction AS last_direction,w.created_at AS page_at${options.enquiries ? ", (SELECT bool_or(i.first_human_response_at IS NULL) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND i.status NOT IN ('closed','resolved','spam')) AS awaiting_human_response" : ""} FROM whatsapp_conversations w LEFT JOIN crm_contacts c ON c.id=w.contact_id LEFT JOIN LATERAL (SELECT text,direction FROM whatsapp_messages WHERE conversation_id=w.id ORDER BY created_at DESC,id DESC LIMIT 1) m ON true WHERE ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)) item`;
   else if (input.resource === "messages")
-    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT m.id,m.direction,m.message_type,m.text,m.status,m.error,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,m.created_at AS page_at FROM whatsapp_messages m JOIN whatsapp_conversations w ON w.id=m.conversation_id WHERE w.id=${param(input.conversationId)}::uuid ${input.messageIds ? `AND m.id=ANY(${param(input.messageIds)}::uuid[])` : ""} AND ${scope ? `w.assigned_agent_id=${own}::uuid` : "true"}) item`;
+    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT m.id,m.direction,m.message_type,m.text,m.status,m.error,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,m.created_at AS page_at FROM whatsapp_messages m JOIN whatsapp_conversations w ON w.id=m.conversation_id WHERE w.id=${param(input.conversationId)}::uuid ${input.messageIds ? `AND m.id=ANY(${param(input.messageIds)}::uuid[])` : ""} AND ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)) item`;
   else {
     const table = CMS_TABLES[input.resource];
     const time = "created_at";
@@ -98,7 +98,12 @@ export function buildAdminPageQuery(
       `(${fields[input.resource].map((field) => `COALESCE(row->>'${field}','') ILIKE ${needle}`).join(" OR ")})`,
     );
   }
-  const binding = pageBinding(input, actor.staffId + ":" + (scope ? "own" : "all"));
+  const binding = pageBinding(
+    input,
+    actor.staffId +
+      ":" +
+      (["conversations", "messages"].includes(input.resource) ? "wa-acl" : scope ? "own" : "all"),
+  );
   const cursor = input.cursor ? decodeAdminCursor(input.cursor, binding) : null;
   const ascending = input.resource === "messages" && input.direction === "newer";
   const boundary = cursor

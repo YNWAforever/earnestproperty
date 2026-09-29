@@ -9,8 +9,8 @@
 | T02 | NL04 / UC09,10 | IMPLEMENTED | 5cf75e0 | RED 4/4 → GREEN 19/19 receipt/identity tests；18/18 plan suite；6/6 manifest；40/40 baseline；typecheck／lint | 新 migration 僅 PGlite；多 session Neon/provider BLOCKED_EXTERNAL |
 | T03 | NL01 / UC01–04,07,08 | IMPLEMENTED | bc4f8c0 | RED module absent → GREEN 8/8 parser, 17/17 parser+links, typecheck/lint | PropertyHK live shape NOT_TESTED；未接DB resolver |
 | T04 | NL01,R01,R02 / UC01,03–05,08,15 | IMPLEMENTED | 863131a | RED module absent → GREEN 15/15 resolver+manifest, typecheck/lint；PGlite exact SQL | 新 migration 僅 PGlite；channel scope/real staff alias及Neon BLOCKED_EXTERNAL |
-| T05 | NL02 / UC01,06–09 | IMPLEMENTED | 本次 focused commit | RED P05 → GREEN 16/16 episodes+manifest；40/40 baseline；typecheck/lint | 新 migration 僅 PGlite；Neon concurrency、historic repair review BLOCKED_EXTERNAL |
-| T06 | UX01,NL02,R13 / UC05,06,12,14 | TODO | | | |
+| T05 | NL02 / UC01,06–09 | IMPLEMENTED | 90e923b | RED P05 → GREEN 16/16 episodes+manifest；40/40 baseline；typecheck/lint | 新 migration 僅 PGlite；Neon concurrency、historic repair review BLOCKED_EXTERNAL |
+| T06 | UX01,NL02,R13 / UC05,06,12,14 | IMPLEMENTED_LOCAL | 本次 focused commit | PGlite ACL/CAS、第二盤隔離、分派policy、既有pagination；47/47 focused tests、typecheck/lint | 新 migration 只在 PGlite；isolated Neon/browser/provider BLOCKED_EXTERNAL |
 | T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | TODO | | | |
 | T08 | UX01,WA01–06,SH01 / UC06,13,17 | TODO | | | |
 | T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | TODO | | | |
@@ -71,3 +71,11 @@ ode --test src/lib/whatsapp-enquiries/portal-resolution.test.mjs src/lib/whatsap
 - GREEN：
 ode --test src/lib/whatsapp-enquiries/no-link-episodes.test.mjs src/lib/whatsapp-enquiries/no-link-episodes.db.test.mjs src/lib/control-plane/migration-versions.test.mjs exit 0（16/16），typecheck、focused ESLint exit 0；T03–T05 合併 suite 32/32，原 baseline 40/40。PGlite 真 SQL 覆蓋不同盤、同盤續問、closed、新訊息多盤、缺映射 triage、錯 receipt scope 直接拒絕、P1/S1 synthetic golden 並保持原 conversation assignee。此證據不是多session Neon／真provider；historic mismerge 只可產生候選修復報表，尚未 remap。
 
+
+## T06：查詢權限與修正
+
+- RED：原後台 manager 對 WhatsApp conversation list/detail/page 及分派 context/request 為全域；新 enquiry owner 無獨立可讀的入站訊息範圍。新 role matrix 首先因缺 enquiry-access.server.ts 失敗。GREEN：新增一致的 DB predicates，list/detail/search/count/page/assignment request 都在 DB 用當下 staff active/role/branch 判斷；agent 原有 assignee filter 保留。不存在 WhatsApp enquiry 專用 export 或 bulk handler；link CSV 仍是另一種資料。
+- S2 的第二盤 enquiry 僅能讀該 enquiry 關聯的客戶入站訊息；S1 整段 conversation 只向其 assignee／同 branch manager／admin 開放。分派候選保護原有 S1 thread，未核實／衝突的 no-link query 保持 review。此能力不授權新同事看到 S1 的其他歷史。
+- 新 additive migration 只加 query owner、resolution override、CAS 版本、provider review、不可改的 revision log 及 SQL role predicates；wa_correct_enquiry 在一個 transaction 內 recheck current MLS/verified mapping、active/branch、version，寫本 enquiry，不變更原文、原始 property/requested、conversation assignee 或 provider。重複／過期版本無第二次 revision。取消時無 server call，因此無 write。
+- synthetic PGlite 測試包括 admin/manager A-B/agent S1-S2/viewer/inactive、直接 SQL 越權、第二盤訊息隔離、CAS duplicate/stale、缺 reason、停用候選、source/mapping 過期、修正後 readback。No-link 初始 review 不可回覆；核實後只 confirmed owner 可回覆。此項是 capability 判定，實際 send route 將於 T07 接入。
+- 指令：node --test enquiry-access.test.mjs enquiry-access.db.test.mjs enquiry-resolution.db.test.mjs assignment.test.mjs admin-data-permissions.test.mjs admin-pagination.test.mjs migration-versions.test.mjs exit 0（focused 47/47）；npm.cmd run typecheck exit 0。DB migration 尚未套至 Neon；多 session/branch、真 provider、synthetic browser BLOCKED_EXTERNAL。

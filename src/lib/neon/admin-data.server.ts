@@ -2865,10 +2865,9 @@ export async function listCommandCenter(actor: StaffAccess): Promise<CommandCent
 }
 
 export async function listAdminConversations(actor?: StaffAccess): Promise<AdminConversationRow[]> {
-  const params: unknown[] = [];
-  const scope = actor ? agentScope(actor) : null;
-  const where =
-    scope !== null ? `WHERE wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const params: unknown[] = [actor.staffId];
+  const where = "WHERE wa_can_read_conversation($1::uuid,wc.id)";
   const rows = await queryRows<AdminConversationRow>(
     `
     SELECT
@@ -2904,10 +2903,9 @@ export async function fetchAdminConversation(
   actor?: StaffAccess,
   includeMessages = true,
 ) {
-  const params: unknown[] = [id];
-  const scope = actor ? agentScope(actor) : null;
-  const scopeClause =
-    scope !== null ? ` AND wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const params: unknown[] = [id, actor.staffId];
+  const scopeClause = " AND wa_can_read_conversation($2::uuid,wc.id)";
   const rows = await queryRows(
     `
     SELECT
@@ -2947,13 +2945,13 @@ export async function fetchAdminConversation(
     FROM (
       SELECT id, direction, message_type, text, status, error, created_at
       FROM whatsapp_messages
-      WHERE conversation_id = $1
+      WHERE conversation_id = $1 AND wa_can_read_conversation($2::uuid,$1::uuid)
       ORDER BY created_at DESC, id DESC
       LIMIT 50
     ) latest
     ORDER BY created_at ASC, id ASC
     `,
-        [id],
+        [id, actor.staffId],
       )
     : [];
 
@@ -2993,10 +2991,8 @@ export async function fetchAdminConversationAiAssist(
   input: { conversationId: string },
   actor: StaffAccess,
 ): Promise<AdminConversationAiAssist> {
-  const params: unknown[] = [input.conversationId];
-  const scope = agentScope(actor);
-  const scopeClause =
-    scope !== null ? ` AND wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
+  const params: unknown[] = [input.conversationId, actor.staffId];
+  const scopeClause = " AND wa_can_read_conversation($2::uuid,wc.id)";
   const rows = await queryRows<{
     id: unknown;
     name: unknown;
@@ -3063,11 +3059,16 @@ export async function updateAdminConversation(
   actor: StaffAccess,
 ) {
   const scope = agentScope(actor);
+  const [access] = await queryRows(
+    "SELECT wa_can_read_conversation($1::uuid,$2::uuid) AS allowed",
+    [actor.staffId, input.id],
+  );
+  if (access?.allowed !== true) throw new Response("Forbidden", { status: 403 });
   const assignments = await import("../whatsapp-enquiries/assignment.server");
   if (await assignments.assignmentSchemaAvailable()) {
     const [current] = await queryRows(
-      `SELECT assigned_agent_id FROM whatsapp_conversations WHERE id=$1::uuid AND ($2::uuid IS NULL OR assigned_agent_id=$2::uuid)`,
-      [input.id, scope],
+      `SELECT assigned_agent_id FROM whatsapp_conversations WHERE id=$1::uuid AND wa_can_read_conversation($2::uuid,id)`,
+      [input.id, actor.staffId],
     );
     if (!current) throw new Response("Forbidden", { status: 403 });
     if ((current.assigned_agent_id ?? null) !== input.assigned_agent_id) {
@@ -3077,18 +3078,14 @@ export async function updateAdminConversation(
       );
     }
     await queryRows(
-      `UPDATE whatsapp_conversations SET status=$2,updated_at=now() WHERE id=$1::uuid AND ($3::uuid IS NULL OR assigned_agent_id=$3::uuid)`,
-      [input.id, input.status, scope],
+      `UPDATE whatsapp_conversations SET status=$2,updated_at=now() WHERE id=$1::uuid AND wa_can_read_conversation($3::uuid,id)`,
+      [input.id, input.status, actor.staffId],
     );
     return { ok: true };
   }
   const rows = await queryRows(
-    `UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3${
-      scope !== null ? " AND assigned_agent_id = $4" : ""
-    } RETURNING id`,
-    scope !== null
-      ? [input.status, input.assigned_agent_id, input.id, scope]
-      : [input.status, input.assigned_agent_id, input.id],
+    `UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3 AND wa_can_read_conversation($4::uuid,id) RETURNING id`,
+    [input.status, input.assigned_agent_id, input.id, actor.staffId],
   );
   if (!rows[0]) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });

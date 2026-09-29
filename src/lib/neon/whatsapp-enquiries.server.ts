@@ -296,13 +296,13 @@ export async function listEnquiries(
   if (!privileged && !actor.roles.includes("agent"))
     throw new Response("Forbidden", { status: 403 });
   const [allowed] = await query(
-    "SELECT id FROM whatsapp_conversations WHERE id=$1::uuid AND ($2::boolean OR assigned_agent_id=$3::uuid)",
-    [conversationId, privileged, actor.staffId],
+    "SELECT i.id FROM inquiries i WHERE i.conversation_id=$1::uuid AND i.source='whatsapp' AND wa_can_read_enquiry($2::uuid,i.id) LIMIT 1",
+    [conversationId, actor.staffId],
   );
   if (!allowed) throw new Response("Forbidden", { status: 403 });
   const rows = await query(
-    `SELECT i.* FROM inquiries i JOIN whatsapp_conversations c ON c.id=i.conversation_id WHERE i.conversation_id=$1::uuid AND i.source='whatsapp' AND ($2::boolean OR c.assigned_agent_id=$3::uuid) ORDER BY i.created_at DESC LIMIT 100`,
-    [conversationId, privileged, actor.staffId],
+    `SELECT i.*,c.assigned_agent_id AS conversation_assignee_id,c.confirmed_staff_id AS provider_confirmed_id FROM inquiries i JOIN whatsapp_conversations c ON c.id=i.conversation_id WHERE i.conversation_id=$1::uuid AND i.source='whatsapp' AND wa_can_read_enquiry($2::uuid,i.id) ORDER BY i.created_at DESC LIMIT 100`,
+    [conversationId, actor.staffId],
   );
   return rows.map((r) => ({
     id: String(r.id),
@@ -322,6 +322,11 @@ export async function listEnquiries(
     firstHumanResponseAt: r.first_human_response_at as string | null,
     effectsEligible: r.effects_eligible === true,
     crmLeadId: r.crm_lead_id as string | null,
+    enquiryOwnerStaffId: r.enquiry_owner_staff_id as string | null,
+    conversationAssigneeId: r.conversation_assignee_id as string | null,
+    providerConfirmedStaffId: r.provider_confirmed_id as string | null,
+    enquiryVersion: Number(r.enquiry_version ?? 0),
+    providerThreadReview: r.association_review === true || r.provider_thread_review === true,
   }));
 }
 export async function trackedRedirect(request: Request, code: string, query = queryRows) {

@@ -41,3 +41,37 @@ export function selectResponseEnquiry(activeIds: readonly string[], explicitId?:
       ? activeIds[0]
       : null;
 }
+
+/** No-link enquiry routing never moves a protected whole thread for one new listing. */
+export function selectNoLinkAssignment(
+  context: {
+    associationReview: boolean;
+    conversationAssigneeId?: string | null;
+    requestedStaffId?: string | null;
+    publicationOwnerId?: string | null;
+    enquiryOwnerId?: string | null;
+  },
+  eligible: ReadonlySet<string>,
+) {
+  const current = context.conversationAssigneeId;
+  const candidates = [
+    context.requestedStaffId,
+    context.publicationOwnerId,
+    context.enquiryOwnerId,
+  ].filter((id): id is string => !!id);
+  if (current) {
+    return eligible.has(current)
+      ? {
+          staffId: current,
+          reason: candidates.some((id) => id !== current)
+            ? "existing_coordinator_review"
+            : "existing_coordinator",
+        }
+      : { staffId: null, reason: "protected_owner_unavailable" };
+  }
+  if (context.associationReview) return { staffId: null, reason: "no_link_review" };
+  const distinct = [...new Set(candidates)];
+  return distinct.length === 1 && eligible.has(distinct[0])
+    ? { staffId: distinct[0], reason: "verified_no_link_owner" }
+    : { staffId: null, reason: "routing_exception" };
+}
