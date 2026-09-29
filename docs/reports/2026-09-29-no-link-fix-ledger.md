@@ -4,8 +4,8 @@
 
 | Task | Findings / UC | 狀態 | Commit | 本地證據 | DB / 外部阻塞 |
 |---|---|---|---|---|---|
-| T00 | 全部 | VERIFIED | 待本次 focused commit | 外層 7/7 SHA、內層 33/33 SHA；40/40 baseline tests；P01–P05 5/5 characterization | Neon、browser、live provider BLOCKED |
-| T01 | NL03 / UC01,09,12 | TODO | | | |
+| T00 | 全部 | VERIFIED | bad4bd9 | 外層 7/7 SHA、內層 33/33 SHA；40/40 baseline tests；P01–P05 5/5 characterization | Neon、browser、live provider BLOCKED |
+| T01 | NL03 / UC01,09,12 | IMPLEMENTED | 待本次 focused commit | RED 2/3 → GREEN 13/13 (含 migration manifest)、typecheck、focused lint；40/40 baseline | 新 migration 僅本地 PGlite apply；isolated Neon BLOCKED |
 | T02 | NL04 / UC09,10 | TODO | | | |
 | T03 | NL01 / UC01–04,07,08 | TODO | | | |
 | T04 | NL01,R01,R02 / UC01,03–05,08,15 | TODO | | | |
@@ -31,3 +31,11 @@
 - 判定：NL01–04 在審核基線仍可重現；R02/R03/R05/R06/R07/R09–R16 已有程式能力，尚需逐 task 補驗；UX01/02/03、WA/BL/LE 等按原審核逐項測，不以歷史狀態冒充目前 live。
 - Ruling: 新隔離 worktree 從 `origin/main` 的審核 SHA 起步，因 remote 目前未有更新且根 checkout 大幅落後並有他人改動；代價是其他未合併分支的新工作不會自動包含，合併前須重比對。
 - Ruling: T01 最小 receipt 用新根表，因現有 transcript 會被可選 workflow schema 擋住；代價是需 additive schema、兼容 reader 與 durable repair 路徑。
+
+## T01：最小耐久收件
+
+- RED：`node --test src/lib/whatsapp-enquiries/inbound-receipts.test.mjs` exit 1，缺 schema 時 503 而非持久收件回 200；最小 store 故障反而回 200。GREEN：同組＋`inbound-receipts.db.test.mjs`＋`migration-versions.test.mjs` exit 0，13/13。PGlite 真 SQL readback 證明 signed webhook 在 workflow 缺失時保留原文／`blocked_schema`；DB 表缺失會拒絕；recovery 對舊 active receipt 強制 observe，off 保持 off。既有 40/40 Node baseline 在 `bad4bd9` 工作樹重跑仍綠。typecheck、focused ESLint exit 0。
+- 新表只存受限 normalized event、scope、digest、capture snapshot、projection 狀態及 lease；不含 secret/header。T01 的 provider identity 去重尚待 T02。原 transcript 仍為對話主資料；P04 原探針保持 reference，新增正向測試驗證 webhook 入口。
+- Ruling: 只把經 webhook 驗簽的 live path 接入最小 receipt；history import 保留獨立入口。原因是驗簽前不可接受可信 scope；代價是直接呼叫 ingest 的非 webhook 程式路徑不享最小 receipt，須保持只作 history／測試。
+- Ruling: recovery 無論舊 active snapshot 都只以 observe 重投影，不復活舊 activation 的外發。代價是被擋下的舊 active 訊息須人工 triage 而不自動補發。普通投影仍按既有 workflow 契約；T15 新 no-link effects 有獨立 default-off gate。
+- `runServiceJobs` 在既有 service worker lane 先作最多 20 筆租約掃描；無新外部 queue。worker alarm 缺失或 commit 後 crash 時，需既有手動 service wake 重新啟動掃描；不能把此說成已在正式環境自動復原。migration clean isolated Neon、真 worker revision及受權限 UI 可見性仍 BLOCKED_EXTERNAL；T09 補操作面板。

@@ -3,6 +3,9 @@ import { queryRows } from "../neon/db.server.ts";
 import { runClaimedJobs } from "./jobs.server.ts";
 import { SERVICE_CAPABILITIES } from "./job-handlers.server.ts";
 export async function runServiceJobs() {
+  const { recoverPendingInboundReceipts } =
+    await import("../whatsapp-enquiries/inbound-receipts.server.ts");
+  await recoverPendingInboundReceipts({ limit: 20 });
   const [schema] = await queryRows(
     "SELECT to_regclass('whatsapp_service_worker_heartbeats') IS NOT NULL AS available",
   );
