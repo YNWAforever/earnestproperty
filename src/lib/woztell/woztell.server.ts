@@ -368,6 +368,7 @@ export function woztellConfig() {
 }
 
 export async function sendWoztellResponse(input: {
+  channelId?: string;
   memberId: string;
   response: Record<string, unknown>[];
 }) {
@@ -377,6 +378,9 @@ export async function sendWoztellResponse(input: {
   }
   if (!config.accessToken || !config.channelId) {
     return { ok: false, error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID" };
+  }
+  if (input.channelId !== undefined && input.channelId !== config.channelId) {
+    return { ok: false, refused: true, error: "WOZTELL_CHANNEL_SCOPE_MISMATCH" };
   }
 
   const { response: res, text: rawBody } = await boundedProviderFetch(

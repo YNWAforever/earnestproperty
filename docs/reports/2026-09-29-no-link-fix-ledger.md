@@ -10,8 +10,8 @@
 | T03 | NL01 / UC01–04,07,08 | IMPLEMENTED | bc4f8c0 | RED module absent → GREEN 8/8 parser, 17/17 parser+links, typecheck/lint | PropertyHK live shape NOT_TESTED；未接DB resolver |
 | T04 | NL01,R01,R02 / UC01,03–05,08,15 | IMPLEMENTED | 863131a | RED module absent → GREEN 15/15 resolver+manifest, typecheck/lint；PGlite exact SQL | 新 migration 僅 PGlite；channel scope/real staff alias及Neon BLOCKED_EXTERNAL |
 | T05 | NL02 / UC01,06–09 | IMPLEMENTED | 90e923b | RED P05 → GREEN 16/16 episodes+manifest；40/40 baseline；typecheck/lint | 新 migration 僅 PGlite；Neon concurrency、historic repair review BLOCKED_EXTERNAL |
-| T06 | UX01,NL02,R13 / UC05,06,12,14 | IMPLEMENTED_LOCAL | 本次 focused commit | PGlite ACL/CAS、第二盤隔離、分派policy、既有pagination；47/47 focused tests、typecheck/lint | 新 migration 只在 PGlite；isolated Neon/browser/provider BLOCKED_EXTERNAL |
-| T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | TODO | | | |
+| T06 | UX01,NL02,R13 / UC05,06,12,14 | IMPLEMENTED_LOCAL | 4ff9fa5 | PGlite ACL/CAS、第二盤隔離、分派policy、既有pagination；47/47 focused tests、typecheck/lint | 新 migration 只在 PGlite；isolated Neon/browser/provider BLOCKED_EXTERNAL |
+| T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | IMPLEMENTED_LOCAL | 本次 focused commit | RED 0/2 → 91/91 Node focused；PGlite 5/5；Bun card 5/5；typecheck/lint | 真 provider、isolated Neon、真同事手機／客戶回覆及整段 synthetic browser BLOCKED_EXTERNAL |
 | T08 | UX01,WA01–06,SH01 / UC06,13,17 | TODO | | | |
 | T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | TODO | | | |
 | T10 | LE01–05 / UC11,13 | TODO | | | |
@@ -79,3 +79,12 @@ ode --test src/lib/whatsapp-enquiries/no-link-episodes.test.mjs src/lib/whatsapp
 - 新 additive migration 只加 query owner、resolution override、CAS 版本、provider review、不可改的 revision log 及 SQL role predicates；wa_correct_enquiry 在一個 transaction 內 recheck current MLS/verified mapping、active/branch、version，寫本 enquiry，不變更原文、原始 property/requested、conversation assignee 或 provider。重複／過期版本無第二次 revision。取消時無 server call，因此無 write。
 - synthetic PGlite 測試包括 admin/manager A-B/agent S1-S2/viewer/inactive、直接 SQL 越權、第二盤訊息隔離、CAS duplicate/stale、缺 reason、停用候選、source/mapping 過期、修正後 readback。No-link 初始 review 不可回覆；核實後只 confirmed owner 可回覆。此項是 capability 判定，實際 send route 將於 T07 接入。
 - 指令：node --test enquiry-access.test.mjs enquiry-access.db.test.mjs enquiry-resolution.db.test.mjs assignment.test.mjs admin-data-permissions.test.mjs admin-pagination.test.mjs migration-versions.test.mjs exit 0（focused 47/47）；npm.cmd run typecheck exit 0。DB migration 尚未套至 Neon；多 session/branch、真 provider、synthetic browser BLOCKED_EXTERNAL。
+
+## T07：現有分派、回覆及通知證據
+
+- RED：新增 T07 guards 0/2；舊 outbound enqueue／dispatch 只用 manager 角色或 conversation assignee，沒有 query owner/branch 的 DB capability；舊 accepted intent trigger 可把 provider 接納誤計作人工回覆。GREEN：出站 enqueue 和 dispatch 都用當下 wa_can_read_conversation，no-link 查詢須指定 enquiry、由 DB 核對已審閱 owner 及 provider-confirmed 整段 assignee；被拒時不 enqueue/send。客戶 member/channel 均來自 DB conversation，配置 channel 不符時 provider adapter 在網絡前拒絕。
+- 新 migration 的 no-link preparation 只接受 capture 時已存入 noLinkEffectsEligible、active/fresh/provider-ID/有效 activation 且現在 worker flag 仍開啟的事件；重新核對單一 portal ref、MLS publication owner、有效 alias、provider-reviewed staff channel、既有整段 owner；有矛盾、observe、舊 activation recovery、缺 mapping 都保留 review 並不建分派 job。安全的新對話建立唯一 request，既有 S1 relationship 不轉走。provider accepted 保留 unknown，authoritative readback 後才 confirmed；確認狀態觸發 query reply capability，再由既有接手通知機制處理。所有 decision append-only，無 production seed。
+- 舊 human-response accepted trigger 改為 no-op，只有已辨認 authenticated staff intent 加上 scoped delivered/read transcript receipt 才可記人工回覆；未知 timeout、未確認的 BOT echo、內部備註不算送達／接手／客戶回覆。以前已記錄的 accepted-only 歷史未自動改寫，待 T14 對照報表。
+- StaffNotificationCard 用香港繁中區分指定同事、供應商確認處理、接手確認與客戶回覆；Inbox 內部備註明示不是同事手機通知。現有 notification endpoint、consent/24h/template/lease、idempotent unknown reservation、provider assignment reconcile 沿用。
+- synthetic PGlite golden 由 P1/S1 verified source/staff/provider map 起，生成一次分派 request；假 provider accepted 後仍 unknown，權威 readback 才 confirmed，S1 可取得 query reply capability但無虛構 ack/human reply。observe、missing map、legacy capture snapshot 得 0 jobs/effects。T01/T03–T05 的 signed receipt/parser/episode 測試分層通過；尚未把全鏈放到 isolated Neon 單一多 session 測試。這個假 provider 證據不能當成真 Woztell 發送或同事手機送達。
+- 指令：T07 Node focused suite 91/91 exit 0；PGlite golden 5/5 exit 0；Bun StaffNotificationCard 5/5 exit 0；npm.cmd run typecheck、focused ESLint exit 0。staff-notifications.db.test.mjs 因無 isolated Neon 1 項 SKIP，分母保留。新 migration 未套 Neon。EP_WA_NO_LINK_EFFECTS_ENABLED 是新 default-off gate，本 session 未改任何正式 config。

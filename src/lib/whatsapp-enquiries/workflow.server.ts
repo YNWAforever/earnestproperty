@@ -76,6 +76,7 @@ export function buildLiveEventStatements(
           staffRoutingEligible: active && process.env.EP_WA_ROUTING_ENABLED === "true",
           staffNotificationsEligible:
             active && process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
+          noLinkEffectsEligible: active && process.env.EP_WA_NO_LINK_EFFECTS_ENABLED === "true",
         }),
         event.legacyExternalMessageId,
         event.text,
@@ -122,6 +123,23 @@ export async function observeEnquiryEvent(
   if (mode === "observe" || mode === "active") {
     const { associatePortalEnquiry } = await import("./enquiry-association.server.ts");
     portal = await associatePortalEnquiry(eventId, query);
+    if (
+      mode === "active" &&
+      portal.handled &&
+      process.env.EP_WA_NO_LINK_EFFECTS_ENABLED === "true"
+    ) {
+      const [prepared] = await query<{ decision: { decision: string } }>(
+        "SELECT wa_prepare_no_link_followup($1::uuid) AS decision",
+        [eventId],
+      );
+      if (
+        prepared?.decision?.decision === "assignment_pending" ||
+        prepared?.decision?.decision === "staff_ready"
+      ) {
+        const { wakeAfterCommit } = await import("../control-plane/job-wake.server.ts");
+        wakeAfterCommit("service");
+      }
+    }
     const { observeEpisode } = await import("./episodes.server.ts");
     if (!portal.handled) await observeEpisode(eventId, query);
     const { observeQualifiedHumanResponse } = await import("./assignment.server.ts");

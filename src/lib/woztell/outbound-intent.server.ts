@@ -78,6 +78,15 @@ export async function enqueueOutboundIntent(
     `WITH authorized AS (
     SELECT wc.* FROM whatsapp_conversations wc WHERE wc.id=$2::uuid
     AND ($7::uuid IS NULL OR wc.assigned_agent_id=$7::uuid)
+    AND wa_can_read_conversation($3::uuid,wc.id)
+    AND ($9::uuid IS NOT NULL OR NOT EXISTS(
+      SELECT 1 FROM inquiries q WHERE q.conversation_id=wc.id AND q.source='whatsapp'
+        AND q.status NOT IN ('closed','resolved','spam')
+        AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL))
+    AND ($9::uuid IS NULL OR NOT EXISTS(
+      SELECT 1 FROM inquiries q WHERE q.id=$9::uuid AND q.conversation_id=wc.id
+        AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL
+        AND NOT wa_can_reply_enquiry($3::uuid,q.id)))
   ), intent AS (
     INSERT INTO whatsapp_outbound_intents (id,conversation_id,actor_staff_id,kind,payload,payload_hash,message_id)
     SELECT $1::uuid,id,$3::uuid,$4,$5::jsonb,$6,$8::uuid FROM authorized
@@ -108,6 +117,7 @@ export async function enqueueOutboundIntent(
       hashOutboundIntent(input),
       scope,
       randomUUID(),
+      input.enquiryId ?? null,
     ],
   );
   const row = rows[0];
@@ -116,7 +126,7 @@ export async function enqueueOutboundIntent(
   return { id: row.id, state: row.state };
 }
 
-type Reservation = { memberId: string; response: Record<string, unknown>[] };
+type Reservation = { channelId: string; memberId: string; response: Record<string, unknown>[] };
 type Outcome = {
   state: OutboundState;
   externalMessageId: string | null;
@@ -204,9 +214,14 @@ async function beginOutboundDispatch(
     { statement: `SELECT id FROM ops_jobs WHERE id=$1::uuid FOR UPDATE`, params: [job.jobId] },
     {
       statement: `WITH eligibility AS (
-      SELECT i.id,wc.woztell_member_id,t.element_name,t.language_code,t.components,i.kind,i.payload,
+      SELECT i.id,wc.channel_id,wc.woztell_member_id,t.element_name,t.language_code,t.components,i.kind,i.payload,
       (c.opted_out_whatsapp=false AND NULLIF(wc.woztell_member_id,'') IS NOT NULL
        AND (i.kind='text' AND wc.last_inbound_at >= now()-interval '24 hours' OR i.kind='template' AND t.status LIKE 'active%')
+       AND wa_can_read_conversation(i.actor_staff_id,wc.id)
+       AND (i.enquiry_id IS NULL OR NOT EXISTS(
+         SELECT 1 FROM inquiries q WHERE q.id=i.enquiry_id
+           AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL
+           AND NOT wa_can_reply_enquiry(i.actor_staff_id,q.id)))
        AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=i.actor_staff_id AND s.active=true AND (r.role IN ('admin','manager') OR r.role='agent' AND wc.assigned_agent_id=s.id))
        AND j.status='running' AND j.lease_owner=$3 AND j.lease_expires_at>clock_timestamp()) AS allowed
       FROM whatsapp_outbound_intents i JOIN whatsapp_conversations wc ON wc.id=i.conversation_id
@@ -230,6 +245,7 @@ async function beginOutboundDispatch(
   if (!row) return null;
   const payload = row.payload as { text: string };
   return {
+    channelId: String(row.channel_id),
     memberId: String(row.woztell_member_id),
     response:
       row.kind === "text"

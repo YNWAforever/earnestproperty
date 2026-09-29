@@ -88,3 +88,12 @@ test("NT-24 response resolution does not invent acknowledgement", () => {
   expect(html).toContain("已有核實人手回覆");
   expect(html).toContain("尚未確認");
 });
+
+test("internal Inbox note is never presented as a colleague phone delivery", () => {
+  const html = render({
+    attempts: [{ ...item.attempts[0], state: "delivered", deliveredAt: "2026-09-12T11:02:00Z" }],
+  });
+  expect(html).toContain("Inbox 內部備註（不代表同事手機通知）");
+  expect(html).toContain("不是手機送達");
+  expect(html).not.toContain("同事手機送達有簽名收據");
+});

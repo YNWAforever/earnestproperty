@@ -352,7 +352,14 @@ test("recency columns never move backwards when old history is replayed", () => 
 test("the webhook route delegates persistence rather than re-inlining SQL", () => {
   const webhookRoute = read("src/routes/api.woztell.webhook.ts");
 
-  assert.match(webhookRoute, /ingestWoztellEvent/);
+  const webhookHandler = read("src/lib/whatsapp-enquiries/webhook.server.ts");
+  assert.match(webhookRoute, /handleWoztellWebhook/);
+  assert.match(webhookHandler, /storeInboundReceipt/);
+  assert.match(webhookHandler, /ingestWoztellEvent/);
+  assert.ok(
+    webhookHandler.indexOf("receipt = await store(") <
+      webhookHandler.indexOf("deps.ingest ?? ingestWoztellEvent"),
+  );
   assert.doesNotMatch(webhookRoute, /INSERT INTO/);
   assert.doesNotMatch(webhookRoute, /UPDATE crm_contacts/);
 });
@@ -724,5 +731,38 @@ test("HTTP 200 without numeric ok:1 is ambiguous, never provider acceptance", as
     assert.equal(result.ok, false, `must not accept ${JSON.stringify(body)}`);
     assert.notEqual(result.refused, true);
     assert.equal(result.error, "WOZTELL_AMBIGUOUS_RESPONSE");
+  }
+});
+
+test("a DB-selected conversation channel cannot be sent through a different configured channel", async () => {
+  const oldFetch = globalThis.fetch;
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    throw new Error("network forbidden");
+  };
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "configured-channel";
+  try {
+    const result = await sendWoztellResponse({
+      channelId: "other-channel",
+      memberId: "customer-member",
+      response: [{ type: "TEXT", text: "reply" }],
+    });
+    assert.equal(result.ok, false);
+    assert.equal(result.refused, true);
+    assert.equal(result.error, "WOZTELL_CHANNEL_SCOPE_MISMATCH");
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = oldFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
   }
 });

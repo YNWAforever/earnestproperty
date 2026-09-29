@@ -33,7 +33,7 @@ export function StaffNotificationCard({
         <span>{states[item.workState] ?? item.workState}</span>
       </div>
       <p className="text-sm">
-        指定：{item.requestedName ?? "未核實"} · 實際處理：{item.handlerName ?? "未命名同事"}
+        指定：{item.requestedName ?? "未核實"} · 供應商確認處理：{item.handlerName ?? "未命名同事"}
       </p>
       {item.mismatchReason ? (
         <p className="text-sm">處理人不同原因：{item.mismatchReason}</p>
@@ -52,11 +52,18 @@ export function StaffNotificationCard({
         {item.attempts.length ? (
           item.attempts.map((a, i) => (
             <li key={i}>
-              {a.transport}：
+              {a.transport === "inbox_private_note"
+                ? "Inbox 內部備註（不代表同事手機通知）"
+                : a.transport === "staff_whatsapp"
+                  ? "同事 WhatsApp 手機通知"
+                  : a.transport}
+              ：
               {a.state === "accepted"
                 ? "供應商已接納（未證實送達）"
                 : a.state === "delivered"
-                  ? "有簽名收據"
+                  ? a.transport === "inbox_private_note"
+                    ? "內部備註狀態已核實（不是手機送達）"
+                    : "同事手機送達有簽名收據"
                   : a.state === "unknown"
                     ? "發送結果不明（需核對）"
                     : a.state}

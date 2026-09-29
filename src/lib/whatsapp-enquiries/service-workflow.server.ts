@@ -338,7 +338,7 @@ export async function deliverServiceAction(
           params: [id],
         },
         {
-          statement: `WITH eligible AS (SELECT o.id,o.payload,w.woztell_member_id,(NOT c.opted_out_whatsapp AND p.status='approved' AND g.ended_at IS NULL AND g.id=$7::uuid AND w.channel_id=$8 AND w.last_inbound_at >= $6::timestamptz-interval '24 hours' AND $5::text IS NULL AND a.state IN ('queued','dispatching') AND q.effects_eligible AND q.activation_id=g.id AND q.status NOT IN ('closed','resolved','spam')
+          statement: `WITH eligible AS (SELECT o.id,o.payload,w.channel_id,w.woztell_member_id,(NOT c.opted_out_whatsapp AND p.status='approved' AND g.ended_at IS NULL AND g.id=$7::uuid AND w.channel_id=$8 AND w.last_inbound_at >= $6::timestamptz-interval '24 hours' AND $5::text IS NULL AND a.state IN ('queued','dispatching') AND q.effects_eligible AND q.activation_id=g.id AND q.status NOT IN ('closed','resolved','spam')
      AND (a.purpose<>'survey' OR (s.state='queued' AND s.expires_at>=$6::timestamptz AND (NOT (p.rules->>'suppressSurveyAfterHuman')::boolean OR q.first_human_response_at IS NULL)))
      AND (a.purpose<>'survey_thanks' OR s.answer='satisfied')
      AND (a.purpose<>'manager_ack' OR (s.answer='assistance' AND s.manager_task_id IS NOT NULL AND EXISTS(SELECT 1 FROM whatsapp_assignment_requests ar JOIN staff_users u ON u.id=ar.desired_staff_id JOIN staff_roles role ON role.staff_user_id=u.id JOIN whatsapp_staff_channels sc ON sc.staff_id=u.id AND sc.channel_id=w.channel_id WHERE ar.id=s.manager_assignment_id AND ar.state='confirmed' AND w.confirmed_staff_id=u.id AND u.active AND role.role IN ('manager','admin') AND sc.eligible AND sc.retired_at IS NULL)))) AS allowed
@@ -347,7 +347,7 @@ export async function deliverServiceAction(
     reserved AS (UPDATE whatsapp_outbound_intents o SET state=CASE WHEN o.state='dispatching' THEN 'unknown' WHEN e.allowed THEN 'dispatching' ELSE 'cancelled' END,error=CASE WHEN o.state='dispatching' THEN 'WOZTELL_DELIVERY_UNKNOWN' WHEN NOT e.allowed THEN COALESCE($5,'runtime_dispatch_gate') ELSE NULL END,dispatch_started_at=COALESCE(dispatch_started_at,$6::timestamptz),updated_at=now() FROM eligible e WHERE o.id=e.id AND o.state IN ('queued','dispatching') RETURNING o.*),
     transcript AS (UPDATE whatsapp_messages m SET status=r.state,error=r.error FROM reserved r WHERE m.id=r.message_id RETURNING m.id),
     action AS (UPDATE whatsapp_service_actions a SET state=CASE WHEN r.state='cancelled' THEN 'suppressed' ELSE r.state END,block_reason=COALESCE(r.error,$5),updated_at=now() FROM reserved r WHERE a.id=r.service_action_id RETURNING a.id)
-    SELECT r.*,e.woztell_member_id FROM reserved r JOIN eligible e ON e.id=r.id WHERE r.state='dispatching'`,
+    SELECT r.*,e.channel_id,e.woztell_member_id FROM reserved r JOIN eligible e ON e.id=r.id WHERE r.state='dispatching'`,
           params: [
             intent,
             context.job.jobId,
@@ -363,6 +363,7 @@ export async function deliverServiceAction(
       const row = results[2]?.[0];
       return row
         ? {
+            channelId: String(row.channel_id),
             memberId: String(row.woztell_member_id),
             response: (row.payload as { response: Record<string, unknown>[] }).response,
           }
