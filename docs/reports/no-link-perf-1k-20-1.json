@@ -1,0 +1,36 @@
+{
+  "environment": "PGlite WASM single connection; synthetic, not Neon multi-session",
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500",
+    "cpuCount": 12,
+    "totalMemoryBytes": 34033348608
+  },
+  "dataset": {
+    "conversations": 1000,
+    "messagesPerConversation": 20,
+    "messageRows": 20000,
+    "actorVisible": 950
+  },
+  "workload": {
+    "readers": 1,
+    "runs": 5,
+    "samples": 5,
+    "queryCountPerRead": 1,
+    "pageLimit": 20
+  },
+  "measurements": {
+    "p50Ms": 31.384000000000015,
+    "p95Ms": 54.2364,
+    "payloadBytes": 14575,
+    "total": 950,
+    "fixtureMs": 1950.1899
+  },
+  "plan": null,
+  "limitations": [
+    "PGlite serializes overlapping requests",
+    "permission functions are simplified fixture stubs",
+    "receipt persistence, queue lag and browser freshness are not measured"
+  ]
+}

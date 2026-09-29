@@ -31,6 +31,11 @@ export function buildAdminPageQuery(
     return `$${params.length}`;
   };
   const own = param(actor.staffId);
+  // The unfiltered inbox can page authorized conversation IDs before joining per-row details.
+  const fastConversationPage =
+    input.resource === "conversations" &&
+    !input.q?.trim() &&
+    (!input.status || input.status === "all");
   let source = "";
   if (input.resource === "leads")
     source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT l.id,l.stage,l.intent,l.budget_min,l.budget_max,l.source,l.note,l.created_at,l.assigned_agent_id,c.name,c.phone,c.email,c.opt_in_whatsapp,p.listing_no,p.title_zh AS property_title,l.created_at AS page_at FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE ${scope ? `l.assigned_agent_id=${own}::uuid` : "true"}) item`;
@@ -73,6 +78,7 @@ export function buildAdminPageQuery(
       LEFT JOIN staff_users requested ON requested.id=i.requested_staff_id
       LEFT JOIN staff_users owner ON owner.id=i.enquiry_owner_staff_id
       WHERE ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)
+        ${fastConversationPage ? "AND w.id IN (SELECT id FROM page)" : ""}
     ) item`;
   else if (input.resource === "messages")
     source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT m.id,m.direction,m.message_type,m.text,m.status,m.error,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,m.created_at AS page_at FROM whatsapp_messages m JOIN whatsapp_conversations w ON w.id=m.conversation_id WHERE w.id=${param(input.conversationId)}::uuid ${input.messageIds ? `AND m.id=ANY(${param(input.messageIds)}::uuid[])` : ""} AND ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)) item`;
@@ -162,6 +168,8 @@ export function buildAdminPageQuery(
     : "";
   const limit = param(input.limit + 1);
   const order = ascending ? "ASC" : "DESC";
-  const statement = `WITH authorized AS NOT MATERIALIZED (${source}), filtered AS NOT MATERIALIZED (SELECT * FROM authorized ${filters.length ? "WHERE " + filters.join(" AND ") : ""}), page AS (SELECT row,page_at,id FROM filtered ${boundary} ORDER BY page_at ${order},id ${order} LIMIT ${limit}) SELECT COALESCE((SELECT jsonb_agg(row||jsonb_build_object('_cursor_at',to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY page_at ${order},id ${order}) FROM page),'[]'::jsonb) AS rows,(SELECT count(*)::int FROM filtered) AS total`;
+  const statement = fastConversationPage
+    ? `WITH scoped AS NOT MATERIALIZED (SELECT w.id,COALESCE(w.last_message_at,w.created_at) AS page_at FROM whatsapp_conversations w WHERE ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)), page AS MATERIALIZED (SELECT id,page_at FROM scoped ${boundary} ORDER BY page_at DESC,id DESC LIMIT ${limit}), authorized AS NOT MATERIALIZED (${source}) SELECT COALESCE((SELECT jsonb_agg(row||jsonb_build_object('_cursor_at',to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY page_at DESC,id DESC) FROM authorized),'[]'::jsonb) AS rows,(SELECT count(*)::int FROM scoped) AS total`
+    : `WITH authorized AS NOT MATERIALIZED (${source}), filtered AS NOT MATERIALIZED (SELECT * FROM authorized ${filters.length ? "WHERE " + filters.join(" AND ") : ""}), page AS (SELECT row,page_at,id FROM filtered ${boundary} ORDER BY page_at ${order},id ${order} LIMIT ${limit}) SELECT COALESCE((SELECT jsonb_agg(row||jsonb_build_object('_cursor_at',to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY page_at ${order},id ${order}) FROM page),'[]'::jsonb) AS rows,(SELECT count(*)::int FROM filtered) AS total`;
   return { statement, params, input, binding, ascending };
 }

@@ -91,6 +91,19 @@ test("activity order, exact count, authorized search and cursor are consistent",
       second.rows.map((row) => row.id),
       [conv[1]],
     );
+    // The fast unfiltered path must match the full filtered path, including
+    // the exact authorized count, row details, cursor and private-row denial.
+    for (const status of [undefined, "all", "open"]) {
+      const filter = status ? { status } : {};
+      const ownFirst = await page(query, { ...filter, limit: 1 });
+      const ownCursor = encodeAdminCursor(
+        { at: ownFirst.rows[0]._cursor_at, id: conv[0] },
+        buildAdminPageQuery({ resource: "conversations", ...filter, limit: 1 }, actor).binding,
+      );
+      const ownSecond = await page(query, { ...filter, limit: 1, cursor: ownCursor });
+      assert.deepEqual(ownFirst, first);
+      assert.deepEqual(ownSecond, second);
+    }
     for (const needle of ["4033349", "A074714", "第一則舊訊息", "客戶甲"]) {
       const match = await page(query, { q: needle });
       assert.equal(match.total, 1, needle);
