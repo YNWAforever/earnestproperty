@@ -107,9 +107,9 @@ export async function readAssignmentContext(
  (SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=w.confirmed_staff_id) AS confirmed_staff_name,
  r.id AS request_id,r.desired_staff_id,r.state AS assignment_state,r.evidence,
  (SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=r.desired_staff_id) AS desired_staff_name,
- (SELECT jsonb_agg(jsonb_build_object('id',i.id,'property',i.public_listing_no,'source',i.placement_source,'requestedStaffId',i.requested_staff_id,'requestedStaffName',(SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=i.requested_staff_id),'dealType',(SELECT p.deal_type FROM properties p WHERE p.id=i.property_id),'firstResponseAt',i.first_human_response_at,'dueAt',i.response_due_at,'review',i.association_review)) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND wa_can_read_enquiry($3::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam')) AS enquiries
- FROM whatsapp_conversations w LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE w.id=$1::uuid AND wa_can_read_conversation($3::uuid,w.id)`,
-    [conversationId, global, actor.staffId],
+ (SELECT jsonb_agg(jsonb_build_object('id',i.id,'property',i.public_listing_no,'source',i.placement_source,'requestedStaffId',i.requested_staff_id,'requestedStaffName',(SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=i.requested_staff_id),'dealType',(SELECT p.deal_type FROM properties p WHERE p.id=i.property_id),'firstResponseAt',i.first_human_response_at,'dueAt',i.response_due_at,'review',i.association_review)) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND wa_can_read_enquiry($2::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam')) AS enquiries
+ FROM whatsapp_conversations w LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE w.id=$1::uuid AND wa_can_read_conversation($2::uuid,w.id)`,
+    [conversationId, actor.staffId],
   );
   if (!row) {
     // Global staff may distinguish a missing conversation from an inaccessible
