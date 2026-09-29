@@ -70,7 +70,10 @@ export function WhatsappEnquiryContext({
   if (!context) return null;
   const episodes = (context.enquiries ?? []) as Episode[];
   return (
-    <section className="space-y-2 border-b bg-muted/20 p-4" aria-label="查詢及分派證據">
+    <section
+      className="max-h-32 shrink-0 space-y-2 overflow-y-auto border-b bg-muted/20 p-4"
+      aria-label="查詢及分派證據"
+    >
       <h3 className="font-semibold">查詢跟進</h3>
       <p className="text-xs text-muted-foreground">
         觀察模式建議：{context.proposedStaffId ?? "需要總台人工處理"}（{context.proposalReason}

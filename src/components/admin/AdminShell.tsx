@@ -60,6 +60,13 @@ const navGroups = [
         roles: STAFF,
       },
       {
+        to: "/admin/whatsapp",
+        label: "WhatsApp 收件匣",
+        icon: MessageCircle,
+        activeExact: false,
+        roles: STAFF,
+      },
+      {
         // The daily lead-triage workspace had no sidebar entry at all: its only
         // way in was one button on /admin/leads.
         to: "/admin/leads/command-center",
@@ -107,13 +114,6 @@ const navGroups = [
         to: "/admin/segments",
         label: "客戶分群",
         icon: UsersRound,
-        activeExact: false,
-        roles: EDITORS,
-      },
-      {
-        to: "/admin/whatsapp",
-        label: "WhatsApp",
-        icon: MessageCircle,
         activeExact: false,
         roles: EDITORS,
       },

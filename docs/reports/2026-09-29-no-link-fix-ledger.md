@@ -11,8 +11,8 @@
 | T04 | NL01,R01,R02 / UC01,03–05,08,15 | IMPLEMENTED | 863131a | RED module absent → GREEN 15/15 resolver+manifest, typecheck/lint；PGlite exact SQL | 新 migration 僅 PGlite；channel scope/real staff alias及Neon BLOCKED_EXTERNAL |
 | T05 | NL02 / UC01,06–09 | IMPLEMENTED | 90e923b | RED P05 → GREEN 16/16 episodes+manifest；40/40 baseline；typecheck/lint | 新 migration 僅 PGlite；Neon concurrency、historic repair review BLOCKED_EXTERNAL |
 | T06 | UX01,NL02,R13 / UC05,06,12,14 | IMPLEMENTED_LOCAL | 4ff9fa5 | PGlite ACL/CAS、第二盤隔離、分派policy、既有pagination；47/47 focused tests、typecheck/lint | 新 migration 只在 PGlite；isolated Neon/browser/provider BLOCKED_EXTERNAL |
-| T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | IMPLEMENTED_LOCAL | 本次 focused commit | RED 0/2 → 91/91 Node focused；PGlite 5/5；Bun card 5/5；typecheck/lint | 真 provider、isolated Neon、真同事手機／客戶回覆及整段 synthetic browser BLOCKED_EXTERNAL |
-| T08 | UX01,WA01–06,SH01 / UC06,13,17 | TODO | | | |
+| T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | IMPLEMENTED_LOCAL | 5954c44 | RED 0/2 → 91/91 Node focused；PGlite 5/5；Bun card 5/5；typecheck/lint | 真 provider、isolated Neon、真同事手機／客戶回覆及整段 synthetic browser BLOCKED_EXTERNAL |
+| T08 | UX01,WA01–06,SH01 / UC06,13,17 | IMPLEMENTED_LOCAL | 本次 focused commit | RED inbox 4/7 → GREEN 23/23 paging+PGlite；route/permission 58/58；Bun UI 7/7；typecheck/lint | 無新 migration；真 authenticated synthetic browser 2 cases BLOCKED_EXTERNAL（缺 isolated app／storageState／30條 fixture） |
 | T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | TODO | | | |
 | T10 | LE01–05 / UC11,13 | TODO | | | |
 | T11 | R05,R06,R14 / UC18 | TODO | | | |
@@ -42,25 +42,21 @@
 ## T02：provider identity、重送及亂序
 
 - 20 次相同 provider ID 重送只得一條 scoped receipt，delivery_count=20 而 repair attempt_count=1；不同 ID 同文分開，同原始 ID 跨 channel 會形成不同 scoped transcript ID。缺 ID 同秒同文保留兩條 ambiguous receipt 和兩則 transcript，不以 content hash 做 unique，不給 active effects；SENT/READ 及 READ-before-SENT 的狀態證據分開。
-- RED 4/4 在 T01 store 重現；GREEN：
-ode --test src/lib/whatsapp-enquiries/inbound-identity.test.mjs src/lib/whatsapp-enquiries/inbound-identity.db.test.mjs src/lib/whatsapp-enquiries/event-classification.test.mjs exit 0（18/18），T01/T02 收件組 19/19，manifest 6/6，
-pm.cmd run typecheck exit 0，focused ESLint exit 0，baseline 40/40。測試使用合成資料與 PGlite 單序 SQL；Neon 多連線 20 併發尚需 isolated target。
+- RED 4/4 在 T01 store 重現；GREEN：`node --test src/lib/whatsapp-enquiries/inbound-identity.test.mjs src/lib/whatsapp-enquiries/inbound-identity.db.test.mjs src/lib/whatsapp-enquiries/event-classification.test.mjs` exit 0（18/18），T01/T02 收件組 19/19，manifest 6/6，`npm.cmd run typecheck` exit 0，focused ESLint exit 0，baseline 40/40。測試使用合成資料與 PGlite 單序 SQL；Neon 多連線 20 併發尚需 isolated target。
 - 新 migration 只加 delivery_count 與非空 identity_key 的 partial unique index，舊資料不 bulk backfill。相同 channel/provider 舊 ID 兼容；receipt identity scope 帶 tenant/app/channel/kind。unknown wrapper、BOT/MANUAL、internal note 沿既有分類 guard，6/6 classification tests。
 - 待解風險：舊 CRM contact 的 whatsapp_member_id 為全域 unique；跨 channel 重複 member ID 且不同客戶電話的 legacy contact link 尚須隔離驗證。
 
 ## T03：免link portal parser
 
 - 原始 28Hse 樣本逐字 fixture；parserVersion portal-intake-v1。解析外部 ID 字串 4033349、requestedStaffText、estateText、sale、訊息報價 HKD12680000。URL 保留原文及 span，canonical 只除已定義非 identity 的 t；未知 query 保留。未推 customer、internal property、click、campaign 或時間。
-- RED：parser module 缺失，
-ode --test src/lib/whatsapp-enquiries/portal-intake.test.mjs exit 1。GREEN：同命令 8/8 exit 0；與 links、link-batch-import 一起 17/17，typecheck、focused ESLint exit 0。純函數測試將 fetch 攔截並確認 0 call，無 model port。
+- RED：parser module 缺失，`node --test src/lib/whatsapp-enquiries/portal-intake.test.mjs` exit 1。GREEN：同命令 8/8 exit 0；與 links、link-batch-import 一起 17/17，typecheck、focused ESLint exit 0。純函數測試將 fetch 攔截並確認 0 call，無 model port。
 - 前導零、不同 ID、重複 URL、多 URL、文字與 URL 衝突、全形標點、過長、spoofed host/userinfo/local URL 有邊界測試。PropertyHK 僅 exact host + unverified shape，沒有已驗證去識別樣本；live format NOT_TESTED，不推測 external ID。T04/T05 尚須把解析證據耐久接到 enquiry。
 
 ## T04：MLS／職員權威配對
 
 - Batch resolver 只查明確 reviewed channel/source scope；migration 建表但不 seed 任何映射。使用 mls_source_state exact source+scope+external ID+deal、有效 observation、active source/link/public offer、30 日 accepted freshness 門檻。外部 ID 保持字串；matched snapshot 有 observation/policy/mapping 版本及 publication owner，訊息報價不改 MLS。
 - requestedStaffText 只走現有 staff_external_references 同 namespace 的精確 verified record；沒有或多個、職員停用、撤刊、scope 不一致一律 review。PropertyHK shape 未驗，不能 auto match。加入 append-only interpretation/resolution snapshot；同 receipt/parser 版本重播一致才 idempotent，改變證據拒絕。
-- RED：resolver module 不存在，new unit exit 1。GREEN：
-ode --test src/lib/whatsapp-enquiries/portal-resolution.test.mjs src/lib/whatsapp-enquiries/portal-resolution.db.test.mjs src/lib/control-plane/migration-versions.test.mjs exit 0（15/15）。PGlite 測新 migration 無 authority seed、以實際 production SQL 配對 synthetic P1/S1、錯 channel 拒絕、snapshot 不可 UPDATE/DELETE。1000 refs 使用 3 次批量 port 呼叫。typecheck、focused lint exit 0。
+- RED：resolver module 不存在，new unit exit 1。GREEN：`node --test src/lib/whatsapp-enquiries/portal-resolution.test.mjs src/lib/whatsapp-enquiries/portal-resolution.db.test.mjs src/lib/control-plane/migration-versions.test.mjs` exit 0（15/15）。PGlite 測新 migration 無 authority seed、以實際 production SQL 配對 synthetic P1/S1、錯 channel 拒絕、snapshot 不可 UPDATE/DELETE。1000 refs 使用 3 次批量 port 呼叫。typecheck、focused lint exit 0。
 - 此時 resolver 尚未由收件流程調用；T05 要接 receipt→interpretation→enquiry。正式 source scope／Terence ID 未知，不能 seed；isolated Neon migration／真 MLS 資料核對 BLOCKED_EXTERNAL。
 
 ## T05：多樓盤 enquiry 關聯
@@ -68,8 +64,7 @@ ode --test src/lib/whatsapp-enquiries/portal-resolution.test.mjs src/lib/whatsap
 - 新正向 P05 在舊 episode function 實際 PGlite SQL 下 red：第二個不同 portal ID 靜默沿用第一個 root。先令舊兼容路徑識別 portal references 並進 review；新增 migration 將舊 SQL 的 NULL property wildcard 改為嚴格 NULL/非NULL 比較，舊 migration 保持唯讀。
 - 新關聯表以(event_id,ref_index)保存一則訊息的全部 portal refs，保留原 event.inquiry_id／whatsapp_enquiry_messages 單指標作兼容但不能用來推多ref回覆歸屬。新 SQL 函數在 event/conversation 鎖下關聯；不同 ref key 建不同 root，同 ref續問重用 open root，closed後建新 root；一訊息多ref只建一個 primary root，其他可見 review。新 root 的 association_review=true／effects_eligible=false，從不改 conversation assignee。
 - Worker 以 event scoped external ID 找到同 channel/app/member 的 durable receipt，讀或新增不可改寫 interpretation/resolution snapshot，再入 SQL function。parser 認出的 portal 訊息不走舊 active service外發；migration/receipt 未齊時仍進 legacy review 路徑。
-- GREEN：
-ode --test src/lib/whatsapp-enquiries/no-link-episodes.test.mjs src/lib/whatsapp-enquiries/no-link-episodes.db.test.mjs src/lib/control-plane/migration-versions.test.mjs exit 0（16/16），typecheck、focused ESLint exit 0；T03–T05 合併 suite 32/32，原 baseline 40/40。PGlite 真 SQL 覆蓋不同盤、同盤續問、closed、新訊息多盤、缺映射 triage、錯 receipt scope 直接拒絕、P1/S1 synthetic golden 並保持原 conversation assignee。此證據不是多session Neon／真provider；historic mismerge 只可產生候選修復報表，尚未 remap。
+- GREEN：`node --test src/lib/whatsapp-enquiries/no-link-episodes.test.mjs src/lib/whatsapp-enquiries/no-link-episodes.db.test.mjs src/lib/control-plane/migration-versions.test.mjs` exit 0（16/16），typecheck、focused ESLint exit 0；T03–T05 合併 suite 32/32，原 baseline 40/40。PGlite 真 SQL 覆蓋不同盤、同盤續問、closed、新訊息多盤、缺映射 triage、錯 receipt scope 直接拒絕、P1/S1 synthetic golden 並保持原 conversation assignee。此證據不是多session Neon／真provider；historic mismerge 只可產生候選修復報表，尚未 remap。
 
 
 ## T06：查詢權限與修正
@@ -87,4 +82,11 @@ ode --test src/lib/whatsapp-enquiries/no-link-episodes.test.mjs src/lib/whatsapp
 - 舊 human-response accepted trigger 改為 no-op，只有已辨認 authenticated staff intent 加上 scoped delivered/read transcript receipt 才可記人工回覆；未知 timeout、未確認的 BOT echo、內部備註不算送達／接手／客戶回覆。以前已記錄的 accepted-only 歷史未自動改寫，待 T14 對照報表。
 - StaffNotificationCard 用香港繁中區分指定同事、供應商確認處理、接手確認與客戶回覆；Inbox 內部備註明示不是同事手機通知。現有 notification endpoint、consent/24h/template/lease、idempotent unknown reservation、provider assignment reconcile 沿用。
 - synthetic PGlite golden 由 P1/S1 verified source/staff/provider map 起，生成一次分派 request；假 provider accepted 後仍 unknown，權威 readback 才 confirmed，S1 可取得 query reply capability但無虛構 ack/human reply。observe、missing map、legacy capture snapshot 得 0 jobs/effects。T01/T03–T05 的 signed receipt/parser/episode 測試分層通過；尚未把全鏈放到 isolated Neon 單一多 session 測試。這個假 provider 證據不能當成真 Woztell 發送或同事手機送達。
-- 指令：T07 Node focused suite 91/91 exit 0；PGlite golden 5/5 exit 0；Bun StaffNotificationCard 5/5 exit 0；npm.cmd run typecheck、focused ESLint exit 0。staff-notifications.db.test.mjs 因無 isolated Neon 1 項 SKIP，分母保留。新 migration 未套 Neon。EP_WA_NO_LINK_EFFECTS_ENABLED 是新 default-off gate，本 session 未改任何正式 config。
+- 指令：T07 Node focused suite 91/91 exit 0，HEAD `5954c44`；PGlite golden 5/5 exit 0；Bun StaffNotificationCard 5/5 exit 0；npm.cmd run typecheck、focused ESLint exit 0。staff-notifications.db.test.mjs 因無 isolated Neon 1 項 SKIP，分母保留。新 migration 未套 Neon。EP_WA_NO_LINK_EFFECTS_ENABLED 是新 default-off gate，本 session 未改任何正式 config。
+
+## T08：前線手機收件匣與搜尋
+
+- RED：`node --test src/lib/whatsapp-enquiries/inbox-query.test.mjs` 4/7，原 query 用 `w.created_at` 作分頁、只搜最後一則訊息，且收納任意 status。GREEN：活動游標改用 `COALESCE(last_message_at,created_at)` 並保持 timestamp+id 同序；授權 CTE 上用 server EXISTS 搜尋所有文字訊息、public no、外部 ID；`unassigned/mine/awaiting/attention` 的列與 count 共用 filtered predicate。PGlite fixture 有兩個本職員對話及另一 actor 的私有對話，證實新活動、舊訊息、樓盤／平台編號搜尋、scope 與游標 2/2；與 paging Node 23/23 exit 0。
+- 前線日常導航出現「WhatsApp 收件匣」，映射／來源連結／推廣維持 manager/admin。卡片用客戶名稱、來源、public no、外部 ID、指定同事、經供應商確認可回覆的查詢負責人及下一步，不拿 UUID 當日常標籤。非 thread owner 如由 query deep link 進入，只讀 `fetchWhatsappEnquiryDetail` 的本次入站訊息；不能看到 S1 其他歷史或在此發送。範本 loading/empty/forbidden/error 分開並可 retry；匯入歷史按 admin session 才顯示。
+- 活動首屏10秒可見頁輪詢、視窗 focus 重取、hidden頁不輪詢；舊頁只提示回首屏，保留 cursor。request generation 拒絕切對話後舊結果；背景 detail 更新不再每次抓 AI assist。手機工作區使用 dvh 限高，timeline/查詢脈絡獨立捲動，composer 及 send 行保持可達，草稿仍以 actor+conversation sessionStorage 分隔。實際 soft-keyboard/focus 行為需 browser fixture 量度，不能由 class 測試推斷已合格。
+- 指令：`node --test src/routes/admin.routes.test.mjs src/lib/neon/admin-data-permissions.test.mjs src/lib/whatsapp-enquiries/inbox-query.test.mjs src/lib/whatsapp-enquiries/inbox-query.db.test.mjs` exit 0（58/58）；`bun test --no-env-file src/components/admin/whatsapp/NoLinkInbox.test.tsx src/components/admin/StaffNotificationCard.test.tsx` exit 0（7/7）；`npm.cmd run typecheck`、focused ESLint exit 0。`npm.cmd exec -- playwright test e2e/whatsapp-no-link.spec.ts --list` 列出2個 case；`node scripts/test-whatsapp-no-link-browser.mjs` 因缺 `PLAYWRIGHT_BASE_URL`／`NO_LINK_BROWSER_FIXTURE` 明確 BLOCKED_EXTERNAL。新 runner 只允許 isolated loopback synthetic app，不對正式站 crawler 或發真訊息。無新 migration；Neon readback 仍 BLOCKED_EXTERNAL。

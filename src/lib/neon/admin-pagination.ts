@@ -76,6 +76,14 @@ export function parseAdminPageInput(value: AdminPageInput): AdminPageInput & { l
   }
   if (input.cursor != null && (typeof input.cursor !== "string" || input.cursor.length > 4096))
     invalid();
+  if (
+    input.resource === "conversations" &&
+    input.status &&
+    !["all", "open", "pending", "closed", "unassigned", "mine", "awaiting", "attention"].includes(
+      input.status,
+    )
+  )
+    invalid();
   if (input.optIn && !["all", "yes", "no"].includes(input.optIn)) invalid();
   if (input.direction && !["older", "newer"].includes(input.direction)) invalid();
   if (input.resource === "messages" && (!input.conversationId || !uuid.test(input.conversationId)))

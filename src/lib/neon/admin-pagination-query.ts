@@ -17,7 +17,7 @@ const CMS_TABLES = {
 export function buildAdminPageQuery(
   raw: AdminPageInput,
   actor: Pick<StaffAccess, "staffId" | "roles">,
-  options: { enquiries?: boolean } = {},
+  _options: { enquiries?: boolean } = {},
 ) {
   if (!actor || !actor.roles.some((role) => ["admin", "manager", "agent"].includes(role)))
     throw Error("FORBIDDEN");
@@ -37,7 +37,43 @@ export function buildAdminPageQuery(
   else if (input.resource === "contacts")
     source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT c.id,c.name,c.phone,c.email,c.opt_in_whatsapp,c.opted_out_whatsapp,c.created_at AS page_at FROM crm_contacts c WHERE ${scope ? `(EXISTS(SELECT 1 FROM crm_leads l WHERE l.contact_id=c.id AND l.assigned_agent_id=${own}::uuid) OR EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.contact_id=c.id AND w.assigned_agent_id=${own}::uuid))` : "true"}) item`;
   else if (input.resource === "conversations")
-    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT w.id,w.status,w.last_message_at,w.last_inbound_at,c.name,c.phone,c.opted_out_whatsapp,m.text AS last_text,m.direction AS last_direction,w.created_at AS page_at${options.enquiries ? ", (SELECT bool_or(i.first_human_response_at IS NULL) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND i.status NOT IN ('closed','resolved','spam')) AS awaiting_human_response" : ""} FROM whatsapp_conversations w LEFT JOIN crm_contacts c ON c.id=w.contact_id LEFT JOIN LATERAL (SELECT text,direction FROM whatsapp_messages WHERE conversation_id=w.id ORDER BY created_at DESC,id DESC LIMIT 1) m ON true WHERE ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)) item`;
+    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (
+      SELECT w.id,w.status,w.assigned_agent_id,w.last_message_at,w.last_inbound_at,
+        c.name,c.phone,c.opted_out_whatsapp,m.text AS last_text,m.direction AS last_direction,
+        COALESCE(w.last_message_at,w.created_at) AS page_at,
+        COALESCE(NULLIF(c.name,''),NULLIF(c.phone,''),'WhatsApp 客戶') AS customer_display_name,
+        i.public_listing_no,COALESCE(rl.source,i.placement_source,'unknown') AS source_label,
+        rl.external_listing_id,
+        COALESCE(NULLIF(requested.name_zh,''),NULLIF(requested.name_en,'')) AS requested_staff_name,
+        CASE WHEN wa_can_reply_enquiry(${own}::uuid,i.id) THEN
+          COALESCE(NULLIF(owner.name_zh,''),NULLIF(owner.name_en,'')) END AS confirmed_owner_name,
+        CASE WHEN EXISTS(SELECT 1 FROM inquiries active_i WHERE active_i.conversation_id=w.id
+          AND active_i.source='whatsapp' AND active_i.status NOT IN ('closed','resolved','spam'))
+          THEN EXISTS(SELECT 1 FROM inquiries awaiting_i WHERE awaiting_i.conversation_id=w.id
+            AND awaiting_i.source='whatsapp' AND awaiting_i.status NOT IN ('closed','resolved','spam')
+            AND awaiting_i.first_human_response_at IS NULL)
+          ELSE COALESCE(m.direction::text='inbound',false) END AS awaiting_human_response,
+        EXISTS(SELECT 1 FROM inquiries review_i WHERE review_i.conversation_id=w.id
+          AND review_i.source='whatsapp' AND review_i.status NOT IN ('closed','resolved','spam')
+          AND (review_i.association_review OR review_i.provider_thread_review)) AS association_review,
+        CASE WHEN i.association_review OR i.provider_thread_review THEN 'review'
+          WHEN i.id IS NOT NULL AND i.first_human_response_at IS NULL THEN 'reply'
+          WHEN w.assigned_agent_id IS NULL THEN 'triage'
+          ELSE 'follow_up' END AS next_action,
+        jsonb_build_object('canReply',COALESCE(wa_can_reply_enquiry(${own}::uuid,i.id),false),
+          'canCorrect',COALESCE(wa_can_correct_enquiry(${own}::uuid,i.id),false)) AS capabilities
+      FROM whatsapp_conversations w
+      LEFT JOIN crm_contacts c ON c.id=w.contact_id
+      LEFT JOIN LATERAL (SELECT text,direction FROM whatsapp_messages
+        WHERE conversation_id=w.id ORDER BY created_at DESC,id DESC LIMIT 1) m ON true
+      LEFT JOIN LATERAL (SELECT * FROM inquiries WHERE conversation_id=w.id AND source='whatsapp'
+        AND status NOT IN ('closed','resolved','spam') ORDER BY updated_at DESC,id DESC LIMIT 1) i ON true
+      LEFT JOIN LATERAL (SELECT source,external_listing_id FROM whatsapp_enquiry_reference_links
+        WHERE inquiry_id=i.id ORDER BY created_at DESC,event_id DESC,ref_index DESC LIMIT 1) rl ON true
+      LEFT JOIN staff_users requested ON requested.id=i.requested_staff_id
+      LEFT JOIN staff_users owner ON owner.id=i.enquiry_owner_staff_id
+      WHERE ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)
+    ) item`;
   else if (input.resource === "messages")
     source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT m.id,m.direction,m.message_type,m.text,m.status,m.error,to_char(m.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at,m.created_at AS page_at FROM whatsapp_messages m JOIN whatsapp_conversations w ON w.id=m.conversation_id WHERE w.id=${param(input.conversationId)}::uuid ${input.messageIds ? `AND m.id=ANY(${param(input.messageIds)}::uuid[])` : ""} AND ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)) item`;
   else {
@@ -60,13 +96,17 @@ export function buildAdminPageQuery(
   equal("intent", input.intent);
   equal("source", input.source);
   equal("scope", input.scope);
-  if (input.status === "awaiting")
-    filters.push(
-      options.enquiries
-        ? "COALESCE((row->>'awaiting_human_response')::boolean,row->>'last_direction'='inbound')"
-        : "row->>'last_direction'='inbound'",
-    );
-  else equal("status", input.status);
+  if (input.resource === "conversations") {
+    if (input.status === "awaiting")
+      filters.push("(row->>'awaiting_human_response')::boolean IS TRUE");
+    else if (input.status === "attention")
+      filters.push(
+        "((row->>'association_review')::boolean IS TRUE OR (row->>'awaiting_human_response')::boolean IS TRUE)",
+      );
+    else if (input.status === "unassigned") filters.push("row->>'assigned_agent_id' IS NULL");
+    else if (input.status === "mine") filters.push(`row->>'assigned_agent_id'=${own}::text`);
+    else equal("status", input.status);
+  } else equal("status", input.status);
   if (input.agentId === "unassigned") filters.push("row->>'assigned_agent_id' IS NULL");
   else equal("assigned_agent_id", input.agentId);
   if (input.optIn === "yes") filters.push("(row->>'opt_in_whatsapp')::boolean IS TRUE");
@@ -85,7 +125,7 @@ export function buildAdminPageQuery(
         "stage",
       ],
       contacts: ["name", "phone", "email"],
-      conversations: ["name", "phone", "last_text"],
+      conversations: ["name", "phone", "last_text", "public_listing_no", "external_listing_id"],
       messages: ["text"],
       estates: ["slug", "name_zh", "name_en", "district_slug", "developer"],
       articles: ["title", "slug", "excerpt", "content"],
@@ -94,9 +134,20 @@ export function buildAdminPageQuery(
       media: ["pathname", "alt_text", "owner_id"],
     };
     const needle = param("%" + input.q.trim().replace(/[\\%_]/g, "\\$&") + "%");
-    filters.push(
-      `(${fields[input.resource].map((field) => `COALESCE(row->>'${field}','') ILIKE ${needle}`).join(" OR ")})`,
-    );
+    const fieldMatches = fields[input.resource]
+      .map((field) => `COALESCE(row->>'${field}','') ILIKE ${needle}`)
+      .join(" OR ");
+    const relatedMatches =
+      input.resource === "conversations"
+        ? ` OR EXISTS(SELECT 1 FROM whatsapp_messages search_message
+          WHERE search_message.conversation_id=(row->>'id')::uuid AND search_message.text ILIKE ${needle})
+          OR EXISTS(SELECT 1 FROM whatsapp_enquiry_reference_links search_ref
+          WHERE search_ref.conversation_id=(row->>'id')::uuid AND
+            (search_ref.external_listing_id ILIKE ${needle} OR
+             EXISTS(SELECT 1 FROM inquiries search_inquiry WHERE search_inquiry.id=search_ref.inquiry_id
+               AND search_inquiry.public_listing_no ILIKE ${needle})))`
+        : "";
+    filters.push(`(${fieldMatches}${relatedMatches})`);
   }
   const binding = pageBinding(
     input,

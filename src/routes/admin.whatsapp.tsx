@@ -1,5 +1,8 @@
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
+import { NoLinkInboxSummary } from "@/components/admin/whatsapp/NoLinkInbox";
+import { EnquiryOnlyPanel } from "@/components/admin/whatsapp/EnquiryOnlyPanel";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
@@ -77,6 +80,9 @@ const inboxStatusFilterOptions = [
   // Not a stored status -- derived from who spoke last. Listed first because it
   // is the only entry that answers "what do I have to do now".
   { value: "awaiting", label: "待回覆" },
+  { value: "attention", label: "需處理" },
+  { value: "mine", label: "我的對話" },
+  { value: "unassigned", label: "未分派" },
   { value: "open", label: "開啟" },
   { value: "pending", label: "待跟進" },
   { value: "closed", label: "已關閉" },
@@ -144,6 +150,8 @@ export const Route = createFileRoute("/admin/whatsapp")({
 
 function AdminWhatsapp() {
   const { user } = useNeonAuth();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const canBackfill = staffSession?.status === "ok" && staffSession.roles.includes("admin");
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const isDesktop = useDesktopBreakpoint();
@@ -159,6 +167,8 @@ function AdminWhatsapp() {
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const [templates, setTemplates] = useState<AdminWhatsappTemplateRow[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const templatesRequestRef = useRef(0);
   const [woztellEnabled, setWoztellEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
@@ -198,6 +208,8 @@ function AdminWhatsapp() {
   }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
+  const [newActivityAvailable, setNewActivityAvailable] = useState(false);
+  const pollFailuresRef = useRef(0);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const inboxQuery = search.q ?? "";
   const inboxStatus = search.status ?? "all";
@@ -254,6 +266,19 @@ function AdminWhatsapp() {
 
   const listCursorRef = useRef<string | null>(null);
   const olderPending = useRef(false);
+  const loadTemplates = useCallback(async () => {
+    const request = ++templatesRequestRef.current;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+    try {
+      const data = await fetchAdminWhatsappTemplates();
+      if (request === templatesRequestRef.current) setTemplates(data as AdminWhatsappTemplateRow[]);
+    } catch (err) {
+      if (request === templatesRequestRef.current) setTemplatesError(errorText(err));
+    } finally {
+      if (request === templatesRequestRef.current) setTemplatesLoading(false);
+    }
+  }, []);
   const refreshConversations = useCallback(
     async (cursor: string | null = listCursorRef.current) => {
       if (!user) return;
@@ -272,10 +297,13 @@ function AdminWhatsapp() {
         setNextListCursor(data.nextCursor);
         setListTotal(data.total);
         setListUpdatedAt(Date.now());
+        if (cursor === null) setNewActivityAvailable(false);
         setError(null);
+        return true;
       } catch (err) {
         if (requestId !== listRequestRef.current) return;
         setError(errorText(err));
+        return false;
       } finally {
         if (requestId === listRequestRef.current) setLoadingRows(false);
       }
@@ -374,7 +402,7 @@ function AdminWhatsapp() {
         };
         setOlderCursor(messageCursors.current.older);
         setDetailError(null);
-        loadConversationAiAssist(id, { background: options.background });
+        if (!options.background) loadConversationAiAssist(id);
         if (options.resetReply) {
           setReplyDrafts((current) => ({ ...current, [id]: "" }));
         }
@@ -438,6 +466,54 @@ function AdminWhatsapp() {
     void refreshConversations(null);
   }, [refreshConversations, user]);
 
+  // Only the active first page refreshes in place. An older page keeps its
+  // stable cursor until the agent explicitly returns to the latest activity.
+  useEffect(() => {
+    if (!user) return;
+    let timer: number | undefined;
+    let stopped = false;
+    let running = false;
+    const schedule = () => {
+      if (!stopped)
+        timer = window.setTimeout(tick, Math.min(60000, 10000 * 2 ** pollFailuresRef.current));
+    };
+    const tick = async () => {
+      if (stopped || document.hidden || running) {
+        schedule();
+        return;
+      }
+      running = true;
+      try {
+        if (listCursorRef.current) {
+          setNewActivityAvailable(true);
+        } else {
+          const ok = await refreshConversations(null);
+          pollFailuresRef.current = ok ? 0 : Math.min(pollFailuresRef.current + 1, 3);
+        }
+        const openId = selectedIdRef.current;
+        if (openId && !document.hidden) await loadConversationDetail(openId, { background: true });
+      } finally {
+        running = false;
+        schedule();
+      }
+    };
+    const onFocus = () => {
+      if (!document.hidden && !running) {
+        if (timer) window.clearTimeout(timer);
+        void tick();
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    schedule();
+    return () => {
+      stopped = true;
+      if (timer) window.clearTimeout(timer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [user, refreshConversations, loadConversationDetail]);
+
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -450,17 +526,7 @@ function AdminWhatsapp() {
         if (!cancelled) setError(errorText(err));
       });
 
-    // Not fatal if this fails or comes back empty -- TemplateSendPanel already
-    // has its own "no templates configured" state, so a failed fetch just
-    // falls back to that same message instead of blocking the inbox.
-    fetchAdminWhatsappTemplates()
-      .then((data) => {
-        if (!cancelled) setTemplates(data as AdminWhatsappTemplateRow[]);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setTemplatesLoading(false);
-      });
+    void loadTemplates();
 
     fetchAdminWoztellStatus()
       .then((data) => {
@@ -475,8 +541,9 @@ function AdminWhatsapp() {
 
     return () => {
       cancelled = true;
+      templatesRequestRef.current += 1;
     };
-  }, [user]);
+  }, [user, loadTemplates]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -746,7 +813,12 @@ function AdminWhatsapp() {
     if (!id) return;
     setReplyDrafts((current) => ({ ...current, [id]: value }));
   }, []);
-  const panelTitle = selectedRow?.name ?? detail?.name ?? selectedRow?.phone ?? "WhatsApp 對話";
+  const panelTitle =
+    selectedRow?.customer_display_name ??
+    selectedRow?.name ??
+    detail?.name ??
+    selectedRow?.phone ??
+    "WhatsApp 對話";
   const panelDescription = selectedRow
     ? `${statusLabel(selectedRow.status)} · ${formatDate(selectedRow.last_message_at)}`
     : "查看訊息紀錄、更新負責代理並回覆客戶。";
@@ -815,7 +887,7 @@ function AdminWhatsapp() {
             <Input
               value={queryDraft}
               onChange={(event) => setQueryDraft(event.target.value)}
-              placeholder="搜尋姓名、電話或訊息"
+              placeholder="搜尋姓名、電話、樓盤或訊息"
               aria-label="搜尋 WhatsApp 對話"
               className="h-11 w-full sm:w-56 lg:h-9"
             />
@@ -860,18 +932,20 @@ function AdminWhatsapp() {
             {/* History import. Deliberately not automatic: it reaches out to
                 Woztell and writes to crm_contacts, so it stays an explicit,
                 admin-initiated action rather than something a page load does. */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-11 lg:h-9"
-              disabled={backfilling}
-              onClick={() => void runBackfill()}
-              title="匯入 Woztell 上早於本系統的歷史對話"
-            >
-              <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              {backfilling ? "匯入中…" : "匯入歷史訊息"}
-            </Button>
+            {canBackfill ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-11 lg:h-9"
+                disabled={backfilling}
+                onClick={() => void runBackfill()}
+                title="匯入 Woztell 上早於本系統的歷史對話"
+              >
+                <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                {backfilling ? "匯入中…" : "匯入歷史訊息"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -894,6 +968,11 @@ function AdminWhatsapp() {
         }
       />
 
+      {newActivityAvailable ? (
+        <Button variant="outline" onClick={() => void refreshConversations(null)}>
+          返回最新活動並重新整理
+        </Button>
+      ) : null}
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -955,6 +1034,8 @@ function AdminWhatsapp() {
               woztellEnabled={woztellEnabled}
               templates={templates}
               templatesLoading={templatesLoading}
+              templatesError={templatesError}
+              onRetryTemplates={() => void loadTemplates()}
               disabled={isMutating}
               savingConversation={mutatingAction === "conversation"}
               sendingReply={mutatingAction === "reply"}
@@ -1011,6 +1092,8 @@ function AdminWhatsapp() {
           woztellEnabled={woztellEnabled}
           templates={templates}
           templatesLoading={templatesLoading}
+          templatesError={templatesError}
+          onRetryTemplates={() => void loadTemplates()}
           disabled={isMutating}
           savingConversation={mutatingAction === "conversation"}
           sendingReply={mutatingAction === "reply"}
@@ -1154,7 +1237,7 @@ function ConversationList({
                       attention.awaitingReply ? "font-bold" : "font-semibold",
                     ].join(" ")}
                   >
-                    {conversation.name ?? "WhatsApp 客戶"}
+                    {conversation.customer_display_name ?? conversation.name ?? "WhatsApp 客戶"}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {conversation.phone ?? "未有電話"}
@@ -1181,6 +1264,7 @@ function ConversationList({
                 (conversation.last_message_at ? "（非文字訊息）" : "未有訊息內容")}
             </span>
 
+            <NoLinkInboxSummary row={conversation} />
             <span className="flex flex-wrap items-center gap-2">
               {attention.awaitingReply ? (
                 <Badge className="border-transparent bg-amber-500 text-amber-950 hover:bg-amber-500">
@@ -1232,6 +1316,8 @@ function ConversationWorkspace({
   woztellEnabled,
   templates,
   templatesLoading,
+  templatesError,
+  onRetryTemplates,
   disabled,
   savingConversation,
   sendingReply,
@@ -1259,6 +1345,8 @@ function ConversationWorkspace({
   woztellEnabled: boolean | null;
   templates: AdminWhatsappTemplateRow[];
   templatesLoading: boolean;
+  templatesError: string | null;
+  onRetryTemplates: () => void;
   disabled: boolean;
   savingConversation: boolean;
   sendingReply: boolean;
@@ -1274,7 +1362,9 @@ function ConversationWorkspace({
   const replyCountId = useId();
   if (loading && !detail) return <Skeleton className="h-[32rem] w-full rounded-none" />;
   if (error)
-    return (
+    return selectedEnquiryId ? (
+      <EnquiryOnlyPanel inquiryId={selectedEnquiryId} />
+    ) : (
       <div className="p-4">
         <AdminError message={error} />
       </div>
@@ -1300,7 +1390,7 @@ function ConversationWorkspace({
   const showTemplateSend = availability.code === "OUTSIDE_24_HOUR_WINDOW";
 
   return (
-    <div className="flex min-h-[32rem] flex-col">
+    <div className="flex h-[calc(100dvh-9rem)] min-h-0 max-h-[44rem] flex-col overflow-hidden">
       {/* Plain divs, not <header>/<footer>: nested inside AdminShell's own
           <header> and the outer site <header>/<footer>, the semantic tags
           produced three "banner" and two "contentinfo" landmarks on one page,
@@ -1327,37 +1417,40 @@ function ConversationWorkspace({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Field label="對話狀態">
-            <AdminStatusSelect
-              ariaLabel="WhatsApp 對話狀態"
-              value={detail.status}
-              options={statusOptionsFor(detail.status)}
-              disabled={disabled}
-              onChange={onStatusChange}
-            />
-          </Field>
-          <Field label="要求更改負責代理（待確認）">
-            <Select
-              value={detail.assigned_agent_id ?? "none"}
-              disabled={disabled}
-              onValueChange={(value) => onAgentChange(value === "none" ? null : value)}
-            >
-              <SelectTrigger aria-label="負責代理">
-                <SelectValue placeholder="選擇代理" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">未指定代理</SelectItem>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agentLabel(agent)}
-                    {agent.active ? "" : "（停用）"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        <details className="mt-3 rounded border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">對話設定</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="對話狀態">
+              <AdminStatusSelect
+                ariaLabel="WhatsApp 對話狀態"
+                value={detail.status}
+                options={statusOptionsFor(detail.status)}
+                disabled={disabled}
+                onChange={onStatusChange}
+              />
+            </Field>
+            <Field label="要求更改負責代理（待確認）">
+              <Select
+                value={detail.assigned_agent_id ?? "none"}
+                disabled={disabled}
+                onValueChange={(value) => onAgentChange(value === "none" ? null : value)}
+              >
+                <SelectTrigger aria-label="負責代理">
+                  <SelectValue placeholder="選擇代理" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未指定代理</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agentLabel(agent)}
+                      {agent.active ? "" : "（停用）"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+        </details>
         {savingConversation ? (
           <p className="mt-3 text-xs text-muted-foreground">正在儲存對話設定…</p>
         ) : null}
@@ -1384,7 +1477,7 @@ function ConversationWorkspace({
         onLoadOlder={onLoadOlder}
       />
 
-      <div className="border-t p-4">
+      <div className="max-h-[36dvh] shrink-0 overflow-y-auto border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           回覆只可在客戶最後一次來訊後 24 小時內發送。
           {windowRemaining ? <span className="block">{windowRemaining}</span> : null}
@@ -1397,6 +1490,8 @@ function ConversationWorkspace({
             key={detail.id}
             templates={templates}
             loading={templatesLoading}
+            error={templatesError}
+            onRetry={onRetryTemplates}
             disabled={disabled}
             sending={sendingTemplate}
             onSend={onSendTemplate}
@@ -1431,7 +1526,7 @@ function ConversationWorkspace({
             placeholder="輸入回覆內容"
             onChange={(event) => onReplyBodyChange(event.target.value)}
           />
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t bg-background py-2">
             <span
               id={replyCountId}
               className={[
@@ -1447,7 +1542,8 @@ function ConversationWorkspace({
             </Button>
           </div>
         </div>
-        <div className="mt-3">
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer">AI 回覆建議（只作草稿）</summary>
           <AiAssistPanel
             aiAssist={aiAssist}
             loading={aiAssistLoading}
@@ -1458,7 +1554,7 @@ function ConversationWorkspace({
               onReplyBodyChange(value);
             }}
           />
-        </div>
+        </details>
       </div>
     </div>
   );
@@ -1496,12 +1592,16 @@ function AiAssistPanel({
 function TemplateSendPanel({
   templates,
   loading,
+  error,
+  onRetry,
   disabled,
   sending,
   onSend,
 }: {
   templates: AdminWhatsappTemplateRow[];
   loading: boolean;
+  error: string | null;
+  onRetry: () => void;
   disabled: boolean;
   sending: boolean;
   onSend: (templateId: string) => Promise<void>;
@@ -1518,6 +1618,20 @@ function TemplateSendPanel({
     );
   }
 
+  if (error) {
+    return (
+      <div role="alert" className="mb-3 rounded-md border border-destructive/30 p-3 text-sm">
+        <p>
+          {/403|forbidden|權限/i.test(error)
+            ? "沒有查看範本的權限。"
+            : "未能載入範本，請稍後重試。"}
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+          重新載入範本
+        </Button>
+      </div>
+    );
+  }
   if (templates.length === 0) {
     return (
       <div className="mb-3 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
