@@ -13,8 +13,8 @@
 | T06 | UX01,NL02,R13 / UC05,06,12,14 | IMPLEMENTED_LOCAL | 4ff9fa5 | PGlite ACL/CAS、第二盤隔離、分派policy、既有pagination；47/47 focused tests、typecheck/lint | 新 migration 只在 PGlite；isolated Neon/browser/provider BLOCKED_EXTERNAL |
 | T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | IMPLEMENTED_LOCAL | 5954c44 | RED 0/2 → 91/91 Node focused；PGlite 5/5；Bun card 5/5；typecheck/lint | 真 provider、isolated Neon、真同事手機／客戶回覆及整段 synthetic browser BLOCKED_EXTERNAL |
 | T08 | UX01,WA01–06,SH01 / UC06,13,17 | IMPLEMENTED_LOCAL | 39a03c9 | RED inbox 4/7 → GREEN 23/23 paging+PGlite；route/permission 58/58；Bun UI 7/7；typecheck/lint | 無新 migration；真 authenticated synthetic browser 2 cases BLOCKED_EXTERNAL（缺 isolated app／storageState／30條 fixture） |
-| T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | IMPLEMENTED_LOCAL | 本次 focused commit | RED Folder module 0/1 → GREEN Bun 12/12；PGlite options/guard + assignment 10/10；typecheck；T09 field ledger | 新 migration 僅 PGlite；synthetic browser/isolated Neon/真 provider BLOCKED_EXTERNAL |
-| T10 | LE01–05 / UC11,13 | TODO | | | |
+| T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | IMPLEMENTED_LOCAL | 6617be3 | RED Folder module 0/1 → GREEN Bun 12/12；PGlite options/guard + assignment 10/10；typecheck；T09 field ledger | 新 migration 僅 PGlite；synthetic browser/isolated Neon/真 provider BLOCKED_EXTERNAL |
+| T10 | LE01–05 / UC11,13 | IMPLEMENTED_LOCAL | 本次 focused commit | RED missing modules/functions → GREEN PGlite + validation + manifest 8/8；Bun form 1/1；command-center 82/82 Node + 8/8 Bun；typecheck/lint | 新 migration 只在 PGlite；合成 browser/isolated Neon/真聯絡身分 BLOCKED_EXTERNAL |
 | T11 | R05,R06,R14 / UC18 | TODO | | | |
 | T12 | BL01–08 / UC16,17 | TODO | | | |
 | T13 | UX03,WEB01 / UC13,16 | TODO | | | |
@@ -97,3 +97,10 @@
 - DB 新 guard 在 requested salesperson override 寫入時重新核對 channel、source scope、原始 requestedStaffText、有效 verified alias 與 active staff；不能用單純同名或任意職員 ID 覆寫。原 migration 不變。
 - 同事手機通知預設關閉，技術目的地配置在支援進階區；保存設定不試送，現有試送獨立 preview/confirm 與 unknown reconciliation 保留。能力卡 inbound/assignment/customer reply/staff phone 分開，unknown 不冒充 ready。完整 audit05 欄位逐項狀態見 `2026-09-29-no-link-t09-fields.md`；未完部分保留在 T12／外部 gate。
 - Synthetic browser verify/save/reload/next actor 未執行：缺獨立 app、manager/agent storageState 及同意的合成 fixture；不是 UI 驗收 PASS。
+
+## T10：人工轉交與 CRM 跟進
+
+- 新手動轉交路徑以已登入 staff ID 作 forwarder、request UUID 去重；原文、業務來源、未核實原客戶聯絡線索及轉交時間單獨保存。CRM lead source=`manual_forward`、contact_id=NULL；不開 WhatsApp 對話／回覆時窗、不置 opt-in；原客戶可不留電話。重複 requestId 相同 payload 只得一 lead，變更 payload 衝突。
+- 下一步在同一 DB transaction 建入現有 `crm_activities`；負責同事須當下 active，同分行 manager 才能代選，agent 只能自己，admin 按現有全域角色；重試不重建 activity。原始 evidence 僅 lead 當下 owner 或管理角色可讀。
+- CRM lead 詳情有授權 related conversation 連結，DB 同時核對 lead scope 與 `wa_can_read_conversation`，沒有原客戶對話時不會偽造。聯絡姓名／電郵另用明確表單和 DB commit 時 scope/共享 contact 核對，audit 一筆；電話、WhatsApp 身分、opt-in/window 不被此操作改動。
+- PGlite 覆蓋來源隔離、無電話、duplicate/conflict、錯 branch、inactive、下一步 refresh 對應 activity、直接越權 read／edit；Node validation、Bun UI、現有 command-center suite 綠。合成 browser save/refresh/next actor 尚缺 isolated app 及登入 fixture，不能當作真人端驗收。未實作 bulk follow-up：現有 bulk stage/agent 沿用；此 task 沒有批次建立下一步的授權需求。AI 原有建議不自動保存。

@@ -13,6 +13,11 @@ import {
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
+import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
+import { RelatedLeadConversations } from "@/components/admin/whatsapp/RelatedLeadConversations";
+import { LeadContactEditor } from "@/components/admin/whatsapp/LeadContactEditor";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
@@ -216,6 +221,7 @@ function AdminLeads() {
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminLeadDetail | null>(null);
   const [draft, setDraft] = useState<LeadDraft | null>(null);
@@ -795,6 +801,9 @@ function AdminLeads() {
         }
         actions={
           <>
+            <Button type="button" size="sm" variant="outline" onClick={() => setForwardOpen(true)}>
+              記錄人工轉交
+            </Button>
             <Button asChild size="sm" className="h-11 lg:h-9">
               <Link to="/admin/leads/command-center">前往跟進工作台</Link>
             </Button>
@@ -1048,7 +1057,29 @@ function AdminLeads() {
             noteSaving={mutatingAction === "note"}
           />
         ) : null}
+        {detail?.source === "manual_forward" ? (
+          <ForwardedEnquiryEvidence leadId={detail.id} />
+        ) : null}
       </AdminDetailPanel>
+      <Dialog open={forwardOpen} onOpenChange={setForwardOpen}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogTitle>記錄人工轉交查詢</DialogTitle>
+          <DialogDescription>
+            保存原文及來源；不會建立 WhatsApp 客戶對話或發送訊息。
+          </DialogDescription>
+          {forwardOpen ? (
+            <ForwardedEnquiryForm
+              agents={agents.map((agent) => ({ id: agent.id, name: agent.name, active: true }))}
+              onCancel={() => setForwardOpen(false)}
+              onSaved={(leadId) => {
+                setForwardOpen(false);
+                void refreshLeads();
+                openLead(leadId);
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
       {unsavedLeadDialog}
       {leadRouteLeaveGuard}
       <AdminConfirmDialog
