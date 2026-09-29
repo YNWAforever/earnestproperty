@@ -3,6 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import type { NormalizedWoztellEvent } from "../woztell/woztell.server.ts";
 import { classifyWoztellEvent } from "./event-classification.ts";
 import { enquiryMode } from "./contracts.ts";
+import { noLinkCaptureSnapshot, maybePrepareNoLinkFollowup } from "./no-link-rollout.server.ts";
 import { buildEnqueueJobStatement } from "../control-plane/jobs.server.ts";
 import type { TransactionStatement } from "../neon/db.server.ts";
 export async function enquirySchemaAvailable() {
@@ -33,6 +34,7 @@ export function buildLiveEventStatements(
   const active = mode === "active";
   const generation = process.env.EP_WA_ACTIVATION_ID;
   const validGeneration = generation && /^[0-9a-f-]{36}$/i.test(generation) ? generation : null;
+  const noLinkCapture = noLinkCaptureSnapshot(mode, event.channelId, validGeneration);
   const job = buildEnqueueJobStatement(
     {
       jobType: "woztell.enquiry.process",
@@ -76,7 +78,8 @@ export function buildLiveEventStatements(
           staffRoutingEligible: active && process.env.EP_WA_ROUTING_ENABLED === "true",
           staffNotificationsEligible:
             active && process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
-          noLinkEffectsEligible: active && process.env.EP_WA_NO_LINK_EFFECTS_ENABLED === "true",
+          noLinkEffectsEligible: noLinkCapture.eligible,
+          noLinkCanaryStaffIds: noLinkCapture.staffIds,
         }),
         event.legacyExternalMessageId,
         event.text,
@@ -123,23 +126,7 @@ export async function observeEnquiryEvent(
   if (mode === "observe" || mode === "active") {
     const { associatePortalEnquiry } = await import("./enquiry-association.server.ts");
     portal = await associatePortalEnquiry(eventId, query);
-    if (
-      mode === "active" &&
-      portal.handled &&
-      process.env.EP_WA_NO_LINK_EFFECTS_ENABLED === "true"
-    ) {
-      const [prepared] = await query<{ decision: { decision: string } }>(
-        "SELECT wa_prepare_no_link_followup($1::uuid) AS decision",
-        [eventId],
-      );
-      if (
-        prepared?.decision?.decision === "assignment_pending" ||
-        prepared?.decision?.decision === "staff_ready"
-      ) {
-        const { wakeAfterCommit } = await import("../control-plane/job-wake.server.ts");
-        wakeAfterCommit("service");
-      }
-    }
+    if (mode === "active" && portal.handled) await maybePrepareNoLinkFollowup(eventId, mode, query);
     const { observeEpisode } = await import("./episodes.server.ts");
     if (!portal.handled) await observeEpisode(eventId, query);
     const { observeQualifiedHumanResponse } = await import("./assignment.server.ts");

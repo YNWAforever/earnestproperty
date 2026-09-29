@@ -46,7 +46,8 @@ if (probePath) {
   }
   const probe = resolve(probePath);
   const digest = createHash("sha256").update(readFileSync(probe)).digest("hex");
-  if (digest !== "d2e508b1ea3acc5fd87f3d56a7930380378a794ce223082736fdda7dec7a127e") throw new Error("Unexpected audit probe content");
+  if (digest !== "d2e508b1ea3acc5fd87f3d56a7930380378a794ce223082736fdda7dec7a127e")
+    throw new Error("Unexpected audit probe content");
   code ||= run("node", ["--test", probe], safeEnv);
 }
 process.exitCode = code;
