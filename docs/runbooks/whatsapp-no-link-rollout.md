@@ -16,6 +16,8 @@ The existing `EP_WA_ENQUIRY_MODE` (`off`/`observe`/`active`) and `EP_WA_NO_LINK_
 
 The setting names above are configuration only; this branch does not set them in any deployment. If any is missing, malformed or mismatched, no-link effects stay off. Changing a cohort or channel requires a new activation so earlier receipts cannot gain new effects. The durable receipt's `effects_eligible` remains false by design; its captured mode, activation, origin, provider identity and time are checked alongside the immutable event snapshot.
 
+Staff offboarding also needs a reviewed no-link enquiry handover: `inquiries.enquiry_owner_staff_id` remains provider-coupled and is not bulk relabelled by the generic staff deactivation. Check outstanding enquiries for that staff member, preserve the original decision/forwarder snapshots, and reconcile the whole-thread provider assignee before confirming a new enquiry owner. The CRM lead assignment is the current owner for manually forwarded enquiries.
+
 ## Preflight and isolated evidence
 
 1. Confirm the exact review commit, remote, migration diff and clean deploy checkout. Do not reset or alter another working tree. Run `node scripts/no-link-safe-checks.mjs`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:no-link`, `npm run test:whatsapp-enquiries`, `npm run test:woztell`, `npm run test:staff-notifications`, `npm run test:analytics`, and `npm run test:control-plane`. Separate PGlite, local Postgres, browser, Neon, and provider results in the release record.
