@@ -37,3 +37,33 @@ export type ReceiptRow = {
   origin: EventOrigin;
   identity_key: string | null;
 };
+export type PortalSource = "28hse" | "propertyhk";
+export type PortalDealType = "sale" | "rent";
+export type PortalWarning =
+  | "text_too_long"
+  | "untrusted_portal_url"
+  | "unverified_28hse_shape"
+  | "propertyhk_shape_unverified"
+  | "text_url_id_conflict"
+  | "deal_type_conflict"
+  | "multiple_references";
+export type PortalReference = {
+  source: PortalSource;
+  sourceEvidence: Array<"url-derived" | "message-declared">;
+  originalUrl: string | null;
+  canonicalUrl: string | null;
+  spans: Array<[number, number]>;
+  externalListingId: string | null;
+  dealType: PortalDealType | null;
+  shape: "verified" | "unverified";
+};
+export type PortalInterpretation = {
+  parserVersion: "portal-intake-v1";
+  references: PortalReference[];
+  requestedStaffText: string | null;
+  estateText: string | null;
+  messageDealType: PortalDealType | null;
+  quotedPriceHkd: number | null;
+  warnings: PortalWarning[];
+  requiresReview: boolean;
+};

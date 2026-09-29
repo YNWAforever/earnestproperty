@@ -6,8 +6,8 @@
 |---|---|---|---|---|---|
 | T00 | 全部 | VERIFIED | bad4bd9 | 外層 7/7 SHA、內層 33/33 SHA；40/40 baseline tests；P01–P05 5/5 characterization | Neon、browser、live provider BLOCKED |
 | T01 | NL03 / UC01,09,12 | IMPLEMENTED | a5fbd85 | RED 2/3 → GREEN 13/13 (含 migration manifest)、typecheck、focused lint；40/40 baseline | 新 migration 僅本地 PGlite apply；isolated Neon BLOCKED |
-| T02 | NL04 / UC09,10 | IMPLEMENTED | 本次 focused commit | RED 4/4 → GREEN 19/19 receipt/identity tests；18/18 plan suite；6/6 manifest；40/40 baseline；typecheck／lint | 新 migration 僅 PGlite；多 session Neon/provider BLOCKED_EXTERNAL |
-| T03 | NL01 / UC01–04,07,08 | TODO | | | |
+| T02 | NL04 / UC09,10 | IMPLEMENTED | 5cf75e0 | RED 4/4 → GREEN 19/19 receipt/identity tests；18/18 plan suite；6/6 manifest；40/40 baseline；typecheck／lint | 新 migration 僅 PGlite；多 session Neon/provider BLOCKED_EXTERNAL |
+| T03 | NL01 / UC01–04,07,08 | IMPLEMENTED | 本次 focused commit | RED module absent → GREEN 8/8 parser, 17/17 parser+links, typecheck/lint | PropertyHK live shape NOT_TESTED；未接DB resolver |
 | T04 | NL01,R01,R02 / UC01,03–05,08,15 | TODO | | | |
 | T05 | NL02 / UC01,06–09 | TODO | | | |
 | T06 | UX01,NL02,R13 / UC05,06,12,14 | TODO | | | |
@@ -47,4 +47,11 @@ ode --test src/lib/whatsapp-enquiries/inbound-identity.test.mjs src/lib/whatsapp
 pm.cmd run typecheck exit 0，focused ESLint exit 0，baseline 40/40。測試使用合成資料與 PGlite 單序 SQL；Neon 多連線 20 併發尚需 isolated target。
 - 新 migration 只加 delivery_count 與非空 identity_key 的 partial unique index，舊資料不 bulk backfill。相同 channel/provider 舊 ID 兼容；receipt identity scope 帶 tenant/app/channel/kind。unknown wrapper、BOT/MANUAL、internal note 沿既有分類 guard，6/6 classification tests。
 - 待解風險：舊 CRM contact 的 whatsapp_member_id 為全域 unique；跨 channel 重複 member ID 且不同客戶電話的 legacy contact link 尚須隔離驗證。
+
+## T03：免link portal parser
+
+- 原始 28Hse 樣本逐字 fixture；parserVersion portal-intake-v1。解析外部 ID 字串 4033349、requestedStaffText、estateText、sale、訊息報價 HKD12680000。URL 保留原文及 span，canonical 只除已定義非 identity 的 t；未知 query 保留。未推 customer、internal property、click、campaign 或時間。
+- RED：parser module 缺失，
+ode --test src/lib/whatsapp-enquiries/portal-intake.test.mjs exit 1。GREEN：同命令 8/8 exit 0；與 links、link-batch-import 一起 17/17，typecheck、focused ESLint exit 0。純函數測試將 fetch 攔截並確認 0 call，無 model port。
+- 前導零、不同 ID、重複 URL、多 URL、文字與 URL 衝突、全形標點、過長、spoofed host/userinfo/local URL 有邊界測試。PropertyHK 僅 exact host + unverified shape，沒有已驗證去識別樣本；live format NOT_TESTED，不推測 external ID。T04/T05 尚須把解析證據耐久接到 enquiry。
 
