@@ -486,18 +486,17 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <a
-            href={WHATSAPP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden sm:inline-flex"
-            onClick={() => setActiveMegaMenu(null)}
-          >
-            <Button size="sm" variant="brand">
+          <Button asChild size="sm" variant="brand" className="hidden sm:inline-flex">
+            <a
+              href={WHATSAPP_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setActiveMegaMenu(null)}
+            >
               <MessageCircle className="h-4 w-4" />
               WhatsApp
-            </Button>
-          </a>
+            </a>
+          </Button>
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -554,18 +553,17 @@ export function SiteHeader() {
                     />
                   </div>
                 </div>
-                <a
-                  href={WHATSAPP_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4"
-                  onClick={() => setOpen(false)}
-                >
-                  <Button variant="brand" className="w-full">
+                <Button asChild variant="brand" className="mt-4 w-full">
+                  <a
+                    href={WHATSAPP_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setOpen(false)}
+                  >
                     <MessageCircle className="h-4 w-4" />
                     WhatsApp 查詢
-                  </Button>
-                </a>
+                  </a>
+                </Button>
               </div>
             </SheetContent>
           </Sheet>

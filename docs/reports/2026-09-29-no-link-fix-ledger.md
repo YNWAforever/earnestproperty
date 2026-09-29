@@ -16,8 +16,8 @@
 | T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | IMPLEMENTED_LOCAL | 6617be3 | RED Folder module 0/1 → GREEN Bun 12/12；PGlite options/guard + assignment 10/10；typecheck；T09 field ledger | 新 migration 僅 PGlite；synthetic browser/isolated Neon/真 provider BLOCKED_EXTERNAL |
 | T10 | LE01–05 / UC11,13 | IMPLEMENTED_LOCAL | 5e6528b | RED missing modules/functions → GREEN PGlite + validation + manifest 8/8；Bun form 1/1；command-center 82/82 Node + 8/8 Bun；typecheck/lint | 新 migration 只在 PGlite；合成 browser/isolated Neon/真聯絡身分 BLOCKED_EXTERNAL |
 | T11 | R05,R06,R14 / UC18 | IMPLEMENTED_LOCAL | 099023f | RED sourceEvidence absent → GREEN 3/3 new Node + 1/1 PGlite；現有 analytics 65/65 Node + 3/3 Bun；typecheck/lint | 無新 migration；Neon/真資料報表與 browser BLOCKED_EXTERNAL |
-| T12 | BL01–08 / UC16,17 | IMPLEMENTED_LOCAL / 部分外部阻塞 | 本次 focused commit | RED pristine/overlap → GREEN 3/3；Woztell 151+8、enquiry 103、admin batch 29+26；typecheck/focused lint | 無新 migration；provider 全文、Neon/合成 browser BLOCKED_EXTERNAL |
-| T13 | UX03,WEB01 / UC13,16 | TODO | | | |
+| T12 | BL01–08 / UC16,17 | IMPLEMENTED_LOCAL / 部分外部阻塞 | 0894105 | RED pristine/overlap → GREEN 3/3；Woztell 151+8、enquiry 103、admin batch 29+26；typecheck/focused lint | 無新 migration；provider 全文、Neon/合成 browser BLOCKED_EXTERNAL |
+| T13 | UX03,WEB01 / UC13,16 | IMPLEMENTED_LOCAL / 部分外部阻塞 | 本次 focused commit | RED 5/7 → GREEN 7/7 auth/header contract；redirect 5/5；public 61+6；contact 58+18；image 13；typecheck/lint | 真登入/cookie origin、A074714 current data、圖像 network budget BLOCKED_EXTERNAL |
 | T14 | PF01、動作台帳 / 全部 UC | TODO | | | |
 | T15 | 發佈 gate / 全部 UC | TODO | | | |
 
@@ -120,3 +120,11 @@
 - 同名群組可看用途和更新時間；各群組精確合資格人數仍需選中後按預覽，沒有冒用舊 campaign 收件數。BL01 的真租務範本狀態、BL03 的真資料同名／人數、BL07 desktop collapse、真 provider 全文及合成 browser 未核實，保留分母。沒有更改 ordinary inbound／tracking source semantics，原 signed batch、partial subset、unknown recovery、CSV escape tests 保留。
 - 此輪另在 T06 assignment context 測試找到真 SQL 參數位置錯誤，已獨立提交 7e448f1。PGlite fixture 載入新增 migration 的真 ACL 函數，admin／同分行 manager／assignee 成功，跨分行 manager 和未授權角色失敗。enquiry suite 103/103。這不是 Neon 多 session readback。
 - 指令：node --test src/lib/admin/blast-review.test.mjs exit 0（3/3）；npm.cmd run test:woztell exit 0（151 Node + 8 Bun）；npm.cmd run test:whatsapp-enquiries exit 0（103/103）；npm.cmd run test:admin-properties exit 0（29 Node + 26 Bun）；npm.cmd run typecheck、focused ESLint exit 0。Synthetic browser、真 provider template API 和送達均未測。無 migration 或 config 變動。
+
+## T13：職員登入與公開站語義
+
+- RED：auth provider 的 AuthView 表單按現有 0.3.0-beta 使用英語預設，雖然頁面標頭是「職員登入」；AdminShell 未登入／登出文案仍顯 Neon Auth 技術名。公開 SiteHeader 桌面及手機 WhatsApp 入口用 anchor 內包 button，產生巢狀互動元素。新增 auth/header 合約 5/7。
+- GREEN：用已安裝 @neondatabase/auth-ui 所繼承 AuthView 的 localization prop 提供香港繁中登入、電郵、密碼、驗證及復原標籤；同頁 English 切換以本地偏好保存。沒有改 auth client、驗證或 callback。AdminShell 改用「職員帳戶」。兩個 header CTA 以 Button asChild 渲染單一 anchor，href、target、fallback 與焦點可達性保留。合約 7/7，redirect allowlist 5/5，安全落回 /admin 的 open-redirect 測試仍過。
+- custom-domain 正式首頁讀取顯示 earnestproperty.com 轉向 www.earnestproperty.com；web 工具無法讀 /admin、/auth/sign-in 及指定搜尋頁，沒有登入或寫入。現有 SITE_URL 由 VITE_SITE_URL／VERCEL_PROJECT_PRODUCTION_URL 決定，local fallback 是 vercel.app；本 session 不知道部署時實際環境值／Neon Auth Domains/cookie 設定，故不更改 alias/config，正式 redirect、callback、session 失效恢復為 BLOCKED_EXTERNAL。
+- A074714 搜尋／VR／交通在審核 read-only 樣本已記為解決，本輪沒有可重現的新缺陷，保留既有文字與 public routes。R16 AppImage 本地 variant 合約 13/13；未作正式站 image network budget，不能聲稱所有圖片已最佳化。首頁層次／文案只有 heuristic，沒有改已核准事實。
+- 指令：node --test src/routes/admin-login-copy.test.mjs src/components/site/SiteHeader.contract.test.mjs src/routes/listings.contract.test.mjs src/routes/property.listing-detail.contract.test.mjs exit 0；bun test --no-env-file src/lib/admin/safe-redirect.test.ts exit 0（5/5）；npm.cmd run test:seo exit 0（61 Node + 6 Bun）；npm.cmd run test:contact exit 0（58 Node + 18 Bun）；bun test --no-env-file src/components/media/AppImage.test.tsx exit 0（13/13）；npm.cmd run typecheck、focused ESLint exit 0。無 migration／config 變動。合成 browser 及真登入未執行。

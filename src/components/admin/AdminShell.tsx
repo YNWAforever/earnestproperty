@@ -427,7 +427,7 @@ export function AdminShell({
         <div className="w-full rounded-lg border bg-card p-6 text-center shadow-sm">
           <h1 className="text-xl font-semibold">職員登入</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            請先使用 Neon Auth 登入，之後即可返回你原本要開啟的頁面。
+            請先以職員帳戶登入，之後即可返回你原本要開啟的頁面。
           </p>
           <Button asChild className="mt-5 w-full">
             {/* Carries the requested admin path so sign-in returns here instead
@@ -568,7 +568,7 @@ export function AdminShell({
       <AdminConfirmDialog
         open={signOutOpen}
         title="確認登出？"
-        description="登出後需要重新使用 Neon Auth 登入才可返回後台。未儲存的修改會遺失。"
+        description="登出後需要重新以職員帳戶登入才可返回後台。未儲存的修改會遺失。"
         confirmLabel="登出"
         isPending={signingOut}
         onOpenChange={setSignOutOpen}

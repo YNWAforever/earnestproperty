@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { AuthView } from "@neondatabase/auth-ui";
 
 import { safeAdminRedirect } from "@/lib/admin/safe-redirect";
+import { staffAuthZhHK } from "@/lib/admin/auth-localization";
 
 export const Route = createFileRoute("/auth/$pathname")({
   // `redirect` carries the admin page the user originally asked for. Without it
@@ -44,17 +46,52 @@ function Auth() {
   // Validated, not trusted: the parameter is attacker-controllable, so it is
   // run through an allowlist rather than passed straight to AuthView.
   const redirectTo = safeAdminRedirect(redirect);
+  const [locale, setLocale] = useState<"zh-HK" | "en">("zh-HK");
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("earnest.staff-auth-locale") === "en") setLocale("en");
+    } catch {
+      // Storage may be unavailable; the visible toggle still works.
+    }
+  }, []);
+  function toggleLocale() {
+    const next = locale === "zh-HK" ? "en" : "zh-HK";
+    setLocale(next);
+    try {
+      window.localStorage.setItem("earnest.staff-auth-locale", next);
+    } catch {
+      // Language selection never blocks authentication.
+    }
+  }
 
   return (
-    <section className="flex min-h-[calc(100vh-12rem)] items-center justify-center bg-background px-4 py-12">
+    <section
+      lang={locale}
+      className="flex min-h-[calc(100vh-12rem)] items-center justify-center bg-background px-4 py-12"
+    >
       <div className="w-full max-w-md">
         <header className="mb-6 text-center">
           <a href="/" className="text-lg font-semibold text-primary">
             晉誠地產
           </a>
-          <p className="mt-1 text-sm text-muted-foreground">職員登入 · 只供已授權團隊使用</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {locale === "zh-HK"
+              ? "職員登入 · 只供已授權團隊使用"
+              : "Staff sign-in · Authorized team only"}
+          </p>
+          <button
+            type="button"
+            onClick={toggleLocale}
+            className="mt-3 min-h-11 rounded px-3 text-sm font-medium text-primary underline underline-offset-4"
+          >
+            {locale === "zh-HK" ? "English" : "繁體中文"}
+          </button>
         </header>
-        <AuthView pathname={pathname} redirectTo={redirectTo} />
+        <AuthView
+          pathname={pathname}
+          redirectTo={redirectTo}
+          localization={locale === "zh-HK" ? staffAuthZhHK : undefined}
+        />
       </div>
     </section>
   );
