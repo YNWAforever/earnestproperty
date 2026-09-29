@@ -106,6 +106,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260927172000_media_asset_variants.sql",
   "20260929100000_whatsapp_inbound_receipts.sql",
   "20260929101000_whatsapp_receipt_identity.sql",
+  "20260929102000_whatsapp_portal_resolution.sql",
 ]);
 
 /**

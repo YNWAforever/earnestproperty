@@ -7,8 +7,8 @@
 | T00 | 全部 | VERIFIED | bad4bd9 | 外層 7/7 SHA、內層 33/33 SHA；40/40 baseline tests；P01–P05 5/5 characterization | Neon、browser、live provider BLOCKED |
 | T01 | NL03 / UC01,09,12 | IMPLEMENTED | a5fbd85 | RED 2/3 → GREEN 13/13 (含 migration manifest)、typecheck、focused lint；40/40 baseline | 新 migration 僅本地 PGlite apply；isolated Neon BLOCKED |
 | T02 | NL04 / UC09,10 | IMPLEMENTED | 5cf75e0 | RED 4/4 → GREEN 19/19 receipt/identity tests；18/18 plan suite；6/6 manifest；40/40 baseline；typecheck／lint | 新 migration 僅 PGlite；多 session Neon/provider BLOCKED_EXTERNAL |
-| T03 | NL01 / UC01–04,07,08 | IMPLEMENTED | 本次 focused commit | RED module absent → GREEN 8/8 parser, 17/17 parser+links, typecheck/lint | PropertyHK live shape NOT_TESTED；未接DB resolver |
-| T04 | NL01,R01,R02 / UC01,03–05,08,15 | TODO | | | |
+| T03 | NL01 / UC01–04,07,08 | IMPLEMENTED | bc4f8c0 | RED module absent → GREEN 8/8 parser, 17/17 parser+links, typecheck/lint | PropertyHK live shape NOT_TESTED；未接DB resolver |
+| T04 | NL01,R01,R02 / UC01,03–05,08,15 | IMPLEMENTED | 本次 focused commit | RED module absent → GREEN 15/15 resolver+manifest, typecheck/lint；PGlite exact SQL | 新 migration 僅 PGlite；channel scope/real staff alias及Neon BLOCKED_EXTERNAL |
 | T05 | NL02 / UC01,06–09 | TODO | | | |
 | T06 | UX01,NL02,R13 / UC05,06,12,14 | TODO | | | |
 | T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | TODO | | | |
@@ -54,4 +54,12 @@ pm.cmd run typecheck exit 0，focused ESLint exit 0，baseline 40/40。測試使
 - RED：parser module 缺失，
 ode --test src/lib/whatsapp-enquiries/portal-intake.test.mjs exit 1。GREEN：同命令 8/8 exit 0；與 links、link-batch-import 一起 17/17，typecheck、focused ESLint exit 0。純函數測試將 fetch 攔截並確認 0 call，無 model port。
 - 前導零、不同 ID、重複 URL、多 URL、文字與 URL 衝突、全形標點、過長、spoofed host/userinfo/local URL 有邊界測試。PropertyHK 僅 exact host + unverified shape，沒有已驗證去識別樣本；live format NOT_TESTED，不推測 external ID。T04/T05 尚須把解析證據耐久接到 enquiry。
+
+## T04：MLS／職員權威配對
+
+- Batch resolver 只查明確 reviewed channel/source scope；migration 建表但不 seed 任何映射。使用 mls_source_state exact source+scope+external ID+deal、有效 observation、active source/link/public offer、30 日 accepted freshness 門檻。外部 ID 保持字串；matched snapshot 有 observation/policy/mapping 版本及 publication owner，訊息報價不改 MLS。
+- requestedStaffText 只走現有 staff_external_references 同 namespace 的精確 verified record；沒有或多個、職員停用、撤刊、scope 不一致一律 review。PropertyHK shape 未驗，不能 auto match。加入 append-only interpretation/resolution snapshot；同 receipt/parser 版本重播一致才 idempotent，改變證據拒絕。
+- RED：resolver module 不存在，new unit exit 1。GREEN：
+ode --test src/lib/whatsapp-enquiries/portal-resolution.test.mjs src/lib/whatsapp-enquiries/portal-resolution.db.test.mjs src/lib/control-plane/migration-versions.test.mjs exit 0（15/15）。PGlite 測新 migration 無 authority seed、以實際 production SQL 配對 synthetic P1/S1、錯 channel 拒絕、snapshot 不可 UPDATE/DELETE。1000 refs 使用 3 次批量 port 呼叫。typecheck、focused lint exit 0。
+- 此時 resolver 尚未由收件流程調用；T05 要接 receipt→interpretation→enquiry。正式 source scope／Terence ID 未知，不能 seed；isolated Neon migration／真 MLS 資料核對 BLOCKED_EXTERNAL。
 
