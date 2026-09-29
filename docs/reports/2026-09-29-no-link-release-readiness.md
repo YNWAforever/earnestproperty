@@ -1,0 +1,52 @@
+# Earnest Property no-link release readiness (T00–T15)
+
+**Decision: LOCAL_IMPLEMENTATION_VERIFIED / VERIFICATION_BLOCKED for production.** The code and isolated tests are reviewable; no production DB, config, provider, customer, staff message, deploy or merge was changed. Branch `codex/no-link-fixes-20260929` starts at audit SHA `b1263bc06aef4d45891dd0b78380574292f70a4b`. The authoritative remote at T00 was `https://github.com/YNWAforever/earnestproperty.git`; the root worktree's unrelated edits were left untouched. See the per-task findings, tests and commits in `2026-09-29-no-link-fix-ledger.md`.
+
+## What has been implemented
+
+- The ordinary signed Woztell inbound path saves a durable attempt before optional transcript/workflow projection. Scoped provider IDs dedupe; missing IDs retain separate attempts and ambiguity review. Existing historical/off/observe captures cannot acquire effects on recovery.
+- The fixed 28Hse sample parses `4033349` as an external string, requested staff text `鄧錦雄 Terence Tang`, `碧堤半島`, sale and HKD 12,680,000 from the message. Only the known nonidentity `t` URL parameter is removed. The verified transport supplies customer identity. Parser/MLS resolution needs no tracking record, portal fetch or LLM. Unknown PropertyHK live URL shape is left unverified and reviewable.
+- Current MLS source scope and verified staff aliases resolve each reference without treating external IDs as property UUIDs. A second listing gets a distinct enquiry; existing conversation assignee and other history stay protected. Missing/ambiguous mapping remains visible triage.
+- An agent inbox, enquiry-scoped ACL/CAS correction, provider-confirmed whole-thread assignment, separate staff/customer destinations, recoverable Folder errors and manual-forward CRM follow-up are implemented. Provider acceptance is not confirmation/delivery/human reply; unknown outcomes reconcile. Campaign recipient review and report source evidence remain explicit.
+- The T15 server gate snapshots canary channel, new activation and exact staff cohort at capture; at execution it checks matching live durable receipt, fresh event, unchanged cohort and current mapping before invoking the locking SQL authority check. `off`, `observe`, history and old activations never reach effect ports. New canary config is absent by default. No production activation was created.
+
+## Verification layers and denominators
+
+| Layer | Result | Limit |
+|---|---|---|
+| Pack/baseline | outer 7/7 and inner 33/33 hashes; baseline SHA/remote/dirty root verified | audit reference remains unchanged |
+| T15 `test:no-link` | 96/96 Node/PGlite and 9/9 Bun UI, exit 0 | synthetic/fake provider, not a live tenant |
+| Existing suites | `test:whatsapp-enquiries` 103/103; `test:woztell` 151 Node + 8 Bun; `test:analytics` 65 Node + 3 Bun; `test:control-plane` 104/104; `test:command-center` and `test:staff-notifications` exit 0 | prior explicit external DB skips remain skips |
+| Static/build | `typecheck` exit 0; `lint` exit 0 with 3 React Refresh warnings; isolated `build` exit 0 | first parallel build had Windows routeTree rename EPERM, then standalone build passed |
+| Local Postgres migration | pgvector/Postgres 17: 69 baseline + 8 new = 77 applied to clean and baseline-upgrade DBs; no-op rerun; normalized schema SHA-256 `5417405ec1a1f49774bd5dac4c4f3c8f896afb29ed462498064e16cabe64ec0f` matches | not an isolated Neon branch or rolling app-reader test |
+| UI rendered actions | 0/1,290 current executions: 811 BLOCKED_EXTERNAL, 479 NOT_TESTED. Original 1,261 source controls stay in denominator; 13 new candidates added | no isolated multi-role browser app/fixtures |
+| UC/AC | 18/18 UCs mapped to local evidence and remaining gates, **0/18 full acceptance**; original 76 AC rows retained as NOT_TESTED: 68 UC-specific IDs plus eight cross-cutting IDs mapped in `2026-09-29-no-link-uc-results.csv` | mandatory browser/Neon/provider/live data gates pending |
+| Provider/live | no real send, assignment or delivery receipt; no formal-site signed inbound | external authorization/test tenant unavailable |
+
+Performance evidence is in `2026-09-29-no-link-performance.md`: at 10k conversations × 200 messages the synthetic PGlite one-reader p95 fell from 472 to 141 ms in analyzed runs, and ten queued readers from 3,797 to 1,003 ms. Exact authorized totals remained 9,500. Neon multi-connection latency, receipt persistence p95, queue lag and UI freshness are not measured.
+
+## Fixed customer sample and operational effect
+
+The sample is verified in **local parser/PGlite stages**, including a no-link enquiry, verified synthetic P1/S1 mapping, single assignment request, fake provider reconciliation and reply permission in separate fixtures. No one environment has yet completed signed webhook → durable receipt → worker → provider confirmed assignment → staff acknowledgement → delivered human reply for this sample. There is no masked live tenant receipt/request chain to cite. Local fixtures prove no per-enquiry tracking link is required; they do not prove the formal site is connected.
+
+Once an already authorized number/channel, verified MLS scope and staff mapping are connected and the release passes canary, ordinary 28Hse enquiries require **zero per-message link creation and zero routine UUID entry**. The one-time connection, consented test users, mapping maintenance and provider capability review remain necessary. An unconnected number will not appear in the inbox. Optional tracked links and campaigns remain separate.
+
+## Critical journeys
+
+| Journey | Release state | Required next evidence |
+|---|---|---|
+| Ordinary 28Hse capture → parser → MLS/enquiry triage | VERIFICATION_BLOCKED | signed tenant webhook, isolated Neon durable row/worker, current MLS and role-session UI readback |
+| PropertyHK automatic reference mapping | NOT_READY | approved live URL shape and current source mapping; unknown format already falls to review |
+| Second listing / protected conversation ownership | VERIFICATION_BLOCKED | two actors on isolated Neon and whole-thread provider constraint readback |
+| Provider assignment → agent mobile inbox → acknowledgement | VERIFICATION_BLOCKED | provider Folder/assignee readback, multi-role browser at 360/390/768/1280, staff receipt |
+| Customer reply and optional staff phone notification | VERIFICATION_BLOCKED | consent/window/destination and delivered/read receipts; internal notes do not count |
+| Manual forwarded enquiry → CRM follow-up | VERIFICATION_BLOCKED | synthetic browser save/refresh/next-actor proof |
+| Analytics/source and campaign review | VERIFICATION_BLOCKED | tenant scoped data, provider approved template body/media/buttons and browser review; click denominator remains unavailable |
+| Auth/custom domain and public routes | VERIFICATION_BLOCKED | real configured Auth origin/callback/cookie, public page/asset/network readback |
+| Formal-site no-link release overall | VERIFICATION_BLOCKED | all mandatory migration, shadow, canary and production authorization gates in runbook |
+
+## Changes and external gates
+
+Eight additive migrations (`20260929100000`–`20260929107000`) are committed in the repository and applied only in local PGlite/disposable Postgres. Manifest includes all eight; no historical applied migration was edited. T15 adds no migration. New server-only config names are `EP_WA_NO_LINK_CANARY_CHANNEL_ID`, `EP_WA_NO_LINK_CANARY_ACTIVATION_ID`, and `EP_WA_NO_LINK_CANARY_STAFF_IDS`; existing `EP_WA_NO_LINK_EFFECTS_ENABLED` remains off. None was set for production. No receiver phone, provider mapping, campaign template, secret, deploy or production data changed.
+
+Before any production decision, perform the runbook's isolated Neon identity/upgrade and old/new-reader proof, consented synthetic browser/role tests, actual provider Folder and assignment reconciliation, human reply and optional separate staff notification receipts, PropertyHK sample validation, and shadow comparison. Then request explicit authorization for migration → compatible app/worker → shadow → human review → narrow canary → expansion. Rollback disables new effects while keeping durable receipts, triage, historical audits, tracked links and unknown-request reconciliation; no schema/data drop or blind resend.
