@@ -180,7 +180,7 @@ export async function ingestWoztellEvent(
       SELECT (SELECT id FROM conversation),c.id,$9::whatsapp_message_direction,$10,$11,$12,$2,$7,$13::jsonb,
         CASE WHEN $9='outbound' THEN 'accepted' ELSE 'received' END,$8::timestamptz FROM contact c
       WHERE ($2::text IS NULL OR EXISTS(SELECT 1 FROM conversation))
-        AND ($14::text IS NULL OR NOT EXISTS(SELECT 1 FROM whatsapp_messages WHERE external_message_id=$14 AND text IS NOT DISTINCT FROM $11::text))
+        AND ($14::text IS NULL OR NOT EXISTS(SELECT 1 FROM whatsapp_messages WHERE external_message_id=$14 AND text IS NOT DISTINCT FROM $11::text AND channel_id=$7 AND woztell_member_id=$2 AND direction::text=$9::text))
       ON CONFLICT (external_message_id) DO NOTHING RETURNING id
     ), verified_evidence AS (
       SELECT i.id FROM whatsapp_outbound_intents i

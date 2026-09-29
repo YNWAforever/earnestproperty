@@ -9,6 +9,8 @@ import { createHash } from "node:crypto";
 import { enquiryMode } from "./contracts.ts";
 import { classifyWoztellEvent } from "./event-classification.ts";
 import { markInboundReceipt, storeInboundReceipt } from "./inbound-receipts.server.ts";
+import { eventForReceiptProjection } from "./inbound-identity.ts";
+import type { ReceiptResult } from "./no-link.types.ts";
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 const MAX_BODY_BYTES = 1024 * 1024;
 async function readBody(request: Request) {
@@ -110,24 +112,28 @@ export async function handleWoztellWebhook(
       { ok: false, error: "WA_RECEIPT_SCOPE_CONFIGURATION_REQUIRED" },
       { status: 503 },
     );
+  let receipt: ReceiptResult | null = null;
   let receiptId: string | null = null;
+  let captureMode: ReturnType<typeof enquiryMode> | undefined;
+  const receivedAt = new Date();
+  const classified = classifyWoztellEvent(payload, { now: receivedAt });
   if (store) {
-    const receivedAt = new Date();
     const activationId = process.env.EP_WA_ACTIVATION_ID;
-    const classified = classifyWoztellEvent(payload, { now: receivedAt });
     try {
-      const receipt = await store({
+      captureMode = enquiryMode();
+      receipt = await store({
         tenantKey: `woztell:${config.appId}`,
         appId: config.appId!,
         channelId: config.channelId!,
         event,
         eventKind: classified.kind,
+        providerEventId: typeof payload.eventId === "string" ? payload.eventId : null,
         providerOccurredAt: classified.occurredAt,
         origin: "live_webhook",
         bodyDigest: createHash("sha256").update(raw).digest("hex"),
         receivedAt,
         capture: {
-          mode: enquiryMode(),
+          mode: captureMode,
           activationId:
             activationId &&
             /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -143,6 +149,16 @@ export async function handleWoztellWebhook(
       return Response.json({ ok: false, error: "WA_RECEIPT_STORE_UNAVAILABLE" }, { status: 503 });
     }
   }
+  if (receipt?.disposition === "duplicate" && receipt.projectionState === "projected")
+    return Response.json({ ok: true, skipped: "duplicate" });
+  const projectionEvent = receipt
+    ? eventForReceiptProjection(
+        event,
+        receipt.receiptId,
+        classified.kind,
+        receipt.identityKey ?? null,
+      )
+    : event;
   const mark = deps.markReceipt ?? markInboundReceipt;
   async function finish(state: "projected" | "blocked_schema" | "failed", reason: string | null) {
     if (!receiptId) return;
@@ -154,9 +170,15 @@ export async function handleWoztellWebhook(
     }
   }
   try {
-    const outcome = await (deps.ingest ?? ingestWoztellEvent)(event, "live_webhook", undefined, {
-      signedEvent: true,
-    });
+    const outcome = await (deps.ingest ?? ingestWoztellEvent)(
+      projectionEvent,
+      "live_webhook",
+      undefined,
+      {
+        signedEvent: true,
+        mode: captureMode,
+      },
+    );
     await finish("projected", null);
     return Response.json(outcome.skipped ? { ok: true, skipped: outcome.skipped } : { ok: true });
   } catch (error) {

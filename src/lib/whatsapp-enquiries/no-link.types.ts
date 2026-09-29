@@ -12,6 +12,7 @@ export type VerifiedReceiptInput = {
   eventKind: EventKind;
   origin: EventOrigin;
   bodyDigest: string;
+  providerEventId?: string | null;
   providerOccurredAt: string | null;
   receivedAt: Date;
   capture: {
@@ -23,6 +24,7 @@ export type VerifiedReceiptInput = {
 
 export type ReceiptResult = {
   receiptId: string;
+  identityKey?: string | null;
   disposition: ReceiptDisposition;
   projectionState: ReceiptProjectionState;
 };
@@ -33,4 +35,5 @@ export type ReceiptRow = {
   event_kind: EventKind;
   capture_mode: EnquiryMode;
   origin: EventOrigin;
+  identity_key: string | null;
 };

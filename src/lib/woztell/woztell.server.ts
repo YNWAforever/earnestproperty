@@ -19,6 +19,8 @@ export type NormalizedWoztellEvent = {
    * woztell-ingest.server.ts.
    */
   legacyExternalMessageId: string | null;
+  /** Receipt projection authority; synthetic/missing IDs may never enable active effects. */
+  identityCertainty?: "provider" | "ambiguous";
   fromPhone: string | null;
   toPhone: string | null;
   timestamp: string;

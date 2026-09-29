@@ -51,6 +51,15 @@ async function withDb(fn) {
   const query = async (statement, params = []) => (await db.query(statement, params)).rows;
   try {
     await db.exec(migration);
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../../../neon/migrations/20260929101000_whatsapp_receipt_identity.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     await fn({ db, query });
   } finally {
     await db.close();

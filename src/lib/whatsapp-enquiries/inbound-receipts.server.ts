@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import { deriveInboundIdentity, eventForReceiptProjection } from "./inbound-identity.ts";
 import { queryRows } from "../neon/db.server.ts";
 import type {
   ReceiptProjectionState,
@@ -62,28 +63,32 @@ export async function storeInboundReceipt(
   }
   const query = ports.query ?? queryRows;
   const id = randomUUID();
-  const similarityKey = createHash("sha256")
-    .update(
-      JSON.stringify([
-        input.tenantKey,
-        input.appId,
-        input.channelId,
-        input.event.woztellMemberId,
-        input.eventKind,
-        input.event.text,
-        input.event.timestamp,
-      ]),
-    )
-    .digest("hex");
+  const providerMessageId =
+    input.event.legacyExternalMessageId === null ? input.event.externalMessageId : null;
+  const identity = deriveInboundIdentity({
+    tenantKey: input.tenantKey,
+    provider: "woztell",
+    appId: input.appId,
+    channelId: input.channelId,
+    eventKind: input.eventKind,
+    providerEventId: input.providerEventId,
+    providerMessageId,
+    providerStatus: input.event.messageType,
+    providerOccurredAt: input.providerOccurredAt,
+    payloadDigest: input.bodyDigest,
+  });
   const rows = await query(
     `INSERT INTO whatsapp_inbound_receipts
       (id,tenant_key,provider,app_id,channel_id,member_id,event_kind,origin,
        provider_message_id,identity_key,similarity_key,normalized_event,body_digest,
        capture_mode,activation_id,effects_eligible,provider_occurred_at,received_at,
        projection_state,attempt_count)
-     VALUES ($1,$2,'woztell',$3,$4,$5,$6,$7,$8,NULL,$9,$10::jsonb,$11,
-             $12,$13::uuid,$14,$15::timestamptz,$16::timestamptz,'pending',1)
-     RETURNING id`,
+     VALUES ($1,$2,'woztell',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,
+             $13,$14::uuid,$15,$16::timestamptz,$17::timestamptz,'pending',1)
+     ON CONFLICT (tenant_key,app_id,channel_id,identity_key)
+       WHERE identity_key IS NOT NULL
+     DO UPDATE SET delivery_count=whatsapp_inbound_receipts.delivery_count+1,updated_at=now()
+     RETURNING id,projection_state,delivery_count`,
     [
       id,
       input.tenantKey,
@@ -92,8 +97,9 @@ export async function storeInboundReceipt(
       input.event.woztellMemberId,
       input.eventKind,
       input.origin,
-      input.event.legacyExternalMessageId === null ? input.event.externalMessageId : null,
-      similarityKey,
+      providerMessageId,
+      identity.scopedProviderKey,
+      identity.similarityKey,
       JSON.stringify(minimalEvent(input.event)),
       input.bodyDigest.toLowerCase(),
       input.capture.mode,
@@ -104,9 +110,18 @@ export async function storeInboundReceipt(
     ],
   );
   if (!rows[0]?.id) throw new Error("WA_RECEIPT_STORE_NO_READBACK");
-  return { receiptId: String(rows[0].id), disposition: "new", projectionState: "pending" };
+  return {
+    receiptId: String(rows[0].id),
+    identityKey: identity.scopedProviderKey,
+    disposition:
+      identity.certainty === "ambiguous"
+        ? "identity_ambiguous"
+        : Number(rows[0].delivery_count) > 1
+          ? "duplicate"
+          : "new",
+    projectionState: rows[0].projection_state as ReceiptProjectionState,
+  };
 }
-
 export async function markInboundReceipt(
   receiptId: string,
   state: ReceiptProjectionState,
@@ -145,7 +160,7 @@ export async function recoverPendingInboundReceipts(
      UPDATE whatsapp_inbound_receipts r
      SET lease_until=now()+interval '60 seconds',attempt_count=r.attempt_count+1,updated_at=now()
      FROM claimed WHERE r.id=claimed.id
-     RETURNING r.id,r.normalized_event,r.event_kind,r.capture_mode,r.origin`,
+     RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin`,
     [limit],
   )) as ReceiptRow[];
   const project =
@@ -167,7 +182,10 @@ export async function recoverPendingInboundReceipts(
         ? (JSON.parse(row.normalized_event) as VerifiedReceiptInput["event"])
         : row.normalized_event;
     try {
-      await project(event, row.capture_mode === "off" ? "off" : "observe");
+      await project(
+        eventForReceiptProjection(event, row.id, row.event_kind, row.identity_key),
+        row.capture_mode === "off" ? "off" : "observe",
+      );
       await markInboundReceipt(row.id, "projected", null, { query });
       counts.projected++;
     } catch (error) {

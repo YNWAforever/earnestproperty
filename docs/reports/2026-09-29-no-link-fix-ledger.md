@@ -5,8 +5,8 @@
 | Task | Findings / UC | 狀態 | Commit | 本地證據 | DB / 外部阻塞 |
 |---|---|---|---|---|---|
 | T00 | 全部 | VERIFIED | bad4bd9 | 外層 7/7 SHA、內層 33/33 SHA；40/40 baseline tests；P01–P05 5/5 characterization | Neon、browser、live provider BLOCKED |
-| T01 | NL03 / UC01,09,12 | IMPLEMENTED | 待本次 focused commit | RED 2/3 → GREEN 13/13 (含 migration manifest)、typecheck、focused lint；40/40 baseline | 新 migration 僅本地 PGlite apply；isolated Neon BLOCKED |
-| T02 | NL04 / UC09,10 | TODO | | | |
+| T01 | NL03 / UC01,09,12 | IMPLEMENTED | a5fbd85 | RED 2/3 → GREEN 13/13 (含 migration manifest)、typecheck、focused lint；40/40 baseline | 新 migration 僅本地 PGlite apply；isolated Neon BLOCKED |
+| T02 | NL04 / UC09,10 | IMPLEMENTED | 本次 focused commit | RED 4/4 → GREEN 19/19 receipt/identity tests；18/18 plan suite；6/6 manifest；40/40 baseline；typecheck／lint | 新 migration 僅 PGlite；多 session Neon/provider BLOCKED_EXTERNAL |
 | T03 | NL01 / UC01–04,07,08 | TODO | | | |
 | T04 | NL01,R01,R02 / UC01,03–05,08,15 | TODO | | | |
 | T05 | NL02 / UC01,06–09 | TODO | | | |
@@ -39,3 +39,12 @@
 - Ruling: 只把經 webhook 驗簽的 live path 接入最小 receipt；history import 保留獨立入口。原因是驗簽前不可接受可信 scope；代價是直接呼叫 ingest 的非 webhook 程式路徑不享最小 receipt，須保持只作 history／測試。
 - Ruling: recovery 無論舊 active snapshot 都只以 observe 重投影，不復活舊 activation 的外發。代價是被擋下的舊 active 訊息須人工 triage 而不自動補發。普通投影仍按既有 workflow 契約；T15 新 no-link effects 有獨立 default-off gate。
 - `runServiceJobs` 在既有 service worker lane 先作最多 20 筆租約掃描；無新外部 queue。worker alarm 缺失或 commit 後 crash 時，需既有手動 service wake 重新啟動掃描；不能把此說成已在正式環境自動復原。migration clean isolated Neon、真 worker revision及受權限 UI 可見性仍 BLOCKED_EXTERNAL；T09 補操作面板。
+## T02：provider identity、重送及亂序
+
+- 20 次相同 provider ID 重送只得一條 scoped receipt，delivery_count=20 而 repair attempt_count=1；不同 ID 同文分開，同原始 ID 跨 channel 會形成不同 scoped transcript ID。缺 ID 同秒同文保留兩條 ambiguous receipt 和兩則 transcript，不以 content hash 做 unique，不給 active effects；SENT/READ 及 READ-before-SENT 的狀態證據分開。
+- RED 4/4 在 T01 store 重現；GREEN：
+ode --test src/lib/whatsapp-enquiries/inbound-identity.test.mjs src/lib/whatsapp-enquiries/inbound-identity.db.test.mjs src/lib/whatsapp-enquiries/event-classification.test.mjs exit 0（18/18），T01/T02 收件組 19/19，manifest 6/6，
+pm.cmd run typecheck exit 0，focused ESLint exit 0，baseline 40/40。測試使用合成資料與 PGlite 單序 SQL；Neon 多連線 20 併發尚需 isolated target。
+- 新 migration 只加 delivery_count 與非空 identity_key 的 partial unique index，舊資料不 bulk backfill。相同 channel/provider 舊 ID 兼容；receipt identity scope 帶 tenant/app/channel/kind。unknown wrapper、BOT/MANUAL、internal note 沿既有分類 guard，6/6 classification tests。
+- 待解風險：舊 CRM contact 的 whatsapp_member_id 為全域 unique；跨 channel 重複 member ID 且不同客戶電話的 legacy contact link 尚須隔離驗證。
+
