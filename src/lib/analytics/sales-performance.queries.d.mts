@@ -1,5 +1,6 @@
 import type { PerformanceFilters } from "./sales-performance.types.ts";
 export const INQUIRY_ROWS_SQL: string;
+export const SOURCE_EVIDENCE_SQL: string;
 export const EVENT_ROWS_SQL: string;
 export const DEAL_ROWS_SQL: string;
 export const CREDIT_ROWS_SQL: string;

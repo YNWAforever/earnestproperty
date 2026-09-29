@@ -228,6 +228,33 @@ export function calculateSalesPerformance({
         unattributed: legacyTransactions,
       },
     },
+    sourceEvidence: {
+      messageDerived28hse: metric(
+        cohort.filter((i) => i.sourceEvidence === "message_28hse").length,
+        "count",
+        cohort.length,
+        cohort.filter((i) => i.sourceEvidence === "message_28hse").length,
+        "ready",
+        "message_28hse",
+      ),
+      trackedOpenEnquiries: metric(
+        cohort.filter((i) => i.sourceEvidence === "tracked_open").length,
+        "count",
+        cohort.length,
+        cohort.filter((i) => i.sourceEvidence === "tracked_open").length,
+        "ready",
+        "tracked_open_enquiries",
+      ),
+      unknownOrigin: metric(
+        cohort.filter((i) => !i.sourceEvidence || i.sourceEvidence === "unknown").length,
+        "count",
+        cohort.length,
+        cohort.filter((i) => !i.sourceEvidence || i.sourceEvidence === "unknown").length,
+        "ready",
+        "unknown_origin",
+      ),
+      clickToEnquiryRate: metric(null, "ratio", null, null, "unavailable", null),
+    },
     acquisition: {
       inquiries: metric(cohort.length, "count", null, cohort.length, "ready", "inquiries"),
       uniqueCustomers: metric(null, "count", null, null, "unavailable", null),
@@ -342,6 +369,14 @@ export function calculateSalesPerformance({
       commissionSampleSize: a.commissionKnown,
     })),
     definitions: {
+      messageDerived28hse:
+        "Production enquiries with an original 28Hse reference extracted from the customer message. This is message evidence, not a tracked click or campaign conversion.",
+      trackedOpenEnquiries:
+        "Production enquiries linked to an actual stored tracked-link open. An accepted message without that reference is excluded.",
+      unknownOrigin:
+        "Production enquiries whose original marketing source is unavailable; the WhatsApp transport alone is not a portal source.",
+      clickToEnquiryRate:
+        "Unavailable here because this report has no scoped count of all eligible clicks. Do not divide enquiries by guessed clicks.",
       inquiries:
         "Unique inquiry rows created within the Hong Kong calendar date range; production quality only. Test, spam and unknown are shown in quality coverage.",
       uniqueCustomers:

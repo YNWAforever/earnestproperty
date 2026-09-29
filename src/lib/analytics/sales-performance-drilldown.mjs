@@ -12,6 +12,9 @@ const inRange = (value, filters) => {
 const PAGE_SIZE = 50;
 export const PERFORMANCE_DRILLDOWN_KEYS = new Set([
   "inquiries",
+  "message_28hse",
+  "tracked_open_enquiries",
+  "unknown_origin",
   "assignments",
   "qualified",
   "viewings",
@@ -89,6 +92,21 @@ export function selectPerformanceRecords(
   switch (key) {
     case "inquiries":
       rows = cohort.map((i) => asRecord("inquiry", i, i.id, i.createdAt));
+      break;
+    case "message_28hse":
+      rows = cohort
+        .filter((i) => i.sourceEvidence === "message_28hse")
+        .map((i) => asRecord("inquiry", i, i.id, i.createdAt));
+      break;
+    case "tracked_open_enquiries":
+      rows = cohort
+        .filter((i) => i.sourceEvidence === "tracked_open")
+        .map((i) => asRecord("inquiry", i, i.id, i.createdAt));
+      break;
+    case "unknown_origin":
+      rows = cohort
+        .filter((i) => !i.sourceEvidence || i.sourceEvidence === "unknown")
+        .map((i) => asRecord("inquiry", i, i.id, i.createdAt));
       break;
     case "assignments":
       rows = events

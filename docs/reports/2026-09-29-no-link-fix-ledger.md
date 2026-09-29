@@ -14,8 +14,8 @@
 | T07 | R03,R04,R11–13,WA06 / UC01,09,10,12,13,17 | IMPLEMENTED_LOCAL | 5954c44 | RED 0/2 → 91/91 Node focused；PGlite 5/5；Bun card 5/5；typecheck/lint | 真 provider、isolated Neon、真同事手機／客戶回覆及整段 synthetic browser BLOCKED_EXTERNAL |
 | T08 | UX01,WA01–06,SH01 / UC06,13,17 | IMPLEMENTED_LOCAL | 39a03c9 | RED inbox 4/7 → GREEN 23/23 paging+PGlite；route/permission 58/58；Bun UI 7/7；typecheck/lint | 無新 migration；真 authenticated synthetic browser 2 cases BLOCKED_EXTERNAL（缺 isolated app／storageState／30條 fixture） |
 | T09 | UX02,R01,R02,R04 / UC04,05,12,14,15 | IMPLEMENTED_LOCAL | 6617be3 | RED Folder module 0/1 → GREEN Bun 12/12；PGlite options/guard + assignment 10/10；typecheck；T09 field ledger | 新 migration 僅 PGlite；synthetic browser/isolated Neon/真 provider BLOCKED_EXTERNAL |
-| T10 | LE01–05 / UC11,13 | IMPLEMENTED_LOCAL | 本次 focused commit | RED missing modules/functions → GREEN PGlite + validation + manifest 8/8；Bun form 1/1；command-center 82/82 Node + 8/8 Bun；typecheck/lint | 新 migration 只在 PGlite；合成 browser/isolated Neon/真聯絡身分 BLOCKED_EXTERNAL |
-| T11 | R05,R06,R14 / UC18 | TODO | | | |
+| T10 | LE01–05 / UC11,13 | IMPLEMENTED_LOCAL | 5e6528b | RED missing modules/functions → GREEN PGlite + validation + manifest 8/8；Bun form 1/1；command-center 82/82 Node + 8/8 Bun；typecheck/lint | 新 migration 只在 PGlite；合成 browser/isolated Neon/真聯絡身分 BLOCKED_EXTERNAL |
+| T11 | R05,R06,R14 / UC18 | IMPLEMENTED_LOCAL | 本次 focused commit | RED sourceEvidence absent → GREEN 3/3 new Node + 1/1 PGlite；現有 analytics 65/65 Node + 3/3 Bun；typecheck/lint | 無新 migration；Neon/真資料報表與 browser BLOCKED_EXTERNAL |
 | T12 | BL01–08 / UC16,17 | TODO | | | |
 | T13 | UX03,WEB01 / UC13,16 | TODO | | | |
 | T14 | PF01、動作台帳 / 全部 UC | TODO | | | |
@@ -104,3 +104,10 @@
 - 下一步在同一 DB transaction 建入現有 `crm_activities`；負責同事須當下 active，同分行 manager 才能代選，agent 只能自己，admin 按現有全域角色；重試不重建 activity。原始 evidence 僅 lead 當下 owner 或管理角色可讀。
 - CRM lead 詳情有授權 related conversation 連結，DB 同時核對 lead scope 與 `wa_can_read_conversation`，沒有原客戶對話時不會偽造。聯絡姓名／電郵另用明確表單和 DB commit 時 scope/共享 contact 核對，audit 一筆；電話、WhatsApp 身分、opt-in/window 不被此操作改動。
 - PGlite 覆蓋來源隔離、無電話、duplicate/conflict、錯 branch、inactive、下一步 refresh 對應 activity、直接越權 read／edit；Node validation、Bun UI、現有 command-center suite 綠。合成 browser save/refresh/next actor 尚缺 isolated app 及登入 fixture，不能當作真人端驗收。未實作 bulk follow-up：現有 bulk stage/agent 沿用；此 task 沒有批次建立下一步的授權需求。AI 原有建議不自動保存。
+
+## T11：來源證據與報表口徑
+
+- 依既有受分行／同事／日期／來源限制的 inquiry ID，另讀不含原文的 source evidence。`explicit_customer_statement`＋首筆 28Hse 參照只計「訊息來源」；`reference`＋已保存 `link_open_id` 才計有追蹤開啟證據。一般 WhatsApp 而無來源資料顯「來源未核實」，保留在有效查詢分母；測試／垃圾／quality unknown 仍列於既有 quality coverage。
+- 報表分開顯示 28Hse 訊息來源、有追蹤開啟證據的查詢、來源未核實，以及點擊至查詢比率 `unavailable`。此報表未讀全部合資格點擊分母，不能用0或最近 campaign 代替。First-touch 歷史與原始 evidence 不改寫；來源、更正、成交 credit 仍沿既有 revision/model。
+- Drilldown 同查詢 cohort/role scope；匯出只含目前授權頁既有欄位，CSV 加公式字元 neutralization，無原文、聯絡方式或 provider secret。真人回覆仍只取 `human_response` event；bot、內部 note、provider accepted 不入回覆樣本。現有 analytics 測試確認 HK 午夜、未成熟 cohort、取消成交、quality revisions。
+- 新 source SQL 的隔離 DB readback／正式 data shape 未有；PGlite 只驗 scoped ID、訊息與 click 區分。無新 migration。

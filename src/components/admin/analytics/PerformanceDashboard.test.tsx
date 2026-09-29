@@ -34,6 +34,12 @@ const report: PerformanceReport = {
     events: { production: 6, test: 0, spam: 0, unknown: 3 },
     deals: { production: 2, test: 0, spam: 0, unknown: 1, unattributed: 4 },
   },
+  sourceEvidence: {
+    messageDerived28hse: m(1),
+    trackedOpenEnquiries: m(0),
+    unknownOrigin: m(2),
+    clickToEnquiryRate: m(null, "ratio", "unavailable", null),
+  },
   acquisition: {
     inquiries: m(10),
     uniqueCustomers: m(null, "count", "unavailable", null),
@@ -81,7 +87,14 @@ test("dashboard presents four named areas, quality coverage, provisional and una
       onOpenRecords: () => {},
     }),
   );
-  for (const label of ["新增與轉換", "回覆及跟進", "成交及佣金", "當前待辦", "資料品質"])
+  for (const label of [
+    "新增與轉換",
+    "來源證據",
+    "回覆及跟進",
+    "成交及佣金",
+    "當前待辦",
+    "資料品質",
+  ])
     expect(html).toContain(label);
   expect(html).toContain("暫定");
   expect(html).toContain("未有足夠資料");
