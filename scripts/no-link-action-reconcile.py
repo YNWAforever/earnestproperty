@@ -10,6 +10,8 @@ import re
 from pathlib import Path
 
 SUPPLEMENTAL = [
+    ("N-T07-staff-work-diagnostics", "/admin/whatsapp", "src/components/admin/StaffNotificationCard.tsx", "open staff handoff support diagnostics", "T07 real-route synthetic Auth/API browser only"),
+    ("N-T07-outbound-readback", "/admin/whatsapp", "src/routes/admin.whatsapp.tsx", "read pending outbound request status", "T07 real-route synthetic browser; actual Postgres actor/scope reads separately verified"),
     ("N-T09-assignment-diagnostics", "/admin/whatsapp", "src/components/admin/WhatsappEnquiryContext.tsx", "open assignment support diagnostics", "T08/T09 real-route synthetic Auth/API browser only"),
     ("N-T08-inbox-view", "/admin/whatsapp", "src/components/admin/whatsapp/NoLinkInbox.tsx", "agent inbox view", "T08 Node/Bun local only"),
     ("N-T08-inbox-search", "/admin/whatsapp", "src/routes/admin.whatsapp.tsx", "activity and full-history search", "T08 PGlite local only"),
