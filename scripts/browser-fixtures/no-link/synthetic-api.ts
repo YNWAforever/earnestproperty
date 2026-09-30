@@ -1,10 +1,15 @@
 // Test-only API model. This is presentation evidence, not server ACL or provider proof.
+import {
+  validateForwardedEnquiry,
+  type ForwardedEnquiryInput,
+} from "../../../src/lib/whatsapp-enquiries/forwarded-enquiries";
 export const actor = sessionStorage.getItem("no-link-fixture-actor") ?? "agent-a";
 export const ids = {
   a: "10000000-0000-4000-8000-000000000001",
   b: "10000000-0000-4000-8000-000000000002",
   private: "10000000-0000-4000-8000-000000000003",
   staff: "20000000-0000-4000-8000-000000000001",
+  staffB: "20000000-0000-4000-8000-000000000002",
   enquiry: "30000000-0000-4000-8000-000000000001",
 };
 const now = new Date().toISOString();
@@ -53,6 +58,8 @@ const state = {
   assignmentFailure: false,
   delayDetail: false,
   releaseLateDetail: null as null | (() => void),
+  forwardMode: "ok",
+  releaseForward: null as null | (() => void),
 };
 Object.assign(window, {
   noLinkFixture: { ...state, ids, actor, lastMessage: rows[0].messages.at(-1)!.text },
@@ -69,10 +76,17 @@ export async function fetchStaffSession() {
   call("staffSession");
   return actor === "viewer"
     ? { status: "denied", reason: "not-staff" }
-    : { status: "ok", roles: ["agent"], staffId: ids.staff };
+    : {
+        status: "ok",
+        roles: [actor === "manager" ? "manager" : "agent"],
+        staffId: actor === "agent-b" ? ids.staffB : ids.staff,
+      };
 }
 export async function fetchAdminAgents() {
-  return [{ id: ids.staff, name: "合成同事甲", email: null, roles: ["agent"], active: true }];
+  return [
+    { id: ids.staff, name: "合成同事甲", email: null, roles: ["agent"], active: true },
+    { id: ids.staffB, name: "合成同事乙", email: null, roles: ["agent"], active: true },
+  ];
 }
 export async function fetchAdminWoztellStatus() {
   return { woztellEnabled: true };
@@ -89,6 +103,10 @@ export async function fetchAdminPage({
   data: { resource: string; conversationId?: string; q?: string; cursor?: string };
 }) {
   call("page", data);
+  if (data.resource === "leads") {
+    const leads = forwardedRecords().filter(canReadForward).map(forwardLead);
+    return { rows: leads, total: leads.length, nextCursor: null };
+  }
   if (data.resource === "conversations") {
     const allowed =
       actor === "agent-a"
@@ -180,3 +198,108 @@ export const confirmStaffNotification = () => noMutation("confirmStaff");
 export const askStaffNotificationHelp = () => noMutation("staffHelp");
 export const correctWhatsappEnquiry = () => noMutation("correctEnquiry");
 export const fetchWhatsappEnquiryDetail = async () => deny();
+
+// Session-only model for CRM presentation. This deliberately does not claim SQL/auth evidence.
+type ForwardRecord = { input: ForwardedEnquiryInput; actor: string; id: string };
+const forwardStorage = "no-link-fixture-forward-records";
+function forwardedRecords(): ForwardRecord[] {
+  return JSON.parse(sessionStorage.getItem(forwardStorage) ?? "[]");
+}
+function canReadForward(record: ForwardRecord) {
+  const owner = record.input.responsibleStaffId ?? ids.staff;
+  return (
+    actor === "manager" ||
+    (actor === "agent-a" && owner === ids.staff) ||
+    (actor === "agent-b" && owner === ids.staffB)
+  );
+}
+function forwardLead(record: ForwardRecord) {
+  return {
+    id: record.id,
+    stage: "new",
+    intent: "buyer",
+    source: "manual_forward",
+    name: null,
+    phone: null,
+    email: null,
+    contact_id: null,
+    opt_in_whatsapp: false,
+    budget_min: null,
+    budget_max: null,
+    note: record.input.note,
+    created_at: now,
+    assigned_agent_id: record.input.responsibleStaffId ?? ids.staff,
+    listing_no: null,
+    property_title: null,
+    preferred_estates: [],
+    activities: record.input.followUpTitle
+      ? [
+          {
+            id: "60000000-0000-4000-8000-000000000001",
+            activity_type: "follow_up",
+            body: record.input.followUpTitle,
+            due_at: record.input.followUpDueAt,
+            completed_at: null,
+            created_at: now,
+            staff_name: "合成負責同事",
+          },
+        ]
+      : [],
+  };
+}
+export async function saveForwardedEnquiry(input: ForwardedEnquiryInput) {
+  call("syntheticForward", input);
+  const attempts = JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts") ?? "[]");
+  attempts.push(input);
+  sessionStorage.setItem("no-link-fixture-forward-attempts", JSON.stringify(attempts));
+  const valid = validateForwardedEnquiry(input);
+  if (!["agent-a", "manager"].includes(actor)) return deny();
+  if (actor !== "manager" && valid.responsibleStaffId && valid.responsibleStaffId !== ids.staff)
+    return deny();
+  if (fixture().forwardMode === "delay")
+    await new Promise<void>((done) => {
+      fixture().releaseForward = done;
+    });
+  const records = forwardedRecords();
+  const existing = records.find((r) => r.actor === actor && r.input.requestId === valid.requestId);
+  if (existing && JSON.stringify(existing.input) !== JSON.stringify(valid))
+    throw Error("WA_FORWARD_REQUEST_CONFLICT");
+  const record = existing ?? {
+    actor,
+    input: valid,
+    id: `50000000-0000-4000-8000-${String(records.length + 1).padStart(12, "0")}`,
+  };
+  if (!existing) sessionStorage.setItem(forwardStorage, JSON.stringify([...records, record]));
+  if (fixture().forwardMode === "timeout") {
+    fixture().forwardMode = "ok";
+    throw Error("Synthetic response lost after commit");
+  }
+  return { leadId: record.id, created: !existing };
+}
+export async function fetchAdminLead({ data }: { data: { id: string } }) {
+  const record = forwardedRecords().find((r) => r.id === data.id && canReadForward(r));
+  return record ? forwardLead(record) : null;
+}
+export async function fetchForwardedEnquiry(leadId: string) {
+  const record = forwardedRecords().find((r) => r.id === leadId && canReadForward(r));
+  return record
+    ? {
+        raw_text: record.input.text,
+        business_source: record.input.businessSource,
+        original_customer_contact: record.input.originalCustomerContact,
+        original_received_at: record.input.originalReceivedAt,
+        source_url: record.input.sourceUrl,
+        note: record.input.note,
+        forwarded_by_name: "合成轉交同事",
+      }
+    : null;
+}
+export const fetchAdminLeadAiProfile = async () => ({ profile: null, tags: [] });
+export const fetchRelatedLeadConversations = async () => [];
+export const saveLeadContact = () => noMutation("contactEdit");
+export const analyzeAdminLeadAiProfile = () => noMutation("leadAi");
+export const approveAdminAiTag = () => noMutation("approveTag");
+export const rejectAdminAiTag = () => noMutation("rejectTag");
+export const createAdminLeadActivity = () => noMutation("leadActivity");
+export const bulkUpdateAdminLeads = () => noMutation("bulkLeads");
+export const updateAdminLead = () => noMutation("updateLead");

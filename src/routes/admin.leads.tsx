@@ -222,6 +222,7 @@ function AdminLeads() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardBusy, setForwardBusy] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminLeadDetail | null>(null);
   const [draft, setDraft] = useState<LeadDraft | null>(null);
@@ -1061,7 +1062,12 @@ function AdminLeads() {
           <ForwardedEnquiryEvidence leadId={detail.id} />
         ) : null}
       </AdminDetailPanel>
-      <Dialog open={forwardOpen} onOpenChange={setForwardOpen}>
+      <Dialog
+        open={forwardOpen}
+        onOpenChange={(open) => {
+          if (!forwardBusy) setForwardOpen(open);
+        }}
+      >
         <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogTitle>記錄人工轉交查詢</DialogTitle>
           <DialogDescription>
@@ -1069,6 +1075,9 @@ function AdminLeads() {
           </DialogDescription>
           {forwardOpen ? (
             <ForwardedEnquiryForm
+              key={user?.id}
+              draftKey={user?.id}
+              onBusyChange={setForwardBusy}
               agents={agents.map((agent) => ({ id: agent.id, name: agent.name, active: true }))}
               onCancel={() => setForwardOpen(false)}
               onSaved={(leadId) => {

@@ -23,7 +23,7 @@ await build({
   resolve: {
     alias: [
       {
-        find: /^@\/lib\/neon\/(admin-data|whatsapp-assignment|staff-notifications|enquiry-resolution)$/,
+        find: /^@\/lib\/neon\/(admin-data|whatsapp-assignment|staff-notifications|enquiry-resolution|forwarded-enquiries)$/,
         replacement: api,
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: auth },

@@ -73,10 +73,10 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
     blocked.push(request.method() + " " + new URL(request.url()).origin);
     return route.abort();
   });
-  await context.addInitScript(
-    (value) => sessionStorage.setItem("no-link-fixture-actor", value),
-    actor,
-  );
+  await context.addInitScript((value) => {
+    if (!sessionStorage.getItem("no-link-fixture-actor"))
+      sessionStorage.setItem("no-link-fixture-actor", value);
+  }, actor);
   const page = await context.newPage();
   page.setDefaultTimeout(7000);
   page.on("pageerror", (error) => errors.push(error.message));
@@ -96,6 +96,13 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
           "confirmStaff",
           "staffHelp",
           "correctEnquiry",
+          "contactEdit",
+          "leadAi",
+          "approveTag",
+          "rejectTag",
+          "leadActivity",
+          "bulkLeads",
+          "updateLead",
         ].includes(c.name),
       ).length,
       0,
@@ -378,6 +385,300 @@ try {
     },
     "guest",
   );
+  async function manualForm(page) {
+    await page.getByRole("button", { name: "記錄人工轉交", exact: true }).click();
+    return page.getByRole("dialog", { name: "記錄人工轉交查詢", exact: true });
+  }
+  async function fillForward(dialog) {
+    await dialog
+      .getByLabel("原文／轉交內容")
+      .fill("合成原文：客戶想了解碧堤半島，聯絡方式待核實。");
+    await dialog.getByLabel("業務來源", { exact: true }).fill("合成同事轉交");
+  }
+  await check(
+    "manual forward unknown result survives refresh and reconciles same request",
+    390,
+    async (page) => {
+      await open(page, `${origin}/admin/leads`);
+      let dialog = await manualForm(page);
+      await fillForward(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.forwardMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+      await expect(dialog.getByRole("alert")).toBeVisible();
+      await page.screenshot({ path: ".audit/no-link-forward-390.png" });
+      const first = await page.evaluate(
+        () => JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts"))[0],
+      );
+      await page.reload();
+      dialog = await manualForm(page);
+      await expect(dialog.getByLabel("原文／轉交內容")).toHaveValue(first.text);
+      await expect(dialog.getByLabel("原文／轉交內容")).toBeDisabled();
+      await dialog.getByRole("button", { name: "核對並重試保存" }).click();
+      await expect(page.getByRole("region", { name: "人工轉交來源" })).toContainText(first.text);
+      const attempts = await page.evaluate(() =>
+        JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts")),
+      );
+      expect(attempts).toEqual([first, first]);
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-forward-records")).length,
+        ),
+      ).toBe(1);
+    },
+  );
+  await check("manual forward pending submit locks fields and Escape close", 390, async (page) => {
+    await open(page, `${origin}/admin/leads`);
+    const dialog = await manualForm(page);
+    await fillForward(dialog);
+    await page.evaluate(() => {
+      window.noLinkFixture.forwardMode = "delay";
+    });
+    await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+    await expect(dialog.getByRole("button", { name: "正在保存…" })).toBeDisabled();
+    await expect(dialog.getByLabel("原文／轉交內容")).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    await dialog
+      .locator("form")
+      .evaluate((form) =>
+        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+    expect(
+      await page.evaluate(
+        () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticForward").length,
+      ),
+    ).toBe(1);
+    await page.evaluate(() => window.noLinkFixture.releaseForward());
+    await expect(page.getByRole("region", { name: "人工轉交來源" })).toBeVisible();
+  });
+  await check(
+    "manual forward incomplete follow-up validates before sending",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/leads`);
+      const dialog = await manualForm(page);
+      await fillForward(dialog);
+      await dialog.getByLabel("事項", { exact: true }).fill("合成跟進");
+      await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("跟進事項及到期時間須一同填寫");
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticForward").length,
+        ),
+      ).toBe(0);
+      await expect(dialog.getByLabel("事項", { exact: true })).toBeEnabled();
+    },
+  );
+  for (const width of [360, 1280]) {
+    await check(
+      `manual forward ${width}px save and refresh retain provenance without contact or reply`,
+      width,
+      async (page) => {
+        await open(page, `${origin}/admin/leads`);
+        const dialog = await manualForm(page);
+        await fillForward(dialog);
+        await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+        const evidence = page.getByRole("region", { name: "人工轉交來源" });
+        await expect(evidence).toContainText("合成原文：客戶想了解碧堤半島");
+        await expect(evidence).toContainText("尚無原客戶聯絡方式；不能直接回覆原客");
+        await expect(evidence).toContainText("轉交同事：合成轉交同事");
+        await expect(page.getByRole("link", { name: "查看已授權的 WhatsApp 對話" })).toHaveCount(0);
+        await page.reload();
+        await expect(evidence).toContainText("合成原文：客戶想了解碧堤半島");
+        expect(
+          await page.evaluate(
+            () => JSON.parse(sessionStorage.getItem("no-link-fixture-forward-records")).length,
+          ),
+        ).toBe(1);
+        expect(
+          await page.evaluate(() =>
+            sessionStorage.getItem("ep-forwarded-enquiry-draft:v1:agent-a"),
+          ),
+        ).toBeNull();
+      },
+    );
+  }
+  await check(
+    "manual forward draft Escape refresh preserves fields and explicit cancel clears",
+    390,
+    async (page) => {
+      await open(page, `${origin}/admin/leads`);
+      let dialog = await manualForm(page);
+      await fillForward(dialog);
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible();
+      await page.reload();
+      dialog = await manualForm(page);
+      await expect(dialog.getByLabel("原文／轉交內容")).toHaveValue(
+        "合成原文：客戶想了解碧堤半島，聯絡方式待核實。",
+      );
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      dialog = await manualForm(page);
+      await expect(dialog.getByLabel("原文／轉交內容")).toHaveValue("");
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticForward").length,
+        ),
+      ).toBe(0);
+    },
+  );
+  await check("manual forward unresolved close reopens frozen same payload", 390, async (page) => {
+    await open(page, `${origin}/admin/leads`);
+    let dialog = await manualForm(page);
+    await fillForward(dialog);
+    await page.evaluate(() => {
+      window.noLinkFixture.forwardMode = "timeout";
+    });
+    await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("尚未核實保存結果");
+    await dialog.getByRole("button", { name: "關閉，稍後核對" }).click();
+    dialog = await manualForm(page);
+    await expect(dialog.getByLabel("原文／轉交內容")).toBeDisabled();
+    await dialog.getByRole("button", { name: "核對並重試保存" }).click();
+    await expect(page.getByRole("region", { name: "人工轉交來源" })).toBeVisible();
+    const attempts = await page.evaluate(() =>
+      JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts")),
+    );
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toEqual(attempts[1]);
+  });
+  await check(
+    "manual forward next assigned actor reads follow-up and cannot see other actor draft",
+    390,
+    async (page) => {
+      await open(page, `${origin}/admin/leads`);
+      const dialog = await manualForm(page);
+      await fillForward(dialog);
+      await dialog.getByLabel("事項", { exact: true }).fill("合成核實原客聯絡方式");
+      await dialog.getByLabel("到期時間", { exact: true }).fill("2026-10-01T10:00");
+      await dialog
+        .getByLabel("負責同事（留空為自己）")
+        .selectOption("20000000-0000-4000-8000-000000000002");
+      await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+      await expect(page.getByRole("region", { name: "人工轉交來源" })).toBeVisible();
+      await page.evaluate(() => {
+        sessionStorage.setItem("no-link-fixture-actor", "agent-b");
+        sessionStorage.setItem(
+          "ep-forwarded-enquiry-draft:v1:manager",
+          JSON.stringify({
+            version: 1,
+            fields: {
+              requestId: "70000000-0000-4000-8000-000000000001",
+              text: "別人的私人草稿",
+              businessSource: "合成來源",
+              sourceUrl: "",
+              originalCustomerContact: "",
+              originalReceivedAt: "",
+              note: "",
+              followUpTitle: "",
+              followUpDueAt: "",
+              responsibleStaffId: "",
+            },
+            pending: null,
+          }),
+        );
+      });
+      await page.reload();
+      await expect(page.getByRole("region", { name: "人工轉交來源" })).toContainText("合成原文");
+      await expect(page.getByText("合成核實原客聯絡方式", { exact: true })).toBeVisible();
+      await page.goto(`${origin}/admin/leads`);
+      const nextDialog = await manualForm(page);
+      await expect(nextDialog.getByLabel("原文／轉交內容")).toHaveValue("");
+    },
+    "manager",
+  );
+  await check(
+    "manual forward unsafe URL validation retains editable form without API call",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/leads`);
+      const dialog = await manualForm(page);
+      await fillForward(dialog);
+      await dialog.getByLabel("來源網址（選填）").fill("http://synthetic.invalid/listing");
+      await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("HTTPS");
+      await expect(dialog.getByLabel("來源網址（選填）")).toBeEnabled();
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticForward").length,
+        ),
+      ).toBe(0);
+    },
+  );
+  await check("manual forward unavailable storage refuses submit before API", 390, async (page) => {
+    await open(page, `${origin}/admin/leads`);
+    const dialog = await manualForm(page);
+    await fillForward(dialog);
+    await page.evaluate(() => {
+      const write = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key.startsWith("ep-forwarded-enquiry-draft:")) throw Error("Synthetic storage failure");
+        return write.call(this, key, value);
+      };
+    });
+    await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("未有送出查詢");
+    expect(
+      await page.evaluate(
+        () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticForward").length,
+      ),
+    ).toBe(0);
+  });
+  await check(
+    "manual forward late save after route leave does not reopen old lead",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/whatsapp`);
+      await page.locator('a[href="/admin/leads"]').filter({ visible: true }).first().click();
+      const dialog = await manualForm(page);
+      await fillForward(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.forwardMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+      await expect(dialog.getByRole("button", { name: "正在保存…" })).toBeDisabled();
+      await page.goBack();
+      await expect(page.getByLabel("搜尋 WhatsApp 對話")).toBeVisible();
+      await page.evaluate(() => window.noLinkFixture.releaseForward());
+      await expect.poll(() => page.url()).toBe(`${origin}/admin/whatsapp`);
+      // Observe beyond React/router microtasks so an obsolete callback cannot navigate later.
+      await page.waitForTimeout(150);
+      expect(page.url()).toBe(`${origin}/admin/whatsapp`);
+      await expect(page.getByRole("region", { name: "人工轉交來源" })).toHaveCount(0);
+    },
+  );
+  await check(
+    "manual forward corrupt unresolved journal blocks a fresh request",
+    390,
+    async (page) => {
+      await open(page, `${origin}/admin/leads`);
+      let dialog = await manualForm(page);
+      await fillForward(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.forwardMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
+      await expect(dialog.getByRole("alert")).toBeVisible();
+      await page.evaluate(() =>
+        sessionStorage.setItem("ep-forwarded-enquiry-draft:v1:agent-a", "{corrupt"),
+      );
+      await page.reload();
+      dialog = await manualForm(page);
+      await expect(dialog.getByRole("alert")).toContainText("草稿受損");
+      await expect(dialog.getByLabel("原文／轉交內容")).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: "請先核對草稿" })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts")).length,
+        ),
+      ).toBe(1);
+      expect(
+        await page.evaluate(() => sessionStorage.getItem("ep-forwarded-enquiry-draft:v1:agent-a")),
+      ).toBe("{corrupt");
+    },
+  );
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
@@ -394,6 +695,7 @@ try {
         filtered: collected - results.length,
         providerSend: false,
         database: false,
+        syntheticCrmModel: true,
         results,
       },
       null,
