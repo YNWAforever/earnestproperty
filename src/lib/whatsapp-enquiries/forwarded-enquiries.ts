@@ -11,6 +11,31 @@ export type ForwardedEnquiryInput = {
   responsibleStaffId: string | null;
 };
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export type LeadContactUpdateInput = {
+  leadId: string;
+  name: string | null;
+  email: string | null;
+  expectedContactId: string;
+  expectedName: string | null;
+  expectedEmail: string | null;
+};
+export function validateLeadContactUpdate(input: LeadContactUpdateInput): LeadContactUpdateInput {
+  if (!input || !uuid.test(input.leadId) || !uuid.test(input.expectedContactId))
+    throw Error("客戶資料無效，請重新載入後再編輯。");
+  for (const [value, limit] of [
+    [input.name, 160],
+    [input.email, 254],
+    [input.expectedName, 160],
+    [input.expectedEmail, 254],
+  ] as const) {
+    if (value !== null && (typeof value !== "string" || value.length > limit))
+      throw Error("客戶資料無效，請重新載入後再編輯。");
+  }
+  const name = input.name?.trim() || null;
+  const email = input.email?.trim() || null;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw Error("電郵格式無效。");
+  return { ...input, name, email };
+}
 const clean = (value: string | null, limit: number) => {
   if (value === null) return null;
   const trimmed = value.trim();

@@ -1,7 +1,9 @@
 // Test-only API model. This is presentation evidence, not server ACL or provider proof.
 import {
   validateForwardedEnquiry,
+  validateLeadContactUpdate,
   type ForwardedEnquiryInput,
+  type LeadContactUpdateInput,
 } from "../../../src/lib/whatsapp-enquiries/forwarded-enquiries";
 export const actor = sessionStorage.getItem("no-link-fixture-actor") ?? "agent-a";
 export const ids = {
@@ -60,6 +62,10 @@ const state = {
   releaseLateDetail: null as null | (() => void),
   forwardMode: "ok",
   releaseForward: null as null | (() => void),
+  contactMode: "ok",
+  releaseContact: null as null | (() => void),
+  contactReadFailure: false,
+  relatedReadFailure: sessionStorage.getItem("no-link-fixture-related-error") === "true",
 };
 Object.assign(window, {
   noLinkFixture: { ...state, ids, actor, lastMessage: rows[0].messages.at(-1)!.text },
@@ -200,7 +206,19 @@ export const correctWhatsappEnquiry = () => noMutation("correctEnquiry");
 export const fetchWhatsappEnquiryDetail = async () => deny();
 
 // Session-only model for CRM presentation. This deliberately does not claim SQL/auth evidence.
-type ForwardRecord = { input: ForwardedEnquiryInput; actor: string; id: string };
+type ForwardRecord = {
+  input: ForwardedEnquiryInput;
+  actor: string;
+  id: string;
+  contact?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    phone: string;
+    optIn: boolean;
+  };
+  conversationId?: string;
+};
 const forwardStorage = "no-link-fixture-forward-records";
 function forwardedRecords(): ForwardRecord[] {
   return JSON.parse(sessionStorage.getItem(forwardStorage) ?? "[]");
@@ -218,12 +236,12 @@ function forwardLead(record: ForwardRecord) {
     id: record.id,
     stage: "new",
     intent: "buyer",
-    source: "manual_forward",
-    name: null,
-    phone: null,
-    email: null,
-    contact_id: null,
-    opt_in_whatsapp: false,
+    source: record.contact ? "whatsapp" : "manual_forward",
+    name: record.contact?.name ?? null,
+    phone: record.contact?.phone ?? null,
+    email: record.contact?.email ?? null,
+    contact_id: record.contact?.id ?? null,
+    opt_in_whatsapp: record.contact?.optIn ?? false,
     budget_min: null,
     budget_max: null,
     note: record.input.note,
@@ -277,6 +295,8 @@ export async function saveForwardedEnquiry(input: ForwardedEnquiryInput) {
   return { leadId: record.id, created: !existing };
 }
 export async function fetchAdminLead({ data }: { data: { id: string } }) {
+  call("leadRead", data);
+  if (fixture().contactReadFailure) throw Error("Synthetic contact read failure");
   const record = forwardedRecords().find((r) => r.id === data.id && canReadForward(r));
   return record ? forwardLead(record) : null;
 }
@@ -295,8 +315,42 @@ export async function fetchForwardedEnquiry(leadId: string) {
     : null;
 }
 export const fetchAdminLeadAiProfile = async () => ({ profile: null, tags: [] });
-export const fetchRelatedLeadConversations = async () => [];
-export const saveLeadContact = () => noMutation("contactEdit");
+export async function fetchRelatedLeadConversations(leadId: string) {
+  call("relatedRead", { leadId });
+  if (fixture().relatedReadFailure) throw Error("Synthetic related read failure");
+  const record = forwardedRecords().find((r) => r.id === leadId && canReadForward(r));
+  return record?.conversationId && readable(record.conversationId)
+    ? [{ id: record.conversationId }]
+    : [];
+}
+export async function saveLeadContact(input: LeadContactUpdateInput) {
+  call("syntheticContact", input);
+  const valid = validateLeadContactUpdate(input);
+  if (fixture().contactMode === "delay")
+    await new Promise<void>((done) => {
+      fixture().releaseContact = done;
+    });
+  const records = forwardedRecords();
+  const record = records.find((r) => r.id === valid.leadId && canReadForward(r));
+  const contact = record?.contact;
+  if (!contact) return deny();
+  if (
+    contact.id !== valid.expectedContactId ||
+    !(
+      (contact.name === valid.expectedName && contact.email === valid.expectedEmail) ||
+      (contact.name === valid.name && contact.email === valid.email)
+    )
+  )
+    throw Error("Synthetic stale contact");
+  contact.name = valid.name;
+  contact.email = valid.email;
+  sessionStorage.setItem(forwardStorage, JSON.stringify(records));
+  if (fixture().contactMode === "timeout") {
+    fixture().contactMode = "ok";
+    throw Error("Synthetic contact response lost after commit");
+  }
+  return { contactId: contact.id };
+}
 export const analyzeAdminLeadAiProfile = () => noMutation("leadAi");
 export const approveAdminAiTag = () => noMutation("approveTag");
 export const rejectAdminAiTag = () => noMutation("rejectTag");

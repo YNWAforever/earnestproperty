@@ -792,6 +792,109 @@ test(
             );
           },
         );
+        await t.test(
+          "contact CAS serializes competing writers and rejects a pointer changed while waiting",
+          async () => {
+            const { updateLeadContact } =
+              await import("../src/lib/whatsapp-enquiries/forwarded-enquiries.server.ts");
+            const contactId = randomUUID(),
+              replacementId = randomUUID(),
+              leadId = randomUUID();
+            await query(
+              "INSERT INTO crm_contacts(id,name,email,phone,opt_in_whatsapp) VALUES($1,'原姓名','old@example.test','synthetic-phone',false),($2,'原姓名','old@example.test',NULL,false)",
+              [contactId, replacementId],
+            );
+            await query(
+              "INSERT INTO crm_leads(id,contact_id,assigned_agent_id,source) VALUES($1,$2,$3,'whatsapp')",
+              [leadId, contactId, ids.s1],
+            );
+            const input = {
+              leadId,
+              name: "修改甲",
+              email: "new@example.test",
+              expectedContactId: contactId,
+              expectedName: "原姓名",
+              expectedEmail: "old@example.test",
+            };
+            const outcomes = await Promise.allSettled([
+              updateLeadContact(input, actor, query),
+              updateLeadContact({ ...input, name: "修改乙" }, actor, query),
+            ]);
+            assert.equal(outcomes.filter((r) => r.status === "fulfilled").length, 1);
+            const rejected = outcomes.find((r) => r.status === "rejected");
+            assert.equal(rejected.reason.status, 409);
+            const [saved] = await query(
+              "SELECT name,email,phone,opt_in_whatsapp FROM crm_contacts WHERE id=$1",
+              [contactId],
+            );
+            assert.ok(["修改甲", "修改乙"].includes(saved.name));
+            assert.equal(saved.phone, "synthetic-phone");
+            assert.equal(saved.opt_in_whatsapp, false);
+            await updateLeadContact({ ...input, name: saved.name }, actor, query);
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM audit_logs WHERE subject_id=$1 AND action='lead.contact.update'",
+                  [contactId],
+                )
+              )[0].n,
+              1,
+            );
+            const lock = await pool.connect();
+            let pending;
+            try {
+              await lock.query("BEGIN");
+              await lock.query("UPDATE crm_leads SET contact_id=$1 WHERE id=$2", [
+                replacementId,
+                leadId,
+              ]);
+              pending = updateLeadContact(
+                {
+                  ...input,
+                  name: "舊畫面再修改",
+                  expectedName: saved.name,
+                  expectedEmail: saved.email,
+                },
+                actor,
+                query,
+              ).then(
+                (value) => ({ value }),
+                (error) => ({ error }),
+              );
+              // Observe the actual blocked backend before committing the pointer change.
+              let waiting = false;
+              for (let n = 0; n < 100 && !waiting; n++) {
+                waiting =
+                  (
+                    await query(
+                      "SELECT count(*)::int n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'WITH locked_lead%'",
+                    )
+                  )[0].n > 0;
+                if (!waiting) await delay(25);
+              }
+              assert.equal(waiting, true, "CAS must wait on the lead lock");
+              await lock.query("COMMIT");
+              const result = await pending;
+              assert.equal(result.error?.status, 409);
+              assert.equal(
+                (await query("SELECT name FROM crm_contacts WHERE id=$1", [replacementId]))[0].name,
+                "原姓名",
+              );
+              assert.equal(
+                (
+                  await query("SELECT count(*)::int n FROM audit_logs WHERE subject_id=$1", [
+                    replacementId,
+                  ])
+                )[0].n,
+                0,
+              );
+            } finally {
+              await lock.query("ROLLBACK");
+              lock.release();
+              await pending;
+            }
+          },
+        );
         assert.equal(networkCalls, 0, "no portal, LLM, provider or external network request");
         t.diagnostic(
           `Postgres 17; ${MIGRATION_VERSIONS.length} full migrations; 8 concurrent intent calls; signed receipt ${receipt.id} -> event ${event.id} -> enquiry ${enquiry.id} -> assignment ${assignment.id} -> ack ${notification.id} -> outbound ${reply.requestId} -> synthetic delivered/read`,

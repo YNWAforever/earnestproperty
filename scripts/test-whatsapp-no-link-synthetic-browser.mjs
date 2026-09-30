@@ -679,6 +679,266 @@ try {
       ).toBe("{corrupt");
     },
   );
+  const contactLead = "70000000-0000-4000-8000-000000000001";
+  const contactId = "80000000-0000-4000-8000-000000000001";
+  async function seedContact(page) {
+    await page.context().addInitScript(
+      ({ contactLead, contactId, conversationId, staff }) => {
+        if (!sessionStorage.getItem("no-link-fixture-forward-records"))
+          sessionStorage.setItem(
+            "no-link-fixture-forward-records",
+            JSON.stringify([
+              {
+                id: contactLead,
+                actor: "agent-a",
+                conversationId,
+                input: {
+                  requestId: "90000000-0000-4000-8000-000000000001",
+                  text: "既有合成 WhatsApp 查詢",
+                  businessSource: "whatsapp",
+                  responsibleStaffId: staff,
+                  note: null,
+                },
+                contact: {
+                  id: contactId,
+                  name: "既有合成客戶",
+                  email: "before@example.test",
+                  phone: "+85200000000",
+                  optIn: false,
+                },
+              },
+            ]),
+          );
+      },
+      { contactLead, contactId, conversationId: ids.a, staff: ids.staff },
+    );
+  }
+  const contactForm = (page) => page.getByRole("form", { name: "編輯聯絡資料" });
+  for (const width of [360, 1280]) {
+    await check(
+      `contact ${width}px save and refresh preserves lead drafts and identity`,
+      width,
+      async (page) => {
+        await seedContact(page);
+        await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+        await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+        const form = contactForm(page);
+        await form.getByLabel("姓名", { exact: true }).fill("更新合成客戶");
+        await form.getByLabel("電郵", { exact: true }).fill("after@example.test");
+        await page.getByLabel("最低預算", { exact: true }).fill("1234567");
+        await page.getByLabel("內部備註（不會傳送給客戶）", { exact: true }).fill("保留未保存草稿");
+        await form.getByRole("button", { name: "儲存聯絡資料" }).click();
+        await expect(form).toHaveCount(0);
+        await expect(
+          page.getByText("更新合成客戶", { exact: true }).filter({ visible: true }).first(),
+        ).toBeVisible();
+        await expect(page.getByLabel("最低預算", { exact: true })).toHaveValue("1234567");
+        await expect(page.getByLabel("內部備註（不會傳送給客戶）", { exact: true })).toHaveValue(
+          "保留未保存草稿",
+        );
+        const input = await page.evaluate(
+          () => window.noLinkFixture.calls.find((c) => c.name === "syntheticContact").input,
+        );
+        expect(input).toEqual({
+          leadId: contactLead,
+          name: "更新合成客戶",
+          email: "after@example.test",
+          expectedContactId: contactId,
+          expectedName: "既有合成客戶",
+          expectedEmail: "before@example.test",
+        });
+        await page.reload();
+        await expect(
+          page.getByText("更新合成客戶", { exact: true }).filter({ visible: true }).first(),
+        ).toBeVisible();
+        await expect(
+          page.getByText("after@example.test", { exact: true }).filter({ visible: true }).first(),
+        ).toBeVisible();
+        await expect(page.locator("dd").getByText("+85200000000", { exact: true })).toBeVisible();
+        await expect(page.locator("dd").getByText("未有推廣同意", { exact: true })).toBeVisible();
+      },
+    );
+  }
+  await check("contact cancel and invalid email perform no write", 390, async (page) => {
+    await seedContact(page);
+    await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+    await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+    await contactForm(page).getByLabel("姓名", { exact: true }).fill("取消草稿");
+    await contactForm(page).getByRole("button", { name: "取消", exact: true }).click();
+    await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+    await expect(contactForm(page).getByLabel("姓名", { exact: true })).toHaveValue("既有合成客戶");
+    await contactForm(page).getByLabel("電郵", { exact: true }).fill("invalid");
+    await contactForm(page).getByRole("button", { name: "儲存聯絡資料" }).click();
+    expect(
+      await page.evaluate(
+        () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticContact").length,
+      ),
+    ).toBe(0);
+    await expect(contactForm(page).getByLabel("電郵", { exact: true })).toHaveValue("invalid");
+  });
+  await check("contact pending save disables edits and duplicate submit", 390, async (page) => {
+    await seedContact(page);
+    await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+    await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+    await contactForm(page).getByLabel("姓名", { exact: true }).fill("等待中的修改");
+    await page.evaluate(() => {
+      window.noLinkFixture.contactMode = "delay";
+    });
+    await contactForm(page).getByRole("button", { name: "儲存聯絡資料" }).click();
+    await expect(contactForm(page).getByLabel("姓名", { exact: true })).toBeDisabled();
+    await expect(contactForm(page).getByLabel("電郵", { exact: true })).toBeDisabled();
+    await expect(
+      contactForm(page).getByRole("button", { name: "取消", exact: true }),
+    ).toBeDisabled();
+    await contactForm(page).evaluate((form) => {
+      form.requestSubmit();
+      form.requestSubmit();
+    });
+    expect(
+      await page.evaluate(
+        () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticContact").length,
+      ),
+    ).toBe(1);
+    await page.evaluate(() => window.noLinkFixture.releaseContact());
+    await expect(contactForm(page)).toHaveCount(0);
+    await expect(
+      page.getByText("等待中的修改", { exact: true }).filter({ visible: true }).first(),
+    ).toBeVisible();
+  });
+  await check("contact stale snapshot requires readback before a new edit", 1280, async (page) => {
+    await seedContact(page);
+    await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+    await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+    await contactForm(page).getByLabel("姓名", { exact: true }).fill("過期草稿");
+    await page.evaluate(() => {
+      const records = JSON.parse(sessionStorage.getItem("no-link-fixture-forward-records"));
+      records[0].contact.name = "另一同事新修改";
+      sessionStorage.setItem("no-link-fixture-forward-records", JSON.stringify(records));
+    });
+    await contactForm(page).getByRole("button", { name: "儲存聯絡資料" }).click();
+    await expect(contactForm(page).getByRole("alert")).toContainText("請先重新載入");
+    await expect(contactForm(page).getByLabel("姓名", { exact: true })).toBeDisabled();
+    await expect(contactForm(page).getByRole("button", { name: "儲存聯絡資料" })).toBeDisabled();
+    await contactForm(page).getByRole("button", { name: "重新載入聯絡資料" }).click();
+    await expect(contactForm(page)).toHaveCount(0);
+    await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+    await expect(contactForm(page).getByLabel("姓名", { exact: true })).toHaveValue(
+      "另一同事新修改",
+    );
+    expect(
+      await page.evaluate(
+        () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticContact").length,
+      ),
+    ).toBe(1);
+  });
+  await check("contact lost response and failed readback never resends", 390, async (page) => {
+    await seedContact(page);
+    await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+    await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+    await contactForm(page).getByLabel("姓名", { exact: true }).fill("結果待核對");
+    await page.evaluate(() => {
+      window.noLinkFixture.contactMode = "timeout";
+      window.noLinkFixture.contactReadFailure = true;
+    });
+    await contactForm(page).getByRole("button", { name: "儲存聯絡資料" }).click();
+    await expect(contactForm(page).getByRole("alert")).toContainText("儲存結果未能確認");
+    await expect(
+      contactForm(page).getByRole("button", { name: "重新載入聯絡資料" }),
+    ).toBeInViewport();
+    expect(
+      await contactForm(page).evaluate((form) => form.scrollWidth <= form.clientWidth + 1),
+    ).toBe(true);
+    await contactForm(page).getByRole("button", { name: "重新載入聯絡資料" }).click();
+    await expect(contactForm(page).getByRole("alert")).toContainText("未有重送修改");
+    await expect(contactForm(page).getByLabel("姓名", { exact: true })).toBeDisabled();
+    await page.evaluate(() => {
+      window.noLinkFixture.contactReadFailure = false;
+    });
+    await contactForm(page).getByRole("button", { name: "重新載入聯絡資料" }).click();
+    await expect(contactForm(page)).toHaveCount(0);
+    await expect(
+      page.getByText("結果待核對", { exact: true }).filter({ visible: true }).first(),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticContact").length,
+      ),
+    ).toBe(1);
+    await page.reload();
+    await expect(
+      page.getByText("結果待核對", { exact: true }).filter({ visible: true }).first(),
+    ).toBeVisible();
+  });
+  await check(
+    "contact next model actor reads change and unassigned actor sees no edit",
+    1280,
+    async (page) => {
+      await seedContact(page);
+      await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+      await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+      await contactForm(page).getByLabel("姓名", { exact: true }).fill("下一同事可核對");
+      await contactForm(page).getByRole("button", { name: "儲存聯絡資料" }).click();
+      await expect(contactForm(page)).toHaveCount(0);
+      await page.evaluate(() => sessionStorage.setItem("no-link-fixture-actor", "manager"));
+      await page.reload();
+      await expect(
+        page.getByText("下一同事可核對", { exact: true }).filter({ visible: true }).first(),
+      ).toBeVisible();
+      await page.evaluate(() => sessionStorage.setItem("no-link-fixture-actor", "agent-b"));
+      await page.reload();
+      await expect(page.getByRole("button", { name: "編輯姓名／電郵" })).toHaveCount(0);
+      await expect(page.getByText("下一同事可核對", { exact: true })).toHaveCount(0);
+    },
+  );
+  await check(
+    "contact late completion after leaving route cannot reopen CRM",
+    1280,
+    async (page) => {
+      await seedContact(page);
+      await open(page, `${origin}/admin/whatsapp`);
+      await page.locator('a[href="/admin/leads"]').filter({ visible: true }).first().click();
+      await page
+        .getByText("既有合成客戶", { exact: true })
+        .filter({ visible: true })
+        .first()
+        .click();
+      await page.getByRole("button", { name: "編輯姓名／電郵" }).click();
+      await contactForm(page).getByLabel("姓名", { exact: true }).fill("遲回修改");
+      await page.evaluate(() => {
+        window.noLinkFixture.contactMode = "delay";
+      });
+      await contactForm(page).getByRole("button", { name: "儲存聯絡資料" }).click();
+      await expect(contactForm(page).getByLabel("姓名", { exact: true })).toBeDisabled();
+      await page.goBack();
+      await expect(page.getByLabel("搜尋 WhatsApp 對話")).toBeVisible();
+      await page.evaluate(() => window.noLinkFixture.releaseContact());
+      await page.waitForTimeout(150);
+      expect(page.url()).toBe(`${origin}/admin/whatsapp`);
+      await expect(contactForm(page)).toHaveCount(0);
+    },
+  );
+  await check("related authorized source opens existing WhatsApp route", 390, async (page) => {
+    await seedContact(page);
+    await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+    await page.getByRole("link", { name: "查看已授權的 WhatsApp 對話" }).click();
+    await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("conversation")).toBe(ids.a);
+  });
+  await check("related source read failure retries without granting access", 390, async (page) => {
+    await seedContact(page);
+    await page
+      .context()
+      .addInitScript(() => sessionStorage.setItem("no-link-fixture-related-error", "true"));
+    await open(page, `${origin}/admin/leads?lead=${contactLead}`);
+    const warning = page.getByRole("alert").filter({ hasText: "未能核對相關對話權限" });
+    await expect(warning).toBeVisible();
+    await expect(page.getByRole("link", { name: "查看已授權的 WhatsApp 對話" })).toHaveCount(0);
+    await page.evaluate(() => {
+      window.noLinkFixture.relatedReadFailure = false;
+    });
+    await warning.getByRole("button", { name: "重新載入", exact: true }).click();
+    await expect(page.getByRole("link", { name: "查看已授權的 WhatsApp 對話" })).toBeVisible();
+  });
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));

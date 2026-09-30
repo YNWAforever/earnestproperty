@@ -2,7 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { withStaffAuthHeaders } from "@/auth";
-import type { ForwardedEnquiryInput } from "../whatsapp-enquiries/forwarded-enquiries";
+import type {
+  ForwardedEnquiryInput,
+  LeadContactUpdateInput,
+} from "../whatsapp-enquiries/forwarded-enquiries";
 const nullableText = (max: number) => z.string().max(max).nullable();
 const captureInput = z
   .object({
@@ -58,6 +61,9 @@ const editContact = createServerFn({ method: "POST" })
         leadId: z.string().uuid(),
         name: z.string().max(160).nullable(),
         email: z.string().max(254).nullable(),
+        expectedContactId: z.string().uuid(),
+        expectedName: z.string().max(160).nullable(),
+        expectedEmail: z.string().max(254).nullable(),
       })
       .strict(),
   )
@@ -68,8 +74,5 @@ const editContact = createServerFn({ method: "POST" })
       await import("../whatsapp-enquiries/forwarded-enquiries.server.ts");
     return updateLeadContact(data, actor);
   });
-export const saveLeadContact = async (data: {
-  leadId: string;
-  name: string | null;
-  email: string | null;
-}) => editContact(await withStaffAuthHeaders({ data }));
+export const saveLeadContact = async (data: LeadContactUpdateInput) =>
+  editContact(await withStaffAuthHeaders({ data }));

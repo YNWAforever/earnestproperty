@@ -370,6 +370,32 @@ function AdminLeads() {
     [canApplyLeadDetail, loadLeadAiProfile],
   );
 
+  const reloadLeadContact = useCallback(
+    async (id: string) => {
+      const requestId = detailRequestRef.current;
+      if (!canApplyLeadDetail(id)) return false;
+      const next = (await fetchAdminLead({ data: { id } })) as AdminLeadDetail | null;
+      if (requestId !== detailRequestRef.current || !canApplyLeadDetail(id)) return false;
+      if (!next) throw new Error("未能核對聯絡資料或權限。");
+      // Contact-only readback must preserve unsaved CRM fields and follow-up notes.
+      setDetail((current) =>
+        current?.id === id
+          ? {
+              ...current,
+              contact_id: next.contact_id,
+              name: next.name,
+              email: next.email,
+              phone: next.phone,
+              opt_in_whatsapp: next.opt_in_whatsapp,
+            }
+          : current,
+      );
+      void refreshLeads();
+      return true;
+    },
+    [canApplyLeadDetail, refreshLeads],
+  );
+
   useEffect(() => {
     if (!user) return;
     refreshLeads();
@@ -1048,6 +1074,7 @@ function AdminLeads() {
             aiMutatingTagId={aiMutatingTagId}
             disabled={isMutating}
             onDraftChange={updateDraft}
+            onReloadContact={() => reloadLeadContact(detail.id)}
             onNoteChange={(value) => {
               setNoteBody(value);
               if (noteError) setNoteError(null);
@@ -1229,6 +1256,7 @@ function LeadDetailEditor({
   disabled,
   noteSaving,
   onDraftChange,
+  onReloadContact,
   onNoteChange,
   onAddNote,
   onRefreshAiProfile,
@@ -1246,6 +1274,7 @@ function LeadDetailEditor({
   disabled: boolean;
   noteSaving: boolean;
   onDraftChange: <K extends keyof LeadDraft>(key: K, value: LeadDraft[K]) => void;
+  onReloadContact: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
   onAddNote: () => void;
   onRefreshAiProfile: () => void;
@@ -1276,6 +1305,25 @@ function LeadDetailEditor({
             </dd>
           </div>
         </dl>
+        {lead.contact_id ? (
+          <LeadContactEditor
+            key={`${lead.id}:${lead.contact_id}`}
+            leadId={lead.id}
+            contactId={lead.contact_id}
+            name={lead.name}
+            email={lead.email}
+            disabled={disabled}
+            onReload={onReloadContact}
+          />
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">
+            尚未連結已核實客戶聯絡資料；原文聯絡方式不會自動建立客戶身分。
+          </p>
+        )}
+        <RelatedLeadConversations
+          key={`${lead.id}:${lead.contact_id ?? "none"}`}
+          leadId={lead.id}
+        />
       </section>
 
       <section className="rounded-lg border p-4">
@@ -1385,6 +1433,7 @@ function LeadDetailEditor({
 
           <Field label="內部備註（不會傳送給客戶）">
             <Textarea
+              aria-label="內部備註（不會傳送給客戶）"
               value={draft.note}
               rows={3}
               disabled={disabled}
