@@ -24,8 +24,12 @@ const server = createServer(async (request, response) => {
     assert.ok(target.startsWith(root + sep), "Asset path escapes fixture root");
     response.setHeader(
       "Content-Type",
-      { ".js": "text/javascript", ".css": "text/css", ".html": "text/html" }[extname(target)] ??
-        "application/octet-stream",
+      {
+        ".js": "text/javascript",
+        ".css": "text/css",
+        ".html": "text/html",
+        ".woff2": "font/woff2",
+      }[extname(target)] ?? "application/octet-stream",
     );
     response.setHeader(
       "Content-Security-Policy",
@@ -48,6 +52,10 @@ const ids = {
   staff: "20000000-0000-4000-8000-000000000001",
 };
 const url = (id) => `${origin}/admin/whatsapp${id ? `?conversation=${id}` : ""}`;
+async function open(page, target) {
+  await page.goto(target);
+  await page.evaluate(() => document.fonts.ready);
+}
 async function check(name, width, run, actor = "agent-a", height = 844) {
   collected++;
   if (
@@ -111,8 +119,24 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
 }
 try {
   browser = await chromium.launch();
+  await check("site Inter and Chinese variable fonts load locally", 390, async (page) => {
+    await open(page, url(ids.a));
+    await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    expect(
+      await page.evaluate(() => document.fonts.check('16px "Noto Sans TC Variable"', "碧堤半島")),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() =>
+        [...document.fonts].some((face) => face.family.includes("Noto Sans TC")),
+      ),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() => [...document.fonts].some((face) => face.family.includes("Inter"))),
+    ).toBe(true);
+  });
   await check("verified staff names replace ordinary UUIDs", 1280, async (page) => {
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     const evidence = page.getByRole("region", { name: "查詢及分派證據" });
     await expect(evidence).toContainText("已確認負責人：合成同事甲");
     await expect(evidence).toContainText("指定同事：合成同事甲");
@@ -126,7 +150,7 @@ try {
   });
   for (const width of [360, 390, 768, 1280]) {
     await check(`${width}px long timeline and composer`, width, async (page) => {
-      await page.goto(url(ids.a));
+      await open(page, url(ids.a));
       const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
       await expect(input).toBeVisible();
       const last = await page.evaluate(() => window.noLinkFixture.lastMessage);
@@ -142,6 +166,7 @@ try {
       await expect(send).toBeInViewport({ ratio: 1 });
       await expect(send).toBeEnabled();
       await page.reload();
+      await page.evaluate(() => document.fonts.ready);
       await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toHaveValue(
         "合成草稿\n",
       );
@@ -155,7 +180,7 @@ try {
     });
   }
   await check("second conversation keeps distinct drafts", 1280, async (page) => {
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
     await input.fill("甲盤草稿");
     await page.getByRole("button").filter({ hasText: "合成客戶乙" }).click();
@@ -164,10 +189,11 @@ try {
     await page.getByRole("button").filter({ hasText: "合成客戶甲" }).click();
     await expect(input).toHaveValue("甲盤草稿");
     await page.reload();
+    await page.evaluate(() => document.fonts.ready);
     await expect(input).toHaveValue("甲盤草稿");
   });
   await check("pane resize preserves reading older messages", 390, async (page) => {
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     await expect(page.getByRole("region", { name: "查詢及分派證據" })).toContainText(
       "已確認負責人",
     );
@@ -187,7 +213,7 @@ try {
     expect(await timeline.evaluate((element) => element.scrollTop)).toBe(0);
   });
   await check("late detail response cannot replace next conversation", 1280, async (page) => {
-    await page.goto(url());
+    await open(page, url());
     await expect(page.getByRole("button").filter({ hasText: "合成客戶甲" })).toBeVisible();
     await page.evaluate(() => {
       window.noLinkFixture.delayDetail = true;
@@ -210,7 +236,7 @@ try {
   });
   await check("missing staff names stay unverified", 1280, async (page) => {
     await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-names", "missing"));
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     const evidence = page.getByRole("region", { name: "查詢及分派證據" });
     await expect(evidence).toContainText("負責同事名稱待核實");
     await expect(evidence).toContainText("指定同事名稱待核實");
@@ -218,7 +244,7 @@ try {
   });
   await check("unknown assignment is not labelled confirmed", 1280, async (page) => {
     await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-assignment", "unknown"));
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     await expect(page.getByRole("region", { name: "查詢及分派證據" })).toContainText(
       "分派：結果待核實",
     );
@@ -227,7 +253,7 @@ try {
     "agent inbox navigation and external ID search retain admin boundary",
     1280,
     async (page) => {
-      await page.goto(url());
+      await open(page, url());
       await expect(page.getByRole("link", { name: "WhatsApp 收件匣", exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "WhatsApp 映射設定", exact: true })).toHaveCount(
         0,
@@ -241,18 +267,19 @@ try {
         (value) => JSON.parse(value.searchParams.get("q") ?? "null") === "4033349",
       );
       await page.reload();
+      await page.evaluate(() => document.fonts.ready);
       await expect(input).toHaveValue("4033349");
     },
   );
   await check("mobile navigation closes on inbox entry", 390, async (page) => {
-    await page.goto(url());
+    await open(page, url());
     await page.getByRole("button", { name: "開啟後台選單" }).click();
     await page.getByRole("link", { name: "WhatsApp 收件匣", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(page.getByLabel("搜尋 WhatsApp 對話")).toBeVisible();
   });
   await check("mobile detail escape retains filter and draft", 390, async (page) => {
-    await page.goto(`${url(ids.a)}&q=4033349`);
+    await open(page, `${url(ids.a)}&q=4033349`);
     const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
     await input.fill("手機草稿");
     await input.press("Escape");
@@ -267,7 +294,7 @@ try {
     "short mobile viewport keeps send reachable",
     390,
     async (page) => {
-      await page.goto(url(ids.a));
+      await open(page, url(ids.a));
       await page.getByLabel("WhatsApp 回覆").filter({ visible: true }).fill("鍵盤模擬草稿");
       await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeInViewport();
     },
@@ -279,7 +306,7 @@ try {
     1280,
     async (page) => {
       await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-window", "expired"));
-      await page.goto(url(ids.a));
+      await open(page, url(ids.a));
       await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeDisabled();
       await expect(page.getByText(/目前未有已審批範本/).filter({ visible: true })).toBeVisible();
     },
@@ -293,7 +320,7 @@ try {
         JSON.stringify({ "10000000-0000-4000-8000-000000000001": "保留草稿" }),
       );
     });
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     await expect(
       page.getByText("未能載入範本，請稍後重試。").filter({ visible: true }),
     ).toBeVisible();
@@ -308,7 +335,7 @@ try {
     "other actor sees neither private thread nor composer",
     1280,
     async (page) => {
-      await page.goto(url(ids.private));
+      await open(page, url(ids.private));
       await expect(page.getByRole("alert").first()).toBeVisible();
       await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toHaveCount(0);
       await expect(page.getByText("合成客戶甲", { exact: true })).toHaveCount(0);
@@ -319,7 +346,7 @@ try {
     "viewer shell denies staff UI",
     1280,
     async (page) => {
-      await page.goto(url(ids.a));
+      await open(page, url(ids.a));
       await expect(page.getByText("此帳戶不是職員帳戶", { exact: true })).toBeVisible();
       await expect(page.getByLabel("WhatsApp 回覆")).toHaveCount(0);
     },
@@ -327,13 +354,13 @@ try {
   );
   for (const value of ["true", '{"bad":"shape"}', "9007199254740993"]) {
     await check(`invalid JSON query does not crash: ${value}`, 1280, async (page) => {
-      await page.goto(`${url(ids.a)}&q=${encodeURIComponent(value)}`);
+      await open(page, `${url(ids.a)}&q=${encodeURIComponent(value)}`);
       await expect(page.getByLabel("搜尋 WhatsApp 對話")).toHaveValue("");
       await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeVisible();
     });
   }
   await check("synthetic composing Enter never invokes send", 390, async (page) => {
-    await page.goto(url(ids.a));
+    await open(page, url(ids.a));
     const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
     await input.fill("香港繁中組字草稿");
     await input.dispatchEvent("compositionstart");
@@ -345,7 +372,7 @@ try {
     "guest sees sign-in gate instead of staff inbox",
     1280,
     async (page) => {
-      await page.goto(url(ids.a));
+      await open(page, url(ids.a));
       await expect(page.getByRole("heading", { name: "職員登入", exact: true })).toBeVisible();
       await expect(page.getByLabel("WhatsApp 回覆")).toHaveCount(0);
     },
