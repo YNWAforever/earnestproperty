@@ -84,6 +84,20 @@ test("resolution options come only from the readable enquiry, fresh MLS and veri
     await query("UPDATE inquiries SET enquiry_resolution='{\"propertyId\":null}'::jsonb");
     const cleared = await readEnquiryResolutionContext({ staffId: id(1) }, id(10), query);
     assert.equal(cleared.propertyId, null);
+    await query(
+      'UPDATE inquiries SET enquiry_resolution=\'{"propertyId":null,"requestedStaffId":null}\'::jsonb',
+    );
+    const corrected = await readEnquiryResolutionContext({ staffId: id(1) }, id(10), query);
+    assert.equal(
+      corrected.requestedStaffId,
+      null,
+      "readback must apply an explicit requested-staff clear",
+    );
+    assert.equal(
+      (await query("SELECT requested_staff_id FROM inquiries"))[0].requested_staff_id,
+      id(2),
+      "original requested-staff evidence stays intact",
+    );
     await query("UPDATE mls_source_state SET last_accepted_at=now()-interval '40 days'");
     await query("UPDATE staff_external_references SET valid_until=now()-interval '1 minute'");
     const stale = await readEnquiryResolutionContext({ staffId: id(1) }, id(10), query);

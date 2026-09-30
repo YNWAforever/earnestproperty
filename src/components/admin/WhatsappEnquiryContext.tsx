@@ -1,7 +1,7 @@
 import { EnquiryResolutionPanel } from "@/components/admin/whatsapp/EnquiryResolutionPanel";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getWhatsappAssignment, getWhatsappEnquiryQueue } from "@/lib/neon/whatsapp-assignment";
 type Episode = {
   id: string;
@@ -39,10 +39,11 @@ export function WhatsappEnquiryContext({
   );
   const [networkError, setNetworkError] = useState(false);
   const [resolutionId, setResolutionId] = useState<string | null>(null);
+  const [resolutionBusy, setResolutionBusy] = useState(false);
   const [retry, setRetry] = useState(0);
+  const refreshEvidence = useCallback(() => setRetry((value) => value + 1), []);
   useEffect(() => {
     let cancelled = false;
-    setResult(null);
     setNetworkError(false);
     getWhatsappAssignment({ conversationId })
       .then((value) => {
@@ -55,6 +56,31 @@ export function WhatsappEnquiryContext({
       cancelled = true;
     };
   }, [conversationId, refreshKey, retry]);
+  const resolutionDialog = (
+    <Dialog
+      key="resolution-dialog"
+      open={resolutionId !== null}
+      onOpenChange={(open) => {
+        if (!open && !resolutionBusy) setResolutionId(null);
+      }}
+    >
+      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+        <DialogTitle>本次查詢例外修正</DialogTitle>
+        <DialogDescription>
+          只查看及修改本次查詢；儲存不會發送訊息或轉移整段對話。
+        </DialogDescription>
+        {resolutionId ? (
+          <EnquiryResolutionPanel
+            key={resolutionId}
+            inquiryId={resolutionId}
+            onBusyChange={setResolutionBusy}
+            onReadback={refreshEvidence}
+            onClose={() => setResolutionId(null)}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
   if (networkError || result?.kind === "error") {
     const message = networkError
       ? "網絡暫時無法連接。"
@@ -68,19 +94,26 @@ export function WhatsappEnquiryContext({
               ? "分派證據功能暫時未備妥。"
               : "未能載入查詢及分派證據。";
     return (
-      <div role="alert" className="space-y-2 p-4 text-sm text-destructive">
-        <p>
-          {message}
-          {result?.kind === "error" ? `（參考編號：${result.requestId}）` : null}
-        </p>
-        <button type="button" className="underline" onClick={() => setRetry((value) => value + 1)}>
-          重新整理
-        </button>
-      </div>
+      <>
+        <div role="alert" className="space-y-2 p-4 text-sm text-destructive">
+          <p>
+            {message}
+            {result?.kind === "error" ? `（參考編號：${result.requestId}）` : null}
+          </p>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => setRetry((value) => value + 1)}
+          >
+            重新整理
+          </button>
+        </div>
+        {resolutionDialog}
+      </>
     );
   }
   const context = result?.kind === "ok" ? result.context : null;
-  if (!context) return null;
+  if (!context) return resolutionDialog;
   const episodes = (context.enquiries ?? []) as Episode[];
   return (
     <>
@@ -165,25 +198,7 @@ export function WhatsappEnquiryContext({
           </p>
         ))}
       </details>
-      <Dialog
-        open={resolutionId !== null}
-        onOpenChange={(open) => {
-          if (!open) setResolutionId(null);
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] overflow-y-auto">
-          <DialogTitle>本次查詢例外修正</DialogTitle>
-          <DialogDescription>
-            只查看及修改本次查詢；儲存不會發送訊息或轉移整段對話。
-          </DialogDescription>
-          {resolutionId ? (
-            <EnquiryResolutionPanel
-              inquiryId={resolutionId}
-              onClose={() => setResolutionId(null)}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {resolutionDialog}
     </>
   );
 }

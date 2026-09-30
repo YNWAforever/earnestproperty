@@ -13,6 +13,7 @@ export const ids = {
   staff: "20000000-0000-4000-8000-000000000001",
   staffB: "20000000-0000-4000-8000-000000000002",
   enquiry: "30000000-0000-4000-8000-000000000001",
+  enquiryB: "30000000-0000-4000-8000-000000000002",
 };
 const now = new Date().toISOString();
 const inboundAt =
@@ -66,6 +67,10 @@ const state = {
   releaseContact: null as null | (() => void),
   contactReadFailure: false,
   relatedReadFailure: sessionStorage.getItem("no-link-fixture-related-error") === "true",
+  resolutionMode: "ok",
+  releaseResolution: null as null | (() => void),
+  resolutionReadFailure: sessionStorage.getItem("no-link-fixture-resolution-error") === "true",
+  retiredCandidate: false,
 };
 Object.assign(window, {
   noLinkFixture: { ...state, ids, actor, lastMessage: rows[0].messages.at(-1)!.text },
@@ -73,7 +78,7 @@ Object.assign(window, {
 const fixture = () => (window as unknown as { noLinkFixture: typeof state }).noLinkFixture;
 const call = (name: string, input?: unknown) => fixture().calls.push({ name, input });
 function readable(id: string) {
-  return actor === "agent-a" && rows.some((r) => r.id === id);
+  return ["agent-a", "manager"].includes(actor) && rows.some((r) => r.id === id);
 }
 function deny() {
   throw Error("沒有查看此對話的權限。");
@@ -114,14 +119,13 @@ export async function fetchAdminPage({
     return { rows: leads, total: leads.length, nextCursor: null };
   }
   if (data.resource === "conversations") {
-    const allowed =
-      actor === "agent-a"
-        ? rows.filter(
-            (r) =>
-              !data.q ||
-              [r.name, r.external_listing_id, r.public_listing_no].some((s) => s.includes(data.q!)),
-          )
-        : [];
+    const allowed = ["agent-a", "manager"].includes(actor)
+      ? rows.filter(
+          (r) =>
+            !data.q ||
+            [r.name, r.external_listing_id, r.public_listing_no].some((s) => s.includes(data.q!)),
+        )
+      : [];
     return {
       rows: allowed.map((r) => ({ ...r, messages: undefined })),
       total: allowed.length,
@@ -171,15 +175,15 @@ export async function getWhatsappAssignment({ conversationId }: { conversationId
       desired_staff_name: null,
       enquiries: [
         {
-          id: ids.enquiry,
-          property: "A074714",
+          id: conversationId === ids.a ? ids.enquiry : ids.enquiryB,
+          property: conversationId === ids.a ? "A074714" : "A074715",
           source: "28Hse",
           dealType: "sale",
           requestedStaffId: ids.staff,
           requestedStaffName: staffName,
           firstResponseAt: null,
           dueAt: null,
-          review: false,
+          review: sessionStorage.getItem("no-link-fixture-enquiry-review") === "true",
         },
       ],
     },
@@ -202,8 +206,125 @@ export const runAdminWoztellBackfill = () => noMutation("backfill");
 export const setWhatsappMarketingConsent = () => noMutation("consent");
 export const confirmStaffNotification = () => noMutation("confirmStaff");
 export const askStaffNotificationHelp = () => noMutation("staffHelp");
-export const correctWhatsappEnquiry = () => noMutation("correctEnquiry");
-export const fetchWhatsappEnquiryDetail = async () => deny();
+type SyntheticResolution = {
+  version: number;
+  propertyId: string | null;
+  requestedStaffId: string | null;
+  ownerStaffId: string | null;
+  revisions: unknown[];
+};
+const resolutionStorage = "no-link-fixture-resolutions";
+function resolutionRecords(): Record<string, SyntheticResolution> {
+  return JSON.parse(sessionStorage.getItem(resolutionStorage) ?? "{}");
+}
+function resolutionRecord(inquiryId: string): SyntheticResolution {
+  return (
+    resolutionRecords()[inquiryId] ?? {
+      version: 0,
+      propertyId: "40000000-0000-4000-8000-000000000001",
+      requestedStaffId: ids.staff,
+      ownerStaffId: ids.staff,
+      revisions: [],
+    }
+  );
+}
+export async function fetchWhatsappEnquiryDetail(inquiryId: string) {
+  call("resolutionRead", { inquiryId });
+  if (fixture().resolutionReadFailure) throw Error("Synthetic resolution read unavailable");
+  if (!["agent-a", "manager"].includes(actor) || ![ids.enquiry, ids.enquiryB].includes(inquiryId))
+    return deny();
+  const record = resolutionRecord(inquiryId);
+  return {
+    access: {
+      canRead: true,
+      canCorrect: actor === "manager",
+      canReply: false,
+      canExport: actor === "manager",
+      historyScope: "enquiry",
+    },
+    messages: [
+      {
+        id: inquiryId,
+        text:
+          inquiryId === ids.enquiry
+            ? "本次合成原文甲：碧堤半島 28Hse ID:4033349"
+            : "本次合成原文乙：另一盤 ID:4033350",
+        createdAt: now,
+      },
+    ],
+    context: {
+      inquiryId,
+      version: record.version,
+      publicListingNo: inquiryId === ids.enquiry ? "A074714" : "A074715",
+      associationReview: true,
+      providerThreadReview: record.ownerStaffId !== ids.staff,
+      propertyId: record.propertyId,
+      requestedStaffId: record.requestedStaffId,
+      ownerStaffId: record.ownerStaffId,
+      references: [
+        {
+          source: "28hse",
+          externalListingId: inquiryId === ids.enquiry ? "4033349" : "4033350",
+          dealType: "sale",
+        },
+      ],
+      propertyCandidates: [
+        { id: "40000000-0000-4000-8000-000000000001", label: "A074714 · 合成碧堤半島" },
+      ],
+      requestedStaffCandidates: [{ id: ids.staff, label: "合成同事甲" }],
+      ownerCandidates: [
+        { id: ids.staff, label: "合成同事甲" },
+        ...(fixture().retiredCandidate ? [] : [{ id: ids.staffB, label: "合成同事乙" }]),
+      ],
+    },
+  };
+}
+export async function correctWhatsappEnquiry(input: {
+  inquiryId: string;
+  expectedVersion: number;
+  propertyId?: string | null;
+  requestedStaffId?: string | null;
+  ownerStaffId?: string | null;
+  reason: string;
+}) {
+  call("syntheticCorrection", input);
+  if (fixture().resolutionMode === "delay")
+    await new Promise<void>((done) => {
+      fixture().releaseResolution = done;
+    });
+  const fail = (status: number) => {
+    throw Object.assign(Error(status === 409 ? "Synthetic STALE" : "Synthetic forbidden"), {
+      status,
+    });
+  };
+  if (actor !== "manager" || fixture().resolutionMode === "forbidden") return fail(403);
+  const record = resolutionRecord(input.inquiryId);
+  if (
+    record.version !== input.expectedVersion ||
+    fixture().resolutionMode === "stale" ||
+    (fixture().retiredCandidate && input.ownerStaffId === ids.staffB)
+  )
+    return fail(409);
+  for (const key of ["propertyId", "requestedStaffId", "ownerStaffId"] as const)
+    if (input[key] !== undefined) record[key] = input[key];
+  record.version++;
+  record.revisions.push(input);
+  const records = resolutionRecords();
+  records[input.inquiryId] = record;
+  sessionStorage.setItem(resolutionStorage, JSON.stringify(records));
+  if (fixture().resolutionMode === "timeout") {
+    fixture().resolutionMode = "ok";
+    throw Error("Synthetic response lost after correction commit");
+  }
+  return {
+    inquiryId: input.inquiryId,
+    version: record.version,
+    ownerStaffId: record.ownerStaffId,
+    resolution: { propertyId: record.propertyId, requestedStaffId: record.requestedStaffId },
+    providerThreadReview: record.ownerStaffId !== ids.staff,
+    associationReview: true,
+  };
+}
 
 // Session-only model for CRM presentation. This deliberately does not claim SQL/auth evidence.
 type ForwardRecord = {

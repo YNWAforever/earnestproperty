@@ -14,6 +14,7 @@ SUPPLEMENTAL = [
     ("N-T08-inbox-view", "/admin/whatsapp", "src/components/admin/whatsapp/NoLinkInbox.tsx", "agent inbox view", "T08 Node/Bun local only"),
     ("N-T08-inbox-search", "/admin/whatsapp", "src/routes/admin.whatsapp.tsx", "activity and full-history search", "T08 PGlite local only"),
     ("N-T09-enquiry-correct", "/admin/whatsapp", "src/components/admin/whatsapp/EnquiryResolutionPanel.tsx", "correct one enquiry", "T06/T09 PGlite CAS local only"),
+    ("N-T09-resolution-refresh", "/admin/whatsapp", "src/components/admin/whatsapp/EnquiryResolutionPanel.tsx", "read back uncertain correction or retry scoped evidence", "T06/T09 real-route synthetic browser; actual Postgres CAS separately verified"),
     ("N-T09-folder-retry", "/admin/whatsapp", "src/components/admin/whatsapp/FolderLoadNotice.tsx", "retry Folder load", "T09 Bun local only"),
     ("N-T09-staff-test", "/admin/whatsapp-settings", "src/components/admin/whatsapp/StaffTestNotificationDialog.tsx", "staff test notification", "T09 UI local only"),
     ("N-T10-forward-capture", "/admin/leads", "src/components/admin/whatsapp/ForwardedEnquiryForm.tsx", "capture manual forward", "T10 PGlite/Bun local only"),

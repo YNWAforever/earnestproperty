@@ -939,6 +939,335 @@ try {
     await warning.getByRole("button", { name: "重新載入", exact: true }).click();
     await expect(page.getByRole("link", { name: "查看已授權的 WhatsApp 對話" })).toBeVisible();
   });
+  async function resolutionDialog(page, target = ids.a) {
+    await page
+      .context()
+      .addInitScript(() => sessionStorage.setItem("no-link-fixture-enquiry-review", "true"));
+    await open(page, url(target));
+    await page
+      .getByRole("button", { name: "查看及修正本次查詢" })
+      .filter({ visible: true })
+      .click();
+    return page.getByRole("dialog", { name: "本次查詢例外修正" });
+  }
+  async function fillResolution(dialog) {
+    await dialog
+      .getByRole("combobox", { name: /^本次查詢負責同事/ })
+      .selectOption("20000000-0000-4000-8000-000000000002");
+    await dialog.getByRole("textbox", { name: /^修正原因/ }).fill("已核對本次合成查詢");
+  }
+  await check(
+    "resolution pending save freezes fields and Escape close",
+    390,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).evaluate((button) => {
+        button.click();
+        button.click();
+      });
+      await expect(dialog.getByRole("textbox", { name: /^修正原因/ })).toBeDisabled();
+      for (const label of ["MLS 樓盤", "指定同事（已核實外部映射）", "本次查詢負責同事"])
+        await expect(
+          dialog.getByRole("combobox", {
+            name: new RegExp("^" + label.replace(/[（）]/g, "\\$&")),
+          }),
+        ).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "取消／關閉" })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticCorrection").length,
+        ),
+      ).toBe(1);
+      await page.evaluate(() => window.noLinkFixture.releaseResolution());
+      await expect(dialog.getByRole("status").filter({ hasText: "已儲存本次查詢" })).toBeVisible();
+    },
+    "manager",
+  );
+  await check(
+    "resolution lost response requires readback and never repeats revision",
+    390,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("button", { name: "重新載入版本（保留草稿）" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toBeDisabled();
+      expect(await dialog.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+      await dialog.getByRole("button", { name: "重新載入版本（保留草稿）" }).click();
+      await expect(dialog).toContainText("版本 1");
+      await expect(dialog.getByRole("textbox", { name: /^修正原因/ })).toHaveValue(
+        "已核對本次合成查詢",
+      );
+      await expect(dialog).toContainText("目前資料已符合草稿");
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticCorrection").length,
+        ),
+      ).toBe(1);
+    },
+    "manager",
+  );
+  await check(
+    "resolution scoped original text is available for review",
+    1280,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await expect(dialog).toContainText("本次合成原文甲：碧堤半島 28Hse ID:4033349");
+      await expect(dialog).not.toContainText("本次合成原文乙");
+    },
+    "manager",
+  );
+  await check(
+    "resolution 360px clear readback survives evidence outage refresh and next actor",
+    360,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await dialog.getByRole("combobox", { name: /^指定同事/ }).selectOption("none");
+      await dialog.getByRole("textbox", { name: /^修正原因/ }).fill("原指定文字待重新核實");
+      await page.evaluate(() => {
+        window.noLinkFixture.assignmentFailure = true;
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("status").filter({ hasText: "已儲存本次查詢" })).toBeVisible();
+      await expect(
+        dialog.getByRole("definition").filter({ hasText: "待核實／未指定" }),
+      ).toBeVisible();
+      const calls = await page.evaluate(() =>
+        window.noLinkFixture.calls.filter((c) => c.name === "syntheticCorrection"),
+      );
+      expect(calls[0].input).toEqual({
+        inquiryId: "30000000-0000-4000-8000-000000000001",
+        expectedVersion: 0,
+        requestedStaffId: null,
+        reason: "原指定文字待重新核實",
+      });
+      await page.reload();
+      await page
+        .getByRole("button", { name: "查看及修正本次查詢" })
+        .filter({ visible: true })
+        .click();
+      await expect(dialog).toContainText("版本 1");
+      await page.evaluate(() => sessionStorage.setItem("no-link-fixture-actor", "agent-a"));
+      await page.reload();
+      await page
+        .getByRole("button", { name: "查看及修正本次查詢" })
+        .filter({ visible: true })
+        .click();
+      await expect(dialog).toContainText("版本 1");
+      await expect(dialog).toContainText("沒有修正權限");
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toHaveCount(0);
+    },
+    "manager",
+  );
+  await check(
+    "resolution cancel unchanged and invalid reason make no API call",
+    390,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("請選擇");
+      await dialog.getByRole("combobox", { name: /^本次查詢負責同事/ }).selectOption("none");
+      await dialog.getByRole("textbox", { name: /^修正原因/ }).fill("x");
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("最少三個字");
+      await dialog.getByRole("button", { name: "取消／關閉" }).click();
+      await expect(dialog).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "syntheticCorrection").length,
+        ),
+      ).toBe(0);
+    },
+    "manager",
+  );
+  await check(
+    "resolution agent reads only scoped evidence without mutation controls",
+    390,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await expect(dialog).toContainText("本次合成原文甲");
+      await expect(dialog).not.toContainText("本次合成原文乙");
+      await expect(dialog).toContainText("沒有修正權限");
+      await expect(dialog.getByRole("combobox")).toHaveCount(0);
+    },
+  );
+  await check(
+    "resolution initial read failure and permission rejection require fresh scope read",
+    390,
+    async (page) => {
+      await page
+        .context()
+        .addInitScript(() => sessionStorage.setItem("no-link-fixture-resolution-error", "true"));
+      const dialog = await resolutionDialog(page);
+      await expect(dialog.getByRole("alert")).toContainText("未能讀取");
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toHaveCount(0);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionReadFailure = false;
+      });
+      await dialog.getByRole("button", { name: "重新載入版本（保留草稿）" }).click();
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionMode = "forbidden";
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("權限已變更");
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toHaveCount(0);
+      expect(
+        await page.evaluate(() => sessionStorage.getItem("no-link-fixture-resolutions")),
+      ).toBeNull();
+    },
+    "manager",
+  );
+  await check(
+    "resolution stale reload failure cannot reuse old version or erase draft",
+    1280,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        sessionStorage.setItem(
+          "no-link-fixture-resolutions",
+          JSON.stringify({
+            "30000000-0000-4000-8000-000000000001": {
+              version: 1,
+              propertyId: "40000000-0000-4000-8000-000000000001",
+              requestedStaffId: "20000000-0000-4000-8000-000000000001",
+              ownerStaffId: "20000000-0000-4000-8000-000000000001",
+              revisions: [],
+            },
+          }),
+        );
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("重新載入");
+      await expect(dialog.getByRole("textbox", { name: /^修正原因/ })).toBeDisabled();
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionReadFailure = true;
+      });
+      await dialog.getByRole("button", { name: "重新載入版本（保留草稿）" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("未有重送");
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toHaveCount(0);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionReadFailure = false;
+      });
+      await dialog.getByRole("button", { name: "重新載入版本（保留草稿）" }).click();
+      await expect(dialog).toContainText("版本 1");
+      await expect(dialog.getByRole("textbox", { name: /^修正原因/ })).toHaveValue(
+        "已核對本次合成查詢",
+      );
+      await expect(dialog.getByRole("combobox", { name: /^本次查詢負責同事/ })).toHaveValue(
+        "20000000-0000-4000-8000-000000000002",
+      );
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog).toContainText("版本 2");
+      const inputs = await page.evaluate(() =>
+        window.noLinkFixture.calls
+          .filter((c) => c.name === "syntheticCorrection")
+          .map((c) => c.input),
+      );
+      expect(inputs.map((i) => i.expectedVersion)).toEqual([0, 1]);
+    },
+    "manager",
+  );
+  await check(
+    "resolution retired candidate remains explicit and blocks save until reselected",
+    390,
+    async (page) => {
+      const dialog = await resolutionDialog(page);
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.retiredCandidate = true;
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await dialog.getByRole("button", { name: "重新載入版本（保留草稿）" }).click();
+      await expect(dialog.getByRole("alert")).toContainText("先前選擇已不可用");
+      await expect(dialog.getByRole("combobox", { name: /^本次查詢負責同事/ })).toHaveValue(
+        "20000000-0000-4000-8000-000000000002",
+      );
+      await expect(dialog.getByRole("button", { name: "儲存本次查詢修正" })).toBeDisabled();
+      await dialog.getByRole("combobox", { name: /^本次查詢負責同事/ }).selectOption("none");
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog).toContainText("版本 1");
+    },
+    "manager",
+  );
+  await check(
+    "resolution completion after route leave cannot read back into another page",
+    1280,
+    async (page) => {
+      await page
+        .context()
+        .addInitScript(() => sessionStorage.setItem("no-link-fixture-enquiry-review", "true"));
+      await open(page, `${origin}/admin/leads`);
+      await page.locator('a[href="/admin/whatsapp"]').filter({ visible: true }).first().click();
+      await page
+        .getByRole("button", { name: /合成客戶甲/ })
+        .filter({ visible: true })
+        .click();
+      await page
+        .getByRole("button", { name: "查看及修正本次查詢" })
+        .filter({ visible: true })
+        .click();
+      const dialog = page.getByRole("dialog", { name: "本次查詢例外修正" });
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("textbox", { name: /^修正原因/ })).toBeDisabled();
+      await page.goBack();
+      if (new URL(page.url()).pathname === "/admin/whatsapp") await page.goBack();
+      await expect(page.getByRole("button", { name: /^記錄人工轉交/ })).toBeVisible();
+      await page.evaluate(() => window.noLinkFixture.releaseResolution());
+      await page.waitForTimeout(150);
+      expect(new URL(page.url()).pathname).toBe("/admin/leads");
+      expect(
+        await page.evaluate(
+          () => window.noLinkFixture.calls.filter((c) => c.name === "resolutionRead").length,
+        ),
+      ).toBe(1);
+    },
+    "manager",
+  );
+  await check(
+    "resolution uncertain close and next enquiry keep identities and drafts separate",
+    390,
+    async (page) => {
+      let dialog = await resolutionDialog(page);
+      await fillResolution(dialog);
+      await page.evaluate(() => {
+        window.noLinkFixture.resolutionMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "儲存本次查詢修正" }).click();
+      await expect(dialog.getByRole("alert")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      dialog = await resolutionDialog(page, ids.b);
+      await expect(dialog).toContainText("本次合成原文乙");
+      await expect(dialog).not.toContainText("本次合成原文甲");
+      await expect(dialog.getByRole("textbox", { name: /^修正原因/ })).toHaveValue("");
+      await expect(dialog.getByRole("combobox", { name: /^本次查詢負責同事/ })).toHaveValue(
+        "unchanged",
+      );
+      await expect(dialog).toContainText("版本 0");
+      const records = await page.evaluate(() =>
+        JSON.parse(sessionStorage.getItem("no-link-fixture-resolutions")),
+      );
+      expect(records["30000000-0000-4000-8000-000000000001"].revisions).toHaveLength(1);
+      expect(records["30000000-0000-4000-8000-000000000002"]).toBeUndefined();
+    },
+    "manager",
+  );
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
@@ -956,6 +1285,7 @@ try {
         providerSend: false,
         database: false,
         syntheticCrmModel: true,
+        syntheticEnquiryModel: true,
         results,
       },
       null,

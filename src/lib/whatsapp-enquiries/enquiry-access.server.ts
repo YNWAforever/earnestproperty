@@ -155,7 +155,9 @@ export async function readEnquiryResolutionContext(
     property_id: string | null;
   }>(
     `SELECT i.id,i.enquiry_version,i.public_listing_no,i.association_review,
-      i.provider_thread_review,i.enquiry_owner_staff_id,i.requested_staff_id,
+      i.provider_thread_review,i.enquiry_owner_staff_id,
+      CASE WHEN i.enquiry_resolution ? 'requestedStaffId'
+        THEN NULLIF(i.enquiry_resolution->>'requestedStaffId','')::uuid ELSE i.requested_staff_id END AS requested_staff_id,
       CASE WHEN i.enquiry_resolution ? 'propertyId'
         THEN NULLIF(i.enquiry_resolution->>'propertyId','')::uuid ELSE i.property_id END AS property_id
       FROM inquiries i WHERE i.id=$1::uuid AND i.source='whatsapp'

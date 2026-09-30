@@ -895,6 +895,84 @@ test(
             }
           },
         );
+        await t.test(
+          "concurrent enquiry corrections have one revision and effective readback preserves original evidence",
+          async () => {
+            const { resolveEnquiry } =
+              await import("../src/lib/whatsapp-enquiries/enquiry-resolution.server.ts");
+            const { readEnquiryResolutionContext, readEnquiryMessages } =
+              await import("../src/lib/whatsapp-enquiries/enquiry-access.server.ts");
+            const manager = { staffId: ids.manager, roles: ["manager"] };
+            const correction = {
+              inquiryId: enquiry.id,
+              expectedVersion: 0,
+              requestedStaffId: null,
+              reason: "已核對原指定同事",
+            };
+            await assert.rejects(resolveEnquiry(correction, actor, query), (e) => e.status === 403);
+            const outcomes = await Promise.allSettled([
+              resolveEnquiry(correction, manager, query),
+              resolveEnquiry({ ...correction, reason: "另一主管同步核對" }, manager, query),
+            ]);
+            assert.equal(outcomes.filter((r) => r.status === "fulfilled").length, 1);
+            assert.equal(outcomes.find((r) => r.status === "rejected").reason.status, 409);
+            const readback = await readEnquiryResolutionContext(manager, enquiry.id, query);
+            assert.equal(readback.version, 1);
+            assert.equal(readback.requestedStaffId, null);
+            assert.equal(readback.propertyId, ids.property);
+            assert.equal(
+              (await query("SELECT requested_staff_id FROM inquiries WHERE id=$1", [enquiry.id]))[0]
+                .requested_staff_id,
+              ids.s1,
+            );
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM whatsapp_enquiry_revisions WHERE inquiry_id=$1",
+                  [enquiry.id],
+                )
+              )[0].n,
+              1,
+            );
+            const [thread] = await query(
+              "SELECT assigned_agent_id,confirmed_staff_id FROM whatsapp_conversations WHERE id=$1",
+              [enquiry.conversation_id],
+            );
+            assert.equal(thread.assigned_agent_id, ids.s1);
+            assert.equal(thread.confirmed_staff_id, ids.s1);
+            const messages = await readEnquiryMessages(manager, enquiry.id, query);
+            assert.ok(messages.some((message) => message.text === sample));
+            await assert.rejects(
+              readEnquiryMessages(otherActor, enquiry.id, query),
+              (e) => e.status === 403,
+            );
+            await query("UPDATE staff_users SET branch_id=NULL WHERE id=$1", [ids.manager]);
+            try {
+              await assert.rejects(
+                resolveEnquiry(
+                  { ...correction, expectedVersion: 1, ownerStaffId: null },
+                  manager,
+                  query,
+                ),
+                (e) => e.status === 403,
+              );
+            } finally {
+              await query("UPDATE staff_users SET branch_id=$2 WHERE id=$1", [
+                ids.manager,
+                ids.branch,
+              ]);
+            }
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM whatsapp_enquiry_revisions WHERE inquiry_id=$1",
+                  [enquiry.id],
+                )
+              )[0].n,
+              1,
+            );
+          },
+        );
         assert.equal(networkCalls, 0, "no portal, LLM, provider or external network request");
         t.diagnostic(
           `Postgres 17; ${MIGRATION_VERSIONS.length} full migrations; 8 concurrent intent calls; signed receipt ${receipt.id} -> event ${event.id} -> enquiry ${enquiry.id} -> assignment ${assignment.id} -> ack ${notification.id} -> outbound ${reply.requestId} -> synthetic delivered/read`,
