@@ -1,13 +1,20 @@
 {
   "environment": "real-route-synthetic-auth-api",
-  "codeSha": "473d2c9d5271346e5fb3a579bb1fe2499e400378",
+  "codeSha": "93922854205fa0fb011bfe2af50f618d45c215ef",
   "browserVersion": "151.0.7922.34",
   "nodeVersion": "v24.18.0",
-  "collected": 23,
+  "collected": 24,
   "filtered": 0,
   "providerSend": false,
   "database": false,
   "results": [
+    {
+      "name": "site Inter and Chinese variable fonts load locally",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
     {
       "name": "verified staff names replace ordinary UUIDs",
       "width": 1280,

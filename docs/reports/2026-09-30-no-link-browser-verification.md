@@ -2,7 +2,7 @@
 
 結果：**LOCAL_UI_VERIFIED / VERIFICATION_BLOCKED for release**。
 
-Code commit：`473d2c9d5271346e5fb3a579bb1fe2499e400378`。同一 PR #206 的隔離 worktree；根 checkout 的現有修改保留。
+Product code commit：`473d2c9d5271346e5fb3a579bb1fe2499e400378`；fixture font correction及最新 committed run：`93922854205fa0fb011bfe2af50f618d45c215ef`。同一 PR #206 的隔離 worktree；根 checkout 的現有修改保留。
 
 ## 三項新發現及修復
 
@@ -14,15 +14,15 @@ Code commit：`473d2c9d5271346e5fb3a579bb1fe2499e400378`。同一 PR #206 的隔
 
 ## 環境及證據界線
 
-Command：`npm.cmd run acceptance:whatsapp-no-link:synthetic`，exit 0，**23/23，零 skip**。Node 24.18.0、Chromium 151.0.7922.34、Windows；CI 另用 lockfile 對應的 Linux Chromium revision。
+Command：`npm.cmd run acceptance:whatsapp-no-link:synthetic`，exit 0，**24/24，零 skip**。Node 24.18.0、Chromium 151.0.7922.34、Windows；CI 另用 lockfile 對應的 Linux Chromium revision。
 
-Fixture 由 Vite 載入真正 `/admin/whatsapp` TanStack route、AdminShell、staff-session store、React components、Radix dialogs 及 repository Tailwind CSS。Test-only alias 替換 Auth hook 和 API imports；不修改正式 app 的 Vite config、routes 或 server adapters。這是 UI presentation／state regression，沒有真 JWT、HTTP server-function authorization、DB 或 provider。模擬角色拒絕畫面不能當作 server 越權拒絕證據；後者仍使用既有 SQL／local Postgres tests 分開記錄。
+Fixture 由 Vite 載入真正 `/admin/whatsapp` TanStack route、AdminShell、staff-session store、React components、Radix dialogs 及 repository Tailwind CSS，以及與正式 root 相同的 Inter 400/500/600/700、Noto Sans TC Variable 本地字型。每次導航及 reload 等候 document.fonts.ready；額外 case 確認本地 font faces 已載入。Test-only alias 替換 Auth hook 和 API imports；不修改正式 app 的 Vite config、routes 或 server adapters。這是 UI presentation／state regression，沒有真 JWT、HTTP server-function authorization、DB 或 provider。模擬角色拒絕畫面不能當作 server 越權拒絕證據；後者仍使用既有 SQL／local Postgres tests 分開記錄。
 
-Runner 自建隨機 port 的 127.0.0.1 server；拒絕外來 `PLAYWRIGHT_BASE_URL`；asset path 留在自己的 `.audit` build directory。Builder 在清理 outDir 前核對 checkout 及絕對 target。CSP 和 Playwright 同時限制 network；只有此 origin 的 GET／HEAD，所有 external／mutation request 都令測試失敗。UI mutation adapters 禁止寫入，23 個 case 的 mutation call 數均為零。正常 API 的 `ai-read` 是合成已存建議讀取，不調 LLM。
+Runner 自建隨機 port 的 127.0.0.1 server；拒絕外來 `PLAYWRIGHT_BASE_URL`；asset path 留在自己的 `.audit` build directory。Builder 在清理 outDir 前核對 checkout 及絕對 target。CSP 和 Playwright 同時限制 network；只有此 origin 的 GET／HEAD，所有 external／mutation request 都令測試失敗。UI mutation adapters 禁止寫入，24 個 case 的 mutation call 數均為零。正常 API 的 `ai-read` 是合成已存建議讀取，不調 LLM。
 
 Desktop case 依一般 document scroll 回到 workspace 後驗 composer；沒有聲稱 desktop 首屏免捲動。390×500 是縮短 viewport 的鍵盤模擬，不是真手機軟鍵盤。`isComposing` 是合成 keyboard event，不是真 OS 輸入法測試。360／390／768px 最新長訊息要求至少 25% viewport ratio；傳送按鈕要求完全在 viewport 內。
 
-完整機器結果：[23-case JSON](2026-09-30-no-link-browser-results.json)；390px 合成畫面：[screenshot](2026-09-30-no-link-browser-390.png)。Runner 在 finally 關閉 browser、contexts 及自己建立的 server。原依賴真正登入 fixture 的 `e2e/whatsapp-no-link.spec.ts`／safe runner 保留，未標成 PASS。
+完整機器結果：[24-case JSON](2026-09-30-no-link-browser-results.json)；390px 合成畫面：[screenshot](2026-09-30-no-link-browser-390.png)。Runner 在 finally 關閉 browser、contexts 及自己建立的 server。原依賴真正登入 fixture 的 `e2e/whatsapp-no-link.spec.ts`／safe runner 保留，未標成 PASS。
 
 ## 已測 scenarios
 
