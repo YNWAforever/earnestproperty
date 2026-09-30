@@ -110,6 +110,22 @@ jobs:
       - run: npm run test:admin-estates
       - run: npm run test:legal
       - run: npm run test:analytics
+  no-link-local-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # Full-schema golden uses only a new loopback container, synthetic data and
+      # fake provider ports. No DATABASE_URL or provider secret is supplied.
+      - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
+      - run: npm run test:no-link:local-postgres
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

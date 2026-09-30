@@ -64,7 +64,14 @@ def main():
     changed = run("git", "diff", "--name-status", BASE, "HEAD", "--", "neon/migrations").splitlines()
     assert sorted(changed) == sorted(f"A\tneon/migrations/{version}" for version in new), \
         "an already-applied migration was modified or removed"
-    assert len(new) == 8 and all(v.startswith("20260929") for v in new), "unexpected new migration set"
+    assert len(new) == 9 and all(v.startswith("20260929") for v in new[:8]) \
+        and new[-1] == "20260930090000_whatsapp_no_link_source_authority.sql", "unexpected new migration set"
+    # The first eight fix-pack migrations have also been rehearsed. Preserve them
+    # byte-for-byte; the follow-up correction must remain additive.
+    for version in new[:8]:
+        original = subprocess.check_output(["git", "show", f"0a67cab:{'neon/migrations/' + version}"])
+        current_sql = (ROOT / "neon/migrations" / version).read_bytes().replace(b"\r\n", b"\n")
+        assert current_sql == original, f"previous fix-pack migration changed: {version}"
     suffix = uuid.uuid4().hex[:8]
     clean, upgrade = f"epclean_{suffix}", f"epupgrade_{suffix}"
     for database in [clean, upgrade]:

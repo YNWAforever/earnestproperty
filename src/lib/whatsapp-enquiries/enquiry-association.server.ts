@@ -123,6 +123,7 @@ export async function associatePortalEnquiry(
     publicationOwnerId: result.publicationOwnerId,
     status: result.status,
     reasons: result.reasons,
+    snapshot: result.snapshot,
   }));
   if (refs.length === 0) return review;
   const [associated] = await query<{ inquiry_id: string | null }>(

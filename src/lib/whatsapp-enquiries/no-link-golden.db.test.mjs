@@ -57,6 +57,15 @@ async function fixture(fn) {
         "utf8",
       ),
     );
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../../../neon/migrations/20260930090000_whatsapp_no_link_source_authority.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     await query("INSERT INTO staff_users VALUES($1,true,$3),($2,true,$3)", [
       ids.s1,
       ids.s2,
@@ -168,7 +177,7 @@ async function setupPreparation({ query, exec }, options = {}) {
     ],
   );
   await query(
-    "INSERT INTO whatsapp_portal_source_scopes VALUES('company','28hse','agent:540',true,now())",
+    "INSERT INTO whatsapp_portal_source_scopes VALUES('company','28hse_agent_540','agent:540',true,now())",
   );
   await query("INSERT INTO properties VALUES($1,$2,'active')", [prepIds.property, ids.s1]);
   await query(

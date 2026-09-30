@@ -112,6 +112,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260929105000_whatsapp_no_link_effects.sql",
   "20260929106000_whatsapp_enquiry_resolution_guard.sql",
   "20260929107000_whatsapp_forwarded_enquiries.sql",
+  "20260930090000_whatsapp_no_link_source_authority.sql",
 ]);
 
 /**
