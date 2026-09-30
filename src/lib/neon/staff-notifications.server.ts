@@ -117,16 +117,19 @@ async function mutate(value: unknown, actor: Actor, kind: "ack" | "help", ports 
       params: [actor.staffId],
     },
     {
-      statement: `WITH changed AS (UPDATE staff_notification_intents n SET
+      statement: `WITH eligible AS (SELECT n.id FROM staff_notification_intents n,whatsapp_conversations w,staff_users s,inquiries i
+ WHERE n.id=$1::uuid AND n.recipient_staff_id=$2::uuid AND n.assignment_version=$3 AND n.purpose='action_required' AND n.acknowledgement_required AND n.work_state IN ('pending','acknowledged')
+ AND i.id=n.inquiry_id AND i.status NOT IN ('closed','resolved','spam') AND NOT i.association_review AND i.first_human_response_at IS NULL AND EXISTS(SELECT 1 FROM whatsapp_enquiry_activations a WHERE a.id=n.activation_generation AND a.ended_at IS NULL) AND EXISTS(SELECT 1 FROM whatsapp_staff_channels m WHERE m.staff_id=n.recipient_staff_id AND m.channel_id=w.channel_id AND m.eligible AND m.retired_at IS NULL) AND w.id=n.conversation_id AND w.assignment_version=n.assignment_version AND w.confirmed_staff_id=n.recipient_staff_id AND w.assigned_agent_id=n.recipient_staff_id AND s.id=$2::uuid AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
+ ),changed AS (UPDATE staff_notification_intents n SET
  work_state=CASE WHEN $4='ack' THEN 'acknowledged' ELSE n.work_state END,
  acknowledged_at=CASE WHEN $4='ack' THEN COALESCE(n.acknowledged_at,now()) ELSE n.acknowledged_at END,
  acknowledged_by=CASE WHEN $4='ack' THEN $2::uuid ELSE n.acknowledged_by END,
  help_requested_at=CASE WHEN $4='help' THEN COALESCE(n.help_requested_at,now()) ELSE n.help_requested_at END,
  help_reason=CASE WHEN $4='help' THEN COALESCE(n.help_reason,$5) ELSE n.help_reason END,updated_at=now()
- FROM whatsapp_conversations w,staff_users s,inquiries i
- WHERE n.id=$1::uuid AND n.recipient_staff_id=$2::uuid AND n.assignment_version=$3 AND n.purpose='action_required' AND n.acknowledgement_required AND n.work_state IN ('pending','acknowledged')
- AND i.id=n.inquiry_id AND i.status NOT IN ('closed','resolved','spam') AND NOT i.association_review AND i.first_human_response_at IS NULL AND EXISTS(SELECT 1 FROM whatsapp_enquiry_activations a WHERE a.id=n.activation_generation AND a.ended_at IS NULL) AND EXISTS(SELECT 1 FROM whatsapp_staff_channels m WHERE m.staff_id=n.recipient_staff_id AND m.channel_id=w.channel_id AND m.eligible AND m.retired_at IS NULL) AND w.id=n.conversation_id AND w.assignment_version=n.assignment_version AND w.confirmed_staff_id=n.recipient_staff_id AND w.assigned_agent_id=n.recipient_staff_id AND s.id=$2::uuid AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
- RETURNING n.id,n.work_state,n.acknowledged_at,n.help_requested_at),audit AS (INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT $2::uuid,CASE WHEN $4='ack' THEN 'staff.notification.ack' ELSE 'staff.notification.help' END,'staff_notification',id,jsonb_build_object('assignmentVersion',$3::integer) FROM changed RETURNING id) SELECT * FROM changed`,
+ FROM eligible e WHERE n.id=e.id AND (($4='ack' AND n.acknowledged_at IS NULL) OR ($4='help' AND n.help_requested_at IS NULL))
+ RETURNING n.id,n.work_state,n.acknowledged_at,n.help_requested_at),audit AS (INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT $2::uuid,CASE WHEN $4='ack' THEN 'staff.notification.ack' ELSE 'staff.notification.help' END,'staff_notification',id,jsonb_build_object('assignmentVersion',$3::integer) FROM changed RETURNING id)
+ SELECT * FROM changed UNION ALL
+ SELECT n.id,n.work_state,n.acknowledged_at,n.help_requested_at FROM staff_notification_intents n JOIN eligible e ON e.id=n.id WHERE NOT EXISTS(SELECT 1 FROM changed)`,
       params: [
         input.notificationId,
         actor.staffId,

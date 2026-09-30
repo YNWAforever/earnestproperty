@@ -192,9 +192,11 @@ export async function getWhatsappAssignment({ conversationId }: { conversationId
 export async function getWhatsappEnquiryQueue() {
   return [];
 }
-export async function fetchMyStaffNotifications() {
-  return { available: true, items: [], nextCursor: null };
-}
+export {
+  fetchMyStaffNotifications,
+  confirmStaffNotification,
+  askStaffNotificationHelp,
+} from "./synthetic-staff-work";
 function noMutation(name: string, input?: unknown): never {
   call(name, input);
   throw Error("Synthetic fixture forbids mutations");
@@ -204,8 +206,6 @@ export const sendAdminConversationTemplate = (input: unknown) => noMutation("sen
 export const updateAdminConversation = (input: unknown) => noMutation("updateConversation", input);
 export const runAdminWoztellBackfill = () => noMutation("backfill");
 export const setWhatsappMarketingConsent = () => noMutation("consent");
-export const confirmStaffNotification = () => noMutation("confirmStaff");
-export const askStaffNotificationHelp = () => noMutation("staffHelp");
 type SyntheticResolution = {
   version: number;
   propertyId: string | null;

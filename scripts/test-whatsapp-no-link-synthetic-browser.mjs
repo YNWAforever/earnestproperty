@@ -1605,6 +1605,255 @@ try {
     },
     "manager",
   );
+  const openStaffWork = async (page) => {
+    await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-staff-work", "true"));
+    await open(page, url());
+    const panel = page.getByRole("region", { name: "我的接手工作" });
+    await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toBeVisible();
+    return panel;
+  };
+  await check(
+    "staff work same-tick duplicate acknowledgement is one request",
+    390,
+    async (page) => {
+      const panel = await openStaffWork(page);
+      await page.evaluate(() => {
+        window.noLinkStaffWorkFixture.mode = "delay";
+      });
+      await panel.getByRole("button", { name: "確認接手", exact: true }).evaluate((button) => {
+        button.click();
+        button.click();
+      });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "ack").length,
+          ),
+        )
+        .toBe(1);
+      await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toBeDisabled();
+      await page.evaluate(() => window.noLinkStaffWorkFixture.release());
+      await expect(panel).toContainText("此頁沒有你的接手工作");
+      await panel.getByLabel("接手工作狀態").selectOption("all");
+      await expect(panel).toContainText("已確認接手");
+      await expect(panel).toContainText("仍待人手回覆");
+      await expect(panel).toContainText("不代表同事手機通知");
+      await page.reload();
+      await page.getByLabel("接手工作狀態").selectOption("all");
+      await expect(page.getByRole("region", { name: "我的接手工作" })).toContainText("已確認接手");
+    },
+  );
+  await check("staff work pending help freezes reason and duplicate", 360, async (page) => {
+    const panel = await openStaffWork(page);
+    const reason = panel.getByLabel("需要協助原因");
+    await reason.fill("合成原因：需要原有負責人協調");
+    await page.evaluate(() => {
+      window.noLinkStaffWorkFixture.mode = "delay";
+    });
+    await panel.getByRole("button", { name: "需要協助", exact: true }).evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    await expect(reason).toBeDisabled();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "help").length,
+        ),
+      )
+      .toBe(1);
+    await page.evaluate(() => window.noLinkStaffWorkFixture.release());
+    await expect(panel.getByRole("button", { name: "已記錄協助要求" })).toBeDisabled();
+    await expect(panel).toContainText("尚未確認");
+    expect(
+      await page.evaluate(
+        () => window.noLinkStaffWorkFixture.calls.find((c) => c.name === "help").input.reason,
+      ),
+    ).toBe("合成原因：需要原有負責人協調");
+  });
+  await check("staff work failed readback keeps stale card locked", 390, async (page) => {
+    const panel = await openStaffWork(page);
+    await panel.getByLabel("接手工作狀態").selectOption("all");
+    await page.evaluate(() => {
+      window.noLinkStaffWorkFixture.mode = "timeout";
+      window.noLinkStaffWorkFixture.readFailure = true;
+    });
+    await panel.getByRole("button", { name: "確認接手", exact: true }).click();
+    await expect(panel.getByRole("alert")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toBeDisabled();
+    await panel.getByRole("button", { name: "更新接手工作" }).click();
+    await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toBeDisabled();
+    await page.evaluate(() => {
+      window.noLinkStaffWorkFixture.readFailure = false;
+    });
+    await panel.getByRole("button", { name: "更新接手工作" }).click();
+    await expect(panel).toContainText("已確認接手");
+    await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "ack").length,
+      ),
+    ).toBe(1);
+  });
+  await check(
+    "staff work ordinary view uses names with UUID diagnostics closed",
+    768,
+    async (page) => {
+      const panel = await openStaffWork(page);
+      await expect(panel).toContainText("A074714");
+      await expect(panel).toContainText("合成指定同事乙");
+      await expect(panel).toContainText("合成同事甲");
+      expect(await panel.innerText()).not.toContain("30000000-0000-4000-8000-000000000001");
+      await panel.getByText("接手支援診斷", { exact: true }).click();
+      expect(await panel.innerText()).toContain("30000000-0000-4000-8000-000000000001");
+    },
+  );
+  await check(
+    "staff work lost help response reads existing result without acknowledgement",
+    390,
+    async (page) => {
+      const panel = await openStaffWork(page);
+      await panel.getByLabel("需要協助原因").fill("合成手機通知未核實，請原 owner 協調");
+      await page.evaluate(() => {
+        window.noLinkStaffWorkFixture.mode = "timeout";
+      });
+      await panel.getByRole("button", { name: "需要協助", exact: true }).click();
+      await expect(panel.getByRole("button", { name: "已記錄協助要求" })).toBeDisabled();
+      await expect(panel).toContainText("尚未確認");
+      await expect(panel).toContainText("仍待人手回覆");
+      expect(
+        await page.evaluate(
+          () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "help").length,
+        ),
+      ).toBe(1);
+      expect(
+        await page.evaluate(
+          () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "ack").length,
+        ),
+      ).toBe(0);
+    },
+  );
+  await check(
+    "staff work stale assignment removes old actions after scoped readback",
+    768,
+    async (page) => {
+      const panel = await openStaffWork(page);
+      await panel.getByLabel("接手工作狀態").selectOption("all");
+      await page.evaluate(() => {
+        sessionStorage.setItem(
+          "no-link-fixture-staff-work-record",
+          JSON.stringify({
+            id: "60000000-0000-4000-8000-000000000001",
+            inquiryId: "30000000-0000-4000-8000-000000000001",
+            conversationId: "10000000-0000-4000-8000-000000000001",
+            assignmentVersion: 4,
+            purpose: "action_required",
+            workState: "superseded",
+            canAct: false,
+            publicListingNo: "A074714",
+            dealType: "sale",
+            source: "28Hse",
+            requestedName: "合成指定同事乙",
+            handlerName: "合成同事乙",
+            attempts: [],
+          }),
+        );
+      });
+      await panel.getByRole("button", { name: "確認接手", exact: true }).click();
+      await expect(panel).toContainText("已轉交");
+      await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toHaveCount(0);
+      await expect(panel.getByRole("button", { name: "需要協助", exact: true })).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "ack").length,
+        ),
+      ).toBe(1);
+    },
+  );
+  await check("staff work invalid reason and 500 character boundary", 1280, async (page) => {
+    const panel = await openStaffWork(page);
+    const reason = panel.getByLabel("需要協助原因");
+    await reason.fill("   ");
+    await expect(panel.getByRole("button", { name: "需要協助", exact: true })).toBeDisabled();
+    expect(
+      await page.evaluate(
+        () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "help").length,
+      ),
+    ).toBe(0);
+    await expect(reason).toHaveAttribute("maxlength", "500");
+    await reason.fill("合".repeat(500));
+    await panel.getByRole("button", { name: "需要協助", exact: true }).click();
+    await expect(panel.getByRole("button", { name: "已記錄協助要求" })).toBeDisabled();
+    expect(
+      await page.evaluate(
+        () =>
+          window.noLinkStaffWorkFixture.calls.find((c) => c.name === "help").input.reason.length,
+      ),
+    ).toBe(500);
+  });
+  await check(
+    "staff work open enquiry carries selected query and conversation",
+    390,
+    async (page) => {
+      const panel = await openStaffWork(page);
+      await panel.getByRole("button", { name: "查看查詢", exact: true }).click();
+      await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeVisible();
+      const current = new URL(page.url());
+      expect(current.searchParams.get("conversation")).toBe(ids.a);
+      expect(current.searchParams.get("enquiry")).toBe("30000000-0000-4000-8000-000000000001");
+      expect(current.searchParams.get("notification")).toBe("60000000-0000-4000-8000-000000000001");
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkStaffWorkFixture.calls.filter((c) => ["help", "ack"].includes(c.name))
+              .length,
+        ),
+      ).toBe(0);
+    },
+  );
+  await check("staff work next actor sees only their own work", 390, async (page) => {
+    const panel = await openStaffWork(page);
+    await panel.getByRole("button", { name: "確認接手", exact: true }).click();
+    await expect(panel).toContainText("此頁沒有你的接手工作");
+    await page.evaluate(() => sessionStorage.setItem("no-link-fixture-actor", "agent-b"));
+    await page.reload();
+    await page.getByLabel("接手工作狀態").selectOption("all");
+    await expect(page.getByRole("region", { name: "我的接手工作" })).toContainText(
+      "此頁沒有你的接手工作",
+    );
+    await expect(page.getByRole("button", { name: "確認接手", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "需要協助", exact: true })).toHaveCount(0);
+  });
+  await check(
+    "staff work completion after route leave cannot reload another actor view",
+    1280,
+    async (page) => {
+      const panel = await openStaffWork(page);
+      await panel.getByLabel("需要協助原因").fill("合成離開頁面前的協助原因");
+      await page.evaluate(() => {
+        window.noLinkStaffWorkFixture.mode = "delay";
+      });
+      await panel.getByRole("button", { name: "需要協助", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => Boolean(window.noLinkStaffWorkFixture.release)))
+        .toBe(true);
+      await page.locator('a[href="/admin/leads"]').filter({ visible: true }).first().click();
+      await expect(page.getByRole("region", { name: "我的接手工作" })).toHaveCount(0);
+      const reads = await page.evaluate(
+        () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "read").length,
+      );
+      await page.evaluate(() => window.noLinkStaffWorkFixture.release());
+      await page.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+      );
+      expect(new URL(page.url()).pathname).toBe("/admin/leads");
+      expect(
+        await page.evaluate(
+          () => window.noLinkStaffWorkFixture.calls.filter((c) => c.name === "read").length,
+        ),
+      ).toBe(reads);
+    },
+  );
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
@@ -1624,6 +1873,7 @@ try {
         syntheticCrmModel: true,
         syntheticEnquiryModel: true,
         syntheticCampaignModel: true,
+        syntheticStaffWorkModel: true,
         results,
       },
       null,

@@ -208,7 +208,7 @@ test(
           await import("../src/lib/whatsapp-enquiries/workflow.server.ts");
         const { executeAssignment, reconcileAssignment } =
           await import("../src/lib/whatsapp-enquiries/assignment.server.ts");
-        const { listMyStaffNotifications, acknowledgeStaffAssignment } =
+        const { listMyStaffNotifications, acknowledgeStaffAssignment, requestStaffAssignmentHelp } =
           await import("../src/lib/neon/staff-notifications.server.ts");
         const { enqueueOutboundIntent, deliverOutboundIntent } =
           await import("../src/lib/woztell/outbound-intent.server.ts");
@@ -449,7 +449,66 @@ test(
           ),
           (error) => error instanceof Response && error.status === 409,
         );
-        await acknowledgeStaffAssignment(ack, actor, ports);
+        await t.test(
+          "local staff acknowledgement and help retries keep one audit each",
+          async () => {
+            const confirmations = await Promise.all([
+              acknowledgeStaffAssignment(ack, actor, ports),
+              acknowledgeStaffAssignment(ack, actor, ports),
+            ]);
+            assert.equal(confirmations[0].acknowledgedAt, confirmations[1].acknowledgedAt);
+            const auditCount = async (action) =>
+              Number(
+                (
+                  await query(
+                    "SELECT count(*)::int total FROM audit_logs WHERE subject_id=$1::uuid AND action=$2",
+                    [notification.id, action],
+                  )
+                )[0].total,
+              );
+            const acknowledgements = await auditCount("staff.notification.ack");
+            const help = { ...ack, reason: "Synthetic first help reason" };
+            const helpResults = await Promise.all([
+              requestStaffAssignmentHelp(help, actor, ports),
+              requestStaffAssignmentHelp(help, actor, ports),
+            ]);
+            assert.equal(helpResults[0].helpRequestedAt, helpResults[1].helpRequestedAt);
+            await requestStaffAssignmentHelp(
+              { ...help, reason: "Synthetic different retry" },
+              actor,
+              ports,
+            );
+            const helpAudits = await auditCount("staff.notification.help");
+            assert.equal(
+              (
+                await query(
+                  "SELECT help_reason FROM staff_notification_intents WHERE id=$1::uuid",
+                  [notification.id],
+                )
+              )[0].help_reason,
+              help.reason,
+            );
+            await assert.rejects(
+              requestStaffAssignmentHelp({ ...help, reason: " " }, actor, ports),
+            );
+            await assert.rejects(
+              requestStaffAssignmentHelp(help, otherActor, ports),
+              (error) => error instanceof Response && error.status === 409,
+            );
+            await assert.rejects(
+              requestStaffAssignmentHelp(
+                { ...help, expectedAssignmentVersion: ack.expectedAssignmentVersion + 1 },
+                actor,
+                ports,
+              ),
+              (error) => error instanceof Response && error.status === 409,
+            );
+            assert.deepEqual(
+              { acknowledgements, helpAudits },
+              { acknowledgements: 1, helpAudits: 1 },
+            );
+          },
+        );
         assert.equal(
           (await listMyStaffNotifications({ status: "all" }, actor, query)).items[0].workState,
           "acknowledged",

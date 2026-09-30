@@ -38,9 +38,7 @@ export function StaffNotificationCard({
       {item.mismatchReason ? (
         <p className="text-sm">處理人不同原因：{item.mismatchReason}</p>
       ) : null}
-      <p className="text-sm">
-        來源：{item.source ?? "未核實"} · 查詢：{item.inquiryId}
-      </p>
+      <p className="text-sm">來源：{item.source ?? "未核實"}</p>
       <p className="text-sm">
         客戶回覆：{item.firstHumanResponseAt ? "已有核實人手回覆" : "仍待人手回覆"} · 回覆限時：
         {item.responseDueAt ?? "政策待核實"}
@@ -80,6 +78,13 @@ export function StaffNotificationCard({
           <li>工作已記錄；未有外部通知證據。</li>
         )}
       </ul>
+      <details className="text-xs">
+        <summary className="cursor-pointer">接手支援診斷</summary>
+        <p>查詢：{item.inquiryId}</p>
+        <p>
+          接手工作：{item.id} · 分派版本：{item.assignmentVersion}
+        </p>
+      </details>
       <div className="flex gap-2">
         <Button variant="outline" onClick={onOpen}>
           查看查詢
@@ -97,6 +102,7 @@ export function StaffNotificationCard({
             placeholder="需要協助的原因"
             maxLength={500}
             value={reason}
+            disabled={busy}
             onChange={(e) => setReason(e.target.value)}
           />
           <Button

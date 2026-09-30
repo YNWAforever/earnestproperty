@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { StaffNotificationCard } from "./StaffNotificationCard";
 import {
@@ -22,14 +22,33 @@ export function StaffNotificationPanel({
     [cursor, setCursor] = useState<string | null>(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
+    [fresh, setFresh] = useState(false),
     [revision, setRevision] = useState(0);
+  const pending = useRef(false);
+  const freshRef = useRef(false);
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  function refresh() {
+    freshRef.current = false;
+    setFresh(false);
+    setRevision((n) => n + 1);
+  }
   useEffect(() => {
     let active = true;
+    freshRef.current = false;
+    setFresh(false);
     fetchMyStaffNotifications({ cursor, status, limit: 10 })
       .then((p) => {
         if (active) {
           setPage(p);
           setError("");
+          freshRef.current = p.available;
+          setFresh(p.available);
         }
       })
       .catch(() => {
@@ -40,18 +59,25 @@ export function StaffNotificationPanel({
     };
   }, [cursor, status, refreshKey, revision]);
   async function perform(item: StaffNotificationItem, reason?: string) {
+    if (pending.current || !freshRef.current || !item.canAct) return;
+    if (reason !== undefined && !reason.trim()) return;
+    pending.current = true;
+    freshRef.current = false;
+    setFresh(false);
     setBusy(true);
     setError("");
     try {
       const input = { notificationId: item.id, expectedAssignmentVersion: item.assignmentVersion };
       if (reason) await askStaffNotificationHelp({ ...input, reason });
       else await confirmStaffNotification(input);
-      setRevision((n) => n + 1);
     } catch {
-      setError("未能更新：工作可能已轉交或權限已改變，請重新整理。");
-      setRevision((n) => n + 1);
+      if (mounted.current) setError("更新結果未能確認，正在讀回接手工作。沒有重送要求。");
     } finally {
-      setBusy(false);
+      pending.current = false;
+      if (mounted.current) {
+        setBusy(false);
+        refresh();
+      }
     }
   }
   return (
@@ -62,6 +88,8 @@ export function StaffNotificationPanel({
           aria-label="接手工作狀態"
           value={status}
           onChange={(e) => {
+            freshRef.current = false;
+            setFresh(false);
             setStatus(e.target.value as "pending" | "all");
             setCursor(null);
           }}
@@ -69,11 +97,12 @@ export function StaffNotificationPanel({
           <option value="pending">待接手</option>
           <option value="all">所有狀態</option>
         </select>
-        <Button variant="outline" onClick={() => setRevision((n) => n + 1)}>
+        <Button variant="outline" disabled={busy} onClick={refresh}>
           更新接手工作
         </Button>
       </div>
       {error ? <p role="alert">{error}</p> : null}
+      {!fresh && page ? <p>正在核對接手工作，完成讀回前不能更新。</p> : null}
       {!page ? (
         <p>載入中…</p>
       ) : !page.available ? (
@@ -85,7 +114,7 @@ export function StaffNotificationPanel({
           <StaffNotificationCard
             key={item.id}
             item={item}
-            busy={busy}
+            busy={busy || !fresh}
             onOpen={() => onOpen(item)}
             onConfirm={() => void perform(item)}
             onHelp={(r) => void perform(item, r)}
@@ -93,13 +122,25 @@ export function StaffNotificationPanel({
         ))
       )}
       <div className="flex gap-2">
-        <Button variant="outline" disabled={!cursor} onClick={() => setCursor(null)}>
+        <Button
+          variant="outline"
+          disabled={busy || !cursor}
+          onClick={() => {
+            freshRef.current = false;
+            setFresh(false);
+            setCursor(null);
+          }}
+        >
           接手工作第一頁
         </Button>
         <Button
           variant="outline"
-          disabled={!page?.nextCursor}
-          onClick={() => setCursor(page?.nextCursor ?? null)}
+          disabled={busy || !page?.nextCursor}
+          onClick={() => {
+            freshRef.current = false;
+            setFresh(false);
+            setCursor(page?.nextCursor ?? null);
+          }}
         >
           接手工作下一頁
         </Button>
