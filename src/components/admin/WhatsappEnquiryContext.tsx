@@ -14,6 +14,15 @@ type Episode = {
   dueAt: string | null;
   review: boolean;
 };
+const assignmentStates: Record<string, string> = {
+  pending: "等候處理",
+  executing: "正在要求分派",
+  unknown: "結果待核實",
+  confirmed: "已確認",
+  failed: "分派失敗",
+  blocked: "已阻擋",
+  superseded: "已由較新要求取代",
+};
 export function WhatsappEnquiryContext({
   conversationId,
   refreshKey,
@@ -81,12 +90,18 @@ export function WhatsappEnquiryContext({
       >
         <h3 className="font-semibold">查詢跟進</h3>
         <p className="text-xs text-muted-foreground">
-          觀察模式建議：{context.proposedStaffId ?? "需要總台人工處理"}（{context.proposalReason}
-          ）；尚未執行自動分派。
+          配對建議：
+          {context.proposedStaffName ??
+            (context.proposedStaffId ? "同事名稱待核實" : "需要總台人工處理")}
         </p>
         <p className="text-sm">
-          已確認負責人：{String(context.confirmed_staff_id ?? "未經 WOZTELL 確認")} · 分派：
-          {String(context.assignment_state ?? "未要求")}
+          已確認負責人：
+          {context.confirmed_staff_name ??
+            (context.confirmed_staff_id ? "負責同事名稱待核實" : "未經供應商確認")}
+          {" · 分派："}
+          {context.assignment_state
+            ? (assignmentStates[context.assignment_state] ?? "狀態待核實")
+            : "未要求"}
         </p>
         {context.desired_staff_id ? (
           <p className="text-sm">
@@ -118,7 +133,9 @@ export function WhatsappEnquiryContext({
             </strong>{" "}
             · 來源 {e.source}
             <p>
-              指定同事：{e.requestedStaffId ?? "沒有指定"} ·{" "}
+              指定同事：
+              {e.requestedStaffName ?? (e.requestedStaffId ? "指定同事名稱待核實" : "沒有指定")}
+              {" · "}
               {e.review ? "需要核實關聯" : "已有關聯"}
             </p>
             {e.review ? (
@@ -136,6 +153,18 @@ export function WhatsappEnquiryContext({
           服務期限與 WhatsApp 24 小時回覆窗口分開計算。接納發送不代表送達。
         </p>
       </section>
+      <details className="max-h-24 shrink-0 overflow-y-auto border-b px-4 py-2 text-xs text-muted-foreground">
+        <summary className="cursor-pointer">支援診斷</summary>
+        <p>配對原因：{context.proposalReason}</p>
+        <p>建議同事 ID：{context.proposedStaffId ?? "—"}</p>
+        <p>已確認同事 ID：{context.confirmed_staff_id ?? "—"}</p>
+        <p>分派狀態代碼：{context.assignment_state ?? "—"}</p>
+        {episodes.map((e) => (
+          <p key={e.id}>
+            查詢 ID：{e.id} · 指定同事 ID：{e.requestedStaffId ?? "—"}
+          </p>
+        ))}
+      </details>
       <Dialog
         open={resolutionId !== null}
         onOpenChange={(open) => {

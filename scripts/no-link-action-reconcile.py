@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 SUPPLEMENTAL = [
+    ("N-T09-assignment-diagnostics", "/admin/whatsapp", "src/components/admin/WhatsappEnquiryContext.tsx", "open assignment support diagnostics", "T08/T09 real-route synthetic Auth/API browser only"),
     ("N-T08-inbox-view", "/admin/whatsapp", "src/components/admin/whatsapp/NoLinkInbox.tsx", "agent inbox view", "T08 Node/Bun local only"),
     ("N-T08-inbox-search", "/admin/whatsapp", "src/routes/admin.whatsapp.tsx", "activity and full-history search", "T08 PGlite local only"),
     ("N-T09-enquiry-correct", "/admin/whatsapp", "src/components/admin/whatsapp/EnquiryResolutionPanel.tsx", "correct one enquiry", "T06/T09 PGlite CAS local only"),

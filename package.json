@@ -55,6 +55,7 @@
     "test:legal": "node --test src/routes/legal-pages.contract.test.mjs",
     "test:a11y": "playwright test",
     "acceptance:whatsapp-link-handoff": "node scripts/test-whatsapp-link-handoff-browser.ts",
+    "acceptance:whatsapp-no-link:synthetic": "node scripts/test-whatsapp-no-link-synthetic-browser.mjs",
     "acceptance:public:synthetic": "node scripts/test-public-synthetic-browser.mjs",
     "test:analytics": "node --test src/lib/analytics/attribution-conversion.test.mjs src/lib/analytics/events.test.mjs src/lib/analytics/ga4.test.mjs src/lib/analytics/privacy.test.mjs src/lib/analytics/provider.test.mjs src/lib/analytics/reporting-server.test.mjs src/lib/analytics/reporting.test.mjs src/lib/analytics/review-regressions.test.mjs src/lib/analytics/runtime.test.mjs src/lib/analytics/performance-events.test.mjs src/lib/analytics/performance-events.db.test.mjs src/lib/analytics/sales-performance.test.mjs src/lib/analytics/sales-performance.db.test.mjs src/lib/analytics/performance-route-search.test.mjs src/lib/route-isolation.test.mjs && bun test src/components/admin/analytics/PerformanceDashboard.test.tsx",
     "migration:discover": "node scripts/old-site-migration/discover.mjs",

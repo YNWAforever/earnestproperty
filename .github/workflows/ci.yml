@@ -143,6 +143,22 @@ jobs:
       - run: npx playwright install --with-deps chromium
       # Real wizard UI with synthetic API; no database or provider credentials.
       - run: npm run acceptance:whatsapp-link-handoff
+  browser-no-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Actual inbox route/shell/CSS with test-only Auth/API adapters. The runner
+      # owns a loopback server and blocks every external or mutation request.
+      - run: npm run acceptance:whatsapp-no-link:synthetic
   browser-staging:
     if: ${{ vars.STAGING_BASE_URL != '' }}
     runs-on: ubuntu-latest

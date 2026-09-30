@@ -135,7 +135,11 @@ function parseWhatsappSearch(search: Record<string, unknown>) {
   if (typeof search.conversation === "string" && search.conversation.trim()) {
     result.conversation = search.conversation;
   }
-  if (typeof search.q === "string" && search.q.trim()) result.q = search.q;
+  // TanStack's JSON search parser reads a plain ?q=4033349 as a number.
+  // Preserve safe integer listing searches while rejecting other JSON shapes.
+  const query =
+    typeof search.q === "number" && Number.isSafeInteger(search.q) ? String(search.q) : search.q;
+  if (typeof query === "string" && query.trim()) result.q = query;
   if (typeof search.status === "string" && search.status !== "all") result.status = search.status;
   return result;
 }
@@ -209,8 +213,8 @@ function AdminWhatsapp() {
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
-  const inboxQuery = search.q ?? "";
-  const inboxStatus = search.status ?? "all";
+  const inboxQuery = typeof search.q === "string" ? search.q : "";
+  const inboxStatus = typeof search.status === "string" ? search.status : "all";
   const [queryDraft, setQueryDraft] = useState(inboxQuery);
 
   const setWhatsappSearch = useCallback(
@@ -1671,6 +1675,18 @@ function MessageTimeline({
       anchor.current = null;
     } else if (pinned.current) element.scrollTop = element.scrollHeight;
   }, [messages]);
+  useLayoutEffect(() => {
+    const element = container.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    // Enquiry evidence and the mobile sheet settle after the messages load.
+    // Keep the newest message in view as the pane changes size, unless the
+    // reader has scrolled back or an older-page anchor is being restored.
+    const observer = new ResizeObserver(() => {
+      if (pinned.current && !anchor.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   async function older() {
     const element = container.current;
     if (element) anchor.current = { height: element.scrollHeight, top: element.scrollTop };
