@@ -477,7 +477,8 @@ function AdminBlasts() {
   }
 
   async function handleConfirmSend() {
-    if (!pendingSend || !providerReviewed || sendingRef.current || queueReadbackRef.current) return;
+    if (!pendingSend || !providerReviewed || sendingRef.current) return;
+    if (queueReadbackRef.current) return;
     if (Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS) {
       setConfirmError("收件人預覽已過期，請關閉視窗並重新預覽");
       return;
