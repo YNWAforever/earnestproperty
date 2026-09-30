@@ -89,6 +89,36 @@ export async function readOutboundIntent(
   return rows[0] ?? null;
 }
 
+/** Current unresolved conversation state, including after tab/storage loss. No payload/history is returned. */
+export async function readOutboundReservation(
+  input: { conversationId: string },
+  staffId: string,
+  scope: string | null,
+  injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
+) {
+  if (!input || !uuid.test(input.conversationId)) throw invalid();
+  const queryRows = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  const rows = await queryRows<{
+    blocked: boolean;
+    intent: { id: string; kind: string; state: OutboundState } | null;
+  }>(
+    `SELECT EXISTS(SELECT 1 FROM whatsapp_outbound_intents i
+       WHERE i.conversation_id=wc.id AND i.state IN ('dispatching','unknown')) AS blocked,
+     (SELECT jsonb_build_object('id',i.id,'kind',i.kind,'state',i.state)
+       FROM whatsapp_outbound_intents i WHERE i.conversation_id=wc.id
+         AND i.state IN ('dispatching','unknown') AND i.actor_staff_id=$2::uuid
+         AND (i.enquiry_id IS NULL OR wa_can_reply_enquiry($2::uuid,i.enquiry_id))
+       ORDER BY i.created_at,i.id LIMIT 1) AS intent
+     FROM whatsapp_conversations wc JOIN staff_users s ON s.id=$2::uuid
+     WHERE wc.id=$1::uuid AND s.active
+       AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
+       AND ($3::uuid IS NULL OR wc.assigned_agent_id=$3::uuid)
+       AND wa_can_read_conversation($2::uuid,wc.id)`,
+    [input.conversationId, staffId, scope],
+  );
+  return rows[0] ?? null;
+}
+
 /** Authorization and all durable records are committed by one statement. A request ID is global and actor-bound. */
 export async function enqueueOutboundIntent(
   input: OutboundIntentInput,
@@ -255,7 +285,7 @@ async function beginOutboundDispatch(
       dispatch_started_at=COALESCE(i.dispatch_started_at,CASE WHEN e.allowed THEN clock_timestamp() END),updated_at=now()
       FROM eligibility e WHERE i.id=e.id AND i.state IN ('queued','dispatching') RETURNING i.*,e.element_name,e.language_code,e.components
     ), transcript AS (
-      UPDATE whatsapp_messages m SET status=r.state,
+      UPDATE whatsapp_messages m SET status=r.state,error=r.error,
       payload=CASE WHEN r.state='dispatching' THEN jsonb_build_object('dispatchResponse',
         CASE WHEN r.kind='text' THEN jsonb_build_object('type','TEXT','text',r.payload->>'text')
         ELSE jsonb_build_object('type','TEMPLATE','elementName',r.element_name,'languageCode',r.language_code,'components',r.components) END)

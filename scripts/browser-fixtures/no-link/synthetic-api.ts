@@ -4,6 +4,7 @@ export {
   sendAdminConversationReply,
   sendAdminConversationTemplate,
   fetchAdminOutboundIntent,
+  fetchAdminOutboundReservation,
 } from "./synthetic-outbound";
 import {
   validateForwardedEnquiry,

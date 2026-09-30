@@ -526,6 +526,177 @@ test(
         );
         assert.ok(concurrent.every((row) => row.id === reply.requestId));
         await t.test(
+          "new outbound request IDs cannot bypass an unresolved conversation",
+          async () => {
+            const writer = await pool.connect();
+            const writeQuery = async (statement, params) =>
+              (await writer.query(statement, params)).rows;
+            try {
+              await writer.query("BEGIN");
+              const { readOutboundReservation } =
+                await import("../src/lib/woztell/outbound-intent.server.ts");
+              for (const state of ["unknown", "dispatching"]) {
+                await writer.query("UPDATE whatsapp_outbound_intents SET state=$2 WHERE id=$1", [
+                  reply.requestId,
+                  state,
+                ]);
+                assert.deepEqual(
+                  await readOutboundReservation(
+                    { conversationId: reply.conversationId },
+                    ids.s1,
+                    ids.s1,
+                    writeQuery,
+                  ),
+                  {
+                    blocked: true,
+                    intent: { id: reply.requestId, kind: "text", state },
+                  },
+                );
+                assert.deepEqual(
+                  await readOutboundReservation(
+                    { conversationId: reply.conversationId },
+                    ids.manager,
+                    null,
+                    writeQuery,
+                  ),
+                  { blocked: true, intent: null },
+                );
+                assert.equal(
+                  await readOutboundReservation(
+                    { conversationId: reply.conversationId },
+                    ids.s2,
+                    ids.s2,
+                    writeQuery,
+                  ),
+                  null,
+                );
+                const original = await enqueueOutboundIntent(reply, ids.s1, ids.s1, writeQuery);
+                assert.deepEqual(original, { id: reply.requestId, state });
+                for (const variant of [
+                  { ...reply, requestId: randomUUID() },
+                  {
+                    ...reply,
+                    requestId: randomUUID(),
+                    kind: "template",
+                    payload: { templateId: randomUUID() },
+                  },
+                ]) {
+                  await writer.query("SAVEPOINT attempt");
+                  await assert.rejects(
+                    enqueueOutboundIntent(variant, ids.s1, ids.s1, writeQuery),
+                    /OUTBOUND_RECONCILIATION_REQUIRED/,
+                  );
+                  await writer.query("ROLLBACK TO attempt");
+                  assert.equal(
+                    (
+                      await writeQuery(
+                        "SELECT count(*)::int n FROM whatsapp_outbound_intents WHERE id=$1",
+                        [variant.requestId],
+                      )
+                    )[0].n,
+                    0,
+                  );
+                  assert.equal(
+                    (
+                      await writeQuery(
+                        "SELECT count(*)::int n FROM ops_jobs WHERE idempotency_key=$1",
+                        ["woztell.reply:" + variant.requestId],
+                      )
+                    )[0].n,
+                    0,
+                  );
+                }
+              }
+              for (const state of ["accepted", "failed", "cancelled"]) {
+                await writer.query("UPDATE whatsapp_outbound_intents SET state=$2 WHERE id=$1", [
+                  reply.requestId,
+                  state,
+                ]);
+                assert.deepEqual(
+                  await readOutboundReservation(
+                    { conversationId: reply.conversationId },
+                    ids.s1,
+                    ids.s1,
+                    writeQuery,
+                  ),
+                  { blocked: false, intent: null },
+                );
+                const deliberate = {
+                  ...reply,
+                  requestId: randomUUID(),
+                  payload: { text: "Synthetic new deliberate " + state },
+                };
+                assert.equal(
+                  (await enqueueOutboundIntent(deliberate, ids.s1, ids.s1, writeQuery)).state,
+                  "queued",
+                );
+              }
+            } finally {
+              await writer.query("ROLLBACK");
+              writer.release();
+            }
+          },
+        );
+        await t.test(
+          "reservation checks see unknown committed while a different writer waits",
+          async () => {
+            const blocker = await pool.connect();
+            const writer = await pool.connect();
+            let held = false;
+            try {
+              const pid = (await writer.query("SELECT pg_backend_pid() pid")).rows[0].pid;
+              await blocker.query("BEGIN");
+              held = true;
+              await blocker.query("SELECT id FROM whatsapp_conversations WHERE id=$1 FOR UPDATE", [
+                reply.conversationId,
+              ]);
+              await blocker.query(
+                "UPDATE whatsapp_outbound_intents SET state='unknown' WHERE id=$1",
+                [reply.requestId],
+              );
+              const result = enqueueOutboundIntent(
+                { ...reply, requestId: randomUUID() },
+                ids.s1,
+                ids.s1,
+                async (statement, params) => (await writer.query(statement, params)).rows,
+              ).then(
+                (value) => ({ value }),
+                (error) => ({ error }),
+              );
+              let waiting = false;
+              for (let attempt = 0; attempt < 150; attempt++) {
+                waiting = (
+                  await pool.query(
+                    "SELECT wait_event_type='Lock' waiting FROM pg_stat_activity WHERE pid=$1",
+                    [pid],
+                  )
+                ).rows[0]?.waiting;
+                if (waiting) break;
+                await delay(10);
+              }
+              assert.equal(
+                waiting,
+                true,
+                "second session must wait on the conversation reservation",
+              );
+              await blocker.query("COMMIT");
+              held = false;
+              const outcome = await result;
+              assert.match(
+                outcome.error?.message ?? "new request succeeded",
+                /OUTBOUND_RECONCILIATION_REQUIRED/,
+              );
+            } finally {
+              if (held) await blocker.query("ROLLBACK");
+              writer.release();
+              blocker.release();
+              await query("UPDATE whatsapp_outbound_intents SET state='queued' WHERE id=$1", [
+                reply.requestId,
+              ]);
+            }
+          },
+        );
+        await t.test(
           "outbound readback is actor-bound scoped readonly and validates input",
           async () => {
             const { readOutboundIntent } =
@@ -601,6 +772,159 @@ test(
               ),
               1,
             );
+          },
+        );
+        await t.test(
+          "a waiting writer must recheck current ownership after the conversation lock",
+          async () => {
+            const conversationId = randomUUID();
+            const requestId = randomUUID();
+            const contactId = (
+              await query("SELECT contact_id FROM whatsapp_conversations WHERE id=$1", [
+                reply.conversationId,
+              ])
+            )[0].contact_id;
+            await query(
+              "INSERT INTO whatsapp_conversations(id,contact_id,woztell_member_id,channel_id,assigned_agent_id,confirmed_staff_id,last_inbound_at) VALUES($1,$2,$3,$4,$5,$5,now())",
+              [conversationId, contactId, "synthetic-scope-" + conversationId, channel, ids.s1],
+            );
+            const blocker = await pool.connect();
+            const writer = await pool.connect();
+            let held = false;
+            try {
+              const pid = (await writer.query("SELECT pg_backend_pid() pid")).rows[0].pid;
+              await blocker.query("BEGIN");
+              held = true;
+              await blocker.query("SELECT id FROM whatsapp_conversations WHERE id=$1 FOR UPDATE", [
+                conversationId,
+              ]);
+              await blocker.query("SELECT set_config('app.wa_confirm_assignment','true',true)");
+              await blocker.query(
+                "UPDATE whatsapp_conversations SET assigned_agent_id=$2,confirmed_staff_id=$2 WHERE id=$1",
+                [conversationId, ids.s2],
+              );
+              const result = enqueueOutboundIntent(
+                {
+                  requestId,
+                  conversationId,
+                  kind: "text",
+                  payload: { text: "Synthetic stale actor must not queue" },
+                },
+                ids.s1,
+                ids.s1,
+                async (statement, params) => (await writer.query(statement, params)).rows,
+              ).then(
+                (value) => ({ value }),
+                (error) => ({ error }),
+              );
+              let waiting = false;
+              for (let attempt = 0; attempt < 150; attempt++) {
+                waiting = (
+                  await pool.query(
+                    "SELECT wait_event_type='Lock' waiting FROM pg_stat_activity WHERE pid=$1",
+                    [pid],
+                  )
+                ).rows[0]?.waiting;
+                if (waiting) break;
+                await delay(10);
+              }
+              assert.equal(waiting, true);
+              await blocker.query("COMMIT");
+              held = false;
+              const outcome = await result;
+              assert.match(
+                outcome.error?.message ?? "stale actor queued a request",
+                /OUTBOUND_CONFLICT_OR_NOT_FOUND/,
+              );
+              assert.equal(
+                (
+                  await query("SELECT count(*)::int n FROM whatsapp_outbound_intents WHERE id=$1", [
+                    requestId,
+                  ])
+                )[0].n,
+                0,
+              );
+            } finally {
+              if (held) await blocker.query("ROLLBACK");
+              writer.release();
+              blocker.release();
+              await query("DELETE FROM ops_jobs WHERE idempotency_key=$1", [
+                "woztell.reply:" + requestId,
+              ]);
+              const messages = await query(
+                "DELETE FROM whatsapp_outbound_intents WHERE id=$1 RETURNING message_id",
+                [requestId],
+              );
+              for (const message of messages)
+                await query("DELETE FROM whatsapp_messages WHERE id=$1", [message.message_id]);
+              await query("DELETE FROM whatsapp_conversations WHERE id=$1", [conversationId]);
+            }
+          },
+        );
+        await t.test(
+          "previously queued different request cannot dispatch behind an unknown send",
+          async () => {
+            for (const state of ["unknown", "dispatching"]) {
+              const second = {
+                ...reply,
+                requestId: randomUUID(),
+                payload: { text: "Synthetic queued before uncertainty " + state },
+              };
+              let sends = 0;
+              try {
+                await enqueueOutboundIntent(second, ids.s1, ids.s1, query);
+                await query("UPDATE whatsapp_outbound_intents SET state=$2 WHERE id=$1", [
+                  reply.requestId,
+                  state,
+                ]);
+                const [pendingJob] = await query(
+                  "UPDATE ops_jobs SET status='running',lease_owner='synthetic-reservation-worker',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+                  ["woztell.reply:" + second.requestId],
+                );
+                assert.deepEqual(
+                  await deliverOutboundIntent(second.requestId, {
+                    checkpoint: async () => {},
+                    job: { jobId: pendingJob.id, workerId: "synthetic-reservation-worker" },
+                    send: async () => {
+                      sends++;
+                      return { ok: true, body: { messageId: "must-not-send" } };
+                    },
+                  }),
+                  { dispatched: 0 },
+                );
+                assert.equal(sends, 0);
+                const [intent] = await query(
+                  "SELECT state,error,dispatch_started_at FROM whatsapp_outbound_intents WHERE id=$1",
+                  [second.requestId],
+                );
+                assert.deepEqual(intent, {
+                  state: "cancelled",
+                  error: "OUTBOUND_RECONCILIATION_REQUIRED",
+                  dispatch_started_at: null,
+                });
+                const [message] = await query(
+                  "SELECT m.status,m.error FROM whatsapp_messages m JOIN whatsapp_outbound_intents i ON i.message_id=m.id WHERE i.id=$1",
+                  [second.requestId],
+                );
+                assert.deepEqual(message, {
+                  status: "cancelled",
+                  error: "OUTBOUND_RECONCILIATION_REQUIRED",
+                });
+              } finally {
+                await query("DELETE FROM ops_jobs WHERE idempotency_key=$1", [
+                  "woztell.reply:" + second.requestId,
+                ]);
+                const messages = await query(
+                  "DELETE FROM whatsapp_outbound_intents WHERE id=$1 RETURNING message_id",
+                  [second.requestId],
+                );
+                for (const message of messages)
+                  await query("DELETE FROM whatsapp_messages WHERE id=$1", [message.message_id]);
+                await query("UPDATE whatsapp_outbound_intents SET state='queued' WHERE id=$1", [
+                  reply.requestId,
+                ]);
+              }
+            }
           },
         );
         assert.equal(

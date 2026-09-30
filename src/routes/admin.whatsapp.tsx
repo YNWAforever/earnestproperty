@@ -45,6 +45,7 @@ import {
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
   fetchAdminOutboundIntent,
+  fetchAdminOutboundReservation,
   fetchAdminPage,
   fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
@@ -112,6 +113,11 @@ const replyErrorLabels: Record<string, string> = {
   MISSING_WOZTELL_MEMBER_ID: "此客戶尚未連接 WhatsApp 帳戶，請聯絡技術支援。",
   TEMPLATE_NOT_FOUND: "找不到此範本，可能已被停用，請重新整理後再試。",
   MESSAGE_CREATE_FAILED: "訊息未能建立，請再試一次。",
+  OUTBOUND_READ_UNAVAILABLE: "暫未能核對傳送狀態，請稍後核對或聯絡支援；不要直接重送。",
+  OUTBOUND_READ_STALE: "對話已更新，請重新核對傳送狀態。",
+  OUTBOUND_NOT_FOUND_OR_FORBIDDEN: "找不到可讀取的傳送要求，或目前沒有權限，請聯絡支援核對。",
+  OUTBOUND_PERSISTENCE_UNAVAILABLE: "未能確認傳送要求是否已保存，請先核對狀態；不要直接重送。",
+  OUTBOUND_CONFLICT_OR_NOT_FOUND: "目前未能按此權限保存傳送要求，請重新載入對話並核對狀態。",
 };
 
 // The open conversation and the inbox filters live in the URL, so a chat is
@@ -213,10 +219,14 @@ function AdminWhatsapp() {
   }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
   const outboundBusy = useRef(false);
+  const outboundReservationGeneration = useRef(0);
   const mounted = useRef(false);
   const actorIdRef = useRef(staffUserId);
   actorIdRef.current = staffUserId;
   const [outboundReadback, setOutboundReadback] = useState<Record<string, boolean>>({});
+  const [outboundReservations, setOutboundReservations] = useState<
+    Record<string, "loading" | "ready" | "blocked" | "error">
+  >({});
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -286,6 +296,39 @@ function AdminWhatsapp() {
   const canApplyConversationDetail = useCallback((id: string) => {
     return mounted.current && selectedIdRef.current === id;
   }, []);
+
+  const checkOutboundReservation = useCallback(
+    async (targetId: string, actorId: string) => {
+      const generation = ++outboundReservationGeneration.current;
+      const key = actorId + ":" + targetId;
+      const current = () =>
+        canApplyConversationDetail(targetId) &&
+        actorIdRef.current === actorId &&
+        outboundReservationGeneration.current === generation;
+      if (current()) setOutboundReservations((previous) => ({ ...previous, [key]: "loading" }));
+      try {
+        for (const kind of ["text", "template"]) readOutboundJournal(actorId, targetId, kind);
+        const result = await fetchAdminOutboundReservation({ data: { conversationId: targetId } });
+        if (typeof result.reservation?.blocked !== "boolean")
+          throw new Error("OUTBOUND_READ_UNAVAILABLE");
+        if (!current()) throw new Error("OUTBOUND_READ_STALE");
+        if (current())
+          setOutboundReservations((previous) => ({
+            ...previous,
+            [key]: result.reservation.blocked ? "blocked" : "ready",
+          }));
+        return result.reservation.blocked;
+      } catch (error) {
+        if (current()) setOutboundReservations((previous) => ({ ...previous, [key]: "error" }));
+        throw error;
+      }
+    },
+    [canApplyConversationDetail],
+  );
+  useEffect(() => {
+    if (staffUserId && selectedId)
+      void checkOutboundReservation(selectedId, staffUserId).catch(() => {});
+  }, [staffUserId, selectedId, checkOutboundReservation]);
 
   const listCursorRef = useRef<string | null>(null);
   const olderPending = useRef(false);
@@ -650,7 +693,11 @@ function AdminWhatsapp() {
   }
 
   async function sendReply() {
-    if (outboundBusy.current) return;
+    if (
+      outboundBusy.current ||
+      outboundReservations[staffUserId + ":" + selectedIdRef.current] !== "ready"
+    )
+      return;
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
@@ -704,6 +751,9 @@ function AdminWhatsapp() {
     } catch (err) {
       releaseRejectedOutboundRequest(err, user?.id, targetId, "text");
       if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      if (outboundReservationRefused(err) && actorId)
+        await checkOutboundReservation(targetId, actorId).catch(() => {});
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       setOutboundReadback((current) => ({
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
@@ -729,7 +779,11 @@ function AdminWhatsapp() {
   // window (which replyAvailability guards) has closed, so gating this on the
   // same check would defeat the point of offering it.
   async function sendTemplate(templateId: string) {
-    if (outboundBusy.current) return;
+    if (
+      outboundBusy.current ||
+      outboundReservations[staffUserId + ":" + selectedIdRef.current] !== "ready"
+    )
+      return;
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
@@ -770,6 +824,9 @@ function AdminWhatsapp() {
     } catch (err) {
       releaseRejectedOutboundRequest(err, user?.id, targetId, "template");
       if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      if (outboundReservationRefused(err) && actorId)
+        await checkOutboundReservation(targetId, actorId).catch(() => {});
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       setOutboundReadback((current) => ({
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
@@ -794,15 +851,11 @@ function AdminWhatsapp() {
     setMutatingAction("reply-readback");
     setReplyError(null);
     try {
+      const blocked = await checkOutboundReservation(targetId, actorId);
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       for (const kind of ["text", "template"]) {
-        const raw = sessionStorage.getItem(outboundStorageKey(actorId, targetId, kind));
-        if (!raw) continue;
-        const saved = JSON.parse(raw) as { requestId: string; value: string };
-        if (typeof saved.requestId !== "string" || typeof saved.value !== "string")
-          throw new Error("傳送要求資料未能核對，請聯絡支援。");
-        const original = JSON.parse(saved.value) as unknown;
-        if (!Array.isArray(original) || original.length !== 2 || typeof original[0] !== "string")
-          throw new Error("傳送要求資料未能核對，請聯絡支援。");
+        const saved = readOutboundJournal(actorId, targetId, kind);
+        if (!saved) continue;
         const result = await fetchAdminOutboundIntent({
           data: { requestId: saved.requestId, conversationId: targetId },
         });
@@ -815,7 +868,9 @@ function AdminWhatsapp() {
         clearOutboundRequestId(actorId, targetId, kind);
         if (kind === "text" && ["queued", "accepted"].includes(state)) {
           setReplyDrafts((current) =>
-            current[targetId]?.trim() === original[0] ? { ...current, [targetId]: "" } : current,
+            current[targetId]?.trim() === saved.original[0]
+              ? { ...current, [targetId]: "" }
+              : current,
           );
         }
         toast.success(
@@ -824,10 +879,12 @@ function AdminWhatsapp() {
             : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
         );
       }
+      if (blocked)
+        throw new Error("此對話仍有未確認的傳送要求，請稍後核對或聯絡支援。沒有重送要求。");
       await loadConversationDetail(targetId, { background: true });
     } catch (error) {
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
-        setReplyError(`未能確認傳送結果。${errorText(error)}`);
+        setReplyError(`未能確認傳送結果。${formatReplyError(errorText(error))}`);
     } finally {
       outboundBusy.current = false;
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
@@ -841,8 +898,13 @@ function AdminWhatsapp() {
   }
 
   const needsOutboundReadback = Boolean(
-    selectedId && outboundReadback[staffUserId + ":" + selectedId],
+    selectedId &&
+    (outboundReadback[staffUserId + ":" + selectedId] ||
+      outboundReservations[staffUserId + ":" + selectedId] !== "ready"),
   );
+  const readingOutbound =
+    mutatingAction === "reply-readback" ||
+    outboundReservations[staffUserId + ":" + selectedId] === "loading";
   const isMutating = mutatingAction !== null;
   // The inbox had no search and no status filter at all -- the toolbar's filter
   // slot held two static badges -- so finding a conversation meant scrolling a
@@ -1097,7 +1159,7 @@ function AdminWhatsapp() {
               onRetryTemplates={() => void loadTemplates()}
               disabled={isMutating || needsOutboundReadback}
               needsOutboundReadback={needsOutboundReadback}
-              readingOutbound={mutatingAction === "reply-readback"}
+              readingOutbound={readingOutbound}
               onReadOutbound={() => void readOutboundOutcome()}
               savingConversation={mutatingAction === "conversation"}
               sendingReply={mutatingAction === "reply"}
@@ -1158,7 +1220,7 @@ function AdminWhatsapp() {
           onRetryTemplates={() => void loadTemplates()}
           disabled={isMutating || needsOutboundReadback}
           needsOutboundReadback={needsOutboundReadback}
-          readingOutbound={mutatingAction === "reply-readback"}
+          readingOutbound={readingOutbound}
           onReadOutbound={() => void readOutboundOutcome()}
           savingConversation={mutatingAction === "conversation"}
           sendingReply={mutatingAction === "reply"}
@@ -1570,7 +1632,11 @@ function ConversationWorkspace({
         ) : null}
         {needsOutboundReadback ? (
           <div className="mb-3 space-y-2 rounded-md border p-3 text-sm">
-            <p>傳送要求結果未確認，請先核對傳送狀態。核對不會重新傳送。</p>
+            <p>
+              {readingOutbound
+                ? "正在核對傳送狀態…"
+                : "傳送要求結果未確認，請先核對傳送狀態。核對不會重新傳送。"}
+            </p>
             <Button
               type="button"
               variant="outline"
@@ -1860,7 +1926,10 @@ function MessageTimeline({
 
 function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
   const outbound = message.direction === "outbound";
-  const failed = message.status === "failed" || ["unknown", "blocked"].includes(message.status);
+  const failed =
+    message.status === "failed" ||
+    ["unknown", "blocked"].includes(message.status) ||
+    (message.status === "cancelled" && Boolean(message.error));
 
   // A failed send used to differ from a delivered one by `font-semibold` alone:
   // same bubble colour, same size, no icon. On the surface that decides whether
@@ -1922,7 +1991,9 @@ function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
 // Provider failure codes reach the bubble verbatim. Staff cannot act on
 // WOZTELL_DELIVERY_UNKNOWN; the raw code stays in `title` for support.
 const PROVIDER_ERROR_LABELS: Record<string, string> = {
-  WOZTELL_DELIVERY_UNKNOWN: "發送失敗（供應商未回覆結果），請稍後重試。",
+  WOZTELL_DELIVERY_UNKNOWN: "傳送結果未確認，請先核對狀態或聯絡支援，勿直接重送。",
+  OUTBOUND_RECONCILIATION_REQUIRED: "本次要求未送出：同一對話有未確認的傳送要求，請先核對狀態。",
+  OUTBOUND_CONFLICT_OR_NOT_FOUND: "本次要求未送出：對話負責人或權限已變更，請重新載入並核對。",
   WOZTELL_CONFIGURATION_UNAVAILABLE: "WhatsApp 尚未設定完成，請聯絡技術支援。",
   WOZTELL_RECIPIENT_MISSING: "此客戶沒有可用的 WhatsApp 號碼。",
   CONTACT_OPTED_OUT: "客戶已拒收訊息。",
@@ -2096,6 +2167,8 @@ function agentLabel(agent: AdminAgentRow) {
 }
 
 function formatReplyError(value: string) {
+  if (value.includes("OUTBOUND_RECONCILIATION_REQUIRED"))
+    return "此對話有未確認的傳送要求，請先核對狀態；本次要求未加入佇列。";
   if (value.includes("ENQUIRY_SELECTION_REQUIRED"))
     return "此對話有多項查詢，請先選擇本次回覆對應的查詢。";
   if (value.includes("ENQUIRY_ASSOCIATION_INVALID")) return "查詢關聯已變更，請重新選擇。";
@@ -2182,6 +2255,17 @@ function hasStoredOutboundRequest(userId: string | undefined | null, conversatio
     return true;
   }
 }
+function readOutboundJournal(userId: string, conversationId: string, kind: string) {
+  const raw = sessionStorage.getItem(outboundStorageKey(userId, conversationId, kind));
+  if (!raw) return null;
+  const saved = JSON.parse(raw) as { requestId: string; value: string };
+  if (!saved || typeof saved.requestId !== "string" || typeof saved.value !== "string")
+    throw new Error("傳送要求資料未能核對，請聯絡支援。");
+  const original: unknown = JSON.parse(saved.value);
+  if (!Array.isArray(original) || original.length !== 2 || typeof original[0] !== "string")
+    throw new Error("傳送要求資料未能核對，請聯絡支援。");
+  return { ...saved, original: original as [string, unknown] };
+}
 function assertKnownOutboundResult(result: unknown) {
   assertNoMutationError(result);
   const intent = (result as { intent?: { state?: string } })?.intent;
@@ -2227,6 +2311,19 @@ function releaseRejectedOutboundRequest(
   kind: string,
 ) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : null;
-  if (code === "ENQUIRY_SELECTION_REQUIRED" || code === "ENQUIRY_ASSOCIATION_INVALID")
+  if (
+    code === "ENQUIRY_SELECTION_REQUIRED" ||
+    code === "ENQUIRY_ASSOCIATION_INVALID" ||
+    code === "OUTBOUND_RECONCILIATION_REQUIRED"
+  )
     clearOutboundRequestId(userId, conversationId, kind);
+}
+
+function outboundReservationRefused(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === "OUTBOUND_RECONCILIATION_REQUIRED",
+  );
 }

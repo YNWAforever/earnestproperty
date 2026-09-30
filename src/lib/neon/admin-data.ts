@@ -1440,6 +1440,22 @@ export async function setWhatsappMarketingConsent(options: {
     setWhatsappMarketingConsentServer(await withStaffAuthHeaders(options)),
   );
 }
+export async function fetchAdminOutboundReservation(options: { data: { conversationId: string } }) {
+  const request = await withStaffAuthHeaders({});
+  const params = new URLSearchParams({ ...options.data, reconciliation: "true" });
+  const response = await fetch(`/api/admin/woztell/send?${params}`, {
+    method: "GET",
+    headers: request.headers,
+    cache: "no-store",
+  });
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error ?? "OUTBOUND_READ_UNAVAILABLE");
+  return payload as {
+    ok: true;
+    reservation: { blocked: boolean; intent: { id: string; kind: string; state: string } | null };
+  };
+}
+
 export async function fetchAdminOutboundIntent(options: {
   data: { conversationId: string; requestId: string };
 }) {

@@ -6,6 +6,7 @@ import {
   enqueueOutboundIntent,
   parseOutboundIntent,
   readOutboundIntent,
+  readOutboundReservation,
 } from "@/lib/woztell/outbound-intent.server";
 
 export const Route = createFileRoute("/api/admin/woztell/send")({
@@ -15,6 +16,22 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
         const staff = await requireStaffAccess(request, ["admin", "manager", "agent"]);
         try {
           const params = new URL(request.url).searchParams;
+          if (params.get("reconciliation") === "true") {
+            const reservation = await readOutboundReservation(
+              { conversationId: params.get("conversationId") ?? "" },
+              staff.staffId,
+              agentScope(staff),
+            );
+            return reservation
+              ? Response.json(
+                  { ok: true, reservation },
+                  { headers: { "Cache-Control": "no-store" } },
+                )
+              : Response.json(
+                  { ok: false, error: "OUTBOUND_NOT_FOUND_OR_FORBIDDEN" },
+                  { status: 404, headers: { "Cache-Control": "no-store" } },
+                );
+          }
           const intent = await readOutboundIntent(
             {
               requestId: params.get("requestId") ?? "",
@@ -62,7 +79,9 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
         } catch (error) {
           const associationError =
             error instanceof Error &&
-            /ENQUIRY_(SELECTION_REQUIRED|ASSOCIATION_INVALID)/.exec(error.message)?.[0];
+            /ENQUIRY_(SELECTION_REQUIRED|ASSOCIATION_INVALID)|OUTBOUND_(RECONCILIATION_REQUIRED|CONFLICT_OR_NOT_FOUND)/.exec(
+              error.message,
+            )?.[0];
           const code =
             associationError ||
             (error && typeof error === "object" && "code" in error
@@ -71,7 +90,8 @@ export const Route = createFileRoute("/api/admin/woztell/send")({
           const status =
             code === "OUTBOUND_CONFLICT_OR_NOT_FOUND" ||
             code === "ENQUIRY_SELECTION_REQUIRED" ||
-            code === "ENQUIRY_ASSOCIATION_INVALID"
+            code === "ENQUIRY_ASSOCIATION_INVALID" ||
+            code === "OUTBOUND_RECONCILIATION_REQUIRED"
               ? 409
               : code === "VALIDATION_ERROR" || error instanceof SyntaxError
                 ? 400

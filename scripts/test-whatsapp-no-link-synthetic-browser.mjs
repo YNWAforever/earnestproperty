@@ -2138,6 +2138,189 @@ try {
       ),
     ).toBe(1000);
   });
+  await check(
+    "outbound cold tab reads unresolved reservation before any new send",
+    390,
+    async (page) => {
+      await page.addInitScript(() => {
+        if (!sessionStorage.getItem("no-link-fixture-outbound"))
+          sessionStorage.setItem(
+            "no-link-fixture-outbound",
+            JSON.stringify([
+              {
+                id: "70000000-0000-4000-8000-000000000001",
+                conversationId: "10000000-0000-4000-8000-000000000001",
+                actor: "agent-a",
+                kind: "text",
+                state: "unknown",
+                text: "合成舊傳送結果待核對",
+              },
+            ]),
+          );
+      });
+      await open(page, url(ids.a));
+      const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+      await expect(input).toBeDisabled();
+      const recovery = page.getByRole("button", { name: "核對傳送狀態", exact: true });
+      await expect(recovery).toBeVisible();
+      expect(
+        await page.evaluate(() => window.noLinkOutboundFixture.reservationReads.length),
+      ).toBeGreaterThan(0);
+      await recovery.click();
+      await expect(input).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkOutboundFixture.calls.filter((c) => ["text", "template"].includes(c.name))
+              .length,
+        ),
+      ).toBe(0);
+      await page.reload();
+      await expect(input).toBeDisabled();
+      await page.evaluate(() => {
+        const records = JSON.parse(sessionStorage.getItem("no-link-fixture-outbound"));
+        records[0].state = "accepted";
+        sessionStorage.setItem("no-link-fixture-outbound", JSON.stringify(records));
+      });
+      await recovery.click();
+      await expect(input).toBeEnabled();
+      await input.fill("合成核對後的新內容");
+      await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+      await expect(input).toHaveValue("");
+      expect(
+        await page.evaluate(
+          () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+        ),
+      ).toBe(1);
+    },
+  );
+  await check(
+    "outbound another tab reservation rejects new request without journalling a nonexistent send",
+    768,
+    async (page) => {
+      await open(page, url(ids.a));
+      const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+      await input.fill("合成目前tab草稿保留");
+      await page.evaluate(() =>
+        sessionStorage.setItem(
+          "no-link-fixture-outbound",
+          JSON.stringify([
+            {
+              id: "70000000-0000-4000-8000-000000000002",
+              conversationId: "10000000-0000-4000-8000-000000000001",
+              actor: "agent-a",
+              kind: "template",
+              state: "dispatching",
+              text: "合成另一tab正在處理",
+            },
+          ]),
+        ),
+      );
+      await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+      await expect(input).toHaveValue("合成目前tab草稿保留");
+      await expect(input).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-outbound")).length,
+        ),
+      ).toBe(1);
+      expect(
+        await page.evaluate(
+          () => Object.keys(sessionStorage).filter((k) => k.startsWith("earnest:outbound:")).length,
+        ),
+      ).toBe(0);
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(input).toBeDisabled();
+    },
+  );
+  await check(
+    "outbound reservation read failure locks composer and retry is readonly",
+    360,
+    async (page) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem("no-link-fixture-reservation-failure", "true"),
+      );
+      await open(page, url(ids.a));
+      const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+      await expect(input).toBeDisabled();
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(input).toBeDisabled();
+      await page.evaluate(() => sessionStorage.removeItem("no-link-fixture-reservation-failure"));
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(input).toBeEnabled();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkOutboundFixture.calls.filter((c) => ["text", "template"].includes(c.name))
+              .length,
+        ),
+      ).toBe(0);
+      expect(
+        await page.evaluate(() => window.noLinkOutboundFixture.reservationReads.length),
+      ).toBeGreaterThan(1);
+    },
+  );
+  await check(
+    "outbound unknown provider result requires reconciliation without retry advice",
+    390,
+    async (page) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem(
+          "no-link-fixture-outbound",
+          JSON.stringify([
+            {
+              id: "70000000-0000-4000-8000-000000000004",
+              conversationId: "10000000-0000-4000-8000-000000000001",
+              actor: "agent-a",
+              kind: "text",
+              state: "unknown",
+              text: "合成供應商結果待核對",
+            },
+          ]),
+        ),
+      );
+      await open(page, url(ids.a));
+      const bubble = page
+        .getByText("合成供應商結果待核對", { exact: true })
+        .filter({ visible: true })
+        .locator("..");
+      await expect(bubble).toContainText("傳送結果未明");
+      await expect(bubble).not.toContainText("請稍後重試");
+      await expect(bubble).toContainText("先核對");
+      expect(await page.evaluate(() => window.noLinkOutboundFixture.calls.length)).toBe(0);
+    },
+  );
+  await check(
+    "outbound cancelled reservation explains no send with visible alert",
+    768,
+    async (page) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem(
+          "no-link-fixture-outbound",
+          JSON.stringify([
+            {
+              id: "70000000-0000-4000-8000-000000000005",
+              conversationId: "10000000-0000-4000-8000-000000000001",
+              actor: "agent-a",
+              kind: "text",
+              state: "cancelled",
+              text: "合成被取消的未送出要求",
+              error: "OUTBOUND_RECONCILIATION_REQUIRED",
+            },
+          ]),
+        ),
+      );
+      await open(page, url(ids.a));
+      const bubble = page
+        .getByText("合成被取消的未送出要求", { exact: true })
+        .filter({ visible: true })
+        .locator("..");
+      await expect(bubble).toHaveAttribute("role", "alert");
+      await expect(bubble).toContainText("未送出");
+      await expect(bubble).not.toContainText("OUTBOUND_RECONCILIATION_REQUIRED");
+      expect(await page.evaluate(() => window.noLinkOutboundFixture.calls.length)).toBe(0);
+    },
+  );
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));

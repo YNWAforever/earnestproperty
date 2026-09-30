@@ -52,7 +52,7 @@ def main():
         raise SystemExit("Explicit disposable container earnest-no-link-qa-* required")
     container = sys.argv[1]
     image = run("docker", "inspect", "-f", "{{.Config.Image}}", container).strip()
-    if not image.startswith("pgvector/pgvector:"):
+    if not (image.startswith("pgvector/pgvector:") or image == "pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0"):
         raise SystemExit("Refusing non-pgvector local container")
     current_text = (ROOT / "src/lib/control-plane/migration-versions.js").read_text(encoding="utf-8")
     base_text = run("git", "show", f"{BASE}:src/lib/control-plane/migration-versions.js")
@@ -61,15 +61,14 @@ def main():
     assert current == files, "manifest and migration directory differ"
     assert current[:len(baseline)] == baseline, "baseline migration order changed"
     new = current[len(baseline):]
-    changed = run("git", "diff", "--name-status", BASE, "HEAD", "--", "neon/migrations").splitlines()
+    changed = run("git", "diff", "--name-status", BASE, "--", "neon/migrations").splitlines()
     assert sorted(changed) == sorted(f"A\tneon/migrations/{version}" for version in new), \
         "an already-applied migration was modified or removed"
-    assert len(new) == 9 and all(v.startswith("20260929") for v in new[:8]) \
-        and new[-1] == "20260930090000_whatsapp_no_link_source_authority.sql", "unexpected new migration set"
-    # The first eight fix-pack migrations have also been rehearsed. Preserve them
-    # byte-for-byte; the follow-up correction must remain additive.
-    for version in new[:8]:
-        original = subprocess.check_output(["git", "show", f"0a67cab:{'neon/migrations/' + version}"])
+    assert len(new) == 10 and all(v.startswith("20260929") for v in new[:8]) \
+        and new[8:] == ["20260930090000_whatsapp_no_link_source_authority.sql", "20261001090000_whatsapp_outbound_unknown_reservation.sql"], "unexpected new migration set"
+    # All nine previously rehearsed additions remain byte-for-byte unchanged.
+    for version in new[:9]:
+        original = subprocess.check_output(["git", "show", f"4eef367:{'neon/migrations/' + version}"])
         current_sql = (ROOT / "neon/migrations" / version).read_bytes().replace(b"\r\n", b"\n")
         assert current_sql == original, f"previous fix-pack migration changed: {version}"
     suffix = uuid.uuid4().hex[:8]

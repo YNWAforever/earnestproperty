@@ -8,9 +8,11 @@ type Entry = {
   kind: string;
   state: string;
   text: string;
+  error?: string | null;
 };
 const model = {
   calls: [] as { name: string; input: unknown }[],
+  reservationReads: [] as { conversationId: string }[],
   mode: "ok",
   readFailure: false,
   release: null as null | (() => void),
@@ -42,6 +44,14 @@ async function queue(
   const entries = records();
   let entry = entries.find((e) => e.id === input.data.requestId);
   if (!entry) {
+    if (
+      entries.some(
+        (e) =>
+          e.conversationId === input.data.conversationId &&
+          ["unknown", "dispatching"].includes(e.state),
+      )
+    )
+      return { ok: false, error: "OUTBOUND_RECONCILIATION_REQUIRED" };
     entry = {
       id: input.data.requestId,
       conversationId: input.data.conversationId,
@@ -60,6 +70,27 @@ export const sendAdminConversationReply = (input: Parameters<typeof queue>[1]) =
   queue("text", input);
 export const sendAdminConversationTemplate = (input: Parameters<typeof queue>[1]) =>
   queue("template", input);
+export async function fetchAdminOutboundReservation(input: { data: { conversationId: string } }) {
+  // Keep new conversation-only readonly checks visible separately from the
+  // existing send/request-specific read log used by the original assertions.
+  model.reservationReads.push({ ...input.data });
+  if (model.readFailure || sessionStorage.getItem("no-link-fixture-reservation-failure") === "true")
+    throw Error("Synthetic reservation read unavailable");
+  if (!allowed(input.data.conversationId)) throw Error("Synthetic conversation unavailable");
+  const unresolved = records().filter(
+    (e) =>
+      e.conversationId === input.data.conversationId &&
+      ["unknown", "dispatching"].includes(e.state),
+  );
+  const own = unresolved.find((e) => e.actor === actor);
+  return {
+    ok: true,
+    reservation: {
+      blocked: unresolved.length > 0,
+      intent: own ? { id: own.id, kind: own.kind, state: own.state } : null,
+    },
+  };
+}
 export async function fetchAdminOutboundIntent(input: {
   data: { requestId: string; conversationId: string };
 }) {
@@ -83,7 +114,7 @@ export function syntheticOutboundMessages(conversationId: string) {
       message_type: e.kind,
       text: e.text,
       status: e.state,
-      error: null,
+      error: e.error ?? (e.state === "unknown" ? "WOZTELL_DELIVERY_UNKNOWN" : null),
       created_at: new Date().toISOString(),
     }));
 }
