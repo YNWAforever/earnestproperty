@@ -66,6 +66,29 @@ export function hashOutboundIntent(input: OutboundIntentInput) {
     .digest("hex");
 }
 
+/** Read-only recovery for the same actor's request. Never queues or dispatches. */
+export async function readOutboundIntent(
+  input: { requestId: string; conversationId: string },
+  staffId: string,
+  scope: string | null,
+  injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
+) {
+  if (!input || !uuid.test(input.requestId) || !uuid.test(input.conversationId)) throw invalid();
+  const queryRows = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  const rows = await queryRows<{ id: string; kind: string; state: OutboundState }>(
+    `SELECT i.id,i.kind,i.state FROM whatsapp_outbound_intents i
+     JOIN whatsapp_conversations wc ON wc.id=i.conversation_id
+     JOIN staff_users s ON s.id=i.actor_staff_id
+     WHERE i.id=$1::uuid AND i.conversation_id=$2::uuid AND i.actor_staff_id=$3::uuid
+       AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
+       AND ($4::uuid IS NULL OR wc.assigned_agent_id=$4::uuid)
+       AND wa_can_read_conversation($3::uuid,wc.id)
+       AND (i.enquiry_id IS NULL OR wa_can_reply_enquiry($3::uuid,i.enquiry_id))`,
+    [input.requestId, input.conversationId, staffId, scope],
+  );
+  return rows[0] ?? null;
+}
+
 /** Authorization and all durable records are committed by one statement. A request ID is global and actor-bound. */
 export async function enqueueOutboundIntent(
   input: OutboundIntentInput,

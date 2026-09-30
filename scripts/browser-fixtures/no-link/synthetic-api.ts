@@ -1,4 +1,10 @@
 // Test-only API model. This is presentation evidence, not server ACL or provider proof.
+import { syntheticOutboundMessages } from "./synthetic-outbound";
+export {
+  sendAdminConversationReply,
+  sendAdminConversationTemplate,
+  fetchAdminOutboundIntent,
+} from "./synthetic-outbound";
 import {
   validateForwardedEnquiry,
   validateLeadContactUpdate,
@@ -106,7 +112,17 @@ export async function fetchAdminWhatsappTemplates() {
   call("templates");
   if (fixture().templateFailure || sessionStorage.getItem("no-link-fixture-templates") === "error")
     throw Error("合成範本讀取失敗");
-  return [];
+  return sessionStorage.getItem("no-link-fixture-reply-template") === "true"
+    ? [
+        {
+          id: "70000000-0000-4000-8000-000000000001",
+          element_name: "synthetic_reply",
+          language_code: "zh_HK",
+          components: [],
+          status: "active",
+        },
+      ]
+    : [];
 }
 export async function fetchAdminPage({
   data,
@@ -135,7 +151,10 @@ export async function fetchAdminPage({
   if (data.resource === "messages") {
     if (!readable(data.conversationId!)) return deny();
     return {
-      rows: rows.find((r) => r.id === data.conversationId)!.messages,
+      rows: [
+        ...rows.find((r) => r.id === data.conversationId)!.messages,
+        ...syntheticOutboundMessages(data.conversationId!),
+      ],
       nextCursor: null,
       newestCursor: "synthetic-newest",
     };
@@ -201,8 +220,6 @@ function noMutation(name: string, input?: unknown): never {
   call(name, input);
   throw Error("Synthetic fixture forbids mutations");
 }
-export const sendAdminConversationReply = (input: unknown) => noMutation("sendReply", input);
-export const sendAdminConversationTemplate = (input: unknown) => noMutation("sendTemplate", input);
 export const updateAdminConversation = (input: unknown) => noMutation("updateConversation", input);
 export const runAdminWoztellBackfill = () => noMutation("backfill");
 export const setWhatsappMarketingConsent = () => noMutation("consent");

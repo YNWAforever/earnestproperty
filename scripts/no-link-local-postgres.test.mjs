@@ -525,6 +525,84 @@ test(
           Array.from({ length: 8 }, () => enqueueOutboundIntent(reply, ids.s1, ids.s1, query)),
         );
         assert.ok(concurrent.every((row) => row.id === reply.requestId));
+        await t.test(
+          "outbound readback is actor-bound scoped readonly and validates input",
+          async () => {
+            const { readOutboundIntent } =
+              await import("../src/lib/woztell/outbound-intent.server.ts");
+            assert.equal(typeof readOutboundIntent, "function");
+            const input = { requestId: reply.requestId, conversationId: reply.conversationId };
+            assert.deepEqual(await readOutboundIntent(input, ids.s1, ids.s1, query), {
+              id: reply.requestId,
+              kind: "text",
+              state: "queued",
+            });
+            assert.equal(await readOutboundIntent(input, ids.s2, ids.s2, query), null);
+            assert.equal(await readOutboundIntent(input, ids.manager, null, query), null);
+            assert.equal(
+              await readOutboundIntent(
+                { ...input, conversationId: randomUUID() },
+                ids.s1,
+                ids.s1,
+                query,
+              ),
+              null,
+            );
+            assert.equal(
+              await readOutboundIntent(
+                { ...input, requestId: randomUUID() },
+                ids.s1,
+                ids.s1,
+                query,
+              ),
+              null,
+            );
+            await assert.rejects(
+              readOutboundIntent({ ...input, requestId: "invalid" }, ids.s1, ids.s1, query),
+              /VALIDATION/,
+            );
+            // Inactivation intentionally retires mappings; rollback the whole
+            // local transaction so later golden cases keep their original setup.
+            const reader = await pool.connect();
+            const readQuery = async (statement, params) =>
+              (await reader.query(statement, params)).rows;
+            try {
+              await reader.query("BEGIN");
+              await reader.query("UPDATE staff_users SET active=false WHERE id=$1", [ids.s1]);
+              assert.equal(await readOutboundIntent(input, ids.s1, ids.s1, readQuery), null);
+              await reader.query("ROLLBACK");
+              await reader.query("BEGIN");
+              // Synthetic provider-confirmed transfer; a bare assignment write
+              // intentionally creates review and leaves the original owner.
+              await reader.query("SELECT set_config('app.wa_confirm_assignment','true',true)");
+              await reader.query(
+                "UPDATE whatsapp_conversations SET assigned_agent_id=$2,confirmed_staff_id=$2 WHERE id=$1",
+                [reply.conversationId, ids.s2],
+              );
+              assert.equal(await readOutboundIntent(input, ids.s1, ids.s1, readQuery), null);
+            } finally {
+              await reader.query("ROLLBACK");
+              reader.release();
+            }
+            await query("UPDATE whatsapp_outbound_intents SET state='unknown' WHERE id=$1", [
+              reply.requestId,
+            ]);
+            assert.equal((await readOutboundIntent(input, ids.s1, ids.s1, query)).state, "unknown");
+            await query("UPDATE whatsapp_outbound_intents SET state='queued' WHERE id=$1", [
+              reply.requestId,
+            ]);
+            assert.equal(
+              Number(
+                (
+                  await query("SELECT count(*)::int total FROM ops_jobs WHERE idempotency_key=$1", [
+                    "woztell.reply:" + reply.requestId,
+                  ])
+                )[0].total,
+              ),
+              1,
+            );
+          },
+        );
         assert.equal(
           (await query("SELECT count(*)::int n FROM whatsapp_outbound_intents"))[0].n,
           1,

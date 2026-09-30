@@ -2,11 +2,45 @@ import "@tanstack/react-start/server-only";
 import { createFileRoute } from "@tanstack/react-router";
 import { requireStaffAccess } from "@/lib/neon/auth.server";
 import { agentScope } from "@/lib/neon/admin-data.server";
-import { enqueueOutboundIntent, parseOutboundIntent } from "@/lib/woztell/outbound-intent.server";
+import {
+  enqueueOutboundIntent,
+  parseOutboundIntent,
+  readOutboundIntent,
+} from "@/lib/woztell/outbound-intent.server";
 
 export const Route = createFileRoute("/api/admin/woztell/send")({
   server: {
     handlers: {
+      GET: async ({ request }) => {
+        const staff = await requireStaffAccess(request, ["admin", "manager", "agent"]);
+        try {
+          const params = new URL(request.url).searchParams;
+          const intent = await readOutboundIntent(
+            {
+              requestId: params.get("requestId") ?? "",
+              conversationId: params.get("conversationId") ?? "",
+            },
+            staff.staffId,
+            agentScope(staff),
+          );
+          return intent
+            ? Response.json({ ok: true, intent }, { headers: { "Cache-Control": "no-store" } })
+            : Response.json(
+                { ok: false, error: "OUTBOUND_NOT_FOUND_OR_FORBIDDEN" },
+                { status: 404, headers: { "Cache-Control": "no-store" } },
+              );
+        } catch (error) {
+          const invalid =
+            error &&
+            typeof error === "object" &&
+            "code" in error &&
+            error.code === "VALIDATION_ERROR";
+          return Response.json(
+            { ok: false, error: invalid ? "VALIDATION_ERROR" : "OUTBOUND_READ_UNAVAILABLE" },
+            { status: invalid ? 400 : 503, headers: { "Cache-Control": "no-store" } },
+          );
+        }
+      },
       POST: async ({ request }) => {
         const staff = await requireStaffAccess(request, ["admin", "manager", "agent"]);
         try {

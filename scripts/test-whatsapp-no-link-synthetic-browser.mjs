@@ -1854,6 +1854,290 @@ try {
       ).toBe(reads);
     },
   );
+  await check("outbound same-tick reply duplicate is one queue request", 390, async (page) => {
+    await open(page, url(ids.a));
+    await page.getByLabel("WhatsApp 回覆").filter({ visible: true }).fill("合成回覆，只傳一次");
+    await page.evaluate(() => {
+      window.noLinkOutboundFixture.mode = "delay";
+    });
+    await page.getByRole("button", { name: "傳送回覆", exact: true }).evaluate((button) => {
+      button.click();
+      button.click();
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+        ),
+      )
+      .toBe(1);
+    await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeDisabled();
+    await page.evaluate(() => window.noLinkOutboundFixture.release());
+    await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toHaveValue("");
+    await expect(page.getByText("回覆已加入傳送佇列", { exact: true })).toBeVisible();
+  });
+  await check(
+    "outbound unknown reply preserves journal and draft without fake queue success",
+    390,
+    async (page) => {
+      await open(page, url(ids.a));
+      const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+      await input.fill("合成結果不明的回覆");
+      await page.evaluate(() => {
+        window.noLinkOutboundFixture.mode = "unknown";
+      });
+      await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+      await expect(input).toHaveValue("合成結果不明的回覆");
+      await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+      await expect(page.getByText("回覆已加入傳送佇列", { exact: true })).toHaveCount(0);
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+        ),
+      ).toBe(1);
+      expect(
+        await page.evaluate(
+          () => Object.keys(sessionStorage).filter((k) => k.includes(":outbound:")).length,
+        ),
+      ).toBe(1);
+    },
+  );
+  await check(
+    "outbound lost reply response requires readonly recovery across reload",
+    390,
+    async (page) => {
+      await open(page, url(ids.a));
+      const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+      await input.fill("合成已入queue但回應遺失");
+      await page.evaluate(() => {
+        window.noLinkOutboundFixture.mode = "timeout";
+        window.noLinkOutboundFixture.readFailure = true;
+      });
+      await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+      await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeDisabled();
+      await expect(input).toHaveValue("合成已入queue但回應遺失");
+      expect(
+        await page.evaluate(
+          () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+        ),
+      ).toBe(1);
+      await page.reload();
+      await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeDisabled();
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(input).toHaveValue("");
+      expect(
+        await page.evaluate(
+          () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+        ),
+      ).toBe(0);
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-outbound")).length,
+        ),
+      ).toBe(1);
+    },
+  );
+  await check("outbound unknown template keeps original request reserved", 390, async (page) => {
+    await page.addInitScript(() => {
+      sessionStorage.setItem("no-link-fixture-window", "expired");
+      sessionStorage.setItem("no-link-fixture-reply-template", "true");
+    });
+    await open(page, url(ids.a));
+    await page.getByLabel("選擇範本").filter({ visible: true }).click();
+    await page.getByRole("option", { name: "synthetic_reply（zh_HK）" }).click();
+    await page.evaluate(() => {
+      window.noLinkOutboundFixture.mode = "unknown";
+    });
+    await page.getByRole("button", { name: "傳送範本", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "傳送", exact: true }).click();
+    await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "傳送範本", exact: true })).toBeDisabled();
+    await expect(page.getByText("範本已加入傳送佇列", { exact: true })).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => Object.keys(sessionStorage).filter((k) => k.includes(":outbound:")).length,
+      ),
+    ).toBe(1);
+  });
+  await check("outbound resolved acceptance is still not delivery", 390, async (page) => {
+    await open(page, url(ids.a));
+    const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+    await input.fill("合成待核對回覆");
+    await page.evaluate(() => {
+      window.noLinkOutboundFixture.mode = "unknown";
+    });
+    await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+    await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+    await page.evaluate(() => {
+      const entries = JSON.parse(sessionStorage.getItem("no-link-fixture-outbound"));
+      entries[0].state = "accepted";
+      sessionStorage.setItem("no-link-fixture-outbound", JSON.stringify(entries));
+    });
+    await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+    await expect(input).toHaveValue("");
+    await expect(
+      page.getByText("供應商已接納傳送要求，尚未證實送達或已讀。", { exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+      ),
+    ).toBe(1);
+    expect(
+      await page.evaluate(
+        () => Object.keys(sessionStorage).filter((k) => k.includes(":outbound:")).length,
+      ),
+    ).toBe(0);
+  });
+  await check("outbound corrupt journal stays blocked after reload and read", 390, async (page) => {
+    await open(page, url(ids.a));
+    await page.getByLabel("WhatsApp 回覆").filter({ visible: true }).fill("合成保留草稿");
+    await page.evaluate(() => {
+      window.noLinkOutboundFixture.mode = "unknown";
+    });
+    await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+    await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+    await page.evaluate(() => {
+      const key = Object.keys(sessionStorage).find((k) => k.includes(":outbound:"));
+      sessionStorage.setItem(key, "{corrupt");
+    });
+    await page.reload();
+    await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+    await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeDisabled();
+    await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toHaveValue(
+      "合成保留草稿",
+    );
+    expect(await page.evaluate(() => window.noLinkOutboundFixture.calls.length)).toBe(0);
+  });
+  await check(
+    "outbound known failure allows only a new deliberate send after readback",
+    390,
+    async (page) => {
+      await open(page, url(ids.a));
+      const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+      await input.fill("合成核對失敗後的草稿");
+      await page.evaluate(() => {
+        window.noLinkOutboundFixture.mode = "unknown";
+      });
+      await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+      await expect(page.getByRole("button", { name: "核對傳送狀態", exact: true })).toBeVisible();
+      await page.evaluate(() => {
+        const entries = JSON.parse(sessionStorage.getItem("no-link-fixture-outbound"));
+        entries[0].state = "failed";
+        sessionStorage.setItem("no-link-fixture-outbound", JSON.stringify(entries));
+        window.noLinkOutboundFixture.mode = "ok";
+      });
+      await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+      await expect(input).toHaveValue("合成核對失敗後的草稿");
+      await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeEnabled();
+      expect(
+        await page.evaluate(
+          () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+        ),
+      ).toBe(1);
+      await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+      await expect(input).toHaveValue("");
+      const entries = await page.evaluate(() =>
+        JSON.parse(sessionStorage.getItem("no-link-fixture-outbound")),
+      );
+      expect(entries.length).toBe(2);
+      expect(entries[0].id).not.toBe(entries[1].id);
+    },
+  );
+  await check("outbound late reply cannot erase next conversation draft", 1280, async (page) => {
+    await open(page, url(ids.a));
+    const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+    await input.fill("甲盤正在傳送的合成回覆");
+    await page.evaluate(() => {
+      window.noLinkOutboundFixture.mode = "delay";
+    });
+    await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => Boolean(window.noLinkOutboundFixture.release)))
+      .toBe(true);
+    await page.getByRole("button").filter({ hasText: "合成客戶乙" }).click();
+    await input.fill("乙盤保留的另一份草稿");
+    await page.evaluate(() => window.noLinkOutboundFixture.release());
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    await expect(input).toHaveValue("乙盤保留的另一份草稿");
+    await page.getByRole("button").filter({ hasText: "合成客戶甲" }).click();
+    await expect(input).toHaveValue("甲盤正在傳送的合成回覆");
+    await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
+    await expect(input).toHaveValue("");
+    expect(
+      await page.evaluate(
+        () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "text").length,
+      ),
+    ).toBe(1);
+  });
+  await check(
+    "outbound template cancel pending choice and duplicate stay explicit",
+    390,
+    async (page) => {
+      await page.addInitScript(() => {
+        sessionStorage.setItem("no-link-fixture-window", "expired");
+        sessionStorage.setItem("no-link-fixture-reply-template", "true");
+      });
+      await open(page, url(ids.a));
+      const picker = page.getByLabel("選擇範本").filter({ visible: true });
+      await picker.click();
+      await page.getByRole("option", { name: "synthetic_reply（zh_HK）" }).click();
+      await page.getByRole("button", { name: "傳送範本", exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "取消", exact: true })
+        .click();
+      expect(await page.evaluate(() => window.noLinkOutboundFixture.calls.length)).toBe(0);
+      await page.evaluate(() => {
+        window.noLinkOutboundFixture.mode = "delay";
+      });
+      await page.getByRole("button", { name: "傳送範本", exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "傳送", exact: true })
+        .evaluate((button) => {
+          button.click();
+          button.click();
+        });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => window.noLinkOutboundFixture.calls.filter((c) => c.name === "template").length,
+          ),
+        )
+        .toBe(1);
+      await expect(picker).toBeDisabled();
+      await expect(
+        page.getByRole("alertdialog").getByRole("button", { name: "取消", exact: true }),
+      ).toBeDisabled();
+      await page.evaluate(() => window.noLinkOutboundFixture.release());
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    },
+  );
+  await check("outbound empty reply and 1000 character boundary", 360, async (page) => {
+    await open(page, url(ids.a));
+    const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+    await input.fill("   ");
+    await expect(page.getByRole("button", { name: "傳送回覆", exact: true })).toBeDisabled();
+    await expect(input).toHaveAttribute("maxlength", "1000");
+    await input.fill("合".repeat(1000));
+    await page.getByRole("button", { name: "傳送回覆", exact: true }).click();
+    await expect(input).toHaveValue("");
+    expect(
+      await page.evaluate(
+        () =>
+          window.noLinkOutboundFixture.calls.find((c) => c.name === "text").input.data.text.length,
+      ),
+    ).toBe(1000);
+  });
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
@@ -1874,6 +2158,7 @@ try {
         syntheticEnquiryModel: true,
         syntheticCampaignModel: true,
         syntheticStaffWorkModel: true,
+        syntheticOutboundModel: true,
         results,
       },
       null,

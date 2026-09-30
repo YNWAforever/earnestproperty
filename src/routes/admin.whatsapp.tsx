@@ -44,6 +44,7 @@ import {
   fetchAdminAgents,
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
+  fetchAdminOutboundIntent,
   fetchAdminPage,
   fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
@@ -211,6 +212,26 @@ function AdminWhatsapp() {
     writeStoredReplyDrafts(replyDrafts, staffUserId);
   }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
+  const outboundBusy = useRef(false);
+  const mounted = useRef(false);
+  const actorIdRef = useRef(staffUserId);
+  actorIdRef.current = staffUserId;
+  const [outboundReadback, setOutboundReadback] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (staffUserId && selectedId) {
+      const key = staffUserId + ":" + selectedId;
+      setOutboundReadback((current) => ({
+        ...current,
+        [key]: hasStoredOutboundRequest(staffUserId, selectedId),
+      }));
+    }
+  }, [staffUserId, selectedId]);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const inboxQuery = typeof search.q === "string" ? search.q : "";
@@ -263,7 +284,7 @@ function AdminWhatsapp() {
   );
 
   const canApplyConversationDetail = useCallback((id: string) => {
-    return selectedIdRef.current === id;
+    return mounted.current && selectedIdRef.current === id;
   }, []);
 
   const listCursorRef = useRef<string | null>(null);
@@ -629,6 +650,7 @@ function AdminWhatsapp() {
   }
 
   async function sendReply() {
+    if (outboundBusy.current) return;
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
@@ -647,6 +669,12 @@ function AdminWhatsapp() {
     }
 
     const targetId = detail.id;
+    const actorId = user?.id;
+    if (hasStoredOutboundRequest(actorId, targetId)) {
+      setOutboundReadback((current) => ({ ...current, [actorId + ":" + targetId]: true }));
+      return;
+    }
+    outboundBusy.current = true;
     setMutatingAction("reply");
     setReplyError(null);
     try {
@@ -663,28 +691,36 @@ function AdminWhatsapp() {
           text,
         },
       });
-      assertNoMutationError(result);
+      assertKnownOutboundResult(result);
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       clearOutboundRequestId(user?.id, targetId, "text");
       setReplyDrafts((current) => ({ ...current, [targetId]: "" }));
       await refreshConversations();
       if (!canApplyConversationDetail(targetId)) return;
 
       const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("回覆已加入傳送佇列");
+      if (refreshed && canApplyConversationDetail(targetId))
+        toast.success(outboundResultNotice(result, "回覆"));
     } catch (err) {
       releaseRejectedOutboundRequest(err, user?.id, targetId, "text");
-      if (!canApplyConversationDetail(targetId)) return;
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      setOutboundReadback((current) => ({
+        ...current,
+        [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
+      }));
       const message = formatReplyError(errorText(err));
       // The send is persisted as a failed message server-side, but the timeline
       // was never refetched on this path -- so the pane still showed the
       // pre-send state and a toast that vanished in ~4s was the only trace. The
-      // draft is deliberately kept so the agent can retry without retyping.
+      // draft and request ID are kept until a scoped readback confirms outcome.
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
       await loadConversationDetail(targetId, { background: true });
     } finally {
-      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
+      outboundBusy.current = false;
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
+        setMutatingAction(null);
     }
   }
 
@@ -693,12 +729,19 @@ function AdminWhatsapp() {
   // window (which replyAvailability guards) has closed, so gating this on the
   // same check would defeat the point of offering it.
   async function sendTemplate(templateId: string) {
+    if (outboundBusy.current) return;
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
     }
 
     const targetId = detail.id;
+    const actorId = user?.id;
+    if (hasStoredOutboundRequest(actorId, targetId)) {
+      setOutboundReadback((current) => ({ ...current, [actorId + ":" + targetId]: true }));
+      return;
+    }
+    outboundBusy.current = true;
     setMutatingAction("template");
     setReplyError(null);
     try {
@@ -715,26 +758,91 @@ function AdminWhatsapp() {
           ),
         },
       });
-      assertNoMutationError(result);
+      assertKnownOutboundResult(result);
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       clearOutboundRequestId(user?.id, targetId, "template");
       await refreshConversations();
       if (!canApplyConversationDetail(targetId)) return;
 
       const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("範本已加入傳送佇列");
+      if (refreshed && canApplyConversationDetail(targetId))
+        toast.success(outboundResultNotice(result, "範本"));
     } catch (err) {
       releaseRejectedOutboundRequest(err, user?.id, targetId, "template");
-      if (!canApplyConversationDetail(targetId)) return;
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      setOutboundReadback((current) => ({
+        ...current,
+        [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
+      }));
       const message = formatReplyError(errorText(err));
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
       await loadConversationDetail(targetId, { background: true });
     } finally {
-      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
+      outboundBusy.current = false;
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
+        setMutatingAction(null);
     }
   }
 
+  async function readOutboundOutcome() {
+    const targetId = selectedIdRef.current;
+    const actorId = user?.id;
+    if (!targetId || !actorId || outboundBusy.current) return;
+    outboundBusy.current = true;
+    setMutatingAction("reply-readback");
+    setReplyError(null);
+    try {
+      for (const kind of ["text", "template"]) {
+        const raw = sessionStorage.getItem(outboundStorageKey(actorId, targetId, kind));
+        if (!raw) continue;
+        const saved = JSON.parse(raw) as { requestId: string; value: string };
+        if (typeof saved.requestId !== "string" || typeof saved.value !== "string")
+          throw new Error("傳送要求資料未能核對，請聯絡支援。");
+        const original = JSON.parse(saved.value) as unknown;
+        if (!Array.isArray(original) || original.length !== 2 || typeof original[0] !== "string")
+          throw new Error("傳送要求資料未能核對，請聯絡支援。");
+        const result = await fetchAdminOutboundIntent({
+          data: { requestId: saved.requestId, conversationId: targetId },
+        });
+        if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+        if (result.intent?.id !== saved.requestId || result.intent.kind !== kind)
+          throw new Error("傳送要求資料未能核對，請聯絡支援。");
+        const state = result.intent.state;
+        if (!["queued", "accepted", "failed", "cancelled"].includes(state))
+          throw new Error("傳送結果仍未確認，請稍後核對或聯絡支援。沒有重送要求。");
+        clearOutboundRequestId(actorId, targetId, kind);
+        if (kind === "text" && ["queued", "accepted"].includes(state)) {
+          setReplyDrafts((current) =>
+            current[targetId]?.trim() === original[0] ? { ...current, [targetId]: "" } : current,
+          );
+        }
+        toast.success(
+          ["queued", "accepted"].includes(state)
+            ? outboundResultNotice(result, "傳送要求")
+            : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
+        );
+      }
+      await loadConversationDetail(targetId, { background: true });
+    } catch (error) {
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
+        setReplyError(`未能確認傳送結果。${errorText(error)}`);
+    } finally {
+      outboundBusy.current = false;
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
+        setOutboundReadback((current) => ({
+          ...current,
+          [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
+        }));
+        setMutatingAction(null);
+      }
+    }
+  }
+
+  const needsOutboundReadback = Boolean(
+    selectedId && outboundReadback[staffUserId + ":" + selectedId],
+  );
   const isMutating = mutatingAction !== null;
   // The inbox had no search and no status filter at all -- the toolbar's filter
   // slot held two static badges -- so finding a conversation meant scrolling a
@@ -987,7 +1095,10 @@ function AdminWhatsapp() {
               templatesLoading={templatesLoading}
               templatesError={templatesError}
               onRetryTemplates={() => void loadTemplates()}
-              disabled={isMutating}
+              disabled={isMutating || needsOutboundReadback}
+              needsOutboundReadback={needsOutboundReadback}
+              readingOutbound={mutatingAction === "reply-readback"}
+              onReadOutbound={() => void readOutboundOutcome()}
               savingConversation={mutatingAction === "conversation"}
               sendingReply={mutatingAction === "reply"}
               sendingTemplate={mutatingAction === "template"}
@@ -1045,7 +1156,10 @@ function AdminWhatsapp() {
           templatesLoading={templatesLoading}
           templatesError={templatesError}
           onRetryTemplates={() => void loadTemplates()}
-          disabled={isMutating}
+          disabled={isMutating || needsOutboundReadback}
+          needsOutboundReadback={needsOutboundReadback}
+          readingOutbound={mutatingAction === "reply-readback"}
+          onReadOutbound={() => void readOutboundOutcome()}
           savingConversation={mutatingAction === "conversation"}
           sendingReply={mutatingAction === "reply"}
           sendingTemplate={mutatingAction === "template"}
@@ -1270,6 +1384,9 @@ function ConversationWorkspace({
   templatesError,
   onRetryTemplates,
   disabled,
+  needsOutboundReadback,
+  readingOutbound,
+  onReadOutbound,
   savingConversation,
   sendingReply,
   sendingTemplate,
@@ -1299,6 +1416,9 @@ function ConversationWorkspace({
   templatesError: string | null;
   onRetryTemplates: () => void;
   disabled: boolean;
+  needsOutboundReadback: boolean;
+  readingOutbound: boolean;
+  onReadOutbound: () => void;
   savingConversation: boolean;
   sendingReply: boolean;
   sendingTemplate: boolean;
@@ -1448,6 +1568,19 @@ function ConversationWorkspace({
             onSend={onSendTemplate}
           />
         ) : null}
+        {needsOutboundReadback ? (
+          <div className="mb-3 space-y-2 rounded-md border p-3 text-sm">
+            <p>傳送要求結果未確認，請先核對傳送狀態。核對不會重新傳送。</p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={sendingReply || sendingTemplate || readingOutbound}
+              onClick={onReadOutbound}
+            >
+              {readingOutbound ? "正在核對…" : "核對傳送狀態"}
+            </Button>
+          </div>
+        ) : null}
         {replyError ? (
           <p
             role="alert"
@@ -1471,7 +1604,7 @@ function ConversationWorkspace({
             // Only the send itself disables the composer. Disabling on any
             // in-flight mutation meant changing 負責代理 froze the textarea the
             // agent was typing in.
-            disabled={sendingReply || Boolean(availability.reason)}
+            disabled={sendingReply || needsOutboundReadback || Boolean(availability.reason)}
             maxLength={REPLY_MAX_LENGTH}
             aria-describedby={replyCountId}
             placeholder="輸入回覆內容"
@@ -1639,6 +1772,7 @@ function TemplateSendPanel({
             : "將向客戶傳送已審批範本。範本一經傳送即無法收回。"
         }
         confirmLabel="傳送"
+        disabled={disabled}
         isPending={sending}
         onOpenChange={setConfirmOpen}
         onConfirm={() => {
@@ -2036,6 +2170,28 @@ function writeStoredReplyDrafts(drafts: Record<string, string>, userId: string |
   } catch {
     // Quota or private-mode failure: the draft simply is not persisted.
   }
+}
+
+function hasStoredOutboundRequest(userId: string | undefined | null, conversationId: string) {
+  if (!userId) return true;
+  try {
+    return ["text", "template"].some((kind) =>
+      Boolean(sessionStorage.getItem(outboundStorageKey(userId, conversationId, kind))),
+    );
+  } catch {
+    return true;
+  }
+}
+function assertKnownOutboundResult(result: unknown) {
+  assertNoMutationError(result);
+  const intent = (result as { intent?: { state?: string } })?.intent;
+  if (!intent || !["queued", "accepted"].includes(intent.state ?? ""))
+    throw new Error("傳送結果仍未確認，請先核對狀態。沒有重送要求。");
+}
+function outboundResultNotice(result: unknown, label: string) {
+  return (result as { intent?: { state?: string } })?.intent?.state === "accepted"
+    ? "供應商已接納傳送要求，尚未證實送達或已讀。"
+    : `${label}已加入傳送佇列`;
 }
 
 // Persist before POST. Storage failure blocks dispatch so page recovery cannot mint a duplicate.
