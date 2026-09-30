@@ -33,6 +33,14 @@ Node test-only resolver補足Vite的extensionless TS／本repo alias解析；不
 
 RED logs：`.audit/campaign-materialize-red-resolved.log`、`campaign-queue-race-red.log`、`campaign-browser-red.log`、`campaign-draft-readback-red.log`。作者按單一agent自我審查，沒有獨立reviewer。
 
+## 完整 CI 發現與 confirmation 合約修正
+
+首輪 current-head `b3afc498d36c646c583aa69523d57b321fd6faec` 的 [CI run36747964248](https://github.com/YNWAforever/earnestproperty/actions/runs/36747964248) 中，browser-no-link、browser-handoff、no-link-local-postgres成功；主ci在 `test:content-copilot` 失敗，後續步驟被skip，不能當成全部通過。Lint／typecheck／build及主ci中此前的no-link／enquiry／Woztell等步驟成功。browser-staging仍因外部環境gate被skip。
+
+本地重現為75/76 Node通過：既有confirmation合約要求原來的pendingSend／providerReviewed／sendingRef guard文字。新增queueReadbackRef合併在同一條件令原source斷言不匹配。修正commit `3bc4fec11a762be5fbd5a18f2ee9024e09b30417` 把原guard與新增readback guard拆成順序兩層，兩層都在mutation前執行；沒有改測試或刪除未知結果保護。Committed `npm.cmd run test:content-copilot` exit0（76 Node＋29 Bun、零skip）；同一最終source patch提交前重跑69/69 synthetic browser exit0、零skip，包含timeout/readback及same-tick duplicate。原69-case `8f5310e` JSON保持原SHA，不覆寫歷史。
+
+本地logs：`.audit/campaign-content-contract-red.log`、`campaign-content-contract-green.log`、`campaign-content-contract-committed.log`、`campaign-contract-browser-green.log`。環境仍為Windows Node24.18.0／Bun及Chromium151.0.7922.34。此次修正沒有DB migration、config、API payload或action／UC分母差異；當前head完整CI結果另在Draft PR #206讀回，舊失敗run保留。
+
 ## 分母及外部 gates
 
 原1277 audit rows／1261 source occurrences／18 UC／76 AC全部保留。新增一個queue readback候選：總1296。Presentation21/1296；完整角色／DB action acceptance **0/1296**（817 BLOCKED_EXTERNAL、479 NOT_TESTED），完整UC **0/18**。新增presentation只標8個已實際操作的original campaign controls、manual template review及readback；沒有把wrapper、delete、campaign cancellation或真provider覆核冒充已驗。
