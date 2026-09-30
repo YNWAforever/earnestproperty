@@ -44,10 +44,9 @@ Staff offboarding also needs a reviewed no-link enquiry handover: `inquiries.enq
 
 ## Local UI presentation check (2026-09-30)
 
-Run `npm.cmd run acceptance:whatsapp-no-link:synthetic` from the isolated checkout, with PLAYWRIGHT_BASE_URL unset. It builds the real inbox and CRM routes/shell/CSS using test-only Auth/API aliases, owns a loopback server and forbids external/mutation requests. Install only the lockfile Chromium revision when absent. Expected 36/36 at c7ecdfb, zero skip (24 inbox plus 12 CRM cases); a NO_LINK_BROWSER_CHECK_FILTER run reports filtered cases as skips and is not the full acceptance run. Report and screenshot are under .audit; commit-stamped evidence is in docs/reports/2026-09-30-no-link-browser-verification.md.
+Run `npm.cmd run acceptance:whatsapp-no-link:synthetic` from the isolated checkout, with PLAYWRIGHT_BASE_URL unset. It builds the real inbox and CRM routes/shell/CSS using test-only Auth/API aliases, owns a loopback server and forbids external/mutation requests. Install only the lockfile Chromium revision when absent. Expected 46/46 at 6a76a33, zero skip (24 inbox, 12 manual-forward, 10 contact/source cases); a NO_LINK_BROWSER_CHECK_FILTER run reports filtered cases as skips and is not the full acceptance run. Report and screenshot are under .audit; commit-stamped evidence is in docs/reports/2026-09-30-no-link-browser-verification.md.
 
 This does not satisfy the real authenticated multi-role/Neon/provider browser gate. The existing e2e/whatsapp-no-link.spec.ts fixture/storage-state preflight remains mandatory before canary. No production URL, secret, provider send or DB config is needed for the presentation check. Current inventory denominator is 1,291 after adding the support diagnostics disclosure; preserve all original 76 ACs/1,261 source controls. The three frontend corrections need no new migration or effects activation. The existing shadow/canary/production/rollback order remains unchanged.
-
 
 ## Forwarded enquiry request recovery (2026-09-30)
 
@@ -56,3 +55,9 @@ The CRM form stores an actor-keyed request journal in the original tab session. 
 If storage is unavailable before submission, no API call occurs. If a stored journal is malformed, preserve it and have an authorized support actor reconcile existing forwarded-enquiry/lead/audit rows before deciding whether to recover or retire that local draft. Do not blindly clear it and recreate the enquiry. Tab closure, a different device/browser, or manually clearing browser storage are outside the client recovery guarantee; the durable SQL request-id record remains authoritative. No support query or correction may bypass the current staff/lead scope.
 
 The new browser CRM save/refresh/next-actor cases use a test-only session model. They do not close the real Auth/HTTP and isolated Neon multi-session gates. Report: docs/reports/2026-09-30-forwarded-enquiry-browser-verification.md. No migration/config/production action is part of this continuation.
+
+## CRM contact snapshot compatibility and recovery
+
+Contact/name/email edits require expectedContactId, expectedName and expectedEmail from the opened form. Isolated app/server/cached-tab checks must exercise success, direct403, stale409, pointer swap and lost-response readback. An old payload fails closed; do not add a downgrade that removes the snapshot. Desired values already current are idempotent without another audit. The immutable four-parameter SQL function is unchanged; the server wrapper locks and validates before calling it. No migration/config delta is required for this continuation.
+
+On uncertain save, use「重新載入聯絡資料」to read the current record before opening a fresh edit. Readback failure must remain blocked, with no resend. Contact refresh preserves pending CRM drafts. Manual-forward leads with no verified contact have no contact editor or assumed reply destination. Related conversation links still require both lead and conversation server scope. Revert the app/UI entry if needed, retain contact data/audit and original no-link effects-off rollback. Presentation46/46 and local Postgres8/8 do not replace Neon/Auth/provider release gates; full acceptance remains VERIFICATION_BLOCKED.
