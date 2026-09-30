@@ -1268,6 +1268,343 @@ try {
     },
     "manager",
   );
+  async function campaignConfirmation(page) {
+    await open(page, `${origin}/admin/blasts`);
+    const row = page.getByRole("row").filter({ hasText: "合成租務推廣" });
+    await expect(row).toBeVisible();
+    await row.getByRole("button", { name: "預覽收件人", exact: true }).click();
+    await row.getByRole("button", { name: "發送…", exact: true }).click();
+    const dialog = page.getByRole("alertdialog", { name: "確認發送 WhatsApp 群發？" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("checkbox").check();
+    return dialog;
+  }
+  await check(
+    "campaign queue success is not represented as delivery",
+    1280,
+    async (page) => {
+      const dialog = await campaignConfirmation(page);
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(page.getByText("已加入發送佇列", { exact: false })).toBeVisible();
+      await expect(page.getByText("已發送給 2 位合資格收件人", { exact: true })).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns"))[0].queueWrites,
+        ),
+      ).toBe(1);
+    },
+    "manager",
+  );
+  await check(
+    "campaign pending queue freezes review and same-tick duplicate",
+    390,
+    async (page) => {
+      const dialog = await campaignConfirmation(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.queueMode = "delay";
+      });
+      await dialog
+        .getByRole("button", { name: "確認發送給 2 人", exact: true })
+        .evaluate((button) => {
+          button.click();
+          button.click();
+        });
+      await expect(dialog.getByRole("checkbox")).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(1);
+      await page.evaluate(() => window.noLinkBlastFixture.releaseQueue());
+      await expect(dialog).not.toBeVisible();
+    },
+    "manager",
+  );
+  await check(
+    "campaign lost queue response requires readback and forbids resend",
+    360,
+    async (page) => {
+      const dialog = await campaignConfirmation(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.queueMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("結果未能確認");
+      await expect(
+        dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }),
+      ).toBeDisabled();
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.readFailure = true;
+      });
+      await dialog.getByRole("button", { name: "重新載入 Campaign 狀態", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("未能讀回");
+      await expect(
+        dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }),
+      ).toBeDisabled();
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.readFailure = false;
+      });
+      await dialog.getByRole("button", { name: "重新載入 Campaign 狀態", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      const row = page.getByRole("row").filter({ hasText: "合成租務推廣" });
+      await expect(row).toContainText("已排隊");
+      await expect(row.getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(1);
+      await page.reload();
+      await expect(page.getByRole("row").filter({ hasText: "合成租務推廣" })).toContainText(
+        "已排隊",
+      );
+    },
+    "manager",
+  );
+  await check(
+    "campaign pristine close cancel and same-name audiences remain explicit",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/blasts`);
+      await page.getByRole("button", { name: "新增 Campaign", exact: true }).click();
+      const edit = page.getByRole("dialog", { name: "新增 Campaign", exact: true });
+      await expect(edit.getByText("計劃發送時間（需人手確認）", { exact: true })).toBeVisible();
+      await edit.getByLabel("Campaign audience", { exact: true }).click();
+      await expect(page.getByRole("option").filter({ hasText: "深井租客" })).toBeVisible();
+      await expect(page.getByRole("option").filter({ hasText: "荃灣買家" })).toBeVisible();
+      await page.keyboard.press("Escape");
+      await edit.getByRole("button", { name: "關閉", exact: true }).click();
+      await expect(edit).not.toBeVisible();
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      const dialog = await campaignConfirmation(page);
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) =>
+              ["syntheticCampaignQueue", "syntheticCampaignSave"].includes(c.name),
+            ).length,
+        ),
+      ).toBe(0);
+    },
+    "manager",
+  );
+  await check(
+    "campaign stale preview blocks direct confirmation",
+    1280,
+    async (page) => {
+      const dialog = await campaignConfirmation(page);
+      await page.evaluate(() => {
+        const current = Date.now();
+        Date.now = () => current + 61000;
+      });
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("預覽已過期");
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(0);
+    },
+    "manager",
+  );
+  await check(
+    "campaign preview failure and unapproved template cannot queue",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/blasts`);
+      const row = page.getByRole("row").filter({ hasText: "合成租務推廣" });
+      await expect(row).toBeVisible();
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.previewFailure = true;
+      });
+      await row.getByRole("button", { name: "預覽收件人", exact: true }).click();
+      await expect(row.getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.previewFailure = false;
+        window.noLinkBlastFixture.templateStatus = "rejected";
+      });
+      await page.getByRole("button", { name: "重新整理", exact: true }).click();
+      await row.getByRole("button", { name: "預覽收件人", exact: true }).click();
+      await row.getByRole("button", { name: "發送…", exact: true }).click();
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(0);
+    },
+    "manager",
+  );
+  await check(
+    "campaign denied actor cannot obtain campaigns or queue",
+    390,
+    async (page) => {
+      await open(page, `${origin}/admin/blasts`);
+      await expect(page.getByText("合成角色沒有推廣權限", { exact: false })).toBeVisible();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(0);
+    },
+    "agent-b",
+  );
+  await check(
+    "campaign unknown close retains readback gate",
+    390,
+    async (page) => {
+      const dialog = await campaignConfirmation(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.queueMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("結果未能確認");
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      const recovery = page.getByRole("alert").filter({ hasText: "加入佇列結果未能確認" });
+      await expect(recovery).toBeVisible();
+      await page.getByRole("button", { name: "重新整理", exact: true }).click();
+      await expect(recovery).toBeVisible();
+      await recovery.getByRole("button", { name: "重新載入 Campaign 狀態", exact: true }).click();
+      await expect(recovery).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(1);
+    },
+    "manager",
+  );
+  await check(
+    "campaign rejected queue needs new read preview and confirmation",
+    1280,
+    async (page) => {
+      const dialog = await campaignConfirmation(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.queueMode = "refused";
+      });
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(
+        dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }),
+      ).toBeDisabled();
+      await dialog.getByRole("button", { name: "重新載入 Campaign 狀態", exact: true }).click();
+      const row = page.getByRole("row").filter({ hasText: "合成租務推廣" });
+      await expect(row.getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(1);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.queueMode = "ok";
+      });
+      await row.getByRole("button", { name: "預覽收件人", exact: true }).click();
+      await row.getByRole("button", { name: "發送…", exact: true }).click();
+      await dialog.getByRole("checkbox").check();
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns"))[0].queueWrites,
+        ),
+      ).toBe(1);
+    },
+    "manager",
+  );
+  await check(
+    "campaign saved draft cannot queue again after queued readback",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/blasts`);
+      await page.getByRole("button", { name: "新增 Campaign", exact: true }).click();
+      let edit = page.getByRole("dialog", { name: "新增 Campaign", exact: true });
+      await edit.getByLabel("Campaign 名稱", { exact: true }).fill("合成新推廣");
+      await edit.getByLabel("Campaign status", { exact: true }).click();
+      await page.getByRole("option", { name: "待審核", exact: true }).click();
+      await edit.getByRole("button", { name: "儲存", exact: true }).click();
+      edit = page.getByRole("dialog", { name: "編輯 Campaign", exact: true });
+      await expect(edit.getByRole("button", { name: "發送…", exact: true })).toBeEnabled();
+      await edit.getByRole("button", { name: "發送…", exact: true }).click();
+      const dialog = page.getByRole("alertdialog", { name: "確認發送 WhatsApp 群發？" });
+      await dialog.getByRole("checkbox").check();
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.queueMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await dialog.getByRole("button", { name: "重新載入 Campaign 狀態", exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(edit.getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+      await expect(edit).toContainText("目前 Campaign 狀態不能加入發送佇列");
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+        ),
+      ).toBe(1);
+    },
+    "manager",
+  );
+  await check(
+    "campaign missing templates displays unavailable and makes no write",
+    390,
+    async (page) => {
+      await open(page, `${origin}/admin/blasts`);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.noTemplates = true;
+      });
+      await page.getByRole("button", { name: "重新整理", exact: true }).click();
+      await page.getByRole("button", { name: "新增 Campaign", exact: true }).click();
+      const edit = page.getByRole("dialog", { name: "新增 Campaign", exact: true });
+      await expect(edit).toContainText("未選擇範本");
+      await expect(edit.getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+      await edit.getByLabel("Campaign 名稱", { exact: true }).fill("缺範本推廣");
+      await edit.getByRole("button", { name: "儲存", exact: true }).click();
+      expect(
+        await page.evaluate(
+          () =>
+            window.noLinkFixture.calls.filter((c) =>
+              ["syntheticCampaignQueue", "syntheticCampaignSave"].includes(c.name),
+            ).length,
+        ),
+      ).toBe(0);
+    },
+    "manager",
+  );
+  await check(
+    "campaign desktop recipient statistics are visible with distinct exclusion total",
+    1280,
+    async (page) => {
+      await open(page, `${origin}/admin/blasts`);
+      const heading = page
+        .getByText("收件人預覽", { exact: true })
+        .filter({ visible: true })
+        .last();
+      const card = heading.locator("xpath=ancestor::div[contains(@class,'h-fit')][1]");
+      await expect(card.getByText("總數", { exact: true }).locator("..")).toContainText("4");
+      await expect(
+        card.getByText("合資格（電話去重）", { exact: true }).locator(".."),
+      ).toContainText("2");
+      await expect(
+        card.getByText("不合資格（按收件人去重）", { exact: true }).locator(".."),
+      ).toContainText("2");
+      await expect(card).toContainText("排除原因可重疊");
+      await card.scrollIntoViewIfNeeded();
+      await expect(card).toBeInViewport({ ratio: 0.5 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+    },
+    "manager",
+  );
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
@@ -1286,6 +1623,7 @@ try {
         database: false,
         syntheticCrmModel: true,
         syntheticEnquiryModel: true,
+        syntheticCampaignModel: true,
         results,
       },
       null,

@@ -1,13 +1,37 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import { setTimeout as delay } from "node:timers/promises";
 import test, { mock } from "node:test";
 import pg from "pg";
 import { MIGRATION_VERSIONS } from "../src/lib/control-plane/migration-versions.js";
 
 const root = new URL("../", import.meta.url);
+// Vite resolves extensionless TS imports; Node's test runner needs the same
+// resolution for actual server modules. This never replaces source or exports.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    try {
+      return nextResolve(specifier, context);
+    } catch (error) {
+      if (error.code !== "ERR_MODULE_NOT_FOUND") throw error;
+      const candidate = specifier.startsWith("@/")
+        ? new URL(`src/${specifier.slice(2)}`, root)
+        : specifier.startsWith(".") && context.parentURL
+          ? new URL(specifier, context.parentURL)
+          : null;
+      if (candidate?.href.startsWith(root.href)) {
+        for (const extension of [".ts", ".tsx", ".js", ".mjs"]) {
+          const target = new URL(candidate.href + extension);
+          if (existsSync(target)) return nextResolve(target.href, context);
+        }
+      }
+      throw error;
+    }
+  },
+});
 const sample = JSON.parse(
   readFileSync(
     new URL("../src/lib/whatsapp-enquiries/fixtures/portal-enquiries.json", import.meta.url),
@@ -137,9 +161,10 @@ test(
           ...actualDb,
           queryRows: query,
           transactionRows: transaction,
-          getSql: () => {
-            throw new Error("Remote SQL forbidden in local integration");
-          },
+          getSql: () => ({
+            transaction: (build) =>
+              transaction(build({ query: (statement, params = []) => ({ statement, params }) })),
+          }),
         },
       });
       let networkCalls = 0;
@@ -967,6 +992,143 @@ test(
                 await query(
                   "SELECT count(*)::int n FROM whatsapp_enquiry_revisions WHERE inquiry_id=$1",
                   [enquiry.id],
+                )
+              )[0].n,
+              1,
+            );
+          },
+        );
+        await t.test(
+          "campaign with missing saved audience cannot materialize all contacts",
+          async () => {
+            const { materializeCampaignRecipients } =
+              await import("../src/lib/neon/admin-data.server.ts");
+            const templateId = randomUUID(),
+              campaignId = randomUUID();
+            await query(
+              "INSERT INTO crm_contacts(name,normalized_phone,source,opt_in_whatsapp) VALUES('合成全庫候選','85268888888','synthetic-global',true)",
+            );
+            await query(
+              "INSERT INTO whatsapp_templates(id,element_name,status) VALUES($1,'synthetic_campaign_missing_audience','active')",
+              [templateId],
+            );
+            await query(
+              "INSERT INTO whatsapp_campaigns(id,name,template_id,status) VALUES($1,'合成缺失群組',$2,'review')",
+              [campaignId, templateId],
+            );
+            const result = await materializeCampaignRecipients(campaignId, {
+              staffId: ids.manager,
+              roles: ["manager"],
+            });
+            assert.deepEqual(result, { ok: false, error: "AUDIENCE_NOT_FOUND" });
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM whatsapp_campaign_recipients WHERE campaign_id=$1",
+                  [campaignId],
+                )
+              )[0].n,
+              0,
+            );
+            assert.equal(
+              (
+                await query("SELECT count(*)::int n FROM audit_logs WHERE subject_id=$1", [
+                  campaignId,
+                ])
+              )[0].n,
+              0,
+            );
+            assert.equal(
+              (await query("SELECT status FROM whatsapp_campaigns WHERE id=$1", [campaignId]))[0]
+                .status,
+              "review",
+            );
+          },
+        );
+        await t.test(
+          "campaign audience deletion before queue cannot create a delivery job",
+          async () => {
+            const { materializeCampaignRecipients, queueAdminCampaign } =
+              await import("../src/lib/neon/admin-data.server.ts");
+            const templateId = randomUUID(),
+              campaignId = randomUUID(),
+              audienceId = randomUUID(),
+              contactId = randomUUID();
+            const manager = { staffId: ids.manager, roles: ["manager"] };
+            await query(
+              "INSERT INTO crm_contacts(id,name,normalized_phone,source,opt_in_whatsapp) VALUES($1,'合成推廣客戶','85269999999','synthetic-campaign',true)",
+              [contactId],
+            );
+            await query(
+              "INSERT INTO whatsapp_templates(id,element_name,status) VALUES($1,'synthetic_campaign_scope','active')",
+              [templateId],
+            );
+            await query(
+              "INSERT INTO whatsapp_audiences(id,name,filters) VALUES($1,'合成推廣群組','{\"source\":\"synthetic-campaign\"}')",
+              [audienceId],
+            );
+            await query(
+              "INSERT INTO whatsapp_campaigns(id,name,template_id,audience_id,status) VALUES($1,'合成群組變更',$2,$3,'review')",
+              [campaignId, templateId, audienceId],
+            );
+            assert.equal((await materializeCampaignRecipients(campaignId, manager)).eligible, 1);
+            await query("DELETE FROM whatsapp_audiences WHERE id=$1", [audienceId]);
+            assert.deepEqual(await queueAdminCampaign(campaignId, manager), {
+              ok: false,
+              error: "CAMPAIGN_NOT_ELIGIBLE",
+            });
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM ops_jobs WHERE payload->>'campaignId'=$1",
+                  [campaignId],
+                )
+              )[0].n,
+              0,
+            );
+            assert.equal(
+              (await query("SELECT status FROM whatsapp_campaigns WHERE id=$1", [campaignId]))[0]
+                .status,
+              "review",
+            );
+            await query(
+              "INSERT INTO whatsapp_audiences(id,name,filters) VALUES($1,'合成推廣群組','{\"source\":\"synthetic-campaign\"}')",
+              [audienceId],
+            );
+            await query("UPDATE whatsapp_campaigns SET audience_id=$2 WHERE id=$1", [
+              campaignId,
+              audienceId,
+            ]);
+            const queued = await Promise.all([
+              queueAdminCampaign(campaignId, manager),
+              queueAdminCampaign(campaignId, manager),
+            ]);
+            assert.equal(queued.filter((result) => result.ok).length, 1);
+            assert.ok(
+              queued.some(
+                (result) =>
+                  !result.ok &&
+                  ["INVALID_CAMPAIGN_STATUS", "CAMPAIGN_NOT_ELIGIBLE"].includes(result.error),
+              ),
+            );
+            assert.equal(
+              (await queueAdminCampaign(campaignId, manager)).error,
+              "INVALID_CAMPAIGN_STATUS",
+            );
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM ops_jobs WHERE payload->>'campaignId'=$1",
+                  [campaignId],
+                )
+              )[0].n,
+              1,
+            );
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM audit_logs WHERE action='campaign.queue' AND subject_id=$1",
+                  [campaignId],
                 )
               )[0].n,
               1,

@@ -145,6 +145,8 @@ function AdminBlasts() {
   const [previewCheckedAt, setPreviewCheckedAt] = useState(0);
   const [providerReviewed, setProviderReviewed] = useState(false);
   const sendingRef = useRef(false);
+  const queueReadbackRef = useRef<string | null>(null);
+  const [queueNeedsReadback, setQueueNeedsReadback] = useState<string | null>(null);
   // Stamped with the fetch time: Queue must never be enabled by a count the
   // operator saw minutes ago, because the server materialises a fresh audience
   // at send time.
@@ -182,8 +184,10 @@ function AdminBlasts() {
         });
         if (settings.clearRowPreviews) setRowPreviews({});
         setError(null);
+        return campaignRows as AdminCampaignRow[];
       } catch (err) {
         setError(errorText(err));
+        return null;
       } finally {
         setLoading(false);
       }
@@ -447,6 +451,7 @@ function AdminBlasts() {
    * interstitial that used to be missing entirely, so a mis-click on Queue sent
    * thousands of irreversible WhatsApp messages. */
   function requestSendCampaign(campaign: AdminCampaignRow, eligible: number, checkedAt: number) {
+    if (queueReadbackRef.current || !isQueueableStatus(campaign.status)) return;
     if (eligible <= 0 || Date.now() - checkedAt > PREVIEW_FRESHNESS_MS) {
       toast.error("收件人預覽已過期或沒有合資格收件人，請重新預覽");
       return;
@@ -472,7 +477,7 @@ function AdminBlasts() {
   }
 
   async function handleConfirmSend() {
-    if (!pendingSend || !providerReviewed || sendingRef.current) return;
+    if (!pendingSend || !providerReviewed || sendingRef.current || queueReadbackRef.current) return;
     if (Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS) {
       setConfirmError("收件人預覽已過期，請關閉視窗並重新預覽");
       return;
@@ -493,12 +498,40 @@ function AdminBlasts() {
       setCampaignDraft(null);
       setPendingSend(null);
       toast.success(
-        `已發送給 ${result.materialization?.eligible ?? pendingSend.eligible} 位合資格收件人`,
+        `已加入發送佇列：${result.materialization?.eligible ?? pendingSend.eligible} 位合資格收件人。送達結果須另行核對。`,
       );
     } catch (err) {
       // Kept inside the dialog rather than behind it: the operator needs the
       // reason next to the action they just authorised.
-      setConfirmError(errorText(err));
+      queueReadbackRef.current = pendingSend.campaignId;
+      setQueueNeedsReadback(pendingSend.campaignId);
+      setRowPreviews({});
+      setPreviewCheckedAt(0);
+      setConfirmError(`加入佇列結果未能確認，請先讀回 Campaign 狀態。${errorText(err)}`);
+    } finally {
+      sendingRef.current = false;
+      setMutatingAction(null);
+    }
+  }
+
+  async function readCampaignQueueOutcome() {
+    const campaignId = queueReadbackRef.current;
+    if (!campaignId || sendingRef.current) return;
+    sendingRef.current = true;
+    setMutatingAction(`queue:${campaignId}`);
+    setConfirmError(null);
+    try {
+      const current = await refreshAdminData({ clearRowPreviews: true });
+      if (!current?.some((row) => row.id === campaignId)) {
+        setConfirmError("未能讀回此 Campaign，或權限已變更。未有重送加入佇列要求。");
+        return;
+      }
+      queueReadbackRef.current = null;
+      setQueueNeedsReadback(null);
+      setPendingSend(null);
+      setProviderReviewed(false);
+      setPreviewCheckedAt(0);
+      toast.success("已讀回目前 Campaign 狀態。沒有重送；如需繼續，請重新預覽並確認。");
     } finally {
       sendingRef.current = false;
       setMutatingAction(null);
@@ -526,8 +559,9 @@ function AdminBlasts() {
   }
 
   const campaignRows = rows ?? [];
+  const currentDraftRow = campaignRows.find((row) => row.id === campaignDraft?.id);
   const canSubmitCampaign =
-    Boolean(campaignDraft?.id) && isQueueableStatus(campaignDraft?.status ?? "");
+    Boolean(campaignDraft?.id) && isQueueableStatus(currentDraftRow?.status ?? "");
   const hasUnsavedCampaignChanges = Boolean(
     campaignDraft && isCampaignDraftDirty(campaignDraft, savedCampaignDraft),
   );
@@ -556,12 +590,15 @@ function AdminBlasts() {
 
   const queueBlockReason = hasUnsavedCampaignChanges
     ? "請先儲存變更才可發送"
-    : campaignDraft && !isQueueableStatus(campaignDraft.status)
-      ? "草稿不可直接發送，請先將狀態改為「待審核」"
-      : null;
+    : campaignDraft?.id && !isQueueableStatus(currentDraftRow?.status ?? "")
+      ? "目前 Campaign 狀態不能加入發送佇列"
+      : campaignDraft && !isQueueableStatus(campaignDraft.status)
+        ? "草稿不可直接發送，請先將狀態改為「待審核」"
+        : null;
   const canQueueDraft =
     canSubmitCampaign &&
     !hasUnsavedCampaignChanges &&
+    !queueNeedsReadback &&
     !previewError &&
     Date.now() - previewCheckedAt <= PREVIEW_FRESHNESS_MS &&
     (preview?.eligible ?? 0) > 0;
@@ -582,6 +619,20 @@ function AdminBlasts() {
       description="WhatsApp 群發：只用已審批範本、只發給已同意接收的客戶。"
     >
       {error ? <AdminError message={error} /> : null}
+      {queueNeedsReadback && !pendingSend ? (
+        <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
+          <p>加入佇列結果未能確認。請先讀回 Campaign 狀態；未有重送。</p>
+          {confirmError ? <p>{confirmError}</p> : null}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!!mutatingAction}
+            onClick={() => void readCampaignQueueOutcome()}
+          >
+            重新載入 Campaign 狀態
+          </Button>
+        </div>
+      ) : null}
 
       <AdminToolbar
         filters={
@@ -691,6 +742,7 @@ function AdminBlasts() {
                         !!stamped &&
                         !previewStale &&
                         eligible > 0 &&
+                        !queueNeedsReadback &&
                         !mutatingAction;
                       const cancelEnabled =
                         cancellableStatuses.has(campaign.status) && !mutatingAction;
@@ -933,6 +985,7 @@ function AdminBlasts() {
         isPending={mutatingAction?.startsWith("queue:") ?? false}
         disabled={
           !providerReviewed ||
+          !!queueNeedsReadback ||
           (pendingSend ? Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS : true)
         }
         error={confirmError}
@@ -951,11 +1004,22 @@ function AdminBlasts() {
             <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
               <Checkbox
                 checked={providerReviewed}
+                disabled={!!mutatingAction || !!queueNeedsReadback}
                 onCheckedChange={(checked) => setProviderReviewed(checked === true)}
               />
               我已在 Woztell
               核對此範本的完整已批准內容、語言、媒體、按鈕及連結目的地，並確認收件人及排除人數。
             </label>
+            {queueNeedsReadback ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!!mutatingAction}
+                onClick={() => void readCampaignQueueOutcome()}
+              >
+                重新載入 Campaign 狀態
+              </Button>
+            ) : null}
           </>
         ) : null}
       </AdminConfirmDialog>

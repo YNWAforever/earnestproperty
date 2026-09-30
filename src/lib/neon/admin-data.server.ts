@@ -3379,7 +3379,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const campaigns = await queryRows(
     `
-    SELECT c.id, a.filters
+    SELECT c.id, a.id AS resolved_audience_id, a.filters
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
     WHERE c.id = $1
@@ -3389,6 +3389,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
   );
   const campaign = campaigns[0];
   if (!campaign) return { ok: false as const, error: "Campaign not found" };
+  if (!campaign.resolved_audience_id) return { ok: false as const, error: "AUDIENCE_NOT_FOUND" };
 
   const filters = parseAudienceFilters(campaign.filters);
   const rows = await fetchAudienceRecipientRows(filters);
@@ -3536,6 +3537,7 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
           AND c.status IN ('review', 'scheduled')
           AND t.id = c.template_id
           AND t.status LIKE 'active%'
+          AND EXISTS (SELECT 1 FROM whatsapp_audiences a WHERE a.id = c.audience_id)
           AND EXISTS (
             SELECT 1
             FROM whatsapp_campaign_recipients r

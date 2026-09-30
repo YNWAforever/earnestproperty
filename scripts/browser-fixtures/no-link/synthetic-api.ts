@@ -478,3 +478,13 @@ export const rejectAdminAiTag = () => noMutation("rejectTag");
 export const createAdminLeadActivity = () => noMutation("leadActivity");
 export const bulkUpdateAdminLeads = () => noMutation("bulkLeads");
 export const updateAdminLead = () => noMutation("updateLead");
+export {
+  fetchAdminCampaigns,
+  fetchAdminBlastOptions,
+  previewAdminAudience,
+  sendAdminCampaignQueue,
+  saveAdminCampaign,
+  saveAdminAudience,
+  deleteAdminAudience,
+  cancelAdminCampaign,
+} from "./synthetic-blasts";

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { Route } from "../../../src/routes/admin.whatsapp";
 import { Route as LeadsRoute } from "../../../src/routes/admin.leads";
+import { Route as BlastsRoute } from "../../../src/routes/admin.blasts";
 import "../../../src/styles.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -31,7 +32,15 @@ const leads = LeadsRoute.update({
   path: "/admin/leads",
   getParentRoute: () => root,
 } as never);
-const router = createRouter({ routeTree: root.addChildren([route, leads]), defaultPreload: false });
+const blasts = BlastsRoute.update({
+  id: "/admin/blasts",
+  path: "/admin/blasts",
+  getParentRoute: () => root,
+} as never);
+const router = createRouter({
+  routeTree: root.addChildren([route, leads, blasts]),
+  defaultPreload: false,
+});
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={new QueryClient()}>
     <RouterProvider router={router} />

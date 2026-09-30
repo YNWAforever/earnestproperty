@@ -25,6 +25,7 @@ SUPPLEMENTAL = [
     ("N-T11-analytics-export", "/admin/analytics", "src/routes/admin.analytics.tsx", "export scoped evidence", "T11 Node/PGlite local only"),
     ("N-T12-audience-preview-retry", "/admin/blasts", "src/routes/admin.blasts.tsx", "retry failed audience preview", "T12 helper/source contract local only"),
     ("N-T12-manual-template-review", "/admin/blasts", "src/routes/admin.blasts.tsx", "confirm external template review", "T12 unit/source local only"),
+    ("N-T12-campaign-readback", "/admin/blasts", "src/routes/admin.blasts.tsx", "read current campaign after unknown queue result", "T12 real-route synthetic browser; actual Postgres audience and queue guards separately verified"),
     ("N-T13-auth-language", "/auth/sign-in", "src/routes/auth.$pathname.tsx", "switch auth language", "T13 local contract only"),
     ("N-T13-header-whatsapp-desktop", "/", "src/components/site/SiteHeader.tsx", "desktop WhatsApp link", "T13 semantic contract only"),
     ("N-T13-header-whatsapp-mobile", "/", "src/components/site/SiteHeader.tsx", "mobile WhatsApp link", "T13 semantic contract only"),
