@@ -96,7 +96,9 @@
     "test:no-link:local-postgres": "node --experimental-test-module-mocks --test scripts/no-link-local-postgres.test.mjs",
     "test:property-sync:admin": "node --test src/lib/mls/sync-run-repository.test.mjs src/lib/mls/dispatch-property-sync.test.mjs scripts/mls/record-sync-execution.test.mjs",
     "test:property-sync:admin:db": "node --test --test-concurrency=1 src/lib/mls/sync-run-repository.db.test.mjs",
-    "test:property-sync:ui": "node scripts/test-property-sync-workspace.mjs"
+    "test:property-sync:ui": "node scripts/test-property-sync-workspace.mjs",
+    "test:property-sync:withdrawal": "node --test src/lib/mls/withdrawal-review.test.mjs",
+    "test:property-sync:withdrawal:db": "node --test --test-concurrency=1 src/lib/mls/withdrawal-review.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",

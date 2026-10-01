@@ -264,15 +264,15 @@
 
 **Consumes:** fresh complete source receipts、canonical/link versions、人工覆寫。**Produces:** 可追溯候選、不可重複套用的bulk結果與可復原操作。
 
-- [ ] 先測：ZIP132 candidates只建立review候選，actual下架0；兩次完整觀察之間有failed run不算缺席證據；missing一個廣告而另一current來源仍活躍不能自動判死整個盤。
-- [ ] 明示撤盤與「未再看到」分開。absence候選預設需同scope兩次完整成功快照、相隔至少24小時均未出現；這是本計劃建議的新增保守規則，需版本化實作，並非現有功能。
-- [ ] 原生Property.hk absence gate目前永遠off；不能只翻config。先上candidate review，正式source lifecycle automation另經rule版本、測試及live基準驗收後才可啟用。
-- [ ] 歷史132不在previous baseline時，現有absence演算法未必會碰到；做獨立historical reconciliation流程，顯示before/current source evidence、canonical links、人工状态、其他來源及原因。
-- [ ] 多來源狀態相反（現有28Hse primary撤盤可能令canonical inactive，即使Property.hk active）要明確顯示conflict並人工核實；本次不能暗改成「任一來源active即上架」。若業務決定改policy，另做版本化decision table與rollback證據。
-- [ ] Bulk流程：filter→explicit選擇（上限100）→preview→逐盤允許/blocked原因→確認reason→apply；預覽15分鐘有效、expectedVersions及服務端重查。agent不可對全公司批次操作；不能「全選所有」暗含未載入盤。
-- [ ] 保留properties及aliases，只透過既有管理服務設inactive；保持人工鎖定／持續覆寫語義，避免下一次sync又上架。被保護／衝突盤不能透過此流程繞過保護。
-- [ ] 每項記錄actor、reason、source evidence、before/after/version、batch/idempotency；partial failure可逐項重試。復原是新審核操作，重查source/staff changes，不能無條件restore舊快照。
-- [ ] 測stale preview、兩個manager競爭、來源剛重新上架、重播duplicate、partial failure、role escalation、draft誤當active；disposable DB確認public query下架後不可見；提交。
+- [x] 先測：ZIP132 candidates只建立review候選，actual下架0；兩次完整觀察之間有failed run不算缺席證據；missing一個廣告而另一current來源仍活躍不能自動判死整個盤。
+- [x] 明示撤盤與「未再看到」分開。absence候選預設需同scope兩次完整成功快照、相隔至少24小時均未出現；這是本計劃建議的新增保守規則，需版本化實作，並非現有功能。
+- [x] 原生Property.hk absence gate目前永遠off；不能只翻config。先上candidate review，正式source lifecycle automation另經rule版本、測試及live基準驗收後才可啟用。
+- [x] 歷史132不在previous baseline時，現有absence演算法未必會碰到；做獨立historical reconciliation流程，顯示before/current source evidence、canonical links、人工状态、其他來源及原因。
+- [x] 多來源狀態相反（現有28Hse primary撤盤可能令canonical inactive，即使Property.hk active）要明確顯示conflict並人工核實；本次不能暗改成「任一來源active即上架」。若業務決定改policy，另做版本化decision table與rollback證據。
+- [x] Bulk流程：filter→explicit選擇（上限100）→preview→逐盤允許/blocked原因→確認reason→apply；預覽15分鐘有效、expectedVersions及服務端重查。agent不可對全公司批次操作；不能「全選所有」暗含未載入盤。
+- [x] 保留properties及aliases，只透過既有管理服務設inactive；保持人工鎖定／持續覆寫語義，避免下一次sync又上架。被保護／衝突盤不能透過此流程繞過保護。
+- [x] 每項記錄actor、reason、source evidence、before/after/version、batch/idempotency；partial failure可逐項重試。復原是新審核操作，重查source/staff changes，不能無條件restore舊快照。
+- [x] 測stale preview、兩個manager競爭、來源剛重新上架、重播duplicate、partial failure、role escalation、draft誤當active；disposable DB確認public query下架後不可見；提交。
 
 ## T11. 分批正式上線、驗收及回退
 

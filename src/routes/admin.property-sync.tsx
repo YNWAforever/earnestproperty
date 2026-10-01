@@ -3,7 +3,15 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useStaffSession } from "@/components/admin/staff-session";
 import { PropertySyncWorkspace } from "@/components/admin/property-sync/PropertySyncWorkspace";
-import { fetchAdminSyncWorkspace, requestAdminSyncOperation } from "@/lib/neon/admin-property-sync";
+import {
+  fetchAdminSyncWorkspace,
+  requestAdminSyncOperation,
+  fetchWithdrawalCandidates,
+  requestWithdrawalPreview,
+  applyAdminWithdrawalPreview,
+  fetchWithdrawalResult,
+} from "@/lib/neon/admin-property-sync";
+import { WithdrawalReviewWorkspace } from "@/components/admin/property-sync/WithdrawalReviewWorkspace";
 export const Route = createFileRoute("/admin/property-sync")({
   head: () => ({
     meta: [{ title: "盤源同步｜Earnest Admin" }, { name: "robots", content: "noindex" }],
@@ -22,10 +30,19 @@ function SyncContent() {
   const { session, loading } = useStaffSession(user?.id ?? null);
   if (loading || !session) return <p role="status">正在核實職員權限…</p>;
   return (
-    <PropertySyncWorkspace
-      roles={session.status === "ok" ? session.roles : []}
-      load={(cursor) => fetchAdminSyncWorkspace({ data: { limit: 25, cursor } })}
-      request={(input) => requestAdminSyncOperation({ data: input })}
-    />
+    <>
+      <PropertySyncWorkspace
+        roles={session.status === "ok" ? session.roles : []}
+        load={(cursor) => fetchAdminSyncWorkspace({ data: { limit: 25, cursor } })}
+        request={(input) => requestAdminSyncOperation({ data: input })}
+      />
+      <WithdrawalReviewWorkspace
+        roles={session.status === "ok" ? session.roles : []}
+        load={(data) => fetchWithdrawalCandidates({ data })}
+        preview={(data) => requestWithdrawalPreview({ data })}
+        apply={(data) => applyAdminWithdrawalPreview({ data })}
+        reconcile={(idempotencyKey) => fetchWithdrawalResult({ data: { idempotencyKey } })}
+      />
+    </>
   );
 }
