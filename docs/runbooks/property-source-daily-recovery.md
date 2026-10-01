@@ -1,5 +1,7 @@
 # 每日盤源同步：恢復、啟用及回退
 
+> 2026-10-02 release 更新：PR207/208 已合併；28Hse 已暫停，原 baseline 已核對並保存私有回讀副本，兩個指定 migration 已套用。其後部署／shadow／canary／token 狀態以 [release 執行紀錄](../reports/2026-10-02-full-sync-release.md) 為準；下列 2026-10-01 操作敘述屬歷史。
+
 本手冊對應 codex/full-property-sync-20261001；程式準備完成不代表正式啟用。正式修改只由獲本 session 明確授權的 release operator 執行。2026-10-01 本 session 正式操作只有 read-only：核對 GitHub、DB host/policy/full receipt、首頁 HTTP 與一次 Property.hk 正常存取；未執行正式 migration、apply、排程 dispatch、config、撤盤、訊息或 merge。
 
 ## 五步員工手冊
