@@ -202,13 +202,13 @@
 | EPT | 青龍頭村 | NTM | 驗證分頁起點、公司牌照及完整範圍 |
 | EPW | 海韻花園 | NTW | 同上 |
 
-- [ ] 先檢查現有部署／營運文件及已授權connector，找provider feed、定時export、既有合作host或批准的crawler方式；不要要求重做已有功能，也不要假設存在公開API。
+- [x] 先檢查現有部署／營運文件及已授權connector，找provider feed、定時export、既有合作host或批准的crawler方式；不要要求重做已有功能，也不要假設存在公開API。
 - [ ] 區分 `dt` 是代理目錄分類還是盤源filter，驗證它是否排除了分行其他地區樓盤；不得把使用者提供參數不經檢查當全分行inventory。
 - [ ] 記錄供應商支援的入口、身份、配額、分頁、ID scope、更新時間、售租／撤盤語義；缺項先做能完成的28Hse工作，再一次列出最小外部需求。
 - [ ] 原網址SID／query不能擅自去除：之前去SID跳到generic directory，不是成功。秘密／session只存受管理配置，不在公開repo保存；若SID是公開固定代理識別亦需由實證確認。
 - [ ] 供應商允許靜態HTML則沿現有HTTP；支援feed/export則加相應adapter；只有正常頁面需要JS且獲准自動化時才加browser transport，保持origin/path/robots/size限制。
-- [ ] 403/challenge現場停在存取問題，與供應商處理allowlist／服務帳戶等正式安排，不以代理或挑戰破解解決。固定IP僅在供應商認可時使用，不把它當避封鎖手段。
-- [ ] 未驗證時維持 id_scope_verified=false、publish關閉；完成access report並提交。此步不聲稱live同步已完成。
+- [x] 403/challenge現場停在存取問題，與供應商處理allowlist／服務帳戶等正式安排，不以代理或挑戰破解解決。固定IP僅在供應商認可時使用，不把它當避封鎖手段。
+- [x] 未驗證時維持 id_scope_verified=false、publish關閉；完成access report並提交。此步不聲稱live同步已完成。
 
 ## T7. 三分行真實解析、全量gate及scope隔離
 

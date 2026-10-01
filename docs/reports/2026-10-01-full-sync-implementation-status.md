@@ -86,3 +86,9 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 - Current homepage HTTP200/HTML/brand verification PASS at05:04:04Z. detailsVerified=0: no newly published production aliases available, so no claim of sample publication/photo/price/detail acceptance.
 - In-app browser twice failed before opening a tab (Windows sandbox deny-read ACL/kernel initialization). Desktop/mobile rendered live screenshots BLOCKED_EXTERNAL; HTTP checks cannot replace them. No production mutation or blind crawler.
 - T5 code and offline regression READY; sample live qualification and rendered UI VERIFICATION_BLOCKED. These unchecked plan steps remain in the denominator.
+
+## T6 access decision
+
+- Detailed access evidence and branch matrix: propertyhk-access-verification.md. Actual single normal detail request403/challenge; no bypass. Exact branch URLs/SID/dt scope, real selectors, ID grammar and media rights remain BLOCKED_EXTERNAL.
+- RED example had no explicit Property.hk publication disable; GREEN source configuration test PASS and full Python80/80 exit0 at working tree based98f843c. Operator sample config remains non-live; no production change.
+- Existing transport and managed server policy retained. No new provider/API invented. T6 local configuration/access report complete; external contract and authentic fixtures remain unchecked.
