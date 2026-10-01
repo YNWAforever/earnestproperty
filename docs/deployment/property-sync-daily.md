@@ -50,3 +50,16 @@ The company rule requires approved=true, version=company-number-v1 and approved_
 
 The v2 migration was applied to production on 2026-09-07 with all1,067 properties and public memberships unchanged. Source writer activation is a distinct gate: publish_enabled is the ingestion write permission, not permission to make new draft inventory public. The cloned-production first-import rehearsal remains blocked by automatic approval review pending explicit authorization of this write permission. Do not enable the daily apply until the rehearsal, first receipt/baseline and runner checks succeed.
 
+
+
+## 2026-10-01 staged implementation / private handoff
+
+The authoritative plan and per-task evidence are in `docs/superpowers/plans/2026-10-01-full-property-sync.md` and `docs/reports/2026-10-01-full-sync-implementation-status.md`. Historical activation prose above is not evidence of current operational readiness.
+
+RunManifest v1 stores request AND raw byte hashes/sizes, source/scope/parser/policy, exact collected timestamp and commit. `daily_artifacts.py freeze` atomically writes the manifest; `verify` checks bounded paths, full collection and every local object. `pin` verifies a private repository with push permission, uploads request/raw, downloads each for exact readback, then uploads/downloads the ready manifest. Missing permissions or transport failures use safe codes, without gh stderr or credentials.
+
+Ingestion canonical payload hashes and raw byte SHA256 are separate. `authority` validates an accepted full receipt against server-read current scope identity; a successful-looking receipt file alone is insufficient. Restored legacy bundles require this database reconciliation before apply. Missing private baseline with an existing database receipt is recovery, not bootstrap permission.
+
+`retention_candidates` implements release-specific7-day raw/90-day compact/request selection. Current baseline assets and every unresolved run's objects are pinned. Accepted/unresolved bundles are never automatically deleted. Selection is a reviewable dry-run; do not authorize deletion without reconciling all outstanding receipt/request pairs and approving exact names. Actions artifact expiry does not purge releases.
+
+Production destination credential/release and baseline recovery remain BLOCKED_EXTERNAL; no private assets were uploaded or removed by local tests.
