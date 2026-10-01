@@ -26,7 +26,7 @@ Sep24 native run 的 artifact quota 失敗不代表 ingestion 未 commit；原 a
 
 PR208 merge 的 Vercel deployment `dpl_2Phc1PmcsLMj7nF2tzt53HuUHik9` 在 build 後被 vulnerable TanStack Start 檢查拒絕。依 [GHSA-qx66-fv34-fjm8](https://github.com/TanStack/router/security/advisories/GHSA-qx66-fv34-fjm8) 升級 react-start 至 1.168.60、start-server-core 至 1.169.39；配套 router 1.170.41。沒有設定 vulnerability bypass。修復 commit `c2baec6`。新 error boundary 的 unknown 型別先 narrow 再顯示，保留繁中 fallback 及 retry。固定 formatter 至原 lock 3.8.2，避免無關程式格式改動。routeTree 為新版 generator 產物，沒有手改。
 
-首次 Vercel inspect 正式 alias 仍指向 READY `dpl_H8H6GyJoacWBfSDPruP5GAvR4qG4`；不能將已 merge 當成已部署。
+新版 Vercel preview `dpl_Eq3DvCY8h96wZoKAFt9mHWVtesXa`（a2e2fd4）READY；安全檢查攔截已解除，未promote。首次 Vercel inspect 正式 alias 仍指向 READY `dpl_H8H6GyJoacWBfSDPruP5GAvR4qG4`；不能將已 merge 當成已部署。
 
 PR：[209](https://github.com/YNWAforever/earnestproperty/pull/209)。
 
@@ -43,7 +43,7 @@ PR：[209](https://github.com/YNWAforever/earnestproperty/pull/209)。
 1. **Managed automation capability**：GitHub `PROPERTY_SYNC_EVIDENCE_TOKEN` 尚未配置；需僅 private evidence repo Contents read/write。Vercel `PROPERTY_SYNC_WORKFLOW_TOKEN` 需僅 code repo Actions write。現有 gh CLI 身分不能當作已接通 automation，不複製廣權 token。不要在 chat 貼 secret。
 2. **公開歷史證據**：舊 public release 有50件、138531553 bytes。automatic approval review 最初因整批可能含 raw/contacts 且缺 exact payload 授權而拒絕；user 隨後明確授權複製及核對全部50檔。原50件皆核對GitHub原digest後複製到指定private repo，再下載核對，50/50 PASS（19 accepted、23 request、8 unresolved）。公開副本尚未刪除，等待精確清單cleanup授權。
 3. **Property.hk**：EPS/EPT/EPW 原 SID/page1→terminal/real HTML-feed、IDscope、media rights 未提供及核實。所有 source flags/policy/schedule 維持未啟用；synthetic PASS 不代替真實接駁。沿用前次正常存取403證據，未繞過 challenge。
-4. **其餘 migration drift**：唯讀 check 仍列10個 WhatsApp migration。它們不在本次指定兩檔授權內，沒有自動執行全 repo migration。此 drift 必須與盤源 migration 已套用分開報告。
+4. **其餘 migration drift**：唯讀 check 仍列10個 WhatsApp migration。它們不在本次指定兩檔授權內，沒有自動執行全 repo migration。正式whatsapp_inbound_receipts表確認不存在；有效signed webhook會先寫receipt並在缺表時回503，故production deployment必須等prerequisite。10/10精確SQL已在disposable Neon transaction rehearsal PASS並ROLLBACK，待額外授權；見 [schema清單](2026-10-02-deployment-schema-prerequisites.md)。
 5. **正式完整鏈與登入**：shadow/canary、正式角色登入/readback、當前3指定盤/source/photo、公網新版結果及三次 scheduled cycles 尚未完成。
 
 ## 來源與 cycle 判定
