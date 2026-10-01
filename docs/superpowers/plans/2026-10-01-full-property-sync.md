@@ -133,7 +133,7 @@
 - [ ] 保留 PR #207 的 `PROPERTY_SYNC_EVIDENCE_REPO`／`PROPERTY_SYNC_EVIDENCE_TOKEN` 支援；確認 destination private、release 存在、必要 read/write 權限可用。使用最小權限服務憑證，不輸出值。
 - [x] metadata 包含精確 request/raw bytes hash；凍結前不允許 ingestion。archive 暫存寫完 fsync／rename 後才標 ready；upload 後驗 object hash／size，不把半檔當成功。
 - [x] latest baseline 必須與 DB current full receipt 的 source/scope/policy/parser/hash 一致；若 DB 已有 baseline 而私有檔案遺失，進 recovery，不可 bootstrap 蓋過它。
-- [ ] 保留 current baseline／未解決 request receipts；raw 7 日、compact 90 日作為起始 retention，另對 release assets 實作清理及 pinned exception，不能誤以為 Actions retention 會刪 release。
+- [x] 保留 current baseline／未解決 request receipts；raw 7 日、compact 90 日作為起始 retention，另對 release assets 實作清理及 pinned exception，不能誤以為 Actions retention 會刪 release。
 - [x] 執行 `python -m pytest scripts/property-sync/tests/test_daily_artifacts.py -q`；通過後提交 `fix(sync): verify private evidence and accepted baselines`。
 
 ## T2. 分階段排程與可恢復採集

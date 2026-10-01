@@ -131,3 +131,10 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 - Actual local React/CSS Chromium desktop1440/mobile390:26/26 PASS, including cancellation0writes, invalid reason, partial results, doubleclick once, expired preview, agent denial and read-only timeout reconciliation. All provider traffic blocked; synthetic browser evidence is separate from live authenticated UI.
 - Full tsc --noEmit exit0; git diff --check exit0. New20261001130000_property_withdrawal_review.sql registered; only disposable random-schema DDL applied. Old applied migrations unchanged. PROPERTY_SYNC_WITHDRAWAL_REVIEW_ENABLED defaults false pending reviewed production migration/deploy/activation.
 - No production withdrawal, config change, messages, migration or deployment.132 ZIP candidates remain unapproved; actual original-ZIP replay and production live acceptance are recorded separately in T11.
+
+
+## T1 retention completion follow-up
+
+- RED4 missing retention preview/apply behaviors; GREEN4/4 pytest PASS, full Python suite97/97 PASS exit0 basedcd320a0. Private destination/capability, complete pagination, immutable metadata identity,1h review expiry, exact selected IDs, changed pins, duplicate assets and unknown DELETE acknowledgement covered.
+- Added evidence_retention.py: preview default, reviewed explicit apply gate, immediate per-asset readback/revalidation, durable UNKNOWN before request, stop-on-failure and read-only reconciliation. All accepted histories, handoffs/unresolved run objects and explicit pins protected.7/90-day minimum ages apply to unpinned objects; conservative accepted history retention may exceed these ages.
+- No remote release mutation; synthetic delete port only. Private repository/token live gate remains BLOCKED_EXTERNAL. Existing production baseline unchanged.
