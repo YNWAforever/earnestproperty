@@ -549,6 +549,9 @@ def validate_config(source, cfg):
             or not cfg.get("company_license")
         ):
             raise WorkerError("configuration_identity")
+        offers = cfg.get("offer_values", {})
+        if not isinstance(offers, dict) or any(not isinstance(k,str) or not isinstance(v,list) or not v or len(v)!=len(set(v)) or any(x not in ('sale','rent') for x in v) for k,v in offers.items()):
+            raise WorkerError("configuration_offer_values")
         for url in cfg["branch_urls"].values():
             if "{page}" not in url:
                 raise WorkerError("configuration_pagination")
@@ -579,20 +582,13 @@ def parse_property_index(html, branch, cfg):
             raise WorkerError("missing_identity_link")
         url = urljoin(cfg["origin"], node["href"])
         checked_url(url, cfg["origin"], cfg["allowed_paths"])
-        deal = field("deal_type") if sel.get("deal_type") else cfg.get("deal_type")
-        if deal not in ("sale", "rent"):
+        value = field("deal_type") if sel.get("deal_type") else cfg.get("deal_type")
+        deals = cfg.get("offer_values", {}).get(value, [value])
+        if not isinstance(deals,list) or not deals or any(deal not in ('sale','rent') for deal in deals):
             raise WorkerError("invalid_deal_type")
-        records.append(
-            {
-                "property_id": ident,
-                "raw_property_id": raw,
-                "source_url": url,
-                "title": field("title"),
-                "deal_type": deal,
-                "branch_code": branch,
-                "branch_memberships": [branch],
-            }
-        )
+        for deal in deals:
+            records.append({"property_id":ident,"raw_property_id":raw,"source_url":url,
+                            "title":field("title"),"deal_type":deal,"branch_code":branch,"branch_memberships":[branch]})
     terminal = not records and bool(s.select_one(sel["empty"]))
     if not records and not terminal:
         raise WorkerError("unknown_empty")
@@ -795,10 +791,43 @@ def ad_keys(payload):
     }
 
 
+def collection_page_proof(payload):
+    expected = ['sale', 'rent'] if payload.get('source') == '28hse' else BRANCHES
+    pages = payload.get('meta', {}).get('pages')
+    if not isinstance(pages, list) or any(not isinstance(p, dict) or p.get('scope') not in expected for p in pages):
+        return False
+    for scope in expected:
+        scoped = [p for p in pages if p.get('scope') == scope]
+        if not scoped or [p.get('page') for p in scoped] != list(range(1, len(scoped)+1)):
+            return False
+        if scoped[-1].get('status') != 'terminal' or scoped[-1].get('ids') != []:
+            return False
+        seen = set()
+        signatures = set()
+        for page in scoped:
+            ids = page.get('ids')
+            if page.get('details_complete') is not True or not isinstance(ids, list) or any(not isinstance(x,str) for x in ids):
+                return False
+            if page is not scoped[-1]:
+                if page.get('status') != 'listings' or not ids or tuple(sorted(set(ids))) in signatures:
+                    return False
+                signatures.add(tuple(sorted(set(ids))))
+                seen.update(ids)
+        rows = {r.get('property_id') for r in payload.get('listings',[]) if
+                (r.get('deal_type') == scope if payload.get('source') == '28hse' else
+                 scope in r.get('branch_memberships',[r.get('branch_code')]))}
+        rejected = {r.get('property_id') for r in payload.get('meta',{}).get('rejected_records',[]) if r.get('scope') == scope}
+        if seen != rows | rejected:
+            return False
+    return True
+
+
 def gate(payload, baseline):
     reasons = []
     m = payload["meta"]
     count = len(ad_keys(payload))
+    if payload.get("source") == "propertyhk" and (not collection_page_proof(payload) or m.get("worker_rejected_count",0)):
+        reasons.append("incomplete_branch_evidence")
     if not m.get("crawl_complete") or m.get("pages_failed", 0):
         reasons.append("incomplete_crawl")
     if not count:

@@ -13,14 +13,18 @@ import subprocess
 import tarfile
 
 
-def validate_context(scope, ref, branch):
-    if scope != 'agent:540' or not branch or ref != 'refs/heads/' + branch:
+def validate_context(scope, ref, branch, source='28hse'):
+    expected={'28hse':'agent:540','propertyhk':'branches:EPW,EPS,EPT'}
+    if scope != expected.get(source) or not branch or ref != 'refs/heads/' + branch:
         raise ValueError('Daily collection requires agent:540 and the approved branch')
 
 
 def validate_request(data):
-    if data.get('source') != '28hse' or data.get('meta', {}).get('scope_id') != 'agent:540' or data.get('meta', {}).get('parser_version') != 'python-v2.2':
+    source = data.get('source')
+    expected = {'28hse':('agent:540','python-v2.2'), 'propertyhk':('branches:EPW,EPS,EPT','python-v2.0')}
+    if source not in expected or (data.get('meta',{}).get('scope_id'),data.get('meta',{}).get('parser_version')) != expected[source]:
         raise ValueError('Incompatible source, scope or parser')
+    return source
 
 
 def make_baseline(request, receipt, destination):
@@ -42,7 +46,8 @@ def restore_baseline(bundle, root):
     # Revalidate the stored receipt; never select an arbitrary latest failed request.
     checked = root / 'checked-baseline'
     make_baseline(request, bundle / 'receipt.json', checked)
-    target = root / 'baselines/28hse/agent-540/baseline.json'
+    source=validate_request(json.loads(request.read_bytes()))
+    target = root / ('baselines/28hse/agent-540/baseline.json' if source=='28hse' else 'baselines/propertyhk/branches-EPW-EPS-EPT/baseline.json')
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(checked / 'request.json', target)
 
@@ -75,8 +80,9 @@ def snapshot_stamp(data):
     return datetime.fromisoformat(value.replace('Z', '+00:00')).strftime('%Y%m%dT%H%M%S%fZ')
 
 
-def accepted_parts(name):
-    match = re.fullmatch(r'accepted-(\d{8}T\d{12}Z)-([0-9]+)-([0-9]+)\.tar\.gz', name)
+def accepted_parts(name, source="28hse"):
+    prefix = "accepted" if source=="28hse" else "accepted-propertyhk"
+    match = re.fullmatch(rf'{prefix}-(\d{{8}}T\d{{12}}Z)-([0-9]+)-([0-9]+)\.tar\.gz', name)
     if not match:
         raise ValueError('Unversioned or invalid accepted asset requires operator reconciliation')
     datetime.strptime(match[1], '%Y%m%dT%H%M%S%fZ')
@@ -86,14 +92,19 @@ def accepted_parts(name):
 def accepted_name(request, run_id, attempt):
     data = json.loads(request.read_bytes())
     validate_request(data)
-    name = f'accepted-{snapshot_stamp(data)}-{run_id}-{attempt}.tar.gz'
-    accepted_parts(name)
+    source=data['source']
+    prefix='accepted' if source=='28hse' else 'accepted-propertyhk'
+    name = f'{prefix}-{snapshot_stamp(data)}-{run_id}-{attempt}.tar.gz'
+    accepted_parts(name,source)
     return name
 
 
-def latest_accepted(names):
-    candidates = [(*accepted_parts(name), name) for name in names if name.startswith('accepted-')]
+def latest_accepted(names, source='28hse'):
+    prefix='accepted-' if source=='28hse' else 'accepted-propertyhk-'
+    selected=[n for n in names if n.startswith(prefix) and (source!='28hse' or not n.startswith('accepted-propertyhk-'))]
+    candidates=[(*accepted_parts(name,source),name) for name in selected]
     return max(candidates)[3] if candidates else ''
+
 
 def unpack_baseline(path, destination):
     allowed = {'baseline/request.json': 5 * 1024 * 1024, 'baseline/receipt.json': 1024 * 1024, 'baseline/manifest.json': 4096}
@@ -105,9 +116,11 @@ def unpack_baseline(path, destination):
         for item in files:
             if not item.isfile() or item.size > allowed[item.name]:
                 raise ValueError('Invalid baseline archive type or size')
-        expected_stamp, _, _ = accepted_parts(path.name)
+        source_kind='propertyhk' if path.name.startswith('accepted-propertyhk-') else '28hse'
+        expected_stamp, _, _ = accepted_parts(path.name,source_kind)
         with source.extractfile('baseline/request.json') as content:
-            if snapshot_stamp(json.loads(content.read())) != expected_stamp:
+            data=json.loads(content.read())
+            if validate_request(data)!=source_kind or snapshot_stamp(data) != expected_stamp:
                 raise ValueError('Accepted asset timestamp does not match its snapshot')
         for item in files:
             target = destination / item.name
@@ -152,6 +165,18 @@ def evidence_identity(data):
     return source, meta
 
 
+def source_branch_summaries(data):
+    if data.get('source') != 'propertyhk': return {}
+    result={}
+    for branch in ('EPW','EPS','EPT'):
+        pages=[p for p in data.get('meta',{}).get('pages',[]) if p.get('scope')==branch]
+        result[branch]={'pagesExpected':None,'pagesRead':len(pages),
+                       'terminalVerified':bool(pages and pages[-1].get('status')=='terminal'),
+                       'observedCount':len(set(i for p in pages for i in p.get('ids',[]))),
+                       'failedCount':sum(p.get('status') not in ('listings','terminal') for p in pages)}
+    return result
+
+
 def freeze_manifest(request, raw, destination, *, git_sha, gate, branch_summaries=None):
     if Path(destination).exists(): raise ValueError('evidence_manifest_immutable')
     request_proof = file_evidence(request, 5 * 1024 * 1024)
@@ -159,8 +184,11 @@ def freeze_manifest(request, raw, destination, *, git_sha, gate, branch_summarie
     data = json.loads(Path(request).read_bytes())
     source, meta = evidence_identity(data)
     if not isinstance(gate, dict) or gate.get('allowed') is not True or gate.get('full') is not True: raise ValueError('collection_not_full')
+    if source=='propertyhk':
+        from scraping.worker import collection_page_proof
+        if not collection_page_proof(data) or meta.get('eligible_for_absence') is not False or set(meta.get('completed_branches',[])) != {'EPW','EPS','EPT'}: raise ValueError('collection_not_full')
     if not isinstance(git_sha, str) or not re.fullmatch(r'[0-9a-f]{40}', git_sha): raise ValueError('evidence_git_sha_invalid')
-    manifest = {'version': 1, 'runId': meta['run_id'], 'source': source, 'scopeId': meta['scope_id'], 'collectedAt': data['scraped_at'], 'parserVersion': meta['parser_version'], 'policyVersion': meta['policy_version'], 'gitSha': git_sha, 'request': request_proof, 'raw': raw_proof, 'gate': {'allowed': True, 'full': True, 'reasons': gate.get('reasons', [])}, 'branchSummaries': branch_summaries or {}}
+    manifest = {'version': 1, 'runId': meta['run_id'], 'source': source, 'scopeId': meta['scope_id'], 'collectedAt': data['scraped_at'], 'parserVersion': meta['parser_version'], 'policyVersion': meta['policy_version'], 'gitSha': git_sha, 'request': request_proof, 'raw': raw_proof, 'gate': {'allowed': True, 'full': True, 'reasons': gate.get('reasons', [])}, 'branchSummaries': branch_summaries if branch_summaries is not None else source_branch_summaries(data)}
     atomic_json(destination, manifest)
     return manifest
 
@@ -183,8 +211,12 @@ def verify_manifest(path, root, *, source=None, scope=None):
     pairs = {'source': request_source, 'scopeId': meta['scope_id'], 'runId': meta['run_id'], 'collectedAt': data['scraped_at'], 'parserVersion': meta['parser_version'], 'policyVersion': meta['policy_version']}
     if any(manifest.get(key) != value for key, value in pairs.items()) or (source and request_source != source) or (scope and meta['scope_id'] != scope): raise ValueError('evidence_identity_invalid')
     if not re.fullmatch(r'[0-9a-f]{40}', manifest.get('gitSha', '')): raise ValueError('evidence_git_sha_invalid')
-    if meta.get('crawl_complete') is not True or meta.get('pages_failed') != 0 or meta.get('worker_rejected_count') != 0 or meta.get('eligible_for_absence') is not True: raise ValueError('collection_not_full')
-    if request_source == 'propertyhk' and set(meta.get('completed_branches', [])) != {'EPW','EPS','EPT'}: raise ValueError('collection_not_full')
+    if meta.get('crawl_complete') is not True or meta.get('pages_failed') != 0 or meta.get('worker_rejected_count') != 0: raise ValueError('collection_not_full')
+    if request_source == 'propertyhk':
+        from scraping.worker import collection_page_proof
+        if set(meta.get('completed_branches', [])) != {'EPW','EPS','EPT'} or not collection_page_proof(data) or meta.get('eligible_for_absence') is not False: raise ValueError('collection_not_full')
+    elif meta.get('eligible_for_absence') is not True: raise ValueError('collection_not_full')
+    if manifest.get('branchSummaries') != source_branch_summaries(data): raise ValueError('branch_summary_mismatch')
     return manifest
 
 
@@ -274,6 +306,7 @@ def main():
     parser.add_argument('--receipt', type=Path)
     parser.add_argument('--run-id')
     parser.add_argument('--attempt')
+    parser.add_argument('--source',choices=['28hse','propertyhk'],default='28hse')
     parser.add_argument('--scope', default='agent:540')
     parser.add_argument('--ref', default='')
     parser.add_argument('--branch', default='')
@@ -292,16 +325,16 @@ def main():
     elif args.command == 'private': verify_private_destination(json.loads(args.request.read_bytes()))
     elif args.command == 'authority': verify_receipt_authority(json.loads(args.request.read_bytes()),json.loads(args.receipt.read_bytes()),json.loads(args.authority.read_bytes()),canonical_hash=args.canonical_hash)
     elif args.command == 'validate':
-        validate_context(args.scope, args.ref, args.branch)
+        validate_context(args.scope, args.ref, args.branch, args.source)
         if args.request: validate_request(json.loads(args.request.read_bytes()))
     elif args.command == 'name': print(accepted_name(args.request, args.run_id, args.attempt))
     elif args.command == 'unpack': unpack_baseline(args.request, args.destination)
-    elif args.command == 'latest': print(latest_accepted([a['name'] for a in json.loads(args.request.read_bytes())['assets']]))
+    elif args.command == 'latest': print(latest_accepted([a['name'] for a in json.loads(args.request.read_bytes())['assets']],args.source))
     elif args.command == 'archive': archive(args.root, args.destination)
     elif args.command == 'baseline': make_baseline(args.request, args.receipt, args.destination)
     elif args.command == 'restore': restore_baseline(args.destination, args.root)
     else:
-        paths = list(args.root.glob('snapshots/28hse/**/request.json'))
+        paths = list(args.root.glob('snapshots/'+args.source+'/**/request.json'))
         if len(paths) != 1: raise ValueError('Expected exactly one newly collected request')
         print(paths[0].as_posix())
 

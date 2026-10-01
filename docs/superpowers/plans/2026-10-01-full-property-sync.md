@@ -217,12 +217,12 @@
 **Consumes:** T6實證輸入。**Produces:** source=propertyhk、scope=branches:EPW,EPS,EPT 的frozen完整request及branch summaries。
 
 - [ ] 先從合法取得的真實sale／rent／dual-offer／無盤／終頁／已撤盤HTML或feed做去個資fixtures；synthetic tests標明用途，不能替代live證明。
-- [ ] 加失敗測試：EPS漏第一頁、EPT第二頁403、EPW重複分頁、缺牌照、generic directory、fake empty、ID跨分行碰撞、不同deal同ID、detail少一個、跌幅超過30%。全部不得成為full或absence eligible。
+- [x] 加失敗測試：EPS漏第一頁、EPT第二頁403、EPW重複分頁、缺牌照、generic directory、fake empty、ID跨分行碰撞、不同deal同ID、detail少一個、跌幅超過30%。全部不得成為full或absence eligible。
 - [ ] source ID global/branch用供應商contract或跨分行樣本驗證；同一ID出現在三分行若有欄位衝突要保留branch provenance並進review，不用last-write-wins。
 - [ ] 解析金額／萬／租金／呎價分開、面積單位、公司盤號、樓層與exact unit、來源更新時間、圖片及聯絡人；未知值null，不猜單位／成交日期。dual-offer產生獨立sale/rent keys。
-- [ ] 逐分行從第一頁到已驗證終頁；保留獨立page/count結果。全部三分行完成才合成full；任何一行blocked，本輪不提交業務寫入，不推global baseline。
-- [ ] Generalize T1 evidence selection、latest／restore／baseline paths，按source+scope+policy+parser隔離；不能把28Hse的baseline灌入Property.hk。允許儲存分行checkpoint，不建立另一套canonical baseline語義。
-- [ ] Property.hk rate limit沿provider規則；預設慢速單request、最多既有3次可重試；401/403與challenge不可暴力重試。源資料消失不憑HTTP404單點自動下架。
+- [x] 逐分行從第一頁到已驗證終頁；保留獨立page/count結果。全部三分行完成才合成full；任何一行blocked，本輪不提交業務寫入，不推global baseline。
+- [x] Generalize T1 evidence selection、latest／restore／baseline paths，按source+scope+policy+parser隔離；不能把28Hse的baseline灌入Property.hk。允許儲存分行checkpoint，不建立另一套canonical baseline語義。
+- [x] Property.hk rate limit沿provider規則；預設慢速單request、最多既有3次可重試；401/403與challenge不可暴力重試。源資料消失不憑HTTP404單點自動下架。
 - [ ] 跑new pytest、ingestion contract／gate suites；用真實三分行fresh dry-run驗完整性及count。拿不到live資料時此task live gate保持BLOCKED；提交可验证部分。
 
 ## T8. Property.hk ingestion、跨來源去重及發佈

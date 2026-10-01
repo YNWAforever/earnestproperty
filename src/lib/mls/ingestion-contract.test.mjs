@@ -1,3 +1,4 @@
+import { batch as sourceBatch } from "./ingestion-test-fixtures.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { exactUnitIdentity } from "./unit-identity.mjs";
@@ -262,4 +263,32 @@ test("differing lifecycle duplicate IDs conflict and negotiable amounts remain n
   const record = decodeSnapshot(batch([row("123", { price: null })])).records[0];
   assert.equal(record.fields.price, null);
   assert.equal(record.offerValid, false);
+});
+test("Property.hk rejected detail is not permission for a partial business apply", () => {
+  const r = { ...row("P1"), source_url: "https://www.property.hk/example/P1", branch_code: "EPW" };
+  const b = sourceBatch([r], undefined, "propertyhk");
+  b.meta.pages[0].ids.push("missing");
+  b.meta.worker_rejected_count = 1;
+  b.meta.rejected_records = [{ scope: "EPW", property_id: "missing", reason: "invalid_record" }];
+  const d = decodeSnapshot(b, { idScope: "global", verifySourceUrl: () => true });
+  assert.equal(d.source, "propertyhk");
+  assert.equal(d.records.length, 1);
+  const g = evaluateSnapshotGate(d, null);
+  assert.equal(g.allowed, false);
+  assert.equal(g.full, false);
+  assert.equal(g.inferAbsence, false);
+});
+test("one Property.hk branch collapse cannot hide behind stable merged inventory", () => {
+  const r = {
+    ...row("P1"),
+    source_url: "https://www.property.hk/example/P1",
+    branch_code: "EPW",
+    branch_memberships: ["EPW", "EPT"],
+  };
+  const b = sourceBatch([r], undefined, "propertyhk");
+  const d = decodeSnapshot(b, { idScope: "global", verifySourceUrl: () => true });
+  assert.equal(d.records.length, 1);
+  const g = evaluateSnapshotGate(d, { fullCount: 1, branchCounts: { EPW: 1, EPS: 1, EPT: 1 } });
+  assert.equal(g.allowed, false);
+  assert.ok(g.reasons.includes("branch_count_drop_EPS"));
 });

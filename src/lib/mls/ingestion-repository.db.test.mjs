@@ -545,12 +545,17 @@ test(
           const rows = [hk("hk1", "01"), hk("hk2", "01"), hk("hk3", "10"), hk("hk4", "20")];
           rows[3].source_url = "https://www.property.hk/fixture/EPW/wrong-id";
           rows[3].title = "Unverified overwrite";
-          const result = await ingestSnapshot(
-            batch(rows, "2026-09-07T00:21:00Z", "propertyhk"),
-            options,
+          const receiptCount = (await q("SELECT count(*)::int n FROM mls_ingestion_receipts"))[0].n;
+          await assert.rejects(
+            ingestSnapshot(batch(rows, "2026-09-07T00:21:00Z", "propertyhk"), options),
+            (e) =>
+              e.code === "incomplete_snapshot" &&
+              e.details.reasons.includes("incomplete_branch_details"),
           );
-          assert.equal(result.status, "partial_success");
-          assert.equal(result.summary.rejected_count, 1);
+          assert.equal(
+            (await q("SELECT count(*)::int n FROM mls_ingestion_receipts"))[0].n,
+            receiptCount,
+          );
           assert.deepEqual(
             (
               await q("SELECT full_receipt_id FROM mls_ingestion_scopes WHERE source='propertyhk'")

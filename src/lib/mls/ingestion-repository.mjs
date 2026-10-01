@@ -145,7 +145,7 @@ export async function applyIngestion(client, payload, options = {}) {
     }
     const scope = (
       await q(
-        "SELECT s.*,r.parser_version,r.full_snapshot FROM mls_ingestion_scopes s LEFT JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id WHERE s.source=$1 AND s.scope_id=$2 AND s.policy_version=$3",
+        "SELECT s.*,r.parser_version,r.full_snapshot,r.run_id AS receipt_run_id FROM mls_ingestion_scopes s LEFT JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id WHERE s.source=$1 AND s.scope_id=$2 AND s.policy_version=$3",
         [batch.source, batch.scopeId, POLICY],
       )
     )[0];
@@ -168,6 +168,26 @@ export async function applyIngestion(client, payload, options = {}) {
           applied: true,
         }
       : null;
+    if (baseline && batch.source === "propertyhk") {
+      // Reconstruct from immutable observations belonging to the accepted full
+      // receipt, never from the evolving current source-state table.
+      const counts = await q(
+        `SELECT b.branch,count(DISTINCT o.external_listing_id)::int AS n
+        FROM listing_source_observations o CROSS JOIN LATERAL (
+          SELECT value AS branch FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(o.payload->'branches')='array' THEN o.payload->'branches' ELSE '[]'::jsonb END)
+          UNION SELECT value FROM jsonb_array_elements_text(CASE WHEN jsonb_typeof(o.payload#>'{raw,branch_memberships}')='array' THEN o.payload#>'{raw,branch_memberships}' ELSE '[]'::jsonb END)
+          UNION SELECT value->>'branch' FROM jsonb_array_elements(CASE WHEN jsonb_typeof(o.payload->'sourceOccurrences')='array' THEN o.payload->'sourceOccurrences' ELSE '[]'::jsonb END)
+          UNION SELECT o.payload#>>'{raw,branch_code}'
+        ) b WHERE o.run_id=$1 AND o.source='propertyhk' AND b.branch IN ('EPW','EPS','EPT') GROUP BY b.branch`,
+        [scope.receipt_run_id],
+      );
+      baseline.branchCounts = {
+        EPW: 0,
+        EPS: 0,
+        EPT: 0,
+        ...Object.fromEntries(counts.map((r) => [r.branch, r.n])),
+      };
+    }
     const gate = evaluateSnapshotGate(batch, baseline, {
       absenceEnabled: policy.config.absence_enabled === true,
     });
@@ -330,6 +350,7 @@ export async function applyIngestion(client, payload, options = {}) {
             sourceStatusReason: record.sourceStatusReason,
             raw: record.raw,
             sourceOccurrences: record.sourceOccurrences,
+            branches: record.branches,
             identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             publicationReasons: record.publicationReasons,
             holdProjection: relation.holdProjection,
