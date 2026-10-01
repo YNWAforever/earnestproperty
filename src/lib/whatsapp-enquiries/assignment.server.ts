@@ -6,7 +6,11 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { queryRows, transactionRows } from "../neon/db.server.ts";
 import type { StaffAccess } from "../neon/auth.server";
-import { classifyAssignmentExecution, selectAssignment } from "./assignment-policy.ts";
+import {
+  classifyAssignmentExecution,
+  selectAssignment,
+  selectNoLinkAssignment,
+} from "./assignment-policy.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaultPorts: Ports = { query: queryRows, transaction: transactionRows };
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
@@ -51,13 +55,13 @@ export async function requestConversationAssignment(
     },
     {
       statement: `SELECT w.pending_assignment_id,w.assignment_version,w.assigned_agent_id FROM whatsapp_conversations w
-WHERE w.id=$1::uuid AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$2::uuid AND s.active AND r.role IN ('admin','manager'))
+WHERE w.id=$1::uuid AND wa_can_read_conversation($2::uuid,w.id) AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$2::uuid AND s.active AND r.role IN ('admin','manager'))
 FOR UPDATE OF w`,
       params: [input.conversationId, actor.staffId],
     },
     {
       statement: `UPDATE whatsapp_conversations w SET assigned_agent_id=$2::uuid,updated_at=now()
-WHERE w.id=$1::uuid AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$3::uuid AND s.active AND r.role IN ('admin','manager'))
+WHERE w.id=$1::uuid AND wa_can_read_conversation($3::uuid,w.id) AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=$3::uuid AND s.active AND r.role IN ('admin','manager'))
 AND w.assigned_agent_id IS DISTINCT FROM $2::uuid
 AND NOT EXISTS(SELECT 1 FROM whatsapp_assignment_requests r WHERE r.id=w.pending_assignment_id AND r.desired_staff_id IS NOT DISTINCT FROM $2::uuid AND r.state IN ('pending','executing','unknown'))
 RETURNING pending_assignment_id,assignment_version,assigned_agent_id`,
@@ -100,10 +104,12 @@ export async function readAssignmentContext(
   if (!authorized) throw new Response("Forbidden", { status: 403 });
   const [row] = await queryRows(
     `SELECT w.assignment_version,w.assignment_lock,w.confirmed_staff_id,w.assigned_agent_id,
+ (SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=w.confirmed_staff_id) AS confirmed_staff_name,
  r.id AS request_id,r.desired_staff_id,r.state AS assignment_state,r.evidence,
- (SELECT jsonb_agg(jsonb_build_object('id',i.id,'property',i.public_listing_no,'source',i.placement_source,'requestedStaffId',i.requested_staff_id,'dealType',(SELECT p.deal_type FROM properties p WHERE p.id=i.property_id),'firstResponseAt',i.first_human_response_at,'dueAt',i.response_due_at,'review',i.association_review)) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND i.status NOT IN ('closed','resolved','spam')) AS enquiries
- FROM whatsapp_conversations w LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE w.id=$1::uuid AND ($2::boolean OR w.assigned_agent_id=$3::uuid)`,
-    [conversationId, global, actor.staffId],
+ (SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=r.desired_staff_id) AS desired_staff_name,
+ (SELECT jsonb_agg(jsonb_build_object('id',i.id,'property',i.public_listing_no,'source',i.placement_source,'requestedStaffId',i.requested_staff_id,'requestedStaffName',(SELECT COALESCE(NULLIF(s.name_zh,''),NULLIF(s.name_en,'')) FROM staff_users s WHERE s.id=i.requested_staff_id),'dealType',(SELECT p.deal_type FROM properties p WHERE p.id=i.property_id),'firstResponseAt',i.first_human_response_at,'dueAt',i.response_due_at,'review',i.association_review)) FROM inquiries i WHERE i.conversation_id=w.id AND i.source='whatsapp' AND wa_can_read_enquiry($2::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam')) AS enquiries
+ FROM whatsapp_conversations w LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE w.id=$1::uuid AND wa_can_read_conversation($2::uuid,w.id)`,
+    [conversationId, actor.staffId],
   );
   if (!row) {
     // Global staff may distinguish a missing conversation from an inaccessible
@@ -117,8 +123,15 @@ export async function readAssignmentContext(
     throw new Response("Forbidden", { status: 403 });
   }
   const proposal = await proposedConversationAssignment(conversationId, ports);
+  const [proposedStaff] = proposal.staffId
+    ? await queryRows<{ name: string | null }>(
+        `SELECT COALESCE(NULLIF(name_zh,''),NULLIF(name_en,'')) AS name FROM staff_users WHERE id=$1::uuid`,
+        [proposal.staffId],
+      )
+    : [];
   return {
     ...row,
+    proposedStaffName: proposedStaff?.name ?? null,
     assignment_version: Number(row.assignment_version),
     proposedStaffId: proposal.staffId,
     proposalReason: proposal.reason,
@@ -222,13 +235,25 @@ export async function proposedConversationAssignment(
 ) {
   const { query: queryRows, transaction: transactionRows } = ports;
   const rows = await queryRows(
-    `SELECT w.assigned_agent_id,w.assignment_lock,i.requested_staff_id,p.agent_id AS offer_owner_id,m.staff_id
- FROM whatsapp_conversations w LEFT JOIN LATERAL(SELECT requested_staff_id,property_id FROM inquiries WHERE conversation_id=w.id ORDER BY created_at DESC LIMIT 1)i ON true
+    `SELECT w.assigned_agent_id,w.assignment_lock,i.requested_staff_id,i.enquiry_owner_staff_id,i.association_review,i.attribution_method,i.link_open_id,p.agent_id AS offer_owner_id,m.staff_id
+ FROM whatsapp_conversations w LEFT JOIN LATERAL(SELECT requested_staff_id,property_id,enquiry_owner_staff_id,association_review,attribution_method,link_open_id FROM inquiries WHERE conversation_id=w.id ORDER BY created_at DESC LIMIT 1)i ON true
  LEFT JOIN properties p ON p.id=i.property_id LEFT JOIN whatsapp_staff_channels m ON m.channel_id=w.channel_id AND m.eligible AND m.retired_at IS NULL AND EXISTS(SELECT 1 FROM staff_users s WHERE s.id=m.staff_id AND s.active) WHERE w.id=$1::uuid`,
     [conversationId],
   );
   const row = rows[0];
   if (!row) return { staffId: null, reason: "routing_exception" };
+  const eligible = new Set(rows.flatMap((r) => (r.staff_id ? [String(r.staff_id)] : [])));
+  if (row.attribution_method === "explicit_customer_statement" && !row.link_open_id)
+    return selectNoLinkAssignment(
+      {
+        associationReview: row.association_review === true,
+        conversationAssigneeId: row.assigned_agent_id ? String(row.assigned_agent_id) : null,
+        requestedStaffId: row.requested_staff_id ? String(row.requested_staff_id) : null,
+        publicationOwnerId: row.offer_owner_id ? String(row.offer_owner_id) : null,
+        enquiryOwnerId: row.enquiry_owner_staff_id ? String(row.enquiry_owner_staff_id) : null,
+      },
+      eligible,
+    );
   return selectAssignment(
     {
       protected: row.assignment_lock === true,
@@ -237,7 +262,7 @@ export async function proposedConversationAssignment(
       requestedStaffId: row.requested_staff_id ? String(row.requested_staff_id) : null,
       offerOwnerId: row.offer_owner_id ? String(row.offer_owner_id) : null,
     },
-    new Set(rows.flatMap((r) => (r.staff_id ? [String(r.staff_id)] : []))),
+    eligible,
   );
 }
 export type AssignmentProvider = {
@@ -398,19 +423,23 @@ export async function readEnquiryQueue(actor: Actor, ports: Ports = defaultPorts
   const { query: queryRows, transaction: transactionRows } = ports;
   await requireActiveManager(actor, queryRows);
   return queryRows<EnquiryQueueDto>(
-    `SELECT i.id,i.conversation_id,i.public_listing_no,i.service_state,i.response_due_at,i.association_review,w.confirmed_staff_id,r.state AS assignment_state FROM inquiries i JOIN whatsapp_conversations w ON w.id=i.conversation_id LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE i.source='whatsapp' AND i.status NOT IN ('closed','resolved','spam') AND (i.first_human_response_at IS NULL OR i.association_review OR r.state IN ('failed','unknown')) ORDER BY i.response_due_at ASC NULLS LAST,i.created_at ASC LIMIT 100`,
+    `SELECT i.id,i.conversation_id,i.public_listing_no,i.service_state,i.response_due_at,i.association_review,w.confirmed_staff_id,r.state AS assignment_state FROM inquiries i JOIN whatsapp_conversations w ON w.id=i.conversation_id LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE i.source='whatsapp' AND wa_can_read_enquiry($1::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam') AND (i.first_human_response_at IS NULL OR i.association_review OR r.state IN ('failed','unknown')) ORDER BY i.response_due_at ASC NULLS LAST,i.created_at ASC LIMIT 100`,
+    [actor.staffId],
   );
 }
 
 export type AssignmentContextDto = {
   proposedStaffId: string | null;
+  proposedStaffName: string | null;
   proposalReason: string;
   assignment_version: number;
   assignment_lock: boolean;
   confirmed_staff_id: string | null;
+  confirmed_staff_name: string | null;
   assigned_agent_id: string | null;
   request_id: string | null;
   desired_staff_id: string | null;
+  desired_staff_name: string | null;
   assignment_state: string | null;
   evidence: Record<string, string | boolean> | null;
   enquiries:
@@ -419,6 +448,7 @@ export type AssignmentContextDto = {
         property: string | null;
         source: string | null;
         requestedStaffId: string | null;
+        requestedStaffName: string | null;
         dealType: string | null;
         firstResponseAt: string | null;
         dueAt: string | null;

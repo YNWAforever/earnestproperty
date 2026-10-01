@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   selectAssignment,
+  selectNoLinkAssignment,
   classifyAssignmentExecution,
   selectResponseEnquiry,
 } from "./assignment-policy.ts";
@@ -59,7 +60,8 @@ test("AT36 bot outbound does not clear qualified waiting enquiry", () => {
     { staffId: "00000000-0000-4000-8000-000000000001", roles: ["admin"] },
     { enquiries: true },
   ).statement;
-  assert.match(sql, /bool_or\(i.first_human_response_at IS NULL\)/);
+  assert.match(sql, /EXISTS\(SELECT 1 FROM inquiries awaiting_i/);
+  assert.match(sql, /awaiting_i.first_human_response_at IS NULL/);
   assert.match(sql, /awaiting_human_response/);
 });
 
@@ -209,4 +211,65 @@ test("same target stays idempotent while pending or unknown and can retry after 
     if (previousWakeFlag === undefined) delete process.env.OPS_EVENT_WAKE_ENABLED;
     else process.env.OPS_EVENT_WAKE_ENABLED = previousWakeFlag;
   }
+});
+
+test("no-link proposal protects S1 thread and reviews conflicting or unverified owners", () => {
+  const eligible = new Set(["S1", "S2"]);
+  assert.deepEqual(
+    selectNoLinkAssignment(
+      {
+        associationReview: true,
+        conversationAssigneeId: "S1",
+        requestedStaffId: "S2",
+        publicationOwnerId: "S2",
+        enquiryOwnerId: "S2",
+      },
+      eligible,
+    ),
+    { staffId: "S1", reason: "existing_coordinator_review" },
+  );
+  assert.deepEqual(
+    selectNoLinkAssignment(
+      {
+        associationReview: true,
+        requestedStaffId: "S2",
+        publicationOwnerId: "S2",
+      },
+      eligible,
+    ),
+    { staffId: null, reason: "no_link_review" },
+  );
+  assert.deepEqual(
+    selectNoLinkAssignment(
+      {
+        associationReview: false,
+        requestedStaffId: "S1",
+        publicationOwnerId: "S2",
+      },
+      eligible,
+    ),
+    { staffId: null, reason: "routing_exception" },
+  );
+  assert.deepEqual(
+    selectNoLinkAssignment(
+      {
+        associationReview: false,
+        requestedStaffId: "S2",
+        publicationOwnerId: "S2",
+      },
+      eligible,
+    ),
+    { staffId: "S2", reason: "verified_no_link_owner" },
+  );
+  assert.deepEqual(
+    selectNoLinkAssignment(
+      {
+        associationReview: false,
+        conversationAssigneeId: "S1",
+        requestedStaffId: "S2",
+      },
+      new Set(["S2"]),
+    ),
+    { staffId: null, reason: "protected_owner_unavailable" },
+  );
 });

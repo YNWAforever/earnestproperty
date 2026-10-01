@@ -1,0 +1,66 @@
+{
+  "environment": "owned-loopback-postgres17-synthetic-actors-provider",
+  "codeSha": "2ed53f61a4fd36b0edb3ac0c9dc9b1ae0df48ff6",
+  "command": "npm.cmd run test:no-link:local-postgres",
+  "exitCode": 0,
+  "nodeVersion": "v24.18.0",
+  "image": "pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0",
+  "migrations": 79,
+  "counts": {
+    "tests": 19,
+    "pass": 19,
+    "fail": 0,
+    "skipped": 0
+  },
+  "checks": [
+    "local staff acknowledgement and help retries keep one audit each",
+    "new outbound request IDs cannot bypass an unresolved conversation",
+    "reservation checks see unknown committed while a different writer waits",
+    "outbound readback is actor-bound scoped readonly and validates input",
+    "a waiting writer must recheck current ownership after the conversation lock",
+    "previously queued different request cannot dispatch behind an unknown send",
+    "signed delivery receipts reconcile unknown intents without another send",
+    "an early signed receipt resolves the later unknown HTTP result",
+    "shadow writes receipt/parser/enquiry evidence with zero effect calls",
+    "second listing keeps its own root, triage and original customer relationship",
+    "missing provider ID retains identical attempts while genuine new IDs remain distinct events",
+    "workflow outage saves raw sample and recovery cannot upgrade old active receipt",
+    "accepted assignment timeout is reconciled without a second irreversible call",
+    "revoked reply consent is rechecked at dispatch with no fake provider send",
+    "contact CAS serializes competing writers and rejects a pointer changed while waiting",
+    "concurrent enquiry corrections have one revision and effective readback preserves original evidence",
+    "campaign with missing saved audience cannot materialize all contacts",
+    "campaign audience deletion before queue cannot create a delivery job",
+    "one local Postgres environment: signed exact sample to confirmed assignment and delivered human reply"
+  ],
+  "newReceiptCases": {
+    "afterUnknown": [
+      "DELIVERED",
+      "READ"
+    ],
+    "earlyAccepted": [
+      "live",
+      "off",
+      "observe"
+    ],
+    "earlyUnknown": [
+      "history",
+      "unsigned",
+      "other-member",
+      "missing-time",
+      "future-time",
+      "missing-id"
+    ],
+    "fakeProviderSendsPerCase": 1,
+    "newJobsFromReceipt": 0
+  },
+  "realAuth": false,
+  "realNeon": false,
+  "realWoztell": false,
+  "productionMutation": false,
+  "limitations": [
+    "HMAC and server modules execute in-process with synthetic trusted actors",
+    "provider responses and delivery receipts are synthetic",
+    "browser evidence is separate and real authenticated browser acceptance remains blocked"
+  ]
+}

@@ -1,0 +1,39 @@
+# T07 delivery receipt reconciliation continuation
+
+**LOCAL_IMPLEMENTATION_VERIFIED / formal VERIFICATION_BLOCKED.** Source/test commit `2ed53f61a4fd36b0edb3ac0c9dc9b1ae0df48ff6`; continues Draft PR [#206](https://github.com/YNWAforever/earnestproperty/pull/206). Single-agent author self-review. No production DB/config/migration/message/deploy/merge. Root user edits and the same-content `bun.lockb` mode change remain untouched.
+
+## Findings, RED and fix
+
+T07/T08/T15; R11–13/WA06; UC01/09/12/13/17. The previous reservation guard correctly blocks unknown sends but exposed a recovery gap: a signed DELIVERED/READ receipt updated the transcript without resolving an already identified unknown intent, so its composer remained reserved. Actual local Postgres RED expected `accepted` but read `unknown` (`receipt-reconciliation-valid-red.log`). A second RED received signed READ before the HTTP outcome supplied its ID; the later uncertain HTTP result still left `unknown` plus its error (`early-receipt-valid-red.log`). The first attempted fixture omitted the enquiry ID required by existing permissions and failed before receipt processing (`receipt-reconciliation-red.log`); that is harness setup, not product RED. The required enquiry scope was restored without relaxing assertions.
+
+`ingestWoztellEvent` now resolves only an already dispatched staff intent from a signed live DELIVERED/READ receipt with exact provider ID, current conversation and transcript channel/member scope, and a valid nonfuture event time at/after dispatch (provider second precision is retained). It does not promote queued/failed/cancelled/service intents, infer delivery from SENT, invent an ID, fetch provider data or enqueue/send anything.
+
+For receipts arriving before HTTP completion, `finishOutboundIntent` reuses the existing minimum verified receipt store. Its proof must be Woztell/live/delivery, match the existing message/conversation channel/member and provider ID, have an actual dispatch start, and fall between dispatch's provider second and receipt arrival. Imported/unsigned delivery-event rows alone cannot prove this. The extra lookup is restricted to uncertain outcomes with a known ID; normal identifiable acceptance keeps its existing path. Existing same-ID locking, atomic transcript adoption and accepted-state preservation remain. A late unknown HTTP write cannot downgrade accepted, DELIVERED or READ.
+
+Ruling: authenticated delivery/read of an already dispatched staff intent can resolve that intent even with new effects off/observe. It records a fact about the existing send and creates no job/activation/enquiry. History/unsigned imports cannot supply this authority. Acceptance, transport delivery/read, staff acknowledgement and human-response evidence remain distinct. The existing delivery trigger, not a new workflow, records eligible staff response evidence once.
+
+## Verification
+
+Windows PowerShell/Node24.18.0; owned pinned loopback pgvector/Postgres17. Actual SQL, migrations, server modules, HMAC verification and multi-connection pool; actor inputs/provider responses are synthetic. No real Auth session, HTTP browser server, Neon branch or Woztell tenant. Exact customer golden and all original17 integration assertions remain.
+
+| Command | Exit / result | Source / evidence |
+| --- | --- | --- |
+| `npm.cmd run test:no-link:local-postgres` | 0; **19/19**, zero skip, all79 migrations | At committed2ed53f6; `.audit/receipt-postgres-committed.log`, committed `2026-10-01-delivery-reconciliation-postgres-results.json`. Original17 plus two receipt-order cases. |
+| `npm.cmd run test:woztell` | 0; **159 Node+8 Bun**, zero Node skip | Final source patch before2ed53f6; `.audit/receipt-woztell-final.log`. Contract/stub layer separate from actual SQL/HMAC above. |
+| `npm.cmd run test:no-link`; `npm.cmd run test:whatsapp-enquiries` | both0; **99 Node/PGlite+9 Bun**, **103 Node**, zero Node skip | `.audit/receipt-no-link-final.log`, `.audit/receipt-enquiry-final.log`. Original parser/access/activation/transport boundaries retained. |
+| `npm.cmd run typecheck`; `npm.cmd run lint`; `npm.cmd run build` | each0; lint0 errors/3 existing warnings | `.audit/receipt-typecheck-final.log`, `.audit/receipt-lint-final.log`, `.audit/receipt-build-final.log`. Generated routeTree has no semantic diff and was restored; diff checks0. |
+| Existing browser evidence | **94/94** at source9b65641, zero skip | Previous source-stamped reservation JSON remains unchanged. This slice changes no UI/client/API fields. Final pushed-head CI/browser checks are read separately in PR206; not true Auth/DB/provider acceptance. |
+
+Actual readback: DELIVERED/READ after unknown resolve the same intent, clear the reservation, retain exact transport status and invoke one fake-provider send despite repeated dispatch/readback/late unknown completion. Concurrent duplicate signed callbacks do not create another send. Wrong sender/channel, absent ID/time, earlier/future time, SENT/FAILED, history and unsigned ingestion remain unknown. Early receipts cover live/off/observe successes and history/unsigned/wrong-member/missing-time/future-time/missing-ID failures. Receipt handling creates zero additional jobs. Accepted cases get one eligible response-evidence row; rejected cases get zero. The pre-existing enquiry's first-response identity/time remains unchanged.
+
+## Schema, compatibility and remaining gates
+
+No migration/manifest/config/dependency/framework/route or activation change in this continuation. All79 migrations remain byte-for-byte unchanged; full-schema application is repeated by the19-case owned local run. Previous79 clean/69-baseline-upgrade/no-op schema proof remains valid at its recorded SHA, not relabelled as a new Neon run.
+
+The upgraded existing minimum receipt store and migration79 reservation guard must precede this app/worker. Require isolated Neon and deployed old/new app/worker/cached-reader tests. In particular exercise early/late signed receipt, unknown with/without identifiable ID, duplicate callback, revoked current reader and the unknown-completion write after receipt. No claim is made that the69-migration baseline lacking the minimum store can run the new finish query. Its failure after a send must retain dispatching/unknown and reconcile; never replay a provider call.
+
+An unknown result without a trustworthy provider ID, or with only untrusted/wrong-scope/missing-time/future proof, still needs existing authoritative provider/worker reconciliation. The readonly UI GET only reads persisted state; it does not contact Woztell. Known resolution permits a fresh deliberate action, not replay of lost per-tab content. No historical receipt/capture is bulk upgraded or reset.
+
+Original18UC/76AC/1,277audit/1,261source retained; **full0/18 UC**, **full0/1,298 actions** (819 BLOCKED_EXTERNAL+479 NOT_TESTED), separate presentation31/1,298. This backend slice adds no rendered action, removes no denominator and changes no full acceptance status. Exact Terence4033349 chain remains in one disposable local Postgres environment with synthetic provider evidence, zero tracking/click/portal/LLM/external network. Daily tracking-link/EPWA work is eliminated in code after authorized one-time channel/MLS/staff connection and release gates.
+
+Real Auth HTTP/roles, isolated Neon locks/readers/latency, signed tenant inbound/current MLS, provider assignment/destinations/consent/window/receipt/readback and approved template evidence remain external. PropertyHK automatic mapping is NOT_READY; other critical journeys remain VERIFICATION_BLOCKED. Rollout: isolated schema/reader proof → shadow → human review → explicitly authorized canary → authorized production. Rollback keeps the minimum store, reservation guard/index, intents/jobs/transcripts/receipts/revisions/audits and reconciliation, restores a compatible app and disables new effects. No drop/reset/replay/blind resend or production action.

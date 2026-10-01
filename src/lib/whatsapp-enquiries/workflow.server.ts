@@ -3,6 +3,7 @@ import { randomUUID, createHash } from "node:crypto";
 import type { NormalizedWoztellEvent } from "../woztell/woztell.server.ts";
 import { classifyWoztellEvent } from "./event-classification.ts";
 import { enquiryMode } from "./contracts.ts";
+import { noLinkCaptureSnapshot, maybePrepareNoLinkFollowup } from "./no-link-rollout.server.ts";
 import { buildEnqueueJobStatement } from "../control-plane/jobs.server.ts";
 import type { TransactionStatement } from "../neon/db.server.ts";
 export async function enquirySchemaAvailable() {
@@ -33,6 +34,7 @@ export function buildLiveEventStatements(
   const active = mode === "active";
   const generation = process.env.EP_WA_ACTIVATION_ID;
   const validGeneration = generation && /^[0-9a-f-]{36}$/i.test(generation) ? generation : null;
+  const noLinkCapture = noLinkCaptureSnapshot(mode, event.channelId, validGeneration);
   const job = buildEnqueueJobStatement(
     {
       jobType: "woztell.enquiry.process",
@@ -66,12 +68,18 @@ export function buildLiveEventStatements(
         classified.occurredAt,
         now.toISOString(),
         classified.timing,
-        event.legacyExternalMessageId === null ? "provider_id" : "synthetic_ambiguous",
+        event.identityCertainty === "ambiguous"
+          ? "synthetic_ambiguous"
+          : event.identityCertainty === "provider" || event.legacyExternalMessageId === null
+            ? "provider_id"
+            : "synthetic_ambiguous",
         JSON.stringify({
           ...classified.evidence,
           staffRoutingEligible: active && process.env.EP_WA_ROUTING_ENABLED === "true",
           staffNotificationsEligible:
             active && process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
+          noLinkEffectsEligible: noLinkCapture.eligible,
+          noLinkCanaryStaffIds: noLinkCapture.staffIds,
         }),
         event.legacyExternalMessageId,
         event.text,
@@ -114,19 +122,29 @@ export async function observeEnquiryEvent(
   const mode = enquiryMode();
   await checkpoint();
   const query = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  let portal = { recognized: false, handled: false };
   if (mode === "observe" || mode === "active") {
+    const { associatePortalEnquiry } = await import("./enquiry-association.server.ts");
+    portal = await associatePortalEnquiry(eventId, query);
+    if (mode === "active" && portal.handled) await maybePrepareNoLinkFollowup(eventId, mode, query);
     const { observeEpisode } = await import("./episodes.server.ts");
-    await observeEpisode(eventId, query);
+    if (!portal.handled) await observeEpisode(eventId, query);
     const { observeQualifiedHumanResponse } = await import("./assignment.server.ts");
     await observeQualifiedHumanResponse(eventId, query);
   }
-  if (mode === "active") {
+  if (mode === "active" && !portal.recognized) {
     const { scheduleServiceForEvent, processServiceAnswer } =
       await import("./service-workflow.server.ts");
     const { transactionRows } = await import("../neon/db.server.ts");
     const servicePorts = { query, transaction: transactionRows };
     await processServiceAnswer(eventId, servicePorts);
     await scheduleServiceForEvent(eventId, servicePorts);
+    await query(
+      "UPDATE whatsapp_enquiry_events SET processing_state='processed',processed_at=now() WHERE id=$1::uuid AND capture_mode='active' AND processing_state='pending'",
+      [eventId],
+    );
+  }
+  if (mode === "active" && portal.recognized) {
     await query(
       "UPDATE whatsapp_enquiry_events SET processing_state='processed',processed_at=now() WHERE id=$1::uuid AND capture_mode='active' AND processing_state='pending'",
       [eventId],

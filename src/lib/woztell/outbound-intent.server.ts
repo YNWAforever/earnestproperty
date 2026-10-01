@@ -66,6 +66,59 @@ export function hashOutboundIntent(input: OutboundIntentInput) {
     .digest("hex");
 }
 
+/** Read-only recovery for the same actor's request. Never queues or dispatches. */
+export async function readOutboundIntent(
+  input: { requestId: string; conversationId: string },
+  staffId: string,
+  scope: string | null,
+  injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
+) {
+  if (!input || !uuid.test(input.requestId) || !uuid.test(input.conversationId)) throw invalid();
+  const queryRows = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  const rows = await queryRows<{ id: string; kind: string; state: OutboundState }>(
+    `SELECT i.id,i.kind,i.state FROM whatsapp_outbound_intents i
+     JOIN whatsapp_conversations wc ON wc.id=i.conversation_id
+     JOIN staff_users s ON s.id=i.actor_staff_id
+     WHERE i.id=$1::uuid AND i.conversation_id=$2::uuid AND i.actor_staff_id=$3::uuid
+       AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
+       AND ($4::uuid IS NULL OR wc.assigned_agent_id=$4::uuid)
+       AND wa_can_read_conversation($3::uuid,wc.id)
+       AND (i.enquiry_id IS NULL OR wa_can_reply_enquiry($3::uuid,i.enquiry_id))`,
+    [input.requestId, input.conversationId, staffId, scope],
+  );
+  return rows[0] ?? null;
+}
+
+/** Current unresolved conversation state, including after tab/storage loss. No payload/history is returned. */
+export async function readOutboundReservation(
+  input: { conversationId: string },
+  staffId: string,
+  scope: string | null,
+  injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
+) {
+  if (!input || !uuid.test(input.conversationId)) throw invalid();
+  const queryRows = injectedQuery ?? (await import("../neon/db.server.ts")).queryRows;
+  const rows = await queryRows<{
+    blocked: boolean;
+    intent: { id: string; kind: string; state: OutboundState } | null;
+  }>(
+    `SELECT EXISTS(SELECT 1 FROM whatsapp_outbound_intents i
+       WHERE i.conversation_id=wc.id AND i.state IN ('dispatching','unknown')) AS blocked,
+     (SELECT jsonb_build_object('id',i.id,'kind',i.kind,'state',i.state)
+       FROM whatsapp_outbound_intents i WHERE i.conversation_id=wc.id
+         AND i.state IN ('dispatching','unknown') AND i.actor_staff_id=$2::uuid
+         AND (i.enquiry_id IS NULL OR wa_can_reply_enquiry($2::uuid,i.enquiry_id))
+       ORDER BY i.created_at,i.id LIMIT 1) AS intent
+     FROM whatsapp_conversations wc JOIN staff_users s ON s.id=$2::uuid
+     WHERE wc.id=$1::uuid AND s.active
+       AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
+       AND ($3::uuid IS NULL OR wc.assigned_agent_id=$3::uuid)
+       AND wa_can_read_conversation($2::uuid,wc.id)`,
+    [input.conversationId, staffId, scope],
+  );
+  return rows[0] ?? null;
+}
+
 /** Authorization and all durable records are committed by one statement. A request ID is global and actor-bound. */
 export async function enqueueOutboundIntent(
   input: OutboundIntentInput,
@@ -78,6 +131,15 @@ export async function enqueueOutboundIntent(
     `WITH authorized AS (
     SELECT wc.* FROM whatsapp_conversations wc WHERE wc.id=$2::uuid
     AND ($7::uuid IS NULL OR wc.assigned_agent_id=$7::uuid)
+    AND wa_can_read_conversation($3::uuid,wc.id)
+    AND ($9::uuid IS NOT NULL OR NOT EXISTS(
+      SELECT 1 FROM inquiries q WHERE q.conversation_id=wc.id AND q.source='whatsapp'
+        AND q.status NOT IN ('closed','resolved','spam')
+        AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL))
+    AND ($9::uuid IS NULL OR NOT EXISTS(
+      SELECT 1 FROM inquiries q WHERE q.id=$9::uuid AND q.conversation_id=wc.id
+        AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL
+        AND NOT wa_can_reply_enquiry($3::uuid,q.id)))
   ), intent AS (
     INSERT INTO whatsapp_outbound_intents (id,conversation_id,actor_staff_id,kind,payload,payload_hash,message_id)
     SELECT $1::uuid,id,$3::uuid,$4,$5::jsonb,$6,$8::uuid FROM authorized
@@ -108,6 +170,7 @@ export async function enqueueOutboundIntent(
       hashOutboundIntent(input),
       scope,
       randomUUID(),
+      input.enquiryId ?? null,
     ],
   );
   const row = rows[0];
@@ -116,7 +179,7 @@ export async function enqueueOutboundIntent(
   return { id: row.id, state: row.state };
 }
 
-type Reservation = { memberId: string; response: Record<string, unknown>[] };
+type Reservation = { channelId: string; memberId: string; response: Record<string, unknown>[] };
 type Outcome = {
   state: OutboundState;
   externalMessageId: string | null;
@@ -204,9 +267,14 @@ async function beginOutboundDispatch(
     { statement: `SELECT id FROM ops_jobs WHERE id=$1::uuid FOR UPDATE`, params: [job.jobId] },
     {
       statement: `WITH eligibility AS (
-      SELECT i.id,wc.woztell_member_id,t.element_name,t.language_code,t.components,i.kind,i.payload,
+      SELECT i.id,wc.channel_id,wc.woztell_member_id,t.element_name,t.language_code,t.components,i.kind,i.payload,
       (c.opted_out_whatsapp=false AND NULLIF(wc.woztell_member_id,'') IS NOT NULL
        AND (i.kind='text' AND wc.last_inbound_at >= now()-interval '24 hours' OR i.kind='template' AND t.status LIKE 'active%')
+       AND wa_can_read_conversation(i.actor_staff_id,wc.id)
+       AND (i.enquiry_id IS NULL OR NOT EXISTS(
+         SELECT 1 FROM inquiries q WHERE q.id=i.enquiry_id
+           AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL
+           AND NOT wa_can_reply_enquiry(i.actor_staff_id,q.id)))
        AND EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id WHERE s.id=i.actor_staff_id AND s.active=true AND (r.role IN ('admin','manager') OR r.role='agent' AND wc.assigned_agent_id=s.id))
        AND j.status='running' AND j.lease_owner=$3 AND j.lease_expires_at>clock_timestamp()) AS allowed
       FROM whatsapp_outbound_intents i JOIN whatsapp_conversations wc ON wc.id=i.conversation_id
@@ -217,7 +285,7 @@ async function beginOutboundDispatch(
       dispatch_started_at=COALESCE(i.dispatch_started_at,CASE WHEN e.allowed THEN clock_timestamp() END),updated_at=now()
       FROM eligibility e WHERE i.id=e.id AND i.state IN ('queued','dispatching') RETURNING i.*,e.element_name,e.language_code,e.components
     ), transcript AS (
-      UPDATE whatsapp_messages m SET status=r.state,
+      UPDATE whatsapp_messages m SET status=r.state,error=r.error,
       payload=CASE WHEN r.state='dispatching' THEN jsonb_build_object('dispatchResponse',
         CASE WHEN r.kind='text' THEN jsonb_build_object('type','TEXT','text',r.payload->>'text')
         ELSE jsonb_build_object('type','TEMPLATE','elementName',r.element_name,'languageCode',r.language_code,'components',r.components) END)
@@ -230,6 +298,7 @@ async function beginOutboundDispatch(
   if (!row) return null;
   const payload = row.payload as { text: string };
   return {
+    channelId: String(row.channel_id),
     memberId: String(row.woztell_member_id),
     response:
       row.kind === "text"
@@ -262,9 +331,27 @@ export async function finishOutboundIntent(
       statement: `WITH existing AS (
       SELECT m.id FROM whatsapp_messages m JOIN whatsapp_outbound_intents i ON i.id=$1::uuid
       WHERE m.external_message_id=$3 AND m.conversation_id=i.conversation_id AND m.direction='outbound'
+    ), trusted_receipt AS (
+      -- A receipt may arrive before this HTTP outcome supplies the external ID.
+      -- Only the existing minimum store proves verified live transport; imported
+      -- or unsigned delivery-event rows alone cannot resolve an unknown intent.
+      SELECT i.id FROM whatsapp_outbound_intents i
+      JOIN whatsapp_messages m ON m.id=i.message_id AND m.direction='outbound'
+      JOIN whatsapp_conversations wc ON wc.id=i.conversation_id AND m.conversation_id=wc.id
+      JOIN whatsapp_inbound_receipts r ON r.provider_message_id=COALESCE($3,i.external_message_id)
+        AND r.channel_id=m.channel_id AND r.member_id=m.woztell_member_id
+      WHERE i.id=$1::uuid AND $2<>'accepted' AND COALESCE($3,i.external_message_id) IS NOT NULL
+        AND i.actor_type='staff' AND i.actor_staff_id IS NOT NULL
+        AND i.dispatch_started_at IS NOT NULL AND i.state IN ('dispatching','unknown')
+        AND wc.channel_id=m.channel_id AND wc.woztell_member_id=m.woztell_member_id
+        AND r.provider='woztell' AND r.origin='live_webhook' AND r.event_kind='delivery_receipt'
+        AND r.normalized_event->>'messageType' IN ('DELIVERED','READ')
+        AND r.normalized_event->>'legacyExternalMessageId' IS NULL
+        AND r.provider_occurred_at>=date_trunc('second',i.dispatch_started_at)
+        AND r.provider_occurred_at<=r.received_at
     ), reconciled AS (
-      UPDATE whatsapp_outbound_intents i SET state=CASE WHEN i.state='accepted' THEN 'accepted' ELSE $2 END,external_message_id=COALESCE($3,i.external_message_id),
-      message_id=COALESCE((SELECT id FROM existing),i.message_id),error=CASE WHEN i.state='accepted' THEN NULL ELSE $4 END,updated_at=now()
+      UPDATE whatsapp_outbound_intents i SET state=CASE WHEN i.state='accepted' OR EXISTS(SELECT 1 FROM trusted_receipt e WHERE e.id=i.id) THEN 'accepted' ELSE $2 END,external_message_id=COALESCE($3,i.external_message_id),
+      message_id=COALESCE((SELECT id FROM existing),i.message_id),error=CASE WHEN i.state='accepted' OR EXISTS(SELECT 1 FROM trusted_receipt e WHERE e.id=i.id) THEN NULL ELSE $4 END,updated_at=now()
       WHERE i.id=$1::uuid AND i.state IN ('dispatching','unknown','accepted') RETURNING i.*
     ), removed AS (
       DELETE FROM whatsapp_messages m USING reconciled i WHERE m.id<>i.message_id AND m.id=(SELECT message_id FROM whatsapp_outbound_intents WHERE id=i.id)

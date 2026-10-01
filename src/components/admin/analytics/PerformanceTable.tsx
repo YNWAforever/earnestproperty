@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safePerformanceCsvCell } from "@/lib/analytics/performance-csv";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,16 +25,14 @@ type Props = {
     reason: string;
   }) => Promise<void>;
 };
-function csvCell(value: string | null) {
-  const safe = (value ?? "").replaceAll('"', '""');
-  return '"' + safe + '"';
-}
 function exportVisible(page: PerformanceRecordPage) {
   const headers = ["kind", "id", "occurredAt", "quality", "staffId", "leadId", "transactionId"];
   const lines = [
     headers.join(","),
     ...page.records.map((record) =>
-      headers.map((key) => csvCell(String(record[key as keyof PerformanceRecord] ?? ""))).join(","),
+      headers
+        .map((key) => safePerformanceCsvCell(String(record[key as keyof PerformanceRecord] ?? "")))
+        .join(","),
     ),
   ];
   const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });

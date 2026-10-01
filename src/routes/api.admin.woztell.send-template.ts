@@ -28,7 +28,9 @@ export const Route = createFileRoute("/api/admin/woztell/send-template")({
         } catch (error) {
           const associationError =
             error instanceof Error &&
-            /ENQUIRY_(SELECTION_REQUIRED|ASSOCIATION_INVALID)/.exec(error.message)?.[0];
+            /ENQUIRY_(SELECTION_REQUIRED|ASSOCIATION_INVALID)|OUTBOUND_(RECONCILIATION_REQUIRED|CONFLICT_OR_NOT_FOUND)/.exec(
+              error.message,
+            )?.[0];
           const code =
             associationError ||
             (error && typeof error === "object" && "code" in error
@@ -37,7 +39,8 @@ export const Route = createFileRoute("/api/admin/woztell/send-template")({
           const status =
             code === "OUTBOUND_CONFLICT_OR_NOT_FOUND" ||
             code === "ENQUIRY_SELECTION_REQUIRED" ||
-            code === "ENQUIRY_ASSOCIATION_INVALID"
+            code === "ENQUIRY_ASSOCIATION_INVALID" ||
+            code === "OUTBOUND_RECONCILIATION_REQUIRED"
               ? 409
               : code === "VALIDATION_ERROR" || error instanceof SyntaxError
                 ? 400

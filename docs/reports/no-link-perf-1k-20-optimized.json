@@ -1,0 +1,122 @@
+{
+  "environment": "PGlite WASM single connection; synthetic, not Neon multi-session",
+  "hardware": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500",
+    "cpuCount": 12,
+    "totalMemoryBytes": 34033348608
+  },
+  "dataset": {
+    "conversations": 1000,
+    "messagesPerConversation": 20,
+    "messageRows": 20000,
+    "actorVisible": 950
+  },
+  "workload": {
+    "readers": 1,
+    "runs": 5,
+    "samples": 5,
+    "queryCountPerRead": 1,
+    "pageLimit": 20
+  },
+  "measurements": {
+    "p50Ms": 16.167099999999664,
+    "p95Ms": 18.391000000000076,
+    "payloadBytes": 14575,
+    "total": 950,
+    "fixtureMs": 2033.3289000000002
+  },
+  "plan": null,
+  "scanSummary": [
+    {
+      "node": "Seq Scan",
+      "relation": "whatsapp_conversations",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "whatsapp_conversations",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Seq Scan",
+      "relation": "crm_contacts",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "whatsapp_messages",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "inquiries",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "whatsapp_enquiry_reference_links",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Seq Scan",
+      "relation": "staff_users",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Seq Scan",
+      "relation": "staff_users",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "inquiries",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "inquiries",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Index Scan",
+      "relation": "inquiries",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    },
+    {
+      "node": "Seq Scan",
+      "relation": "whatsapp_conversations",
+      "rows": null,
+      "loops": null,
+      "observedRows": null
+    }
+  ],
+  "limitations": [
+    "PGlite serializes overlapping requests",
+    "permission functions are simplified fixture stubs",
+    "receipt persistence, queue lag and browser freshness are not measured"
+  ]
+}

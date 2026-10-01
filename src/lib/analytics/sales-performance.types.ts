@@ -29,6 +29,12 @@ export type PerformanceReport = {
       unattributed: number;
     };
   };
+  sourceEvidence: {
+    messageDerived28hse: PerformanceMetric;
+    trackedOpenEnquiries: PerformanceMetric;
+    unknownOrigin: PerformanceMetric;
+    clickToEnquiryRate: PerformanceMetric;
+  };
   acquisition: {
     inquiries: PerformanceMetric;
     uniqueCustomers: PerformanceMetric;

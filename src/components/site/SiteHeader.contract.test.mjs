@@ -55,3 +55,8 @@ test("mega menu returns focus to its trigger on close, not just to nothing", () 
 test("mobile nav trigger's aria-label reflects open/closed state", () => {
   assert.match(headerSource, /aria-label=\{open \? "關閉主選單" : "開啟主選單"\}/);
 });
+
+test("WhatsApp header CTAs render one interactive anchor each", () => {
+  assert.doesNotMatch(headerSource, /<a[^>]*href=\{WHATSAPP_URL\}[^>]*>\s*<Button/s);
+  assert.match(headerSource, /<Button[^>]*asChild[^>]*>\s*<a[^>]*href=\{WHATSAPP_URL\}/s);
+});

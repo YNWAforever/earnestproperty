@@ -38,4 +38,9 @@ export type WhatsappEnquiry = {
   firstHumanResponseAt: string | null;
   effectsEligible: boolean;
   crmLeadId: string | null;
+  enquiryOwnerStaffId: string | null;
+  conversationAssigneeId: string | null;
+  providerConfirmedStaffId: string | null;
+  enquiryVersion: number;
+  providerThreadReview: boolean;
 };

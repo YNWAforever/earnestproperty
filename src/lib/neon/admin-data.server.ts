@@ -12,6 +12,7 @@ import {
   transactionRows,
 } from "./db.server";
 import { leadBudgetError } from "../admin/lead-budget";
+import { reviewAudienceRows, resolveAudienceSelection } from "../admin/blast-review";
 import { getPublicInventoryCounts } from "./public-inventory-counts.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
 import { isMissingBranchesTableError } from "./branches-schema";
@@ -774,6 +775,9 @@ type AudienceSummary = {
   optedOut: number;
   missingPhone: number;
   notOptedIn: number;
+  uniqueExcluded: number;
+  identityUnsafe: number;
+  duplicatePhone: number;
 };
 
 // Extended to carry the same filter vocabulary as fetchSegmentContacts
@@ -905,18 +909,7 @@ function uniqueEligibleAudienceRows(rows: Record<string, unknown>[]) {
   });
 }
 function summarizeAudienceRows(rows: Record<string, unknown>[]): AudienceSummary {
-  const eligibleIds = new Set(uniqueEligibleAudienceRows(rows).map((row) => row.id));
-  return rows.reduce<AudienceSummary>(
-    (summary, row) => {
-      summary.total += 1;
-      if (eligibleIds.has(row.id)) summary.eligible += 1;
-      if (!row.normalized_phone) summary.missingPhone += 1;
-      if (row.opted_out_whatsapp === true) summary.optedOut += 1;
-      if (row.opt_in_whatsapp !== true) summary.notOptedIn += 1;
-      return summary;
-    },
-    { total: 0, eligible: 0, optedOut: 0, missingPhone: 0, notOptedIn: 0 },
-  );
+  return reviewAudienceRows(rows, normalizeAdminPhone);
 }
 
 async function fetchAudienceRecipientRows(filters: AudienceFilters) {
@@ -924,12 +917,39 @@ async function fetchAudienceRecipientRows(filters: AudienceFilters) {
 }
 
 async function resolveAudienceFilters(input: { audience_id?: string; filters?: AudienceFilters }) {
-  if (input.filters) return normalizeAudienceFilters(input.filters);
-  if (!input.audience_id) return {};
-  const rows = await queryRows("SELECT filters FROM whatsapp_audiences WHERE id = $1 LIMIT 1", [
-    input.audience_id,
-  ]);
-  return parseAudienceFilters(rows[0]?.filters);
+  const selected = await resolveAudienceSelection(input, async (audienceId) => {
+    const rows = await queryRows(
+      "SELECT filters FROM whatsapp_audiences WHERE id = $1::uuid LIMIT 1",
+      [audienceId],
+    );
+    return rows[0]?.filters ?? null;
+  });
+  return parseAudienceFilters(selected);
+}
+
+async function assertAudienceFilterChoices(filters: AudienceFilters) {
+  const estates = filters.estates ?? [];
+  if (estates.length) {
+    const rows = await queryRows<{ slug: string }>(
+      "SELECT slug FROM estates WHERE slug = ANY($1::text[])",
+      [estates],
+    );
+    if (new Set(rows.map((row) => row.slug)).size !== new Set(estates).size)
+      throw new Error("INVALID_ESTATE_SELECTION");
+  }
+  if (filters.district_slug) {
+    const rows = await queryRows("SELECT 1 FROM districts WHERE slug=$1 LIMIT 1", [
+      filters.district_slug,
+    ]);
+    if (!rows.length) throw new Error("INVALID_DISTRICT_SELECTION");
+  }
+  if (filters.assigned_agent_id) {
+    const rows = await queryRows(
+      "SELECT 1 FROM staff_users WHERE id=$1::uuid AND active=true LIMIT 1",
+      [filters.assigned_agent_id],
+    );
+    if (!rows.length) throw new Error("INVALID_AGENT_SELECTION");
+  }
 }
 
 export async function getAdminOverview() {
@@ -2865,10 +2885,9 @@ export async function listCommandCenter(actor: StaffAccess): Promise<CommandCent
 }
 
 export async function listAdminConversations(actor?: StaffAccess): Promise<AdminConversationRow[]> {
-  const params: unknown[] = [];
-  const scope = actor ? agentScope(actor) : null;
-  const where =
-    scope !== null ? `WHERE wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const params: unknown[] = [actor.staffId];
+  const where = "WHERE wa_can_read_conversation($1::uuid,wc.id)";
   const rows = await queryRows<AdminConversationRow>(
     `
     SELECT
@@ -2904,10 +2923,9 @@ export async function fetchAdminConversation(
   actor?: StaffAccess,
   includeMessages = true,
 ) {
-  const params: unknown[] = [id];
-  const scope = actor ? agentScope(actor) : null;
-  const scopeClause =
-    scope !== null ? ` AND wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const params: unknown[] = [id, actor.staffId];
+  const scopeClause = " AND wa_can_read_conversation($2::uuid,wc.id)";
   const rows = await queryRows(
     `
     SELECT
@@ -2947,13 +2965,13 @@ export async function fetchAdminConversation(
     FROM (
       SELECT id, direction, message_type, text, status, error, created_at
       FROM whatsapp_messages
-      WHERE conversation_id = $1
+      WHERE conversation_id = $1 AND wa_can_read_conversation($2::uuid,$1::uuid)
       ORDER BY created_at DESC, id DESC
       LIMIT 50
     ) latest
     ORDER BY created_at ASC, id ASC
     `,
-        [id],
+        [id, actor.staffId],
       )
     : [];
 
@@ -2993,10 +3011,8 @@ export async function fetchAdminConversationAiAssist(
   input: { conversationId: string },
   actor: StaffAccess,
 ): Promise<AdminConversationAiAssist> {
-  const params: unknown[] = [input.conversationId];
-  const scope = agentScope(actor);
-  const scopeClause =
-    scope !== null ? ` AND wc.assigned_agent_id = ${addParam(params, scope)}::uuid` : "";
+  const params: unknown[] = [input.conversationId, actor.staffId];
+  const scopeClause = " AND wa_can_read_conversation($2::uuid,wc.id)";
   const rows = await queryRows<{
     id: unknown;
     name: unknown;
@@ -3063,11 +3079,16 @@ export async function updateAdminConversation(
   actor: StaffAccess,
 ) {
   const scope = agentScope(actor);
+  const [access] = await queryRows(
+    "SELECT wa_can_read_conversation($1::uuid,$2::uuid) AS allowed",
+    [actor.staffId, input.id],
+  );
+  if (access?.allowed !== true) throw new Response("Forbidden", { status: 403 });
   const assignments = await import("../whatsapp-enquiries/assignment.server");
   if (await assignments.assignmentSchemaAvailable()) {
     const [current] = await queryRows(
-      `SELECT assigned_agent_id FROM whatsapp_conversations WHERE id=$1::uuid AND ($2::uuid IS NULL OR assigned_agent_id=$2::uuid)`,
-      [input.id, scope],
+      `SELECT assigned_agent_id FROM whatsapp_conversations WHERE id=$1::uuid AND wa_can_read_conversation($2::uuid,id)`,
+      [input.id, actor.staffId],
     );
     if (!current) throw new Response("Forbidden", { status: 403 });
     if ((current.assigned_agent_id ?? null) !== input.assigned_agent_id) {
@@ -3077,18 +3098,14 @@ export async function updateAdminConversation(
       );
     }
     await queryRows(
-      `UPDATE whatsapp_conversations SET status=$2,updated_at=now() WHERE id=$1::uuid AND ($3::uuid IS NULL OR assigned_agent_id=$3::uuid)`,
-      [input.id, input.status, scope],
+      `UPDATE whatsapp_conversations SET status=$2,updated_at=now() WHERE id=$1::uuid AND wa_can_read_conversation($3::uuid,id)`,
+      [input.id, input.status, actor.staffId],
     );
     return { ok: true };
   }
   const rows = await queryRows(
-    `UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3${
-      scope !== null ? " AND assigned_agent_id = $4" : ""
-    } RETURNING id`,
-    scope !== null
-      ? [input.status, input.assigned_agent_id, input.id, scope]
-      : [input.status, input.assigned_agent_id, input.id],
+    `UPDATE whatsapp_conversations SET status = $1, assigned_agent_id = $2, updated_at = now() WHERE id = $3 AND wa_can_read_conversation($4::uuid,id) RETURNING id`,
+    [input.status, input.assigned_agent_id, input.id, actor.staffId],
   );
   if (!rows[0]) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
@@ -3172,7 +3189,7 @@ export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
 }
 
 export async function fetchAdminBlastOptions() {
-  const [templates, audiences] = await Promise.all([
+  const [templates, audiences, estates, districts, agents] = await Promise.all([
     queryRows(
       // category/description/components are selected so the send confirmation can
       // show staff everything this system knows about the template. The approved
@@ -3180,7 +3197,12 @@ export async function fetchAdminBlastOptions() {
       "SELECT id, element_name, language_code, status, category, description, components FROM whatsapp_templates ORDER BY element_name ASC",
     ),
     queryRows(
-      "SELECT id, name, description, filters FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
+      "SELECT id, name, description, filters, updated_at FROM whatsapp_audiences ORDER BY name ASC, created_at DESC",
+    ),
+    queryRows("SELECT slug, name_zh, district_slug FROM estates ORDER BY name_zh ASC"),
+    queryRows("SELECT slug, name_zh FROM districts ORDER BY name_zh ASC"),
+    queryRows(
+      "SELECT id, COALESCE(name_zh, name_en, email) AS name, branch FROM staff_users WHERE active=true ORDER BY name ASC",
     ),
   ]);
   return {
@@ -3197,9 +3219,24 @@ export async function fetchAdminBlastOptions() {
       id: stringOrEmpty(row.id),
       name: stringOrEmpty(row.name),
       description: stringOrNull(row.description),
+      updated_at: dateOrNull(row.updated_at),
       // Needed to reopen an audience in the editor; without it "edit" could only
       // ever rename, silently blanking the filters on save.
       filters: normalizeAudienceFilters(parseAudienceFilters(row.filters)),
+    })),
+    estates: estates.map((row) => ({
+      slug: stringOrEmpty(row.slug),
+      name: stringOrEmpty(row.name_zh),
+      district_slug: stringOrEmpty(row.district_slug),
+    })),
+    districts: districts.map((row) => ({
+      slug: stringOrEmpty(row.slug),
+      name: stringOrEmpty(row.name_zh),
+    })),
+    agents: agents.map((row) => ({
+      id: stringOrEmpty(row.id),
+      name: stringOrEmpty(row.name),
+      branch: stringOrNull(row.branch),
     })),
   };
 }
@@ -3231,6 +3268,7 @@ export async function fetchAdminWhatsappTemplates() {
 export async function saveAdminAudience(input: AdminAudienceInput, actor: StaffAccess) {
   requireNonEmpty(input.name, "name");
   const filters = normalizeAudienceFilters(input.filters);
+  await assertAudienceFilterChoices(filters);
   const params = [input.name, input.description, JSON.stringify(filters)];
 
   const rows = input.id
@@ -3296,6 +3334,7 @@ export async function previewAdminAudience(input: {
   filters?: AudienceFilters;
 }): Promise<AdminAudiencePreview> {
   const filters = await resolveAudienceFilters(input);
+  await assertAudienceFilterChoices(filters);
   const rows = await fetchAudienceRecipientRows(filters);
   return summarizeAudienceRows(rows);
 }
@@ -3340,7 +3379,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const campaigns = await queryRows(
     `
-    SELECT c.id, a.filters
+    SELECT c.id, a.id AS resolved_audience_id, a.filters
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
     WHERE c.id = $1
@@ -3350,6 +3389,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
   );
   const campaign = campaigns[0];
   if (!campaign) return { ok: false as const, error: "Campaign not found" };
+  if (!campaign.resolved_audience_id) return { ok: false as const, error: "AUDIENCE_NOT_FOUND" };
 
   const filters = parseAudienceFilters(campaign.filters);
   const rows = await fetchAudienceRecipientRows(filters);
@@ -3497,6 +3537,7 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
           AND c.status IN ('review', 'scheduled')
           AND t.id = c.template_id
           AND t.status LIKE 'active%'
+          AND EXISTS (SELECT 1 FROM whatsapp_audiences a WHERE a.id = c.audience_id)
           AND EXISTS (
             SELECT 1
             FROM whatsapp_campaign_recipients r

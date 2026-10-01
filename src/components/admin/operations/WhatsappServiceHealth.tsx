@@ -59,8 +59,9 @@ export function WhatsappServiceHealth() {
             必要資料表：{health.schemaAvailable ? "已具備" : "缺失，服務受阻"}
           </p>
           <p className="text-sm">
-            接單分派：{state(health.runtime.assignment.state)} · 客戶回覆：
-            {state(health.runtime.customerReply.state)} · 同事 WhatsApp 文字：
+            客戶來訊：待核實（需簽名 webhook 及耐久收件讀回） · 接單分派：
+            {state(health.runtime.assignment.state)} · 客戶回覆：
+            {state(health.runtime.customerReply.state)} · 同事手機通知（可選）：
             {state(health.runtime.staffWhatsappText.state)} · 同事模板：
             {state(health.runtime.staffWhatsappTemplate.state)}
           </p>

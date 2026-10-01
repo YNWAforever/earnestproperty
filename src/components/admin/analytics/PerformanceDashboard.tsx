@@ -257,6 +257,7 @@ export function PerformanceDashboard({
           <Tabs defaultValue="acquisition" className="space-y-4">
             <TabsList className="flex h-auto flex-wrap justify-start">
               <TabsTrigger value="acquisition">新增與轉換</TabsTrigger>
+              <TabsTrigger value="source">來源證據</TabsTrigger>
               <TabsTrigger value="followup">回覆及跟進</TabsTrigger>
               <TabsTrigger value="sales">成交及佣金</TabsTrigger>
               <TabsTrigger value="backlog">當前待辦</TabsTrigger>
@@ -268,6 +269,29 @@ export function PerformanceDashboard({
                 {card("合格線索", report.acquisition.qualifiedLeads, "qualifiedLeads")}
                 {card("完成看樓", report.acquisition.completedViewings, "completedViewings")}
                 {card("30／90 日成交轉換", report.acquisition.saleConversion, "saleConversion")}
+              </div>
+            </TabsContent>
+            <TabsContent value="source" forceMount className="data-[state=inactive]:hidden">
+              <p className="mb-3 text-sm">
+                訊息中的平台來源、已儲存的追蹤開啟及未知來源分開統計；沒有點擊分母時不顯示點擊轉換率。
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {card(
+                  "28Hse 訊息來源",
+                  report.sourceEvidence.messageDerived28hse,
+                  "messageDerived28hse",
+                )}
+                {card(
+                  "有追蹤開啟證據的查詢",
+                  report.sourceEvidence.trackedOpenEnquiries,
+                  "trackedOpenEnquiries",
+                )}
+                {card("來源未核實", report.sourceEvidence.unknownOrigin, "unknownOrigin")}
+                {card(
+                  "點擊至查詢比率",
+                  report.sourceEvidence.clickToEnquiryRate,
+                  "clickToEnquiryRate",
+                )}
               </div>
             </TabsContent>
             <TabsContent value="followup" forceMount className="data-[state=inactive]:hidden">

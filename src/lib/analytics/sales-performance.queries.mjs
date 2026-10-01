@@ -109,3 +109,16 @@ export const LEGACY_TRANSACTION_SQL = `SELECT count(*)::integer AS count
   AND ($4::uuid IS NULL OR t.agent_id=$4::uuid)
   AND $5::text IS NULL
   AND ($6::text IS NULL OR t.deal_type::text=$6::text)`;
+
+/** Scoped IDs come from INQUIRY_ROWS_SQL. No raw message or click inference is returned. */
+export const SOURCE_EVIDENCE_SQL = `SELECT i.id::text AS "inquiryId",
+  COALESCE(i.placement_source,i.source) AS "currentSource",
+  CASE
+    WHEN i.attribution_method='reference' AND i.link_open_id IS NOT NULL THEN 'tracked_open'
+    WHEN i.attribution_method='explicit_customer_statement' AND EXISTS(
+      SELECT 1 FROM whatsapp_enquiry_reference_links l WHERE l.inquiry_id=i.id
+        AND l.ref_index=0 AND l.source='28hse') THEN 'message_28hse'
+    WHEN i.source='whatsapp' AND (i.placement_source IS NULL OR i.placement_source='unknown')
+      THEN 'unknown'
+    ELSE 'other' END AS "sourceEvidence"
+  FROM inquiries i WHERE i.id=ANY($1::uuid[]) ORDER BY i.id`;

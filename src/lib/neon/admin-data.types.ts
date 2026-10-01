@@ -166,6 +166,16 @@ export type AdminLeadRow = {
 
 export type AdminConversationRow = {
   awaiting_human_response?: boolean | null;
+  association_review?: boolean;
+  assigned_agent_id?: string | null;
+  customer_display_name?: string;
+  public_listing_no?: string | null;
+  source_label?: string | null;
+  external_listing_id?: string | null;
+  requested_staff_name?: string | null;
+  confirmed_owner_name?: string | null;
+  next_action?: "review" | "reply" | "triage" | "follow_up";
+  capabilities?: { canReply: boolean; canCorrect: boolean };
   id: string;
   status: string;
   last_message_at: string | null;
@@ -429,6 +439,9 @@ export type AdminAudiencePreview = {
   optedOut: number;
   missingPhone: number;
   notOptedIn: number;
+  uniqueExcluded: number;
+  identityUnsafe: number;
+  duplicatePhone: number;
 };
 
 export type AdminCampaignInput = {
@@ -456,8 +469,12 @@ export type AdminBlastOptions = {
     id: string;
     name: string;
     description: string | null;
+    updated_at: string | null;
     filters: AdminAudienceInput["filters"];
   }>;
+  estates: Array<{ slug: string; name: string; district_slug: string }>;
+  districts: Array<{ slug: string; name: string }>;
+  agents: Array<{ id: string; name: string; branch: string | null }>;
 };
 
 /** An approved WhatsApp template an agent can send outside the 24-hour reply

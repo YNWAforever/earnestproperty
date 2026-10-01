@@ -1,0 +1,180 @@
+{
+  "environment": "real-route-synthetic-auth-api",
+  "codeSha": "93922854205fa0fb011bfe2af50f618d45c215ef",
+  "browserVersion": "151.0.7922.34",
+  "nodeVersion": "v24.18.0",
+  "collected": 24,
+  "filtered": 0,
+  "providerSend": false,
+  "database": false,
+  "results": [
+    {
+      "name": "site Inter and Chinese variable fonts load locally",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "verified staff names replace ordinary UUIDs",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "360px long timeline and composer",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "390px long timeline and composer",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "768px long timeline and composer",
+      "width": 768,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "1280px long timeline and composer",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "second conversation keeps distinct drafts",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "pane resize preserves reading older messages",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "late detail response cannot replace next conversation",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "missing staff names stay unverified",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown assignment is not labelled confirmed",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "agent inbox navigation and external ID search retain admin boundary",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "mobile navigation closes on inbox entry",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "mobile detail escape retains filter and draft",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "short mobile viewport keeps send reachable",
+      "width": 390,
+      "height": 500,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "expired window shows empty template state and disables free reply",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "template error retry recovers without changing draft",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "other actor sees neither private thread nor composer",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-b",
+      "status": "PASS"
+    },
+    {
+      "name": "viewer shell denies staff UI",
+      "width": 1280,
+      "height": 844,
+      "actor": "viewer",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid JSON query does not crash: true",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid JSON query does not crash: {\"bad\":\"shape\"}",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid JSON query does not crash: 9007199254740993",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "synthetic composing Enter never invokes send",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "guest sees sign-in gate instead of staff inbox",
+      "width": 1280,
+      "height": 844,
+      "actor": "guest",
+      "status": "PASS"
+    }
+  ]
+}

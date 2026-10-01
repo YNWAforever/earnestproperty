@@ -12,6 +12,7 @@ import {
   INQUIRY_ROWS_SQL,
   LEGACY_TRANSACTION_SQL,
   reportParams,
+  SOURCE_EVIDENCE_SQL,
 } from "./sales-performance.queries.mjs";
 import {
   PERFORMANCE_DRILLDOWN_KEYS,
@@ -57,11 +58,12 @@ export async function getSalesPerformance(
       inquiryRows.map((row) => row.crmLeadId).filter((id): id is string => typeof id === "string"),
     ),
   ];
-  const [eventRows, dealRows, backlogRows, legacyRows] = await Promise.all([
+  const [eventRows, dealRows, backlogRows, legacyRows, sourceRows] = await Promise.all([
     inquiryIds.length ? queryRows(EVENT_ROWS_SQL, [inquiryIds, leadIds]) : Promise.resolve([]),
     queryRows(DEAL_ROWS_SQL, params),
     queryRows(BACKLOG_SQL, params.slice(2, 6)),
     queryRows(LEGACY_TRANSACTION_SQL, params.slice(0, 6)),
+    inquiryIds.length ? queryRows(SOURCE_EVIDENCE_SQL, [inquiryIds]) : Promise.resolve([]),
   ]);
   const dealIds = [...new Set(dealRows.map((row) => String(row.transactionId)))];
   const creditRows = dealIds.length
@@ -71,8 +73,9 @@ export async function getSalesPerformance(
   if (typeof backlog?.openInquiries !== "number" || typeof backlog?.unknownQuality !== "number") {
     throw new Response("Invalid backlog aggregate", { status: 503 });
   }
+  const evidenceById = new Map(sourceRows.map((row) => [String(row.inquiryId), row]));
   return calculateSalesPerformance({
-    inquiries: inquiryRows,
+    inquiries: inquiryRows.map((row) => ({ ...row, ...evidenceById.get(String(row.id)) })),
     events: eventRows,
     deals: dealRows,
     credits: creditRows,
@@ -106,16 +109,25 @@ export async function listPerformanceRecords(
       inquiries.map((row) => row.crmLeadId).filter((id): id is string => typeof id === "string"),
     ),
   ];
-  const [events, deals, backlogRows] = await Promise.all([
+  const [events, deals, backlogRows, sourceRows] = await Promise.all([
     ids.length ? queryRows(EVENT_ROWS_SQL, [ids, leadIds]) : Promise.resolve([]),
     queryRows(DEAL_ROWS_SQL, params),
     input.drilldownKey === "open_inquiries" || input.drilldownKey === "unknown_backlog"
       ? queryRows(BACKLOG_ROWS_SQL, params.slice(2, 6))
       : Promise.resolve([]),
+    ids.length ? queryRows(SOURCE_EVIDENCE_SQL, [ids]) : Promise.resolve([]),
   ]);
+  const evidenceById = new Map(sourceRows.map((row) => [String(row.inquiryId), row]));
   try {
     return selectPerformanceRecords(
-      { inquiries, events, deals, backlogRows, filters, asOf: new Date().toISOString() },
+      {
+        inquiries: inquiries.map((row) => ({ ...row, ...evidenceById.get(String(row.id)) })),
+        events,
+        deals,
+        backlogRows,
+        filters,
+        asOf: new Date().toISOString(),
+      },
       input.drilldownKey,
       input.cursor ?? null,
     );

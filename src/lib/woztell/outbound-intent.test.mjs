@@ -1,13 +1,215 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
+import ts from "typescript";
 import {
   parseOutboundIntent,
   hashOutboundIntent,
   deliverOutboundIntent,
   finishOutboundIntent,
+  readOutboundIntent,
+  readOutboundReservation,
 } from "./outbound-intent.server.ts";
 const id = "11111111-1111-4111-8111-111111111111";
 const input = { requestId: id, conversationId: id, kind: "text", payload: { text: "hello" } };
+test("readonly HTTP handler authenticates before scoped outbound read and sanitizes failure", async (t) => {
+  const source = ts.createSourceFile(
+    "send.ts",
+    readFileSync("src/routes/api.admin.woztell.send.ts", "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  let handler;
+  function visit(node) {
+    if (ts.isPropertyAssignment(node) && node.name.getText(source) === "GET")
+      handler = node.initializer.getText(source);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(handler, "GET recovery handler exists");
+  const actor = { staffId: id, roles: ["agent"] };
+  function fixture({ denial, rows = [{ id, kind: "text", state: "unknown" }], failure } = {}) {
+    const calls = [];
+    const context = {
+      URL,
+      Response,
+      requireStaffAccess: async (_request, roles) => {
+        assert.deepEqual(Array.from(roles), ["admin", "manager", "agent"]);
+        if (denial) throw new Response("Denied", { status: denial });
+        return actor;
+      },
+      agentScope: (staff) => staff.staffId,
+      readOutboundIntent: (value, staffId, scope) =>
+        readOutboundIntent(value, staffId, scope, async (statement, params) => {
+          assert.match(statement, /^SELECT /);
+          calls.push(params);
+          if (failure) throw Error("Synthetic private failure detail");
+          return rows;
+        }),
+      readOutboundReservation: (value, staffId, scope) =>
+        readOutboundReservation(value, staffId, scope, async (statement, params) => {
+          assert.match(statement, /^SELECT /);
+          calls.push(params);
+          if (failure) throw Error("Synthetic private failure detail");
+          return rows;
+        }),
+    };
+    vm.runInNewContext(
+      ts.transpile(`globalThis.run = ${handler}`, { target: ts.ScriptTarget.ES2022 }),
+      context,
+    );
+    const request = (requestId = id) =>
+      new Request(
+        `https://example.invalid/api/admin/woztell/send?requestId=${requestId}&conversationId=${id}&staffId=untrusted&scope=untrusted`,
+      );
+    return {
+      calls,
+      run: (requestId) => context.run({ request: request(requestId) }),
+      reserve: (conversationId = id) =>
+        context.run({
+          request: new Request(
+            `https://example.invalid/api/admin/woztell/send?reconciliation=true&conversationId=${conversationId}&staffId=untrusted&scope=untrusted`,
+          ),
+        }),
+    };
+  }
+  await t.test("successful read keeps unknown and ignores client actor or scope", async () => {
+    const h = fixture();
+    const response = await h.run();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal((await response.json()).intent.state, "unknown");
+    assert.deepEqual(h.calls, [[id, id, id, id]]);
+  });
+  await t.test("unauthenticated and denied actors never reach a query", async () => {
+    for (const denial of [401, 403]) {
+      const h = fixture({ denial });
+      await assert.rejects(
+        h.run(),
+        (error) => error instanceof Response && error.status === denial,
+      );
+      assert.equal(h.calls.length, 0);
+    }
+  });
+  await t.test("invalid identifier is400 without query", async () => {
+    const h = fixture();
+    assert.equal((await h.run("invalid")).status, 400);
+    assert.equal(h.calls.length, 0);
+  });
+  await t.test("missing or forbidden request is404 without identity disclosure", async () => {
+    const response = await fixture({ rows: [] }).run();
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), {
+      ok: false,
+      error: "OUTBOUND_NOT_FOUND_OR_FORBIDDEN",
+    });
+  });
+  await t.test("query outage is503 with no raw error or mutation", async () => {
+    const response = await fixture({ failure: true }).run();
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { ok: false, error: "OUTBOUND_READ_UNAVAILABLE" });
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  });
+  await t.test(
+    "cold reservation read is scoped no-store and never exposes another actor's request",
+    async () => {
+      const h = fixture({ rows: [{ blocked: true, intent: null }] });
+      const response = await h.reserve();
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.deepEqual(await response.json(), {
+        ok: true,
+        reservation: { blocked: true, intent: null },
+      });
+      assert.deepEqual(h.calls, [[id, id, id]]);
+      for (const denial of [401, 403]) {
+        const denied = fixture({ denial });
+        await assert.rejects(
+          denied.reserve(),
+          (error) => error instanceof Response && error.status === denial,
+        );
+        assert.equal(denied.calls.length, 0);
+      }
+      const invalid = fixture();
+      assert.equal((await invalid.reserve("invalid")).status, 400);
+      assert.equal(invalid.calls.length, 0);
+      assert.equal((await fixture({ rows: [] }).reserve()).status, 404);
+      const unavailable = await fixture({ failure: true }).reserve();
+      assert.equal(unavailable.status, 503);
+      assert.deepEqual(await unavailable.json(), { ok: false, error: "OUTBOUND_READ_UNAVAILABLE" });
+    },
+  );
+});
+
+test("text and template HTTP writes preserve reservation409 and trusted actor guards", async () => {
+  for (const [path, body] of [
+    [
+      "src/routes/api.admin.woztell.send.ts",
+      { requestId: id, conversationId: id, text: "Synthetic reply" },
+    ],
+    [
+      "src/routes/api.admin.woztell.send-template.ts",
+      { requestId: id, conversationId: id, templateId: id },
+    ],
+  ]) {
+    const source = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    let handler;
+    function visit(node) {
+      if (ts.isPropertyAssignment(node) && node.name.getText(source) === "POST")
+        handler = node.initializer.getText(source);
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+    let calls = 0;
+    const context = {
+      Response,
+      JSON,
+      SyntaxError,
+      Error,
+      parseOutboundIntent,
+      requireStaffAccess: async () => ({ staffId: id, roles: ["agent"] }),
+      agentScope: (staff) => staff.staffId,
+      enqueueOutboundIntent: async (_value, staffId, scope) => {
+        calls++;
+        assert.equal(staffId, id);
+        assert.equal(scope, id);
+        throw Object.assign(new Error("OUTBOUND_RECONCILIATION_REQUIRED"), { code: "P0001" });
+      },
+    };
+    vm.runInNewContext(
+      ts.transpile(`globalThis.run = ${handler}`, { target: ts.ScriptTarget.ES2022 }),
+      context,
+    );
+    const request = () =>
+      new Request("https://example.invalid/api/admin/woztell/send", {
+        method: "POST",
+        body: JSON.stringify({ ...body, staffId: "untrusted", scope: "untrusted" }),
+      });
+    const refused = await context.run({ request: request() });
+    assert.equal(refused.status, 409);
+    assert.deepEqual(await refused.json(), {
+      ok: false,
+      error: "OUTBOUND_RECONCILIATION_REQUIRED",
+    });
+    assert.equal(calls, 1);
+    for (const denial of [401, 403]) {
+      context.requireStaffAccess = async () => {
+        throw new Response("Denied", { status: denial });
+      };
+      await assert.rejects(
+        context.run({ request: request() }),
+        (error) => error instanceof Response && error.status === denial,
+      );
+      assert.equal(calls, 1);
+    }
+  }
+});
 test("kind-specific canonical payload hash rejects changed text and invalid payloads", () => {
   assert.equal(
     hashOutboundIntent(parseOutboundIntent(input)),

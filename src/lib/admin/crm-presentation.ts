@@ -36,6 +36,7 @@ export const sourceLabels: Record<string, string> = {
   phone: "電話",
   referral: "轉介",
   walk_in: "到店",
+  manual_forward: "人工轉交",
 };
 
 export function quickLeadFilter<T extends { stage: string; agent_id: string; cursor?: string }>(

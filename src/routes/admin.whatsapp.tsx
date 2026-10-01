@@ -1,5 +1,8 @@
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
+import { NoLinkInboxSummary } from "@/components/admin/whatsapp/NoLinkInbox";
+import { EnquiryOnlyPanel } from "@/components/admin/whatsapp/EnquiryOnlyPanel";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
@@ -41,6 +44,8 @@ import {
   fetchAdminAgents,
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
+  fetchAdminOutboundIntent,
+  fetchAdminOutboundReservation,
   fetchAdminPage,
   fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
@@ -77,6 +82,9 @@ const inboxStatusFilterOptions = [
   // Not a stored status -- derived from who spoke last. Listed first because it
   // is the only entry that answers "what do I have to do now".
   { value: "awaiting", label: "待回覆" },
+  { value: "attention", label: "需處理" },
+  { value: "mine", label: "我的對話" },
+  { value: "unassigned", label: "未分派" },
   { value: "open", label: "開啟" },
   { value: "pending", label: "待跟進" },
   { value: "closed", label: "已關閉" },
@@ -105,6 +113,11 @@ const replyErrorLabels: Record<string, string> = {
   MISSING_WOZTELL_MEMBER_ID: "此客戶尚未連接 WhatsApp 帳戶，請聯絡技術支援。",
   TEMPLATE_NOT_FOUND: "找不到此範本，可能已被停用，請重新整理後再試。",
   MESSAGE_CREATE_FAILED: "訊息未能建立，請再試一次。",
+  OUTBOUND_READ_UNAVAILABLE: "暫未能核對傳送狀態，請稍後核對或聯絡支援；不要直接重送。",
+  OUTBOUND_READ_STALE: "對話已更新，請重新核對傳送狀態。",
+  OUTBOUND_NOT_FOUND_OR_FORBIDDEN: "找不到可讀取的傳送要求，或目前沒有權限，請聯絡支援核對。",
+  OUTBOUND_PERSISTENCE_UNAVAILABLE: "未能確認傳送要求是否已保存，請先核對狀態；不要直接重送。",
+  OUTBOUND_CONFLICT_OR_NOT_FOUND: "目前未能按此權限保存傳送要求，請重新載入對話並核對狀態。",
 };
 
 // The open conversation and the inbox filters live in the URL, so a chat is
@@ -129,7 +142,11 @@ function parseWhatsappSearch(search: Record<string, unknown>) {
   if (typeof search.conversation === "string" && search.conversation.trim()) {
     result.conversation = search.conversation;
   }
-  if (typeof search.q === "string" && search.q.trim()) result.q = search.q;
+  // TanStack's JSON search parser reads a plain ?q=4033349 as a number.
+  // Preserve safe integer listing searches while rejecting other JSON shapes.
+  const query =
+    typeof search.q === "number" && Number.isSafeInteger(search.q) ? String(search.q) : search.q;
+  if (typeof query === "string" && query.trim()) result.q = query;
   if (typeof search.status === "string" && search.status !== "all") result.status = search.status;
   return result;
 }
@@ -144,6 +161,8 @@ export const Route = createFileRoute("/admin/whatsapp")({
 
 function AdminWhatsapp() {
   const { user } = useNeonAuth();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const canBackfill = staffSession?.status === "ok" && staffSession.roles.includes("admin");
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const isDesktop = useDesktopBreakpoint();
@@ -159,6 +178,8 @@ function AdminWhatsapp() {
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const [templates, setTemplates] = useState<AdminWhatsappTemplateRow[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const templatesRequestRef = useRef(0);
   const [woztellEnabled, setWoztellEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
@@ -197,10 +218,34 @@ function AdminWhatsapp() {
     writeStoredReplyDrafts(replyDrafts, staffUserId);
   }, [replyDrafts, staffUserId]);
   const [mutatingAction, setMutatingAction] = useState<string | null>(null);
+  const outboundBusy = useRef(false);
+  const outboundReservationGeneration = useRef(0);
+  const mounted = useRef(false);
+  const actorIdRef = useRef(staffUserId);
+  actorIdRef.current = staffUserId;
+  const [outboundReadback, setOutboundReadback] = useState<Record<string, boolean>>({});
+  const [outboundReservations, setOutboundReservations] = useState<
+    Record<string, "loading" | "ready" | "blocked" | "error">
+  >({});
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (staffUserId && selectedId) {
+      const key = staffUserId + ":" + selectedId;
+      setOutboundReadback((current) => ({
+        ...current,
+        [key]: hasStoredOutboundRequest(staffUserId, selectedId),
+      }));
+    }
+  }, [staffUserId, selectedId]);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
-  const inboxQuery = search.q ?? "";
-  const inboxStatus = search.status ?? "all";
+  const inboxQuery = typeof search.q === "string" ? search.q : "";
+  const inboxStatus = typeof search.status === "string" ? search.status : "all";
   const [queryDraft, setQueryDraft] = useState(inboxQuery);
 
   const setWhatsappSearch = useCallback(
@@ -249,11 +294,57 @@ function AdminWhatsapp() {
   );
 
   const canApplyConversationDetail = useCallback((id: string) => {
-    return selectedIdRef.current === id;
+    return mounted.current && selectedIdRef.current === id;
   }, []);
+
+  const checkOutboundReservation = useCallback(
+    async (targetId: string, actorId: string) => {
+      const generation = ++outboundReservationGeneration.current;
+      const key = actorId + ":" + targetId;
+      const current = () =>
+        canApplyConversationDetail(targetId) &&
+        actorIdRef.current === actorId &&
+        outboundReservationGeneration.current === generation;
+      if (current()) setOutboundReservations((previous) => ({ ...previous, [key]: "loading" }));
+      try {
+        for (const kind of ["text", "template"]) readOutboundJournal(actorId, targetId, kind);
+        const result = await fetchAdminOutboundReservation({ data: { conversationId: targetId } });
+        if (typeof result.reservation?.blocked !== "boolean")
+          throw new Error("OUTBOUND_READ_UNAVAILABLE");
+        if (!current()) throw new Error("OUTBOUND_READ_STALE");
+        if (current())
+          setOutboundReservations((previous) => ({
+            ...previous,
+            [key]: result.reservation.blocked ? "blocked" : "ready",
+          }));
+        return result.reservation.blocked;
+      } catch (error) {
+        if (current()) setOutboundReservations((previous) => ({ ...previous, [key]: "error" }));
+        throw error;
+      }
+    },
+    [canApplyConversationDetail],
+  );
+  useEffect(() => {
+    if (staffUserId && selectedId)
+      void checkOutboundReservation(selectedId, staffUserId).catch(() => {});
+  }, [staffUserId, selectedId, checkOutboundReservation]);
 
   const listCursorRef = useRef<string | null>(null);
   const olderPending = useRef(false);
+  const loadTemplates = useCallback(async () => {
+    const request = ++templatesRequestRef.current;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+    try {
+      const data = await fetchAdminWhatsappTemplates();
+      if (request === templatesRequestRef.current) setTemplates(data as AdminWhatsappTemplateRow[]);
+    } catch (err) {
+      if (request === templatesRequestRef.current) setTemplatesError(errorText(err));
+    } finally {
+      if (request === templatesRequestRef.current) setTemplatesLoading(false);
+    }
+  }, []);
   const refreshConversations = useCallback(
     async (cursor: string | null = listCursorRef.current) => {
       if (!user) return;
@@ -273,9 +364,11 @@ function AdminWhatsapp() {
         setListTotal(data.total);
         setListUpdatedAt(Date.now());
         setError(null);
+        return true;
       } catch (err) {
         if (requestId !== listRequestRef.current) return;
         setError(errorText(err));
+        return false;
       } finally {
         if (requestId === listRequestRef.current) setLoadingRows(false);
       }
@@ -287,9 +380,7 @@ function AdminWhatsapp() {
     async (id: string, options: { background?: boolean } = {}) => {
       const requestId = aiAssistRequestRef.current + 1;
       aiAssistRequestRef.current = requestId;
-      // A background refresh must leave the current card on screen. The 30s poll
-      // called this unconditionally, so the AI assist panel blanked to a
-      // skeleton every tick while an agent was reading it.
+      // A background detail refresh must leave the current AI card on screen.
       if (!options.background) {
         setAiAssist(null);
         // Without this, a pending fetch and an outright failure both rendered the
@@ -303,7 +394,7 @@ function AdminWhatsapp() {
         setAiAssist(assist as AdminConversationAiAssist);
       } catch {
         if (requestId !== aiAssistRequestRef.current || !canApplyConversationDetail(id)) return;
-        // Keep the last good card rather than blanking it on a transient poll error.
+        // Keep the last good card rather than blanking it on a transient refresh error.
         if (!options.background) setAiAssist(null);
       } finally {
         if (requestId === aiAssistRequestRef.current && canApplyConversationDetail(id)) {
@@ -322,7 +413,7 @@ function AdminWhatsapp() {
       if (options.background && olderPending.current) return null;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
-      // A background poll must not flip the pane into its loading state or wipe
+      // A background detail refresh must not flip the pane into its loading state or wipe
       // the visible thread -- the agent may be mid-sentence in the composer.
       if (!options.background) {
         setDetailLoading(true);
@@ -374,14 +465,14 @@ function AdminWhatsapp() {
         };
         setOlderCursor(messageCursors.current.older);
         setDetailError(null);
-        loadConversationAiAssist(id, { background: options.background });
+        if (!options.background) loadConversationAiAssist(id);
         if (options.resetReply) {
           setReplyDrafts((current) => ({ ...current, [id]: "" }));
         }
         return conversation;
       } catch (err) {
         if (requestId !== detailRequestRef.current || !canApplyConversationDetail(id)) return null;
-        // A failed background poll must not blank a thread the agent is reading.
+        // A failed background refresh must not blank a thread the agent is reading.
         if (options.background) return null;
 
         const message = errorText(err);
@@ -450,17 +541,7 @@ function AdminWhatsapp() {
         if (!cancelled) setError(errorText(err));
       });
 
-    // Not fatal if this fails or comes back empty -- TemplateSendPanel already
-    // has its own "no templates configured" state, so a failed fetch just
-    // falls back to that same message instead of blocking the inbox.
-    fetchAdminWhatsappTemplates()
-      .then((data) => {
-        if (!cancelled) setTemplates(data as AdminWhatsappTemplateRow[]);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setTemplatesLoading(false);
-      });
+    void loadTemplates();
 
     fetchAdminWoztellStatus()
       .then((data) => {
@@ -475,8 +556,9 @@ function AdminWhatsapp() {
 
     return () => {
       cancelled = true;
+      templatesRequestRef.current += 1;
     };
-  }, [user]);
+  }, [user, loadTemplates]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -560,8 +642,8 @@ function AdminWhatsapp() {
       assertNoMutationError(result);
 
       // Claim the list request slot before refetching. This fetch ran outside
-      // listRequestRef entirely, so a 30s background poll started earlier could
-      // resolve afterwards and overwrite the freshly-saved row with its stale
+      // listRequestRef entirely, so an earlier list request could resolve
+      // afterwards and overwrite the freshly-saved row with its stale
       // copy -- the agent's status or assignment change silently reverted on
       // screen while the database held the new value.
       // Claiming the slot also means owning the loading flag: refreshConversations
@@ -611,6 +693,11 @@ function AdminWhatsapp() {
   }
 
   async function sendReply() {
+    if (
+      outboundBusy.current ||
+      outboundReservations[staffUserId + ":" + selectedIdRef.current] !== "ready"
+    )
+      return;
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
@@ -629,6 +716,12 @@ function AdminWhatsapp() {
     }
 
     const targetId = detail.id;
+    const actorId = user?.id;
+    if (hasStoredOutboundRequest(actorId, targetId)) {
+      setOutboundReadback((current) => ({ ...current, [actorId + ":" + targetId]: true }));
+      return;
+    }
+    outboundBusy.current = true;
     setMutatingAction("reply");
     setReplyError(null);
     try {
@@ -645,28 +738,39 @@ function AdminWhatsapp() {
           text,
         },
       });
-      assertNoMutationError(result);
+      assertKnownOutboundResult(result);
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       clearOutboundRequestId(user?.id, targetId, "text");
       setReplyDrafts((current) => ({ ...current, [targetId]: "" }));
       await refreshConversations();
       if (!canApplyConversationDetail(targetId)) return;
 
       const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("回覆已加入傳送佇列");
+      if (refreshed && canApplyConversationDetail(targetId))
+        toast.success(outboundResultNotice(result, "回覆"));
     } catch (err) {
       releaseRejectedOutboundRequest(err, user?.id, targetId, "text");
-      if (!canApplyConversationDetail(targetId)) return;
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      if (outboundReservationRefused(err) && actorId)
+        await checkOutboundReservation(targetId, actorId).catch(() => {});
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      setOutboundReadback((current) => ({
+        ...current,
+        [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
+      }));
       const message = formatReplyError(errorText(err));
       // The send is persisted as a failed message server-side, but the timeline
       // was never refetched on this path -- so the pane still showed the
       // pre-send state and a toast that vanished in ~4s was the only trace. The
-      // draft is deliberately kept so the agent can retry without retyping.
+      // draft and request ID are kept until a scoped readback confirms outcome.
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
       await loadConversationDetail(targetId, { background: true });
     } finally {
-      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
+      outboundBusy.current = false;
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
+        setMutatingAction(null);
     }
   }
 
@@ -675,12 +779,23 @@ function AdminWhatsapp() {
   // window (which replyAvailability guards) has closed, so gating this on the
   // same check would defeat the point of offering it.
   async function sendTemplate(templateId: string) {
+    if (
+      outboundBusy.current ||
+      outboundReservations[staffUserId + ":" + selectedIdRef.current] !== "ready"
+    )
+      return;
     if (!detail || detail.id !== selectedIdRef.current) {
       toast.error("請先選擇對話");
       return;
     }
 
     const targetId = detail.id;
+    const actorId = user?.id;
+    if (hasStoredOutboundRequest(actorId, targetId)) {
+      setOutboundReadback((current) => ({ ...current, [actorId + ":" + targetId]: true }));
+      return;
+    }
+    outboundBusy.current = true;
     setMutatingAction("template");
     setReplyError(null);
     try {
@@ -697,26 +812,99 @@ function AdminWhatsapp() {
           ),
         },
       });
-      assertNoMutationError(result);
+      assertKnownOutboundResult(result);
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       clearOutboundRequestId(user?.id, targetId, "template");
       await refreshConversations();
       if (!canApplyConversationDetail(targetId)) return;
 
       const refreshed = await loadConversationDetail(targetId);
-      if (refreshed && canApplyConversationDetail(targetId)) toast.success("範本已加入傳送佇列");
+      if (refreshed && canApplyConversationDetail(targetId))
+        toast.success(outboundResultNotice(result, "範本"));
     } catch (err) {
       releaseRejectedOutboundRequest(err, user?.id, targetId, "template");
-      if (!canApplyConversationDetail(targetId)) return;
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      if (outboundReservationRefused(err) && actorId)
+        await checkOutboundReservation(targetId, actorId).catch(() => {});
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      setOutboundReadback((current) => ({
+        ...current,
+        [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
+      }));
       const message = formatReplyError(errorText(err));
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
       await loadConversationDetail(targetId, { background: true });
     } finally {
-      if (canApplyConversationDetail(targetId)) setMutatingAction(null);
+      outboundBusy.current = false;
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
+        setMutatingAction(null);
     }
   }
 
+  async function readOutboundOutcome() {
+    const targetId = selectedIdRef.current;
+    const actorId = user?.id;
+    if (!targetId || !actorId || outboundBusy.current) return;
+    outboundBusy.current = true;
+    setMutatingAction("reply-readback");
+    setReplyError(null);
+    try {
+      const blocked = await checkOutboundReservation(targetId, actorId);
+      if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+      for (const kind of ["text", "template"]) {
+        const saved = readOutboundJournal(actorId, targetId, kind);
+        if (!saved) continue;
+        const result = await fetchAdminOutboundIntent({
+          data: { requestId: saved.requestId, conversationId: targetId },
+        });
+        if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
+        if (result.intent?.id !== saved.requestId || result.intent.kind !== kind)
+          throw new Error("傳送要求資料未能核對，請聯絡支援。");
+        const state = result.intent.state;
+        if (!["queued", "accepted", "failed", "cancelled"].includes(state))
+          throw new Error("傳送結果仍未確認，請稍後核對或聯絡支援。沒有重送要求。");
+        clearOutboundRequestId(actorId, targetId, kind);
+        if (kind === "text" && ["queued", "accepted"].includes(state)) {
+          setReplyDrafts((current) =>
+            current[targetId]?.trim() === saved.original[0]
+              ? { ...current, [targetId]: "" }
+              : current,
+          );
+        }
+        toast.success(
+          ["queued", "accepted"].includes(state)
+            ? outboundResultNotice(result, "傳送要求")
+            : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
+        );
+      }
+      if (blocked)
+        throw new Error("此對話仍有未確認的傳送要求，請稍後核對或聯絡支援。沒有重送要求。");
+      await loadConversationDetail(targetId, { background: true });
+    } catch (error) {
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
+        setReplyError(`未能確認傳送結果。${formatReplyError(errorText(error))}`);
+    } finally {
+      outboundBusy.current = false;
+      if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
+        setOutboundReadback((current) => ({
+          ...current,
+          [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
+        }));
+        setMutatingAction(null);
+      }
+    }
+  }
+
+  const needsOutboundReadback = Boolean(
+    selectedId &&
+    (outboundReadback[staffUserId + ":" + selectedId] ||
+      outboundReservations[staffUserId + ":" + selectedId] !== "ready"),
+  );
+  const readingOutbound =
+    mutatingAction === "reply-readback" ||
+    outboundReservations[staffUserId + ":" + selectedId] === "loading";
   const isMutating = mutatingAction !== null;
   // The inbox had no search and no status filter at all -- the toolbar's filter
   // slot held two static badges -- so finding a conversation meant scrolling a
@@ -746,7 +934,12 @@ function AdminWhatsapp() {
     if (!id) return;
     setReplyDrafts((current) => ({ ...current, [id]: value }));
   }, []);
-  const panelTitle = selectedRow?.name ?? detail?.name ?? selectedRow?.phone ?? "WhatsApp 對話";
+  const panelTitle =
+    selectedRow?.customer_display_name ??
+    selectedRow?.name ??
+    detail?.name ??
+    selectedRow?.phone ??
+    "WhatsApp 對話";
   const panelDescription = selectedRow
     ? `${statusLabel(selectedRow.status)} · ${formatDate(selectedRow.last_message_at)}`
     : "查看訊息紀錄、更新負責代理並回覆客戶。";
@@ -815,7 +1008,7 @@ function AdminWhatsapp() {
             <Input
               value={queryDraft}
               onChange={(event) => setQueryDraft(event.target.value)}
-              placeholder="搜尋姓名、電話或訊息"
+              placeholder="搜尋姓名、電話、樓盤或訊息"
               aria-label="搜尋 WhatsApp 對話"
               className="h-11 w-full sm:w-56 lg:h-9"
             />
@@ -860,18 +1053,20 @@ function AdminWhatsapp() {
             {/* History import. Deliberately not automatic: it reaches out to
                 Woztell and writes to crm_contacts, so it stays an explicit,
                 admin-initiated action rather than something a page load does. */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-11 lg:h-9"
-              disabled={backfilling}
-              onClick={() => void runBackfill()}
-              title="匯入 Woztell 上早於本系統的歷史對話"
-            >
-              <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              {backfilling ? "匯入中…" : "匯入歷史訊息"}
-            </Button>
+            {canBackfill ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-11 lg:h-9"
+                disabled={backfilling}
+                onClick={() => void runBackfill()}
+                title="匯入 Woztell 上早於本系統的歷史對話"
+              >
+                <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+                {backfilling ? "匯入中…" : "匯入歷史訊息"}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -894,6 +1089,11 @@ function AdminWhatsapp() {
         }
       />
 
+      {listCursor ? (
+        <p className="text-sm text-muted-foreground">
+          你正查看較舊頁面。按「第一頁」查看最新活動。
+        </p>
+      ) : null}
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
@@ -955,7 +1155,12 @@ function AdminWhatsapp() {
               woztellEnabled={woztellEnabled}
               templates={templates}
               templatesLoading={templatesLoading}
-              disabled={isMutating}
+              templatesError={templatesError}
+              onRetryTemplates={() => void loadTemplates()}
+              disabled={isMutating || needsOutboundReadback}
+              needsOutboundReadback={needsOutboundReadback}
+              readingOutbound={readingOutbound}
+              onReadOutbound={() => void readOutboundOutcome()}
               savingConversation={mutatingAction === "conversation"}
               sendingReply={mutatingAction === "reply"}
               sendingTemplate={mutatingAction === "template"}
@@ -1011,7 +1216,12 @@ function AdminWhatsapp() {
           woztellEnabled={woztellEnabled}
           templates={templates}
           templatesLoading={templatesLoading}
-          disabled={isMutating}
+          templatesError={templatesError}
+          onRetryTemplates={() => void loadTemplates()}
+          disabled={isMutating || needsOutboundReadback}
+          needsOutboundReadback={needsOutboundReadback}
+          readingOutbound={readingOutbound}
+          onReadOutbound={() => void readOutboundOutcome()}
           savingConversation={mutatingAction === "conversation"}
           sendingReply={mutatingAction === "reply"}
           sendingTemplate={mutatingAction === "template"}
@@ -1154,7 +1364,7 @@ function ConversationList({
                       attention.awaitingReply ? "font-bold" : "font-semibold",
                     ].join(" ")}
                   >
-                    {conversation.name ?? "WhatsApp 客戶"}
+                    {conversation.customer_display_name ?? conversation.name ?? "WhatsApp 客戶"}
                   </span>
                   <span className="block truncate text-xs text-muted-foreground">
                     {conversation.phone ?? "未有電話"}
@@ -1181,6 +1391,7 @@ function ConversationList({
                 (conversation.last_message_at ? "（非文字訊息）" : "未有訊息內容")}
             </span>
 
+            <NoLinkInboxSummary row={conversation} />
             <span className="flex flex-wrap items-center gap-2">
               {attention.awaitingReply ? (
                 <Badge className="border-transparent bg-amber-500 text-amber-950 hover:bg-amber-500">
@@ -1232,7 +1443,12 @@ function ConversationWorkspace({
   woztellEnabled,
   templates,
   templatesLoading,
+  templatesError,
+  onRetryTemplates,
   disabled,
+  needsOutboundReadback,
+  readingOutbound,
+  onReadOutbound,
   savingConversation,
   sendingReply,
   sendingTemplate,
@@ -1259,7 +1475,12 @@ function ConversationWorkspace({
   woztellEnabled: boolean | null;
   templates: AdminWhatsappTemplateRow[];
   templatesLoading: boolean;
+  templatesError: string | null;
+  onRetryTemplates: () => void;
   disabled: boolean;
+  needsOutboundReadback: boolean;
+  readingOutbound: boolean;
+  onReadOutbound: () => void;
   savingConversation: boolean;
   sendingReply: boolean;
   sendingTemplate: boolean;
@@ -1274,7 +1495,9 @@ function ConversationWorkspace({
   const replyCountId = useId();
   if (loading && !detail) return <Skeleton className="h-[32rem] w-full rounded-none" />;
   if (error)
-    return (
+    return selectedEnquiryId ? (
+      <EnquiryOnlyPanel inquiryId={selectedEnquiryId} />
+    ) : (
       <div className="p-4">
         <AdminError message={error} />
       </div>
@@ -1300,7 +1523,7 @@ function ConversationWorkspace({
   const showTemplateSend = availability.code === "OUTSIDE_24_HOUR_WINDOW";
 
   return (
-    <div className="flex min-h-[32rem] flex-col">
+    <div className="flex h-[calc(100dvh-9rem)] min-h-0 max-h-[44rem] flex-col overflow-hidden">
       {/* Plain divs, not <header>/<footer>: nested inside AdminShell's own
           <header> and the outer site <header>/<footer>, the semantic tags
           produced three "banner" and two "contentinfo" landmarks on one page,
@@ -1327,37 +1550,40 @@ function ConversationWorkspace({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <Field label="對話狀態">
-            <AdminStatusSelect
-              ariaLabel="WhatsApp 對話狀態"
-              value={detail.status}
-              options={statusOptionsFor(detail.status)}
-              disabled={disabled}
-              onChange={onStatusChange}
-            />
-          </Field>
-          <Field label="要求更改負責代理（待確認）">
-            <Select
-              value={detail.assigned_agent_id ?? "none"}
-              disabled={disabled}
-              onValueChange={(value) => onAgentChange(value === "none" ? null : value)}
-            >
-              <SelectTrigger aria-label="負責代理">
-                <SelectValue placeholder="選擇代理" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">未指定代理</SelectItem>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agentLabel(agent)}
-                    {agent.active ? "" : "（停用）"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        <details className="mt-3 rounded border px-3 py-2">
+          <summary className="cursor-pointer text-sm font-medium">對話設定</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="對話狀態">
+              <AdminStatusSelect
+                ariaLabel="WhatsApp 對話狀態"
+                value={detail.status}
+                options={statusOptionsFor(detail.status)}
+                disabled={disabled}
+                onChange={onStatusChange}
+              />
+            </Field>
+            <Field label="要求更改負責代理（待確認）">
+              <Select
+                value={detail.assigned_agent_id ?? "none"}
+                disabled={disabled}
+                onValueChange={(value) => onAgentChange(value === "none" ? null : value)}
+              >
+                <SelectTrigger aria-label="負責代理">
+                  <SelectValue placeholder="選擇代理" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未指定代理</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agentLabel(agent)}
+                      {agent.active ? "" : "（停用）"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+        </details>
         {savingConversation ? (
           <p className="mt-3 text-xs text-muted-foreground">正在儲存對話設定…</p>
         ) : null}
@@ -1384,7 +1610,7 @@ function ConversationWorkspace({
         onLoadOlder={onLoadOlder}
       />
 
-      <div className="border-t p-4">
+      <div className="max-h-[36dvh] shrink-0 overflow-y-auto border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           回覆只可在客戶最後一次來訊後 24 小時內發送。
           {windowRemaining ? <span className="block">{windowRemaining}</span> : null}
@@ -1397,10 +1623,29 @@ function ConversationWorkspace({
             key={detail.id}
             templates={templates}
             loading={templatesLoading}
+            error={templatesError}
+            onRetry={onRetryTemplates}
             disabled={disabled}
             sending={sendingTemplate}
             onSend={onSendTemplate}
           />
+        ) : null}
+        {needsOutboundReadback ? (
+          <div className="mb-3 space-y-2 rounded-md border p-3 text-sm">
+            <p>
+              {readingOutbound
+                ? "正在核對傳送狀態…"
+                : "傳送要求結果未確認，請先核對傳送狀態。核對不會重新傳送。"}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={sendingReply || sendingTemplate || readingOutbound}
+              onClick={onReadOutbound}
+            >
+              {readingOutbound ? "正在核對…" : "核對傳送狀態"}
+            </Button>
+          </div>
         ) : null}
         {replyError ? (
           <p
@@ -1425,13 +1670,13 @@ function ConversationWorkspace({
             // Only the send itself disables the composer. Disabling on any
             // in-flight mutation meant changing 負責代理 froze the textarea the
             // agent was typing in.
-            disabled={sendingReply || Boolean(availability.reason)}
+            disabled={sendingReply || needsOutboundReadback || Boolean(availability.reason)}
             maxLength={REPLY_MAX_LENGTH}
             aria-describedby={replyCountId}
             placeholder="輸入回覆內容"
             onChange={(event) => onReplyBodyChange(event.target.value)}
           />
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t bg-background py-2">
             <span
               id={replyCountId}
               className={[
@@ -1447,7 +1692,8 @@ function ConversationWorkspace({
             </Button>
           </div>
         </div>
-        <div className="mt-3">
+        <details className="mt-3 text-sm">
+          <summary className="cursor-pointer">AI 回覆建議（只作草稿）</summary>
           <AiAssistPanel
             aiAssist={aiAssist}
             loading={aiAssistLoading}
@@ -1458,7 +1704,7 @@ function ConversationWorkspace({
               onReplyBodyChange(value);
             }}
           />
-        </div>
+        </details>
       </div>
     </div>
   );
@@ -1496,12 +1742,16 @@ function AiAssistPanel({
 function TemplateSendPanel({
   templates,
   loading,
+  error,
+  onRetry,
   disabled,
   sending,
   onSend,
 }: {
   templates: AdminWhatsappTemplateRow[];
   loading: boolean;
+  error: string | null;
+  onRetry: () => void;
   disabled: boolean;
   sending: boolean;
   onSend: (templateId: string) => Promise<void>;
@@ -1518,6 +1768,20 @@ function TemplateSendPanel({
     );
   }
 
+  if (error) {
+    return (
+      <div role="alert" className="mb-3 rounded-md border border-destructive/30 p-3 text-sm">
+        <p>
+          {/403|forbidden|權限/i.test(error)
+            ? "沒有查看範本的權限。"
+            : "未能載入範本，請稍後重試。"}
+        </p>
+        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+          重新載入範本
+        </Button>
+      </div>
+    );
+  }
   if (templates.length === 0) {
     return (
       <div className="mb-3 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
@@ -1574,6 +1838,7 @@ function TemplateSendPanel({
             : "將向客戶傳送已審批範本。範本一經傳送即無法收回。"
         }
         confirmLabel="傳送"
+        disabled={disabled}
         isPending={sending}
         onOpenChange={setConfirmOpen}
         onConfirm={() => {
@@ -1610,6 +1875,18 @@ function MessageTimeline({
       anchor.current = null;
     } else if (pinned.current) element.scrollTop = element.scrollHeight;
   }, [messages]);
+  useLayoutEffect(() => {
+    const element = container.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    // Enquiry evidence and the mobile sheet settle after the messages load.
+    // Keep the newest message in view as the pane changes size, unless the
+    // reader has scrolled back or an older-page anchor is being restored.
+    const observer = new ResizeObserver(() => {
+      if (pinned.current && !anchor.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   async function older() {
     const element = container.current;
     if (element) anchor.current = { height: element.scrollHeight, top: element.scrollTop };
@@ -1649,7 +1926,10 @@ function MessageTimeline({
 
 function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
   const outbound = message.direction === "outbound";
-  const failed = message.status === "failed" || ["unknown", "blocked"].includes(message.status);
+  const failed =
+    message.status === "failed" ||
+    ["unknown", "blocked"].includes(message.status) ||
+    (message.status === "cancelled" && Boolean(message.error));
 
   // A failed send used to differ from a delivered one by `font-semibold` alone:
   // same bubble colour, same size, no icon. On the surface that decides whether
@@ -1711,7 +1991,9 @@ function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
 // Provider failure codes reach the bubble verbatim. Staff cannot act on
 // WOZTELL_DELIVERY_UNKNOWN; the raw code stays in `title` for support.
 const PROVIDER_ERROR_LABELS: Record<string, string> = {
-  WOZTELL_DELIVERY_UNKNOWN: "發送失敗（供應商未回覆結果），請稍後重試。",
+  WOZTELL_DELIVERY_UNKNOWN: "傳送結果未確認，請先核對狀態或聯絡支援，勿直接重送。",
+  OUTBOUND_RECONCILIATION_REQUIRED: "本次要求未送出：同一對話有未確認的傳送要求，請先核對狀態。",
+  OUTBOUND_CONFLICT_OR_NOT_FOUND: "本次要求未送出：對話負責人或權限已變更，請重新載入並核對。",
   WOZTELL_CONFIGURATION_UNAVAILABLE: "WhatsApp 尚未設定完成，請聯絡技術支援。",
   WOZTELL_RECIPIENT_MISSING: "此客戶沒有可用的 WhatsApp 號碼。",
   CONTACT_OPTED_OUT: "客戶已拒收訊息。",
@@ -1885,6 +2167,8 @@ function agentLabel(agent: AdminAgentRow) {
 }
 
 function formatReplyError(value: string) {
+  if (value.includes("OUTBOUND_RECONCILIATION_REQUIRED"))
+    return "此對話有未確認的傳送要求，請先核對狀態；本次要求未加入佇列。";
   if (value.includes("ENQUIRY_SELECTION_REQUIRED"))
     return "此對話有多項查詢，請先選擇本次回覆對應的查詢。";
   if (value.includes("ENQUIRY_ASSOCIATION_INVALID")) return "查詢關聯已變更，請重新選擇。";
@@ -1961,6 +2245,39 @@ function writeStoredReplyDrafts(drafts: Record<string, string>, userId: string |
   }
 }
 
+function hasStoredOutboundRequest(userId: string | undefined | null, conversationId: string) {
+  if (!userId) return true;
+  try {
+    return ["text", "template"].some((kind) =>
+      Boolean(sessionStorage.getItem(outboundStorageKey(userId, conversationId, kind))),
+    );
+  } catch {
+    return true;
+  }
+}
+function readOutboundJournal(userId: string, conversationId: string, kind: string) {
+  const raw = sessionStorage.getItem(outboundStorageKey(userId, conversationId, kind));
+  if (!raw) return null;
+  const saved = JSON.parse(raw) as { requestId: string; value: string };
+  if (!saved || typeof saved.requestId !== "string" || typeof saved.value !== "string")
+    throw new Error("傳送要求資料未能核對，請聯絡支援。");
+  const original: unknown = JSON.parse(saved.value);
+  if (!Array.isArray(original) || original.length !== 2 || typeof original[0] !== "string")
+    throw new Error("傳送要求資料未能核對，請聯絡支援。");
+  return { ...saved, original: original as [string, unknown] };
+}
+function assertKnownOutboundResult(result: unknown) {
+  assertNoMutationError(result);
+  const intent = (result as { intent?: { state?: string } })?.intent;
+  if (!intent || !["queued", "accepted"].includes(intent.state ?? ""))
+    throw new Error("傳送結果仍未確認，請先核對狀態。沒有重送要求。");
+}
+function outboundResultNotice(result: unknown, label: string) {
+  return (result as { intent?: { state?: string } })?.intent?.state === "accepted"
+    ? "供應商已接納傳送要求，尚未證實送達或已讀。"
+    : `${label}已加入傳送佇列`;
+}
+
 // Persist before POST. Storage failure blocks dispatch so page recovery cannot mint a duplicate.
 function outboundStorageKey(userId: string | undefined, conversationId: string, kind: string) {
   if (!userId) throw new Error("STAFF_IDENTITY_REQUIRED");
@@ -1994,6 +2311,19 @@ function releaseRejectedOutboundRequest(
   kind: string,
 ) {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : null;
-  if (code === "ENQUIRY_SELECTION_REQUIRED" || code === "ENQUIRY_ASSOCIATION_INVALID")
+  if (
+    code === "ENQUIRY_SELECTION_REQUIRED" ||
+    code === "ENQUIRY_ASSOCIATION_INVALID" ||
+    code === "OUTBOUND_RECONCILIATION_REQUIRED"
+  )
     clearOutboundRequestId(userId, conversationId, kind);
+}
+
+function outboundReservationRefused(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    error.code === "OUTBOUND_RECONCILIATION_REQUIRED",
+  );
 }

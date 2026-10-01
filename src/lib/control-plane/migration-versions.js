@@ -104,6 +104,16 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20260927170000_performance_event_quality.sql",
   "20260927171000_inquiry_quality.sql",
   "20260927172000_media_asset_variants.sql",
+  "20260929100000_whatsapp_inbound_receipts.sql",
+  "20260929101000_whatsapp_receipt_identity.sql",
+  "20260929102000_whatsapp_portal_resolution.sql",
+  "20260929103000_whatsapp_no_link_episodes.sql",
+  "20260929104000_whatsapp_enquiry_access.sql",
+  "20260929105000_whatsapp_no_link_effects.sql",
+  "20260929106000_whatsapp_enquiry_resolution_guard.sql",
+  "20260929107000_whatsapp_forwarded_enquiries.sql",
+  "20260930090000_whatsapp_no_link_source_authority.sql",
+  "20261001090000_whatsapp_outbound_unknown_reservation.sql",
 ]);
 
 /**

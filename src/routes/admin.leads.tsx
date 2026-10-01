@@ -13,6 +13,11 @@ import {
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
+import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
+import { RelatedLeadConversations } from "@/components/admin/whatsapp/RelatedLeadConversations";
+import { LeadContactEditor } from "@/components/admin/whatsapp/LeadContactEditor";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
@@ -216,6 +221,8 @@ function AdminLeads() {
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [forwardOpen, setForwardOpen] = useState(false);
+  const [forwardBusy, setForwardBusy] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminLeadDetail | null>(null);
   const [draft, setDraft] = useState<LeadDraft | null>(null);
@@ -361,6 +368,32 @@ function AdminLeads() {
       }
     },
     [canApplyLeadDetail, loadLeadAiProfile],
+  );
+
+  const reloadLeadContact = useCallback(
+    async (id: string) => {
+      const requestId = detailRequestRef.current;
+      if (!canApplyLeadDetail(id)) return false;
+      const next = (await fetchAdminLead({ data: { id } })) as AdminLeadDetail | null;
+      if (requestId !== detailRequestRef.current || !canApplyLeadDetail(id)) return false;
+      if (!next) throw new Error("未能核對聯絡資料或權限。");
+      // Contact-only readback must preserve unsaved CRM fields and follow-up notes.
+      setDetail((current) =>
+        current?.id === id
+          ? {
+              ...current,
+              contact_id: next.contact_id,
+              name: next.name,
+              email: next.email,
+              phone: next.phone,
+              opt_in_whatsapp: next.opt_in_whatsapp,
+            }
+          : current,
+      );
+      void refreshLeads();
+      return true;
+    },
+    [canApplyLeadDetail, refreshLeads],
   );
 
   useEffect(() => {
@@ -795,6 +828,9 @@ function AdminLeads() {
         }
         actions={
           <>
+            <Button type="button" size="sm" variant="outline" onClick={() => setForwardOpen(true)}>
+              記錄人工轉交
+            </Button>
             <Button asChild size="sm" className="h-11 lg:h-9">
               <Link to="/admin/leads/command-center">前往跟進工作台</Link>
             </Button>
@@ -1038,6 +1074,7 @@ function AdminLeads() {
             aiMutatingTagId={aiMutatingTagId}
             disabled={isMutating}
             onDraftChange={updateDraft}
+            onReloadContact={() => reloadLeadContact(detail.id)}
             onNoteChange={(value) => {
               setNoteBody(value);
               if (noteError) setNoteError(null);
@@ -1048,7 +1085,37 @@ function AdminLeads() {
             noteSaving={mutatingAction === "note"}
           />
         ) : null}
+        {detail?.source === "manual_forward" ? (
+          <ForwardedEnquiryEvidence leadId={detail.id} />
+        ) : null}
       </AdminDetailPanel>
+      <Dialog
+        open={forwardOpen}
+        onOpenChange={(open) => {
+          if (!forwardBusy) setForwardOpen(open);
+        }}
+      >
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogTitle>記錄人工轉交查詢</DialogTitle>
+          <DialogDescription>
+            保存原文及來源；不會建立 WhatsApp 客戶對話或發送訊息。
+          </DialogDescription>
+          {forwardOpen ? (
+            <ForwardedEnquiryForm
+              key={user?.id}
+              draftKey={user?.id}
+              onBusyChange={setForwardBusy}
+              agents={agents.map((agent) => ({ id: agent.id, name: agent.name, active: true }))}
+              onCancel={() => setForwardOpen(false)}
+              onSaved={(leadId) => {
+                setForwardOpen(false);
+                void refreshLeads();
+                openLead(leadId);
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
       {unsavedLeadDialog}
       {leadRouteLeaveGuard}
       <AdminConfirmDialog
@@ -1189,6 +1256,7 @@ function LeadDetailEditor({
   disabled,
   noteSaving,
   onDraftChange,
+  onReloadContact,
   onNoteChange,
   onAddNote,
   onRefreshAiProfile,
@@ -1206,6 +1274,7 @@ function LeadDetailEditor({
   disabled: boolean;
   noteSaving: boolean;
   onDraftChange: <K extends keyof LeadDraft>(key: K, value: LeadDraft[K]) => void;
+  onReloadContact: () => Promise<boolean>;
   onNoteChange: (value: string) => void;
   onAddNote: () => void;
   onRefreshAiProfile: () => void;
@@ -1236,6 +1305,25 @@ function LeadDetailEditor({
             </dd>
           </div>
         </dl>
+        {lead.contact_id ? (
+          <LeadContactEditor
+            key={`${lead.id}:${lead.contact_id}`}
+            leadId={lead.id}
+            contactId={lead.contact_id}
+            name={lead.name}
+            email={lead.email}
+            disabled={disabled}
+            onReload={onReloadContact}
+          />
+        ) : (
+          <p className="mt-3 text-xs text-muted-foreground">
+            尚未連結已核實客戶聯絡資料；原文聯絡方式不會自動建立客戶身分。
+          </p>
+        )}
+        <RelatedLeadConversations
+          key={`${lead.id}:${lead.contact_id ?? "none"}`}
+          leadId={lead.id}
+        />
       </section>
 
       <section className="rounded-lg border p-4">
@@ -1345,6 +1433,7 @@ function LeadDetailEditor({
 
           <Field label="內部備註（不會傳送給客戶）">
             <Textarea
+              aria-label="內部備註（不會傳送給客戶）"
               value={draft.note}
               rows={3}
               disabled={disabled}
