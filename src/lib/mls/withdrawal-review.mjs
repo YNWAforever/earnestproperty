@@ -75,9 +75,10 @@ async function context(q, source) {
  FROM mls_ingestion_receipts r WHERE r.source=$1 AND r.scope_id=$2 AND r.full_snapshot AND r.response->>'success'='true' ORDER BY r.scraped_at DESC,r.id DESC LIMIT 2`,
     [source, scope(source)],
   );
-  const since = receipts[1]?.accepted_at ?? receipts[0]?.accepted_at ?? new Date(0).toISOString();
+  // Absence is measured between original observations, not later receipt acceptance.
+  const since = receipts[1]?.scraped_at ?? receipts[0]?.scraped_at ?? new Date(0).toISOString();
   const failures = await q(
-    `SELECT id,stages,dispatch_status,finished_at FROM property_sync_runs WHERE source=$1 AND started_at>=$2 AND (finished_at IS NULL OR dispatch_status='unknown' OR EXISTS(SELECT 1 FROM jsonb_each(stages) s WHERE s.value->>'status' IN ('failed','blocked','unknown','cancelled'))) ORDER BY started_at DESC,id DESC LIMIT 1`,
+    `SELECT id,stages,dispatch_status,finished_at FROM property_sync_runs WHERE source=$1 AND (started_at>=$2 OR finished_at>=$2 OR finished_at IS NULL) AND (finished_at IS NULL OR dispatch_status IN ('failed','unknown') OR EXISTS(SELECT 1 FROM jsonb_each(stages) s WHERE s.value->>'status' IN ('failed','blocked','unknown','cancelled'))) ORDER BY started_at DESC,id DESC LIMIT 1`,
     [source, since],
   );
   const watermark = await q(

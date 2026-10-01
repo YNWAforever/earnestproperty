@@ -151,3 +151,123 @@ test("candidate pagination never includes the lookahead row on the current page"
   );
   assert.equal(filtered.nextCursor, row(2).id);
 });
+
+test("actual failure-interval SQL rejects failed or unresolved observations without blocking unrelated history", async (t) => {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const { listWithdrawalCandidates } = await m();
+  const db = new PGlite();
+  const actor = { staffId: "10000000-0000-0000-0000-000000000001", roles: ["manager"] };
+  const receipts = snapshots.map((r, i) => ({
+    id: "receipt-" + i,
+    scraped_at: r.collectedAt,
+    accepted_at: new Date(Date.parse(r.collectedAt) + 10 * 60000).toISOString(),
+    covered: true,
+    payload_hash: "a".repeat(64),
+  }));
+  const candidate = {
+    id: "20000000-0000-0000-0000-000000000001",
+    title_zh: "合成候選",
+    status: "active",
+    property_no: "FIXTURE-1",
+    deal_type: "sale",
+    version: "v1",
+    states: [],
+    protected: false,
+    latest_present: false,
+    prior_present: false,
+  };
+  const cases = [
+    {
+      name: "definite rejected dispatch with no stages",
+      started: "2026-10-01T03:00:00Z",
+      finished: "2026-10-01T03:01:00Z",
+      dispatch: "failed",
+      stages: {},
+      allowed: false,
+    },
+    {
+      name: "failed run crosses the first observation boundary",
+      started: "2026-09-30T00:30:00Z",
+      finished: "2026-09-30T01:01:00Z",
+      dispatch: "accepted",
+      stages: { collection: { status: "failed" } },
+      allowed: false,
+    },
+    {
+      name: "older unresolved run still overlaps the observation interval",
+      started: "2026-09-29T01:00:00Z",
+      finished: null,
+      dispatch: "unknown",
+      stages: {},
+      allowed: false,
+    },
+    {
+      name: "failure between collection and delayed receipt acceptance",
+      started: "2026-09-30T01:02:00Z",
+      finished: "2026-09-30T01:05:00Z",
+      dispatch: "accepted",
+      stages: { ingestion: { status: "failed" } },
+      allowed: false,
+    },
+    {
+      name: "fully finished failure before both observations is outside the interval",
+      started: "2026-09-29T22:00:00Z",
+      finished: "2026-09-30T00:55:00Z",
+      dispatch: "failed",
+      stages: {},
+      allowed: true,
+    },
+    {
+      name: "another source failure cannot block this scope",
+      source: "propertyhk",
+      started: "2026-10-01T03:00:00Z",
+      finished: "2026-10-01T03:01:00Z",
+      dispatch: "failed",
+      stages: {},
+      allowed: true,
+    },
+  ];
+  try {
+    await db.exec(
+      "CREATE TABLE property_sync_runs(id text,source text,stages jsonb,dispatch_status text,started_at timestamptz,finished_at timestamptz)",
+    );
+    const client = {
+      query: async (sql, params) => {
+        if (sql.includes("FROM property_sync_runs WHERE source=$1")) return db.query(sql, params);
+        if (sql.includes("FROM staff_users")) return { rows: [{ ok: 1 }] };
+        if (sql.includes("FROM mls_ingestion_receipts r")) return { rows: receipts };
+        if (sql.includes("FROM mls_ingestion_scopes")) return { rows: [] };
+        if (sql.includes("FROM properties p")) return { rows: [candidate] };
+        throw Error("Unexpected fixture SQL");
+      },
+    };
+    assert.equal(
+      (await listWithdrawalCandidates({ client, actor, source: "28hse_agent_540", now })).rows[0]
+        .decision.allowed,
+      true,
+    );
+    for (const entry of cases)
+      await t.test(entry.name, async () => {
+        await db.exec("DELETE FROM property_sync_runs");
+        await db.query("INSERT INTO property_sync_runs VALUES($1,$2,$3,$4,$5,$6)", [
+          "synthetic-failure",
+          entry.source ?? "28hse_agent_540",
+          JSON.stringify(entry.stages),
+          entry.dispatch,
+          entry.started,
+          entry.finished,
+        ]);
+        const result = await listWithdrawalCandidates({
+          client,
+          actor,
+          source: "28hse_agent_540",
+          now,
+        });
+        assert.equal(result.rows[0].decision.allowed, entry.allowed);
+        if (!entry.allowed)
+          assert.equal(result.rows[0].decision.reason, "failed_or_unknown_interval");
+      });
+  } finally {
+    await db.close();
+  }
+});

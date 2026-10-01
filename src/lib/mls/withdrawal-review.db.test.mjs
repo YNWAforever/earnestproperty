@@ -249,6 +249,103 @@ test(
         source,
         candidateIds: [ids[4]],
       });
+      const rejectedDispatch = (
+        await q(
+          "INSERT INTO property_sync_runs(source,scope_id,dispatch_status,stages,finished_at) VALUES('28hse_agent_540','agent:540','failed','{}',now()) RETURNING id",
+        )
+      )[0];
+      const rejectionInterval = await previewWithdrawals({
+        client,
+        actor: manager,
+        source,
+        candidateIds: [ids[4]],
+      });
+      assert.equal(
+        rejectionInterval.rows[0].decision.allowed,
+        false,
+        "definitely failed dispatch cannot count as a successful absence interval",
+      );
+      assert.equal(rejectionInterval.rows[0].decision.reason, "failed_or_unknown_interval");
+      const rejectionApply = await apply(sourceRace, [ids[4]]);
+      assert.equal(
+        rejectionApply.results[0].status,
+        "blocked",
+        "preview made before rejection is rechecked before mutation",
+      );
+      assert.equal(
+        (await q("SELECT status::text FROM properties WHERE id=$1", [ids[4]]))[0].status,
+        "active",
+      );
+      await q("DELETE FROM property_sync_runs WHERE id=$1", [rejectedDispatch.id]);
+      const observation = (
+        await q(
+          "SELECT scraped_at,accepted_at FROM mls_ingestion_receipts WHERE source=$1 ORDER BY scraped_at DESC,id DESC LIMIT 1 OFFSET 1",
+          [source],
+        )
+      )[0];
+      const firstObservedAt = new Date(observation.scraped_at).getTime();
+      for (const entry of [
+        {
+          name: "cross-boundary failure",
+          start: firstObservedAt - 60000,
+          finish: firstObservedAt + 60000,
+          dispatch: "accepted",
+          stages: { collection: { status: "failed" } },
+          allowed: false,
+        },
+        {
+          name: "old unresolved run",
+          start: firstObservedAt - 60000,
+          finish: null,
+          dispatch: "unknown",
+          stages: {},
+          allowed: false,
+        },
+        {
+          name: "between collection and delayed acceptance",
+          start: firstObservedAt + 60000,
+          finish: firstObservedAt + 120000,
+          dispatch: "accepted",
+          stages: { ingestion: { status: "failed" } },
+          allowed: false,
+        },
+        {
+          name: "old completed failure outside both observations",
+          start: firstObservedAt - 120000,
+          finish: firstObservedAt - 60000,
+          dispatch: "failed",
+          stages: {},
+          allowed: true,
+        },
+      ]) {
+        const event = (
+          await q(
+            "INSERT INTO property_sync_runs(source,scope_id,dispatch_status,stages,started_at,finished_at) VALUES($1,'agent:540',$2,$3,$4,$5) RETURNING id",
+            [
+              source,
+              entry.dispatch,
+              JSON.stringify(entry.stages),
+              new Date(entry.start).toISOString(),
+              entry.finish === null ? null : new Date(entry.finish).toISOString(),
+            ],
+          )
+        )[0];
+        const check = await previewWithdrawals({
+          client,
+          actor: manager,
+          source,
+          candidateIds: [ids[4]],
+        });
+        assert.equal(check.rows[0].decision.allowed, entry.allowed, entry.name);
+        if (!entry.allowed)
+          assert.equal(check.rows[0].decision.reason, "failed_or_unknown_interval", entry.name);
+        await q("DELETE FROM property_sync_runs WHERE id=$1", [event.id]);
+      }
+      assert.equal(
+        (await q("SELECT status::text FROM properties WHERE id=$1", [ids[4]]))[0].status,
+        "active",
+      );
+
       const failed = (
         await q(
           "INSERT INTO property_sync_runs(source,scope_id,stages,finished_at) VALUES('28hse_agent_540','agent:540','{\"ingestion\":{\"status\":\"failed\"}}',now()) RETURNING id",

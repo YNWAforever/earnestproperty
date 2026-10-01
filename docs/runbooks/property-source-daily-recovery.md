@@ -106,6 +106,8 @@ verify job 為了保留故障摘要會 always 執行；job success 本身不代�
 
 132historical缺席於本session沒有任何正式apply。候選須同scope兩個accepted full observations，原採集時間相隔≥24h、latest≤36h、collection/ingestion metadata可證完整、無failed/unknown區間。明示sold/rented獨立；draft、人工override/openreview、其他active source均阻擋。Property.hk absence永遠off，本次只人工review、不啟用automation。
 
+缺席區間從較早原採集時間開始，不以延遲匯入的accepted_at縮短。Dispatch明確failed即使stages尚為空，也屬失敗；跨首輪觀察的失敗及更早開始但仍未解決的run會阻擋撤盤，先由operator唯讀核對native結果。完整終結且在兩輪觀察之前的舊失敗、其他source的失敗不混入本source區間。新failure會改變預覽evidence fingerprint，舊preview不可直接套用。
+
 Apply只通過既有locked管理writer設inactive並持續override；UUID／public alias／source links不刪。Preview之後source或staff版本變更會blocked；一批partial結果保留。COMMIT ack未知先用idempotency key只讀結果，禁止換key盲重送。
 
 後台撤盤在送出前保存原 idempotency key 與來源至已核實 user 的 browser-tab sessionStorage；整頁刷新仍保持「結果待核實，請勿重複提交」。按「核對提交結果」只讀同 staff/key 的 batch，不重新 apply；只有 confirmed 結果才清除本頁 key。其他 manager 不可讀原 actor 的 batch。保存／讀取失敗或紀錄格式不正確時阻擋新提交，由管理員核實原 batch；不要先清空 browser storage、換 actor/key 或重新預覽去掩蓋未知結果。關閉 tab／換裝置不保證保留 browser-tab key；先由 operator 唯讀核對原 batch/audit 再決定下一步。
