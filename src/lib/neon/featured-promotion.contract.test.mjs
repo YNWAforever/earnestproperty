@@ -237,7 +237,9 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
       ('old-gold','28hse','1','sale','active','2026-08-01','2026-10-01'),
       ('new-ad','28hse','2','sale','active','2026-09-29','2026-10-01'),
       ('relisted','28hse','3','sale','active','2026-09-30','2026-10-01'),
-      ('old-gold','28hse','4','sale','active','2026-10-01','2026-10-01');
+      ('old-gold','28hse','4','sale','active','2026-10-01','2026-10-01'),
+      ('old-gold','28hse','proposed','sale','proposed','2026-10-03','2026-10-03'),
+      ('old-gold','28hse','rejected','sale','rejected','2026-10-04','2026-10-04');
     INSERT INTO mls_source_state VALUES
       ('old-gold','2026-08-01','active','2026-10-01','28hse','1','sale'),
       ('new-ad','2026-09-29','active','2026-10-01','28hse','2','sale'),
@@ -261,12 +263,28 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
       ["RELIST", "NEW", "OLD"],
     );
     await db.query("UPDATE mls_source_state SET last_accepted_at='2026-10-02'");
+    await db.query("UPDATE properties SET last_seen_at='2026-10-03',updated_at='2026-10-03'");
+    await db.query("UPDATE property_source_links SET last_seen_at='2026-10-03'");
     const again = await server.fetchFeaturedProperties({ limit: 2, order: "newest" });
     assert.deepEqual(
       again.map((row) => row.listing_no),
       ["RELIST", "NEW"],
       "routine re-scrape must not make old adverts new",
     );
+    await db.exec(`INSERT INTO properties(id,listing_no,created_at) VALUES
+      ('fallback-1','F1','2026-08-10'),('fallback-2','F2','2026-08-11'),
+      ('fallback-3','F3','2026-08-12'),('fallback-4','F4','2026-08-13'),
+      ('new-ad-twin','TWIN','2026-09-28');
+      INSERT INTO property_public_members VALUES ('fallback-1','F1'),('fallback-2','F2'),
+      ('fallback-3','F3'),('fallback-4','F4'),('new-ad-twin','P2');`);
+    const six = await server.fetchFeaturedProperties({ limit: 6, order: "newest" });
+    assert.equal(six.length, 6, "six unique canonical cards, duplicates do not consume slots");
+    assert.equal(new Set(six.map((x) => x.public_listing_no)).size, 6);
+    assert.deepEqual(
+      six.slice(0, 2).map((x) => x.listing_no),
+      ["RELIST", "NEW"],
+    );
+    assert.ok(!six.some((x) => ["TWIN", "W1", "W2"].includes(x.listing_no)));
   } finally {
     await db.close();
   }

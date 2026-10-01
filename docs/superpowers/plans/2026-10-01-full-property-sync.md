@@ -184,9 +184,9 @@
 
 **Consumes:** 已公開 canonical listings。**Produces:** 真實最新且穩定的首頁列表。
 
-- [ ] 先加有資料的排序測試：新廣告在舊廣告之前；每日 last_seen refresh 不 bump；proposed/rejected source link 不参与排序；同一盤重複廣告不吃掉所有6張卡；下架盤不可見。
-- [ ] 保留 newest 與 promotion 兩個模式；只有首頁最新放盤用 newest。confirmed active source links＋active source states 的 first_seen 排序；fallback created_at＋stable ID；canonical 去重與地域限制先於 LIMIT。
-- [ ] 若有 cache，沿既有 cache mechanism 實作發佈／下架後失效；不全站關cache或單純把「更新日期」換成現在。
+- [x] 先加有資料的排序測試：新廣告在舊廣告之前；每日 last_seen refresh 不 bump；proposed/rejected source link 不参与排序；同一盤重複廣告不吃掉所有6張卡；下架盤不可見。
+- [x] 保留 newest 與 promotion 兩個模式；只有首頁最新放盤用 newest。confirmed active source links＋active source states 的 first_seen 排序；fallback created_at＋stable ID；canonical 去重與地域限制先於 LIMIT。
+- [x] 若有 cache，沿既有 cache mechanism 實作發佈／下架後失效；不全站關cache或單純把「更新日期」換成現在。
 - [ ] 離線三樣本必須有mapping；live sample仍active且合資格則在listing/detail可查；首頁只要求在正確排序及展示數量下可見，不強制三者永久佔位。
 - [ ] 跑 relevant listing-priority/search tests及typecheck；登入/preview受阻寫BLOCKED，不當UI pass。桌面＋手機核對照片、價錢、link與active filter；提交。
 

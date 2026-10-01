@@ -1,12 +1,27 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 const origin = "https://earnestproperty.com";
-async function publicPage(url, fetch) {
+async function publicPage(url, fetch, redirected = false) {
   const response = await fetch(url, {
     redirect: "manual",
     signal: AbortSignal.timeout(15000),
     headers: { Accept: "text/html" },
   });
+  if ([301, 302, 307, 308].includes(response.status) && !redirected) {
+    const target = new URL(response.headers.get("location") ?? "", url);
+    const original = new URL(url);
+    if (
+      target.origin !== "https://www.earnestproperty.com" ||
+      target.username ||
+      target.password ||
+      target.pathname !== original.pathname ||
+      target.search !== original.search ||
+      target.hash
+    )
+      throw Error("PUBLIC_PAGE_UNVERIFIED");
+    await response.body?.cancel();
+    return publicPage(target.href, fetch, true);
+  }
   if (
     response.status !== 200 ||
     !response.headers.get("content-type")?.includes("text/html") ||
