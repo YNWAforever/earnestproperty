@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   SyncWorkspace,
   SyncOperationInput,
@@ -44,12 +44,16 @@ export function PropertySyncWorkspace({
     [uncertain, setUncertain] = useState(false);
   const latch = useRef(false);
   const generation = useRef(0);
-  const refresh = async (cursor?: SyncWorkspace["nextCursor"]) => {
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+  const refresh = useCallback(async (cursor?: SyncWorkspace["nextCursor"]) => {
     const token = ++generation.current;
     setLoading(true);
     setError(null);
     try {
-      const next = await load(cursor);
+      const next = await loadRef.current(cursor);
       if (token === generation.current)
         setData((previous) =>
           cursor && previous ? { ...next, history: [...previous.history, ...next.history] } : next,
@@ -59,13 +63,14 @@ export function PropertySyncWorkspace({
     } finally {
       if (token === generation.current) setLoading(false);
     }
-  };
+  }, []);
   useEffect(() => {
+    const requestGeneration = generation;
     if (allowed && !initialData) void refresh();
     return () => {
-      generation.current++;
+      requestGeneration.current++;
     };
-  }, [allowed]);
+  }, [allowed, initialData, refresh]);
   const run = async (
     source: string,
     operation: SyncOperationInput["operation"],

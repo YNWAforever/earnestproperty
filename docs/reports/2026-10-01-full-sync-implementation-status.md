@@ -21,10 +21,10 @@
 | Task | Code / offline | Live / production |
 |---|---|---|
 | T0 | PASS | read-only checks PASS; no mutation |
-| T1-T5 | PENDING | evidence destination/baseline recovery gate |
-| T6-T8 | PENDING | Property.hk access/identity/fixtures BLOCKED_EXTERNAL |
-| T9-T10 | PENDING | authenticated UI + disposable integration pending |
-| T11 | PENDING | 0/3 new scheduled cycles; MONITORING not stable |
+| T1-T5 | PASS code/offline/isolated | private evidence/baseline recovery/live publication gate |
+| T6-T8 | PASS safe gated code/isolated | Property.hk access/identity/real fixtures BLOCKED_EXTERNAL |
+| T9-T10 | PASS synthetic UI/real disposable integration | migrations/live login/managed dispatch/release gate |
+| T11 | PASS local release/recovery/rollback preparation | 0/3 new scheduled cycles; MONITORING not stable |
 
 ## Shared interfaces / rulings
 
@@ -37,7 +37,7 @@
 
 ## External gates
 
-Private evidence repository/release + least-privilege credential and authoritative baseline recovery; reviewed merge/deploy/activation authority; verified disposable DB; Property.hk supported exact URLs/real fixtures/ID/media policy; production UI login; manual end-to-end and3 actual daily cycles.
+Private evidence repository/release + least-privilege credential and authoritative baseline recovery; reviewed merge/deploy/activation authority; Property.hk supported exact URLs/real fixtures/ID/media policy; production UI login; manual end-to-end and3 actual daily cycles.
 
 ## T1 implementation evidence
 
@@ -138,3 +138,18 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 - RED4 missing retention preview/apply behaviors; GREEN4/4 pytest PASS, full Python suite97/97 PASS exit0 basedcd320a0. Private destination/capability, complete pagination, immutable metadata identity,1h review expiry, exact selected IDs, changed pins, duplicate assets and unknown DELETE acknowledgement covered.
 - Added evidence_retention.py: preview default, reviewed explicit apply gate, immediate per-asset readback/revalidation, durable UNKNOWN before request, stop-on-failure and read-only reconciliation. All accepted histories, handoffs/unresolved run objects and explicit pins protected.7/90-day minimum ages apply to unpinned objects; conservative accepted history retention may exceed these ages.
 - No remote release mutation; synthetic delete port only. Private repository/token live gate remains BLOCKED_EXTERNAL. Existing production baseline unchanged.
+
+
+## T11 final rehearsal and release preparation
+
+- Exact privateZIP request SHA checked before disposable DB fixture; original scraped_at2026-10-01T02:50:22.963602Z unchanged. Original10min test runner cancelled at600s despite completing data assertions/cleanup; corrected this first286-ad import regression timeout to20min, not production job limits. Finalnode --env-file=.task-logs/.env.test-target --test --test-concurrency=1 src/lib/mls/original-28hse-evidence.db.test.mjs:exit0,1/1PASS/0skip,611.8s.197syntheticfixturecanonical/286observations/284links/1receipt/inactive0; secondexactbytes replay identical, UUID/publicaliases/counters unchanged. Three specified mappings correct. Productionwrites0; fixtures are not authoritative production mappings.
+- Historical-withdrawal.db.test.mjs:exit0,1/1PASS/0skip,7.0s. Actual132syntheticactivehistorical rows/source links,100+32keysetpagination,allNOT_APPROVED,forcedapplyblocked,actualinactive0,UUID/aliases/linkstatus preserved. Fixtures use one full receipt with no secondcompletecoverage; production132candidates untouched.
+- Newmigration tool RED2missingbehaviors→GREEN2/2unitPASS; exacthashes/dryrun0DB,actualserverbranch/prerequisiteguard,transactionlock,alreadyappliedduplicate,DDLrollback/COMMITunknown. ActualtwoDDLfiles were previouslyvalidatedrandomschemas inT9/T10. Production --apply notrun.
+- Finalportable npm suites exit0:ingestion75/daily35/admin9/withdrawal5/release2/listingpriority36/listingsearch91Node+12Bun/media5; Python97; fulltscexit0. CIwiresnewportable/UI/Pythongates anddedicatedmanualguardeddisposableDBworkflow, no productioncredential/fakeSKIPPEDPASS.
+- Newacceptance report retains19case denominator:13isolatedPASS/6requiredliveBLOCKED_EXTERNAL. A/B/Csafeimplementation READY;livejourneys VERIFICATION_BLOCKED;3scheduled0/3MONITORING. Recovery/SMEfivesteps/config/migration/sourceactivation/rollbackrunbookprepared.
+- Freshremote read stillmain e8997f2 andPR207OPEN/DRAFT/unmerged,head1e2a345; preserveancestry/rootedits. No merge/deploy/productionmigration/dispatch/config/messages/remoteevidencedelete.
+
+- Browser final rerun initially timed out at firstlocalhost navigation30s afterVite dependency reoptimization. Added bounded request-failure diagnostics, then warmcache26/26PASS andforcedcold dependency reoptimization26/26PASS, exit0. Failure could not be reproduced in either controlled rerun; no productroute/timeoutclaim orremoteproviderproof inferred. Diagnosticprobe retainedforCI; firstfailurelog remainsprivate.
+- Finalactualproductionread-only migration --check PASS: expecteddirecthost/neondb/serverbranch br-polished-sea-aom4i1ct andfivecoreprerequisitesverified; twoaddedmigrationspending,applied[]. Refreshedauthority unchangedreceipt60895ce3/279ads/hash6c6db71a. No productionDDL/DML. Finaldisposable readback properties0/customschemas[] afterallfixtures; actualguardbeforequery.
+
+- Build npm run build exit0 (serverbundle50.7s; normalthirdpartyuse-clientwarnings). Initialwhole-repolint27errorscameonlyfromignoredlocaltask/syntheticentry/venvgeneratedfiles; preciseartifact-directoryignoresadded without weakeningapplicationrules. NewUIhooklifecyclesuse stableloadrefs/callbacks andinvalidateoldgeneration oncleanup. PostfixscopedESLint0errors/warnings, fulltsc exit0 andsyntheticbrowser26/26PASS; existingunrelatedWhatsApprefreshwarningsunchanged.

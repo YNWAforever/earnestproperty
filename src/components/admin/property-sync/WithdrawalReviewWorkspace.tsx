@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type {
@@ -56,32 +56,40 @@ export function WithdrawalReviewWorkspace({
     [unknown, setUnknown] = useState<string | null>(null);
   const latch = useRef(false),
     generation = useRef(0);
-  const refresh = async (cursor?: string | null) => {
-    const token = ++generation.current;
-    setBusy(true);
-    setError(null);
-    try {
-      const next = await load({ source, cursor });
-      if (token === generation.current) {
-        setData((old) => (cursor && old ? { ...next, rows: [...old.rows, ...next.rows] } : next));
-        if (!cursor) {
-          setReview(null);
-          setSelected(new Set());
-          setChosen(new Set());
-        }
-      }
-    } catch {
-      if (token === generation.current) setError("未能讀取撤盤候選，沒有更改樓盤。");
-    } finally {
-      if (token === generation.current) setBusy(false);
-    }
-  };
+  const loadRef = useRef(load);
   useEffect(() => {
+    loadRef.current = load;
+  }, [load]);
+  const refresh = useCallback(
+    async (cursor?: string | null) => {
+      const token = ++generation.current;
+      setBusy(true);
+      setError(null);
+      try {
+        const next = await loadRef.current({ source, cursor });
+        if (token === generation.current) {
+          setData((old) => (cursor && old ? { ...next, rows: [...old.rows, ...next.rows] } : next));
+          if (!cursor) {
+            setReview(null);
+            setSelected(new Set());
+            setChosen(new Set());
+          }
+        }
+      } catch {
+        if (token === generation.current) setError("未能讀取撤盤候選，沒有更改樓盤。");
+      } finally {
+        if (token === generation.current) setBusy(false);
+      }
+    },
+    [source],
+  );
+  useEffect(() => {
+    const requestGeneration = generation;
     if (allowed) void refresh();
     return () => {
-      generation.current++;
+      requestGeneration.current++;
     };
-  }, [allowed, source]);
+  }, [allowed, refresh]);
   const toggle = (id: string, values: Set<string>, setter: (value: Set<string>) => void) => {
     const next = new Set(values);
     if (next.has(id)) next.delete(id);

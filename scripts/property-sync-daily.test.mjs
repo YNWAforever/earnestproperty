@@ -121,3 +121,32 @@ test("watchdog is independent, read-only and emits no external messages", async 
   assert.ok(!/--apply|BLOB_READ_WRITE_TOKEN|send-message|email|whatsapp/i.test(job));
   assert.match(job, /sync-watchdog.mjs/);
 });
+
+test("manual source acceptance uses only disposable credentials and runs DB gates serially", async () => {
+  const { createRequire } = await import("node:module");
+  const w = createRequire(import.meta.url)("js-yaml").load(
+    readFileSync(
+      new URL("../.github/workflows/property-sync-acceptance.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(Object.keys(w.on), ["workflow_dispatch"]);
+  assert.equal(w.permissions.contents, "read");
+  const job = JSON.stringify(w.jobs);
+  assert.ok(
+    !/DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|PROPERTY_SYNC_WORKFLOW_TOKEN|PROPERTY_SYNC_EVIDENCE_TOKEN/.test(
+      job,
+    ),
+  );
+  assert.match(job, /ASTRA_TEST_DATABASE_URL/);
+  assert.match(job, /ASTRA_TEST_BRANCH_ID/);
+  assert.match(job, /PROPERTY_SYNC_DB_ACCEPTANCE_ENABLED/);
+  const runSteps = w.jobs.disposable.steps.filter(
+    (s) => s.run && /test:property-sync:.*db/.test(s.run),
+  );
+  assert.equal(runSteps.length, 4);
+  assert.equal(
+    w.jobs.disposable.env.ASTRA_TEST_DATABASE_CONFIRMED,
+    "${{ vars.ASTRA_TEST_DATABASE_CONFIRMED }}",
+  );
+});

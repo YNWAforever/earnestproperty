@@ -98,7 +98,9 @@
     "test:property-sync:admin:db": "node --test --test-concurrency=1 src/lib/mls/sync-run-repository.db.test.mjs",
     "test:property-sync:ui": "node scripts/test-property-sync-workspace.mjs",
     "test:property-sync:withdrawal": "node --test src/lib/mls/withdrawal-review.test.mjs",
-    "test:property-sync:withdrawal:db": "node --test --test-concurrency=1 src/lib/mls/withdrawal-review.db.test.mjs"
+    "test:property-sync:withdrawal:db": "node --test --test-concurrency=1 src/lib/mls/withdrawal-review.db.test.mjs src/lib/mls/historical-withdrawal.db.test.mjs",
+    "test:property-sync:private-replay:db": "node --test --test-concurrency=1 src/lib/mls/original-28hse-evidence.db.test.mjs",
+    "test:property-sync:release": "node --test scripts/mls/migrate-sync-operations.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",

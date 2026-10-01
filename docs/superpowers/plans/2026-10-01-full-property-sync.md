@@ -280,14 +280,14 @@
 
 **Consumes:** 各task通過的程式和source evidence。**Produces:** per-source live acceptance及操作手冊。
 
-- [ ] T11-A：review PR #207與後續依賴、CI、DB migrations target、private evidence、managed secrets與現有production baseline；先完成必要read-only及rehearsal。merge/deploy/正式啟用依當時使用者授權與平台門檻執行，不以此文件假裝已獲所有production權限。
+- [x] T11-A：review PR #207與後續依賴、CI、DB migrations target、private evidence、managed secrets與現有production baseline；先完成必要read-only及rehearsal。merge/deploy/正式啟用依當時使用者授權與平台門檻執行，不以此文件假裝已獲所有production權限。
 - [ ] 同一fresh28Hse run走 collect→freeze→ingest→publish→public verification；記錄exactcommit、runURL、hash、receipt、actualcounts及首頁screen evidence。不拿過期ZIP改scraped_at作新live資料。
 - [ ] T11-B：三分行存取與parser已verified後，disposable rehearsal→firstfullapply（absenceoff）→publication→publiccheck→schedule；外部未ready則此段BLOCKED_EXTERNAL，28Hse可先LIVE。
 - [ ] T11-C：dashboard可讀live receipts／backlog；admin可受控retry；withdrawal先人工review模式；至少兩次fullfresh觀察及policy驗收後才考慮自動source absence。
 - [ ] 證明至少一次manual end-to-end及其後3個實際scheduled daily cycles；失敗應有可見狀態及恢復結果。3日未走完報MONITORING，不提前寫「穩定每日同步」。
-- [ ] Drill：ingestion回應未知→receipt對帳；publication中途失敗→只重試發佈；一個Property.hk分行403→global無新full baseline／無下架；超30h無成功→UI stale。
-- [ ] Rollback：按source停新增schedule/apply，允許已開始transaction完成並對receipt；停publication／absenceautomation；保留history、media、IDs、policies與currentbaseline。錯誤data以reviewed compensating mutation修正，不刪ledger、不直接啟舊writer。
-- [ ] 交付每個PR、migration、正式配置names（不含values）、tests/skip/block、source counts、未完成外部事項、回退命令與owner。編寫5步SME手冊：睇狀態→睇待處理→重試階段→核實撤盤→查看紀錄。
+- [x] Drill：ingestion回應未知→receipt對帳；publication中途失敗→只重試發佈；一個Property.hk分行403→global無新full baseline／無下架；超30h無成功→UI stale。
+- [x] Rollback：按source停新增schedule/apply，允許已開始transaction完成並對receipt；停publication／absenceautomation；保留history、media、IDs、policies與currentbaseline。錯誤data以reviewed compensating mutation修正，不刪ledger、不直接啟舊writer。
+- [x] 交付每個PR、migration、正式配置names（不含values）、tests/skip/block、source counts、未完成外部事項、回退命令與owner。編寫5步SME手冊：睇狀態→睇待處理→重試階段→核實撤盤→查看紀錄。
 
 ## 3. 最低驗收矩陣
 
@@ -366,3 +366,8 @@ npm run test:property-sync:publication:db
 - Property.hk服務背景（不是晉誠API已存在的證明）：https://www.property.hk/profile.php
 
 本計劃已以程式、GitHub PR狀態及ZIP內容核對；本次只交付計劃，未merge、部署、開啟排程或更改正式樓盤。
+
+
+### 2026-10-01 execution gate notes
+
+T5 offline three-mapping/query tests PASS; its live detail/mobile-photo checks remain unchecked. T7 synthetic/Neon parser/gate suites PASS; real source HTML/contract/fresh3branch dryrun remains BLOCKED_EXTERNAL. T11 checked items denote read-only/rehearsal and prepared reviewable code/runbooks only; fresh production E2E, live dashboard, Property.hk firstapply and3scheduledcycles remain unchecked. See19case acceptance report, with blocked cases retained in denominator.

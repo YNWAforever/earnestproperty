@@ -35,11 +35,17 @@ createRoot(document.getElementById('root')).render(<main className="mx-auto max-
 );
 let server, browser;
 let cases = 0;
+const diagnostics = [];
+const record = (event, url, extra = "") => {
+  diagnostics.push({ event, path: new URL(url).pathname, extra, at: Date.now() });
+  if (diagnostics.length > 30) diagnostics.shift();
+};
 try {
   server = await createServer({
     root: folder,
     configFile: false,
     envFile: false,
+    optimizeDeps: { force: process.env.PROPERTY_SYNC_UI_FORCE_COLD === "true" },
     plugins: [react(), tailwind()],
     resolve: { alias: { "@": resolve(root, "src") } },
     server: { host: "127.0.0.1", port: 0, fs: { allow: [root] } },
@@ -54,6 +60,10 @@ try {
       new URL(route.request().url()).origin === origin ? route.continue() : route.abort(),
     );
     const page = await context.newPage();
+    page.on("request", (r) => record("request", r.url()));
+    page.on("requestfinished", (r) => record("finished", r.url()));
+    page.on("requestfailed", (r) => record("failed", r.url(), r.failure()?.errorText));
+    page.on("pageerror", (e) => record("pageerror", origin, e.message));
     await page.goto(origin + "/?scenario=first");
     await page.getByText("正在讀取同步紀錄…").waitFor();
     await page.getByRole("heading", { name: "EPW", exact: true }).waitFor();
@@ -165,6 +175,9 @@ try {
       databaseWrites: 0,
     }),
   );
+} catch (error) {
+  console.error(JSON.stringify({ syntheticUiDiagnostics: diagnostics }));
+  throw error;
 } finally {
   await browser?.close();
   await server?.close();
