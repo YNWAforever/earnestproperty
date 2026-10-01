@@ -49,6 +49,7 @@ export const fetchNeonFeaturedProperties = createServerFn({ method: "GET" })
   .inputValidator(
     (data: {
       limit: number;
+      order?: "newest" | "promotion";
       districtSlugs?: string[];
       estateSlugs?: string[];
       textAliases?: string[];

@@ -91,3 +91,13 @@ def test_company_number_parser_baseline_boundary():
     m.validate_request(payload())
     old = payload(); old['meta']['parser_version'] = 'python-v2.1'
     with pytest.raises(ValueError): m.validate_request(old)
+
+
+def test_compact_archive_retains_publication_outcome(tmp_path):
+    import tarfile
+    root=tmp_path/'output'; root.mkdir()
+    report=b'{"published":[],"held":[{"reason":"daily_publication_limit"}]}'
+    (root/'publication.json').write_bytes(report)
+    m.archive(root,tmp_path/'archives')
+    with tarfile.open(tmp_path/'archives/compact.tar.gz') as bundle:
+        assert bundle.extractfile('publication.json').read()==report

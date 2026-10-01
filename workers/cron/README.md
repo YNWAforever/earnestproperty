@@ -21,7 +21,7 @@ The former `/api/admin/jobs/send-queue` route remains callable manually for orph
 
 ## Other database schedules
 
-The Vercel YouTube crons are removed. Staff can still invoke incremental or full sync manually. The GitHub migration drift check runs on migration-file pushes to main or manual dispatch; property collection is manual dispatch only. Videos and property listings will no longer refresh automatically from those workflows, and migration drift is no longer rechecked daily. This is the cost tradeoff for zero repository-managed idle Neon wakes. Independently configured external schedules must be checked during rollout.
+The Vercel YouTube crons are removed. Staff can still invoke incremental or full sync manually. The GitHub migration drift check runs on migration-file pushes to main or manual dispatch; property collection has a separately gated daily GitHub workflow at 04:17 Hong Kong time. Property collection requires `PROPERTY_SYNC_DAILY_ENABLED=true`, the approved parser/branch/database target, and a private evidence repository (see `scripts/property-sync/README.md`). Video collection remains manual and migration drift is not rechecked daily. The property workflow deliberately pays for one daily inventory refresh; it does not restore periodic CRM, WhatsApp or video polling. Independently configured external schedules must be checked during rollout.
 
 ## Local checks
 
