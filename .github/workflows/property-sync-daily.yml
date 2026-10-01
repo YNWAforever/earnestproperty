@@ -42,6 +42,7 @@ env:
   EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
   POLICY_APPROVED: ${{ vars.PROPERTY_SYNC_POLICY_APPROVED }}
   APPLY_ENABLED: ${{ vars.PROPERTY_SYNC_DAILY_ENABLED }}
+  MANUAL_APPLY_ENABLED: ${{ vars.PROPERTY_SYNC_MANUAL_APPLY_ENABLED }}
   REPLAY_ASSET: ${{ inputs.replay_asset }}
   BOOTSTRAP: ${{ inputs.bootstrap || 'false' }}
 jobs:
@@ -85,7 +86,13 @@ jobs:
 
           case "$MODE" in
            shadow|replay-shadow) ;;
-           apply|replay-apply|publication-only) test "$APPLY_ENABLED" = true; test "$POLICY_APPROVED" = python-v2.2 ;;
+           apply|replay-apply|publication-only)
+            case "$GITHUB_EVENT_NAME" in
+             schedule) test "$APPLY_ENABLED" = true ;;
+             workflow_dispatch) test "$MANUAL_APPLY_ENABLED" = true ;;
+             *) exit 1 ;;
+            esac
+            test "$POLICY_APPROVED" = python-v2.2 ;;
            *) exit 1 ;;
           esac
         id: evidence-gate

@@ -1,6 +1,6 @@
 # 每日盤源同步：恢復、啟用及回退
 
-> 2026-10-02 release 更新：PR207/208 已合併；28Hse 已暫停，原 baseline 已核對並保存私有回讀副本，兩個指定 migration 已套用。其後部署／shadow／canary／token 狀態以 [release 執行紀錄](../reports/2026-10-02-full-sync-release.md) 為準；下列 2026-10-01 操作敘述屬歷史。
+> 2026-10-02 release 更新：PR207/208/209 已合併；28Hse 已暫停，原 baseline 已核對，50個歷史證據已私有回讀並清除公開副本，兩個盤源及追加10個 webhook migration已套用，正式81/81。其後部署／shadow／canary／token 狀態以 [release 執行紀錄](../reports/2026-10-02-full-sync-release.md) 為準；下列 2026-10-01 操作敘述屬歷史。
 
 本手冊對應 codex/full-property-sync-20261001；程式準備完成不代表正式啟用。正式修改只由獲本 session 明確授權的 release operator 執行。2026-10-01 本 session 正式操作只有 read-only：核對 GitHub、DB host/policy/full receipt、首頁 HTTP 與一次 Property.hk 正常存取；未執行正式 migration、apply、排程 dispatch、config、撤盤、訊息或 merge。
 
@@ -16,7 +16,7 @@
 
 | Gate | 負責人 | 必需證據 |
 |---|---|---|
-| Reviewed PR／release | Repository maintainer | PR207仍draft且未合併，review ancestry與CI；新PR可包含其既有修正但不重複套用 |
+| Reviewed PR／release | Repository maintainer | PR207/208/209已merge；新canary隔離修復須review最新diff/CI，不重複套用既有修復 |
 | 私有證據 | GitHub operator | private evidence repo、property-sync-evidence release、least privilege token、upload/download hash readback；原 ZIP／raw／contacts不公開 |
 | 正式 baseline recovery | DB＋sync operator | current full receipt、exact original request、canonical payload hash、source/scope/parser/policy一致；舊request必須有正式權威核對 |
 | 兩個 additive migrations | DB operator | host／server branch／app_migrations prerequisites、精確checksums、transaction readback；不跑未篩選的全repo migration |
@@ -28,9 +28,9 @@
 
 ## 配置：names only，沒有secret values
 
-GitHub source workflow沿用：PROPERTY_SYNC_DAILY_ENABLED、PROPERTY_SYNC_EXPECTED_BRANCH、PROPERTY_SYNC_POLICY_APPROVED、PROPERTY_SYNC_EXPECTED_DATABASE_HOST、PROPERTY_SYNC_EVIDENCE_REPO；managed secrets DATABASE_URL_UNPOOLED、BLOB_READ_WRITE_TOKEN、PROPERTY_SYNC_EVIDENCE_TOKEN。Code token保持contents-read；evidence token僅private evidence repository contents read/write。後台 managed PROPERTY_SYNC_WORKFLOW_TOKEN限制同一repo Actions write，不用它公開evidence或更改repository權限。
+GitHub source workflow沿用：PROPERTY_SYNC_DAILY_ENABLED、PROPERTY_SYNC_MANUAL_APPLY_ENABLED、PROPERTY_SYNC_EXPECTED_BRANCH、PROPERTY_SYNC_POLICY_APPROVED、PROPERTY_SYNC_EXPECTED_DATABASE_HOST、PROPERTY_SYNC_EVIDENCE_REPO；managed secrets DATABASE_URL_UNPOOLED、BLOB_READ_WRITE_TOKEN、PROPERTY_SYNC_EVIDENCE_TOKEN。Code token保持contents-read；evidence token僅private evidence repository contents read/write。後台 managed PROPERTY_SYNC_WORKFLOW_TOKEN限制同一repo Actions write，不用它公開evidence或更改repository權限。
 
-新增off-default：PROPERTY_SYNC_OBSERVABILITY_ENABLED、PROPERTY_SYNC_ADMIN_DISPATCH_ENABLED、PROPERTY_SYNC_WITHDRAWAL_REVIEW_ENABLED。Operator migration使用PROPERTY_SYNC_EXPECTED_DATABASE_BRANCH、PROPERTY_SYNC_MIGRATION_APPROVED；cleanup另用PROPERTY_SYNC_EVIDENCE_RETENTION_APPROVED。本 session 沒有設定任何新增正式flag／token。
+新增off-default：PROPERTY_SYNC_OBSERVABILITY_ENABLED、PROPERTY_SYNC_ADMIN_DISPATCH_ENABLED、PROPERTY_SYNC_WITHDRAWAL_REVIEW_ENABLED。Operator migration使用PROPERTY_SYNC_EXPECTED_DATABASE_BRANCH、PROPERTY_SYNC_MIGRATION_APPROVED；cleanup另用PROPERTY_SYNC_EVIDENCE_RETENTION_APPROVED。截至最新release紀錄，新增app flags仍未啟用；managed token由使用者直接配置，須metadata/readback後才稱已接通。
 
 Disposable acceptance專用ASTRA_TEST_DATABASE_URL、ASTRA_TEST_BRANCH_ID、ASTRA_TEST_DATABASE_CONFIRMED與PROPERTY_SYNC_DB_ACCEPTANCE_ENABLED；只有manual workflow，先驗current_database／neon.branch_id／endpoint。不得使用正式DB secret，缺值必須fail而非skip當pass。原ZIP回歸使用本機私有PROPERTY_SYNC_PRIVATE_REGRESSION_REQUEST；不把ZIP放public CI artifact。
 
@@ -62,8 +62,8 @@ node scripts/mls/migrate-sync-operations.mjs --apply
 1. **Read-only準備**：fresh fetch main／PR207；核對source policy owner=no-hermes-v2、parser=python-v2.2、agent:540、absence=false與accepted baseline。Managed production direct host於本session核對為ep-divine-frost-aokzrg7f.c-2.ap-southeast-1.aws.neon.tech/neondb；執行時重新確認server branch及host。不reset main，不重建inventory。
 2. **Private recovery**：正式current receipt對應的exact request／accepted archive必須在private release可復原，並驗hash。現有receipt但缺private archive是recovery gate；bootstrap=false，不拿2026-10-01 ZIP或新run假裝舊baseline。
 3. **Shadow**：reviewed branch合併/部署授權後，manual shadow agent:540，完整sale/rent第一頁→終頁，request/raw原子freeze、private readback、full gate；不進業務寫入。核對實際hosted120min採集預算及page counts。
-4. **Canary**：經正式apply授權後，一個fresh同run走collect120→ingest20→publish45→verify10（minutes）；accepted full receipt、canonical actual writes與公開alias分開計數。保留20次publication嘗試/36h原始scraped_at freshness；held後重試只publish。不要把46source IDs當46新物業。
-5. **Production**：04:17HK每日28Hse＋08:15HK只讀watchdog，沿既有full chain concurrency＋global MLS writer lock。記錄manual E2E及後續三次scheduled cycles；每次失敗有stage/receipt/readback及恢復結果。未完成3次，整體MONITORING。
+4. **Canary**：canary隔離修復合併後，保持PROPERTY_SYNC_DAILY_ENABLED=false，只在既有正式apply授權及shadow PASS後設PROPERTY_SYNC_MANUAL_APPLY_ENABLED=true。一個fresh同run走collect120→ingest20→publish45→verify10（minutes）；accepted full receipt、canonical actual writes與公開alias分開計數。保留20次publication嘗試/36h原始scraped_at freshness；held後重試只publish。不要把46source IDs當46新物業。
+5. **Production**：canary及public readback通過後才設PROPERTY_SYNC_DAILY_ENABLED=true；manual apply開關只授權workflow_dispatch，不會啟用schedule。04:17HK每日28Hse＋08:15HK只讀watchdog，沿既有full chain concurrency＋global MLS writer lock。記錄manual E2E及後續三次scheduled cycles；每次失敗有stage/receipt/readback及恢復結果。未完成3次，整體MONITORING。
 
 Property.hk獨立gate：三個branch真實parser、原SID URL、IDscope/mappings/media已核實後才做fresh3/3full disposable rehearsal→first approved apply（absence off）→source-aware publication→public verify→新增獨立05:17HK schedule。**本次沒有添加Property.hk production schedule或啟用policy**；source-aware安全程式與synthetic tests不等於正式入口可用。
 
@@ -120,13 +120,14 @@ Apply只通過既有locked管理writer設inactive並持續override；UUID／publ
 
 ## 私有證據cleanup
 
-詳見deployment/property-sync-daily.md：preview default；1h exact review；raw7d／compact/request90d只對unpinned orphan objects；所有accepted history、readyhandoff、unresolved及explicit pins都保護。先暫停新dispatch再由單operator處理。DELETE前重新查pins/object identity；未知先reconcile-report，只讀確認缺席。No cleanup cron；本session沒有遠端刪除。
+詳見deployment/property-sync-daily.md：preview default；1h exact review；raw7d／compact/request90d只對unpinned orphan objects；所有accepted history、readyhandoff、unresolved及explicit pins都保護。先暫停新dispatch再由單operator處理。DELETE前重新查pins/object identity；未知先reconcile-report，只讀確認缺席。No cleanup cron；2026-10-02已按使用者額外授權刪除精確50個public副本，見release紀錄；一般private retention cleanup仍未執行。
 
 ## Rollback（需operator正式變更授權）
 
 ```bash
 # 只停此source的daily/apply；保持active transaction完成並對receipt。
 gh variable set PROPERTY_SYNC_DAILY_ENABLED --body false --repo YNWAforever/earnestproperty
+gh variable set PROPERTY_SYNC_MANUAL_APPLY_ENABLED --body false --repo YNWAforever/earnestproperty
 # 阻止新的dashboard workflow dispatch。
 # App managed PROPERTY_SYNC_ADMIN_DISPATCH_ENABLED=false
 # App managed PROPERTY_SYNC_WITHDRAWAL_REVIEW_ENABLED=false
@@ -142,7 +143,7 @@ gh variable set PROPERTY_SYNC_DAILY_ENABLED --body false --repo YNWAforever/earn
 | 2 | 尚未正式啟用／執行 | MONITORING，未驗證 |
 | 3 | 尚未正式啟用／執行 | MONITORING，未驗證 |
 
-本session0/3；沒有自動排程Codex跟進或發訊息。Operator逐cycle記錄commit/run URL、原scraped timestamp/byte+canonical hashes、receipt、page及source counts、canonical changes/public held/public verification、elapsed/error/recovery。三次實際cycle及liveA/B/C全部通過前不可稱穩定上線。
+本session0/3；已有本chat每日09:00香港時間的只讀監測heartbeat，未發真實訊息。Operator逐cycle記錄commit/run URL、原scraped timestamp/byte+canonical hashes、receipt、page及source counts、canonical changes/public held/public verification、elapsed/error/recovery。三次實際cycle及liveA/B/C全部通過前不可稱穩定上線。
 
 
 ### 可選private regression CI gate
