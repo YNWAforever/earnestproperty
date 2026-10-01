@@ -43,7 +43,16 @@ export async function readSyncWorkspace({
     [SOURCES],
   );
   const latest = await query(
-    `SELECT DISTINCT ON(source) id,source,stages,branches,counts,dispatch_status,error_code,finished_at FROM property_sync_runs ORDER BY source,started_at DESC,id DESC`,
+    `SELECT latest.*,published.last_published_at
+      FROM (SELECT DISTINCT ON(source) id,source,stages,branches,counts,dispatch_status,error_code,finished_at
+        FROM property_sync_runs ORDER BY source,started_at DESC,id DESC) latest
+      LEFT JOIN LATERAL (
+        SELECT r.stages->'publication'->>'finishedAt' AS last_published_at
+        FROM property_sync_runs r WHERE r.source=latest.source
+          AND r.stages->'publication'->>'status'='succeeded'
+          AND r.stages->'publication'->>'finishedAt' IS NOT NULL
+        ORDER BY r.started_at DESC,r.id DESC LIMIT 1
+      ) published ON true`,
   );
   const history = await query(
     `WITH recent AS (
@@ -83,9 +92,11 @@ export async function readSyncWorkspace({
         : {});
     const acceptedAt = receipt?.accepted_at ? new Date(receipt.accepted_at).toISOString() : null;
     let health = deriveSyncHealth({ lastAcceptedFullAt: acceptedAt, stages }, now);
+    if (run?.dispatch_status === "failed" && run.finished_at && health !== "stale")
+      health = "failed";
     if (
       (run?.dispatch_status === "unknown" ||
-        (["reserved", "accepted"].includes(run?.dispatch_status) &&
+        (["reserved", "accepted", "failed"].includes(run?.dispatch_status) &&
           !run.finished_at &&
           !Object.keys(stages).length)) &&
       health !== "stale"
@@ -112,8 +123,9 @@ export async function readSyncWorkspace({
       connected: Boolean(receipt),
       lastCollectionAt: receipt?.scraped_at ? new Date(receipt.scraped_at).toISOString() : null,
       lastAcceptedFullAt: acceptedAt,
-      lastPublishedAt:
-        stages.publication?.status === "succeeded" ? (stages.publication.finishedAt ?? null) : null,
+      lastPublishedAt: Number.isFinite(Date.parse(run?.last_published_at ?? ""))
+        ? new Date(run.last_published_at).toISOString()
+        : null,
       advertisements: branch
         ? (branchEvidence?.observedCount ?? null)
         : (agg?.advertisements ?? null),

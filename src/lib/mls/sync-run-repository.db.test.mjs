@@ -144,8 +144,63 @@ test(
       assert.equal(ws.cards[0].backlog, 1);
       assert.equal(ws.cards[0].message, "同步失敗，保留現有資料");
       assert.equal(ws.cards[1].health, "never_synced");
+      const previousPublicationAt = new Date(Date.now() - 3600000).toISOString();
+      await query(
+        `INSERT INTO property_sync_runs(source,scope_id,workflow_run_id,stages,counts,started_at,finished_at)
+         VALUES('28hse_agent_540','agent:540','10002',$1::jsonb,'{"published":1}',now()-interval '2 hours',now()-interval '1 hour')`,
+        [
+          JSON.stringify({
+            publication: { status: "succeeded", finishedAt: previousPublicationAt },
+          }),
+        ],
+      );
+      for (const status of ["failed", "unknown", "cancelled"]) {
+        await query(
+          "UPDATE property_sync_runs SET stages=jsonb_set(stages,'{publication,status}',to_jsonb($2::text)) WHERE id=$1",
+          [reservation.runId, status],
+        );
+        await query("BEGIN READ ONLY");
+        try {
+          const latestFailure = await readSyncWorkspace({ query, actor: manager });
+          assert.equal(latestFailure.cards[0].lastPublishedAt, previousPublicationAt);
+          assert.equal(latestFailure.cards[0].health, status === "unknown" ? "unknown" : "failed");
+          assert.ok(latestFailure.cards.slice(1).every((card) => card.lastPublishedAt === null));
+        } finally {
+          await query("ROLLBACK");
+        }
+      }
+      await query(
+        "UPDATE property_sync_runs SET stages=jsonb_set(stages,'{publication,status}','\"failed\"'::jsonb) WHERE id=$1",
+        [reservation.runId],
+      );
+      await query(
+        "UPDATE property_sync_runs SET started_at=now()-interval '2 minutes' WHERE id=$1",
+        [reservation.runId],
+      );
+      const rejectedKey = randomUUID();
+      const rejected = await requestSyncOperation({
+        ...options,
+        input: { ...input, idempotencyKey: rejectedKey },
+        dispatch: async () => ({ accepted: false, rejected: true }),
+      });
+      assert.equal(rejected.status, "failed");
+      await query("BEGIN READ ONLY");
+      try {
+        const rejectedCard = (await readSyncWorkspace({ query, actor: manager })).cards[0];
+        assert.equal(rejectedCard.health, "failed");
+        assert.equal(rejectedCard.lastPublishedAt, previousPublicationAt);
+        assert.equal(
+          (await readSyncOperationResult({ query, actor: admin, idempotencyKey: rejectedKey }))
+            .state,
+          "failed",
+        );
+      } finally {
+        await query("ROLLBACK");
+      }
       await query("UPDATE mls_ingestion_receipts SET accepted_at=now()-interval '31 hours'");
-      assert.equal((await readSyncWorkspace({ query, actor: admin })).cards[0].health, "stale");
+      const staleCard = (await readSyncWorkspace({ query, actor: admin })).cards[0];
+      assert.equal(staleCard.health, "stale");
+      assert.equal(staleCard.lastPublishedAt, previousPublicationAt);
       await query(
         `INSERT INTO property_sync_runs(source,scope_id,started_at,finished_at) SELECT '28hse_agent_540','agent:540',now()-g*interval '1 second',now() FROM generate_series(1,1000)g`,
       );
@@ -163,16 +218,33 @@ test(
         "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id FROM property_sync_runs ORDER BY started_at DESC,id DESC LIMIT 25",
       );
       const times = [];
+      let publicationRead;
+      const measuredQuery = (sql, params = []) => {
+        if (sql.includes("last_published_at")) publicationRead = { sql, params };
+        return query(sql, params);
+      };
       for (let i = 0; i < 7; i++) {
         const start = performance.now();
-        await readSyncWorkspace({ query, actor: admin });
+        await readSyncWorkspace({ query: measuredQuery, actor: admin });
         times.push(performance.now() - start);
       }
       times.sort((a, b) => a - b);
+      const publicationPlan = await query(
+        "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + publicationRead.sql,
+        publicationRead.params,
+      );
       writeFileSync(
         ".task-logs/t9-query-measurements.json",
         JSON.stringify(
-          { synthetic: true, rows: 1001, iterations: 7, p50Ms: times[3], p95Ms: times[6], plans },
+          {
+            synthetic: true,
+            rows: 1003,
+            iterations: 7,
+            p50Ms: times[3],
+            p95Ms: times[6],
+            plans,
+            publicationPlan,
+          },
           null,
           2,
         ),

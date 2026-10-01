@@ -5,8 +5,57 @@ import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwind from "@tailwindcss/vite";
 import { chromium } from "@playwright/test";
+import { readSyncWorkspace } from "../src/lib/mls/sync-run-repository.mjs";
 const root = process.cwd(),
   folder = resolve(root, ".task-logs/sync-ui");
+const previousPublicationAt = "2026-10-01T01:00:00.000Z";
+const retainedPublication = await readSyncWorkspace({
+  actor: { staffId: "10000000-0000-0000-0000-000000000001", roles: ["manager"] },
+  now: Date.parse("2026-10-01T03:00:00Z"),
+  query: async (sql) => {
+    if (sql.includes("FROM mls_ingestion_scopes"))
+      return [
+        {
+          source: "28hse_agent_540",
+          receipt_id: "30000000-0000-0000-0000-000000000001",
+          scraped_at: previousPublicationAt,
+          accepted_at: previousPublicationAt,
+        },
+      ];
+    if (sql.includes("DISTINCT ON"))
+      return [
+        {
+          source: "28hse_agent_540",
+          stages: {},
+          dispatch_status: "failed",
+          finished_at: "2026-10-01T02:00:01Z",
+          last_published_at: previousPublicationAt,
+        },
+      ];
+    if (sql.includes("WITH recent AS"))
+      return [
+        {
+          id: "20000000-0000-0000-0000-000000000001",
+          source: "28hse_agent_540",
+          scope_id: "agent:540",
+          operation: "collect",
+          workflow_run_id: null,
+          git_sha: null,
+          request_asset: null,
+          request_hash: null,
+          receipt_id: null,
+          stages: {},
+          branches: {},
+          counts: {},
+          dispatch_status: "failed",
+          error_code: null,
+          started_at: "2026-10-01T02:00:00Z",
+          finished_at: "2026-10-01T02:00:01Z",
+        },
+      ];
+    return [];
+  },
+});
 await mkdir(folder, { recursive: true });
 await writeFile(
   resolve(folder, "index.html"),
@@ -22,7 +71,7 @@ window.fixture={loads:0,requests:0};
 const card=(label,source,branch=null)=>({label,source,branch,health:'never_synced',message:'從未成功同步',connected:false,lastCollectionAt:null,lastAcceptedFullAt:null,lastPublishedAt:null,advertisements:null,backlog:null,publicCount:null,stages:{},branchEvidence:null,capability:{enabled:source==='28hse_agent_540',reason:'未接通'}});
 const cards=[card('28Hse','28hse_agent_540'),...['EPS','EPT','EPW'].map(b=>card(b,'propertyhk',b))];
 const history=Array.from({length:75},(_,i)=>({id:'20000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),source:'28hse_agent_540',scope_id:'agent:540',operation:'collect',workflow_run_id:'123',git_sha:'a'.repeat(40),request_asset:'request-123-1.json',request_hash:'b'.repeat(64),receipt_id:'30000000-0000-0000-0000-000000000001',stages:{collection:{status:'succeeded'},ingestion:{status:'succeeded'},publication:{status:'failed'},verification:{status:'pending'}},branches:{},counts:{canonicalCreated:2,canonicalUpdated:3,published:0,held:1},dispatch_status:'failed',error_code:'MEDIA_FAILED',started_at:'2026-10-01T02:00:00Z',finished_at:null}));
-const load=async cursor=>{window.fixture.loads++;await new Promise(r=>setTimeout(r,300));if(scenario==='failure')throw Error('synthetic unavailable');const start=cursor?Number(cursor.id):0;const rows=scenario==='history'?history.slice(start,start+25):[];return{cards,history:rows,nextCursor:scenario==='history'&&start+25<75?{id:String(start+25),at:'2026-10-01T02:00:00Z'}:null,asOf:'2026-10-01T02:00:00Z'}};
+const load=async cursor=>{window.fixture.loads++;await new Promise(r=>setTimeout(r,300));if(scenario==='previous-publication-failed')return ${JSON.stringify(retainedPublication)};if(scenario==='failure')throw Error('synthetic unavailable');const start=cursor?Number(cursor.id):0;const rows=scenario==='history'?history.slice(start,start+25):[];return{cards,history:rows,nextCursor:scenario==='history'&&start+25<75?{id:String(start+25),at:'2026-10-01T02:00:00Z'}:null,asOf:'2026-10-01T02:00:00Z'}};
 const request=async input=>{window.fixture.lastKey=input.idempotencyKey;window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario.startsWith('unknown'))throw Error('synthetic timeout');return{runId:'reserved',status:'accepted'}};
 const syncReconcile=async key=>{window.fixture.reconciles=(window.fixture.reconciles||0)+1;window.fixture.readKey=key;return{runId:'reserved',state:scenario==='unknown'?'unknown':'completed',reconciled:scenario!=='unknown'}};
 const withdrawalRows=[true,scenario==='withdrawal-partial'].map((allowed,i)=>({candidateId:'40000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),propertyNo:'FIXTURE-'+i,title:i===0?'合成候選甲':'合成候選乙',dealType:'sale',version:'a'.repeat(32),status:'active',decision:{allowed,approval:allowed?'REVIEW_REQUIRED':'NOT_APPROVED',reason:allowed?'confirmed_absence':'active_source_conflict',ruleVersion:'review-withdrawal-v1'},evidence:{kind:'historical_absence',terminalReason:null,otherActiveSources:allowed?[]:['propertyhk']}}));
@@ -70,7 +119,7 @@ try {
     await page.getByRole("heading", { name: "EPW", exact: true }).waitFor();
     assert.equal(await page.getByText("從未成功同步", { exact: true }).count(), 4);
     assert.equal(
-      await page.getByText("未有工作流程紀錄；上方成功時間仍以已接受的完整 receipt 為準。").count(),
+      await page.getByText("未有同步流程紀錄；完整匯入及上架結果會分開核實。").count(),
       1,
     );
     cases++;
@@ -86,6 +135,48 @@ try {
     });
     await page.getByText("已提交工作流程，請查看階段進度。").waitFor();
     assert.equal(await page.evaluate(() => window.fixture.requests), 1);
+    cases++;
+    await page.goto(origin + "/?scenario=previous-publication-failed");
+    const failedSource = page
+      .locator("article")
+      .filter({ has: page.getByRole("heading", { name: "28Hse", exact: true }) });
+    await failedSource.getByText("同步失敗，保留現有資料", { exact: true }).waitFor();
+    const lastPublished = failedSource
+      .locator("dt")
+      .filter({ hasText: "最後上架" })
+      .locator("..")
+      .locator("dd");
+    const expectedPublicationDate = await page.evaluate(
+      (value) => new Date(value).toLocaleString("zh-HK"),
+      previousPublicationAt,
+    );
+    assert.equal(await lastPublished.textContent(), expectedPublicationDate);
+    assert.equal(
+      await page.getByText("同步失敗，保留現有資料", { exact: true }).count(),
+      2,
+      "card and durable history expose the rejected dispatch",
+    );
+    assert.equal(
+      await page
+        .getByText("工作流程未被接收；請管理員核對接駁設定後再提交同步。", { exact: true })
+        .count(),
+      1,
+      "rejected collection has no frozen request to replay",
+    );
+    await page.getByRole("button", { name: "重新載入", exact: true }).first().click();
+    await page.waitForFunction(() => window.fixture.loads === 2);
+    await page.waitForFunction(
+      () =>
+        !Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "重新載入")
+          .disabled,
+    );
+    assert.equal(await lastPublished.textContent(), expectedPublicationDate);
+    assert.equal(await page.evaluate(() => window.fixture.requests), 0);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({
+      path: resolve(root, ".task-logs/t9-last-publication-" + width + ".png"),
+      fullPage: true,
+    });
     cases++;
     await page.goto(origin + "/?scenario=unknown");
     await page.getByRole("heading", { name: "28Hse", exact: true }).waitFor();

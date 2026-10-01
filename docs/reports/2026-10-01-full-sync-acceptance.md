@@ -56,15 +56,15 @@ PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKE
 | C03 | PASS multisessionNeon | 15minDBclockexpiry、source更新／staffversion競爭拒絕、2clients only1winner | 正式不故意做race |
 | C04 | PASS Neon＋UI | duplicate/idempotent、peritempartial、realCOMMITacklost→readback、readonlyUIreconcile；nextactor/publicqueryreadback | realprovider/productiontimeout未注入 |
 | C05 | PASS service＋DB | clientroleforgeryagent actualDBdeny、manager dispatchdeny、invalidURL/ref/source/host/id/subset；redirect/timeoutfailclosed | liveauthenticatedserverFn/browser token尚未接通 |
-| C06 | BLOCKED_EXTERNAL | actualReact/CSSChromium1440/390、30journeys、nohorizontaloverflow；names/nextstep/denied/failed/retry | 真新員工liveauth/mobile，未拿synthetic當prodpass |
+| C06 | BLOCKED_EXTERNAL | actualReact/CSSChromium1440/390、32journeys、nohorizontaloverflow；names/nextstep/denied/failed/retry | 真新員工liveauth/mobile，未拿synthetic當prodpass |
 
 ## 動作coverage及層級
 
-- Portablecode：ingestion75、daily37（包括新manualdisposableworkflowguard及實際verification shell）、admin15、withdrawal5、release migration3、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
+- Portablecode：ingestion75、daily37（包括新manualdisposableworkflowguard及實際verification shell）、admin17、withdrawal5、release migration3、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
 - Python：97/97exit0，包括realprocesscheckpoint、propertyhk syntheticselectors/fullgate、privatehash/retention ports。
 - PGlite：public newest/search實際SQLfixture；不是Neon或production。
 - RealNeon：核對project dawn-meadow-79190048／disposable br-young-breeze-ao85rtx1／endpoint ep-square-leaf-aobruyvf／dedicated earnest_audit_acceptance_20260927後才fixtureDDL。原六套serial41/41baselinePASS；原atomicrepository26/26最後T8重驗；HKfullgate1/1、HKpublication1/1、28publication與nextingestion各1/1、T9metadata1/1、T10withdraw1/1、132historical1/1。ExactZIP1/1PASS/0skip、611.8s，另記A01。隨機schema清理；沒有fixture指向inheritedneondb或production。
-- Syntheticbrowser：actualReact/CSSChromium，desktop1440/mobile390，30/30；providerrequests0／DBwrites0。包括loading/empty/failure/denied、history75rows、pagination、retrydoubleclick、invalidreason/cancel、expiry、partial、unknownreconcile。Liveauth及公開照片未測保留分母。Finalrerunfirstlocalhost navigation30s曾timeout；boundeddiagnostics加入後warm及forcedcold各26/26PASS，未重現；保留該失敗、不冒稱根因已修。
+- Syntheticbrowser：actualReact/CSSChromium，desktop1440/mobile390，32/32；providerrequests0／DBwrites0。包括loading/empty/failure/denied、history75rows、pagination、retrydoubleclick、invalidreason/cancel、expiry、partial、unknownreconcile。Liveauth及公開照片未測保留分母。Finalrerunfirstlocalhost navigation30s曾timeout；boundeddiagnostics加入後warm及forcedcold各26/26PASS，未重現；保留該失敗、不冒稱根因已修。
 - FullTypeScript：tsc --noEmit exit0；localproduction buildexit0。NewUIhookchanges再驗tsc/UI26PASS。YAML35/phasebudgets/permissions與bash語法有效。舊lockbytes不變；nativeworktreebun.lockb mode差異未stage。
 - ActionsCI新增admin/withdrawal/release/Pythonretention/syntheticUIchecks；另manual disposable workflow先guard，四組DBtest逐組serial，不注入production/Blob/workflow/evidencecredentials。新PRremoteCI狀態另在交付補記。
 - Highrisk：成功、直接越權、invalid、cancel、duplicate、stale、timeoutunknown、refresh/nextactor/publicreadback都有對應上述測試；正式故障注入未做。權限/consent/providerlive層不混算。
@@ -109,3 +109,8 @@ ThirdCIlaterfailedattest-wiringclassifyingnew3DBsuitesasportable. ExplicitDB/pri
 ### T9 timeout 結果核對續作
 
 新增 authenticated GET，只讀同 actor／原 idempotency key；active admin role 由 DB 重新驗證。Browser-tab 保存原 key，頁面 refresh 後不重送；「核對工作流程結果」只有在確定拒絕或完整 native 終結 proof 後解鎖。四階段缺失、unknown、缺成功 ingestion receipt 均保持待核實。Real disposable SQL 的 BEGIN READ ONLY、other admin 隔離、manager/agent forged role 拒絕、duplicate readback、partial→complete→unknown 已通過（1/1、0skip）；admin15/15、daily37/37、actual synthetic browser30/30、typecheck/scoped lint/build exit0。確定核對後清除 tab key；沒有 provider redispatch。此功能仍依賴已核實 callback；live login/production release 仍未驗，13/19 isolated PASS、6/19 BLOCKED_EXTERNAL、0/3 MONITORING 不變。精確 commit／hosted CI 在 PR208 記錄。
+
+
+### T9 最後成功／最新故障續作
+
+來源卡保留source最近一次有成功狀態/完成時間的publication；後來failed/cancelled/unknown/pending不清空時間，也不改30h accepted full ingestion的stale。明確rejected dispatch保存的failed/finished_at在來源卡及durable history都可見；不完整結果仍unknown。原receipt不當公開證據。兩組正向RED→GREEN：admin17/17、daily37/37、actualReact/CSS32/32synthetic、realdisposableSQL1/1（0skip），typecheck/scoped lint exit0。SQL只讀核對及EXPLAIN、1003rows/7次p50=316.4ms/p95=397.3ms，是隔離環境測量。先前localhost navigation30s timeout保留，無放寬timeout/斷言；後續重跑通過，不冒稱正式手機NFR。19case/live gate及0/3MONITORING不變，exact SHA/新CI在PR208。

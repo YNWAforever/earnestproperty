@@ -257,9 +257,7 @@ export function PropertySyncWorkspace({
             ))}
           </div>
           <h2 className="text-lg font-semibold">同步紀錄</h2>
-          {!data.history.length && (
-            <p>未有工作流程紀錄；上方成功時間仍以已接受的完整 receipt 為準。</p>
-          )}
+          {!data.history.length && <p>未有同步流程紀錄；完整匯入及上架結果會分開核實。</p>}
           <div className="space-y-4">
             {data.history.map((row) => (
               <article className="rounded-xl border p-4 space-y-3" key={row.id}>
@@ -269,9 +267,10 @@ export function PropertySyncWorkspace({
                     {date(row.started_at)}
                   </h3>
                   <span>
-                    {row.dispatch_status === "unknown"
+                    {row.dispatch_status === "unknown" ||
+                    (row.dispatch_status === "failed" && !row.finished_at)
                       ? "結果待核實，請勿重複提交"
-                      : row.error_code
+                      : row.dispatch_status === "failed" || row.error_code
                         ? "同步失敗，保留現有資料"
                         : null}
                   </span>
@@ -303,7 +302,11 @@ export function PropertySyncWorkspace({
                     </div>
                   ))}
                 </dl>
-                <p className="text-sm">等待核實，暫不下架。失敗後可按階段重試，沿用原採集證據。</p>
+                <p className="text-sm">
+                  {row.dispatch_status === "failed" && row.finished_at && !row.request_asset
+                    ? "工作流程未被接收；請管理員核對接駁設定後再提交同步。"
+                    : "等待核實，暫不下架。失敗後可按階段重試，沿用原採集證據。"}
+                </p>
                 {admin && row.request_asset && (
                   <div className="flex flex-wrap gap-2">
                     <Button

@@ -35,6 +35,7 @@ test("sync read is bounded, never invents success on DB failure, exposes four ca
   });
   assert.equal(result.cards.length, 4);
   assert.ok(result.cards.every((x) => x.health === "never_synced"));
+  assert.ok(result.cards.every((x) => x.lastPublishedAt === null));
   assert.equal(result.history.length, 0);
   assert.equal(result.nextCursor, null);
   await assert.rejects(readSyncWorkspace({ actor, limit: 101, query: async () => [] }), /INVALID/);
@@ -47,7 +48,7 @@ test("sync read is bounded, never invents success on DB failure, exposes four ca
     }),
     /DB unavailable/,
   );
-  assert.ok(queries.some(([s, p]) => s.includes("LIMIT") && p.includes(26)));
+  assert.ok(queries.some(([s, p]) => s.includes("LIMIT") && p?.includes(26)));
 });
 test("disabled provider capability refuses operation without reserving fake success", async () => {
   const { requestSyncOperation } = await m();
@@ -204,4 +205,88 @@ test("dispatch-result readback never upgrades accepted, missing proof, or unknow
   });
   assert.equal(rejected.reconciled, true);
   assert.equal(rejected.state, "failed");
+});
+
+test("source cards retain last successful publication while newer runs fail, cancel, or remain unknown", async () => {
+  const { readSyncWorkspace } = await m();
+  const publishedAt = "2026-10-01T01:00:00.000Z";
+  for (const [status, health] of [
+    ["failed", "failed"],
+    ["cancelled", "failed"],
+    ["unknown", "unknown"],
+    ["pending", "healthy"],
+  ]) {
+    const result = await readSyncWorkspace({
+      actor,
+      now: Date.parse("2026-10-01T03:00:00Z"),
+      query: async (sql) => {
+        if (sql.includes("FROM mls_ingestion_scopes"))
+          return [
+            {
+              source: "28hse_agent_540",
+              receipt_id: actor.staffId,
+              scraped_at: publishedAt,
+              accepted_at: publishedAt,
+            },
+          ];
+        if (sql.includes("DISTINCT ON"))
+          return [
+            {
+              source: "28hse_agent_540",
+              stages: { publication: { status } },
+              last_published_at: publishedAt,
+            },
+          ];
+        return [];
+      },
+    });
+    assert.equal(result.cards[0].lastPublishedAt, publishedAt);
+    assert.equal(
+      result.cards[0].health,
+      health,
+      "historical success must not hide the latest outcome",
+    );
+    assert.ok(
+      result.cards.slice(1).every((card) => card.lastPublishedAt === null),
+      "publication history is source-scoped",
+    );
+  }
+});
+
+test("definitely rejected dispatch stays failed after refresh without clearing prior publication", async () => {
+  const { readSyncWorkspace } = await m();
+  const publishedAt = "2026-10-01T01:00:00.000Z";
+  for (const [finishedAt, health] of [
+    ["2026-10-01T02:00:00Z", "failed"],
+    [null, "unknown"],
+  ]) {
+    const result = await readSyncWorkspace({
+      actor,
+      now: Date.parse("2026-10-01T03:00:00Z"),
+      query: async (sql) => {
+        if (sql.includes("FROM mls_ingestion_scopes"))
+          return [
+            {
+              source: "28hse_agent_540",
+              receipt_id: actor.staffId,
+              scraped_at: publishedAt,
+              accepted_at: publishedAt,
+            },
+          ];
+        if (sql.includes("DISTINCT ON"))
+          return [
+            {
+              source: "28hse_agent_540",
+              dispatch_status: "failed",
+              finished_at: finishedAt,
+              stages: {},
+              last_published_at: publishedAt,
+            },
+          ];
+        return [];
+      },
+    });
+    assert.equal(result.cards[0].health, health);
+    assert.equal(result.cards[0].lastPublishedAt, publishedAt);
+  }
 });
