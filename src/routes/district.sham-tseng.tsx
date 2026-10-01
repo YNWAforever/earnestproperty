@@ -81,12 +81,14 @@ export const Route = createFileRoute("/district/sham-tseng")({
   component: ShamTsengPage,
 });
 
-function DistrictErrorComponent({ error }: { error: Error }) {
+function DistrictErrorComponent({ error }: { error: unknown }) {
   const router = useRouter();
   return (
     <div className="mx-auto max-w-2xl px-6 py-24 text-center">
       <h1 className="text-2xl font-bold">載入失敗</h1>
-      <p className="mt-2 text-muted-foreground">{error.message}</p>
+      <p className="mt-2 text-muted-foreground">
+        {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
+      </p>
       <button
         className="mt-6 rounded-md bg-primary px-4 py-2 text-primary-foreground"
         onClick={() => router.invalidate()}

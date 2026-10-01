@@ -1157,7 +1157,7 @@ function ListingsPendingComponent() {
   );
 }
 
-function ListingsErrorComponent({ error }: { error: Error }) {
+function ListingsErrorComponent({ error }: { error: unknown }) {
   const router = useRouter();
 
   return (
@@ -1168,7 +1168,9 @@ function ListingsErrorComponent({ error }: { error: Error }) {
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           即時放盤資料暫時未能載入。可以重新載入，或返回搜尋首頁調整篩選條件再試一次。
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
+        </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button onClick={() => router.invalidate()}>重新載入</Button>
           <Button asChild variant="outline">
