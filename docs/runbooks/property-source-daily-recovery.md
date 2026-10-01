@@ -129,3 +129,8 @@ gh variable set PROPERTY_SYNC_DAILY_ENABLED --body false --repo YNWAforever/earn
 | 3 | 尚未正式啟用／執行 | MONITORING，未驗證 |
 
 本session0/3；沒有自動排程Codex跟進或發訊息。Operator逐cycle記錄commit/run URL、原scraped timestamp/byte+canonical hashes、receipt、page及source counts、canonical changes/public held/public verification、elapsed/error/recovery。三次實際cycle及liveA/B/C全部通過前不可稱穩定上線。
+
+
+### 可選private regression CI gate
+
+`property-sync-acceptance.yml`的private_regression job在disposable四組先通過後，只有managed PROPERTY_SYNC_PRIVATE_REGRESSION_ENABLED=true才執行。Operator先在private property-sync-evidence release準備 exact原request asset `regression-28hse-20261001-request.json`（414631bytes／b458d085... SHA），另配置只讀該private repository contents的PROPERTY_SYNC_PRIVATE_REGRESSION_READ_TOKEN。此session沒有上傳asset、配置token或dispatch該workflow。Job驗repositoryprivate、asset完整/size、localbytes SHA及actualdisposabletarget，然後跑原ZIPreplay；不公開artifact，不用production/Blob/providercredential。缺資料時failclosed或gateSKIPPED，不能報PASS；本機exactZIPNeonPASS另有證據。這是可選CI回歸配置，不增加正式28Hse daily token權限。

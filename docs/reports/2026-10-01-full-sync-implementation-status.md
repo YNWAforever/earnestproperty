@@ -165,3 +165,10 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 
 - SecondLinuxCI36833689156 passed lint/build/typecheck andALLnewsourceportable/UI/Pythongates; threeothernonstagingjobsPASS. Latercommand-centerfailedatfixedsidebarcount16vsnew17. Reproducedlocally; updatedapprovednavigationexpectationto17andpositivelyassertsource-synclabel/EDITORSroles. Originalno-duplicatedestinationsandallgroup/legacybugchecksremainintact; noCRM/providerproductioncodechanged.
 - GREENnpm run test:command-center exit0,82Node+8BunPASS/0skip. Source-sync route staysadmin/manager; mutationpermissionboundariesunchanged. Focusedtest-onlyfollowupcommit;newCIrerunrequired.
+
+
+## PR208 CI environment-dependent test wiring
+
+- ThirdCI36834351380 passedpreviousfixes/newsourcegates/CommandCenter/nolink,thenexistingtest-wiringmisclassifiedthreeNEW:dbsuitesasportable. Explicitenvironment-dependentregistrationadded; ordinaryCIstillrequiresALLdeterministic scripts. Admin/withdrawaltestsremainwiredtoguardedmanualdisposableworkflow.
+- Addedpositiveprivate-regressionCIentrypointtest: REDmissingprivatejob; GREENnpm run test:control-plane105/105PASSexit0,0skip; daily+wiring16/16PASS. Optionalprivate_regressionrequiresfourdisposablegroupsfirst,private-onlyreadtoken,approvedprivateexactassetname,size414631/SHAcheck BEFOREfixturewrites andactualdisposableguard. Ituploadsnoartifactandusesnoproduction/Blob/providercredential.
+- No privateassetupload/tokenconfig/manualCI dispatch performed. OptionalprivateCIgate isUNRUN/BLOCKED_EXTERNAL untiloperatorprovidesmanagedreadcapability/exactasset; originallocalZIPDB1/1PASS remainsseparate. Runbooklistsgate andproperSKIPPED/failclosedsemantics.

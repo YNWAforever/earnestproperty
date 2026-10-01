@@ -106,6 +106,10 @@ test("CI runs every test script that does not need a database or browser server"
     "test:mls:db",
     "test:property-sync:db",
     "test:property-sync:publication:db",
+    // Manual private acceptance workflow requires a verified disposable target.
+    "test:property-sync:admin:db",
+    "test:property-sync:withdrawal:db",
+    "test:property-sync:private-replay:db",
     "test:staff-bootstrap:db",
     "test:youtube-sync:db",
   ]);
@@ -144,4 +148,29 @@ test("Playwright starts the local server only when no remote base URL is supplie
 
   assert.match(config, /const remoteBaseUrl = process\.env\.PLAYWRIGHT_BASE_URL;/);
   assert.match(config, /webServer: remoteBaseUrl\s*\? undefined\s*:/);
+});
+
+test("source-sync DB and private original regression have explicit guarded manual CI entrypoints", async () => {
+  const { createRequire } = await import("node:module");
+  const w = createRequire(import.meta.url)("js-yaml").load(
+    readFileSync(join(root, ".github/workflows/property-sync-acceptance.yml"), "utf8"),
+  );
+  assert.deepEqual(Object.keys(w.on), ["workflow_dispatch"]);
+  const portableDb = JSON.stringify(w.jobs.disposable);
+  for (const name of ["test:property-sync:admin:db", "test:property-sync:withdrawal:db"])
+    assert.ok(portableDb.includes(name));
+  const p = w.jobs.private_regression;
+  assert.ok(p, "private regression is wired, not only local");
+  assert.equal(p.needs, "disposable");
+  assert.match(p.if, /PROPERTY_SYNC_PRIVATE_REGRESSION_ENABLED/);
+  assert.equal(w.permissions.contents, "read");
+  const text = JSON.stringify(p);
+  assert.match(text, /PRIVATE_REGRESSION_READ_TOKEN/);
+  assert.match(text, /PRIVATE_FIXTURE_SIZE_MISMATCH/);
+  assert.match(text, /PRIVATE_FIXTURE_HASH_MISMATCH/);
+  assert.ok(text.includes("npm run test:property-sync:private-replay:db"));
+  assert.doesNotMatch(
+    text,
+    /DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|upload-artifact|PROPERTY_SYNC_WORKFLOW_TOKEN/,
+  );
 });
