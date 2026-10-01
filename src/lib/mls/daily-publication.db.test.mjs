@@ -1,3 +1,4 @@
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "@neondatabase/serverless";
@@ -9,7 +10,7 @@ test(
   "daily publication executes audited SQL atomically and replays without media writes",
   { skip: !process.env.ASTRA_TEST_DATABASE_URL },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     const c = new Client({ connectionString: process.env.ASTRA_TEST_DATABASE_URL });
     await c.connect();
     const q = (s, p = []) => c.query(s, p);
@@ -187,6 +188,36 @@ test(
       );
       assert.equal((await q("SELECT status FROM properties")).rows[0].status, "draft");
       assert.equal((await q("SELECT count(*)::int n FROM listing_change_events")).rows[0].n, 4);
+      let unknownReport;
+      const lostAcknowledgement = {
+        query: async (text, params) => {
+          const result = await c.query(text, params);
+          if (text === "COMMIT") throw Error("TEST_COMMIT_ACK_LOST");
+          return result;
+        },
+      };
+      await assert.rejects(
+        publishDaily({
+          payload,
+          client: lostAcknowledgement,
+          apply: true,
+          prepare,
+          onReport: async (r) => {
+            unknownReport = r;
+          },
+        }),
+        /TEST_COMMIT_ACK_LOST/,
+      );
+      assert.equal(unknownReport.unknown[0].reason, "commit_outcome_unknown");
+      assert.equal((await q("SELECT status FROM properties")).rows[0].status, "active");
+      const reconciled = await publishDaily({ payload, client: c, apply: true, prepare });
+      assert.equal(reconciled.alreadyPublic, 1);
+      assert.equal(
+        preparations,
+        1,
+        "confirmed owned media is not uploaded after unknown acknowledgement",
+      );
+      await q("UPDATE properties SET status='draft',description=NULL,images=NULL,source_url=NULL");
       await q(
         "INSERT INTO admin_property_overrides(property_no,shared,rent,sale) VALUES('A123456','{\"title_zh\":\"Staff\"}','{}','{}')",
       );
@@ -202,6 +233,82 @@ test(
         /ACCEPTED_CURRENT/,
       );
       assert.equal(preparations, 1);
+      // Real PostgreSQL queue readback; media failure is synthetic, no Blob calls.
+      const waiting = Array.from({ length: 21 }, (_, i) => ({
+        ...raw,
+        property_id: String(4100001 + i),
+        agency_property_no: "B" + String(200001 + i),
+        source_url: `https://www.28hse.com/rent/apartment/property-${4100001 + i}`,
+        publication: { description: "Test queue", images: [`https://i1.28hse.com/queue-${i}.jpg`] },
+      }));
+      const waitingPayload = { ...payload, listings: waiting };
+      await q(
+        `INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,status,ingestion_owner,rent,saleable_area,estate_id,created_at)
+        SELECT gen_random_uuid(),'QUEUE-'||x.property_id,x.agency_property_no,'Queue','rent','draft','no-hermes-v2',18000,500,$2,now()-interval '2 days'
+        FROM jsonb_to_recordset($1::jsonb) x(property_id text,agency_property_no text)`,
+        [JSON.stringify(waiting), randomUUID()],
+      );
+      await q(
+        `INSERT INTO property_public_members(property_id,public_listing_no) SELECT id,canonical_property_no FROM properties WHERE listing_no LIKE 'QUEUE-%'`,
+      );
+      await q(
+        `INSERT INTO listing_source_observations(id,run_id,payload) SELECT gen_random_uuid(),$1,'{}' FROM properties WHERE listing_no LIKE 'QUEUE-%'`,
+        [run],
+      );
+      const observations = (
+        await q(
+          `SELECT id FROM listing_source_observations WHERE id<>$1 AND payload='{}' ORDER BY id`,
+          [obs],
+        )
+      ).rows;
+      const queueProps = (
+        await q(
+          `SELECT id,canonical_property_no FROM properties WHERE listing_no LIKE 'QUEUE-%' ORDER BY canonical_property_no`,
+        )
+      ).rows;
+      await q(
+        `INSERT INTO mls_source_state(property_id,observation_id,source,scope_id,external_listing_id,deal_type,source_status)
+       SELECT x.id,x.obs,'28hse_agent_540','agent:540',x.external,'rent','active'
+       FROM jsonb_to_recordset($1::jsonb) x(id uuid,obs uuid,external text)`,
+        [
+          JSON.stringify(
+            queueProps.map((p, i) => ({
+              id: p.id,
+              obs: observations[i].id,
+              external: waiting[i].property_id,
+            })),
+          ),
+        ],
+      );
+      await q("UPDATE mls_ingestion_receipts SET payload_hash=$1", [hashPayload(waitingPayload)]);
+      await q("UPDATE mls_ingestion_scopes SET last_accepted_at=$1", [payload.scraped_at]);
+      const tried = [];
+      const failMedia = async ({ propertyId, observationId, observation }) => {
+        tried.push(propertyId);
+        await q(
+          `INSERT INTO listing_media_records(property_id,observation_id,source_url,eligibility,created_at) VALUES($1,$2,$3,'upload_failed',clock_timestamp())`,
+          [propertyId, observationId, observation.mediaCandidates[0].url],
+        );
+        return { publishable: false };
+      };
+      const queueReport = await publishDaily({
+        payload: waitingPayload,
+        client: c,
+        apply: true,
+        prepare: failMedia,
+      });
+      assert.equal(queueReport.attempted, 20);
+      assert.equal(queueReport.eligibleBacklog, 21);
+      assert.equal(tried.length, 20);
+      assert.equal(
+        queueReport.held.filter((x) => x.reason === "daily_publication_limit").length,
+        1,
+      );
+      const untouched = queueProps.find((x) => !tried.includes(x.id)).id;
+      tried.length = 0;
+      await publishDaily({ payload: waitingPayload, client: c, apply: true, prepare: failMedia });
+      assert.equal(tried[0], untouched, "never attempted draft gets first slot on next run");
+      assert.equal(tried.length, 20, "failures count as attempts on retry");
     } finally {
       await q(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await c.end();

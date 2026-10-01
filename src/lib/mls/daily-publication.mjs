@@ -1,3 +1,4 @@
+import { orderPublicationQueue, publicationBacklog } from "./publication-queue.mjs";
 import { publicationMediaObservation } from "./publication-media-retry.mjs";
 import { decodeSnapshot, normalizeDecimal } from "./ingestion-contract.mjs";
 import { prepareListingMedia } from "./media.mjs";
@@ -60,7 +61,9 @@ export function publicationDecision(raw, p) {
   }
   return null;
 }
-const targetSql = `SELECT p.*,s.observation_id,s.external_listing_id,s.source_status,o.run_id,m.public_listing_no,
+const targetSql = `SELECT p.*,
+ (SELECT max(mr.created_at) FROM listing_media_records mr WHERE mr.property_id=p.id) AS last_media_attempt_at,
+ s.observation_id,s.external_listing_id,s.source_status,o.run_id,m.public_listing_no,
  (SELECT count(*) FROM mls_source_state x WHERE x.property_id=p.id AND x.source_status='active') AS source_count,
  (coalesce(o.payload->>'holdProjection','false')='true'
  OR EXISTS(SELECT 1 FROM properties other WHERE other.id<>p.id AND other.canonical_property_no=p.canonical_property_no AND other.deal_type=p.deal_type)
@@ -106,7 +109,18 @@ export async function publishDaily({
     return r[0].id;
   };
   const receiptId = await accepted();
-  const report = { receiptId, published: [], ready: [], held: [], alreadyPublic: 0 };
+  const report = {
+    receiptId,
+    published: [],
+    ready: [],
+    held: [],
+    unknown: [],
+    alreadyPublic: 0,
+    attempted: 0,
+    eligibleBacklog: 0,
+    oldestWaitingAt: null,
+  };
+  const candidates = [];
   const repository = createSyncRepository({ client });
   let attempted = 0;
   try {
@@ -122,12 +136,17 @@ export async function publishDaily({
       const item = {
         propertyNo: raw.agency_property_no,
         sourceId: record.externalId,
+        dealType: record.dealType,
         ...(p?.public_listing_no ? { publicListingNo: p.public_listing_no } : {}),
       };
       if (reason) {
         report.held.push({ ...item, reason });
         continue;
       }
+      candidates.push({ record, property: p, item });
+    }
+    for (const { record, property: p, item } of orderPublicationQueue(candidates)) {
+      const raw = record.raw;
       if (!apply) {
         report.ready.push(item);
         continue;
@@ -137,6 +156,7 @@ export async function publishDaily({
         continue;
       }
       attempted++;
+      report.attempted = attempted;
       const mediaObservationId = await publicationMediaObservation(q, p);
       const reusable = await q(
         `SELECT mr.source_url FROM listing_media_records mr JOIN media_assets a ON a.id=mr.owned_media_asset_id WHERE mr.property_id=$1 AND mr.observation_id=$2 AND mr.eligibility='eligible' AND mr.content_hash=a.content_hash AND mr.detected_mime=a.content_type AND mr.size_bytes=a.size_bytes`,
@@ -179,6 +199,7 @@ export async function publishDaily({
         continue;
       }
       await q("BEGIN");
+      let commitSent = false;
       try {
         await q("SET LOCAL lock_timeout='20s'");
         await q("SELECT pg_advisory_xact_lock(hashtext('earnestproperty:mls-sync'))");
@@ -243,15 +264,18 @@ export async function publishDaily({
           `INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,$2,'property',id,jsonb_build_object('receiptId',$3::text,'payloadHash',$4::text,'before',$5::jsonb,'after',to_jsonb(p)) FROM properties p WHERE id=$1`,
           [p.id, POLICY, receiptId, batch.hash, JSON.stringify(before)],
         );
+        commitSent = true;
         await q("COMMIT");
         report.published.push(item);
       } catch (error) {
-        await q("ROLLBACK");
+        if (commitSent) report.unknown.push({ ...item, reason: "commit_outcome_unknown" });
+        await q("ROLLBACK").catch(() => {});
         throw error;
       }
     }
     return report;
   } finally {
+    Object.assign(report, publicationBacklog(candidates, report.published));
     await onReport(report);
   }
 }

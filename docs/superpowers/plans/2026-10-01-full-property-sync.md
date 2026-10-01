@@ -171,12 +171,12 @@
 
 **Consumes:** T3 current accepted full receipt。**Produces:** publication report／ready／held／alreadyPublic，以及可重試發佈。
 
-- [ ] 先加測試：已公開不重複；媒體上传中斷可復用已验证資產；大於36小時或非current receipt拒絕；重新 ingestion 後不能套用舊發佈結果。
-- [ ] 預設保留每次20個「嘗試」上限；顯示 eligible backlog／最舊等待時間／held原因。每日選取使用穩定排序，已知 held 有原因可追蹤，避免一批永遠餓死後面。
-- [ ] 初次46個新source IDs先做canonical reconciliation，不能迴圈強行全部公開。若需加大daily budget，另列量化實測、媒體配額及可review的配置變更；不能暗中移除20個cap。
-- [ ] 重試發佈仍驗description、estate、金額／面積、source URL、owned media、manual edits和source conflicts。現有內容需review的限制不能為三個樣本隨便關掉。
-- [ ] 失敗結果按盤顯示：「需補屋苑」、「圖片待核實」、「人工修改需確認」、「來源身份衝突」、「今日處理上限」；標示寫入成功但未公開。
-- [ ] 跑 `npm run test:property-sync:daily` 及 disposable `npm run test:property-sync:publication:db`；提交。
+- [x] 先加測試：已公開不重複；媒體上传中斷可復用已验证資產；大於36小時或非current receipt拒絕；重新 ingestion 後不能套用舊發佈結果。
+- [x] 預設保留每次20個「嘗試」上限；顯示 eligible backlog／最舊等待時間／held原因。每日選取使用穩定排序，已知 held 有原因可追蹤，避免一批永遠餓死後面。
+- [x] 初次46個新source IDs先做canonical reconciliation，不能迴圈強行全部公開。若需加大daily budget，另列量化實測、媒體配額及可review的配置變更；不能暗中移除20個cap。
+- [x] 重試發佈仍驗description、estate、金額／面積、source URL、owned media、manual edits和source conflicts。現有內容需review的限制不能為三個樣本隨便關掉。
+- [x] 失敗結果按盤顯示：「需補屋苑」、「圖片待核實」、「人工修改需確認」、「來源身份衝突」、「今日處理上限」；標示寫入成功但未公開。
+- [x] 跑 `npm run test:property-sync:daily` 及 disposable `npm run test:property-sync:publication:db`；提交。
 
 ## T5. 首頁「最新放盤」及公開一致性
 
