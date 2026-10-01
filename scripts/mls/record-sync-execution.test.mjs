@@ -43,3 +43,72 @@ test("cancelled incomplete evidence and successful job without receipt never bec
   assert.equal(r.stages.ingestion.status, "unknown");
   assert.equal(r.stages.publication.status, "unknown");
 });
+
+test("shadow summary-only verification is not a completed public check", () => {
+  for (const mode of ["shadow", "replay-shadow"]) {
+    const summary = executionSummary({
+      ...base,
+      mode,
+      needs: {
+        collect: { result: "success" },
+        ingest: { result: "success" },
+        publish: { result: "skipped" },
+        verify: { result: "success" },
+      },
+    });
+    assert.equal(summary.stages.ingestion.status, "blocked");
+    assert.equal(summary.stages.verification.status, "pending");
+    assert.equal(summary.stages.verification.errorCode, "PUBLIC_VERIFICATION_NOT_RUN");
+    assert.equal(summary.stages.verification.finishedAt, undefined);
+  }
+});
+
+test("publication failure or unknown outcome cannot gain verification success from a summary job", () => {
+  for (const result of ["failure", "cancelled", "skipped"]) {
+    const summary = executionSummary({
+      ...base,
+      needs: {
+        publish: { result },
+        verify: { result: "success", outputs: { public_verified: "true" } },
+      },
+    });
+    assert.equal(summary.stages.verification.status, "pending");
+    assert.equal(summary.stages.verification.finishedAt, undefined);
+  }
+  const unknown = executionSummary({
+    ...base,
+    publication: { published: [], unknown: [{ propertyId: "unknown" }] },
+    needs: {
+      publish: { result: "success" },
+      verify: { result: "success", outputs: { public_verified: "true" } },
+    },
+  });
+  assert.equal(unknown.stages.publication.status, "unknown");
+  assert.notEqual(unknown.stages.verification.status, "succeeded");
+});
+
+test("public verification requires its explicit native output and preserves failed checks", () => {
+  const input = {
+    ...base,
+    publication: { published: [] },
+    needs: { publish: { result: "success" }, verify: { result: "success" } },
+  };
+  for (const value of [undefined, "false", true]) {
+    const summary = executionSummary({
+      ...input,
+      needs: { ...input.needs, verify: { result: "success", outputs: { public_verified: value } } },
+    });
+    assert.equal(summary.stages.verification.status, "unknown");
+    assert.equal(summary.stages.verification.errorCode, "PUBLIC_VERIFICATION_PROOF_REQUIRED");
+  }
+  const succeeded = executionSummary({
+    ...input,
+    needs: { ...input.needs, verify: { result: "success", outputs: { public_verified: "true" } } },
+  });
+  assert.equal(succeeded.stages.verification.status, "succeeded");
+  const failed = executionSummary({
+    ...input,
+    needs: { ...input.needs, verify: { result: "failure", outputs: { public_verified: "true" } } },
+  });
+  assert.equal(failed.stages.verification.status, "failed");
+});

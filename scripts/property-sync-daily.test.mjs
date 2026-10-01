@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 const path = new URL("../.github/workflows/property-sync-daily.yml", import.meta.url);
 async function workflow() {
   const { createRequire } = await import("node:module");
@@ -149,4 +152,78 @@ test("manual source acceptance uses only disposable credentials and runs DB gate
     w.jobs.disposable.env.ASTRA_TEST_DATABASE_CONFIRMED,
     "${{ vars.ASTRA_TEST_DATABASE_CONFIRMED }}",
   );
+});
+
+test("public verification proof is exported only after the real HTTP checker succeeds", async () => {
+  const w = await workflow();
+  const verify = w.jobs.verify;
+  const step = verify.steps.find((item) => item.id === "public-verify");
+  assert.ok(step, "real public verification needs an explicit step identity");
+  assert.equal(
+    verify.outputs.public_verified,
+    "${{ steps.public-verify.outputs.public_verified }}",
+  );
+  assert.match(step.run, /if \[ "\$PUBLICATION_RESULT" = success \]; then/);
+  assert.match(step.run, /set -euo pipefail/);
+  const checkIndex = step.run.indexOf("node scripts/mls/verify-sync-publication.mjs");
+  const proofIndex = step.run.indexOf('echo "public_verified=true" >> "$GITHUB_OUTPUT"');
+  assert.ok(
+    checkIndex >= 0 && proofIndex > checkIndex,
+    "proof must follow the successful real check",
+  );
+  assert.ok(
+    proofIndex < step.run.lastIndexOf("fi"),
+    "proof stays inside publication-success branch",
+  );
+  const summary = verify.steps.find((item) => item.name === "Safe job summary");
+  assert.ok(!summary.run.includes("public_verified=true"));
+});
+
+test("actual verification shell never exports proof on a skipped or failed check", async () => {
+  const w = await workflow();
+  const step = w.jobs.verify.steps.find((item) => item.id === "public-verify");
+  const directory = mkdtempSync(join(tmpdir(), "property-sync-verification-"));
+  const bash =
+    [process.env.PROPERTY_SYNC_TEST_BASH, "C:/Program Files/Git/bin/bash.exe"]
+      .filter(Boolean)
+      .find((candidate) => existsSync(candidate)) ?? "bash";
+  const stubs = `
+    gh() { return 0; }
+    node() { echo checked >> "$CHECK_CALLS"; return "$CHECK_EXIT"; }
+  `;
+  try {
+    for (const [publication, checkExit, expectedExit, checked] of [
+      ["failure", "0", 0, false],
+      ["skipped", "0", 0, false],
+      ["success", "1", 1, true],
+      ["success", "0", 0, true],
+    ]) {
+      const output = join(directory, `${publication}-${checkExit}.outputs`);
+      const calls = join(directory, `${publication}-${checkExit}.calls`);
+      const result = spawnSync(bash, ["-c", stubs + step.run], {
+        cwd: directory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          BASH_ENV: "",
+          PUBLICATION_RESULT: publication,
+          GITHUB_RUN_ID: "123",
+          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_OUTPUT: output.replaceAll("\\", "/"),
+          CHECK_CALLS: calls.replaceAll("\\", "/"),
+          CHECK_EXIT: checkExit,
+        },
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, expectedExit, result.stderr);
+      assert.equal(existsSync(calls), checked);
+      assert.equal(
+        existsSync(output) ? readFileSync(output, "utf8").trim() : "",
+        publication === "success" && checkExit === "0" ? "public_verified=true" : "",
+      );
+    }
+  } finally {
+    assert.ok(directory.startsWith(join(tmpdir(), "property-sync-verification-")));
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

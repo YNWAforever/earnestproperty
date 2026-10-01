@@ -60,7 +60,7 @@ PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKE
 
 ## 動作coverage及層級
 
-- Portablecode：ingestion75、daily35（包括新manualdisposableworkflowguard）、admin9、withdrawal5、release migration3、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
+- Portablecode：ingestion75、daily37（包括新manualdisposableworkflowguard及實際verification shell）、admin12、withdrawal5、release migration3、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
 - Python：97/97exit0，包括realprocesscheckpoint、propertyhk syntheticselectors/fullgate、privatehash/retention ports。
 - PGlite：public newest/search實際SQLfixture；不是Neon或production。
 - RealNeon：核對project dawn-meadow-79190048／disposable br-young-breeze-ao85rtx1／endpoint ep-square-leaf-aobruyvf／dedicated earnest_audit_acceptance_20260927後才fixtureDDL。原六套serial41/41baselinePASS；原atomicrepository26/26最後T8重驗；HKfullgate1/1、HKpublication1/1、28publication與nextingestion各1/1、T9metadata1/1、T10withdraw1/1、132historical1/1。ExactZIP1/1PASS/0skip、611.8s，另記A01。隨機schema清理；沒有fixture指向inheritedneondb或production。
@@ -99,3 +99,8 @@ PR208 firstLinuxCI failed at exactmigrationchecksum guard: WindowsnewSQLfileshad
 SecondLinuxCIpassedallnewgates(including26syntheticUI/Python97),thenexistingCommandCenterhard-coded16-entryexpectationfailedafterapproved17thsource-syncentry. Positive17-entry/label/EDITORSregressionupdated; duplicate/groupassertionspreserved. Localcommand-center82Node+8BunPASS. NounrelatedCRM/WhatsAppfeaturelogicmodified;finalrequiredCIreruntrackedinPR.
 
 ThirdCIlaterfailedattest-wiringclassifyingnew3DBsuitesasportable. ExplicitDB/private-fixtureregistrationandguardedprivate-regressionmanualjobadded; ordinaryCIcoveragecheckretained. Control-plane105/105PASS, daily+wiring16/16PASSlocally. Privatejobreadsprivateassetwithdedicatedread-onlytoken,checks414631bytes/exactSHA/verifieddisposabletarget,nopublicartifact; nojob/token/assetconfiguredordispatchedthissession. ThisoptionalhostedprivateCIgate remainsUNRUN/BLOCKED_EXTERNAL, notlocalZIPPASSorproductioncycleevidence.
+
+
+### 續作：公開驗證 proof 修復
+
+發現 summary-only verify job success 曾被記成公開驗證成功；四個正向回歸先失敗，現改為只有實際HTTP checker通過後的 native public_verified=true 才可成功。Shadow／發佈失敗未執行檢查維持 pending；成功發佈缺 proof 顯示 unknown；HTTP檢查失敗不升級。實際Git Bash執行四種合成分支驗證輸出順序；daily37/37、admin12/12、job-wake17/17 PASS／0skip。此 HTTP proof不代表live browser驗收；13/19 isolated PASS、6/19 live BLOCKED_EXTERNAL、0/3 MONITORING不變。更新的hostedCI結果在PR記錄。

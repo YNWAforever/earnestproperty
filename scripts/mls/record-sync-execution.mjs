@@ -70,6 +70,18 @@ export function executionSummary({
     stages.publication = { status: "unknown", errorCode: "PUBLICATION_RECONCILIATION_REQUIRED" };
   else if (stages.publication.status === "succeeded" && !publication)
     stages.publication = { status: "unknown", errorCode: "PUBLICATION_REPORT_REQUIRED" };
+  if (stages.verification.status === "succeeded") {
+    if (stages.publication.status !== "succeeded") {
+      // The always-run summary job also succeeds when no public check ran.
+      // Leave this stage unstarted rather than hiding a failed publication.
+      stages.verification = { status: "pending", errorCode: "PUBLIC_VERIFICATION_NOT_RUN" };
+    } else if (needs.verify?.outputs?.public_verified !== "true") {
+      stages.verification = {
+        status: "unknown",
+        errorCode: "PUBLIC_VERIFICATION_PROOF_REQUIRED",
+      };
+    }
+  }
   const s = receipt?.response?.summary;
   const counts = {};
   if (s) {

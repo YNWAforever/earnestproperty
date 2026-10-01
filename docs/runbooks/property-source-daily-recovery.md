@@ -96,6 +96,10 @@ gh workflow run property-sync-daily.yml --repo YNWAforever/earnestproperty --ref
 
 GitHub204=dispatch accepted，未等於job開始/完成。Timeout／5xx=unknown，read-only查native workflow/run operation identity，待確認後再處理；現有reservation阻擋blind redispatch。Run metadata只存bounded IDs/counts/stages/private asset reference；terminal結果不倒退。原full receipt可作accepted historyfallback；callback未執行不能宣稱publication完成。30h無accepted full ingestion與從未接通分開，不能以最近publication時間洗白。
 
+### 公開驗證與安全摘要
+
+verify job 為了保留故障摘要會 always 執行；job success 本身不代表公開檢查執行過。只有實際 HTTP checker 通過後才輸出 native public_verified=true，後台才記錄 verification succeeded。Shadow／publication skipped或failed未執行check，verification保持未開始；缺proof顯示待核實。HTTP proof也不代替登入／照片／桌面手機live browser驗收，這些仍需release operator獨立記錄。
+
 ## 撤盤及復原
 
 132historical缺席於本session沒有任何正式apply。候選須同scope兩個accepted full observations，原採集時間相隔≥24h、latest≤36h、collection/ingestion metadata可證完整、無failed/unknown區間。明示sold/rented獨立；draft、人工override/openreview、其他active source均阻擋。Property.hk absence永遠off，本次只人工review、不啟用automation。

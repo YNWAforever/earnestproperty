@@ -434,6 +434,7 @@ jobs:
           set -euo pipefail
           npm ci --ignore-scripts --no-audit --no-fund
       - name: Verify public result from private report
+        id: public-verify
         shell: bash
         run: |-
           set -euo pipefail
@@ -442,6 +443,7 @@ jobs:
           if [ "$PUBLICATION_RESULT" = success ]; then
            gh release download property-sync-evidence --pattern "$asset" --dir verification
            node scripts/mls/verify-sync-publication.mjs --report "verification/$asset" --out verification/result.json
+           echo "public_verified=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Safe job summary
         shell: bash
@@ -467,6 +469,8 @@ jobs:
       COLLECTION_RESULT: ${{ needs.collect.result }}
       INGESTION_RESULT: ${{ needs.ingest.result }}
       PUBLICATION_RESULT: ${{ needs.publish.result }}
+    outputs:
+      public_verified: ${{ steps.public-verify.outputs.public_verified }}
     if: always() && needs.preflight.result == 'success'
 
   record:
