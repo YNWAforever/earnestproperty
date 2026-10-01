@@ -1,6 +1,8 @@
-# 舊公開證據副本 cleanup 待審清單
+# 舊公開證據副本 cleanup：精確清單及完成證據
 
-只限 YNWAforever/earnestproperty 的 property-sync-evidence release。以下50件已在 private YNWAforever/earnestproperty-sync-evidence 同名 release 保存並逐檔download/hash驗證 PASS。此清單不是刪除授權，尚未刪除任何遠端asset。
+只限 YNWAforever/earnestproperty 的 property-sync-evidence release。以下50件已在 private YNWAforever/earnestproperty-sync-evidence 同名 release 保存並逐檔download/hash驗證 PASS。最初此清單僅作 preview；使用者其後明確要求解除以下50檔刪除阻塞，已按原清單執行。
+
+正式 cleanup：先核對每日同步=false、目的庫private，再重新下載全部50個私有副本驗SHA/size；每件DELETE前重查原public asset ID/name/size/digest，只刪該numeric ID。`--check`／`--apply` exit0；最終public release assets=0、private retained=50、fresh byte readback=50/50。未刪除release本身、私有副本、accepted baseline或DB紀錄。私有原件保留復原；不自動重新公開raw/contacts。
 
 | Asset | Bytes | Verified private SHA-256 |
 |---|---:|---|
