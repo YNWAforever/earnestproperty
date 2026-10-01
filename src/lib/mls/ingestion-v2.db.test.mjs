@@ -1,3 +1,4 @@
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -8,7 +9,7 @@ test(
   "v2 database guards preserve aliases, overrides, old history and reject sequential legacy writes",
   { skip: !url },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     assert.notEqual(
       url,
       process.env.DATABASE_URL_UNPOOLED,

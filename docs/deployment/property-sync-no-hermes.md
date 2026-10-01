@@ -54,7 +54,7 @@ scripts/property-sync/.venv/Scripts/python.exe scripts/property-sync/run_propert
 
 On Linux use `python3` for venv creation and `.venv/bin/python` instead of `.venv/Scripts/python.exe`. The named Python test script selects the correct venv path. Optional `requirements-browser.txt` pins Crawl4AI; its browser runtime is not part of verified offline coverage. No Hermes/LLM dependency is required.
 
-`npm run test:property-sync:db` uses only the explicitly approved disposable `ASTRA_TEST_DATABASE_URL` with `ASTRA_TEST_BRANCH_ID=br-quiet-hat-aoxbj2ue`; inject these through the test environment. It skips if the URL is absent and fails for a different branch or the production connection. Fixtures create and drop uniquely named isolated schemas. A skip is not database verification. Do not point any existing destructive database suite at production.
+`npm run test:property-sync:db` uses only the explicitly approved disposable `ASTRA_TEST_DATABASE_URL` with an explicitly confirmed current `ASTRA_TEST_BRANCH_ID` and `ASTRA_TEST_DATABASE_CONFIRMED=true`; inject these through the test environment. The shared guard verifies server-reported branch, endpoint and a dedicated `earnest_audit_acceptance_YYYYMMDD` database before fixtures. It skips if the URL is absent and fails on an identity mismatch or production connection. Fixtures create and drop uniquely named isolated schemas. A skip is not database verification. Do not point any existing destructive database suite at production.
 
 ## Worker and server configuration
 

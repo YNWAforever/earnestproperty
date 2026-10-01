@@ -158,12 +158,12 @@
 
 **Consumes:** T1 frozen manifest。**Produces:** immutable receipt、actual-write counters、accepted full baseline。
 
-- [ ] 先加測試：相同 request 重播兩次只產生一次業務效果；DB commit 已成功但回應 timeout 時進 unknown/reconcile；錯 DB host／scope／policy在寫入前拒絕。
-- [ ] 先執行 `verify-daily-target.mjs`，只允許已核實 direct host＋database；不用從輸入 payload 或 UI 任意指定 database。
-- [ ] 由 exact frozen request 產生／找回 receipt；timeout 查 hash/run identity 再決定重播，不建立新的爬取 run 來掩蓋結果未知。
-- [ ] baseline 只有 accepted full receipt 可推進；不倒退、不從 publication 成功推定 ingestion 成功。私有 baseline upload 失敗時標「已匯入／紀錄保存待恢復」，下一步先對帳。
-- [ ] 验證 source ID、canonical identity、field provenance、staff override 保持；新來源與現有盤相配時不重建物業。
-- [ ] 跑 `npm run test:property-sync`、`npm run test:property-sync:python` 及 disposable DB 的 `npm run test:property-sync:db`；記錄 PASS／SKIPPED；提交。
+- [x] 先加測試：相同 request 重播兩次只產生一次業務效果；DB commit 已成功但回應 timeout 時進 unknown/reconcile；錯 DB host／scope／policy在寫入前拒絕。
+- [x] 先執行 `verify-daily-target.mjs`，只允許已核實 direct host＋database；不用從輸入 payload 或 UI 任意指定 database。
+- [x] 由 exact frozen request 產生／找回 receipt；timeout 查 hash/run identity 再決定重播，不建立新的爬取 run 來掩蓋結果未知。
+- [x] baseline 只有 accepted full receipt 可推進；不倒退、不從 publication 成功推定 ingestion 成功。私有 baseline upload 失敗時標「已匯入／紀錄保存待恢復」，下一步先對帳。
+- [x] 验證 source ID、canonical identity、field provenance、staff override 保持；新來源與現有盤相配時不重建物業。
+- [x] 跑 `npm run test:property-sync`、`npm run test:property-sync:python` 及 disposable DB 的 `npm run test:property-sync:db`；記錄 PASS／SKIPPED；提交。
 
 ## T4. 28Hse 發佈恢復及 backlog
 

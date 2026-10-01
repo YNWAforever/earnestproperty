@@ -1,6 +1,7 @@
 import { open } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { SnapshotError } from "../../src/lib/mls/ingestion-contract.mjs";
+import { verifyDailyTarget } from "./verify-daily-target.mjs";
 const MAX_BYTES = 5 * 1024 * 1024;
 async function readFrozen(path) {
   const file = await open(path, "r");
@@ -47,7 +48,14 @@ export async function runSnapshotBridge(
   }
   if (!payload || payload.source !== "28hse") throw new SnapshotError("SOURCE_SCOPE_MISMATCH", 400);
   const options = { apply, expectedSource: "28hse_agent_540" };
-  if (apply) options.connectionString = env.DATABASE_URL_UNPOOLED;
+  if (apply) {
+    try {
+      verifyDailyTarget(env.DATABASE_URL_UNPOOLED, env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
+    } catch {
+      throw new SnapshotError("DAILY_DATABASE_TARGET_UNVERIFIED", 503);
+    }
+    options.connectionString = env.DATABASE_URL_UNPOOLED;
+  }
   const service =
     ingest ?? (await import("../../src/lib/mls/ingestion-service.mjs")).ingestSnapshot;
   return service(payload, options);

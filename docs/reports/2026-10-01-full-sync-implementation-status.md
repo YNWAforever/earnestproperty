@@ -59,3 +59,13 @@ Private evidence repository/release + least-privilege credential and authoritati
 - Early T4 compatibility: publication report carries the existing public alias for verifier; never reconstructs a public alias from the company number.
 
 T2 final verification at working tree based94c25bd: npm run test:property-sync:daily exit0,24/24 PASS; Python pytest scripts/property-sync/tests exit0,79/79 PASS; git diff --check exit0. Provider/canonical writer/DB policy unmodified. T1 private live capability and reviewed retention execution remain unchecked.
+
+## T3 verification / durable ingestion
+
+- RED: wrong daily DB host was not rejected by the CLI bridge; fixed before service/client invocation. Dry-run still reads no credentials.
+- GREEN on working tree based b420876: npm run test:property-sync exit0 71/71; npm run test:property-sync:python exit0 79/79. The named Python runner now uses its documented isolated venv with pinned requirements.
+- Verified disposable staging branch br-young-breeze-ao85rtx1, endpoint ep-square-leaf-aobruyvf, dedicated empty earnest_audit_acceptance_20260927 database using the unchanged shared server identity guard. Eight suites now use this guard instead of a deleted hard-coded branch. Production/neondb is not a fixture target.
+- Actual Node direct env-file test command (six ingestion suites plus two publication suites, --test-concurrency=1) exit0: 41 PASS,0 FAIL,0 SKIPPED,488.3s. Tests cover same-request replay, lost COMMIT acknowledgement/reconciliation, previous-full baseline, wrong identity/scope, primary/secondary priority, retained aliases, manual overrides, actual write counters and real two-client global lock contention.
+- Initial two concurrent runner processes failed ingestion_busy (37/39 ingestion tests and1/2 publication tests); serial rerun confirmed the cause was expected shared advisory-lock contention between runners. No production lock rule weakened. Initial node --env-file --run invocation propagated no env to its child and skipped6; not counted as DB evidence. The direct --test run above had no skips.
+- DB migration status: existing immutable migration fixtures only in unique disposable schemas; no production migration/config/data writes. Private evidence/baseline readback remains BLOCKED_EXTERNAL; accepted DB receipt alone is never a successful upload.
+- T3 local READY. Production apply and a fresh accepted full receipt remain VERIFICATION_BLOCKED pending the private destination and rollout gates.

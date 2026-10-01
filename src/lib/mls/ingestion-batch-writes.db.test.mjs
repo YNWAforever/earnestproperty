@@ -1,3 +1,4 @@
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "@neondatabase/serverless";
@@ -6,7 +7,7 @@ test(
   "batched SQL preserves JSON null, numeric zero and existing adopted ownership",
   { skip: !process.env.ASTRA_TEST_DATABASE_URL },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     const c = new Client({ connectionString: process.env.ASTRA_TEST_DATABASE_URL });
     c.neonConfig.webSocketConstructor = globalThis.WebSocket;
     await c.connect();
