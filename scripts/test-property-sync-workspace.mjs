@@ -105,7 +105,10 @@ try {
     origin = "http://127.0.0.1:" + port;
   browser = await chromium.launch({ headless: true });
   for (const width of [1440, 390]) {
-    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    const context = await browser.newContext({
+      viewport: { width, height: 900 },
+      timezoneId: "UTC",
+    });
     await context.route("**/*", (route) =>
       new URL(route.request().url()).origin === origin ? route.continue() : route.abort(),
     );
@@ -147,7 +150,7 @@ try {
       .locator("..")
       .locator("dd");
     const expectedPublicationDate = await page.evaluate(
-      (value) => new Date(value).toLocaleString("zh-HK"),
+      (value) => new Date(value).toLocaleString("zh-HK", { timeZone: "Asia/Hong_Kong" }),
       previousPublicationAt,
     );
     assert.equal(await lastPublished.textContent(), expectedPublicationDate);

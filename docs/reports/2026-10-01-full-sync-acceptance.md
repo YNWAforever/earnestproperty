@@ -114,3 +114,6 @@ ThirdCIlaterfailedattest-wiringclassifyingnew3DBsuitesasportable. ExplicitDB/pri
 ### T9 最後成功／最新故障續作
 
 來源卡保留source最近一次有成功狀態/完成時間的publication；後來failed/cancelled/unknown/pending不清空時間，也不改30h accepted full ingestion的stale。明確rejected dispatch保存的failed/finished_at在來源卡及durable history都可見；不完整結果仍unknown。原receipt不當公開證據。兩組正向RED→GREEN：admin17/17、daily37/37、actualReact/CSS32/32synthetic、realdisposableSQL1/1（0skip），typecheck/scoped lint exit0。SQL只讀核對及EXPLAIN、1003rows/7次p50=316.4ms/p95=397.3ms，是隔離環境測量。先前localhost navigation30s timeout保留，無放寬timeout/斷言；後續重跑通過，不冒稱正式手機NFR。19case/live gate及0/3MONITORING不變，exact SHA/新CI在PR208。
+
+
+T9 Linux CI36871635624的日期assertion漏了香港timezone，UTC runner預期01:00、product正確09:00。Windows強制UTC browser後同樣RED；reference expectation補明確Asia/Hong_Kong，保留UTC context、32/32PASS／0skip／no provider/DB writes。沒有把product改成UTC，也未放寬保留歷史成功/失敗/refresh的斷言。新CI結果在PR208，19case與production gates仍不變。

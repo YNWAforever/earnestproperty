@@ -216,3 +216,10 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 - EXPLAIN ANALYZE/BUFFERS及1003rows/7次whole-workspace讀取：p50=316.4ms、p95=397.3ms（本機→disposable Neon），lateral讀取使用既有history index並只回1row/source。不是production latency保證，沒有加index migration或改pagination上限。
 - 保留一次首個localhost navigation30s timeout；diagnostics顯示CSS/dev compilation仍未完成。未宣稱根因已修或放寬timeout/斷言；無改動重跑32PASS，後續文案/拒絕history修正後亦32PASS。首次加入lateral LIMIT1時舊test helper假設所有LIMIT都有params，曾1FAIL；僅令它容許無params的固定LIMIT1，原parameterized history limit26/assertions保留。遠端Linux CI需確認，不把rerun重疊case加為新UC。
 - Read-only GitHub config refresh：private evidence repo/token仍未配置，observability及manual disposable CI旗標未啟用。Production DML/DDL/config/dispatch/deploy/merge/messages0；兩個既有新增migration仍pending，原ZIP/request/raw hashes及scraped_at不變。Private baseline、Property.hk real contract、live auth/release/E2E及3cycles外部gate保留；13/19isolatedPASS、6/19liveBLOCKED_EXTERNAL、0/3MONITORING不變。
+
+
+## PR208 T9 timezone regression follow-up
+
+- Linux CI36871635624/9671e9b：三個nonstaging sibling jobs及Vercel SUCCESS，main ci在新增UI日期assertion失敗，product09:00／test01:00。Root cause：product既有date formatter明確Asia/Hong_Kong；新test expectation漏timezone，Windows HK暫掩蓋此錯，Linux UTC重現。不是product應改為runner時間。
+- 在Windows test browser固定timezoneId=UTC，未改expectation先跑：RED同樣09:00≠01:00，exit1；保留fixture日期/refresh/status/nextstep/assertions。只修reference formatter為明確香港時間，UTC browser context繼續保留作正向跨時區回歸。
+- GREEN：npm.cmd run test:property-sync:ui exit0、32/32syntheticPASS/0skip（1440/390、UTC context，顯示Hong Kong agency time）、providerRequests0/databaseWrites0；scoped ESLint/git diff check exit0。Product code、migration、private原bytes/metadata及所有限時不變，不再跑無關DB/ZIP。Exactfollow-upcommit及新hosted CI在PR208；失敗run仍保留。
