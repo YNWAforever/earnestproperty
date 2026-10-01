@@ -10,7 +10,7 @@ import { Link, useRouter } from "@tanstack/react-router";
  * space under the sticky header.
  */
 
-export function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+export function DefaultErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   const router = useRouter();
 
   return (
@@ -39,7 +39,7 @@ export function DefaultErrorComponent({ error, reset }: { error: Error; reset: (
         <p className="mt-3 text-base leading-7 text-muted-foreground">
           載入時遇到未預期的問題。請再試一次；如果問題持續，可返回首頁或直接 WhatsApp 我們。
         </p>
-        {import.meta.env.DEV && error.message && (
+        {import.meta.env.DEV && error instanceof Error && error.message && (
           <pre className="mt-4 max-h-40 overflow-auto rounded-md bg-muted p-3 text-left font-mono text-xs text-destructive">
             {error.message}
           </pre>

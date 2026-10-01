@@ -162,7 +162,9 @@ export const Route = createFileRoute("/")({
   errorComponent: ({ error }) => (
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">載入失敗</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
+      </p>
     </div>
   ),
   // Title and description come from the registry. They used to be duplicated

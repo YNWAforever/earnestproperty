@@ -195,7 +195,9 @@ export const Route = createFileRoute("/estate/$slug")({
   errorComponent: ({ error }) => (
     <div className="mx-auto max-w-md py-24 text-center">
       <h1 className="text-2xl font-bold">載入失敗</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{error.message}</p>
+      <p className="mt-2 text-sm text-muted-foreground">
+        {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
+      </p>
       <Link to="/" className="mt-4 inline-block text-primary underline">
         回首頁
       </Link>

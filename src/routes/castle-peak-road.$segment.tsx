@@ -100,7 +100,7 @@ function getSegmentListingsHref(segment: CorridorSegment) {
   return "/listings?deal=all&district=castle-peak-road&page=1";
 }
 
-function CastlePeakRoadSegmentError({ error }: { error: Error }) {
+function CastlePeakRoadSegmentError({ error }: { error: unknown }) {
   const router = useRouter();
 
   return (
@@ -111,7 +111,9 @@ function CastlePeakRoadSegmentError({ error }: { error: Error }) {
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           這個分段的即時放盤或內容暫時未能載入。可先返回青山公路總覽，或重新整理資料再試一次。
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">{error.message}</p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
+        </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button onClick={() => router.invalidate()}>重新載入</Button>
           <Button asChild variant="outline">
