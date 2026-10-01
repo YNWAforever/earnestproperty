@@ -622,6 +622,8 @@ def parse_property_detail(html, record, cfg):
     for k in cfg.get("required_detail_fields", []):
         if r.get(k) is None:
             raise WorkerError("missing_required_detail")
+    from .publication import configured_publication_content
+    r["publication"] = configured_publication_content(root, cfg)
     r["raw_payload"] = {"detail_fields": raw}
     return r
 

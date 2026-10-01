@@ -61,3 +61,13 @@ def test_same_global_id_dual_offer_uses_distinct_sale_rent_keys():
  assert p['meta']['eligible_for_absence'] is False
 
  assert next(r for r in p['listings'] if r['deal_type']=='rent')['rent']=='18000'
+def test_propertyhk_publication_requires_explicit_verified_selectors_and_media_rights():
+ cfg,fixtures,_=full_fixture()
+ html=fixtures['https://www.property.hk/detail/100']['html'].replace('</main>','<p class="description">Literal synthetic description</p><img class="photo" src="https://media.fixture.property.hk/one.jpg"></main>')
+ raw={'property_id':'100','source_url':'https://www.property.hk/detail/100','deal_type':'sale','branch_code':'EPW'}
+ assert w.parse_property_detail(html,raw,cfg).get('publication',{}).get('images',[])==[]
+ cfg['publication']={'verified':True,'rights_confirmed':True,'media_hosts_verified':True,'allowed_media_hosts':['media.fixture.property.hk'],'description_selector':'.description','images_selector':'img.photo'}
+ content=w.parse_property_detail(html,raw,cfg)['publication']
+ assert content=={'description':'Literal synthetic description','images':['https://media.fixture.property.hk/one.jpg']}
+ cfg['publication']['rights_confirmed']=False
+ assert w.parse_property_detail(html,raw,cfg)['publication']['images']==[]

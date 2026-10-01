@@ -97,3 +97,27 @@ test("apply refuses wrong DB host before the ingestion service can write", async
   );
   assert.equal(calls, 0);
 });
+
+test("Property.hk bridge requires explicit source selection and protected policy in service", async () => {
+  let called = 0;
+  const ports = {
+    env: {},
+    readPayload: async () => '{"source":"propertyhk"}',
+    ingest: async (p, o) => {
+      called++;
+      assert.equal(o.expectedSource, "propertyhk");
+      assert.equal(o.apply, false);
+      return { success: true };
+    },
+  };
+  await runSnapshotBridge(["--source", "propertyhk", "--payload", "frozen.json"], ports);
+  assert.equal(called, 1);
+  await assert.rejects(runSnapshotBridge(["--source", "other", "--payload", "x"], ports));
+  await assert.rejects(
+    runSnapshotBridge(["--source", "propertyhk", "--payload", "x"], {
+      ...ports,
+      readPayload: async () => '{"source":"28hse"}',
+    }),
+  );
+  assert.equal(called, 1);
+});

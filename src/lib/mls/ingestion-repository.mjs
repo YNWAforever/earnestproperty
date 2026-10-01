@@ -281,10 +281,10 @@ export async function applyIngestion(client, payload, options = {}) {
         )
       )[0];
       const candidates = record.unitKey
-        ? await q("SELECT * FROM mls_source_state WHERE unit_key=$1 AND deal_type=$2", [
-            record.unitKey,
-            record.dealType,
-          ])
+        ? await q(
+            "SELECT s.*,o.payload->'fields' AS fields,o.payload->>'sourceStatusReason' AS source_status_reason FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id WHERE s.unit_key=$1 AND s.deal_type=$2",
+            [record.unitKey, record.dealType],
+          )
         : [];
       const existing =
         state ??

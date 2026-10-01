@@ -37,7 +37,15 @@
       "absence_detection_enabled": false,
       "sync_allowed_origins": [],
       "publishEnabled": false,
-      "access_verified": false
+      "access_verified": false,
+      "publication": {
+        "verified": false,
+        "rights_confirmed": false,
+        "media_hosts_verified": false,
+        "allowed_media_hosts": [],
+        "description_selector": null,
+        "images_selector": null
+      }
     }
   }
 }

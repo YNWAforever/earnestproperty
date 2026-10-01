@@ -200,3 +200,62 @@ test("no authorized nullable winner emits an explicit clearing decision without 
   assert.equal(selection.provenance.description.reason, "no_authorized_source");
   assert.ok(selectSourceFields([{ ...primary, fields: {} }]).clearFields.includes("bathrooms"));
 });
+
+test("verified Property.hk exact equivalent advertisements may share canonical with explicit consistency", () => {
+  const fields = {
+    price: "5380000",
+    estate: "ESTATE",
+    district: "TEST",
+    block: "2",
+    floor: "12",
+    unit: "A",
+  };
+  const r = {
+    ...record,
+    fields,
+    sourceStatus: "active",
+    sourceStatusReason: null,
+    exactMatchEligible: true,
+  };
+  const state = {
+    source: "propertyhk",
+    external_listing_id: "a",
+    deal_type: "sale",
+    property_id: "one",
+    unit_key: r.unitKey,
+    fields,
+    source_status: "active",
+    source_status_reason: null,
+  };
+  assert.equal(chooseRelationship(r, null, [state]).propertyId, "one");
+  assert.equal(
+    chooseRelationship({ ...r, fields: { ...fields, price: "6000000" } }, null, [state])
+      .holdProjection,
+    true,
+  );
+  assert.equal(
+    chooseRelationship({ ...r, exactMatchEligible: false }, null, [state]).propertyId,
+    null,
+  );
+  const secondaryState = { ...state, observation_id: "o1" };
+  const chosen = selectSourceFields([
+    secondaryState,
+    { ...secondaryState, external_listing_id: "b", observation_id: "o2" },
+  ]);
+  assert.equal(chosen.ambiguous, false);
+  assert.equal(chosen.values.price, "5380000");
+  assert.equal(
+    selectSourceFields([
+      secondaryState,
+      { ...secondaryState, fields: { ...fields, price: "6000000" } },
+    ]).ambiguous,
+    true,
+  );
+  assert.equal(
+    selectSourceFields([
+      { ...secondaryState, unit_key: null },
+      { ...secondaryState, unit_key: null },
+    ]).ambiguous,
+    true,
+  );
+});

@@ -231,14 +231,15 @@
 
 **Consumes:** T7完整request及T6版本化server policy。**Produces:** 已接受Property.hk來源資料，無重複canonical，合資格公開牌。
 
-- [ ] 先測同一實體跨三分行／跨28Hse、同盤售租、未知公司盤號、exact unit缺失、多secondary矛盾。現有 `source-selection.mjs` 對多個Property.hk secondary會ambiguous；不能直接移除保護。
-- [ ] 同global ID的同offer先在adapter依實證合併branch provenance；不同IDs但同canonical使用明確一致性判定，衝突交review。保持28Hse主要欄位優先及人工覆寫；在没有新規格批准前保持既有lifecycle優先策略。
+- [x] 先測同一實體跨三分行／跨28Hse、同盤售租、未知公司盤號、exact unit缺失、多secondary矛盾。現有 `source-selection.mjs` 對多個Property.hk secondary會ambiguous；不能直接移除保護。
+- [x] 同global ID的同offer先在adapter依實證合併branch provenance；不同IDs但同canonical使用明確一致性判定，衝突交review。保持28Hse主要欄位優先及人工覆寫；在没有新規格批准前保持既有lifecycle優先策略。
 - [ ] 建立/啟用Property.hk server source policy須有已验证URLgrammar、id_scope、parser、estate/district mapping與first baseline證據。來源帳號不由client payload聲稱即可通過。
-- [ ] 發佈函數改為source-aware：target SQL參數化source/scope；sourceURL identity、media host allowlist、media source codec、observation schema逐一確認支援propertyhk。不能只把 `batch.source !== 28hse` 判斷移除。
-- [ ] 圖片host僅加入實際驗證及可使用來源；防SSRF／redirect／MIME／size與owned-media檢查沿用。零圖片／缺內容盤進held，不造描述或取錯分行圖片。
-- [ ] Property.hk已有28Hse同盤不新增公開牌；補充欄位遵守既有優先規則。新Property.hk-only盤通過public prerequisites後才能上架。
-- [ ] 用disposable DB做first import→replay→publication→next ingestion全鏈；驗唯一盤、public alias不變、照片不重覆上傳、staff overrides保持。
+- [x] 發佈函數改為source-aware：target SQL參數化source/scope；sourceURL identity、media host allowlist、media source codec、observation schema逐一確認支援propertyhk。不能只把 `batch.source !== 28hse` 判斷移除。
+- [x] 圖片host僅加入實際驗證及可使用來源；防SSRF／redirect／MIME／size與owned-media檢查沿用。零圖片／缺內容盤進held，不造描述或取錯分行圖片。
+- [x] Property.hk已有28Hse同盤不新增公開牌；補充欄位遵守既有優先規則。新Property.hk-only盤通過public prerequisites後才能上架。
+- [x] 用disposable DB做first import→replay→publication→next ingestion全鏈；驗唯一盤、public alias不變、照片不重覆上傳、staff overrides保持。
 - [ ] 首次live apply檢查receipt及逐分行source counts；再加入獨立schedule（建議香港05:17，限T11-B gate通過後），不得改動28Hse正常排程；提交。
+
 
 ## T9. 後台「盤源同步」與看得見的故障
 

@@ -1,23 +1,54 @@
+import { exactUnitIdentity } from "./unit-identity.mjs";
+import {
+  HSE_PUBLICATION_SOURCE,
+  resolvePublicationSource,
+  createPropertyhkMediaObservation,
+} from "./publication-source-policy.mjs";
 import { orderPublicationQueue, publicationBacklog } from "./publication-queue.mjs";
 import { publicationMediaObservation } from "./publication-media-retry.mjs";
-import { decodeSnapshot, normalizeDecimal } from "./ingestion-contract.mjs";
+import { decodeSnapshot, normalizeDecimal, cleanSourceId } from "./ingestion-contract.mjs";
 import { prepareListingMedia } from "./media.mjs";
 import { createObservation } from "./source-contract.mjs";
 import { createSyncRepository } from "./sync-repository.mjs";
 const POLICY = "daily-reviewed-publication-v1";
-const HOSTS = ["i1.28hse.com", "i2.28hse.com", "i3.28hse.com"];
 const equal = (a, b) => normalizeDecimal(a) === normalizeDecimal(b);
-export function publicationDecision(raw, p) {
+export function publicationDecision(raw, p, source = HSE_PUBLICATION_SOURCE) {
   if (!p || p.status !== "draft" || p.ingestion_owner !== "no-hermes-v2")
     return "not_imported_draft";
-  if (p.blocked || Number(p.source_count) !== 1) return "staff_or_source_review";
   if (
-    !/^[A-Z][0-9]{6}$/.test(raw.agency_property_no ?? "") ||
-    raw.agency_property_no !== p.canonical_property_no ||
-    raw.deal_type !== p.deal_type ||
-    raw.property_id !== p.external_listing_id
+    p.blocked ||
+    (Number(p.source_count) !== 1 &&
+      !(
+        source.source === "propertyhk" &&
+        p.equivalent_propertyhk_sources === true &&
+        Number(p.source_count) > 0
+      ))
   )
-    return "identity_changed";
+    return "staff_or_source_review";
+  if (source.source === "propertyhk") {
+    const externalId = cleanSourceId(
+      "propertyhk",
+      raw.property_id,
+      raw.branch_code,
+      source.idScope,
+    );
+    const identity = exactUnitIdentity(raw, source.aliases);
+    if (
+      !identity.key ||
+      identity.key !== p.unit_key ||
+      raw.deal_type !== p.deal_type ||
+      externalId !== p.external_listing_id
+    )
+      return "identity_changed";
+  } else {
+    if (
+      !/^[A-Z][0-9]{6}$/.test(raw.agency_property_no ?? "") ||
+      raw.agency_property_no !== p.canonical_property_no ||
+      raw.deal_type !== p.deal_type ||
+      raw.property_id !== p.external_listing_id
+    )
+      return "identity_changed";
+  }
   if (raw.source_status !== "active" || p.source_status !== "active") return "source_inactive";
   if (!p.estate_id || !(Number(p.saleable_area) > 0) || !equal(p.saleable_area, raw.saleable_area))
     return "area_or_estate_missing";
@@ -36,20 +67,22 @@ export function publicationDecision(raw, p) {
   )
     return "content_missing";
   try {
-    const source = new URL(raw.source_url);
-    if (
-      source.origin !== "https://www.28hse.com" ||
-      source.pathname !==
+    const sourceUrl = new URL(raw.source_url);
+    if (source.source === "propertyhk") {
+      if (!source.verifySourceUrl(raw, sourceUrl)) return "source_url_invalid";
+    } else if (
+      sourceUrl.origin !== "https://www.28hse.com" ||
+      sourceUrl.pathname !==
         `/${raw.deal_type === "rent" ? "rent" : "buy"}/apartment/property-${raw.property_id}` ||
-      source.search ||
-      source.hash
+      sourceUrl.search ||
+      sourceUrl.hash
     )
       return "source_url_invalid";
     for (const image of content.images) {
       const u = new URL(image);
       if (
         u.protocol !== "https:" ||
-        !HOSTS.includes(u.hostname) ||
+        !source.mediaHosts.includes(u.hostname) ||
         u.port ||
         u.username ||
         u.password
@@ -63,7 +96,8 @@ export function publicationDecision(raw, p) {
 }
 const targetSql = `SELECT p.*,
  (SELECT max(mr.created_at) FROM listing_media_records mr WHERE mr.property_id=p.id) AS last_media_attempt_at,
- s.observation_id,s.external_listing_id,s.source_status,o.run_id,m.public_listing_no,
+ s.observation_id,s.unit_key,s.external_listing_id,s.source_status,o.run_id,m.public_listing_no,
+ (s.source='propertyhk' AND s.unit_key IS NOT NULL AND NOT EXISTS(SELECT 1 FROM mls_source_state x JOIN listing_source_observations xo ON xo.id=x.observation_id WHERE x.property_id=p.id AND x.source_status='active' AND (x.source<>s.source OR x.unit_key IS DISTINCT FROM s.unit_key OR x.deal_type<>s.deal_type OR xo.payload->'fields' IS DISTINCT FROM o.payload->'fields' OR xo.payload->>'sourceStatusReason' IS DISTINCT FROM o.payload->>'sourceStatusReason'))) AS equivalent_propertyhk_sources,
  (SELECT count(*) FROM mls_source_state x WHERE x.property_id=p.id AND x.source_status='active') AS source_count,
  (coalesce(o.payload->>'holdProjection','false')='true'
  OR EXISTS(SELECT 1 FROM properties other WHERE other.id<>p.id AND other.canonical_property_no=p.canonical_property_no AND other.deal_type=p.deal_type)
@@ -73,7 +107,7 @@ const targetSql = `SELECT p.*,
  OR EXISTS(SELECT 1 FROM mls_ingestion_reviews r WHERE r.source=s.source AND r.external_listing_id=s.external_listing_id AND r.deal_type=s.deal_type AND r.status='open')) AS blocked
  FROM mls_source_state s JOIN properties p ON p.id=s.property_id JOIN property_public_members m ON m.property_id=p.id
  JOIN listing_source_observations o ON o.id=s.observation_id
- WHERE s.source='28hse_agent_540' AND s.scope_id='agent:540' AND s.external_listing_id=$1 AND s.deal_type=$2`;
+ WHERE s.source=$3 AND s.scope_id=$4 AND s.external_listing_id=$1 AND s.deal_type=$2`;
 export async function publishDaily({
   payload,
   client,
@@ -83,12 +117,11 @@ export async function publishDaily({
   now = Date.now,
   onReport = async () => {},
 }) {
-  const batch = decodeSnapshot(payload);
+  let batch = decodeSnapshot(payload, { idScope: "global" });
   if (
-    batch.source !== "28hse_agent_540" ||
-    batch.scopeId !== "agent:540" ||
-    batch.rejects.length ||
-    batch.duplicates
+    !["28hse_agent_540", "propertyhk"].includes(batch.source) ||
+    batch.scopeId !== (batch.source === "propertyhk" ? "branches:EPW,EPS,EPT" : "agent:540") ||
+    (batch.source === "28hse_agent_540" && (batch.rejects.length || batch.duplicates))
   )
     throw Error("INVALID_PUBLICATION_BATCH");
   if (
@@ -109,6 +142,20 @@ export async function publishDaily({
     return r[0].id;
   };
   const receiptId = await accepted();
+  let source = HSE_PUBLICATION_SOURCE;
+  if (batch.source === "propertyhk") {
+    const policies = await q(
+      `SELECT * FROM mls_ingestion_policies WHERE source=$1 AND scope_id=$2 AND policy_version=$3`,
+      [batch.source, batch.scopeId, batch.policyVersion],
+    );
+    if (policies.length !== 1 || policies[0].parser_version !== batch.parserVersion)
+      throw Error("SOURCE_PUBLICATION_POLICY_UNVERIFIED");
+    source = resolvePublicationSource(policies[0]);
+    batch = decodeSnapshot(payload, source);
+    if (batch.rejects.length || batch.records.some((r) => !r.urlIdentityVerified))
+      throw Error("INVALID_PUBLICATION_BATCH");
+  }
+
   const report = {
     receiptId,
     published: [],
@@ -116,6 +163,7 @@ export async function publishDaily({
     held: [],
     unknown: [],
     alreadyPublic: 0,
+    duplicateCanonical: 0,
     attempted: 0,
     eligibleBacklog: 0,
     oldestWaitingAt: null,
@@ -126,13 +174,18 @@ export async function publishDaily({
   try {
     for (const record of batch.records) {
       const raw = record.raw;
-      const targets = await q(targetSql, [record.externalId, record.dealType]);
+      const targets = await q(targetSql, [
+        record.externalId,
+        record.dealType,
+        batch.source,
+        batch.scopeId,
+      ]);
       if (targets.length === 1 && targets[0].status === "active") {
         report.alreadyPublic++;
         continue;
       }
       const p = targets.length === 1 ? targets[0] : null;
-      const reason = publicationDecision(raw, p);
+      const reason = publicationDecision(raw, p, source);
       const item = {
         propertyNo: raw.agency_property_no,
         sourceId: record.externalId,
@@ -141,6 +194,10 @@ export async function publishDaily({
       };
       if (reason) {
         report.held.push({ ...item, reason });
+        continue;
+      }
+      if (candidates.some((candidate) => candidate.property.id === p.id)) {
+        report.duplicateCanonical++;
         continue;
       }
       candidates.push({ record, property: p, item });
@@ -166,30 +223,41 @@ export async function publishDaily({
         (url) => !reusable.some((asset) => asset.source_url === url),
       );
 
-      const observation = createObservation({
-        source: batch.source,
-        externalId: record.externalId,
-        dealType: record.dealType,
-        sourceUrl: raw.source_url,
-        propertyNoRaw: raw.agency_property_no,
-        fields: record.fields,
-        fetchedAt: batch.scrapedAt,
-        mediaCandidates: missing.map((url) => ({
-          url,
-          category: "listing_photo",
-          isPrimary: url === raw.publication.images[0],
-        })),
-      });
+      const observation =
+        batch.source === "propertyhk"
+          ? createPropertyhkMediaObservation({
+              raw,
+              externalId: record.externalId,
+              unitKey: p.unit_key,
+              fetchedAt: batch.scrapedAt,
+              aliases: source.aliases,
+              verifySourceUrl: source.verifySourceUrl,
+              images: missing,
+            })
+          : createObservation({
+              source: batch.source,
+              externalId: record.externalId,
+              dealType: record.dealType,
+              sourceUrl: raw.source_url,
+              propertyNoRaw: raw.agency_property_no,
+              fields: record.fields,
+              fetchedAt: batch.scrapedAt,
+              mediaCandidates: missing.map((url) => ({
+                url,
+                category: "listing_photo",
+                isPrimary: url === raw.publication.images[0],
+              })),
+            });
       const media = missing.length
         ? await prepare({
-            rightsConfirmed: true,
+            rightsConfirmed: source.rightsConfirmed,
             observation,
             observationId: mediaObservationId,
             propertyId: p.id,
             isNew: false,
             currentImages: [],
             mode: "upload",
-            allowedMediaHosts: HOSTS,
+            allowedMediaHosts: source.mediaHosts,
             repository,
             blobStore,
           })
@@ -205,12 +273,17 @@ export async function publishDaily({
         await q("SELECT pg_advisory_xact_lock(hashtext('earnestproperty:mls-sync'))");
         await q("LOCK TABLE properties IN SHARE ROW EXCLUSIVE MODE");
         await accepted();
-        const current = await q(targetSql, [record.externalId, record.dealType]);
+        const current = await q(targetSql, [
+          record.externalId,
+          record.dealType,
+          batch.source,
+          batch.scopeId,
+        ]);
         if (
           current.length !== 1 ||
           current[0].id !== p.id ||
           current[0].observation_id !== p.observation_id ||
-          publicationDecision(raw, current[0])
+          publicationDecision(raw, current[0], source)
         )
           throw Error("PUBLICATION_TARGET_CHANGED");
         const assets = await q(
