@@ -16,6 +16,8 @@
 | P1 | 入庫與刊登是兩個關卡 | `publishDaily()` 每次最多嘗試刊登 20 個 draft。圖片、屋苑、身份、人工覆寫或現有內容等條件不符會保留待審，並非同步成功就全部公開。 |
 | P2 | Actions 紅燈會混淆真正結果 | 已核對 run `36062151356`：收盤、套用、基線儲存及刊登步驟成功，後面的 artifact 上載因配額滿而失敗。整個 job 紅燈不能直接解讀為「沒有入庫」，亦不應因此重新寫入另一份快照。 |
 
+對正式庫 371 個仍標為 active 的歷史 28Hse 來源記錄再分組：286 個連到 active 物業、44 個連到 inactive、23 個連到 draft、18 個未連結物業。這是來源記錄數，並非去重後的公開物業數，亦不代表今天仍在來源網站刊登。這證明「來源 active／已入庫／已刊登」必須分開顯示，不能一鍵把全部來源 active 的記錄強制上架。
+
 ## 2. 使用者提供的樣本
 
 | 來源 ID | 來源核對 | 正式 inventory 核對 |
@@ -74,7 +76,7 @@
 4. 檢查 `publication.json`，把 ready / alreadyPublic / held 分開。每批不超過現有 20 個刊登嘗試；對每日上限、圖片、既有內容及身份衝突等 held 原因逐項處理。缺圖或身份不明的盤不應偽裝成刊登成功。
 5. 部署首頁修正，按最新已接受的 active 來源對照首頁六張卡片，檢查詳情頁、售價／租金、圖片、重複盤、手提電話版及失效盤隱藏。
 6. 先輸出歷史下架候選及受保護清單，逐項附來源／公司物業編號、之前狀態、最後見到時間、完整快照 receipt 及原因；審核後分批套用，記錄 before/after，不做 DELETE。
-7. 在 provider 正常支援的存取方式下完成 EPS/EPT/EPW 三分行 adapter、ID scope 及 policy 驗證；每分行獨立基線，逐分行 shadow → apply → publication，不把三分行任一失敗當作全站缺盤。
+7. 在 provider 正常支援的存取方式下完成 EPS/EPT/EPW 三分行 adapter、ID scope 及 policy 驗證；三分行分別核對完整性，全部完成後才提升共同 scope 的完整基線；依次 shadow → apply → publication。任何分行失敗，都不能把缺少資料當作全站缺盤。
 8. 恢復 daily flag 後核對下一次 scheduled run 的 accepted receipt 及 publication，而非只看 workflow 綠燈。監察最後成功時間、抓取／解析／拒絕數、待審量、刊登量、下架量；超過 30 小時無成功完整快照應通知管理員。
 
 私人 release 的資產不會自動按 Actions 的 7／90 日設定刪除。需另設保留政策，永遠保留目前 accepted baseline 及未解決 request/receipt；本次未刪除任何舊資產。
@@ -84,14 +86,36 @@
 - 75 個 Node 聚焦測試通過：最新排序、推廣模式、去重、withdrawal 抑制、地區範圍、同步完整性、身份及刊登規則。
 - 65 個 Python 測試通過：收盤 worker 及 evidence archive，包括 publication 結果保存。
 - TypeScript `tsc --noEmit` 通過。
+- 在正式資料庫以只讀 `EXPLAIN (ANALYZE, BUFFERS)` 執行實際最新排序 SQL（不加地區條件、取 6 筆）：planning 3.044 ms、execution 10.493 ms。這是單次查詢測量，不代表整頁載入、冷啟動或手機速度；沒有進行資料寫入。
 - 首個修正 commit `add90e2` 的 Vercel preview 部署為 READY；瀏覽器實測被導向 Vercel 登入頁，未繞過保護，因此不宣稱已完成 preview UI 驗收。
 - 新增回歸測試先在修改前失敗，再於修正後通過；使用 PGlite 執行實際首頁查詢，並非只比對 SQL 字串。
 - 沒有聲稱完成正式部署、所有盤補數、Property.hk 三分行同步、批量下架或端到端正式刊登。
 - 正式環境仍需私人證據目的地及可用來源存取。來源數量與正式公開物業數量須分開驗收。
 
-完整重新收集的結果及差異會記錄於本報告補充節；只有通過完整性驗證的快照可用於補數／缺盤判斷。
+本次全量抓取已完成，結果見第 8 節。這是本地完整性驗證通過，並非正式庫已接受／套用的 receipt。
 
-## 8. 可追溯位置
+## 8. 本次完整 28Hse 收盤及對帳結果
+
+完成時間：**2026-10-01 10:50:22 香港時間**（02:50:22 UTC）。本次診斷約耗時 **53 分 51 秒**，只讀取來源、沒有寫入正式庫。此時間包含本次執行環境的網絡等候，不能直接當作 GitHub 正式工作或網站訪客的載入時間。
+
+- 完整性結果：`allowed=true`、`full=true`；22 個分頁結果、0 失敗頁、0 拒絕記錄。
+- 286 個唯一來源廣告：**226 售盤、60 租盤**；其中 284 個 active、2 個明確已售。
+- 309 次已記錄 HTTP 請求、309 個不同 URL，未見重複 URL 下載；不能把本次耗時歸因於重複抓取。
+- 4033913／A072390、4034357／B059410、4034591／A057717 全部在完整批次內，且來源狀態均為 active。
+- **46 個來源廣告 ID 未見於既有 V2 來源狀態。** 這不等於 46 個全新物業；例如 B059410 已有舊 inactive 物業，仍須身份及狀態審核。
+- 其餘 240 個已知來源廣告，正式狀態為：183 個連到 active 物業、22 個 draft、24 個 inactive、11 個未連結物業。
+- **132 個歷史 active 來源廣告未在本次完整快照出現。** 其中 103 個連到 active 物業、21 個 inactive、1 個 draft、7 個未連結。這些都是來源廣告數，不能直接當作要下架的獨立物業數；已連結者涉及 108 個不同 inventory listing_no，仍可能有同盤其他有效廣告或人工設定。
+- 兩個明確已售廣告為 3962323／B074334、3961800／C009407；它們連到的網站物業均已是 inactive。本次沒有將它們重新上架。
+
+另附 `EarnestProperty_28Hse_Reconciliation_2026-10-01.csv`，把本次 286 個來源廣告與 132 個歷史缺盤候選分開標記。`historical_absence_candidate_NOT_APPROVED` **不是下架指令**。原始證據及完全相同的 request bytes 另存證據壓縮檔，沒有放入公開 GitHub repository。
+
+凍結 request 的 SHA-256：
+
+`b458d085b60aeb241006daf0f11919a54a5e9ef490528854b594d522cac3bd55`
+
+正式庫最後再次核對仍是 9 月 25 日的完整快照；356 個來源連結全部屬於 28Hse，Property.hk 為 0，`absence_enabled=false`。本次沒有套用這份新 request、沒有批量下架，亦沒有冒稱完成新盤刊登。後續須經現有指定資料庫、政策、身份、媒體及 publication 關卡；publication 有 36 小時快照時限，過期須重新收集。
+
+## 9. 可追溯位置
 
 - [正式網站](https://earnestproperty.vercel.app/)
 - [基準程式碼](https://github.com/YNWAforever/earnestproperty/tree/e8997f290045fde37625be99863d803f4f72c7b5)
