@@ -172,3 +172,9 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 - ThirdCI36834351380 passedpreviousfixes/newsourcegates/CommandCenter/nolink,thenexistingtest-wiringmisclassifiedthreeNEW:dbsuitesasportable. Explicitenvironment-dependentregistrationadded; ordinaryCIstillrequiresALLdeterministic scripts. Admin/withdrawaltestsremainwiredtoguardedmanualdisposableworkflow.
 - Addedpositiveprivate-regressionCIentrypointtest: REDmissingprivatejob; GREENnpm run test:control-plane105/105PASSexit0,0skip; daily+wiring16/16PASS. Optionalprivate_regressionrequiresfourdisposablegroupsfirst,private-onlyreadtoken,approvedprivateexactassetname,size414631/SHAcheck BEFOREfixturewrites andactualdisposableguard. Ituploadsnoartifactandusesnoproduction/Blob/providercredential.
 - No privateassetupload/tokenconfig/manualCI dispatch performed. OptionalprivateCIgate isUNRUN/BLOCKED_EXTERNAL untiloperatorprovidesmanagedreadcapability/exactasset; originallocalZIPDB1/1PASS remainsseparate. Runbooklistsgate andproperSKIPPED/failclosedsemantics.
+
+
+## PR208 daily cron serialization compatibility
+
+- Fourth Linux CI run 36836152284 passed all added source-sync gates and three non-staging browser/DB jobs, then failed the original job-wake schedule assertion. Local RED: npm run test:job-wake exit1,16/17 PASS,0skip. YAML serialization omitted quotes around the unchanged cron string. Restored its original quoted form; no schedule, gate, permission or unrelated cron changed.
+- GREEN: npm run test:job-wake exit0,17/17 PASS/0skip; npm run test:property-sync:daily exit0,35/35 PASS/0skip. Original test assertions preserved. New hosted rerun required.
