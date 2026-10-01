@@ -45,3 +45,17 @@ Private evidence repository/release + least-privilege credential and authoritati
 - GREEN: `.venv-sync/Scripts/python -m pytest scripts/property-sync/tests/test_daily_artifacts.py -q` exit0,18/18 PASS at T1 working tree (base9775d8b); no source/network/DB writes.
 - Implemented bounded hashes, atomic archive/final manifest, privacy+permissions, exact upload/download readback, canonical receipt authority checks and pinned release retention selection. Windows fsync requires a writable descriptor; verified fix with archive tests.
 - T1 helpers READY; workflow wiring T2, read-only authority retrieval T3 pending. Private live permission/baseline migration BLOCKED_EXTERNAL. Retention deletion intentionally requires reviewed exact assets; no remote cleanup performed.
+
+## T2 local implementation (and prerequisite T3 read guard)
+
+- RED: missing durable checkpoint3 cases, run contract2 cases and staged workflow budget1 case reproduced. Hard-exit worker process test added; outcome unknown/terminal duplicate protection tested.
+- GREEN before final commit: daily workflow+target+publication+run/authority/public verifier suites23 PASS; Python full suite79 PASS, including actual subprocess exit17 immediately after a saved response. Full ingestion baseline70 PASS. bash -n passes all25 actual job scripts.
+- Initial budgets: preflight10/collect120/ingest20/publish45/verify10 minutes. Collector has no DB/Blob credential; only preflight reads DB, ingest applies, publish owns Blob. Private manifest is read back before downstream stages. Replay/publication-only never invokes collector or changes timestamps.
+- Read-only08:15HK watchdog is independent of collection callbacks and sends no messages. Health uses durable ingestion accepted_at; source collected_at remains separate for36h publication freshness.
+- New current authority helper executed against verified production host in BEGIN READ ONLY: current receipt60895ce3 and279 ads confirmed. No transaction writes/migrations.
+- Ruling: automatic approval review rejected broadening code-repository token permissions to contents-write. Retain contents-read and require a separately managed evidence repository credential with minimal contents read/write. Missing write capability fails private preflight; the original default token fallback cannot upload under this restricted setup. Cost if wrong: private-code-repo installations must configure an explicit evidence credential; safer than widening every code job token. No rejected action was executed.
+- Ruling: immutable terminal stage duplicate may not replace its receipt/timestamps; reconciled unknown results require an explicit reconciliation event. New attempt uses a new run stage.
+- T2 readiness is local/reviewable. Live handoff permissions, hosted job duration, callback readback/UI and3 actual scheduled cycles remain unverified. No workflow dispatched or production configuration changed.
+- Early T4 compatibility: publication report carries the existing public alias for verifier; never reconstructs a public alias from the company number.
+
+T2 final verification at working tree based94c25bd: npm run test:property-sync:daily exit0,24/24 PASS; Python pytest scripts/property-sync/tests exit0,79/79 PASS; git diff --check exit0. Provider/canonical writer/DB policy unmodified. T1 private live capability and reviewed retention execution remain unchecked.

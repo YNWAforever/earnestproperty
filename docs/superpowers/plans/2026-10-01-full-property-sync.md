@@ -129,12 +129,12 @@
 
 **Consumes:** RunManifest v1、已接受 receipt。**Produces:** 有 hash 的私有 evidence handoff，正確恢復 baseline。
 
-- [ ] 先加失敗測試：公開 destination 被拒；缺 request／raw／錯 hash／錯 scope／過期 parser／偽造 receipt baseline 被拒；private evidence token 無權限回報明確 code。
+- [x] 先加失敗測試：公開 destination 被拒；缺 request／raw／錯 hash／錯 scope／過期 parser／偽造 receipt baseline 被拒；private evidence token 無權限回報明確 code。
 - [ ] 保留 PR #207 的 `PROPERTY_SYNC_EVIDENCE_REPO`／`PROPERTY_SYNC_EVIDENCE_TOKEN` 支援；確認 destination private、release 存在、必要 read/write 權限可用。使用最小權限服務憑證，不輸出值。
-- [ ] metadata 包含精確 request/raw bytes hash；凍結前不允許 ingestion。archive 暫存寫完 fsync／rename 後才標 ready；upload 後驗 object hash／size，不把半檔當成功。
-- [ ] latest baseline 必須與 DB current full receipt 的 source/scope/policy/parser/hash 一致；若 DB 已有 baseline 而私有檔案遺失，進 recovery，不可 bootstrap 蓋過它。
+- [x] metadata 包含精確 request/raw bytes hash；凍結前不允許 ingestion。archive 暫存寫完 fsync／rename 後才標 ready；upload 後驗 object hash／size，不把半檔當成功。
+- [x] latest baseline 必須與 DB current full receipt 的 source/scope/policy/parser/hash 一致；若 DB 已有 baseline 而私有檔案遺失，進 recovery，不可 bootstrap 蓋過它。
 - [ ] 保留 current baseline／未解決 request receipts；raw 7 日、compact 90 日作為起始 retention，另對 release assets 實作清理及 pinned exception，不能誤以為 Actions retention 會刪 release。
-- [ ] 執行 `python -m pytest scripts/property-sync/tests/test_daily_artifacts.py -q`；通過後提交 `fix(sync): verify private evidence and accepted baselines`。
+- [x] 執行 `python -m pytest scripts/property-sync/tests/test_daily_artifacts.py -q`；通過後提交 `fix(sync): verify private evidence and accepted baselines`。
 
 ## T2. 分階段排程與可恢復採集
 
@@ -142,15 +142,15 @@
 
 **Consumes:** T1 manifest。**Produces:** durable collection output、分階段 run summary。
 
-- [ ] 先加失敗測試：collection 無 DB／Blob secret；ingestion/publication 無 source fetch；collector 中途終止仍保留 raw checkpoint，但 full=false；重複 invocation 不並行。
-- [ ] 把 workflow 拆成 preflight → collect（120 分鐘）→ ingest（20 分鐘）→ publish（45 分鐘）→ verify/report（10 分鐘）；這是初始每 job 上限，首 3 次實測再調校，不是 SLA。
-- [ ] workflow-level concurrency 覆蓋整條 source/scope 工作；28Hse 與 Property.hk 独立組，canonical DB 仍用共用 writer lock。不要以每 job lock 取代全 run 防重。
-- [ ] collect 逐頁／逐 detail 原子保存原始回應和進度，受既有 delay/robots/limits 約束；不在結束時才一次寫全部 raw。失敗／取消時以 always/best-effort 上傳 checkpoints；硬終止未上傳部分需標缺證據。
-- [ ] checkpoint 僅保存調試與本 run 恢復證據；不能把昨日頁面混入今日 full snapshot。不同觀測時間的拼接不得產生 absence-eligible full baseline。初版失敗 collection 可重新採集；下游失敗只重播 request。
-- [ ] 只有收集 full gate 通過、request及raw已私有持久化、manifest核對通過才啟動 ingestion；partial／blocked 不進寫入。
-- [ ] 保留 shadow／apply／replay-shadow／replay-apply；新增「只重試發佈」獨立入口，驗 accepted current receipt及freshness，不能重新爬取或更改時間戳。
-- [ ] 正式排程沿用香港 04:17；Property.hk 未 ready 時停用其 schedule。新增每日香港 08:15 read-only watchdog：即使主 job 根本未開始也記錄 stale/overdue；外部訊息渠道未另獲授權前只做內部提示／既有授權渠道。
-- [ ] 跑 `node --test scripts/property-sync-daily.test.mjs src/lib/mls/sync-run-contract.test.mjs` 及 checkpoint pytest；核對真實 job 權限／handoff，不只做 YAML 字串測試；提交。
+- [x] 先加失敗測試：collection 無 DB／Blob secret；ingestion/publication 無 source fetch；collector 中途終止仍保留 raw checkpoint，但 full=false；重複 invocation 不並行。
+- [x] 把 workflow 拆成 preflight → collect（120 分鐘）→ ingest（20 分鐘）→ publish（45 分鐘）→ verify/report（10 分鐘）；這是初始每 job 上限，首 3 次實測再調校，不是 SLA。
+- [x] workflow-level concurrency 覆蓋整條 source/scope 工作；28Hse 與 Property.hk 独立組，canonical DB 仍用共用 writer lock。不要以每 job lock 取代全 run 防重。
+- [x] collect 逐頁／逐 detail 原子保存原始回應和進度，受既有 delay/robots/limits 約束；不在結束時才一次寫全部 raw。失敗／取消時以 always/best-effort 上傳 checkpoints；硬終止未上傳部分需標缺證據。
+- [x] checkpoint 僅保存調試與本 run 恢復證據；不能把昨日頁面混入今日 full snapshot。不同觀測時間的拼接不得產生 absence-eligible full baseline。初版失敗 collection 可重新採集；下游失敗只重播 request。
+- [x] 只有收集 full gate 通過、request及raw已私有持久化、manifest核對通過才啟動 ingestion；partial／blocked 不進寫入。
+- [x] 保留 shadow／apply／replay-shadow／replay-apply；新增「只重試發佈」獨立入口，驗 accepted current receipt及freshness，不能重新爬取或更改時間戳。
+- [x] 正式排程沿用香港 04:17；Property.hk 未 ready 時停用其 schedule。新增每日香港 08:15 read-only watchdog：即使主 job 根本未開始也記錄 stale/overdue；外部訊息渠道未另獲授權前只做內部提示／既有授權渠道。
+- [x] 跑 `node --test scripts/property-sync-daily.test.mjs src/lib/mls/sync-run-contract.test.mjs` 及 checkpoint pytest；核對真實 job 權限／handoff，不只做 YAML 字串測試；提交。
 
 ## T3. 安全匯入、receipt 對帳與跨 job replay
 

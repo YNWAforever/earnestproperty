@@ -179,7 +179,7 @@ def http_request(url, data=None, token=None):
 
 
 class Fetcher:
-    def __init__(self, origin, paths, fixtures=None, sleep=time.sleep):
+    def __init__(self, origin, paths, fixtures=None, sleep=time.sleep, checkpoint=None):
         self.origin = origin
         self.paths = paths
         self.fixtures = fixtures
@@ -187,6 +187,7 @@ class Fetcher:
         self.policy = None
         self.last = 0
         self.evidence = []
+        self.checkpoint = checkpoint
 
     def get(self, url, robots=False):
         checked_url(url, self.origin, None if robots else self.paths)
@@ -223,6 +224,8 @@ class Fetcher:
                         )
                         self.last = time.monotonic()
                         status, headers, body = http_request(active)
+                    if self.checkpoint:
+                        self.checkpoint.response(active, status, attempt + 1, body)
                     self.evidence.append(
                         {
                             "url": active,
@@ -627,7 +630,7 @@ def parse_property_detail(html, record, cfg):
     return r
 
 
-def crawl(source, cfg, fixtures=None):
+def crawl(source, cfg, fixtures=None, checkpoint=None):
     validate_config(source, cfg)
     origin = "https://www.28hse.com" if source == "28hse" else cfg["origin"]
     paths = (
@@ -635,8 +638,11 @@ def crawl(source, cfg, fixtures=None):
         if source == "28hse"
         else cfg["allowed_paths"]
     )
-    fetch = Fetcher(origin, paths, fixtures)
+    fetch = Fetcher(origin, paths, fixtures, checkpoint=checkpoint)
     pages = []
+    def save_page(evidence):
+        pages.append(evidence)
+        if checkpoint: checkpoint.page(evidence)
     accepted = {}
     rejected = []
     completed = []
@@ -668,7 +674,7 @@ def crawl(source, cfg, fixtures=None):
                 evidence["advertised_total"] = total
                 if terminal:
                     evidence.update(status="terminal", details_complete=True, observed_distinct_total=len(found))
-                    pages.append(evidence)
+                    save_page(evidence)
                     completed.append(scope)
                     break
                 signature = tuple(evidence["ids"])
@@ -736,14 +742,14 @@ def crawl(source, cfg, fixtures=None):
                         r["occurrences"] = [occurrence]
                         accepted[key] = r
                 evidence.update(status="listings", details_complete=True)
-                pages.append(evidence)
+                save_page(evidence)
             except WorkerError as e:
                 evidence["status"] = (
                     "blocked"
                     if str(e) in ("blocked", "robots_disallowed")
                     else "parser_error"
                 )
-                pages.append(evidence)
+                save_page(evidence)
                 errors.append({"scope": scope, "page": page, "reason": str(e)})
                 break
         else:
@@ -756,7 +762,7 @@ def crawl(source, cfg, fixtures=None):
     complete = len(completed) == (2 if source == "28hse" else 3) and not errors
     meta = {
         "schema_version": "2.0",
-        "run_id": str(uuid.uuid4()),
+        "run_id": checkpoint.data["runId"] if checkpoint else str(uuid.uuid4()),
         "scope_id": "agent:540" if source == "28hse" else "branches:EPW,EPS,EPT",
         "policy_version": "no-hermes-v2",
         "parser_version": "python-v2.2" if source == "28hse" else "python-v2.0",
@@ -1095,12 +1101,16 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
         baseline = (
             json.loads(baseline_path.read_bytes()) if baseline_path.exists() else None
         )
-        payload, evidence = crawl(source, cfg, fixtures)
+        from scraping.checkpoint import Checkpoint
+        run_id = str(uuid.uuid4())
+        checkpoint = Checkpoint(root / "checkpoints" / source / scope / run_id, source=source, scope="agent:540" if source == "28hse" else "branches:EPW,EPS,EPT", run_id=run_id)
+        payload, evidence = crawl(source, cfg, fixtures, checkpoint=checkpoint)
         if source == "propertyhk":
             payload["id_scope"] = cfg["id_scope"]
         decision = gate(payload, baseline)
         path = save_snapshot(root, payload, evidence)
         (path / "gate.json").write_bytes(frozen(decision))
+        checkpoint.finish(decision)
         if source == "28hse":
             changes = diff(
                 baseline["listings"] if baseline else [], payload["listings"]

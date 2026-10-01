@@ -63,3 +63,14 @@ Ingestion canonical payload hashes and raw byte SHA256 are separate. `authority`
 `retention_candidates` implements release-specific7-day raw/90-day compact/request selection. Current baseline assets and every unresolved run's objects are pinned. Accepted/unresolved bundles are never automatically deleted. Selection is a reviewable dry-run; do not authorize deletion without reconciling all outstanding receipt/request pairs and approving exact names. Actions artifact expiry does not purge releases.
 
 Production destination credential/release and baseline recovery remain BLOCKED_EXTERNAL; no private assets were uploaded or removed by local tests.
+
+
+### Phase jobs / retry / watchdog
+
+Jobs use separate runner environments: preflight read-only target+current receipt reconciliation; collect120m; ingest20m; publish45m; verification/report10m. These are initial caps, not measured SLAs. Collect lacks DB/Blob secrets. Downstream jobs download and verify the exact private handoff instead of collecting. The workflow-level agent540 concurrency fence covers the whole chain and does not cancel an active transaction.
+
+Modes shadow/apply/replay-shadow/replay-apply remain; publication-only requires the original request asset and its verified handoff, current accepted full receipt and unchanged36-hour freshness. It does not ingest or collect. Existing request assets without a verified handoff require reviewed recovery, not an invented timestamp or manifest.
+
+The independent08:15HK watchdog reads authority only and writes an internal Actions summary. It detects absent/stale ingestion without a callback. No WhatsApp/email channel is enabled. Last full ingestion success uses receipt accepted_at; source scraped_at and publication time are separate.
+
+Code repo GitHub token remains contents-read. Configure PROPERTY_SYNC_EVIDENCE_TOKEN for contents read/write restricted to the private evidence repository (even when the evidence repository happens to be the private code repo). Automatic approval review rejected widening the code repo token; absent managed write capability fails closed. No raw evidence Actions artifact is created in a public code repository. All ready request/raw assets are downloaded after upload for byte/size checks; missing checkpoints after a hard runner termination stay missing evidence.

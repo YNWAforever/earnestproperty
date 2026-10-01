@@ -211,6 +211,23 @@ def gh_call(args):
     return result.stdout
 
 
+def fetch_private_manifest(asset, root):
+    if not re.fullmatch(r'handoff-[0-9]+-[0-9]+\.json', asset or ''): raise ValueError('evidence_asset_invalid')
+    repository = os.environ.get('GH_REPO', '')
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository): raise ValueError('evidence_repository_invalid')
+    verify_private_destination(json.loads(gh_call(['api', 'repos/' + repository])))
+    root = Path(root); root.mkdir(parents=True, exist_ok=True)
+    gh_call(['release', 'download', 'property-sync-evidence', '--pattern', asset, '--dir', str(root)])
+    path = root / asset
+    if path.stat().st_size > 64 * 1024: raise ValueError('evidence_manifest_too_large')
+    manifest = json.loads(path.read_bytes())
+    for field in ('request', 'raw'):
+        key = manifest.get(field, {}).get('key')
+        if not isinstance(key, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,199}', key): raise ValueError('evidence_key_invalid')
+        gh_call(['release', 'download', 'property-sync-evidence', '--pattern', key, '--dir', str(root)])
+    return verify_manifest(path, root)
+
+
 def pin_private_release(path, root):
     repository = os.environ.get('GH_REPO', '')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository): raise ValueError('evidence_repository_invalid')
@@ -250,7 +267,7 @@ def retention_candidates(assets, now, *, pinned, unresolved_runs):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['validate', 'archive', 'baseline', 'restore', 'select', 'unpack', 'latest', 'name', 'freeze', 'verify', 'private', 'authority', 'pin'])
+    parser.add_argument('command', choices=['validate', 'archive', 'baseline', 'restore', 'select', 'unpack', 'latest', 'name', 'freeze', 'verify', 'private', 'authority', 'pin', 'fetch'])
     parser.add_argument('--root', type=Path, default=Path('daily-output'))
     parser.add_argument('--destination', type=Path, default=Path('daily-archives'))
     parser.add_argument('--request', type=Path)
@@ -260,6 +277,7 @@ def main():
     parser.add_argument('--scope', default='agent:540')
     parser.add_argument('--ref', default='')
     parser.add_argument('--branch', default='')
+    parser.add_argument('--asset')
     parser.add_argument('--raw', type=Path)
     parser.add_argument('--gate', type=Path)
     parser.add_argument('--git-sha')
@@ -269,6 +287,7 @@ def main():
     if args.command == 'freeze':
         freeze_manifest(args.request,args.raw,args.destination,git_sha=args.git_sha,gate=json.loads(args.gate.read_bytes()))
     elif args.command == 'verify': verify_manifest(args.request,args.root,scope=args.scope)
+    elif args.command == 'fetch': fetch_private_manifest(args.asset,args.root)
     elif args.command == 'pin': pin_private_release(args.request,args.root)
     elif args.command == 'private': verify_private_destination(json.loads(args.request.read_bytes()))
     elif args.command == 'authority': verify_receipt_authority(json.loads(args.request.read_bytes()),json.loads(args.receipt.read_bytes()),json.loads(args.authority.read_bytes()),canonical_hash=args.canonical_hash)
@@ -289,4 +308,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

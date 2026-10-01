@@ -119,7 +119,11 @@ export async function publishDaily({
       }
       const p = targets.length === 1 ? targets[0] : null;
       const reason = publicationDecision(raw, p);
-      const item = { propertyNo: raw.agency_property_no, sourceId: record.externalId };
+      const item = {
+        propertyNo: raw.agency_property_no,
+        sourceId: record.externalId,
+        ...(p?.public_listing_no ? { publicListingNo: p.public_listing_no } : {}),
+      };
       if (reason) {
         report.held.push({ ...item, reason });
         continue;
