@@ -331,9 +331,27 @@ export async function finishOutboundIntent(
       statement: `WITH existing AS (
       SELECT m.id FROM whatsapp_messages m JOIN whatsapp_outbound_intents i ON i.id=$1::uuid
       WHERE m.external_message_id=$3 AND m.conversation_id=i.conversation_id AND m.direction='outbound'
+    ), trusted_receipt AS (
+      -- A receipt may arrive before this HTTP outcome supplies the external ID.
+      -- Only the existing minimum store proves verified live transport; imported
+      -- or unsigned delivery-event rows alone cannot resolve an unknown intent.
+      SELECT i.id FROM whatsapp_outbound_intents i
+      JOIN whatsapp_messages m ON m.id=i.message_id AND m.direction='outbound'
+      JOIN whatsapp_conversations wc ON wc.id=i.conversation_id AND m.conversation_id=wc.id
+      JOIN whatsapp_inbound_receipts r ON r.provider_message_id=COALESCE($3,i.external_message_id)
+        AND r.channel_id=m.channel_id AND r.member_id=m.woztell_member_id
+      WHERE i.id=$1::uuid AND $2<>'accepted' AND COALESCE($3,i.external_message_id) IS NOT NULL
+        AND i.actor_type='staff' AND i.actor_staff_id IS NOT NULL
+        AND i.dispatch_started_at IS NOT NULL AND i.state IN ('dispatching','unknown')
+        AND wc.channel_id=m.channel_id AND wc.woztell_member_id=m.woztell_member_id
+        AND r.provider='woztell' AND r.origin='live_webhook' AND r.event_kind='delivery_receipt'
+        AND r.normalized_event->>'messageType' IN ('DELIVERED','READ')
+        AND r.normalized_event->>'legacyExternalMessageId' IS NULL
+        AND r.provider_occurred_at>=date_trunc('second',i.dispatch_started_at)
+        AND r.provider_occurred_at<=r.received_at
     ), reconciled AS (
-      UPDATE whatsapp_outbound_intents i SET state=CASE WHEN i.state='accepted' THEN 'accepted' ELSE $2 END,external_message_id=COALESCE($3,i.external_message_id),
-      message_id=COALESCE((SELECT id FROM existing),i.message_id),error=CASE WHEN i.state='accepted' THEN NULL ELSE $4 END,updated_at=now()
+      UPDATE whatsapp_outbound_intents i SET state=CASE WHEN i.state='accepted' OR EXISTS(SELECT 1 FROM trusted_receipt e WHERE e.id=i.id) THEN 'accepted' ELSE $2 END,external_message_id=COALESCE($3,i.external_message_id),
+      message_id=COALESCE((SELECT id FROM existing),i.message_id),error=CASE WHEN i.state='accepted' OR EXISTS(SELECT 1 FROM trusted_receipt e WHERE e.id=i.id) THEN NULL ELSE $4 END,updated_at=now()
       WHERE i.id=$1::uuid AND i.state IN ('dispatching','unknown','accepted') RETURNING i.*
     ), removed AS (
       DELETE FROM whatsapp_messages m USING reconciled i WHERE m.id<>i.message_id AND m.id=(SELECT message_id FROM whatsapp_outbound_intents WHERE id=i.id)

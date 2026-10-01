@@ -63,6 +63,16 @@ export async function ingestWoztellEvent(
       ? "failed"
       : null;
   if (receipt) {
+    // Reconcile an already dispatched staff intent only from a signed live,
+    // identified delivery/read receipt. This records a provider fact; it never
+    // queues, sends, activates a capture or promotes historical ingestion.
+    const reconcileIntent =
+      origin === "live_webhook" &&
+      options.signedEvent === true &&
+      ["delivered", "read"].includes(receipt) &&
+      event.legacyExternalMessageId === null &&
+      classification.occurredAt !== null &&
+      classification.timing !== "future";
     await transactionRows([
       {
         statement: "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
@@ -87,6 +97,27 @@ export async function ingestWoztellEvent(
           event.timestamp,
         ],
       },
+      ...(reconcileIntent
+        ? [
+            {
+              statement: `UPDATE whatsapp_outbound_intents i SET state='accepted',error=NULL,updated_at=now()
+              FROM whatsapp_messages m JOIN whatsapp_conversations wc ON wc.id=m.conversation_id
+              WHERE i.message_id=m.id AND i.conversation_id=wc.id
+                AND i.actor_type='staff' AND i.actor_staff_id IS NOT NULL
+                AND i.state IN ('dispatching','unknown') AND i.dispatch_started_at IS NOT NULL
+                AND $4::timestamptz>=date_trunc('second',i.dispatch_started_at)
+                AND i.external_message_id=$1 AND m.external_message_id=$1
+                AND m.direction='outbound' AND m.channel_id=$2 AND m.woztell_member_id=$3
+                AND wc.channel_id=$2 AND wc.woztell_member_id=$3`,
+              params: [
+                event.externalMessageId,
+                event.channelId,
+                event.woztellMemberId,
+                classification.occurredAt,
+              ],
+            },
+          ]
+        : []),
       {
         statement: `UPDATE whatsapp_messages SET status=status WHERE external_message_id=$1 AND channel_id=$2 AND woztell_member_id=$3 AND direction='outbound'`,
         params: [

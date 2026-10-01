@@ -1014,6 +1014,343 @@ test(
           )[0].n,
           1,
         );
+        await t.test(
+          "signed delivery receipts reconcile unknown intents without another send",
+          async () => {
+            const { readOutboundReservation, finishOutboundIntent } =
+              await import("../src/lib/woztell/outbound-intent.server.ts");
+            const { ingestWoztellEvent } =
+              await import("../src/lib/woztell/woztell-ingest.server.ts");
+            const { normalizeWoztellEvent } = await import("../src/lib/woztell/woztell.server.ts");
+            for (const receiptType of ["DELIVERED", "READ"]) {
+              const requestId = randomUUID();
+              const externalId = "synthetic-unknown-receipt-" + requestId;
+              let sends = 0;
+              try {
+                await enqueueOutboundIntent(
+                  {
+                    requestId,
+                    conversationId: reply.conversationId,
+                    enquiryId: reply.enquiryId,
+                    kind: "text",
+                    payload: { text: "Synthetic uncertain delivery " + receiptType },
+                  },
+                  ids.s1,
+                  ids.s1,
+                  query,
+                );
+                const [receiptJob] = await query(
+                  "UPDATE ops_jobs SET status='running',lease_owner='synthetic-receipt-worker',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+                  ["woztell.reply:" + requestId],
+                );
+                const deliverUnknown = () =>
+                  deliverOutboundIntent(requestId, {
+                    checkpoint: async () => {},
+                    job: { jobId: receiptJob.id, workerId: "synthetic-receipt-worker" },
+                    send: async () => {
+                      sends++;
+                      return {
+                        ok: false,
+                        body: {
+                          ok: 1,
+                          sendResult: {
+                            result: [
+                              { messageEvent: { messageId: externalId } },
+                              { err: "Synthetic partial refusal" },
+                            ],
+                          },
+                        },
+                      };
+                    },
+                  });
+                assert.deepEqual(await deliverUnknown(), { dispatched: 1 });
+                const readState = async () =>
+                  (
+                    await query(
+                      "SELECT state,external_message_id FROM whatsapp_outbound_intents WHERE id=$1",
+                      [requestId],
+                    )
+                  )[0];
+                assert.deepEqual(await readState(), {
+                  state: "unknown",
+                  external_message_id: externalId,
+                });
+                const receiptPayload = {
+                  type: receiptType,
+                  messageId: externalId,
+                  member: "synthetic-customer",
+                  channel,
+                  app,
+                  timestamp: Math.floor(Date.now() / 1000),
+                };
+                const journal = () =>
+                  readOutboundReservation(
+                    { conversationId: reply.conversationId },
+                    ids.s1,
+                    ids.s1,
+                    query,
+                  );
+                assert.equal((await journal()).blocked, true);
+                // No trusted match: another sender, synthesized identity, no timestamp,
+                // earlier event, failed/sent status, history and unsigned ingestion.
+                for (const patch of [
+                  { member: "synthetic-other-customer" },
+                  { messageId: undefined },
+                  { timestamp: undefined },
+                  { timestamp: Math.floor(Date.now() / 1000) - 60 },
+                  { timestamp: Math.floor(Date.now() / 1000) + 3600 },
+                  { type: "FAILED" },
+                  { type: "SENT" },
+                ]) {
+                  assert.equal((await signedWebhook({ ...receiptPayload, ...patch })).status, 200);
+                  assert.equal((await readState()).state, "unknown");
+                }
+                assert.equal(
+                  (await signedWebhook({ ...receiptPayload, channel: "synthetic-other-channel" }))
+                    .status,
+                  403,
+                );
+                await ingestWoztellEvent(
+                  normalizeWoztellEvent(receiptPayload),
+                  "history_import",
+                  transaction,
+                  { mode: "off", signedEvent: true },
+                );
+                await ingestWoztellEvent(
+                  normalizeWoztellEvent(receiptPayload),
+                  "live_webhook",
+                  transaction,
+                  { mode: "off" },
+                );
+                assert.equal((await readState()).state, "unknown");
+                // Different durable event from the negative timestamp case; the
+                // signed live receipt is the only evidence that resolves the intent.
+                const authoritative = { ...receiptPayload, timestamp: Date.now() };
+                const outcomes = await Promise.all([
+                  signedWebhook(authoritative),
+                  signedWebhook(authoritative),
+                ]);
+                assert.ok(outcomes.every((response) => response.status === 200));
+                assert.deepEqual(await readState(), {
+                  state: "accepted",
+                  external_message_id: externalId,
+                });
+                assert.deepEqual(await journal(), { blocked: false, intent: null });
+                assert.deepEqual(await deliverUnknown(), { dispatched: 0 });
+                assert.equal(sends, 1);
+                await finishOutboundIntent(
+                  requestId,
+                  {
+                    state: "unknown",
+                    externalMessageId: externalId,
+                    error: "WOZTELL_DELIVERY_UNKNOWN",
+                  },
+                  transaction,
+                );
+                assert.equal((await readState()).state, "accepted");
+                const [message] = await query(
+                  "SELECT status,error FROM whatsapp_messages WHERE external_message_id=$1",
+                  [externalId],
+                );
+                assert.equal(message.status, receiptType.toLowerCase());
+                assert.equal(message.error, null);
+              } finally {
+                await query("DELETE FROM ops_jobs WHERE idempotency_key=$1", [
+                  "woztell.reply:" + requestId,
+                ]);
+                const messages = await query(
+                  "DELETE FROM whatsapp_outbound_intents WHERE id=$1 RETURNING message_id",
+                  [requestId],
+                );
+                for (const message of messages) {
+                  await query("DELETE FROM whatsapp_human_response_evidence WHERE message_id=$1", [
+                    message.message_id,
+                  ]);
+                  await query("DELETE FROM whatsapp_messages WHERE id=$1", [message.message_id]);
+                }
+              }
+            }
+          },
+        );
+        await t.test("an early signed receipt resolves the later unknown HTTP result", async () => {
+          const { readOutboundReservation, finishOutboundIntent } =
+            await import("../src/lib/woztell/outbound-intent.server.ts");
+          const { ingestWoztellEvent } =
+            await import("../src/lib/woztell/woztell-ingest.server.ts");
+          const { normalizeWoztellEvent } = await import("../src/lib/woztell/woztell.server.ts");
+          const priorMode = process.env.EP_WA_ENQUIRY_MODE;
+          const [priorEvidence] = await query(
+            "SELECT first_human_response_at,first_human_response_staff_id FROM inquiries WHERE id=$1",
+            [enquiry.id],
+          );
+          for (const proof of [
+            "live",
+            "off",
+            "observe",
+            "history",
+            "unsigned",
+            "other-member",
+            "missing-time",
+            "future-time",
+            "missing-id",
+          ]) {
+            const requestId = randomUUID();
+            const externalId = "synthetic-early-delivery-" + requestId;
+            const accepted = ["live", "off", "observe"].includes(proof);
+            let sends = 0;
+            try {
+              await enqueueOutboundIntent(
+                { ...reply, requestId, payload: { text: "Synthetic early receipt" } },
+                ids.s1,
+                ids.s1,
+                query,
+              );
+              const [earlyJob] = await query(
+                "UPDATE ops_jobs SET status='running',lease_owner='synthetic-early-receipt-worker',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+                ["woztell.reply:" + requestId],
+              );
+              const deliverEarly = () =>
+                deliverOutboundIntent(requestId, {
+                  checkpoint: async () => {},
+                  job: { jobId: earlyJob.id, workerId: "synthetic-early-receipt-worker" },
+                  send: async () => {
+                    sends++;
+                    const event = {
+                      type: "READ",
+                      messageId: externalId,
+                      member: "synthetic-customer",
+                      channel,
+                      app,
+                      timestamp: Date.now(),
+                    };
+                    if (proof === "history" || proof === "unsigned") {
+                      await ingestWoztellEvent(
+                        normalizeWoztellEvent(event),
+                        proof === "history" ? "history_import" : "live_webhook",
+                        transaction,
+                        { mode: "off", signedEvent: proof === "history" },
+                      );
+                    } else {
+                      if (proof === "other-member") event.member = "synthetic-wrong-member";
+                      if (proof === "missing-time") delete event.timestamp;
+                      if (proof === "future-time") event.timestamp += 60000;
+                      if (proof === "missing-id") delete event.messageId;
+                      if (proof === "off" || proof === "observe")
+                        process.env.EP_WA_ENQUIRY_MODE = proof;
+                      const [jobsBeforeReceipt] = await query(
+                        "SELECT count(*)::int n FROM ops_jobs",
+                      );
+                      assert.equal((await signedWebhook(event)).status, 200);
+                      assert.deepEqual(
+                        (await query("SELECT count(*)::int n FROM ops_jobs"))[0],
+                        jobsBeforeReceipt,
+                      );
+                    }
+                    return {
+                      ok: false,
+                      body: {
+                        ok: 1,
+                        sendResult: {
+                          result: [
+                            { messageEvent: { messageId: externalId } },
+                            { err: "Synthetic partial refusal" },
+                          ],
+                        },
+                      },
+                    };
+                  },
+                });
+              assert.deepEqual(await deliverEarly(), { dispatched: 1 });
+              const [intent] = await query(
+                "SELECT state,error FROM whatsapp_outbound_intents WHERE id=$1",
+                [requestId],
+              );
+              assert.deepEqual(
+                intent,
+                accepted
+                  ? { state: "accepted", error: null }
+                  : { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+                proof,
+              );
+              assert.deepEqual(
+                await readOutboundReservation(
+                  { conversationId: reply.conversationId },
+                  ids.s1,
+                  ids.s1,
+                  query,
+                ),
+                accepted
+                  ? { blocked: false, intent: null }
+                  : { blocked: true, intent: { id: requestId, kind: "text", state: "unknown" } },
+                proof,
+              );
+              assert.deepEqual(await deliverEarly(), { dispatched: 0 });
+              assert.equal(sends, 1);
+              await finishOutboundIntent(
+                requestId,
+                {
+                  state: "unknown",
+                  externalMessageId: externalId,
+                  error: "WOZTELL_DELIVERY_UNKNOWN",
+                },
+                transaction,
+              );
+              assert.equal(
+                (
+                  await query("SELECT state FROM whatsapp_outbound_intents WHERE id=$1", [
+                    requestId,
+                  ])
+                )[0].state,
+                accepted ? "accepted" : "unknown",
+                proof,
+              );
+              assert.equal(
+                (
+                  await query(
+                    "SELECT count(*)::int n FROM whatsapp_human_response_evidence e JOIN whatsapp_outbound_intents i ON i.message_id=e.message_id WHERE i.id=$1",
+                    [requestId],
+                  )
+                )[0].n,
+                accepted ? 1 : 0,
+                proof,
+              );
+              if (accepted)
+                assert.deepEqual(
+                  (
+                    await query(
+                      "SELECT m.status,m.error FROM whatsapp_messages m JOIN whatsapp_outbound_intents i ON i.message_id=m.id WHERE i.id=$1",
+                      [requestId],
+                    )
+                  )[0],
+                  { status: "read", error: null },
+                );
+              assert.deepEqual(
+                (
+                  await query(
+                    "SELECT first_human_response_at,first_human_response_staff_id FROM inquiries WHERE id=$1",
+                    [enquiry.id],
+                  )
+                )[0],
+                priorEvidence,
+              );
+            } finally {
+              process.env.EP_WA_ENQUIRY_MODE = priorMode;
+              await query("DELETE FROM ops_jobs WHERE idempotency_key=$1", [
+                "woztell.reply:" + requestId,
+              ]);
+              const messages = await query(
+                "DELETE FROM whatsapp_outbound_intents WHERE id=$1 RETURNING message_id",
+                [requestId],
+              );
+              for (const message of messages) {
+                await query("DELETE FROM whatsapp_human_response_evidence WHERE message_id=$1", [
+                  message.message_id,
+                ]);
+                await query("DELETE FROM whatsapp_messages WHERE id=$1", [message.message_id]);
+              }
+            }
+          }
+        });
         const clients = await Promise.all([pool.connect(), pool.connect()]);
         try {
           const pids = await Promise.all(
