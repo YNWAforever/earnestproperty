@@ -84,6 +84,13 @@ const navGroups = [
         roles: STAFF,
       },
       {
+        to: "/admin/property-sync",
+        label: "盤源同步",
+        icon: Building2,
+        activeExact: false,
+        roles: EDITORS,
+      },
+      {
         to: "/admin/transactions",
         label: "成交管理",
         icon: Receipt,

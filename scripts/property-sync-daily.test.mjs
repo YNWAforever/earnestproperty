@@ -40,7 +40,7 @@ test("DB and media credentials are restricted to the intended stages and guarded
   }
   assert.deepEqual(
     dbSteps.map((s) => s.name),
-    ["preflight", "ingest", "publish"],
+    ["preflight", "ingest", "publish", "record"],
   );
   assert.match(dbSteps[0].step.run, /read-sync-authority/);
   assert.ok(!/--apply/.test(dbSteps[0].step.run));
@@ -51,6 +51,12 @@ test("DB and media credentials are restricted to the intended stages and guarded
   );
   assert.match(w.jobs.publish.if, /needs.collect.result == 'success'/);
   assert.match(w.jobs.publish.if, /publication-only/);
+  assert.match(w.jobs.record.if, /PROPERTY_SYNC_OBSERVABILITY_ENABLED/);
+  assert.match(dbSteps[3].step.run, /record-sync-execution/);
+  assert.ok(
+    !/crawl|run_28hse_sync|publish-daily-listings|apply-source-snapshot/.test(dbSteps[3].step.run),
+  );
+  assert.ok(dbSteps[3].step.env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
 });
 test("accepted snapshot chronology and private failure evidence survive the staged handoff", async () => {
   const w = await workflow();

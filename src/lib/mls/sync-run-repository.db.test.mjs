@@ -1,0 +1,143 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { openSyncTestDatabase } from "./sync-test-database.mjs";
+import { recordSyncRun, readSyncWorkspace, requestSyncOperation } from "./sync-run-repository.mjs";
+import { ingestSnapshot } from "./ingestion-service.mjs";
+import { batch, row } from "./ingestion-test-fixtures.mjs";
+import { hashPayload } from "./ingestion-contract.mjs";
+test(
+  "isolated migration execution metadata direct RBAC receipts replay health keyset and query measurements",
+  { skip: !process.env.ASTRA_TEST_DATABASE_URL },
+  async () => {
+    const db = await openSyncTestDatabase(["20261001120000_property_sync_operations.sql"]);
+    const { query, client } = db;
+    const admin = { staffId: randomUUID(), roles: ["admin"] },
+      manager = { staffId: randomUUID(), roles: ["manager"] },
+      agent = { staffId: randomUUID(), roles: ["agent"] };
+    try {
+      for (const actor of [admin, manager, agent]) {
+        await query("INSERT INTO staff_users VALUES($1,true)", [actor.staffId]);
+        await query("INSERT INTO staff_roles VALUES($1,$2)", [actor.staffId, actor.roles[0]]);
+      }
+      for (const actor of [manager, agent])
+        await assert.rejects(
+          query("SELECT reserve_property_sync_operation($1,$2,$3,$4)", [
+            "28hse_agent_540",
+            "collect",
+            randomUUID(),
+            actor.staffId,
+          ]),
+          /FORBIDDEN/,
+        );
+      const input = {
+        source: "28hse_agent_540",
+        operation: "collect",
+        idempotencyKey: randomUUID(),
+      };
+      let dispatched = 0;
+      const options = {
+        query,
+        actor: admin,
+        input,
+        capability: { enabled: true },
+        dispatch: async () => {
+          dispatched++;
+          return { accepted: true };
+        },
+      };
+      const reservation = await requestSyncOperation(options);
+      assert.equal(reservation.status, "accepted");
+      assert.equal((await requestSyncOperation(options)).status, "accepted");
+      assert.equal(dispatched, 1);
+      await assert.rejects(
+        requestSyncOperation({ ...options, input: { ...input, idempotencyKey: randomUUID() } }),
+        /IN_PROGRESS/,
+      );
+      await query(
+        `INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,bootstrap_approved_at,bootstrap_approved_by,config) VALUES('28hse_agent_540','agent:540','no-hermes-v2','fixture-v2','no-hermes-v2',true,now(),'fixture','{"district_slugs":{"Test":"test"}}')`,
+      );
+      const payload = batch([row("9900001")], new Date(Date.now() - 40 * 3600000).toISOString());
+      const receipt = await ingestSnapshot(payload, {
+        connectionString: db.connectionString,
+        createClient: db.createClient,
+        apply: true,
+      });
+      const summary = {
+        source: "28hse_agent_540",
+        scopeId: "agent:540",
+        requestHash: hashPayload(payload),
+        gitSha: "a".repeat(40),
+        workflowRunId: "10001",
+        privateEvidenceRef: { requestAsset: "request-10001-1.json" },
+        stages: {
+          collection: { status: "succeeded" },
+          ingestion: { status: "succeeded", receiptId: receipt.receipt_id },
+          publication: { status: "failed", errorCode: "MEDIA_FAILED" },
+        },
+        counts: { canonicalCreated: 1, canonicalUpdated: 0, held: 1 },
+        finishedAt: new Date().toISOString(),
+      };
+      await recordSyncRun({ client, runId: reservation.runId, summary });
+      await recordSyncRun({ client, runId: reservation.runId, summary });
+      await assert.rejects(
+        recordSyncRun({
+          client,
+          runId: reservation.runId,
+          summary: { ...summary, stages: { collection: { status: "running" } } },
+        }),
+        /terminal/,
+      );
+      await assert.rejects(
+        recordSyncRun({
+          client,
+          runId: reservation.runId,
+          summary: { ...summary, requestHash: "0".repeat(64) },
+        }),
+        /RECEIPT/,
+      );
+      const ws = await readSyncWorkspace({ query, actor: manager });
+      assert.equal(ws.cards.length, 4);
+      assert.equal(ws.history.length, 1);
+      assert.equal(ws.cards[0].backlog, 1);
+      assert.equal(ws.cards[0].message, "同步失敗，保留現有資料");
+      assert.equal(ws.cards[1].health, "never_synced");
+      await query("UPDATE mls_ingestion_receipts SET accepted_at=now()-interval '31 hours'");
+      assert.equal((await readSyncWorkspace({ query, actor: admin })).cards[0].health, "stale");
+      await query(
+        `INSERT INTO property_sync_runs(source,scope_id,started_at,finished_at) SELECT '28hse_agent_540','agent:540',now()-g*interval '1 second',now() FROM generate_series(1,1000)g`,
+      );
+      const first = await readSyncWorkspace({ query, actor: admin, limit: 25 }),
+        second = await readSyncWorkspace({
+          query,
+          actor: admin,
+          limit: 25,
+          cursor: first.nextCursor,
+        });
+      assert.equal(first.history.length, 25);
+      assert.equal(second.history.length, 25);
+      assert.ok(!second.history.some((r) => first.history.some((f) => f.id === r.id)));
+      const plans = await query(
+        "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) SELECT id FROM property_sync_runs ORDER BY started_at DESC,id DESC LIMIT 25",
+      );
+      const times = [];
+      for (let i = 0; i < 7; i++) {
+        const start = performance.now();
+        await readSyncWorkspace({ query, actor: admin });
+        times.push(performance.now() - start);
+      }
+      times.sort((a, b) => a - b);
+      writeFileSync(
+        ".task-logs/t9-query-measurements.json",
+        JSON.stringify(
+          { synthetic: true, rows: 1001, iterations: 7, p50Ms: times[3], p95Ms: times[6], plans },
+          null,
+          2,
+        ),
+      );
+    } finally {
+      await db.close();
+    }
+  },
+);

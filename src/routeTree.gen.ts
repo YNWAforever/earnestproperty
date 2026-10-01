@@ -49,6 +49,7 @@ import { Route as AdminWhatsappRouteImport } from './routes/admin.whatsapp'
 import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AdminTeamRouteImport } from './routes/admin.team'
 import { Route as AdminSegmentsRouteImport } from './routes/admin.segments'
+import { Route as AdminPropertySyncRouteImport } from './routes/admin.property-sync'
 import { Route as AdminOperationsRouteImport } from './routes/admin.operations'
 import { Route as AdminListingsRouteImport } from './routes/admin.listings'
 import { Route as AdminLeadsRouteImport } from './routes/admin.leads'
@@ -289,6 +290,11 @@ const AdminTeamRoute = AdminTeamRouteImport.update({
 const AdminSegmentsRoute = AdminSegmentsRouteImport.update({
   id: '/segments',
   path: '/segments',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminPropertySyncRoute = AdminPropertySyncRouteImport.update({
+  id: '/property-sync',
+  path: '/property-sync',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminOperationsRoute = AdminOperationsRouteImport.update({
@@ -537,6 +543,7 @@ export interface FileRoutesByFullPath {
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
+  '/admin/property-sync': typeof AdminPropertySyncRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
   '/admin/transactions': typeof AdminTransactionsRoute
@@ -618,6 +625,7 @@ export interface FileRoutesByTo {
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
+  '/admin/property-sync': typeof AdminPropertySyncRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
   '/admin/transactions': typeof AdminTransactionsRoute
@@ -702,6 +710,7 @@ export interface FileRoutesById {
   '/admin/leads': typeof AdminLeadsRoute
   '/admin/listings': typeof AdminListingsRoute
   '/admin/operations': typeof AdminOperationsRoute
+  '/admin/property-sync': typeof AdminPropertySyncRoute
   '/admin/segments': typeof AdminSegmentsRoute
   '/admin/team': typeof AdminTeamRoute
   '/admin/transactions': typeof AdminTransactionsRoute
@@ -787,6 +796,7 @@ export interface FileRouteTypes {
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
+    | '/admin/property-sync'
     | '/admin/segments'
     | '/admin/team'
     | '/admin/transactions'
@@ -868,6 +878,7 @@ export interface FileRouteTypes {
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
+    | '/admin/property-sync'
     | '/admin/segments'
     | '/admin/team'
     | '/admin/transactions'
@@ -951,6 +962,7 @@ export interface FileRouteTypes {
     | '/admin/leads'
     | '/admin/listings'
     | '/admin/operations'
+    | '/admin/property-sync'
     | '/admin/segments'
     | '/admin/team'
     | '/admin/transactions'
@@ -1343,6 +1355,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSegmentsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/property-sync': {
+      id: '/admin/property-sync'
+      path: '/property-sync'
+      fullPath: '/admin/property-sync'
+      preLoaderRoute: typeof AdminPropertySyncRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/operations': {
       id: '/admin/operations'
       path: '/operations'
@@ -1642,6 +1661,7 @@ interface AdminRouteChildren {
   AdminLeadsRoute: typeof AdminLeadsRoute
   AdminListingsRoute: typeof AdminListingsRoute
   AdminOperationsRoute: typeof AdminOperationsRoute
+  AdminPropertySyncRoute: typeof AdminPropertySyncRoute
   AdminSegmentsRoute: typeof AdminSegmentsRoute
   AdminTeamRoute: typeof AdminTeamRoute
   AdminTransactionsRoute: typeof AdminTransactionsRoute
@@ -1669,6 +1689,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminLeadsRoute: AdminLeadsRoute,
   AdminListingsRoute: AdminListingsRoute,
   AdminOperationsRoute: AdminOperationsRoute,
+  AdminPropertySyncRoute: AdminPropertySyncRoute,
   AdminSegmentsRoute: AdminSegmentsRoute,
   AdminTeamRoute: AdminTeamRoute,
   AdminTransactionsRoute: AdminTransactionsRoute,
@@ -1808,10 +1829,13 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
+
 import type { createStart } from '@tanstack/react-start'
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
+
     router: Awaited<ReturnType<typeof getRouter>>
   }
 }

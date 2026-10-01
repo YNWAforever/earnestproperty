@@ -93,7 +93,10 @@
     "test:ratelimit": "bun test src/lib/rate-limit-prune.test.ts",
     "test:job-wake": "node --test src/lib/control-plane/job-wake.test.mjs src/lib/control-plane/job-signal.test.mjs src/lib/control-plane/jobs-next-due.test.mjs workers/cron/src/job-alarm.test.mjs",
     "test:public-number-search:db": "node --test src/lib/neon/public-number-search.db.test.mjs",
-    "test:no-link:local-postgres": "node --experimental-test-module-mocks --test scripts/no-link-local-postgres.test.mjs"
+    "test:no-link:local-postgres": "node --experimental-test-module-mocks --test scripts/no-link-local-postgres.test.mjs",
+    "test:property-sync:admin": "node --test src/lib/mls/sync-run-repository.test.mjs src/lib/mls/dispatch-property-sync.test.mjs scripts/mls/record-sync-execution.test.mjs",
+    "test:property-sync:admin:db": "node --test --test-concurrency=1 src/lib/mls/sync-run-repository.db.test.mjs",
+    "test:property-sync:ui": "node scripts/test-property-sync-workspace.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",

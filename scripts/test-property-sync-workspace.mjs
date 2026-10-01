@@ -1,0 +1,116 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import assert from "node:assert/strict";
+import { createServer } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwind from "@tailwindcss/vite";
+import { chromium } from "@playwright/test";
+const root = process.cwd(),
+  folder = resolve(root, ".task-logs/sync-ui");
+await mkdir(folder, { recursive: true });
+await writeFile(
+  resolve(folder, "index.html"),
+  '<html lang="zh-HK"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div><script type="module" src="/entry.tsx"></script></body></html>',
+);
+await writeFile(
+  resolve(folder, "entry.tsx"),
+  `
+import React from 'react';import {createRoot} from 'react-dom/client';
+import {PropertySyncWorkspace} from '../../src/components/admin/property-sync/PropertySyncWorkspace';import '../../src/styles.css';
+const scenario=new URLSearchParams(location.search).get('scenario')||'first';
+window.fixture={loads:0,requests:0};
+const card=(label,source,branch=null)=>({label,source,branch,health:'never_synced',message:'從未成功同步',connected:false,lastCollectionAt:null,lastAcceptedFullAt:null,lastPublishedAt:null,advertisements:null,backlog:null,publicCount:null,stages:{},branchEvidence:null,capability:{enabled:source==='28hse_agent_540',reason:'未接通'}});
+const cards=[card('28Hse','28hse_agent_540'),...['EPS','EPT','EPW'].map(b=>card(b,'propertyhk',b))];
+const history=Array.from({length:75},(_,i)=>({id:'20000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),source:'28hse_agent_540',scope_id:'agent:540',operation:'collect',workflow_run_id:'123',git_sha:'a'.repeat(40),request_asset:'request-123-1.json',request_hash:'b'.repeat(64),receipt_id:'30000000-0000-0000-0000-000000000001',stages:{collection:{status:'succeeded'},ingestion:{status:'succeeded'},publication:{status:'failed'},verification:{status:'pending'}},branches:{},counts:{canonicalCreated:2,canonicalUpdated:3,published:0,held:1},dispatch_status:'failed',error_code:'MEDIA_FAILED',started_at:'2026-10-01T02:00:00Z',finished_at:null}));
+const load=async cursor=>{window.fixture.loads++;await new Promise(r=>setTimeout(r,300));if(scenario==='failure')throw Error('synthetic unavailable');const start=cursor?Number(cursor.id):0;const rows=scenario==='history'?history.slice(start,start+25):[];return{cards,history:rows,nextCursor:scenario==='history'&&start+25<75?{id:String(start+25),at:'2026-10-01T02:00:00Z'}:null,asOf:'2026-10-01T02:00:00Z'}};
+const request=async()=>{window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario==='unknown')throw Error('synthetic timeout');return{runId:'reserved',status:'accepted'}};
+createRoot(document.getElementById('root')).render(<main className="mx-auto max-w-7xl p-4"><h1 className="text-2xl font-bold mb-4">盤源同步</h1><PropertySyncWorkspace roles={[scenario==='denied'?'agent':scenario==='manager'?'manager':'admin']} load={load} request={request}/></main>);
+`,
+);
+let server, browser;
+let cases = 0;
+try {
+  server = await createServer({
+    root: folder,
+    configFile: false,
+    envFile: false,
+    plugins: [react(), tailwind()],
+    resolve: { alias: { "@": resolve(root, "src") } },
+    server: { host: "127.0.0.1", port: 0, fs: { allow: [root] } },
+  });
+  await server.listen();
+  const port = server.httpServer.address().port,
+    origin = "http://127.0.0.1:" + port;
+  browser = await chromium.launch({ headless: true });
+  for (const width of [1440, 390]) {
+    const context = await browser.newContext({ viewport: { width, height: 900 } });
+    await context.route("**/*", (route) =>
+      new URL(route.request().url()).origin === origin ? route.continue() : route.abort(),
+    );
+    const page = await context.newPage();
+    await page.goto(origin + "/?scenario=first");
+    await page.getByText("正在讀取同步紀錄…").waitFor();
+    await page.getByRole("heading", { name: "EPW", exact: true }).waitFor();
+    assert.equal(await page.getByText("從未成功同步", { exact: true }).count(), 4);
+    assert.equal(
+      await page.getByText("未有工作流程紀錄；上方成功時間仍以已接受的完整 receipt 為準。").count(),
+      1,
+    );
+    cases++;
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({
+      path: resolve(root, ".task-logs/t9-" + (width === 390 ? "mobile" : "desktop") + ".png"),
+      fullPage: true,
+    });
+    const button = page.getByRole("button", { name: "立即同步", exact: true });
+    await button.evaluate((b) => {
+      b.click();
+      b.click();
+    });
+    await page.getByText("已提交工作流程，請查看階段進度。").waitFor();
+    assert.equal(await page.evaluate(() => window.fixture.requests), 1);
+    cases++;
+    await page.goto(origin + "/?scenario=unknown");
+    await page.getByRole("heading", { name: "28Hse", exact: true }).waitFor();
+    await page.getByRole("button", { name: "立即同步", exact: true }).click();
+    await page.getByText("結果待核實，請勿重複提交", { exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "立即同步", exact: true }).isDisabled(),
+      true,
+    );
+    cases++;
+    await page.goto(origin + "/?scenario=failure");
+    await page.getByRole("alert").waitFor();
+    assert.equal(await page.getByRole("heading", { name: "28Hse", exact: true }).count(), 0);
+    cases++;
+    await page.goto(origin + "/?scenario=denied");
+    await page.getByRole("alert").waitFor();
+    assert.equal(await page.evaluate(() => window.fixture.loads), 0);
+    cases++;
+    await page.goto(origin + "/?scenario=manager");
+    await page.getByRole("heading", { name: "28Hse", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: "立即同步", exact: true }).count(), 0);
+    cases++;
+    await page.goto(origin + "/?scenario=history");
+    await page.getByRole("button", { name: "載入較早紀錄" }).waitFor();
+    assert.equal(await page.getByText("支援診斷", { exact: true }).count(), 25);
+    await page.getByRole("button", { name: "載入較早紀錄" }).click();
+    await page.waitForFunction(() => document.querySelectorAll("summary").length === 51);
+    assert.equal(await page.getByText("支援診斷", { exact: true }).count(), 50);
+    cases++;
+    await context.close();
+  }
+  console.log(
+    JSON.stringify({
+      status: "PASS",
+      synthetic: true,
+      cases,
+      viewports: [1440, 390],
+      providerRequests: 0,
+      databaseWrites: 0,
+    }),
+  );
+} finally {
+  await browser?.close();
+  await server?.close();
+}

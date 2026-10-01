@@ -22,6 +22,9 @@ name: Daily property collection
           Exact private frozen request asset; replay/publication-only require matching verified
           handoff
         type: string
+      operation_id:
+        description: Server-reserved operation identity for authenticated dashboard dispatch
+        type: string
       bootstrap:
         description: Only for approved first baseline with no existing DB receipt
         type: boolean
@@ -465,3 +468,49 @@ jobs:
       INGESTION_RESULT: ${{ needs.ingest.result }}
       PUBLICATION_RESULT: ${{ needs.publish.result }}
     if: always() && needs.preflight.result == 'success'
+
+  record:
+    if: always() && vars.PROPERTY_SYNC_OBSERVABILITY_ENABLED == 'true'
+    needs: [preflight, collect, ingest, publish, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: python -m pip install -r scripts/property-sync/requirements.txt
+      - name: Read exact private handoff and publication report without collection
+        env:
+          HANDOFF_ASSET: ${{ needs.collect.outputs.handoff }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p execution-report
+          if [[ "$HANDOFF_ASSET" =~ ^handoff-[0-9]+-[0-9]+\.json$ ]]; then
+            python scripts/property-sync/daily_artifacts.py fetch --asset "$HANDOFF_ASSET" --root execution-report
+            python scripts/property-sync/daily_artifacts.py verify --request "execution-report/$HANDOFF_ASSET" --root execution-report --scope "$SCOPE"
+            asset=$(python -c 'import json,os; print(json.load(open("execution-report/"+os.environ["HANDOFF_ASSET"]))["request"]["key"])')
+            echo "RECORD_MANIFEST=execution-report/$HANDOFF_ASSET" >> "$GITHUB_ENV"
+            echo "RECORD_PAYLOAD=execution-report/$asset" >> "$GITHUB_ENV"
+            echo "RECORD_REQUEST_ASSET=$asset" >> "$GITHUB_ENV"
+          fi
+          name="publication-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+          if gh release download property-sync-evidence --pattern "$name" --dir execution-report; then
+            echo "RECORD_PUBLICATION=execution-report/$name" >> "$GITHUB_ENV"
+          fi
+      - name: Persist bounded execution metadata and reconcile actual receipts
+        run: node scripts/mls/record-sync-execution.mjs
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+          PROPERTY_SYNC_EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
+          RECORD_NEEDS: ${{ toJSON(needs) }}
+          RECORD_OPERATION_ID: ${{ inputs.operation_id }}

@@ -22,6 +22,8 @@ export interface SyncStage {
   startedAt?: string;
   finishedAt?: string;
   reconciled?: boolean;
+  pagesRead?: number;
+  pagesFailed?: number;
 }
 export interface SyncRunSummary {
   runId?: string;

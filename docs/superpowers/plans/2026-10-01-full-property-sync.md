@@ -247,16 +247,16 @@
 
 **Consumes:** SyncRunSummary、receipts及publication report。**Produces:** staff可理解的read模型、admin受控操作及staleness。
 
-- [ ] 先寫health與RBAC測試：never synced／30h stale／partial/blocked／unknown／cancelled；讀取失敗不能顯示0盤成功。新run事件不能倒退terminal state。
-- [ ] Dashboard 4張卡：28Hse、EPS、EPT、EPW。主資訊為狀態、最後成功採集／匯入／公開時間、盤數與變動；全站Property.hk只有三行全部完整才標整體成功。
-- [ ] Run detail顯示4階段、page progress、actual writes、held、重複／conflict與簡單補救步驟；技術IDs和證據references收在展開區。
-- [ ] Exact UI copy：「同步失敗，保留現有資料」、「已匯入，部分樓盤待上架」、「等待核實，暫不下架」、「從未成功同步」、「結果待核實，請勿重複提交」。
-- [ ] 讀取admin/manager；agent只可在既有樓盤權限範圍看來源時間。啟動run／replay僅admin；review/publish可admin/manager但需逐盤existing authorization。前後端同時檢查，route存在不等於授权。
-- [ ] 「立即同步」只enqueue／dispatch allowlisted workflow+source+main，不在web request執行長爬蟲。使用具workflow-only權限GitHub App/managed token；server allowlist、run dedupe、限流、審計。無provider capability時明確禁用並顯示配置項，不造假成功toast。
-- [ ] 「重試匯入」／「重試上架」分開，exactrequest manifest由server選；禁止使用者提交任意URL、shell、branch、DB或payload hash當權威。
-- [ ] 來源變量／憑證／開關放「進階設定」且不顯示secret；普通員工不用輸入policyVersion／Inbox等不相關technical IDs。
-- [ ] API用bounded pagination（預設25、上限100）、必要indexes及aggregate summaries，不在頁面掃raw HTML；基於現有schema做EXPLAIN，記錄資料量與p50/p95，避免無測量承諾。
-- [ ] 加desktop/mobile UI journey tests：第一次／loading／empty／denied／failure／retry／doubleclick／longhistory；query及RBAC用integration驗證，typecheck；提交。
+- [x] 先寫health與RBAC測試：never synced／30h stale／partial/blocked／unknown／cancelled；讀取失敗不能顯示0盤成功。新run事件不能倒退terminal state。
+- [x] Dashboard 4張卡：28Hse、EPS、EPT、EPW。主資訊為狀態、最後成功採集／匯入／公開時間、盤數與變動；全站Property.hk只有三行全部完整才標整體成功。
+- [x] Run detail顯示4階段、page progress、actual writes、held、重複／conflict與簡單補救步驟；技術IDs和證據references收在展開區。
+- [x] Exact UI copy：「同步失敗，保留現有資料」、「已匯入，部分樓盤待上架」、「等待核實，暫不下架」、「從未成功同步」、「結果待核實，請勿重複提交」。
+- [x] 讀取admin/manager；agent只可在既有樓盤權限範圍看來源時間。啟動run／replay僅admin；review/publish可admin/manager但需逐盤existing authorization。前後端同時檢查，route存在不等於授权。
+- [x] 「立即同步」只enqueue／dispatch allowlisted workflow+source+main，不在web request執行長爬蟲。使用具workflow-only權限GitHub App/managed token；server allowlist、run dedupe、限流、審計。無provider capability時明確禁用並顯示配置項，不造假成功toast。
+- [x] 「重試匯入」／「重試上架」分開，exactrequest manifest由server選；禁止使用者提交任意URL、shell、branch、DB或payload hash當權威。
+- [x] 來源變量／憑證／開關放「進階設定」且不顯示secret；普通員工不用輸入policyVersion／Inbox等不相關technical IDs。
+- [x] API用bounded pagination（預設25、上限100）、必要indexes及aggregate summaries，不在頁面掃raw HTML；基於現有schema做EXPLAIN，記錄資料量與p50/p95，避免無測量承諾。
+- [x] 加desktop/mobile UI journey tests：第一次／loading／empty／denied／failure／retry／doubleclick／longhistory；query及RBAC用integration驗證，typecheck；提交。
 
 ## T10. 撤盤候選、批量核實及安全下架
 
