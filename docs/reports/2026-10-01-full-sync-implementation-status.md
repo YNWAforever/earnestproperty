@@ -178,3 +178,9 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 
 - Fourth Linux CI run 36836152284 passed all added source-sync gates and three non-staging browser/DB jobs, then failed the original job-wake schedule assertion. Local RED: npm run test:job-wake exit1,16/17 PASS,0skip. YAML serialization omitted quotes around the unchanged cron string. Restored its original quoted form; no schedule, gate, permission or unrelated cron changed.
 - GREEN: npm run test:job-wake exit0,17/17 PASS/0skip; npm run test:property-sync:daily exit0,35/35 PASS/0skip. Original test assertions preserved. New hosted rerun required.
+
+
+## PR208 staff FK guard parser follow-up
+
+- Proactively ran the 16 later ordinary CI suites before another hosted attempt: 15 exited0; property-experience exited1 (145/146) because the migration scanner assigned the first UUID on a compact multi-column line to a later staff FK. New compact fixture RED reproduces both false row-identity attribution and missed second FK. Corrected scanner to resolve each comma-delimited UUID declaration and reject any unresolved reference, with two positive regression cases. Original ownership/history classification and seven-column handover lists unchanged; new withdrawal actor_id remains immutable historical attribution. No migration bytes or application writer changed.
+- GREEN: node --test src/lib/neon/staff-ownership.test.mjs exit0,8/8 PASS/0skip; npm run test:property-experience exit0,148/148 PASS/0skip; scoped ESLint exit0 and git diff --check exit0. Other later ratelimit/team/content-copilot/live-agent/admin-properties/cms/youtube-sync/migration/mls:cloudflare/transactions/estate-reviews/valuation/admin-estates/legal/analytics suites exit0. Logs retained privately; repeated suites are not new unique coverage.
