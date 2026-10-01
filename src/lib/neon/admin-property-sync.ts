@@ -5,6 +5,7 @@ import { unwrapServerFnResponse } from "./server-fn-response";
 import {
   syncPageSchema,
   syncOperationSchema,
+  syncOperationResultSchema,
   type SyncOperationInput,
 } from "./admin-property-sync.types";
 const readServer = createServerFn({ method: "GET" })
@@ -15,6 +16,17 @@ const readServer = createServerFn({ method: "GET" })
     const { getAdminSyncWorkspace } = await import("./admin-property-sync.server");
     return getAdminSyncWorkspace(data, actor);
   });
+const operationResultServer = createServerFn({ method: "GET" })
+  .inputValidator(syncOperationResultSchema)
+  .handler(async ({ data }) => {
+    const { requireStaffAccess } = await import("./auth.server");
+    const actor = await requireStaffAccess(getRequest(), ["admin"]);
+    const { getAdminSyncOperationResult } = await import("./admin-property-sync.server");
+    return getAdminSyncOperationResult(data, actor);
+  });
+export async function fetchAdminSyncOperationResult(input: { data: { idempotencyKey: string } }) {
+  return unwrapServerFnResponse(operationResultServer(await withStaffAuthHeaders(input)));
+}
 const startServer = createServerFn({ method: "POST" })
   .inputValidator(syncOperationSchema)
   .handler(async ({ data }) => {

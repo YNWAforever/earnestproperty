@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { openSyncTestDatabase } from "./sync-test-database.mjs";
-import { recordSyncRun, readSyncWorkspace, requestSyncOperation } from "./sync-run-repository.mjs";
+import {
+  recordSyncRun,
+  readSyncWorkspace,
+  requestSyncOperation,
+  readSyncOperationResult,
+} from "./sync-run-repository.mjs";
 import { ingestSnapshot } from "./ingestion-service.mjs";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
 import { hashPayload } from "./ingestion-contract.mjs";
@@ -15,9 +20,10 @@ test(
     const { query, client } = db;
     const admin = { staffId: randomUUID(), roles: ["admin"] },
       manager = { staffId: randomUUID(), roles: ["manager"] },
-      agent = { staffId: randomUUID(), roles: ["agent"] };
+      agent = { staffId: randomUUID(), roles: ["agent"] },
+      otherAdmin = { staffId: randomUUID(), roles: ["admin"] };
     try {
-      for (const actor of [admin, manager, agent]) {
+      for (const actor of [admin, manager, agent, otherAdmin]) {
         await query("INSERT INTO staff_users VALUES($1,true)", [actor.staffId]);
         await query("INSERT INTO staff_roles VALUES($1,$2)", [actor.staffId, actor.roles[0]]);
       }
@@ -51,6 +57,13 @@ test(
       assert.equal(reservation.status, "accepted");
       assert.equal((await requestSyncOperation(options)).status, "accepted");
       assert.equal(dispatched, 1);
+      const readResult = (actor) =>
+        readSyncOperationResult({ query, actor, idempotencyKey: input.idempotencyKey });
+      assert.equal((await readResult(admin)).reconciled, false);
+      assert.equal((await readResult(otherAdmin)).state, "unknown");
+      for (const actor of [manager, agent])
+        await assert.rejects(readResult({ ...actor, roles: ["admin"] }), /FORBIDDEN/);
+
       await assert.rejects(
         requestSyncOperation({ ...options, input: { ...input, idempotencyKey: randomUUID() } }),
         /IN_PROGRESS/,
@@ -81,6 +94,34 @@ test(
       };
       await recordSyncRun({ client, runId: reservation.runId, summary });
       await recordSyncRun({ client, runId: reservation.runId, summary });
+      assert.equal(
+        (await readResult(admin)).reconciled,
+        false,
+        "partial stage metadata stays locked",
+      );
+      summary.stages.verification = { status: "pending" };
+      await recordSyncRun({ client, runId: reservation.runId, summary });
+      await query("BEGIN READ ONLY");
+      try {
+        const firstRead = await readResult(admin);
+        assert.equal(firstRead.reconciled, true);
+        assert.equal(firstRead.state, "completed");
+        assert.deepEqual(await readResult(admin), firstRead);
+        assert.equal((await readResult(otherAdmin)).reconciled, false);
+      } finally {
+        await query("ROLLBACK");
+      }
+      assert.equal(dispatched, 1, "result readback cannot redispatch");
+      await query(
+        "UPDATE property_sync_runs SET stages=jsonb_set(stages,'{publication,status}','\"unknown\"'::jsonb) WHERE id=$1",
+        [reservation.runId],
+      );
+      assert.equal((await readResult(admin)).reconciled, false);
+      await query(
+        "UPDATE property_sync_runs SET stages=jsonb_set(stages,'{publication,status}','\"failed\"'::jsonb) WHERE id=$1",
+        [reservation.runId],
+      );
+
       await assert.rejects(
         recordSyncRun({
           client,

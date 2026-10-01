@@ -4,11 +4,13 @@ import type { StaffAccess } from "./auth.server";
 import {
   syncPageSchema,
   syncOperationSchema,
+  syncOperationResultSchema,
   type SyncOperationInput,
 } from "./admin-property-sync.types";
 import {
   readSyncWorkspace,
   requestSyncOperation,
+  readSyncOperationResult,
   requireSyncRole,
 } from "../mls/sync-run-repository.mjs";
 import { workflowCapability, dispatchPropertySync } from "../mls/dispatch-property-sync.mjs";
@@ -24,6 +26,11 @@ export async function getAdminSyncWorkspace(input: unknown, actor: StaffAccess) 
       propertyhk: workflowCapability("propertyhk"),
     },
   });
+}
+export async function getAdminSyncOperationResult(input: unknown, actor: StaffAccess) {
+  requireSyncRole(actor, ["admin"]);
+  const data = syncOperationResultSchema.parse(input);
+  return readSyncOperationResult({ query: queryRows, actor, ...data });
 }
 export async function startAdminSyncOperation(input: SyncOperationInput, actor: StaffAccess) {
   requireSyncRole(actor, ["admin"]);

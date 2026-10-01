@@ -97,3 +97,111 @@ test("dispatch timeout is unknown; duplicate must reconcile and cannot blindly s
   assert.equal((await requestSyncOperation(options)).status, "unknown");
   assert.equal(sends, 1);
 });
+
+test("dispatch-result readback checks role and valid identity before querying", async () => {
+  const { readSyncOperationResult } = await m();
+  let calls = 0;
+  const query = async () => {
+    calls++;
+    return [];
+  };
+  for (const roles of [["agent"], ["manager"]])
+    await assert.rejects(
+      readSyncOperationResult({ query, actor: { ...actor, roles }, idempotencyKey: actor.staffId }),
+      /FORBIDDEN/,
+    );
+  await assert.rejects(
+    readSyncOperationResult({ query, actor, idempotencyKey: "invalid" }),
+    /INVALID_OPERATION/,
+  );
+  assert.equal(calls, 0);
+});
+
+test("dispatch-result readback is caller-scoped and fresh DB role checks cannot be forged", async () => {
+  const { readSyncOperationResult } = await m();
+  const queries = [];
+  const query = async (sql, params) => {
+    queries.push([sql, params]);
+    return [{ allowed: true, id: null }];
+  };
+  const missing = await readSyncOperationResult({ query, actor, idempotencyKey: actor.staffId });
+  assert.equal(missing.reconciled, false);
+  assert.equal(missing.state, "unknown");
+  assert.deepEqual(queries[0][1], [actor.staffId, actor.staffId]);
+  assert.match(queries[0][0], /idempotency_key/);
+  assert.match(queries[0][0], /requested_by/);
+  assert.match(queries[0][0], /staff_roles/);
+  assert.match(queries[0][0], /s.active/);
+  assert.doesNotMatch(queries[0][0], /\b(UPDATE|INSERT|DELETE|reserve_property_sync_operation)\b/i);
+  await assert.rejects(
+    readSyncOperationResult({
+      query: async () => [{ allowed: false }],
+      actor,
+      idempotencyKey: actor.staffId,
+    }),
+    /FORBIDDEN/,
+  );
+});
+
+test("dispatch-result readback never upgrades accepted, missing proof, or unknown phases to completion", async () => {
+  const { readSyncOperationResult } = await m();
+  const base = {
+    allowed: true,
+    id: actor.staffId,
+    dispatch_status: "accepted",
+    workflow_run_id: "123",
+    finished_at: null,
+    stages: {
+      collection: { status: "succeeded" },
+      ingestion: { status: "pending" },
+      publication: { status: "pending" },
+      verification: { status: "pending" },
+    },
+  };
+  const read = (row) =>
+    readSyncOperationResult({ query: async () => [row], actor, idempotencyKey: actor.staffId });
+  for (const row of [
+    base,
+    { ...base, dispatch_status: "unknown" },
+    { ...base, finished_at: new Date().toISOString(), workflow_run_id: null },
+    {
+      ...base,
+      finished_at: new Date().toISOString(),
+      stages: { collection: { status: "succeeded" } },
+    },
+    {
+      ...base,
+      finished_at: new Date().toISOString(),
+      stages: { ...base.stages, publication: { status: "unknown" } },
+    },
+    {
+      ...base,
+      finished_at: new Date().toISOString(),
+      stages: { ...base.stages, ingestion: { status: "succeeded" } },
+      receipt_confirmed: false,
+    },
+  ])
+    assert.equal((await read(row)).reconciled, false);
+  const completed = await read({ ...base, finished_at: new Date().toISOString() });
+  assert.equal(completed.reconciled, true);
+  assert.equal(completed.state, "completed");
+  assert.equal(
+    (
+      await read({
+        ...base,
+        finished_at: new Date().toISOString(),
+        stages: { ...base.stages, ingestion: { status: "succeeded" } },
+        receipt_confirmed: true,
+      })
+    ).reconciled,
+    true,
+  );
+  const rejected = await read({
+    ...base,
+    dispatch_status: "failed",
+    workflow_run_id: null,
+    finished_at: new Date().toISOString(),
+  });
+  assert.equal(rejected.reconciled, true);
+  assert.equal(rejected.state, "failed");
+});

@@ -23,14 +23,15 @@ const card=(label,source,branch=null)=>({label,source,branch,health:'never_synce
 const cards=[card('28Hse','28hse_agent_540'),...['EPS','EPT','EPW'].map(b=>card(b,'propertyhk',b))];
 const history=Array.from({length:75},(_,i)=>({id:'20000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),source:'28hse_agent_540',scope_id:'agent:540',operation:'collect',workflow_run_id:'123',git_sha:'a'.repeat(40),request_asset:'request-123-1.json',request_hash:'b'.repeat(64),receipt_id:'30000000-0000-0000-0000-000000000001',stages:{collection:{status:'succeeded'},ingestion:{status:'succeeded'},publication:{status:'failed'},verification:{status:'pending'}},branches:{},counts:{canonicalCreated:2,canonicalUpdated:3,published:0,held:1},dispatch_status:'failed',error_code:'MEDIA_FAILED',started_at:'2026-10-01T02:00:00Z',finished_at:null}));
 const load=async cursor=>{window.fixture.loads++;await new Promise(r=>setTimeout(r,300));if(scenario==='failure')throw Error('synthetic unavailable');const start=cursor?Number(cursor.id):0;const rows=scenario==='history'?history.slice(start,start+25):[];return{cards,history:rows,nextCursor:scenario==='history'&&start+25<75?{id:String(start+25),at:'2026-10-01T02:00:00Z'}:null,asOf:'2026-10-01T02:00:00Z'}};
-const request=async()=>{window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario==='unknown')throw Error('synthetic timeout');return{runId:'reserved',status:'accepted'}};
+const request=async input=>{window.fixture.lastKey=input.idempotencyKey;window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario.startsWith('unknown'))throw Error('synthetic timeout');return{runId:'reserved',status:'accepted'}};
+const syncReconcile=async key=>{window.fixture.reconciles=(window.fixture.reconciles||0)+1;window.fixture.readKey=key;return{runId:'reserved',state:scenario==='unknown'?'unknown':'completed',reconciled:scenario!=='unknown'}};
 const withdrawalRows=[true,scenario==='withdrawal-partial'].map((allowed,i)=>({candidateId:'40000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),propertyNo:'FIXTURE-'+i,title:i===0?'合成候選甲':'合成候選乙',dealType:'sale',version:'a'.repeat(32),status:'active',decision:{allowed,approval:allowed?'REVIEW_REQUIRED':'NOT_APPROVED',reason:allowed?'confirmed_absence':'active_source_conflict',ruleVersion:'review-withdrawal-v1'},evidence:{kind:'historical_absence',terminalReason:null,otherActiveSources:allowed?[]:['propertyhk']}}));
 const withdrawalLoad=async()=>({enabled:true,rows:withdrawalRows,nextCursor:null,ruleVersion:'review-withdrawal-v1'});
 const withdrawalPreview=async()=>({previewId:'50000000-0000-0000-0000-000000000001',expiresAt:new Date(Date.now()+900000).toISOString(),rows:withdrawalRows});
 const withdrawalResults=()=>withdrawalRows.map((r,i)=>({candidateId:r.candidateId,propertyNo:r.propertyNo,status:i===0?'applied':'blocked',reason:i===1?'STALE_SOURCE_OR_PROPERTY':undefined}));
 const withdrawalApply=async()=>{window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario==='withdrawal-unknown')throw Error('synthetic unknown commit');if(scenario==='withdrawal-expired')throw Error('STALE_PREVIEW');return{batchId:'batch',results:withdrawalResults()}};
 const withdrawalReconcile=async()=>{window.fixture.reconciles=(window.fixture.reconciles||0)+1;return{status:'confirmed',batchId:'batch',results:withdrawalResults()}};
-createRoot(document.getElementById('root')).render(<main className="mx-auto max-w-7xl p-4"><h1 className="text-2xl font-bold mb-4">盤源同步</h1>{scenario.startsWith('withdrawal')?<WithdrawalReviewWorkspace roles={[scenario==='withdrawal-denied'?'agent':'manager']} load={withdrawalLoad} preview={withdrawalPreview} apply={withdrawalApply} reconcile={withdrawalReconcile}/>:<PropertySyncWorkspace roles={[scenario==='denied'?'agent':scenario==='manager'?'manager':'admin']} load={load} request={request}/>}</main>);
+createRoot(document.getElementById('root')).render(<main className="mx-auto max-w-7xl p-4"><h1 className="text-2xl font-bold mb-4">盤源同步</h1>{scenario.startsWith('withdrawal')?<WithdrawalReviewWorkspace roles={[scenario==='withdrawal-denied'?'agent':'manager']} load={withdrawalLoad} preview={withdrawalPreview} apply={withdrawalApply} reconcile={withdrawalReconcile}/>:<PropertySyncWorkspace roles={[scenario==='denied'?'agent':scenario==='manager'?'manager':'admin']} load={load} request={request} reconcile={syncReconcile} actorKey={'fixture-'+scenario}/>}</main>);
 `,
 );
 let server, browser;
@@ -93,6 +94,53 @@ try {
     assert.equal(
       await page.getByRole("button", { name: "立即同步", exact: true }).isDisabled(),
       true,
+    );
+    cases++;
+    await page.getByRole("button", { name: "核對工作流程結果", exact: true }).click();
+    assert.equal(
+      await page.getByRole("button", { name: "立即同步", exact: true }).isDisabled(),
+      true,
+    );
+    assert.equal(await page.evaluate(() => window.fixture.requests), 1);
+    assert.equal(
+      await page.evaluate(() => window.fixture.lastKey === window.fixture.readKey),
+      true,
+    );
+    cases++;
+    await page.goto(origin + "/?scenario=unknown-completed");
+    await page.getByRole("heading", { name: "28Hse", exact: true }).waitFor();
+    await page.getByRole("button", { name: "立即同步", exact: true }).click();
+    await page.getByText("結果待核實，請勿重複提交", { exact: true }).waitFor();
+    const pendingKey = await page.evaluate(() => window.fixture.lastKey);
+    await page.reload();
+    await page.getByRole("button", { name: "核對工作流程結果", exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "立即同步", exact: true }).isDisabled(),
+      true,
+    );
+    await page.getByRole("button", { name: "核對工作流程結果", exact: true }).evaluate((b) => {
+      b.click();
+      b.click();
+    });
+    await page.getByText("已核對工作流程結果，請查看各階段紀錄。", { exact: true }).waitFor();
+    await page.waitForFunction(
+      () =>
+        !Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "立即同步")
+          .disabled,
+    );
+    assert.equal(
+      await page.evaluate(() => window.fixture.requests),
+      0,
+      "readback after reload must not resend",
+    );
+    assert.equal(await page.evaluate(() => window.fixture.reconciles), 1);
+    assert.equal(await page.evaluate(() => window.fixture.readKey), pendingKey);
+    assert.equal(
+      await page.evaluate(() =>
+        sessionStorage.getItem("earnest-property-sync-pending:fixture-unknown-completed"),
+      ),
+      null,
+      "confirmed readback clears the tab pending identity",
     );
     cases++;
     await page.goto(origin + "/?scenario=failure");

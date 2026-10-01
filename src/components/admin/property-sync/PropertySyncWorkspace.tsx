@@ -3,6 +3,7 @@ import type {
   SyncWorkspace,
   SyncOperationInput,
   SyncHistoryRow,
+  SyncOperationResult,
 } from "@/lib/neon/admin-property-sync.types";
 import { Button } from "@/components/ui/button";
 const date = (value: string | null) =>
@@ -24,12 +25,16 @@ const statuses: Record<string, string> = {
 };
 export interface PropertySyncWorkspaceProps {
   roles: string[];
+  actorKey?: string;
+  reconcile?: (idempotencyKey: string) => Promise<SyncOperationResult>;
   initialData?: SyncWorkspace;
   load: (cursor?: SyncWorkspace["nextCursor"]) => Promise<SyncWorkspace>;
   request: (input: SyncOperationInput) => Promise<{ runId: string; status: string }>;
 }
 export function PropertySyncWorkspace({
   roles,
+  actorKey,
+  reconcile,
   initialData,
   load,
   request,
@@ -41,7 +46,35 @@ export function PropertySyncWorkspace({
     [error, setError] = useState<string | null>(null),
     [notice, setNotice] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
-    [uncertain, setUncertain] = useState(false);
+    [uncertain, setUncertain] = useState(false),
+    [pendingKey, setPendingKey] = useState<string | null>(null);
+  const preservePending = useCallback(
+    (value: string | null) => {
+      setPendingKey(value);
+      if (!actorKey) return;
+      try {
+        const key = "earnest-property-sync-pending:" + actorKey;
+        if (value) sessionStorage.setItem(key, value);
+        else sessionStorage.removeItem(key);
+      } catch {
+        // Storage may be unavailable; keep the in-memory unknown outcome locked.
+      }
+    },
+    [actorKey],
+  );
+  useEffect(() => {
+    if (!admin || !actorKey) return;
+    try {
+      const value = sessionStorage.getItem("earnest-property-sync-pending:" + actorKey);
+      if (value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+        setPendingKey(value);
+        setUncertain(true);
+        setNotice("結果待核實，請勿重複提交");
+      }
+    } catch {
+      // Reading storage does not authorize a retry or change server evidence.
+    }
+  }, [admin, actorKey]);
   const latch = useRef(false);
   const generation = useRef(0);
   const loadRef = useRef(load);
@@ -81,22 +114,57 @@ export function PropertySyncWorkspace({
     setBusy(true);
     setError(null);
     setNotice(null);
+    const idempotencyKey = crypto.randomUUID();
+    preservePending(idempotencyKey);
     try {
       const result = await request({
         source: source as SyncOperationInput["source"],
         operation,
         runId: row?.id,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey,
       });
-      if (result.status === "accepted") setNotice("已提交工作流程，請查看階段進度。");
-      else if (result.status === "failed") setError("同步失敗，保留現有資料");
-      else {
+      if (result.status === "accepted") {
+        preservePending(null);
+        setNotice("已提交工作流程，請查看階段進度。");
+      } else if (result.status === "failed") {
+        preservePending(null);
+        setError("同步失敗，保留現有資料");
+      } else {
         setUncertain(true);
         setNotice("結果待核實，請勿重複提交");
       }
       await refresh();
     } catch {
       setUncertain(true);
+      setNotice("結果待核實，請勿重複提交");
+    } finally {
+      latch.current = false;
+      setBusy(false);
+    }
+  };
+  const reconcilePending = async () => {
+    if (!admin || !reconcile || !pendingKey || latch.current) return;
+    latch.current = true;
+    setBusy(true);
+    try {
+      const result = await reconcile(pendingKey);
+      if (result.reconciled) {
+        preservePending(null);
+        setUncertain(false);
+        setNotice(
+          result.state === "failed"
+            ? "工作流程未被接收，請查看同步紀錄。"
+            : "已核對工作流程結果，請查看各階段紀錄。",
+        );
+        await refresh();
+      } else {
+        setNotice(
+          ["running", "pending"].includes(result.state)
+            ? "工作流程已接收，等待完成；請稍後再核對。"
+            : "結果待核實，請勿重複提交",
+        );
+      }
+    } catch {
       setNotice("結果待核實，請勿重複提交");
     } finally {
       latch.current = false;
@@ -123,6 +191,15 @@ export function PropertySyncWorkspace({
         <p role="status" className="rounded-lg border p-3">
           {notice}
         </p>
+      )}
+      {admin && uncertain && pendingKey && reconcile && (
+        <Button
+          variant="outline"
+          disabled={busy || loading}
+          onClick={() => void reconcilePending()}
+        >
+          核對工作流程結果
+        </Button>
       )}
       {loading && !data && <p role="status">正在讀取同步紀錄…</p>}
       {data && (

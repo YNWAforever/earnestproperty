@@ -136,6 +136,49 @@ export async function readSyncWorkspace({
     asOf: new Date(now).toISOString(),
   };
 }
+export async function readSyncOperationResult({ query, actor, idempotencyKey }) {
+  requireSyncRole(actor, ["admin"]);
+  if (!uuid.test(idempotencyKey ?? "")) throw Error("INVALID_OPERATION");
+  const [row] = await query(
+    `WITH actor_access AS (
+      SELECT EXISTS(SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id=s.id
+        WHERE s.id=$2::uuid AND s.active AND r.role::text='admin') AS allowed
+    ) SELECT a.allowed,r.id,r.dispatch_status,r.workflow_run_id,r.finished_at,r.stages,
+      EXISTS(SELECT 1 FROM mls_ingestion_receipts i WHERE i.id=r.receipt_id
+        AND i.source=r.source AND i.scope_id=r.scope_id AND i.payload_hash=r.request_hash
+        AND i.full_snapshot AND i.response->>'success'='true') AS receipt_confirmed
+      FROM actor_access a LEFT JOIN property_sync_runs r
+        ON a.allowed AND r.idempotency_key=$1::uuid AND r.requested_by=$2::uuid`,
+    [idempotencyKey, actor.staffId],
+  );
+  if (row?.allowed !== true) throw Error("FORBIDDEN");
+  if (!row.id) return { runId: null, state: "unknown", reconciled: false };
+  const finished = row.finished_at && Number.isFinite(new Date(row.finished_at).getTime());
+  if (row.dispatch_status === "failed" && finished)
+    return { runId: row.id, state: "failed", reconciled: true };
+  const known =
+    Object.keys(row.stages ?? {}).length === SYNC_STAGES.length &&
+    SYNC_STAGES.every((stage) =>
+      ["pending", "succeeded", "failed", "blocked", "cancelled"].includes(
+        row.stages?.[stage]?.status,
+      ),
+    );
+  const receiptConfirmed =
+    row.stages?.ingestion?.status !== "succeeded" || row.receipt_confirmed === true;
+  const completed =
+    finished && /^[0-9]{1,30}$/.test(row.workflow_run_id ?? "") && known && receiptConfirmed;
+  return {
+    runId: row.id,
+    state: completed
+      ? "completed"
+      : row.dispatch_status === "accepted" && !finished
+        ? row.workflow_run_id
+          ? "running"
+          : "pending"
+        : "unknown",
+    reconciled: Boolean(completed),
+  };
+}
 export async function requestSyncOperation({ query, actor, input, capability, dispatch }) {
   requireSyncRole(actor, ["admin"]);
   if (

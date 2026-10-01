@@ -10,6 +10,12 @@ export const syncPageSchema = z
       .optional(),
   })
   .strict();
+export const syncOperationResultSchema = z.object({ idempotencyKey: z.string().uuid() }).strict();
+export interface SyncOperationResult {
+  runId: string | null;
+  state: "unknown" | "pending" | "running" | "completed" | "failed";
+  reconciled: boolean;
+}
 export const syncOperationSchema = z
   .object({
     source: z.enum(["28hse_agent_540", "propertyhk"]),

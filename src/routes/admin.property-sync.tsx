@@ -6,6 +6,7 @@ import { PropertySyncWorkspace } from "@/components/admin/property-sync/Property
 import {
   fetchAdminSyncWorkspace,
   requestAdminSyncOperation,
+  fetchAdminSyncOperationResult,
   fetchWithdrawalCandidates,
   requestWithdrawalPreview,
   applyAdminWithdrawalPreview,
@@ -32,9 +33,12 @@ function SyncContent() {
   return (
     <>
       <PropertySyncWorkspace
+        key={user?.id}
+        actorKey={user?.id}
         roles={session.status === "ok" ? session.roles : []}
         load={(cursor) => fetchAdminSyncWorkspace({ data: { limit: 25, cursor } })}
         request={(input) => requestAdminSyncOperation({ data: input })}
+        reconcile={(idempotencyKey) => fetchAdminSyncOperationResult({ data: { idempotencyKey } })}
       />
       <WithdrawalReviewWorkspace
         roles={session.status === "ok" ? session.roles : []}
