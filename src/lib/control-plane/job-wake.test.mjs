@@ -77,13 +77,15 @@ test("job drains have no recurring Cloudflare or Vercel schedule", () => {
   assert.match(worker, /"\/api\/admin\/control-plane\/worker"/);
 });
 
-test("database maintenance and content refresh have no idle schedules", () => {
+test("maintenance stays event driven while property refresh has one gated daily schedule", () => {
   const vercel = readFileSync("vercel.ts", "utf8");
   const migration = readFileSync(".github/workflows/migration-drift.yml", "utf8");
   const properties = readFileSync(".github/workflows/property-sync-daily.yml", "utf8");
   assert.match(vercel, /crons:\s*\[\s*\]/);
   assert.doesNotMatch(migration, /^\s+schedule:/m);
-  assert.doesNotMatch(properties, /^\s+schedule:/m);
+  assert.match(properties, /^\s+schedule:/m);
+  assert.match(properties, /cron: "17 20 \* \* \*"/);
+  assert.match(properties, /vars\.PROPERTY_SYNC_DAILY_ENABLED == 'true'/);
   assert.match(migration, /workflow_dispatch:/);
   assert.match(migration, /neon\/migrations\/\*\*/);
   assert.match(properties, /workflow_dispatch:/);

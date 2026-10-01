@@ -219,7 +219,7 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
     CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
     CREATE TABLE property_source_links(property_id text, source text, external_listing_id text,
       deal_type text, status text, first_seen_at timestamp, last_seen_at timestamp);
-    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text, last_accepted_at timestamp);
+    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text, last_accepted_at timestamp, source text, external_listing_id text, deal_type text);
     CREATE TABLE mls_source_promotion_tiers(source text, external_listing_id text, deal_type text, promotion_tier text);
     INSERT INTO mls_source_promotion_tiers VALUES ('28hse','1','sale','gold'),('28hse','2','sale','normal');
     INSERT INTO properties(id,listing_no,created_at,source_updated_at,status) VALUES
@@ -239,10 +239,11 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
       ('relisted','28hse','3','sale','active','2026-09-30','2026-10-01'),
       ('old-gold','28hse','4','sale','active','2026-10-01','2026-10-01');
     INSERT INTO mls_source_state VALUES
-      ('old-gold','2026-08-01','active','2026-10-01'),
-      ('new-ad','2026-09-29','active','2026-10-01'),
-      ('relisted','2026-09-30','active','2026-10-01'),
-      ('old-gold','2026-10-01','delisted','2026-10-01');`);
+      ('old-gold','2026-08-01','active','2026-10-01','28hse','1','sale'),
+      ('new-ad','2026-09-29','active','2026-10-01','28hse','2','sale'),
+      ('relisted','2026-09-30','active','2026-10-01','28hse','3','sale'),
+      ('old-gold','2026-10-01','delisted','2026-10-01','28hse','4','sale'),
+      ('old-gold','2026-10-01','active','2026-10-01','28hse','unverified','sale');`);
     const calls = [];
     const server = await loadPublicDataServer(async (text, params) => {
       calls.push(text);

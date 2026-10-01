@@ -475,8 +475,15 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
 const LISTING_NEWEST_ORDER = "p.created_at DESC, p.id ASC";
 // First observation of a currently active advert makes a relisted property new.
 // last_seen_at/updated_at would incorrectly promote every routine sync.
+// A held candidate without a confirmed source link must not affect public rank.
 const LATEST_ADVERT_ORDER = `COALESCE((
   SELECT max(fresh.first_seen_at) FROM mls_source_state fresh
+  JOIN property_source_links verified
+    ON verified.property_id = fresh.property_id
+   AND verified.source = fresh.source
+   AND verified.external_listing_id = fresh.external_listing_id
+   AND verified.deal_type = fresh.deal_type
+   AND verified.status = 'active'
   WHERE fresh.property_id = p.id AND fresh.source_status = 'active'
 ), p.created_at) DESC, p.created_at DESC, p.id ASC`;
 
