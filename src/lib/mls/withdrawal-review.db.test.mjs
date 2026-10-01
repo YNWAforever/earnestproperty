@@ -10,6 +10,7 @@ import {
   listWithdrawalCandidates,
   previewWithdrawals,
   applyWithdrawalPreview,
+  readWithdrawalResult,
 } from "./withdrawal-review.mjs";
 import { canonicalListingCte } from "../neon/public-listing-query.js";
 test(
@@ -174,6 +175,45 @@ test(
         },
       };
       await assert.rejects(apply(unknown, [ids[2]], manager, port, unknownKey), /OUTCOME_UNKNOWN/);
+      // A fresh HTTP session uses the original key for read-only recovery, not another apply.
+      const batchesBefore = (await q("SELECT count(*)::int n FROM property_withdrawal_batches"))[0]
+        .n;
+      await q("BEGIN READ ONLY");
+      try {
+        const readback = await readWithdrawalResult({
+          client,
+          actor: manager,
+          idempotencyKey: unknownKey,
+        });
+        assert.equal(readback.status, "confirmed");
+        assert.equal(readback.results[0].status, "applied");
+        assert.deepEqual(
+          await readWithdrawalResult({ client, actor: manager, idempotencyKey: unknownKey }),
+          readback,
+        );
+        assert.deepEqual(
+          await readWithdrawalResult({ client, actor: second, idempotencyKey: unknownKey }),
+          { status: "unknown", results: [] },
+        );
+        assert.deepEqual(
+          await readWithdrawalResult({ client, actor: manager, idempotencyKey: randomUUID() }),
+          { status: "unknown", results: [] },
+        );
+        await assert.rejects(
+          readWithdrawalResult({
+            client,
+            actor: { ...agent, roles: ["manager"] },
+            idempotencyKey: unknownKey,
+          }),
+          /FORBIDDEN/,
+        );
+        assert.equal(
+          (await q("SELECT count(*)::int n FROM property_withdrawal_batches"))[0].n,
+          batchesBefore,
+        );
+      } finally {
+        await q("ROLLBACK");
+      }
       const recovered = await apply(unknown, [ids[2]], manager, client, unknownKey);
       assert.equal(recovered.replayed, true);
       assert.equal(recovered.results[0].status, "applied");

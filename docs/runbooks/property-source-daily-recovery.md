@@ -106,6 +106,8 @@ verify job 為了保留故障摘要會 always 執行；job success 本身不代�
 
 Apply只通過既有locked管理writer設inactive並持續override；UUID／public alias／source links不刪。Preview之後source或staff版本變更會blocked；一批partial結果保留。COMMIT ack未知先用idempotency key只讀結果，禁止換key盲重送。
 
+後台撤盤在送出前保存原 idempotency key 與來源至已核實 user 的 browser-tab sessionStorage；整頁刷新仍保持「結果待核實，請勿重複提交」。按「核對提交結果」只讀同 staff/key 的 batch，不重新 apply；只有 confirmed 結果才清除本頁 key。其他 manager 不可讀原 actor 的 batch。保存／讀取失敗或紀錄格式不正確時阻擋新提交，由管理員核實原 batch；不要先清空 browser storage、換 actor/key 或重新預覽去掩蓋未知結果。關閉 tab／換裝置不保證保留 browser-tab key；先由 operator 唯讀核對原 batch/audit 再決定下一步。
+
 復原是**新的管理審核操作**：核對當前source/conflicts、freshness、manual變動、public prerequisites及current group version，manager經既有樓盤管理提交修正，再next actor／public readback。不能盲還原before JSON、bulk active、清override或重新啟舊writer。
 
 ## 私有證據cleanup

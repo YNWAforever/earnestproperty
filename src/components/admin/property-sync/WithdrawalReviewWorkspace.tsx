@@ -24,6 +24,7 @@ const reasons: Record<string, string> = {
 };
 export interface WithdrawalReviewWorkspaceProps {
   roles: string[];
+  actorKey?: string;
   load: (input: {
     source: "28hse_agent_540" | "propertyhk";
     cursor?: string | null;
@@ -37,6 +38,7 @@ export interface WithdrawalReviewWorkspaceProps {
 }
 export function WithdrawalReviewWorkspace({
   roles,
+  actorKey,
   load,
   preview,
   apply,
@@ -53,7 +55,48 @@ export function WithdrawalReviewWorkspace({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null),
     [result, setResult] = useState<WithdrawalBatch | null>(null),
-    [unknown, setUnknown] = useState<string | null>(null);
+    [unknown, setUnknown] = useState<string | null>(null),
+    [restoring, setRestoring] = useState(true),
+    [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const recoveryMessage = "未能保存或讀取本頁提交紀錄，請管理員查核後再操作。";
+  const blocked = Boolean(unknown) || restoring || Boolean(recoveryError);
+  const preservePending = useCallback(
+    (key: string | null) => {
+      if (!actorKey) throw new Error("VERIFIED_ACTOR_REQUIRED");
+      const storageKey = "earnest-property-withdrawal-pending:" + actorKey;
+      if (key) sessionStorage.setItem(storageKey, JSON.stringify({ key, source }));
+      else sessionStorage.removeItem(storageKey);
+      setUnknown(key);
+    },
+    [actorKey, source],
+  );
+  useEffect(() => {
+    if (!allowed) {
+      setRestoring(false);
+      return;
+    }
+    try {
+      if (!actorKey) throw new Error("VERIFIED_ACTOR_REQUIRED");
+      const value = sessionStorage.getItem("earnest-property-withdrawal-pending:" + actorKey);
+      if (value) {
+        const pending = JSON.parse(value);
+        if (
+          !pending ||
+          typeof pending.key !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pending.key) ||
+          !["28hse_agent_540", "propertyhk"].includes(pending.source)
+        )
+          throw new Error("INVALID_PENDING_WITHDRAWAL");
+        setSource(pending.source);
+        setUnknown(pending.key);
+      }
+    } catch {
+      // Do not allow a new mutation when its previous key cannot be recovered.
+      setRecoveryError(recoveryMessage);
+    } finally {
+      setRestoring(false);
+    }
+  }, [allowed, actorKey]);
   const latch = useRef(false),
     generation = useRef(0);
   const loadRef = useRef(load);
@@ -97,7 +140,7 @@ export function WithdrawalReviewWorkspace({
     setter(next);
   };
   const previewSelected = async () => {
-    if (latch.current || !selected.size) return;
+    if (!allowed || latch.current || blocked || !selected.size) return;
     latch.current = true;
     setBusy(true);
     setError(null);
@@ -119,7 +162,9 @@ export function WithdrawalReviewWorkspace({
   };
   const submit = async () => {
     if (
+      !allowed ||
       latch.current ||
+      blocked ||
       !review ||
       !chosen.size ||
       !confirmed ||
@@ -132,6 +177,13 @@ export function WithdrawalReviewWorkspace({
     setError(null);
     const key = crypto.randomUUID();
     try {
+      try {
+        // Persist before sending, so a reload during the request remains locked.
+        preservePending(key);
+      } catch {
+        setRecoveryError(recoveryMessage);
+        return;
+      }
       const r = await apply({
         previewId: review.previewId,
         selectedIds: [...chosen],
@@ -144,6 +196,7 @@ export function WithdrawalReviewWorkspace({
         reason,
       });
       setResult(r);
+      preservePending(null);
       setReview(null);
       setSelected(new Set());
       setChosen(new Set());
@@ -155,11 +208,16 @@ export function WithdrawalReviewWorkspace({
       }
     } catch (e) {
       if (e instanceof Error && e.message.includes("STALE_PREVIEW")) {
-        setError("預覽已過期，請重新預覽。");
-        setReview(null);
+        try {
+          preservePending(null);
+          setError("預覽已過期，請重新預覽。");
+          setReview(null);
+        } catch {
+          setError("結果待核實，請勿重複提交");
+        }
       } else {
         setUnknown(key);
-        setError("結果待核實，請勿重複提交");
+        setError(null);
       }
     } finally {
       setBusy(false);
@@ -167,18 +225,18 @@ export function WithdrawalReviewWorkspace({
     }
   };
   const verify = async () => {
-    if (!unknown || latch.current) return;
+    if (!allowed || !unknown || latch.current) return;
     latch.current = true;
     setBusy(true);
     try {
       const r = await reconcile(unknown);
       if (r.status === "confirmed") {
         setResult(r);
-        setUnknown(null);
+        preservePending(null);
         setReview(null);
         setError(null);
         await refresh();
-      } else setError("結果待核實，請勿重複提交");
+      } else setError(null);
     } catch {
       setError("未能核對提交結果，請保留此紀錄交由管理員查核。");
     } finally {
@@ -200,21 +258,19 @@ export function WithdrawalReviewWorkspace({
             className="h-11 rounded-md border px-3"
             aria-label="撤盤來源"
             value={source}
-            disabled={busy || Boolean(review) || Boolean(unknown)}
+            disabled={busy || Boolean(review) || blocked}
             onChange={(e) => setSource(e.target.value as typeof source)}
           >
             <option value="28hse_agent_540">28Hse</option>
             <option value="propertyhk">Property.hk 三分行</option>
           </select>
         </label>
-        <Button
-          variant="outline"
-          disabled={busy || Boolean(unknown)}
-          onClick={() => void refresh()}
-        >
+        <Button variant="outline" disabled={busy || blocked} onClick={() => void refresh()}>
           更新撤盤候選
         </Button>
       </div>
+      {recoveryError && <p role="alert">{recoveryError}</p>}
+      {unknown && <p role="status">結果待核實，請勿重複提交</p>}
       {error && <p role="alert">{error}</p>}
       {busy && !data && <p role="status">正在讀取候選…</p>}
       {data && !data.enabled && <p role="status">{data.reason ?? "撤盤 review 尚未啟用"}</p>}
@@ -230,7 +286,7 @@ export function WithdrawalReviewWorkspace({
                     type="checkbox"
                     aria-label={"選取 " + row.title}
                     checked={selected.has(row.candidateId)}
-                    disabled={busy || Boolean(unknown)}
+                    disabled={busy || blocked}
                     onChange={() => toggle(row.candidateId, selected, setSelected)}
                   />
                   <span>
@@ -258,7 +314,7 @@ export function WithdrawalReviewWorkspace({
           </ul>
           <div className="flex gap-3">
             <Button
-              disabled={busy || !selected.size || Boolean(unknown)}
+              disabled={busy || !selected.size || blocked}
               onClick={() => void previewSelected()}
             >
               預覽所選撤盤
@@ -266,7 +322,7 @@ export function WithdrawalReviewWorkspace({
             {data.nextCursor && (
               <Button
                 variant="outline"
-                disabled={busy || Boolean(unknown)}
+                disabled={busy || blocked}
                 onClick={() => void refresh(data.nextCursor)}
               >
                 更多撤盤候選
@@ -291,7 +347,7 @@ export function WithdrawalReviewWorkspace({
                     type="checkbox"
                     aria-label={"套用 " + row.title}
                     checked={chosen.has(row.candidateId)}
-                    disabled={!row.decision.allowed || busy || Boolean(unknown)}
+                    disabled={!row.decision.allowed || busy || blocked}
                     onChange={() => toggle(row.candidateId, chosen, setChosen)}
                   />
                   <span>
@@ -312,7 +368,7 @@ export function WithdrawalReviewWorkspace({
               aria-label="核實原因"
               value={reason}
               maxLength={1000}
-              disabled={busy || Boolean(unknown)}
+              disabled={busy || blocked}
               onChange={(e) => setReason(e.target.value)}
               placeholder="請記錄逐盤核實的原因（至少5字）"
             />
@@ -321,23 +377,21 @@ export function WithdrawalReviewWorkspace({
             <input
               type="checkbox"
               checked={confirmed}
-              disabled={busy || Boolean(unknown)}
+              disabled={busy || blocked}
               onChange={(e) => setConfirmed(e.target.checked)}
             />
             我已逐盤核實，只套用已選項目。
           </label>
           <div className="flex flex-wrap gap-3">
             <Button
-              disabled={
-                busy || !chosen.size || !confirmed || reason.trim().length < 5 || Boolean(unknown)
-              }
+              disabled={busy || !chosen.size || !confirmed || reason.trim().length < 5 || blocked}
               onClick={() => void submit()}
             >
               確認所選撤盤
             </Button>
             <Button
               variant="outline"
-              disabled={busy || Boolean(unknown)}
+              disabled={busy || blocked}
               onClick={() => {
                 setReview(null);
                 setChosen(new Set());

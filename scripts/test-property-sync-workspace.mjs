@@ -67,6 +67,7 @@ await writeFile(
 import React from 'react';import {createRoot} from 'react-dom/client';
 import {PropertySyncWorkspace} from '../../src/components/admin/property-sync/PropertySyncWorkspace';import {WithdrawalReviewWorkspace} from '../../src/components/admin/property-sync/WithdrawalReviewWorkspace';import '../../src/styles.css';
 const scenario=new URLSearchParams(location.search).get('scenario')||'first';
+const withdrawalActor='fixture-'+scenario+(new URLSearchParams(location.search).get('actor')||'');
 window.fixture={loads:0,requests:0};
 const card=(label,source,branch=null)=>({label,source,branch,health:'never_synced',message:'從未成功同步',connected:false,lastCollectionAt:null,lastAcceptedFullAt:null,lastPublishedAt:null,advertisements:null,backlog:null,publicCount:null,stages:{},branchEvidence:null,capability:{enabled:source==='28hse_agent_540',reason:'未接通'}});
 const cards=[card('28Hse','28hse_agent_540'),...['EPS','EPT','EPW'].map(b=>card(b,'propertyhk',b))];
@@ -78,9 +79,9 @@ const withdrawalRows=[true,scenario==='withdrawal-partial'].map((allowed,i)=>({c
 const withdrawalLoad=async()=>({enabled:true,rows:withdrawalRows,nextCursor:null,ruleVersion:'review-withdrawal-v1'});
 const withdrawalPreview=async()=>({previewId:'50000000-0000-0000-0000-000000000001',expiresAt:new Date(Date.now()+900000).toISOString(),rows:withdrawalRows});
 const withdrawalResults=()=>withdrawalRows.map((r,i)=>({candidateId:r.candidateId,propertyNo:r.propertyNo,status:i===0?'applied':'blocked',reason:i===1?'STALE_SOURCE_OR_PROPERTY':undefined}));
-const withdrawalApply=async()=>{window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario==='withdrawal-unknown')throw Error('synthetic unknown commit');if(scenario==='withdrawal-expired')throw Error('STALE_PREVIEW');return{batchId:'batch',results:withdrawalResults()}};
-const withdrawalReconcile=async()=>{window.fixture.reconciles=(window.fixture.reconciles||0)+1;return{status:'confirmed',batchId:'batch',results:withdrawalResults()}};
-createRoot(document.getElementById('root')).render(<main className="mx-auto max-w-7xl p-4"><h1 className="text-2xl font-bold mb-4">盤源同步</h1>{scenario.startsWith('withdrawal')?<WithdrawalReviewWorkspace roles={[scenario==='withdrawal-denied'?'agent':'manager']} load={withdrawalLoad} preview={withdrawalPreview} apply={withdrawalApply} reconcile={withdrawalReconcile}/>:<PropertySyncWorkspace roles={[scenario==='denied'?'agent':scenario==='manager'?'manager':'admin']} load={load} request={request} reconcile={syncReconcile} actorKey={'fixture-'+scenario}/>}</main>);
+const withdrawalApply=async input=>{window.fixture.lastKey=input.idempotencyKey;window.fixture.persistedBeforeApply=JSON.parse(sessionStorage.getItem('earnest-property-withdrawal-pending:'+withdrawalActor)||'null')?.key===input.idempotencyKey;window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario.startsWith('withdrawal-unknown'))throw Error('synthetic unknown commit');if(scenario==='withdrawal-expired')throw Error('STALE_PREVIEW');return{batchId:'batch',results:withdrawalResults()}};
+const withdrawalReconcile=async key=>{window.fixture.readKey=key;window.fixture.reconciles=(window.fixture.reconciles||0)+1;await new Promise(r=>setTimeout(r,300));return scenario==='withdrawal-unknown-pending'?{status:'unknown',results:[]}:{status:'confirmed',batchId:'batch',results:withdrawalResults()}};
+createRoot(document.getElementById('root')).render(<main className="mx-auto max-w-7xl p-4"><h1 className="text-2xl font-bold mb-4">盤源同步</h1>{scenario.startsWith('withdrawal')?<WithdrawalReviewWorkspace key={withdrawalActor} actorKey={withdrawalActor} roles={[scenario==='withdrawal-denied'?'agent':'manager']} load={withdrawalLoad} preview={withdrawalPreview} apply={withdrawalApply} reconcile={withdrawalReconcile}/>:<PropertySyncWorkspace roles={[scenario==='denied'?'agent':scenario==='manager'?'manager':'admin']} load={load} request={request} reconcile={syncReconcile} actorKey={'fixture-'+scenario}/>}</main>);
 `,
 );
 let server, browser;
@@ -287,9 +288,45 @@ try {
       if (scenario === "withdrawal-unknown") {
         await page.getByRole("button", { name: "核對提交結果" }).waitFor();
         assert.equal(await page.getByRole("button", { name: "確認所選撤盤" }).isDisabled(), true);
-        await page.getByRole("button", { name: "核對提交結果" }).click();
+        const originalKey = await page.evaluate(() => window.fixture.lastKey);
+        await page.reload();
+        await page.getByRole("checkbox", { name: "選取 合成候選甲" }).waitFor();
+        assert.equal(
+          await page.getByRole("button", { name: "核對提交結果" }).count(),
+          1,
+          "reload preserves the unresolved withdrawal and its read-only reconciliation",
+        );
+        assert.equal(
+          await page.getByRole("checkbox", { name: "選取 合成候選甲" }).isDisabled(),
+          true,
+        );
+        assert.equal(await page.getByRole("button", { name: "預覽所選撤盤" }).isDisabled(), true);
+        assert.equal(
+          await page.evaluate(() => window.fixture.requests),
+          0,
+          "reload never reapplies",
+        );
+        await page.getByRole("button", { name: "核對提交結果" }).evaluate((b) => {
+          b.click();
+          b.click();
+        });
         await page.getByRole("heading", { name: "撤盤結果" }).waitFor();
         assert.equal(await page.evaluate(() => window.fixture.reconciles), 1);
+        assert.equal(await page.evaluate(() => window.fixture.readKey), originalKey);
+        assert.equal(
+          await page.evaluate(() =>
+            sessionStorage.getItem(
+              "earnest-property-withdrawal-pending:fixture-withdrawal-unknown",
+            ),
+          ),
+          null,
+          "only confirmed readback clears this actor's pending key",
+        );
+        assert.equal(
+          await page.getByRole("checkbox", { name: "選取 合成候選甲" }).isDisabled(),
+          false,
+        );
+        cases++;
       } else if (scenario === "withdrawal-expired") {
         await page.getByText("預覽已過期，請重新預覽。", { exact: true }).waitFor();
         assert.equal(await page.getByRole("heading", { name: "確認撤盤預覽" }).count(), 0);
@@ -297,10 +334,122 @@ try {
         await page.getByRole("heading", { name: "撤盤結果" }).waitFor();
         await page.getByText("FIXTURE-0：已核實下架", { exact: true }).waitFor();
       }
-      assert.equal(await page.evaluate(() => window.fixture.requests), 1);
+      assert.equal(
+        await page.evaluate(() => window.fixture.requests),
+        scenario === "withdrawal-unknown" ? 0 : 1,
+      );
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       cases++;
     }
+    await page.goto(origin + "/?scenario=withdrawal-unknown-pending");
+    await page.getByRole("checkbox", { name: "選取 合成候選甲" }).waitFor();
+    await page.getByRole("combobox", { name: "撤盤來源" }).selectOption("propertyhk");
+    await page.getByRole("checkbox", { name: "選取 合成候選甲" }).check();
+    await page.getByRole("button", { name: "預覽所選撤盤" }).click();
+    await page.getByRole("textbox", { name: "核實原因" }).fill("合成資料驗證待核實恢復");
+    await page.getByRole("checkbox", { name: "我已逐盤核實，只套用已選項目。" }).check();
+    await page.getByRole("button", { name: "確認所選撤盤" }).click();
+    await page.getByRole("button", { name: "核對提交結果" }).waitFor();
+    await page.waitForFunction(
+      () =>
+        !Array.from(document.querySelectorAll("button")).find(
+          (b) => b.textContent === "核對提交結果",
+        ).disabled,
+    );
+    assert.equal(
+      await page.evaluate(() => window.fixture.persistedBeforeApply),
+      true,
+      "key saved before apply starts",
+    );
+    const withdrawalPendingKey = await page.evaluate(() => window.fixture.lastKey);
+    await page.reload();
+    await page.getByRole("button", { name: "核對提交結果" }).waitFor();
+    assert.equal(await page.getByRole("combobox", { name: "撤盤來源" }).inputValue(), "propertyhk");
+    assert.equal(await page.getByRole("combobox", { name: "撤盤來源" }).isDisabled(), true);
+    await page.getByRole("button", { name: "核對提交結果" }).evaluate((b) => {
+      b.click();
+      b.click();
+    });
+    await page.waitForFunction(
+      () =>
+        window.fixture.reconciles === 1 &&
+        !Array.from(document.querySelectorAll("button")).find(
+          (b) => b.textContent === "核對提交結果",
+        ).disabled,
+    );
+    assert.equal(await page.evaluate(() => window.fixture.readKey), withdrawalPendingKey);
+    assert.equal(await page.evaluate(() => window.fixture.requests), 0);
+    assert.equal(await page.getByRole("checkbox", { name: "選取 合成候選甲" }).isDisabled(), true);
+    assert.equal(await page.getByRole("heading", { name: "撤盤結果" }).count(), 0);
+    assert.deepEqual(
+      await page.evaluate(() =>
+        JSON.parse(
+          sessionStorage.getItem(
+            "earnest-property-withdrawal-pending:fixture-withdrawal-unknown-pending",
+          ),
+        ),
+      ),
+      { key: withdrawalPendingKey, source: "propertyhk" },
+    );
+    await page.screenshot({
+      path: resolve(root, ".task-logs/t10-pending-reload-" + width + ".png"),
+      fullPage: true,
+    });
+    cases++;
+    await page.goto(origin + "/?scenario=withdrawal-unknown-pending&actor=-other");
+    await page.getByRole("checkbox", { name: "選取 合成候選甲" }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "核對提交結果" }).count(),
+      0,
+      "another actor cannot inherit the first actor's key",
+    );
+    assert.equal(await page.evaluate(() => window.fixture.requests), 0);
+    assert.equal(await page.evaluate(() => window.fixture.reconciles || 0), 0);
+    await page.goto(origin + "/?scenario=withdrawal-unknown-pending");
+    await page.getByRole("button", { name: "核對提交結果" }).waitFor();
+    assert.equal(await page.getByRole("checkbox", { name: "選取 合成候選甲" }).isDisabled(), true);
+    cases++;
+    await page.addInitScript(() => {
+      const scenario = new URLSearchParams(location.search).get("scenario");
+      if (scenario === "withdrawal-storage-unavailable") {
+        const original = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+          if (key.startsWith("earnest-property-withdrawal-pending:"))
+            throw new DOMException("synthetic disabled storage", "SecurityError");
+          return original.call(this, key, value);
+        };
+      } else if (scenario === "withdrawal-invalid-pending") {
+        sessionStorage.setItem(
+          "earnest-property-withdrawal-pending:fixture-withdrawal-invalid-pending",
+          "{invalid synthetic record}",
+        );
+      }
+    });
+    await page.goto(origin + "/?scenario=withdrawal-storage-unavailable");
+    await page.getByRole("checkbox", { name: "選取 合成候選甲" }).check();
+    await page.getByRole("button", { name: "預覽所選撤盤" }).click();
+    await page.getByRole("textbox", { name: "核實原因" }).fill("合成資料驗證儲存失敗");
+    await page.getByRole("checkbox", { name: "我已逐盤核實，只套用已選項目。" }).check();
+    await page.getByRole("button", { name: "確認所選撤盤" }).click();
+    await page
+      .getByText("未能保存或讀取本頁提交紀錄，請管理員查核後再操作。", { exact: true })
+      .waitFor();
+    assert.equal(
+      await page.evaluate(() => window.fixture.requests),
+      0,
+      "no mutation when key persistence fails",
+    );
+    assert.equal(await page.getByRole("button", { name: "確認所選撤盤" }).isDisabled(), true);
+    cases++;
+    await page.goto(origin + "/?scenario=withdrawal-invalid-pending");
+    await page
+      .getByText("未能保存或讀取本頁提交紀錄，請管理員查核後再操作。", { exact: true })
+      .waitFor();
+    await page.getByRole("checkbox", { name: "選取 合成候選甲" }).waitFor();
+    assert.equal(await page.getByRole("checkbox", { name: "選取 合成候選甲" }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "預覽所選撤盤" }).isDisabled(), true);
+    assert.equal(await page.evaluate(() => window.fixture.requests), 0);
+    cases++;
     await page.goto(origin + "/?scenario=withdrawal-denied");
     await page.getByRole("alert").waitFor();
     assert.equal(await page.getByRole("button", { name: "預覽所選撤盤" }).count(), 0);

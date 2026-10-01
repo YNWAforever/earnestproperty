@@ -41,6 +41,8 @@ function SyncContent() {
         reconcile={(idempotencyKey) => fetchAdminSyncOperationResult({ data: { idempotencyKey } })}
       />
       <WithdrawalReviewWorkspace
+        key={user?.id}
+        actorKey={user?.id}
         roles={session.status === "ok" ? session.roles : []}
         load={(data) => fetchWithdrawalCandidates({ data })}
         preview={(data) => requestWithdrawalPreview({ data })}
