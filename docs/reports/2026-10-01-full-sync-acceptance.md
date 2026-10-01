@@ -60,7 +60,7 @@ PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKE
 
 ## 動作coverage及層級
 
-- Portablecode：ingestion75、daily35（包括新manualdisposableworkflowguard）、admin9、withdrawal5、release migration2、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
+- Portablecode：ingestion75、daily35（包括新manualdisposableworkflowguard）、admin9、withdrawal5、release migration3、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
 - Python：97/97exit0，包括realprocesscheckpoint、propertyhk syntheticselectors/fullgate、privatehash/retention ports。
 - PGlite：public newest/search實際SQLfixture；不是Neon或production。
 - RealNeon：核對project dawn-meadow-79190048／disposable br-young-breeze-ao85rtx1／endpoint ep-square-leaf-aobruyvf／dedicated earnest_audit_acceptance_20260927後才fixtureDDL。原六套serial41/41baselinePASS；原atomicrepository26/26最後T8重驗；HKfullgate1/1、HKpublication1/1、28publication與nextingestion各1/1、T9metadata1/1、T10withdraw1/1、132historical1/1。ExactZIP1/1PASS/0skip、611.8s，另記A01。隨機schema清理；沒有fixture指向inheritedneondb或production。
@@ -90,3 +90,8 @@ PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKE
 ## Scheduled監測
 
 Manualfreshproduction E2E尚未執行。Cycle1/2/3皆未執行：**0/3MONITORING**。未建立提醒／heartbeatautomation或真實外部訊息。正式release需上述owner完成gate後各記錄scheduled runURL/commit/hashes/receipt/source/canonical/publiccounts/elapsed及recovery，三次才可聲稱穩定每日同步。
+
+
+### PR208 CI follow-up
+
+PR208 firstLinuxCI failed at exactmigrationchecksum guard: WindowsnewSQLfileshadCRLF whileGitblob/LinuxhadLF. ProductionSQLwasnotapplied. PositiveGitblobregressionreproducedfailure locally; onlytwoNEWmigrationpaths nowhave eol=lf attributes andLFchecksum pins. OldappliedSQLandprivateZIP/request/rawbytesunchanged. Updatedhashes areinrunbook. Authorwillrecord finalremotecheck resultinPRhandoff; firstfailure remainsvisible.

@@ -38,8 +38,8 @@ Disposable acceptance專用ASTRA_TEST_DATABASE_URL、ASTRA_TEST_BRANCH_ID、ASTR
 
 | File | SHA-256 |
 |---|---|
-| 20261001120000_property_sync_operations.sql | 7fa1fd00884eb7203b097b813c06fb5eeacc10a79a5f829ad0d418c5efad8deb |
-| 20261001130000_property_withdrawal_review.sql | 643ac76532acbcb8a16c0dbb1b40f31f8239ca53cbe8d32363ac485b0605f36e |
+| 20261001120000_property_sync_operations.sql | 349af4a3d84122be226d19028b54451b7d5b8f4e822b7f3d42eaea7160f66c64 |
+| 20261001130000_property_withdrawal_review.sql | ba68aaea2975c6c22e41997236c0fe7d3e96d2b3bcf1490223018bfbbd7c4e19 |
 
 已在disposable DB隨機schema套用驗證。原有已套用migration檔沒有修改。T10透過新migration擴充既有admin_property_manage的inactive allowlist，原授權、鎖、group version、provenance、override及audit保持。
 

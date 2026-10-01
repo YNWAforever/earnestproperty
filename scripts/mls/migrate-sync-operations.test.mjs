@@ -82,3 +82,14 @@ test("lost migration COMMIT response is unknown duplicate skips and failed DDL r
     /MIGRATION_BYTES_CHANGED/,
   );
 });
+
+test("reviewed migration hashes match Git blob bytes across checkout platforms", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const { createHash } = await import("node:crypto");
+  const { MIGRATIONS } = await m();
+  for (const p of MIGRATIONS) {
+    const blob = execFileSync("git", ["show", "HEAD:neon/migrations/" + p.file]);
+    assert.equal(createHash("sha256").update(blob).digest("hex"), p.sha256);
+    assert.equal(Buffer.from(p.ddl).compare(blob), 0);
+  }
+});

@@ -1,0 +1,3 @@
+# Exact reviewed bytes for these new, not-yet-applied migrations on every platform.
+neon/migrations/20261001120000_property_sync_operations.sql text eol=lf
+neon/migrations/20261001130000_property_withdrawal_review.sql text eol=lf

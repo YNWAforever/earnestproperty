@@ -153,3 +153,9 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 - Finalactualproductionread-only migration --check PASS: expecteddirecthost/neondb/serverbranch br-polished-sea-aom4i1ct andfivecoreprerequisitesverified; twoaddedmigrationspending,applied[]. Refreshedauthority unchangedreceipt60895ce3/279ads/hash6c6db71a. No productionDDL/DML. Finaldisposable readback properties0/customschemas[] afterallfixtures; actualguardbeforequery.
 
 - Build npm run build exit0 (serverbundle50.7s; normalthirdpartyuse-clientwarnings). Initialwhole-repolint27errorscameonlyfromignoredlocaltask/syntheticentry/venvgeneratedfiles; preciseartifact-directoryignoresadded without weakeningapplicationrules. NewUIhooklifecyclesuse stableloadrefs/callbacks andinvalidateoldgeneration oncleanup. PostfixscopedESLint0errors/warnings, fulltsc exit0 andsyntheticbrowser26/26PASS; existingunrelatedWhatsApprefreshwarningsunchanged.
+
+
+## PR208 cross-platform CI checksum correction
+
+- FirstCIrun36833069630 failed atnewmigrationrelease2tests (MIGRATION_BYTES_CHANGED onLinux). LocalSQLhad54/115CRLF;Gitblobhad0. AddedGitblobbytecomparisonregression: RED1/3 locally,prior2green. Fixonlynewnot-yet-appliedmigrationpathswith.gitattributes eol=lf; hashesnow349af4a3d84122be226d19028b54451b7d5b8f4e822b7f3d42eaea7160f66c64 /ba68aaea2975c6c22e41997236c0fe7d3e96d2b3bcf1490223018bfbbd7c4e19. Appliedoldmigrationsandraw/requestevidencebytesunchanged. NewDDLsemanticsunchanged;isolatedDDLtestsremainapplicable.
+- GREENnode --test scripts/mls/migrate-sync-operations.test.mjs3/3PASSexit0; dry-runchecksGit-compatiblebytes. Whole-repolint0errors/3existingunrelatedwarnings,tsc/UI26PASS afterhooklifecyclecleanup. RemoteCIrerunwillverifyLinuxactualcheckout; no productionmutation.

@@ -8,11 +8,11 @@ const hash = (s) => createHash("sha256").update(s).digest("hex");
 const pins = [
   {
     file: "20261001120000_property_sync_operations.sql",
-    sha256: "7fa1fd00884eb7203b097b813c06fb5eeacc10a79a5f829ad0d418c5efad8deb",
+    sha256: "349af4a3d84122be226d19028b54451b7d5b8f4e822b7f3d42eaea7160f66c64",
   },
   {
     file: "20261001130000_property_withdrawal_review.sql",
-    sha256: "643ac76532acbcb8a16c0dbb1b40f31f8239ca53cbe8d32363ac485b0605f36e",
+    sha256: "ba68aaea2975c6c22e41997236c0fe7d3e96d2b3bcf1490223018bfbbd7c4e19",
   },
 ];
 export const MIGRATIONS = pins.map((p) => ({
