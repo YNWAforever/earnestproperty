@@ -94,6 +94,8 @@ gh workflow run property-sync-daily.yml --repo YNWAforever/earnestproperty --ref
 
 ### 後台dispatch未知／stale
 
+同步／replay送出前必須成功保存browser-tab原key；恢復舊pending紀錄完成前鎖新operation。若browser storage不可用、缺已核實actor或舊key格式不正確，頁面顯示「未能保存或讀取本頁提交紀錄，請管理員查核後再操作。」並不送出。先由operator核對原workflow reservation及native evidence，再處理browser設定；不要直接清除舊key換key重送。
+
 GitHub204=dispatch accepted，未等於job開始/完成。Timeout／5xx=unknown；後台保存原 idempotency key 至已核實 user 的 browser-tab sessionStorage，重新載入仍保持待核實。按「核對工作流程結果」只讀同 staff/key 的結果，DB 重新核對 active admin role，不 dispatch 或寫入。確定 provider rejection，或具有完整四階段 native 終結紀錄且成功 ingestion receipt 的 source/scope/hash 相符，才解鎖；accepted／缺 callback／缺階段／unknown outcome 仍鎖定。核對完成只代表該 operation 結果已知，各階段失敗仍按紀錄處理。若原 key 已遺失或歷史 unknown 沒有 callback，由 operator 唯讀查 native workflow/run operation identity；不得換 key 盲重送。現有 reservation 仍阻擋 blind redispatch。Run metadata只存bounded IDs/counts/stages/private asset reference；terminal結果不倒退。原full receipt可作accepted historyfallback；callback未執行不能宣稱publication完成。30h無accepted full ingestion與從未接通分開，不能以最近publication時間洗白。
 
 ### 公開驗證與安全摘要

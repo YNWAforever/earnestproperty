@@ -411,13 +411,21 @@ try {
     cases++;
     await page.addInitScript(() => {
       const scenario = new URLSearchParams(location.search).get("scenario");
-      if (scenario === "withdrawal-storage-unavailable") {
+      if (["withdrawal-storage-unavailable", "sync-storage-unavailable"].includes(scenario)) {
         const original = Storage.prototype.setItem;
         Storage.prototype.setItem = function (key, value) {
-          if (key.startsWith("earnest-property-withdrawal-pending:"))
+          if (
+            key.startsWith("earnest-property-withdrawal-pending:") ||
+            key.startsWith("earnest-property-sync-pending:")
+          )
             throw new DOMException("synthetic disabled storage", "SecurityError");
           return original.call(this, key, value);
         };
+      } else if (scenario === "sync-invalid-pending") {
+        sessionStorage.setItem(
+          "earnest-property-sync-pending:fixture-sync-invalid-pending",
+          "invalid synthetic key",
+        );
       } else if (scenario === "withdrawal-invalid-pending") {
         sessionStorage.setItem(
           "earnest-property-withdrawal-pending:fixture-withdrawal-invalid-pending",
@@ -453,6 +461,37 @@ try {
     await page.goto(origin + "/?scenario=withdrawal-denied");
     await page.getByRole("alert").waitFor();
     assert.equal(await page.getByRole("button", { name: "預覽所選撤盤" }).count(), 0);
+    cases++;
+    await page.goto(origin + "/?scenario=sync-storage-unavailable");
+    await page.getByRole("heading", { name: "28Hse", exact: true }).waitFor();
+    await page.getByRole("button", { name: "立即同步", exact: true }).click();
+    await page.waitForFunction(
+      () => window.fixture.requests > 0 || document.querySelector('[role="alert"]'),
+    );
+    assert.equal(
+      await page.evaluate(() => window.fixture.requests),
+      0,
+      "no workflow dispatch when pending-key persistence fails",
+    );
+    await page
+      .getByText("未能保存或讀取本頁提交紀錄，請管理員查核後再操作。", { exact: true })
+      .waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "立即同步", exact: true }).isDisabled(),
+      true,
+    );
+    cases++;
+    await page.goto(origin + "/?scenario=sync-invalid-pending");
+    await page.getByRole("heading", { name: "28Hse", exact: true }).waitFor();
+    assert.equal(
+      await page.getByRole("button", { name: "立即同步", exact: true }).isDisabled(),
+      true,
+      "invalid prior key cannot authorize a new operation",
+    );
+    assert.equal(await page.evaluate(() => window.fixture.requests), 0);
+    await page
+      .getByText("未能保存或讀取本頁提交紀錄，請管理員查核後再操作。", { exact: true })
+      .waitFor();
     cases++;
     await context.close();
   }

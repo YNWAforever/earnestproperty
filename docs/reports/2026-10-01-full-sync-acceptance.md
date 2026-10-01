@@ -56,7 +56,7 @@ PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKE
 | C03 | PASS multisessionNeon | 15minDBclockexpiry、source更新／staffversion競爭拒絕、2clients only1winner | 正式不故意做race |
 | C04 | PASS Neon＋UI | duplicate/idempotent、peritempartial、realCOMMITacklost→readback、readonlyUIreconcile；nextactor/publicqueryreadback | realprovider/productiontimeout未注入 |
 | C05 | PASS service＋DB | clientroleforgeryagent actualDBdeny、manager dispatchdeny、invalidURL/ref/source/host/id/subset；redirect/timeoutfailclosed | liveauthenticatedserverFn/browser token尚未接通 |
-| C06 | BLOCKED_EXTERNAL | actualReact/CSSChromium1440/390、42journeys、nohorizontaloverflow；names/nextstep/denied/failed/retry | 真新員工liveauth/mobile，未拿synthetic當prodpass |
+| C06 | BLOCKED_EXTERNAL | actualReact/CSSChromium1440/390、46journeys、nohorizontaloverflow；names/nextstep/denied/failed/retry | 真新員工liveauth/mobile，未拿synthetic當prodpass |
 
 ## 動作coverage及層級
 
@@ -64,7 +64,7 @@ PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKE
 - Python：97/97exit0，包括realprocesscheckpoint、propertyhk syntheticselectors/fullgate、privatehash/retention ports。
 - PGlite：public newest/search實際SQLfixture；不是Neon或production。
 - RealNeon：核對project dawn-meadow-79190048／disposable br-young-breeze-ao85rtx1／endpoint ep-square-leaf-aobruyvf／dedicated earnest_audit_acceptance_20260927後才fixtureDDL。原六套serial41/41baselinePASS；原atomicrepository26/26最後T8重驗；HKfullgate1/1、HKpublication1/1、28publication與nextingestion各1/1、T9metadata1/1、T10withdraw1/1、132historical1/1。ExactZIP1/1PASS/0skip、611.8s，另記A01。隨機schema清理；沒有fixture指向inheritedneondb或production。
-- Syntheticbrowser：actualReact/CSSChromium，desktop1440/mobile390，42/42；providerrequests0／DBwrites0。包括loading/empty/failure/denied、history75rows、pagination、retrydoubleclick、invalidreason/cancel、expiry、partial、unknownreconcile。Liveauth及公開照片未測保留分母。Finalrerunfirstlocalhost navigation30s曾timeout；boundeddiagnostics加入後warm及forcedcold各26/26PASS，未重現；保留該失敗、不冒稱根因已修。
+- Syntheticbrowser：actualReact/CSSChromium，desktop1440/mobile390，46/46；providerrequests0／DBwrites0。包括loading/empty/failure/denied、history75rows、pagination、retrydoubleclick、invalidreason/cancel、expiry、partial、unknownreconcile。Liveauth及公開照片未測保留分母。Finalrerunfirstlocalhost navigation30s曾timeout；boundeddiagnostics加入後warm及forcedcold各26/26PASS，未重現；保留該失敗、不冒稱根因已修。
 - FullTypeScript：tsc --noEmit exit0；localproduction buildexit0。NewUIhookchanges再驗tsc/UI26PASS。YAML35/phasebudgets/permissions與bash語法有效。舊lockbytes不變；nativeworktreebun.lockb mode差異未stage。
 - ActionsCI新增admin/withdrawal/release/Pythonretention/syntheticUIchecks；另manual disposable workflow先guard，四組DBtest逐組serial，不注入production/Blob/workflow/evidencecredentials。新PRremoteCI狀態另在交付補記。
 - Highrisk：成功、直接越權、invalid、cancel、duplicate、stale、timeoutunknown、refresh/nextactor/publicreadback都有對應上述測試；正式故障注入未做。權限/consent/providerlive層不混算。
@@ -122,3 +122,8 @@ T9 Linux CI36871635624的日期assertion漏了香港timezone，UTC runner預期0
 ### T10 撤盤 timeout／reload 續作
 
 RED實際browser證明整頁刷新遺失原key/核對按鈕。現於apply前保存actor隔離的key/source，刷新後unknown仍鎖；只有confirmed readback清除。Storage失敗或壞紀錄不送apply。42/42synthetic桌面/手機PASS；realdisposableSQL1/1、0skip（BEGIN READ ONLY核對lost COMMIT、duplicate、另一manager無結果、forged agent拒絕、batch數不變）；withdrawal5/5/typecheck/scopedlint PASS。Synthetic Property.hk-source恢復案例只驗UI storage，未啟用其absence或證明live來源。舊schema/writer/flags及19case分母不變，正式角色登入/release仍BLOCKED_EXTERNAL，0/3MONITORING。
+
+
+### T9 提交紀錄保存失敗續作
+
+RED browser保存失敗仍request1≠0；現於保存成功前不dispatch/replay，pending恢復完成前、非法舊key/缺actor/Storage失敗都鎖新提交。46/46synthetic browser/admin17/17/typecheck/scopedlint PASS。Known server結果若key清除失敗仍保留原key，不釋放未知鎖。只改UI persistence，server role/writer/native proof未變；沒有正式來源/登入/排程驗收升級，19case分母及0/3MONITORING維持。

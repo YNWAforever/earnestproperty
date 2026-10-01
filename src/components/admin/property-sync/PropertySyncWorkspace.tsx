@@ -47,32 +47,41 @@ export function PropertySyncWorkspace({
     [notice, setNotice] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [uncertain, setUncertain] = useState(false),
-    [pendingKey, setPendingKey] = useState<string | null>(null);
+    [pendingKey, setPendingKey] = useState<string | null>(null),
+    [restoring, setRestoring] = useState(true),
+    [recoveryError, setRecoveryError] = useState<string | null>(null);
+  const recoveryMessage = "未能保存或讀取本頁提交紀錄，請管理員查核後再操作。";
+  const blocked = uncertain || restoring || Boolean(recoveryError);
   const preservePending = useCallback(
     (value: string | null) => {
+      if (!actorKey) throw new Error("VERIFIED_ACTOR_REQUIRED");
+      const key = "earnest-property-sync-pending:" + actorKey;
+      if (value) sessionStorage.setItem(key, value);
+      else sessionStorage.removeItem(key);
       setPendingKey(value);
-      if (!actorKey) return;
-      try {
-        const key = "earnest-property-sync-pending:" + actorKey;
-        if (value) sessionStorage.setItem(key, value);
-        else sessionStorage.removeItem(key);
-      } catch {
-        // Storage may be unavailable; keep the in-memory unknown outcome locked.
-      }
     },
     [actorKey],
   );
   useEffect(() => {
-    if (!admin || !actorKey) return;
+    if (!admin) {
+      setRestoring(false);
+      return;
+    }
     try {
+      if (!actorKey) throw new Error("VERIFIED_ACTOR_REQUIRED");
       const value = sessionStorage.getItem("earnest-property-sync-pending:" + actorKey);
-      if (value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      if (value) {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))
+          throw new Error("INVALID_PENDING_SYNC");
         setPendingKey(value);
         setUncertain(true);
         setNotice("結果待核實，請勿重複提交");
       }
     } catch {
-      // Reading storage does not authorize a retry or change server evidence.
+      // Do not send a new operation when its previous key cannot be recovered.
+      setRecoveryError(recoveryMessage);
+    } finally {
+      setRestoring(false);
     }
   }, [admin, actorKey]);
   const latch = useRef(false);
@@ -109,14 +118,19 @@ export function PropertySyncWorkspace({
     operation: SyncOperationInput["operation"],
     row?: SyncHistoryRow,
   ) => {
-    if (!admin || latch.current || uncertain) return;
+    if (!admin || latch.current || blocked) return;
     latch.current = true;
     setBusy(true);
     setError(null);
     setNotice(null);
     const idempotencyKey = crypto.randomUUID();
-    preservePending(idempotencyKey);
     try {
+      try {
+        preservePending(idempotencyKey);
+      } catch {
+        setRecoveryError(recoveryMessage);
+        return;
+      }
       const result = await request({
         source: source as SyncOperationInput["source"],
         operation,
@@ -182,6 +196,7 @@ export function PropertySyncWorkspace({
           重新載入
         </Button>
       </div>
+      {recoveryError && <p role="alert">{recoveryError}</p>}
       {error && (
         <p role="alert" className="rounded-lg border border-destructive p-3">
           {error}
@@ -247,7 +262,7 @@ export function PropertySyncWorkspace({
                 {admin && !card.branch && (
                   <Button
                     className="w-full"
-                    disabled={busy || uncertain || !card.capability.enabled}
+                    disabled={busy || blocked || !card.capability.enabled}
                     onClick={() => void run(card.source, "collect")}
                   >
                     立即同步
@@ -313,7 +328,7 @@ export function PropertySyncWorkspace({
                       variant="outline"
                       disabled={
                         busy ||
-                        uncertain ||
+                        blocked ||
                         !data.cards.find((c) => c.source === row.source)?.capability.enabled
                       }
                       onClick={() => void run(row.source, "ingestion", row)}
@@ -324,7 +339,7 @@ export function PropertySyncWorkspace({
                       variant="outline"
                       disabled={
                         busy ||
-                        uncertain ||
+                        blocked ||
                         !row.receipt_id ||
                         !data.cards.find((c) => c.source === row.source)?.capability.enabled
                       }
