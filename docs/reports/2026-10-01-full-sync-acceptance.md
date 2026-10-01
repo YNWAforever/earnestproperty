@@ -132,3 +132,7 @@ RED browser保存失敗仍request1≠0；現於保存成功前不dispatch/replay
 ### T10 失敗區間判斷續作
 
 Actual Neon RED重現failed dispatch/stages={}卻allowed。現依原scraped_at界定區間，definite failed dispatch、重疊failedrun、較早未解決run及採集後/accepted之前的失敗都阻擋；完整終結且在兩觀察以前或另一source的失敗不會誤擋。PGlite query12nodes（6top-level+6subtest）PASS；其他read ports是synthetic。Full verifieddisposableNeon1/1PASS/0skip、122.0s，舊preview對新failureblocked/actualactive保持。Original writer/IDs/aliases/24h/36h/20cap/rule-v1/Property.hk absenceoff保留。Connector cleanup522後，verifieddedicatedconnection唯讀確認db/branch/properties0/schemas[]。新UIcopy驗證進行中；19case及正式release/monitoring分母不變。
+
+### T10 繁中狀態與 UI fixture 續作
+
+中文核實狀態 actualbrowser RED count0≠1，現日常列顯示「待逐盤核實／未獲批准，暫不下架」，raw approval 收入預設折疊 diagnostics，展開仍可查核；沒有更改 allowed/角色/撤盤 rules。兩次原 Vite dev fixture first-page30s timeout 保留為FAIL。Harness先 fresh build 真實 TSX/CSS，再在 loopback preview 查互動，config/env不載入、provider/DB0；原30s timeout/UTC context/46 scenarios不放寬。新built fixture46/46PASS、0skip、compile5.46s，中文及diagnostics可見性assertion通過、390px screenshot已自審。Scoped lint/diffcheck/fulltypecheck exit0。此層是synthetic ports的actualReact/CSS，不是production登入或startup效能證據；13/19 isolated PASS、6/19 requiredliveBLOCKED_EXTERNAL及0/3MONITORING維持。Exact SHA/new hosted CI記PR208。

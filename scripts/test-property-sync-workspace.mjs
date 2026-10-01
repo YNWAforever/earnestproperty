@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import assert from "node:assert/strict";
-import { createServer } from "vite";
+import { build, preview } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwind from "@tailwindcss/vite";
 import { chromium } from "@playwright/test";
@@ -92,16 +92,23 @@ const record = (event, url, extra = "") => {
   if (diagnostics.length > 30) diagnostics.shift();
 };
 try {
-  server = await createServer({
+  const output = resolve(folder, "dist");
+  // Compile the isolated fixture before checking browser navigation and interactions.
+  await build({
     root: folder,
     configFile: false,
     envFile: false,
-    optimizeDeps: { force: process.env.PROPERTY_SYNC_UI_FORCE_COLD === "true" },
     plugins: [react(), tailwind()],
     resolve: { alias: { "@": resolve(root, "src") } },
-    server: { host: "127.0.0.1", port: 0, fs: { allow: [root] } },
+    build: { outDir: output, emptyOutDir: false },
   });
-  await server.listen();
+  server = await preview({
+    root: folder,
+    configFile: false,
+    envFile: false,
+    build: { outDir: output },
+    preview: { host: "127.0.0.1", port: 0 },
+  });
   const port = server.httpServer.address().port,
     origin = "http://127.0.0.1:" + port;
   browser = await chromium.launch({ headless: true });
@@ -265,6 +272,28 @@ try {
     ]) {
       await page.goto(origin + "/?scenario=" + scenario);
       await page.getByRole("checkbox", { name: "選取 合成候選甲" }).waitFor();
+      if (scenario === "withdrawal") {
+        assert.equal(
+          await page.getByText("未獲批准，暫不下架", { exact: true }).count(),
+          1,
+          "ordinary candidate status uses Hong Kong Traditional Chinese",
+        );
+        assert.equal(await page.getByText("待逐盤核實", { exact: true }).count(), 1);
+        assert.equal(
+          await page.getByText("核實狀態：NOT_APPROVED", { exact: true }).isVisible(),
+          false,
+          "raw approval is hidden in support diagnostics",
+        );
+        await page
+          .locator("li")
+          .filter({ has: page.getByRole("checkbox", { name: "選取 合成候選乙" }) })
+          .getByText("來源及版本", { exact: true })
+          .click();
+        assert.equal(
+          await page.getByText("核實狀態：NOT_APPROVED", { exact: true }).isVisible(),
+          true,
+        );
+      }
       await page.getByRole("checkbox", { name: "選取 合成候選甲" }).check();
       await page.getByRole("button", { name: "預覽所選撤盤" }).click();
       await page.getByRole("heading", { name: "確認撤盤預覽" }).waitFor();
@@ -499,6 +528,8 @@ try {
     JSON.stringify({
       status: "PASS",
       synthetic: true,
+      fixtureMode: "built",
+      freshBuild: true,
       cases,
       viewports: [1440, 390],
       providerRequests: 0,

@@ -104,6 +104,8 @@ verify job 為了保留故障摘要會 always 執行；job success 本身不代�
 
 ## 撤盤及復原
 
+日常候選顯示「待逐盤核實」或「未獲批准，暫不下架」；原 REVIEW_REQUIRED／NOT_APPROVED 在「來源及版本」展開診斷。文字不代表 apply 授權，仍以 server preview/recheck 為準。
+
 132historical缺席於本session沒有任何正式apply。候選須同scope兩個accepted full observations，原採集時間相隔≥24h、latest≤36h、collection/ingestion metadata可證完整、無failed/unknown區間。明示sold/rented獨立；draft、人工override/openreview、其他active source均阻擋。Property.hk absence永遠off，本次只人工review、不啟用automation。
 
 缺席區間從較早原採集時間開始，不以延遲匯入的accepted_at縮短。Dispatch明確failed即使stages尚為空，也屬失敗；跨首輪觀察的失敗及更早開始但仍未解決的run會阻擋撤盤，先由operator唯讀核對native結果。完整終結且在兩輪觀察之前的舊失敗、其他source的失敗不混入本source區間。新failure會改變預覽evidence fingerprint，舊preview不可直接套用。

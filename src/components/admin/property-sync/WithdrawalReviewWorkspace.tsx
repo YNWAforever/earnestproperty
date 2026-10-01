@@ -7,6 +7,10 @@ import type {
   WithdrawalApplyInput,
   WithdrawalBatch,
 } from "@/lib/neon/admin-property-sync.types";
+const approvalLabels: Record<string, string> = {
+  REVIEW_REQUIRED: "待逐盤核實",
+  NOT_APPROVED: "未獲批准，暫不下架",
+};
 const reasons: Record<string, string> = {
   not_active: "目前並非公開盤",
   staff_or_review_protected: "有人工覆寫或未解決 review",
@@ -297,7 +301,7 @@ export function WithdrawalReviewWorkspace({
                     {row.evidence.kind === "explicit_terminal"
                       ? "明示售出／租出"
                       : "歷史未再看到"}{" "}
-                    · {row.decision.approval}
+                    · <span>{approvalLabels[row.decision.approval] ?? "狀態待核實，暫不下架"}</span>
                     <br />
                     {reasons[row.decision.reason] ?? row.decision.reason}
                     {row.evidence.otherActiveSources.length > 0 && (
@@ -308,6 +312,7 @@ export function WithdrawalReviewWorkspace({
                 <details className="mt-2 text-xs break-all">
                   <summary>來源及版本</summary>
                   {row.propertyNo} · {row.version}
+                  <p>核實狀態：{row.decision.approval}</p>
                 </details>
               </li>
             ))}
