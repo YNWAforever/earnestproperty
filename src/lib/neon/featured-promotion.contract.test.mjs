@@ -3,11 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import ts from "typescript";
+import { PGlite } from "@electric-sql/pglite";
 
 import { promotionTierRank } from "../mls/promotion-tier.mjs";
 
 /**
- * 網頁07092026.docx p5: the homepage feed must order 黃金 > 置頂 > 普通.
+ * Historical promotion mode retains 黃金 > 置頂 > 普通.
+ * Homepage now explicitly requests newest; its executable DB regression is below.
  *
  * The load-bearing property is that ordering happens BEFORE the row limit.
  * The previous implementation fetched a fixed 24 rows ordered by freshness and
@@ -199,4 +201,73 @@ test("the feed degrades to its previous order until the migration is applied", a
   assert.doesNotMatch(text, /mls_source_promotion_tiers/);
   assert.doesNotMatch(text, /promotion\.rank/);
   assert.match(text, /ORDER BY p\.created_at DESC/, "it falls back to the existing order");
+});
+
+test("homepage newest feed ranks new source adverts before old promoted inventory and preserves withdrawal", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE TABLE properties (
+      id text PRIMARY KEY, listing_no text, canonical_property_no text, title_zh text,
+      deal_type text NOT NULL DEFAULT 'sale', source_updated_at timestamp,
+      last_seen_at timestamp, updated_at timestamp, created_at timestamp NOT NULL,
+      status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
+      estate_id text, district_slug text, address text, price numeric, rent numeric,
+      saleable_area numeric, bedrooms numeric, bathrooms numeric, features text[],
+      images text[], video_url text, source_site text
+    );
+    CREATE TABLE property_public_members(property_id text, public_listing_no text);
+    CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
+    CREATE TABLE property_source_links(property_id text, source text, external_listing_id text,
+      deal_type text, status text, first_seen_at timestamp, last_seen_at timestamp);
+    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text, last_accepted_at timestamp, source text, external_listing_id text, deal_type text);
+    CREATE TABLE mls_source_promotion_tiers(source text, external_listing_id text, deal_type text, promotion_tier text);
+    INSERT INTO mls_source_promotion_tiers VALUES ('28hse','1','sale','gold'),('28hse','2','sale','normal');
+    INSERT INTO properties(id,listing_no,created_at,source_updated_at,status) VALUES
+      ('old-gold','OLD','2026-08-01','2026-08-01','active'),
+      ('new-ad','NEW','2026-09-29','2026-09-29','active'),
+      ('relisted','RELIST','2026-07-01','2026-09-30','active'),
+      ('withdrawn-old','W1','2026-08-01','2026-08-01','active'),
+      ('withdrawn-new','W2','2026-10-01','2026-10-01','inactive'),
+      ('rent','RENT','2026-09-28','2026-09-28','active');
+    UPDATE properties SET deal_type='rent' WHERE id='rent';
+    INSERT INTO property_public_members VALUES
+      ('old-gold','P1'),('new-ad','P2'),('relisted','P3'),
+      ('withdrawn-old','P4'),('withdrawn-new','P4'),('rent','P2');
+    INSERT INTO property_source_links VALUES
+      ('old-gold','28hse','1','sale','active','2026-08-01','2026-10-01'),
+      ('new-ad','28hse','2','sale','active','2026-09-29','2026-10-01'),
+      ('relisted','28hse','3','sale','active','2026-09-30','2026-10-01'),
+      ('old-gold','28hse','4','sale','active','2026-10-01','2026-10-01');
+    INSERT INTO mls_source_state VALUES
+      ('old-gold','2026-08-01','active','2026-10-01','28hse','1','sale'),
+      ('new-ad','2026-09-29','active','2026-10-01','28hse','2','sale'),
+      ('relisted','2026-09-30','active','2026-10-01','28hse','3','sale'),
+      ('old-gold','2026-10-01','delisted','2026-10-01','28hse','4','sale'),
+      ('old-gold','2026-10-01','active','2026-10-01','28hse','unverified','sale');`);
+    const calls = [];
+    const server = await loadPublicDataServer(async (text, params) => {
+      calls.push(text);
+      return (await db.query(text, params)).rows;
+    });
+    const rows = await server.fetchFeaturedProperties({ limit: 2, order: "newest" });
+    assert.deepEqual(
+      rows.map((row) => row.listing_no),
+      ["RELIST", "NEW"],
+    );
+    assert.equal(calls.length, 1, "newest feed needs no promotion capability probe");
+    const all = await server.fetchFeaturedProperties({ limit: 6, order: "newest" });
+    assert.deepEqual(
+      all.map((row) => row.listing_no),
+      ["RELIST", "NEW", "OLD"],
+    );
+    await db.query("UPDATE mls_source_state SET last_accepted_at='2026-10-02'");
+    const again = await server.fetchFeaturedProperties({ limit: 2, order: "newest" });
+    assert.deepEqual(
+      again.map((row) => row.listing_no),
+      ["RELIST", "NEW"],
+      "routine re-scrape must not make old adverts new",
+    );
+  } finally {
+    await db.close();
+  }
 });

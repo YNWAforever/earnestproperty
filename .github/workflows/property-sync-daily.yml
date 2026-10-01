@@ -1,5 +1,8 @@
-name: Property collection on demand
+name: Daily property collection
 on:
+  schedule:
+    # 04:17 Asia/Hong_Kong; still requires PROPERTY_SYNC_DAILY_ENABLED=true.
+    - cron: "17 20 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -31,8 +34,8 @@ jobs:
       contents: write
       actions: read
     env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.PROPERTY_SYNC_EVIDENCE_TOKEN || github.token }}
+      GH_REPO: ${{ vars.PROPERTY_SYNC_EVIDENCE_REPO || github.repository }}
       MODE: ${{ inputs.mode || 'apply' }}
       SCOPE: ${{ inputs.scope || 'agent:540' }}
       EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
@@ -50,6 +53,7 @@ jobs:
           node-version: "24"
           cache: npm
       - name: Validate operator gates and private evidence destination
+        id: evidence-gate
         shell: bash
         run: |
           set -euo pipefail
@@ -135,31 +139,42 @@ jobs:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
         run: node scripts/mls/publish-daily-listings.mjs --payload "$PAYLOAD" --report daily-output/publication.json
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event.repository.private == true && steps.evidence-gate.outcome == 'success'
+        continue-on-error: true
         with:
           name: property-publication-${{ github.run_id }}-${{ github.run_attempt }}
           path: daily-output/publication.json
           retention-days: 90
           if-no-files-found: ignore
       - name: Compress evidence even after failure
-        if: always()
+        if: always() && steps.evidence-gate.outcome == 'success'
         run: python scripts/property-sync/daily_artifacts.py archive --root daily-output --destination daily-archives
+      - name: Pin evidence independently of Actions artifact quota
+        if: always() && steps.evidence-gate.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp daily-archives/raw.tar.gz "raw-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          cp daily-archives/compact.tar.gz "compact-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
+          gh release upload property-sync-evidence "raw-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz" "compact-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event.repository.private == true && steps.evidence-gate.outcome == 'success'
+        continue-on-error: true
         with:
           name: property-sync-raw-${{ github.run_id }}-${{ github.run_attempt }}
           path: daily-archives/raw.tar.gz
           retention-days: 7
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && github.event.repository.private == true && steps.evidence-gate.outcome == 'success'
+        continue-on-error: true
         with:
           name: property-sync-compact-${{ github.run_id }}-${{ github.run_attempt }}
           path: daily-archives/compact.tar.gz
           retention-days: 90
           if-no-files-found: error
       - name: Pin unresolved evidence independently of artifact expiry
-        if: failure()
+        if: failure() && steps.evidence-gate.outcome == 'success'
         shell: bash
         run: |
           cp daily-archives/raw.tar.gz "unresolved-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.tar.gz"
@@ -168,7 +183,7 @@ jobs:
         if: always()
         run: |
           echo "Daily agent:540 result: ${{ job.status }}. Evidence reference: $GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT." >> "$GITHUB_STEP_SUMMARY"
-          echo 'See restricted request, receipt and publication artifacts. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'See the private evidence release for request, receipt and publication results. Failed job status is the notification.' >> "$GITHUB_STEP_SUMMARY"
           if [ -f daily-output/publication.json ]; then
             python -c 'import json; r=json.load(open("daily-output/publication.json")); print("Publication: %d published, %d held for review." % (len(r["published"]),len(r["held"])))' >> "$GITHUB_STEP_SUMMARY"
           fi

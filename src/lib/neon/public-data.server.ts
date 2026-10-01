@@ -473,6 +473,19 @@ function listingWhere(input: NeonListingFiltersInput, params: unknown[]) {
 // only searchListings (the general /listings search path) accepts a sort.
 // Newest means first recorded on this site, not featured status or scraper last-seen time.
 const LISTING_NEWEST_ORDER = "p.created_at DESC, p.id ASC";
+// First observation of a currently active advert makes a relisted property new.
+// last_seen_at/updated_at would incorrectly promote every routine sync.
+// A held candidate without a confirmed source link must not affect public rank.
+const LATEST_ADVERT_ORDER = `COALESCE((
+  SELECT max(fresh.first_seen_at) FROM mls_source_state fresh
+  JOIN property_source_links verified
+    ON verified.property_id = fresh.property_id
+   AND verified.source = fresh.source
+   AND verified.external_listing_id = fresh.external_listing_id
+   AND verified.deal_type = fresh.deal_type
+   AND verified.status = 'active'
+  WHERE fresh.property_id = p.id AND fresh.source_status = 'active'
+), p.created_at) DESC, p.created_at DESC, p.id ASC`;
 
 // Price/area/PSF sorts retain the existing featured/source-check tie breakers.
 // Newest uses creation order consistently for representative selection and paging;
@@ -823,26 +836,16 @@ async function promotionTierTableAvailable(): Promise<boolean> {
 }
 
 /**
- * The homepage's live listing feed.
- *
- * Ordering happens in SQL, before the row limit, and the region predicate is
- * applied in SQL too. Both were previously done in the caller
- * (queries.ts's fetchFeaturedProperties) on a fixed 24-row over-fetch, which
- * meant a higher-priority listing sitting at row 25 could never appear no
- * matter how it ranked -- the 黃金-first ordering the client asked for cannot
- * be built on top of a window that has already discarded candidates.
- *
- * Deduplication still happens first: canonicalListingCte collapses each
- * public_listing_no to one row before this ORDER BY sees it, so a listing with
- * several source rows or several offers is one card, ranked once.
- *
- * Staff `featured` flags and publication/delisting rules are untouched --
- * `p.status = 'active'` is still the gate, and LISTING_NEWEST_ORDER remains
- * the within-tier order, so this only inserts the client's tier priority
- * ahead of the existing deterministic freshness/id tiebreak.
+ * Canonical public card feed, ordered and deduplicated before LIMIT.
+ * Homepage explicitly requests newest accepted active adverts; legacy callers
+ * retain promotion-first ordering. First-seen means discovery by our collector,
+ * not the source's publication date. Re-fetches never bump that timestamp.
+ * Scope, current-offering withdrawal suppression and publication gates apply
+ * in both modes. No paid-placement lookup is needed for the newest feed.
  */
 export async function fetchFeaturedProperties(input: {
   limit: number;
+  order?: "newest" | "promotion";
   districtSlugs?: string[];
   estateSlugs?: string[];
   textAliases?: string[];
@@ -857,7 +860,8 @@ export async function fetchFeaturedProperties(input: {
     limit: pageSize,
   });
 
-  const ranked = await promotionTierTableAvailable();
+  const newest = input.order === "newest";
+  const ranked = !newest && (await promotionTierTableAvailable());
 
   const params: unknown[] = [];
   // With no scope terms the feed stays exactly as broad as it was before the
@@ -866,14 +870,15 @@ export async function fetchFeaturedProperties(input: {
   const where = hasCorridorAliases(scope) ? corridorWhere(scope, params) : "p.status = 'active'";
   // Before the migration lands there is no tier to rank on, so the feed keeps
   // its previous freshness order rather than erroring.
+  const candidateOrder = newest ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER;
   const order = ranked
     ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, ${LISTING_NEWEST_ORDER}`
-    : LISTING_NEWEST_ORDER;
+    : candidateOrder;
   const limitParam = addParam(params, pageSize);
 
   const rows = await sql().query(
     `
-    ${canonicalListingCte(where, false, LISTING_NEWEST_ORDER)}
+    ${canonicalListingCte(where, false, candidateOrder)}
     SELECT ${listingCardColumns}
     FROM properties p JOIN canonical c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id

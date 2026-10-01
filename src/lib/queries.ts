@@ -231,30 +231,15 @@ export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
 const FEATURED_DISPLAY_LIMIT = 6;
 
 /**
- * The homepage's live listing feed (網頁07092026.docx p5: 黃金 > 置頂 > 普通).
- *
- * The region predicate and the promotion-tier ordering both now run in SQL,
- * before the row limit. The previous shape -- fetch a fixed 24 rows ordered by
- * freshness, then region-filter, dedupe and slice to six in JS -- could not
- * support the client's request: a 黃金 listing at row 25 was discarded before
- * any ranking could see it, and sorting the surviving six would only reorder
- * whatever the freshness window happened to contain.
- *
- * Deduplication order is unchanged and still happens before the cap: the
- * server's canonicalListingCte collapses each public_listing_no to a single
- * row inside the query, so the LIMIT counts unique listings, and
- * dedupeListings below stays as the legacy-shape safety net it already was.
- *
- * The scope terms handed to the server are exactly corridorRegionScope's --
- * the same whitelist/exclusion pair every other corridor query uses, plus the
- * client's approved estates. isWithinCorridorRegion still runs on the returned
- * rows as defense in depth, the same way fetchCorridorInventoryForAliases
- * keeps its own app-layer filter after moving exclusions into SQL.
+ * Homepage 最新放盤: request the newest accepted active source adverts.
+ * Scope and canonical deduplication run in SQL before the six-card limit;
+ * this final scope check and dedupe remain defensive checks for legacy rows.
  */
 export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
   const rows = (await fetchNeonFeaturedProperties({
     data: {
       limit: FEATURED_DISPLAY_LIMIT,
+      order: "newest",
       districtSlugs: corridorRegionScope.districtSlugs,
       // The client's approved presentation estates join the corridor's own
       // estates here. This is what lets 香港黃金海岸 stock through a place-name

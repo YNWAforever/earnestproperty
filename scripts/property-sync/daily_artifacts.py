@@ -50,7 +50,7 @@ def archive(root, destination):
             for path in sorted(root.rglob('*')):
                 if path.is_file() and not path.is_symlink():
                     raw.add(path, arcname=str(path.relative_to(root)), recursive=False)
-                    if path.name in {'request.json', 'receipt.json', 'manifest.json', 'baseline.json', 'summary.json', 'gate.json'} or path.name.startswith('receipt-attempt') or (path.parent.name == 'attempts' and path.suffix == '.json' and path.stem.isdigit()):
+                    if path.name in {'request.json', 'receipt.json', 'manifest.json', 'baseline.json', 'summary.json', 'gate.json', 'publication.json'} or path.name.startswith('receipt-attempt') or (path.parent.name == 'attempts' and path.suffix == '.json' and path.stem.isdigit()):
                         compact.add(path, arcname=str(path.relative_to(root)), recursive=False)
 
 

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const path = new URL("../.github/workflows/property-sync-daily.yml", import.meta.url);
-test("manual property workflow remains gated, serialized, immutable and narrowly scoped", () => {
+test("daily property workflow remains gated, serialized, immutable and narrowly scoped", () => {
   const y = readFileSync(path, "utf8");
   for (const value of [
     "workflow_dispatch:",
@@ -22,7 +22,7 @@ test("manual property workflow remains gated, serialized, immutable and narrowly
     "agent:540",
   ])
     assert.ok(y.includes(value), value);
-  assert.doesNotMatch(y, /^\s+schedule:/m);
+  assert.match(y, /^\s+schedule:/m);
   assert.equal((y.match(/secrets\.DATABASE_URL_UNPOOLED/g) || []).length, 2);
   assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(y));
   assert.ok(
@@ -63,7 +63,7 @@ test("database credential exists only on the gated apply step", async () => {
   assert.equal(
     steps.find((step) => step.name === "Pin unresolved evidence independently of artifact expiry")
       .if,
-    "failure()",
+    "failure() && steps.evidence-gate.outcome == 'success'",
   );
   assert.match(
     steps.find((step) => step.name === "Restore last accepted full baseline").run,
@@ -79,4 +79,25 @@ test("accepted asset names derive from immutable snapshot chronology", () => {
   );
   assert.match(y, /tar -czf "\$asset" baseline/);
   assert.ok(!y.includes('tar -czf "accepted-$GITHUB_RUN_ID'));
+});
+
+test("daily collection has one gated HK morning schedule and private durable evidence", async () => {
+  const { createRequire } = await import("node:module");
+  const workflow = createRequire(import.meta.url)("js-yaml").load(readFileSync(path, "utf8"));
+  assert.deepEqual(workflow.on.schedule, [{ cron: "17 20 * * *" }]);
+  const job = workflow.jobs.daily;
+  assert.match(job.env.GH_REPO, /PROPERTY_SYNC_EVIDENCE_REPO/);
+  assert.match(job.env.GH_TOKEN, /PROPERTY_SYNC_EVIDENCE_TOKEN/);
+  const steps = job.steps;
+  const gate = steps.find(
+    (s) => s.name === "Validate operator gates and private evidence destination",
+  );
+  assert.match(gate.run, /repos\/\$GH_REPO.*\.private/);
+  const pin = steps.find((s) => s.name === "Pin evidence independently of Actions artifact quota");
+  assert.equal(pin.if, "always() && steps.evidence-gate.outcome == 'success'");
+  assert.match(pin.run, /gh release upload property-sync-evidence/);
+  for (const step of steps.filter((s) => s.uses === "actions/upload-artifact@v4")) {
+    assert.match(step.if, /github.event.repository.private == true/);
+    assert.equal(step["continue-on-error"], true);
+  }
 });
