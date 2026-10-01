@@ -159,3 +159,9 @@ T2 final verification at working tree based94c25bd: npm run test:property-sync:d
 
 - FirstCIrun36833069630 failed atnewmigrationrelease2tests (MIGRATION_BYTES_CHANGED onLinux). LocalSQLhad54/115CRLF;Gitblobhad0. AddedGitblobbytecomparisonregression: RED1/3 locally,prior2green. Fixonlynewnot-yet-appliedmigrationpathswith.gitattributes eol=lf; hashesnow349af4a3d84122be226d19028b54451b7d5b8f4e822b7f3d42eaea7160f66c64 /ba68aaea2975c6c22e41997236c0fe7d3e96d2b3bcf1490223018bfbbd7c4e19. Appliedoldmigrationsandraw/requestevidencebytesunchanged. NewDDLsemanticsunchanged;isolatedDDLtestsremainapplicable.
 - GREENnode --test scripts/mls/migrate-sync-operations.test.mjs3/3PASSexit0; dry-runchecksGit-compatiblebytes. Whole-repolint0errors/3existingunrelatedwarnings,tsc/UI26PASS afterhooklifecyclecleanup. RemoteCIrerunwillverifyLinuxactualcheckout; no productionmutation.
+
+
+## PR208 navigation regression follow-up
+
+- SecondLinuxCI36833689156 passed lint/build/typecheck andALLnewsourceportable/UI/Pythongates; threeothernonstagingjobsPASS. Latercommand-centerfailedatfixedsidebarcount16vsnew17. Reproducedlocally; updatedapprovednavigationexpectationto17andpositivelyassertsource-synclabel/EDITORSroles. Originalno-duplicatedestinationsandallgroup/legacybugchecksremainintact; noCRM/providerproductioncodechanged.
+- GREENnpm run test:command-center exit0,82Node+8BunPASS/0skip. Source-sync route staysadmin/manager; mutationpermissionboundariesunchanged. Focusedtest-onlyfollowupcommit;newCIrerunrequired.

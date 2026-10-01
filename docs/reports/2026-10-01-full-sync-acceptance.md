@@ -95,3 +95,5 @@ Manualfreshproduction E2E尚未執行。Cycle1/2/3皆未執行：**0/3MONITORING
 ### PR208 CI follow-up
 
 PR208 firstLinuxCI failed at exactmigrationchecksum guard: WindowsnewSQLfileshadCRLF whileGitblob/LinuxhadLF. ProductionSQLwasnotapplied. PositiveGitblobregressionreproducedfailure locally; onlytwoNEWmigrationpaths nowhave eol=lf attributes andLFchecksum pins. OldappliedSQLandprivateZIP/request/rawbytesunchanged. Updatedhashes areinrunbook. Authorwillrecord finalremotecheck resultinPRhandoff; firstfailure remainsvisible.
+
+SecondLinuxCIpassedallnewgates(including26syntheticUI/Python97),thenexistingCommandCenterhard-coded16-entryexpectationfailedafterapproved17thsource-syncentry. Positive17-entry/label/EDITORSregressionupdated; duplicate/groupassertionspreserved. Localcommand-center82Node+8BunPASS. NounrelatedCRM/WhatsAppfeaturelogicmodified;finalrequiredCIreruntrackedinPR.
