@@ -1,0 +1,138 @@
+# 每日盤源同步驗收 — 2026-10-01
+
+## 狀態與範圍
+
+單agent順序實作T0–T11，沿PR207 head1e2a345，保留既有homepage newest/private evidence/daily schedule修正。最後fresh fetch：main=e8997f290045fde37625be99863d803f4f72c7b5；PR207仍OPEN／DRAFT／unmerged，CI4項SUCCESS、stagingSKIPPED、VercelSUCCESS。這些是PR207結果，不能套用到新PR。
+
+本次交付是可審閱code/tests/UI/runbook。**未完成正式A/B/C live acceptance；不是COMPLETE或穩定上線。0/3scheduled cycles，MONITORING。** 無production mutation、migration、dispatch、deploy、merge、true WhatsApp/email或bulk withdrawal。
+
+| Journey | Local implementation／rehearsal | Live status |
+|---|---|---|
+| A28Hse collect→private freeze→ingest→publish→homepage | READY；隔離SQL、exact ZIP regression、process failure、owned-media fake ports、public query fixtures | VERIFICATION_BLOCKED：private evidence/token/current baseline recovery＋reviewedrelease/manualfresh E2E未完成 |
+| BProperty.hk EPS/EPT/EPW | READY gated code；三分行synthetic parser、3/3gate、source-aware SQL publication與canonical復用 | BLOCKED_EXTERNAL：正常detail403、三原入口/SID/realfixtures/ID/media未核實；policy及schedule維持off |
+| C盤源同步／受控重試／撤盤review | READY：actual DB RBAC/concurrency、realReact/CSS mobile/desktop synthetic browser、off flags | VERIFICATION_BLOCKED：兩個migration/release/token/live login未完成；沒有正式下架 |
+| 3daily cycles | 0/3 | MONITORING；未開始新正式scheduled cycles |
+
+## Task／finding／focused commits
+
+| Task | Finding／結果 | Commit | 外部狀態 |
+|---|---|---|---|
+| T0 | ZIP/hash/ancestry/working tree/production authority只讀核對；隔離worktree | 9775d8b | PASS read-only |
+| T1 | 私有hash/readback/authority／不可變handoff；reviewedretention/unknown DELETE核對 | 94c25bd、015ee45 | destination/token/accepted archive recovery BLOCKED |
+| T2 | collect120／ingest20／publish45／verify10，durablecheckpoints；downstream不再爬；08:15HK只讀watchdog | b420876 | hosted stagedmanualrun/cost/cancelarchive未驗 |
+| T3 | direct host/neondb預寫入guard；currentreceiptreconcile；replay idempotency | 515aa23 | production baseline保持，只讀 |
+| T4 | backlog穩定輪轉、actualheld、unknownCOMMIT、20 attempts及36h保留 | f095848 | 正式媒體/publication未执行 |
+| T5 | 沿PR207 newest query；canonicalwww verifier；last_seen不洗排序 | 98f843c | homepage HTTP200只有read-onlybrand；3currentdetails／livebrowser未驗 |
+| T6 | 明確未接通；403停止、不去SID猜入口 | 7f7189b | 全3分行BLOCKED_EXTERNAL |
+| T7 | p1→terminal/pageproof，3/3full才apply、sourceisolated accepted archives、dual offers | 6b3b58a | real parser/selectors/IDscope待provider |
+| T8 | 相容HK-onlysecondary一致性、actualrawSQL sourcepublication／ownedmediacodec；原priority/override保留 | a77d847 | 正式serverpolicy／firstapply／HKschedule未啟用 |
+| T9 | 4cards/stages/30hstale/metadata、freshRBAC、allowlistedworkflowonlydispatch／dedupe | 543881b | 新migration/login/managedworkflowtoken/release待驗 |
+| T10 | absence review version、15minpreview、partial/idempotentapply、actualDBrole/clock/version重查、manualinactiveoverride | cd320a0 | withdrawalflagoff；132historicalNOT_APPROVED |
+| T11 | exactprivateZIP regression、132syntheticDB review、新migrationtool、CIwiring／sourcegate/rollback/manual | 本報告所在commit（git log -- docs/reports/2026-10-01-full-sync-acceptance.md） | live gates保留；3cycles0/3 |
+
+逐taskred/green/command/exit/environment見full-sync-implementation-status.md。Code author自審，未使用subagents或聲稱independent external code review。原audit reference及缺陷probes沒有修改。
+
+## 最低矩陣：19case，未測live保留分母
+
+PASS只指右列明示的isolated層級；含必需live片段的case整列BLOCKED_EXTERNAL。矩陣13/19在所指定isolated層級PASS、6/19含必需live片段BLOCKED_EXTERNAL；沒有19/19正式PASS之主張。
+
+| Case | 狀態 | 已執行證據 | 未測／剩餘 |
+|---|---|---|---|
+| A01 | PASS disposable Neon | 原private request hash／timestamp不變、disposable schema；最終1/1PASS、0skip、611.8s：286ads→197canonical、286observations、284links、1receipt、inactive0；replay identical、3aliases正確 | 原10m runner timeout如實保留；20m runner通過，197屬synthetic mapping fixture，不推production新增數 |
+| A02 | BLOCKED_EXTERNAL | stagedworkflowcontract、UIseparatefailedpublication、publication-only不collector；localsynthetic26journeys | 真hostedpublication失敗/retry以及privateassetreadback |
+| A03 | PASS isolated process | 真subprocessexit17後rawcheckpoint可讀；incomplete非full、不apply | hostedhardcancel未上傳部分只能missing evidence |
+| A04 | PASS unit＋Neon | wronghost/scope/hash/sourcepolicy prewrite拒絕；receiptimmutableidentity | production不做故意wrongtargetwrite |
+| A05 | PASS readonly＋fixtures | freshmain無schedule／Sep24baseline；30hstale/neverconnected/failure不顯示0成功；watchdog獨立 | 正式新watchdog/UI未部署 |
+| A06 | BLOCKED_EXTERNAL | exactZIP三樣本4033913/A072390、4034357/B059410、4034591/A057717兩層mapping | 當前fresh來源/livedetail/photo資格；不强上已撤盤 |
+| A07 | PASS PGlite queries | 實際SQL資料fixture：activeacceptedlinks/newest/canonical去重/last_seen不bump／inactive不見 | productionhomepage新版排序未部署 |
+| B01 | BLOCKED_EXTERNAL | 3branchsyntheticp1→terminal＋Neonfullgate1/1 | 正式三原SID/dt頁／realparse／fullcount |
+| B02 | PASS gates＋Neon | EPS9page／missingbranch／403／fakeempty／dropcollapse／invalid URL拒絕整輪；no baseline advance | provider403只讀現場證據，不繞過 |
+| B03 | BLOCKED_EXTERNAL | global/branchscopecollision、sameIDsale/rent parserfixtures及SQLoffer隔離 | suppliercontract／跨branch真實ID證據 |
+| B04 | PASS reconciliation＋Neon | consistentHK-onlysecondary有限合併；price/identity/lifecycle矛盾仍review；原atomic26/26 | 不把synthetic規則當已核實livepolicy |
+| B05 | PASS Neon | exactcanonical跨source、sale/rentpublicgroup、override/UUID/alias/provenance保持 | productioncrosssource未apply |
+| B06 | BLOCKED_EXTERNAL | HK synthetic3/3→SQLimport/replay→ownedphoto1fakeports→public1→nextingestion1canonical；1/1 | 真mediahost/rights/sourceURL/config/firstbaseline与freshlivepublic |
+| C01 | PASS Neon＋unit | 真SQL132synthetichistoricalcandidates，100+32boundedpagination，全部NOT_APPROVED；强行review applyblocked、inactive0、IDs/132links保持 | 原ZIP132實際production候選未套用；禁止直接下架 |
+| C02 | PASS gate＋syntheticUI | 403/fakeempty/drop>30%failclosed、失敗保留資料；live403另記 | 無production盲爬／fault injection |
+| C03 | PASS multisessionNeon | 15minDBclockexpiry、source更新／staffversion競爭拒絕、2clients only1winner | 正式不故意做race |
+| C04 | PASS Neon＋UI | duplicate/idempotent、peritempartial、realCOMMITacklost→readback、readonlyUIreconcile；nextactor/publicqueryreadback | realprovider/productiontimeout未注入 |
+| C05 | PASS service＋DB | clientroleforgeryagent actualDBdeny、manager dispatchdeny、invalidURL/ref/source/host/id/subset；redirect/timeoutfailclosed | liveauthenticatedserverFn/browser token尚未接通 |
+| C06 | BLOCKED_EXTERNAL | actualReact/CSSChromium1440/390、46journeys、nohorizontaloverflow；names/nextstep/denied/failed/retry | 真新員工liveauth/mobile，未拿synthetic當prodpass |
+
+## 動作coverage及層級
+
+- Portablecode：ingestion75、daily37（包括新manualdisposableworkflowguard及實際verification shell）、admin17、withdrawal12、release migration3、listingpriority36、listingsearch91Node＋12Bun、media5。每套exit0/0skip；不合計重跑的重疊case。
+- Python：97/97exit0，包括realprocesscheckpoint、propertyhk syntheticselectors/fullgate、privatehash/retention ports。
+- PGlite：public newest/search實際SQLfixture；不是Neon或production。
+- RealNeon：核對project dawn-meadow-79190048／disposable br-young-breeze-ao85rtx1／endpoint ep-square-leaf-aobruyvf／dedicated earnest_audit_acceptance_20260927後才fixtureDDL。原六套serial41/41baselinePASS；原atomicrepository26/26最後T8重驗；HKfullgate1/1、HKpublication1/1、28publication與nextingestion各1/1、T9metadata1/1、T10withdraw1/1、132historical1/1。ExactZIP1/1PASS/0skip、611.8s，另記A01。隨機schema清理；沒有fixture指向inheritedneondb或production。
+- Syntheticbrowser：actualReact/CSSChromium，desktop1440/mobile390，46/46；providerrequests0／DBwrites0。包括loading/empty/failure/denied、history75rows、pagination、retrydoubleclick、invalidreason/cancel、expiry、partial、unknownreconcile。Liveauth及公開照片未測保留分母。Finalrerunfirstlocalhost navigation30s曾timeout；boundeddiagnostics加入後warm及forcedcold各26/26PASS，未重現；保留該失敗、不冒稱根因已修。
+- FullTypeScript：tsc --noEmit exit0；localproduction buildexit0。NewUIhookchanges再驗tsc/UI26PASS。YAML35/phasebudgets/permissions與bash語法有效。舊lockbytes不變；nativeworktreebun.lockb mode差異未stage。
+- ActionsCI新增admin/withdrawal/release/Pythonretention/syntheticUIchecks；另manual disposable workflow先guard，四組DBtest逐組serial，不注入production/Blob/workflow/evidencecredentials。新PRremoteCI狀態另在交付補記。
+- Highrisk：成功、直接越權、invalid、cancel、duplicate、stale、timeoutunknown、refresh/nextactor/publicreadback都有對應上述測試；正式故障注入未做。權限/consent/providerlive層不混算。
+
+## Live逐來源與實際正式操作
+
+| Source | 最新已核實情況 | 本session正式write |
+|---|---|---|
+| 28Hse agent540 | productioncurrent fullreceipt60895ce3-6a1d-4225-84f1-455d6e47f181；Sep24T21:45:54.421920Z／279ads；sourceapprovedlinks356；stale；privatebaseline recovery未通過 | 0 |
+| Property.hk EPS | 原p9／SID/dt/approvedp1未實測，無serverpolicy | 0 |
+| Property.hk EPT | 原SID/dt/pagination/IDscope未核實 | 0 |
+| Property.hk EPW | 同上；三branch共用scope3/3gate | 0 |
+| Public homepage | 308到exactcanonicalwww後HTTP200，brandPASS，detailsVerified0 | 0 |
+
+單次正常Property.hk detail請求2026-10-01T05:04:36.912Z403/challenge，沒有代理／challengecookie／繞過；不推論獲准feed或部署環境永遠不可用。Currentproductionhostname已managedvar/localread-only匹配；URL與secret沒有印出。
+
+## Migration／config／回退
+
+只新增20261001120000_property_sync_operations.sql及20261001130000_property_withdrawal_review.sql，manifestregistered、isolatedDDL驗證，正式read-only --check已驗directhost/neondb/serverbranch及五個coreprerequisites，兩檔pending/applied[]；freshauthority仍60895ce3/279ads。Disposablefinalreadback properties0/customschemas[]。正式未套用。Migration helper預設noDBdryrun；operator --check read-only，--apply須host/serverbranch/prerequisite/hash與explicitapproval。沒有自動跑全repo pendingmigrations。
+
+新增flags均off；詳細confignames、shadow→canary→production、最小external需求、20/36limits、phasebudgets、unknownrecovery、privatecleanup及SME五步手冊在[恢復與回退runbook](../runbooks/property-source-daily-recovery.md)。Rollback停止此source新daily/apply/dispatch/review、等transaction並對帳、留history/media/IDs/currentbaseline；錯data用新reviewedcompensatingoperation。沒有直接重啟舊writer或無條件restore。
+
+## Scheduled監測
+
+Manualfreshproduction E2E尚未執行。Cycle1/2/3皆未執行：**0/3MONITORING**。未建立提醒／heartbeatautomation或真實外部訊息。正式release需上述owner完成gate後各記錄scheduled runURL/commit/hashes/receipt/source/canonical/publiccounts/elapsed及recovery，三次才可聲稱穩定每日同步。
+
+
+### PR208 CI follow-up
+
+PR208 firstLinuxCI failed at exactmigrationchecksum guard: WindowsnewSQLfileshadCRLF whileGitblob/LinuxhadLF. ProductionSQLwasnotapplied. PositiveGitblobregressionreproducedfailure locally; onlytwoNEWmigrationpaths nowhave eol=lf attributes andLFchecksum pins. OldappliedSQLandprivateZIP/request/rawbytesunchanged. Updatedhashes areinrunbook. Authorwillrecord finalremotecheck resultinPRhandoff; firstfailure remainsvisible.
+
+SecondLinuxCIpassedallnewgates(including26syntheticUI/Python97),thenexistingCommandCenterhard-coded16-entryexpectationfailedafterapproved17thsource-syncentry. Positive17-entry/label/EDITORSregressionupdated; duplicate/groupassertionspreserved. Localcommand-center82Node+8BunPASS. NounrelatedCRM/WhatsAppfeaturelogicmodified;finalrequiredCIreruntrackedinPR.
+
+ThirdCIlaterfailedattest-wiringclassifyingnew3DBsuitesasportable. ExplicitDB/private-fixtureregistrationandguardedprivate-regressionmanualjobadded; ordinaryCIcoveragecheckretained. Control-plane105/105PASS, daily+wiring16/16PASSlocally. Privatejobreadsprivateassetwithdedicatedread-onlytoken,checks414631bytes/exactSHA/verifieddisposabletarget,nopublicartifact; nojob/token/assetconfiguredordispatchedthissession. ThisoptionalhostedprivateCIgate remainsUNRUN/BLOCKED_EXTERNAL, notlocalZIPPASSorproductioncycleevidence.
+
+
+### 續作：公開驗證 proof 修復
+
+發現 summary-only verify job success 曾被記成公開驗證成功；四個正向回歸先失敗，現改為只有實際HTTP checker通過後的 native public_verified=true 才可成功。Shadow／發佈失敗未執行檢查維持 pending；成功發佈缺 proof 顯示 unknown；HTTP檢查失敗不升級。實際Git Bash執行四種合成分支驗證輸出順序；daily37/37、admin12/12、job-wake17/17 PASS／0skip。此 HTTP proof不代表live browser驗收；13/19 isolated PASS、6/19 live BLOCKED_EXTERNAL、0/3 MONITORING不變。更新的hostedCI結果在PR記錄。
+
+
+### T9 timeout 結果核對續作
+
+新增 authenticated GET，只讀同 actor／原 idempotency key；active admin role 由 DB 重新驗證。Browser-tab 保存原 key，頁面 refresh 後不重送；「核對工作流程結果」只有在確定拒絕或完整 native 終結 proof 後解鎖。四階段缺失、unknown、缺成功 ingestion receipt 均保持待核實。Real disposable SQL 的 BEGIN READ ONLY、other admin 隔離、manager/agent forged role 拒絕、duplicate readback、partial→complete→unknown 已通過（1/1、0skip）；admin15/15、daily37/37、actual synthetic browser30/30、typecheck/scoped lint/build exit0。確定核對後清除 tab key；沒有 provider redispatch。此功能仍依賴已核實 callback；live login/production release 仍未驗，13/19 isolated PASS、6/19 BLOCKED_EXTERNAL、0/3 MONITORING 不變。精確 commit／hosted CI 在 PR208 記錄。
+
+
+### T9 最後成功／最新故障續作
+
+來源卡保留source最近一次有成功狀態/完成時間的publication；後來failed/cancelled/unknown/pending不清空時間，也不改30h accepted full ingestion的stale。明確rejected dispatch保存的failed/finished_at在來源卡及durable history都可見；不完整結果仍unknown。原receipt不當公開證據。兩組正向RED→GREEN：admin17/17、daily37/37、actualReact/CSS32/32synthetic、realdisposableSQL1/1（0skip），typecheck/scoped lint exit0。SQL只讀核對及EXPLAIN、1003rows/7次p50=316.4ms/p95=397.3ms，是隔離環境測量。先前localhost navigation30s timeout保留，無放寬timeout/斷言；後續重跑通過，不冒稱正式手機NFR。19case/live gate及0/3MONITORING不變，exact SHA/新CI在PR208。
+
+
+T9 Linux CI36871635624的日期assertion漏了香港timezone，UTC runner預期01:00、product正確09:00。Windows強制UTC browser後同樣RED；reference expectation補明確Asia/Hong_Kong，保留UTC context、32/32PASS／0skip／no provider/DB writes。沒有把product改成UTC，也未放寬保留歷史成功/失敗/refresh的斷言。新CI結果在PR208，19case與production gates仍不變。
+
+
+### T10 撤盤 timeout／reload 續作
+
+RED實際browser證明整頁刷新遺失原key/核對按鈕。現於apply前保存actor隔離的key/source，刷新後unknown仍鎖；只有confirmed readback清除。Storage失敗或壞紀錄不送apply。42/42synthetic桌面/手機PASS；realdisposableSQL1/1、0skip（BEGIN READ ONLY核對lost COMMIT、duplicate、另一manager無結果、forged agent拒絕、batch數不變）；withdrawal5/5/typecheck/scopedlint PASS。Synthetic Property.hk-source恢復案例只驗UI storage，未啟用其absence或證明live來源。舊schema/writer/flags及19case分母不變，正式角色登入/release仍BLOCKED_EXTERNAL，0/3MONITORING。
+
+
+### T9 提交紀錄保存失敗續作
+
+RED browser保存失敗仍request1≠0；現於保存成功前不dispatch/replay，pending恢復完成前、非法舊key/缺actor/Storage失敗都鎖新提交。46/46synthetic browser/admin17/17/typecheck/scopedlint PASS。Known server結果若key清除失敗仍保留原key，不釋放未知鎖。只改UI persistence，server role/writer/native proof未變；沒有正式來源/登入/排程驗收升級，19case分母及0/3MONITORING維持。
+
+
+### T10 失敗區間判斷續作
+
+Actual Neon RED重現failed dispatch/stages={}卻allowed。現依原scraped_at界定區間，definite failed dispatch、重疊failedrun、較早未解決run及採集後/accepted之前的失敗都阻擋；完整終結且在兩觀察以前或另一source的失敗不會誤擋。PGlite query12nodes（6top-level+6subtest）PASS；其他read ports是synthetic。Full verifieddisposableNeon1/1PASS/0skip、122.0s，舊preview對新failureblocked/actualactive保持。Original writer/IDs/aliases/24h/36h/20cap/rule-v1/Property.hk absenceoff保留。Connector cleanup522後，verifieddedicatedconnection唯讀確認db/branch/properties0/schemas[]。新UIcopy驗證進行中；19case及正式release/monitoring分母不變。
+
+### T10 繁中狀態與 UI fixture 續作
+
+中文核實狀態 actualbrowser RED count0≠1，現日常列顯示「待逐盤核實／未獲批准，暫不下架」，raw approval 收入預設折疊 diagnostics，展開仍可查核；沒有更改 allowed/角色/撤盤 rules。兩次原 Vite dev fixture first-page30s timeout 保留為FAIL。Harness先 fresh build 真實 TSX/CSS，再在 loopback preview 查互動，config/env不載入、provider/DB0；原30s timeout/UTC context/46 scenarios不放寬。新built fixture46/46PASS、0skip、compile5.46s，中文及diagnostics可見性assertion通過、390px screenshot已自審。Scoped lint/diffcheck/fulltypecheck exit0。此層是synthetic ports的actualReact/CSS，不是production登入或startup效能證據；13/19 isolated PASS、6/19 requiredliveBLOCKED_EXTERNAL及0/3MONITORING維持。Exact SHA/new hosted CI記PR208。

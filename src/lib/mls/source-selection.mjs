@@ -48,6 +48,26 @@ const MATERIAL = [
   "bedrooms",
   "bathrooms",
 ];
+function equivalentPropertyhk(sources) {
+  const first = sources[0];
+  return Boolean(
+    first?.unit_key &&
+    first.source === "propertyhk" &&
+    ["sale", "rent"].includes(first.deal_type) &&
+    ["active", "delisted"].includes(first.source_status) &&
+    sources.every(
+      (s) =>
+        s.source === "propertyhk" &&
+        s.unit_key === first.unit_key &&
+        s.deal_type === first.deal_type &&
+        s.source_status === first.source_status &&
+        (s.source_status_reason ?? null) === (first.source_status_reason ?? null) &&
+        FIELDS.every(
+          (k) => canonicalJson(s.fields?.[k] ?? null) === canonicalJson(first.fields?.[k] ?? null),
+        ),
+    ),
+  );
+}
 function primaryAdvertisement(sources) {
   const all = [...sources].sort((a, b) =>
     String(a.external_listing_id).localeCompare(String(b.external_listing_id)),
@@ -105,6 +125,35 @@ export function chooseRelationship(record, existing, candidates = []) {
       )
       .map((c) => c.property_id),
   );
+  if (
+    record.source === "propertyhk" &&
+    record.exactMatchEligible &&
+    sameSourceTargets.size === 1 &&
+    !candidates.some((c) => c.source !== record.source && sameSourceTargets.has(c.property_id)) &&
+    [...sameSourceTargets][0] &&
+    equivalentPropertyhk([
+      {
+        source: record.source,
+        unit_key: record.unitKey,
+        deal_type: record.dealType,
+        fields: record.fields,
+        source_status: record.sourceStatus,
+        source_status_reason: record.sourceStatusReason,
+      },
+      ...candidates.filter(
+        (c) =>
+          c.source === record.source &&
+          c.unit_key === record.unitKey &&
+          c.deal_type === record.dealType,
+      ),
+    ])
+  )
+    return {
+      propertyId: [...sameSourceTargets][0],
+      reason: "equivalent_propertyhk_v1",
+      holdProjection: false,
+      unitKey: record.unitKey,
+    };
   if (record.unitKey && sameSourceTargets.size)
     return {
       propertyId: null,
@@ -146,7 +195,7 @@ export function selectSourceFields(sources) {
           !s.raw_identity?.agency_property_no ||
           (s.policy_config && s.policy_config.company_number_identity?.approved !== true),
       )) ||
-    secondaries.length > 1 ||
+    (secondaries.length > 1 && !equivalentPropertyhk(secondaries)) ||
     [...primaries, ...secondaries].some((s) => !["active", "delisted"].includes(s.source_status))
   )
     return {
@@ -158,7 +207,9 @@ export function selectSourceFields(sources) {
       lifecycle: null,
     };
   const primary = primaryChoice.winner,
-    secondary = secondaries[0],
+    secondary = [...secondaries].sort((a, b) =>
+      String(a.external_listing_id).localeCompare(String(b.external_listing_id)),
+    )[0],
     values = {},
     provenance = {},
     conflicts = [],

@@ -7,6 +7,7 @@ export type SnapshotGate = {
 };
 export type AppliedBaseline = {
   fullCount: number;
+  branchCounts?: Record<string, number>;
   fullReceiptId?: string | null;
   source?: string;
   scopeId?: string;

@@ -957,8 +957,13 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     destinations.length,
     `duplicate sidebar destination: ${destinations.join(", ")}`,
   );
-  // Includes the two reviewed WhatsApp workflow management screens.
-  assert.equal(destinations.length, 16);
+  // Includes the reviewed source-sync workspace without removing duplicate protection.
+  assert.equal(destinations.length, 17);
+  assert.ok(destinations.includes("/admin/property-sync"));
+  const syncEntry = block.match(/to: "\/admin\/property-sync",([\s\S]*?)\}/)?.[1];
+  assert.ok(syncEntry, "source-sync has one explicit entry");
+  assert.match(syncEntry, /label: "盤源同步"/);
+  assert.match(syncEntry, /roles: EDITORS/);
   assert.ok(destinations.includes("/admin/whatsapp-links"));
   assert.ok(destinations.includes("/admin/whatsapp-settings"));
   assert.ok(destinations.includes("/admin/analytics"));

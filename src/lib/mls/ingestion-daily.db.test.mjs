@@ -1,3 +1,4 @@
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -10,7 +11,7 @@ test(
   "daily difference and source lifecycle on approved disposable isolated schema",
   { skip: !url },
   async (t) => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     assert.notEqual(url, process.env.DATABASE_URL_UNPOOLED);
     const schema = "daily_" + randomUUID().replaceAll("-", "");
     const c = new Client({ connectionString: url });

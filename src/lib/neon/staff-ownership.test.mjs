@@ -191,22 +191,28 @@ function staffForeignKeysInMigrations(migrationsDir = DEFAULT_MIGRATIONS_DIR) {
       const alterMatch = line.match(/^ALTER TABLE\s+([a-zA-Z0-9_]+)/i);
       if (alterMatch) currentTable = alterMatch[1];
 
-      if (!line.includes("REFERENCES staff_users")) continue;
+      const references = [...line.matchAll(/\bREFERENCES\s+staff_users\b/gi)];
+      if (!references.length) continue;
 
-      // The column name is whatever token sits right before the UUID type.
-      const tokens = line.split(/\s+/);
-      const uuidIndex = tokens.findIndex((token) => token.toLowerCase() === "uuid");
-      const column = uuidIndex > 0 ? tokens[uuidIndex - 1] : null;
-      if (!currentTable || !column) {
+      // Resolve each UUID declaration within its own comma-delimited column.
+      // Taking the first UUID on a compact line would relabel the row's id as
+      // the actor and omit any subsequent staff FK. Fail closed if a reference
+      // cannot be resolved, retaining the schema-classification guard below.
+      const columns = [
+        ...line.matchAll(
+          /\b([a-zA-Z_][a-zA-Z0-9_]*)\s+UUID\b[^,;]*?\bREFERENCES\s+staff_users\b/gi,
+        ),
+      ];
+      if (!currentTable || columns.length !== references.length) {
         throw new Error(
-          `staffForeignKeysInMigrations: could not resolve a table/column for a ` +
+          `staffForeignKeysInMigrations: could not resolve every table/column for a ` +
             `"REFERENCES staff_users" line in ${file}: "${line}". The parser in ` +
             `staff-ownership.test.mjs expects "<column> UUID ... REFERENCES staff_users" inside a ` +
             `CREATE TABLE or ALTER TABLE statement -- fix the parser (or the migration) rather than ` +
             `silently skipping this line.`,
         );
       }
-      refs.push({ table: currentTable, column, file });
+      for (const match of columns) refs.push({ table: currentTable, column: match[1], file });
     }
   }
   return refs;
@@ -246,6 +252,46 @@ test("staffForeignKeysInMigrations resolves a same-line ALTER TABLE ADD COLUMN a
     assert.ok(
       !refs.some((ref) => ref.column === "legacy_owner_id"),
       "a commented-out REFERENCES staff_users line must never be treated as a real reference",
+    );
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("staffForeignKeysInMigrations resolves every compact UUID reference without relabelling row identities", () => {
+  const fixtureDir = mkdtempSync(join(tmpdir(), "staff-ownership-compact-"));
+  try {
+    writeFileSync(
+      join(fixtureDir, "0001_compact.sql"),
+      [
+        "CREATE TABLE IF NOT EXISTS previews (",
+        " id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_id uuid NOT NULL REFERENCES staff_users(id),",
+        " owner_id UUID REFERENCES staff_users(id),approved_by UUID REFERENCES staff_users(id)",
+        ");",
+        "CREATE TABLE batches (",
+        " idempotency_key uuid UNIQUE NOT NULL,actor_id uuid NOT NULL REFERENCES staff_users(id),reason text NOT NULL",
+        ");",
+      ].join("\n"),
+    );
+    assert.deepEqual(
+      staffForeignKeysInMigrations(fixtureDir).map(({ table, column }) => `${table}.${column}`),
+      ["previews.actor_id", "previews.owner_id", "previews.approved_by", "batches.actor_id"],
+    );
+  } finally {
+    rmSync(fixtureDir, { recursive: true, force: true });
+  }
+});
+
+test("staffForeignKeysInMigrations fails closed on an unresolved compact reference", () => {
+  const fixtureDir = mkdtempSync(join(tmpdir(), "staff-ownership-unresolved-"));
+  try {
+    writeFileSync(
+      join(fixtureDir, "0001_unresolved.sql"),
+      "CREATE TABLE widgets (id UUID PRIMARY KEY, owner_id TEXT REFERENCES staff_users(id));",
+    );
+    assert.throws(
+      () => staffForeignKeysInMigrations(fixtureDir),
+      /could not resolve every table\/column/,
     );
   } finally {
     rmSync(fixtureDir, { recursive: true, force: true });

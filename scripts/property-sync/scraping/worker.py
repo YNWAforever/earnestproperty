@@ -179,7 +179,7 @@ def http_request(url, data=None, token=None):
 
 
 class Fetcher:
-    def __init__(self, origin, paths, fixtures=None, sleep=time.sleep):
+    def __init__(self, origin, paths, fixtures=None, sleep=time.sleep, checkpoint=None):
         self.origin = origin
         self.paths = paths
         self.fixtures = fixtures
@@ -187,6 +187,7 @@ class Fetcher:
         self.policy = None
         self.last = 0
         self.evidence = []
+        self.checkpoint = checkpoint
 
     def get(self, url, robots=False):
         checked_url(url, self.origin, None if robots else self.paths)
@@ -223,6 +224,8 @@ class Fetcher:
                         )
                         self.last = time.monotonic()
                         status, headers, body = http_request(active)
+                    if self.checkpoint:
+                        self.checkpoint.response(active, status, attempt + 1, body)
                     self.evidence.append(
                         {
                             "url": active,
@@ -546,6 +549,9 @@ def validate_config(source, cfg):
             or not cfg.get("company_license")
         ):
             raise WorkerError("configuration_identity")
+        offers = cfg.get("offer_values", {})
+        if not isinstance(offers, dict) or any(not isinstance(k,str) or not isinstance(v,list) or not v or len(v)!=len(set(v)) or any(x not in ('sale','rent') for x in v) for k,v in offers.items()):
+            raise WorkerError("configuration_offer_values")
         for url in cfg["branch_urls"].values():
             if "{page}" not in url:
                 raise WorkerError("configuration_pagination")
@@ -576,20 +582,13 @@ def parse_property_index(html, branch, cfg):
             raise WorkerError("missing_identity_link")
         url = urljoin(cfg["origin"], node["href"])
         checked_url(url, cfg["origin"], cfg["allowed_paths"])
-        deal = field("deal_type") if sel.get("deal_type") else cfg.get("deal_type")
-        if deal not in ("sale", "rent"):
+        value = field("deal_type") if sel.get("deal_type") else cfg.get("deal_type")
+        deals = cfg.get("offer_values", {}).get(value, [value])
+        if not isinstance(deals,list) or not deals or any(deal not in ('sale','rent') for deal in deals):
             raise WorkerError("invalid_deal_type")
-        records.append(
-            {
-                "property_id": ident,
-                "raw_property_id": raw,
-                "source_url": url,
-                "title": field("title"),
-                "deal_type": deal,
-                "branch_code": branch,
-                "branch_memberships": [branch],
-            }
-        )
+        for deal in deals:
+            records.append({"property_id":ident,"raw_property_id":raw,"source_url":url,
+                            "title":field("title"),"deal_type":deal,"branch_code":branch,"branch_memberships":[branch]})
     terminal = not records and bool(s.select_one(sel["empty"]))
     if not records and not terminal:
         raise WorkerError("unknown_empty")
@@ -623,11 +622,13 @@ def parse_property_detail(html, record, cfg):
     for k in cfg.get("required_detail_fields", []):
         if r.get(k) is None:
             raise WorkerError("missing_required_detail")
+    from .publication import configured_publication_content
+    r["publication"] = configured_publication_content(root, cfg)
     r["raw_payload"] = {"detail_fields": raw}
     return r
 
 
-def crawl(source, cfg, fixtures=None):
+def crawl(source, cfg, fixtures=None, checkpoint=None):
     validate_config(source, cfg)
     origin = "https://www.28hse.com" if source == "28hse" else cfg["origin"]
     paths = (
@@ -635,8 +636,11 @@ def crawl(source, cfg, fixtures=None):
         if source == "28hse"
         else cfg["allowed_paths"]
     )
-    fetch = Fetcher(origin, paths, fixtures)
+    fetch = Fetcher(origin, paths, fixtures, checkpoint=checkpoint)
     pages = []
+    def save_page(evidence):
+        pages.append(evidence)
+        if checkpoint: checkpoint.page(evidence)
     accepted = {}
     rejected = []
     completed = []
@@ -668,7 +672,7 @@ def crawl(source, cfg, fixtures=None):
                 evidence["advertised_total"] = total
                 if terminal:
                     evidence.update(status="terminal", details_complete=True, observed_distinct_total=len(found))
-                    pages.append(evidence)
+                    save_page(evidence)
                     completed.append(scope)
                     break
                 signature = tuple(evidence["ids"])
@@ -736,14 +740,14 @@ def crawl(source, cfg, fixtures=None):
                         r["occurrences"] = [occurrence]
                         accepted[key] = r
                 evidence.update(status="listings", details_complete=True)
-                pages.append(evidence)
+                save_page(evidence)
             except WorkerError as e:
                 evidence["status"] = (
                     "blocked"
                     if str(e) in ("blocked", "robots_disallowed")
                     else "parser_error"
                 )
-                pages.append(evidence)
+                save_page(evidence)
                 errors.append({"scope": scope, "page": page, "reason": str(e)})
                 break
         else:
@@ -756,7 +760,7 @@ def crawl(source, cfg, fixtures=None):
     complete = len(completed) == (2 if source == "28hse" else 3) and not errors
     meta = {
         "schema_version": "2.0",
-        "run_id": str(uuid.uuid4()),
+        "run_id": checkpoint.data["runId"] if checkpoint else str(uuid.uuid4()),
         "scope_id": "agent:540" if source == "28hse" else "branches:EPW,EPS,EPT",
         "policy_version": "no-hermes-v2",
         "parser_version": "python-v2.2" if source == "28hse" else "python-v2.0",
@@ -789,10 +793,43 @@ def ad_keys(payload):
     }
 
 
+def collection_page_proof(payload):
+    expected = ['sale', 'rent'] if payload.get('source') == '28hse' else BRANCHES
+    pages = payload.get('meta', {}).get('pages')
+    if not isinstance(pages, list) or any(not isinstance(p, dict) or p.get('scope') not in expected for p in pages):
+        return False
+    for scope in expected:
+        scoped = [p for p in pages if p.get('scope') == scope]
+        if not scoped or [p.get('page') for p in scoped] != list(range(1, len(scoped)+1)):
+            return False
+        if scoped[-1].get('status') != 'terminal' or scoped[-1].get('ids') != []:
+            return False
+        seen = set()
+        signatures = set()
+        for page in scoped:
+            ids = page.get('ids')
+            if page.get('details_complete') is not True or not isinstance(ids, list) or any(not isinstance(x,str) for x in ids):
+                return False
+            if page is not scoped[-1]:
+                if page.get('status') != 'listings' or not ids or tuple(sorted(set(ids))) in signatures:
+                    return False
+                signatures.add(tuple(sorted(set(ids))))
+                seen.update(ids)
+        rows = {r.get('property_id') for r in payload.get('listings',[]) if
+                (r.get('deal_type') == scope if payload.get('source') == '28hse' else
+                 scope in r.get('branch_memberships',[r.get('branch_code')]))}
+        rejected = {r.get('property_id') for r in payload.get('meta',{}).get('rejected_records',[]) if r.get('scope') == scope}
+        if seen != rows | rejected:
+            return False
+    return True
+
+
 def gate(payload, baseline):
     reasons = []
     m = payload["meta"]
     count = len(ad_keys(payload))
+    if payload.get("source") == "propertyhk" and (not collection_page_proof(payload) or m.get("worker_rejected_count",0)):
+        reasons.append("incomplete_branch_evidence")
     if not m.get("crawl_complete") or m.get("pages_failed", 0):
         reasons.append("incomplete_crawl")
     if not count:
@@ -1095,12 +1132,16 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
         baseline = (
             json.loads(baseline_path.read_bytes()) if baseline_path.exists() else None
         )
-        payload, evidence = crawl(source, cfg, fixtures)
+        from scraping.checkpoint import Checkpoint
+        run_id = str(uuid.uuid4())
+        checkpoint = Checkpoint(root / "checkpoints" / source / scope / run_id, source=source, scope="agent:540" if source == "28hse" else "branches:EPW,EPS,EPT", run_id=run_id)
+        payload, evidence = crawl(source, cfg, fixtures, checkpoint=checkpoint)
         if source == "propertyhk":
             payload["id_scope"] = cfg["id_scope"]
         decision = gate(payload, baseline)
         path = save_snapshot(root, payload, evidence)
         (path / "gate.json").write_bytes(frozen(decision))
+        checkpoint.finish(decision)
         if source == "28hse":
             changes = diff(
                 baseline["listings"] if baseline else [], payload["listings"]

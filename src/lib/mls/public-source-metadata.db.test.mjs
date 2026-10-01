@@ -1,3 +1,4 @@
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -8,7 +9,7 @@ test(
   "public group metadata requires current contact provenance on real SQL",
   { skip: !url },
   async () => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     assert.notEqual(url, process.env.DATABASE_URL_UNPOOLED);
     const client = new Client({ connectionString: url });
     client.neonConfig.webSocketConstructor = globalThis.WebSocket;

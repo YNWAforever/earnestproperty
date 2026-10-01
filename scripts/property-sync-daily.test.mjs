@@ -1,103 +1,229 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 const path = new URL("../.github/workflows/property-sync-daily.yml", import.meta.url);
-test("daily property workflow remains gated, serialized, immutable and narrowly scoped", () => {
-  const y = readFileSync(path, "utf8");
-  for (const value of [
-    "workflow_dispatch:",
-    "cancel-in-progress: false",
-    "PROPERTY_SYNC_DAILY_ENABLED",
-    "PROPERTY_SYNC_POLICY_APPROVED",
-    "= python-v2.2",
-    "PROPERTY_SYNC_EXPECTED_BRANCH",
-    'python-version: "3.14"',
-    'node-version: "24"',
-    "--dry-run",
-    "replay_28hse_sync.py",
-    "retention-days: 7",
-    "retention-days: 90",
-    "if: always()",
-    "--apply",
-    "agent:540",
-  ])
-    assert.ok(y.includes(value), value);
-  assert.match(y, /^\s+schedule:/m);
-  assert.equal((y.match(/secrets\.DATABASE_URL_UNPOOLED/g) || []).length, 2);
-  assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(y));
-  assert.ok(
-    y.indexOf("Collect without database access") < y.indexOf("secrets.DATABASE_URL_UNPOOLED"),
+async function workflow() {
+  const { createRequire } = await import("node:module");
+  return createRequire(import.meta.url)("js-yaml").load(readFileSync(path, "utf8"));
+}
+test("daily property workflow retains gated scheduling, privacy, branch and policy checks", async () => {
+  const w = await workflow();
+  assert.deepEqual(w.on.schedule, [{ cron: "17 20 * * *" }]);
+  assert.equal(w.concurrency.group, "property-sync-agent-540");
+  assert.equal(w.concurrency["cancel-in-progress"], false);
+  assert.match(w.jobs.preflight.if, /PROPERTY_SYNC_DAILY_ENABLED/);
+  assert.match(w.env.GH_REPO, /PROPERTY_SYNC_EVIDENCE_REPO/);
+  assert.match(w.env.GH_TOKEN, /PROPERTY_SYNC_EVIDENCE_TOKEN/);
+  const gate = w.jobs.preflight.steps.find((s) => s.id === "evidence-gate");
+  assert.match(gate.run, /daily_artifacts.py private/);
+  assert.match(gate.run, /--ref "\$GITHUB_REF" --branch "\$EXPECTED_BRANCH"/);
+  assert.match(gate.run, /= python-v2.2/);
+  const text = JSON.stringify(w);
+  assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(text));
+  for (const job of Object.values(w.jobs))
+    for (const step of job.steps.filter((s) => s.uses === "actions/upload-artifact@v4")) {
+      assert.match(step.if, /github.event.repository.private == true/);
+      assert.equal(step["continue-on-error"], true);
+    }
+});
+test("DB and media credentials are restricted to the intended stages and guarded apply steps", async () => {
+  const w = await workflow();
+  assert.ok(!w.env.DATABASE_URL_UNPOOLED);
+  assert.ok(!w.env.BLOB_READ_WRITE_TOKEN);
+  const dbSteps = [];
+  for (const [name, job] of Object.entries(w.jobs)) {
+    assert.ok(!job.env?.DATABASE_URL_UNPOOLED);
+    for (const step of job.steps) {
+      if (step.env?.DATABASE_URL_UNPOOLED) dbSteps.push({ name, step });
+      if (step.env?.BLOB_READ_WRITE_TOKEN) assert.equal(name, "publish");
+    }
+  }
+  assert.deepEqual(
+    dbSteps.map((s) => s.name),
+    ["preflight", "ingest", "publish", "record"],
   );
+  assert.match(dbSteps[0].step.run, /read-sync-authority/);
+  assert.ok(!/--apply/.test(dbSteps[0].step.run));
+  assert.equal(dbSteps[1].step.if, "endsWith(env.MODE, 'apply')");
+  assert.ok(
+    dbSteps[1].step.run.indexOf("verify-daily-target.mjs") <
+      dbSteps[1].step.run.indexOf("replay_28hse_sync.py"),
+  );
+  assert.match(w.jobs.publish.if, /needs.collect.result == 'success'/);
+  assert.match(w.jobs.publish.if, /publication-only/);
+  assert.match(w.jobs.record.if, /PROPERTY_SYNC_OBSERVABILITY_ENABLED/);
+  assert.match(dbSteps[3].step.run, /record-sync-execution/);
+  assert.ok(
+    !/crawl|run_28hse_sync|publish-daily-listings|apply-source-snapshot/.test(dbSteps[3].step.run),
+  );
+  assert.ok(dbSteps[3].step.env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
+});
+test("accepted snapshot chronology and private failure evidence survive the staged handoff", async () => {
+  const w = await workflow();
+  const apply = w.jobs.ingest.steps.find((s) => s.env?.DATABASE_URL_UNPOOLED);
+  assert.match(
+    apply.run,
+    /daily_artifacts.py name --request "\$PAYLOAD" --run-id "\$GITHUB_RUN_ID" --attempt "\$GITHUB_RUN_ATTEMPT"/,
+  );
+  assert.match(apply.run, /tar -czf "\$asset" baseline/);
+  const failure = w.jobs.collect.steps.find(
+    (s) => s.name === "Preserve interrupted private checkpoints",
+  );
+  assert.match(failure.if, /failure\(\).*cancelled\(\)/);
+  assert.match(failure.run, /unresolved-/);
+  const pin = w.jobs.collect.steps.find(
+    (s) => s.name === "Freeze and pin immutable request and raw before database access",
+  );
+  assert.match(pin.run, /daily_artifacts.py verify/);
+  assert.match(pin.run, /daily_artifacts.py pin/);
+  const replay = w.jobs.collect.steps.find(
+    (s) => s.name === "Download exact frozen replay evidence",
+  );
+  assert.match(replay.run, /\^request-\[0-9\]/);
+  assert.ok(!/run_28hse_sync/.test(replay.run));
 });
 
-test("database credential exists only on the gated apply step", async () => {
+test("staged workflow budgets isolate collector and reuse immutable evidence downstream", async () => {
   const { createRequire } = await import("node:module");
-  const require = createRequire(import.meta.url);
-  const workflow = require("js-yaml").load(readFileSync(path, "utf8"));
-  assert.equal(workflow.concurrency.group, "property-sync-agent-540");
-  assert.equal(workflow.concurrency["cancel-in-progress"], false);
-  assert.match(workflow.jobs.daily.if, /PROPERTY_SYNC_DAILY_ENABLED == 'true'/);
-  const steps = workflow.jobs.daily.steps;
-  const apply = steps.filter((step) => step.env?.DATABASE_URL_UNPOOLED);
-  assert.equal(apply.length, 2);
-  assert.ok(apply.every((step) => step.if === "endsWith(env.MODE, 'apply')"));
+  const w = createRequire(import.meta.url)("js-yaml").load(readFileSync(path, "utf8"));
+  for (const [stage, budget] of Object.entries({
+    collect: 120,
+    ingest: 20,
+    publish: 45,
+    verify: 10,
+  })) {
+    assert.ok(w.jobs[stage], stage + " job missing");
+    assert.equal(w.jobs[stage]["timeout-minutes"], budget);
+  }
+  const collector = JSON.stringify(w.jobs.collect);
+  assert.ok(!/DATABASE_URL|BLOB_READ_WRITE_TOKEN/.test(collector));
+  for (const stage of ["ingest", "publish"]) {
+    const job = JSON.stringify(w.jobs[stage]);
+    assert.ok(!/run_28hse_sync|crawl_agent|Fetcher|run_propertyhk_sync/.test(job));
+    assert.match(job, /daily_artifacts.py verify/);
+  }
+  assert.ok(w.on.workflow_dispatch.inputs.mode.options.includes("publication-only"));
+  const ingest = JSON.stringify(w.jobs.ingest);
+  assert.match(ingest, /read-sync-authority/);
+});
+
+test("watchdog is independent, read-only and emits no external messages", async () => {
+  const { createRequire } = await import("node:module");
+  const w = createRequire(import.meta.url)("js-yaml").load(
+    readFileSync(
+      new URL("../.github/workflows/property-sync-watchdog.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(w.on.schedule, [{ cron: "15 0 * * *" }]);
+  assert.equal(w.permissions.contents, "read");
+  const job = JSON.stringify(w.jobs);
+  assert.ok(!/--apply|BLOB_READ_WRITE_TOKEN|send-message|email|whatsapp/i.test(job));
+  assert.match(job, /sync-watchdog.mjs/);
+});
+
+test("manual source acceptance uses only disposable credentials and runs DB gates serially", async () => {
+  const { createRequire } = await import("node:module");
+  const w = createRequire(import.meta.url)("js-yaml").load(
+    readFileSync(
+      new URL("../.github/workflows/property-sync-acceptance.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(Object.keys(w.on), ["workflow_dispatch"]);
+  assert.equal(w.permissions.contents, "read");
+  const job = JSON.stringify(w.jobs);
   assert.ok(
-    steps.findIndex((step) => step.name === "Pin accepted full baseline") <
-      steps.findIndex((step) => step.name === "Publish verified imported drafts"),
+    !/DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|PROPERTY_SYNC_WORKFLOW_TOKEN|PROPERTY_SYNC_EVIDENCE_TOKEN/.test(
+      job,
+    ),
   );
-  assert.ok(
-    apply[0].run.indexOf("verify-daily-target.mjs") < apply[0].run.indexOf("replay_28hse_sync.py"),
+  assert.match(job, /ASTRA_TEST_DATABASE_URL/);
+  assert.match(job, /ASTRA_TEST_BRANCH_ID/);
+  assert.match(job, /PROPERTY_SYNC_DB_ACCEPTANCE_ENABLED/);
+  const runSteps = w.jobs.disposable.steps.filter(
+    (s) => s.run && /test:property-sync:.*db/.test(s.run),
   );
-  assert.ok(apply[0].env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
-  assert.equal(apply[0].if, "endsWith(env.MODE, 'apply')");
-  assert.match(
-    apply[0].run,
-    /replay_28hse_sync\.py --payload "\$PAYLOAD" --root daily-output --apply/,
-  );
-  const pinIndex = steps.findIndex(
-    (step) => step.name === "Pin immutable request before database access",
-  );
-  assert.ok(pinIndex < steps.indexOf(apply[0]));
-  assert.ok(!workflow.env?.DATABASE_URL_UNPOOLED);
-  assert.ok(!workflow.jobs.daily.env.DATABASE_URL_UNPOOLED);
+  assert.equal(runSteps.length, 4);
   assert.equal(
-    steps.find((step) => step.name === "Pin unresolved evidence independently of artifact expiry")
-      .if,
-    "failure() && steps.evidence-gate.outcome == 'success'",
-  );
-  assert.match(
-    steps.find((step) => step.name === "Restore last accepted full baseline").run,
-    /daily_artifacts.py unpack/,
+    w.jobs.disposable.env.ASTRA_TEST_DATABASE_CONFIRMED,
+    "${{ vars.ASTRA_TEST_DATABASE_CONFIRMED }}",
   );
 });
 
-test("accepted asset names derive from immutable snapshot chronology", () => {
-  const y = readFileSync(path, "utf8");
-  assert.match(
-    y,
-    /daily_artifacts\.py name --request "\$PAYLOAD" --run-id "\$GITHUB_RUN_ID" --attempt "\$GITHUB_RUN_ATTEMPT"/,
+test("public verification proof is exported only after the real HTTP checker succeeds", async () => {
+  const w = await workflow();
+  const verify = w.jobs.verify;
+  const step = verify.steps.find((item) => item.id === "public-verify");
+  assert.ok(step, "real public verification needs an explicit step identity");
+  assert.equal(
+    verify.outputs.public_verified,
+    "${{ steps.public-verify.outputs.public_verified }}",
   );
-  assert.match(y, /tar -czf "\$asset" baseline/);
-  assert.ok(!y.includes('tar -czf "accepted-$GITHUB_RUN_ID'));
+  assert.match(step.run, /if \[ "\$PUBLICATION_RESULT" = success \]; then/);
+  assert.match(step.run, /set -euo pipefail/);
+  const checkIndex = step.run.indexOf("node scripts/mls/verify-sync-publication.mjs");
+  const proofIndex = step.run.indexOf('echo "public_verified=true" >> "$GITHUB_OUTPUT"');
+  assert.ok(
+    checkIndex >= 0 && proofIndex > checkIndex,
+    "proof must follow the successful real check",
+  );
+  assert.ok(
+    proofIndex < step.run.lastIndexOf("fi"),
+    "proof stays inside publication-success branch",
+  );
+  const summary = verify.steps.find((item) => item.name === "Safe job summary");
+  assert.ok(!summary.run.includes("public_verified=true"));
 });
 
-test("daily collection has one gated HK morning schedule and private durable evidence", async () => {
-  const { createRequire } = await import("node:module");
-  const workflow = createRequire(import.meta.url)("js-yaml").load(readFileSync(path, "utf8"));
-  assert.deepEqual(workflow.on.schedule, [{ cron: "17 20 * * *" }]);
-  const job = workflow.jobs.daily;
-  assert.match(job.env.GH_REPO, /PROPERTY_SYNC_EVIDENCE_REPO/);
-  assert.match(job.env.GH_TOKEN, /PROPERTY_SYNC_EVIDENCE_TOKEN/);
-  const steps = job.steps;
-  const gate = steps.find(
-    (s) => s.name === "Validate operator gates and private evidence destination",
-  );
-  assert.match(gate.run, /repos\/\$GH_REPO.*\.private/);
-  const pin = steps.find((s) => s.name === "Pin evidence independently of Actions artifact quota");
-  assert.equal(pin.if, "always() && steps.evidence-gate.outcome == 'success'");
-  assert.match(pin.run, /gh release upload property-sync-evidence/);
-  for (const step of steps.filter((s) => s.uses === "actions/upload-artifact@v4")) {
-    assert.match(step.if, /github.event.repository.private == true/);
-    assert.equal(step["continue-on-error"], true);
+test("actual verification shell never exports proof on a skipped or failed check", async () => {
+  const w = await workflow();
+  const step = w.jobs.verify.steps.find((item) => item.id === "public-verify");
+  const directory = mkdtempSync(join(tmpdir(), "property-sync-verification-"));
+  const bash =
+    [process.env.PROPERTY_SYNC_TEST_BASH, "C:/Program Files/Git/bin/bash.exe"]
+      .filter(Boolean)
+      .find((candidate) => existsSync(candidate)) ?? "bash";
+  const stubs = `
+    gh() { return 0; }
+    node() { echo checked >> "$CHECK_CALLS"; return "$CHECK_EXIT"; }
+  `;
+  try {
+    for (const [publication, checkExit, expectedExit, checked] of [
+      ["failure", "0", 0, false],
+      ["skipped", "0", 0, false],
+      ["success", "1", 1, true],
+      ["success", "0", 0, true],
+    ]) {
+      const output = join(directory, `${publication}-${checkExit}.outputs`);
+      const calls = join(directory, `${publication}-${checkExit}.calls`);
+      const result = spawnSync(bash, ["-c", stubs + step.run], {
+        cwd: directory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          BASH_ENV: "",
+          PUBLICATION_RESULT: publication,
+          GITHUB_RUN_ID: "123",
+          GITHUB_RUN_ATTEMPT: "1",
+          GITHUB_OUTPUT: output.replaceAll("\\", "/"),
+          CHECK_CALLS: calls.replaceAll("\\", "/"),
+          CHECK_EXIT: checkExit,
+        },
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, expectedExit, result.stderr);
+      assert.equal(existsSync(calls), checked);
+      assert.equal(
+        existsSync(output) ? readFileSync(output, "utf8").trim() : "",
+        publication === "success" && checkExit === "0" ? "public_verified=true" : "",
+      );
+    }
+  } finally {
+    assert.ok(directory.startsWith(join(tmpdir(), "property-sync-verification-")));
+    rmSync(directory, { recursive: true, force: true });
   }
 });

@@ -146,10 +146,23 @@ export function evaluateSnapshotGate(batch, baseline, policy = {}) {
         if (!discovered.has(cleanId(r.raw.property_id))) reasons.push("missing_record_evidence");
     }
   }
+  if (batch.source === "propertyhk" && baseline) {
+    for (const branch of BRANCHES) {
+      const previousCount = baseline.branchCounts?.[branch];
+      const count = new Set(
+        batch.records.filter((r) => r.branches.includes(branch)).map((r) => r.advertisementId),
+      ).size;
+      if (!Number.isSafeInteger(previousCount) || previousCount < 0)
+        reasons.push("branch_baseline_unverified");
+      else if (count * 10 < previousCount * 7) reasons.push("branch_count_drop_" + branch);
+    }
+  }
   const previous = baseline?.fullCount;
   if (previous > 0 && batch.advertisementCount * 10 < previous * 7)
     reasons.push("count_drop_exceeds_30_percent");
   if (batch.advertisementCount === 0) reasons.push("zero_inventory_requires_review");
+  if (batch.source === "propertyhk" && (batch.rejects.length || m.worker_rejected_count))
+    reasons.push("incomplete_branch_details");
   const allowed = reasons.length === 0;
   const full = allowed && !batch.rejects.length && m.worker_rejected_count === 0;
   return {

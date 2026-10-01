@@ -1,0 +1,101 @@
+# Synthetic real-SQL acceptance only. No source crawl or production credentials.
+name: Disposable property sync acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: property-sync-disposable-acceptance
+  cancel-in-progress: false
+jobs:
+  disposable:
+    if: vars.PROPERTY_SYNC_DB_ACCEPTANCE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ASTRA_TEST_DATABASE_URL: ${{ secrets.ASTRA_TEST_DATABASE_URL }}
+      ASTRA_TEST_BRANCH_ID: ${{ vars.ASTRA_TEST_BRANCH_ID }}
+      ASTRA_TEST_DATABASE_CONFIRMED: ${{ vars.ASTRA_TEST_DATABASE_CONFIRMED }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Verify disposable database before any fixture test
+        run: |
+          node --input-type=module -e '
+          import { assertDisposableNeonTestTarget } from "./src/lib/neon/disposable-test-target.mjs";
+          if (!process.env.ASTRA_TEST_DATABASE_URL) throw Error("DISPOSABLE_DATABASE_REQUIRED_NO_SKIPPED_PASS");
+          await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
+          '
+      - name: Sequential ingestion and source gates
+        run: npm run test:property-sync:db
+      - name: Sequential publication and next-ingestion readback
+        run: npm run test:property-sync:publication:db
+      - name: Authenticated metadata and controlled operation reservations
+        run: npm run test:property-sync:admin:db
+      - name: Reviewed withdrawal competing actors and public readback
+        run: npm run test:property-sync:withdrawal:db
+      - name: Safe acceptance summary
+        if: always()
+        run: |
+          echo 'Disposable synthetic SQL tests only. Live provider acceptance and three scheduled production cycles are separate gates.' >> "$GITHUB_STEP_SUMMARY"
+
+  private_regression:
+    # Optional explicit private-fixture acceptance; no public artifact upload.
+    needs: disposable
+    if: vars.PROPERTY_SYNC_PRIVATE_REGRESSION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ASTRA_TEST_DATABASE_URL: ${{ secrets.ASTRA_TEST_DATABASE_URL }}
+      ASTRA_TEST_BRANCH_ID: ${{ vars.ASTRA_TEST_BRANCH_ID }}
+      ASTRA_TEST_DATABASE_CONFIRMED: ${{ vars.ASTRA_TEST_DATABASE_CONFIRMED }}
+      PROPERTY_SYNC_PRIVATE_REGRESSION_REQUEST: .private-sync-evidence/regression-28hse-20261001-request.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Read only the exact private regression request
+        env:
+          GH_TOKEN: ${{ secrets.PROPERTY_SYNC_PRIVATE_REGRESSION_READ_TOKEN }}
+          GH_REPO: ${{ vars.PROPERTY_SYNC_EVIDENCE_REPO }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module -e '
+          if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(process.env.GH_REPO || "") || !process.env.GH_TOKEN) throw Error("PRIVATE_FIXTURE_CAPABILITY_REQUIRED");
+          '
+          mkdir -p .task-logs .private-sync-evidence
+          gh api "repos/$GH_REPO" > .task-logs/private-repository.json
+          node --input-type=module -e '
+          import {readFileSync} from "node:fs";
+          if (JSON.parse(readFileSync(".task-logs/private-repository.json")).private !== true) throw Error("PRIVATE_DESTINATION_REQUIRED");
+          '
+          gh api "repos/$GH_REPO/releases/tags/property-sync-evidence" > .task-logs/private-release.json
+          node --input-type=module -e '
+          import {readFileSync} from "node:fs";
+          const assets=JSON.parse(readFileSync(".task-logs/private-release.json")).assets;
+          const matches=assets.filter(a=>a.name === "regression-28hse-20261001-request.json");
+          if (matches.length!==1 || matches[0].size!==414631 || matches[0].state!=="uploaded") throw Error("PRIVATE_FIXTURE_SIZE_MISMATCH");
+          '
+          gh release download property-sync-evidence --pattern regression-28hse-20261001-request.json --dir .private-sync-evidence
+      - name: Verify bytes and disposable target before any fixture writes
+        run: |
+          node --input-type=module -e '
+          import {readFileSync,lstatSync} from "node:fs";
+          import {createHash} from "node:crypto";
+          import {assertDisposableNeonTestTarget} from "./src/lib/neon/disposable-test-target.mjs";
+          const path=process.env.PROPERTY_SYNC_PRIVATE_REGRESSION_REQUEST,stat=lstatSync(path);
+          if (!stat.isFile() || stat.isSymbolicLink() || stat.size!==414631) throw Error("PRIVATE_FIXTURE_SIZE_MISMATCH");
+          if (createHash("sha256").update(readFileSync(path)).digest("hex")!=="b458d085b60aeb241006daf0f11919a54a5e9ef490528854b594d522cac3bd55") throw Error("PRIVATE_FIXTURE_HASH_MISMATCH");
+          if (!process.env.ASTRA_TEST_DATABASE_URL) throw Error("DISPOSABLE_DATABASE_REQUIRED_NO_SKIPPED_PASS");
+          await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
+          '
+      - name: Exact original-byte SQL replay
+        run: npm run test:property-sync:private-replay:db

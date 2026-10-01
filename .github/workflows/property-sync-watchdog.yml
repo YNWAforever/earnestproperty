@@ -1,0 +1,25 @@
+name: Property sync read-only watchdog
+on:
+  schedule:
+    # 08:15 Asia/Hong_Kong, independent of collector callbacks.
+    - cron: "15 0 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  health:
+    if: vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Read current full receipt without inventory mutations
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: node scripts/mls/sync-watchdog.mjs >> "$GITHUB_STEP_SUMMARY"

@@ -1,3 +1,4 @@
+import { validatePropertyhkMediaObservation } from "./publication-source-policy.mjs";
 import { ensureMediaVariants } from "../media/remote-variants.mjs";
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
@@ -1299,7 +1300,10 @@ function validateCandidateMarkers(candidate) {
 }
 
 function validateObservation(observation) {
-  const reason = exactObservationQuarantineReason(observation);
+  const reason =
+    observation?.source === "propertyhk"
+      ? validatePropertyhkMediaObservation(observation)
+      : exactObservationQuarantineReason(observation);
   if (reason) throw new TypeError(`observation is invalid: ${reason}`);
   const urls = new Set();
   for (const candidate of observation.mediaCandidates) {

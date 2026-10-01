@@ -1,3 +1,4 @@
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -10,7 +11,7 @@ test(
   "T11-27 atomic ingestion on approved disposable isolated schema",
   { skip: !url },
   async (t) => {
-    assert.equal(process.env.ASTRA_TEST_BRANCH_ID, "br-quiet-hat-aoxbj2ue");
+    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
     assert.notEqual(url, process.env.DATABASE_URL_UNPOOLED);
     const schema = "atomic_" + randomUUID().replaceAll("-", "");
     const c = new Client({ connectionString: url });
@@ -544,12 +545,17 @@ test(
           const rows = [hk("hk1", "01"), hk("hk2", "01"), hk("hk3", "10"), hk("hk4", "20")];
           rows[3].source_url = "https://www.property.hk/fixture/EPW/wrong-id";
           rows[3].title = "Unverified overwrite";
-          const result = await ingestSnapshot(
-            batch(rows, "2026-09-07T00:21:00Z", "propertyhk"),
-            options,
+          const receiptCount = (await q("SELECT count(*)::int n FROM mls_ingestion_receipts"))[0].n;
+          await assert.rejects(
+            ingestSnapshot(batch(rows, "2026-09-07T00:21:00Z", "propertyhk"), options),
+            (e) =>
+              e.code === "incomplete_snapshot" &&
+              e.details.reasons.includes("incomplete_branch_details"),
           );
-          assert.equal(result.status, "partial_success");
-          assert.equal(result.summary.rejected_count, 1);
+          assert.equal(
+            (await q("SELECT count(*)::int n FROM mls_ingestion_receipts"))[0].n,
+            receiptCount,
+          );
           assert.deepEqual(
             (
               await q("SELECT full_receipt_id FROM mls_ingestion_scopes WHERE source='propertyhk'")

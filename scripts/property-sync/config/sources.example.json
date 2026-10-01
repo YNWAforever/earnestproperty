@@ -1,1 +1,51 @@
-{"timezone":"Asia/Hong_Kong","sources":{"28hse":{"scope_id":"agent:540","list_url_template":"https://www.28hse.com/agent/540?page={page}","request_delay_seconds":[2,3],"max_attempts":3,"max_pages":100,"max_drop_ratio":0.30,"publishEnabled":false},"propertyhk":{"scope_id":"branches:EPW,EPS,EPT","origin":"https://www.property.hk","branch_urls":{"EPW":null,"EPS":null,"EPT":null},"id_scope":null,"id_scope_verified":false,"selectors":null,"allowed_paths":null,"company_name":null,"company_license":null,"request_delay_seconds":[2,3],"max_attempts":3,"max_pages":100,"max_drop_ratio":0.30,"absence_detection_enabled":false,"sync_allowed_origins":[]}}}
+{
+  "timezone": "Asia/Hong_Kong",
+  "sources": {
+    "28hse": {
+      "scope_id": "agent:540",
+      "list_url_template": "https://www.28hse.com/agent/540?page={page}",
+      "request_delay_seconds": [
+        2,
+        3
+      ],
+      "max_attempts": 3,
+      "max_pages": 100,
+      "max_drop_ratio": 0.3,
+      "publishEnabled": false
+    },
+    "propertyhk": {
+      "scope_id": "branches:EPW,EPS,EPT",
+      "origin": "https://www.property.hk",
+      "branch_urls": {
+        "EPW": null,
+        "EPS": null,
+        "EPT": null
+      },
+      "id_scope": null,
+      "id_scope_verified": false,
+      "selectors": null,
+      "allowed_paths": null,
+      "company_name": null,
+      "company_license": null,
+      "request_delay_seconds": [
+        2,
+        3
+      ],
+      "max_attempts": 3,
+      "max_pages": 100,
+      "max_drop_ratio": 0.3,
+      "absence_detection_enabled": false,
+      "sync_allowed_origins": [],
+      "publishEnabled": false,
+      "access_verified": false,
+      "publication": {
+        "verified": false,
+        "rights_confirmed": false,
+        "media_hosts_verified": false,
+        "allowed_media_hosts": [],
+        "description_selector": null,
+        "images_selector": null
+      }
+    }
+  }
+}

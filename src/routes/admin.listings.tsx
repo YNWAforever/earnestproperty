@@ -175,6 +175,11 @@ function AdminListings() {
       title="物業管理"
       description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
     >
+      <p className="mb-4">
+        <Link to="/admin/property-sync" className="text-sm underline">
+          查看盤源同步及待處理紀錄
+        </Link>
+      </p>
       <fieldset disabled={bulkBusy} className="mb-5 flex flex-wrap items-center gap-2">
         <Input
           aria-label="搜尋物業"

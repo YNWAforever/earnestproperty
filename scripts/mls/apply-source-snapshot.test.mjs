@@ -26,7 +26,10 @@ test("T28 bridge defaults to dry run and never loads DB credentials", async () =
 test("apply accepts only collected 28hse payload and explicit switch", async () => {
   let options;
   await runSnapshotBridge(["--payload", "saved.json", "--apply"], {
-    env: { DATABASE_URL_UNPOOLED: "private" },
+    env: {
+      DATABASE_URL_UNPOOLED: "postgres://fixture:fixture@ep-disposable-test.neon.tech/neondb",
+      PROPERTY_SYNC_EXPECTED_DATABASE_HOST: "ep-disposable-test.neon.tech",
+    },
     readPayload: async () => '{"source":"28hse"}',
     ingest: async (p, o) => {
       options = o;
@@ -36,7 +39,7 @@ test("apply accepts only collected 28hse payload and explicit switch", async () 
   assert.deepEqual(options, {
     apply: true,
     expectedSource: "28hse_agent_540",
-    connectionString: "private",
+    connectionString: "postgres://fixture:fixture@ep-disposable-test.neon.tech/neondb",
   });
   for (const args of [[], ["--payload", "x", "--crawl"], ["--payload", "x", "--apply", "--apply"]])
     await assert.rejects(runSnapshotBridge(args), SnapshotError);
@@ -74,4 +77,47 @@ test("bridge errors expose only safe code, status and bounded retry metadata", a
     error: "INGESTION_UNAVAILABLE",
     status: 503,
   });
+});
+
+test("apply refuses wrong DB host before the ingestion service can write", async () => {
+  let calls = 0;
+  await assert.rejects(
+    () =>
+      runSnapshotBridge(["--payload", "saved.json", "--apply"], {
+        env: {
+          DATABASE_URL_UNPOOLED: "postgres://fixture:fixture@wrong.neon.tech/neondb",
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: "approved.neon.tech",
+        },
+        readPayload: async () => '{"source":"28hse"}',
+        ingest: () => {
+          calls++;
+        },
+      }),
+    /TARGET_UNVERIFIED/,
+  );
+  assert.equal(calls, 0);
+});
+
+test("Property.hk bridge requires explicit source selection and protected policy in service", async () => {
+  let called = 0;
+  const ports = {
+    env: {},
+    readPayload: async () => '{"source":"propertyhk"}',
+    ingest: async (p, o) => {
+      called++;
+      assert.equal(o.expectedSource, "propertyhk");
+      assert.equal(o.apply, false);
+      return { success: true };
+    },
+  };
+  await runSnapshotBridge(["--source", "propertyhk", "--payload", "frozen.json"], ports);
+  assert.equal(called, 1);
+  await assert.rejects(runSnapshotBridge(["--source", "other", "--payload", "x"], ports));
+  await assert.rejects(
+    runSnapshotBridge(["--source", "propertyhk", "--payload", "x"], {
+      ...ports,
+      readPayload: async () => '{"source":"28hse"}',
+    }),
+  );
+  assert.equal(called, 1);
 });
