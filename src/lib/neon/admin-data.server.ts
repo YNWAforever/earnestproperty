@@ -3051,13 +3051,18 @@ export async function fetchAdminConversationAiAssist(
              'text', m.text,
              'created_at', m.created_at
            )
-           ORDER BY m.created_at DESC
+           ORDER BY m.created_at DESC, m.id DESC
          ) FILTER (WHERE m.id IS NOT NULL),
          '[]'::json
        ) AS messages
      FROM whatsapp_conversations wc
      LEFT JOIN crm_contacts c ON c.id = wc.contact_id
-     LEFT JOIN whatsapp_messages m ON m.conversation_id = wc.id
+     LEFT JOIN LATERAL (
+       SELECT id,direction,text,created_at FROM whatsapp_messages
+       WHERE conversation_id=wc.id
+       ORDER BY created_at DESC,id DESC
+       LIMIT 10
+     ) m ON true
      WHERE wc.id = $1${scopeClause}
      GROUP BY wc.id, c.name, c.opted_out_whatsapp
      LIMIT 1`,
@@ -3066,7 +3071,7 @@ export async function fetchAdminConversationAiAssist(
   const row = rows[0];
   if (!row) throw new Error("Conversation not found");
 
-  const messages = parseConversationAiMessages(row.messages).slice(0, 10);
+  const messages = parseConversationAiMessages(row.messages);
   const latestInbound = messages.find((message) => message.direction === "inbound");
   const latestInboundText = latestInbound?.text ?? "";
   // Values are picked to match AI_INTENT_LABELS/AI_URGENCY_LABELS in

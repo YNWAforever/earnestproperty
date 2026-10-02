@@ -135,6 +135,7 @@ jobs:
       - run: npm run test:no-link:local-postgres
       - run: npm run test:ai-knowledge:db
       - run: npm run test:crm-analysis:db
+      - run: npm run test:conversation-assist:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:
