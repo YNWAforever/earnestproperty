@@ -7,6 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import test, { mock } from "node:test";
 import pg from "pg";
 import { MIGRATION_VERSIONS } from "../src/lib/control-plane/migration-versions.js";
+import { withRestoredOwnedSnapshot } from "./acceptance/owned-postgres-restore.mjs";
 
 const root = new URL("../", import.meta.url);
 // Vite resolves extensionless TS imports; Node's test runner needs the same
@@ -154,7 +155,7 @@ test(
   "one local Postgres environment: signed exact sample to confirmed assignment and delivered human reply",
   { timeout: 240000 },
   async (t) => {
-    await withDisposablePostgres(async ({ pool, query, transaction, effectCalls }) => {
+    await withDisposablePostgres(async ({ pool, query, transaction, effectCalls, containerId }) => {
       const actualDb = await import("../src/lib/neon/db.server.ts");
       mock.module(new URL("../src/lib/neon/db.server.ts", import.meta.url).href, {
         exports: {
@@ -168,6 +169,30 @@ test(
         },
       });
       let networkCalls = 0;
+      let syntheticCrmValue = null;
+      mock.module(new URL("../src/lib/ai/provider.server.ts", import.meta.url).href, {
+        exports: {
+          generateAiJson: async (input) =>
+            syntheticCrmValue
+              ? {
+                  ok: true,
+                  value: syntheticCrmValue,
+                  metadata: {
+                    provider: "synthetic-owned",
+                    resolvedModel: "synthetic-owned",
+                    usage: {
+                      inputTokens: 17,
+                      outputTokens: 9,
+                      costAmount: null,
+                      costCurrency: null,
+                    },
+                  },
+                }
+              : { ok: false, value: input.fallback, error: "SYNTHETIC_DISABLED" },
+          generateAiText: async () => ({ ok: false }),
+          embedAiTexts: async () => ({ ok: false }),
+        },
+      });
       t.mock.method(globalThis, "fetch", () => {
         networkCalls++;
         throw new Error("Network effect forbidden in local integration");
@@ -1931,6 +1956,253 @@ test(
               )[0].n,
               1,
             );
+          },
+        );
+        await t.test(
+          "Golden B authorised validated review and apply in the same schema as Golden A",
+          async () => {
+            syntheticCrmValue = {
+              summary: "合成查詢待人工覆核",
+              urgency: "normal",
+              timeline: null,
+              action: { type: "review_enquiry", reason: "核對已收原訊息" },
+              suggested_tags: [
+                { tag: "needs_confirmation", confidence: 0.4, reason: "待人工確認" },
+              ],
+            };
+            await query(
+              "UPDATE staff_users SET auth_user_id='qa-golden-manager',active=true WHERE id=$1",
+              [ids.manager],
+            );
+            const actor = {
+              staffId: ids.manager,
+              authUserId: "qa-golden-manager",
+              roles: ["manager"],
+              email: null,
+              name: null,
+              bootstrap: false,
+            };
+            const [lead] = await query(
+              "INSERT INTO crm_leads(contact_id,property_id,source,assigned_agent_id) VALUES($1,$2,'website',$3) RETURNING id",
+              [enquiry.contact_id, ids.property, ids.s1],
+            );
+            const { analyzeCrmLead, approveCrmAiTag } =
+              await import("../src/lib/ai/crm-enrichment.server.ts");
+            const runId = randomUUID();
+            const generated = await analyzeCrmLead(lead.id, actor, { requestId: runId });
+            assert.equal(generated.analysis.status, "completed");
+            assert.equal(generated.analysis.resultKind, "model_validated");
+            const [tag] = await query(
+              "SELECT * FROM crm_ai_tags WHERE lead_id=$1 AND status='suggested'",
+              [lead.id],
+            );
+            assert.equal(tag.analysis_run_id, runId);
+            await approveCrmAiTag({ tagId: tag.id, staffId: actor.staffId, approve: true }, actor);
+            const [stored] = await query(
+              "SELECT r.status,r.source_fingerprint,p.result_kind,t.status tag_status FROM crm_ai_analysis_runs r JOIN crm_ai_profiles p ON p.analysis_run_id=r.id JOIN crm_ai_tags t ON t.analysis_run_id=r.id WHERE r.id=$1 AND t.id=$2",
+              [runId, tag.id],
+            );
+            assert.equal(stored.status, "completed");
+            assert.equal(stored.tag_status, "approved");
+            assert.equal(stored.source_fingerprint, generated.analysis.sourceFingerprint);
+            assert.deepEqual(
+              (await analyzeCrmLead(lead.id, actor, { requestId: runId })).analysis.runId,
+              runId,
+            );
+          },
+        );
+        await t.test(
+          "Golden C saved price invalidates public AI then targeted repair restores canonical facts",
+          async () => {
+            const knowledge = await import("../src/lib/ai/knowledge.server.ts");
+            await query("UPDATE properties SET price=12680000,status='active' WHERE id=$1", [
+              ids.property,
+            ]);
+            await knowledge.rebuildAiKnowledgeIndex();
+            const [identity] = await query(
+              "SELECT public_listing_no FROM property_public_members WHERE property_id=$1",
+              [ids.property],
+            );
+            const [version] = await query("SELECT admin_property_group_version($1) version", [
+              identity.public_listing_no,
+            ]);
+            await query(
+              "SELECT admin_property_manage($1,$2,'sale','{\"price\":12300000}'::jsonb,$3)",
+              [identity.public_listing_no, version.version, ids.manager],
+            );
+            assert.equal(
+              (await query("SELECT price::text FROM properties WHERE id=$1", [ids.property]))[0]
+                .price,
+              "12300000",
+            );
+            const { canonicalListingCte } = await import("../src/lib/neon/public-listing-query.js");
+            const publicRows = await query(
+              canonicalListingCte("TRUE") +
+                " SELECT p.price::text,canonical.public_listing_no FROM canonical JOIN properties p ON p.id=canonical.id WHERE canonical.public_listing_no=$1",
+              [identity.public_listing_no],
+            );
+            assert.equal(publicRows.length, 1);
+            assert.equal(publicRows[0].price, "12300000");
+            assert.equal(
+              (
+                await query(
+                  "SELECT count(*)::int n FROM ai_knowledge_chunks WHERE listing_id=$1 AND stale",
+                  [ids.property],
+                )
+              )[0].n,
+              1,
+            );
+            await knowledge.repairPublicKnowledgeIndex();
+            const fresh = await knowledge.searchPublicKnowledge({ query: "碧堤半島", limit: 12 });
+            assert.ok(
+              fresh.some((c) => c.listing_id === ids.property && c.chunk_text.includes("12300000")),
+            );
+            assert.ok(
+              !fresh.some(
+                (c) => c.listing_id === ids.property && c.chunk_text.includes("12680000"),
+              ),
+            );
+          },
+        );
+        await t.test(
+          "eight concurrent owned actor sessions enforce admin/manager/agent/viewer and other-branch scope",
+          async () => {
+            const [otherBranch] = await query(
+              "INSERT INTO branches(slug,name) VALUES('qa-golden-other','合成另一分行') RETURNING id",
+            );
+            const actors = [];
+            const roles = [
+              "admin",
+              "admin",
+              "manager",
+              "manager",
+              "agent",
+              "agent",
+              "viewer",
+              "viewer",
+            ];
+            for (const [i, role] of roles.entries()) {
+              const authUserId = "qa-golden-session-" + i;
+              const [staff] = await query(
+                "INSERT INTO staff_users(auth_user_id,branch_id) VALUES($1,$2) RETURNING id",
+                [authUserId, i % 2 ? otherBranch.id : ids.branch],
+              );
+              await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,$2)", [
+                staff.id,
+                role,
+              ]);
+              actors.push({
+                staffId: staff.id,
+                authUserId,
+                roles: [role],
+                email: null,
+                name: null,
+                bootstrap: false,
+              });
+            }
+            const [lead] = await query(
+              "INSERT INTO crm_leads(source,assigned_agent_id) VALUES('website',$1) RETURNING id",
+              [actors[4].staffId],
+            );
+            const { analyzeCrmLead } = await import("../src/lib/ai/crm-enrichment.server.ts");
+            const results = await Promise.all(
+              actors.map((actor) => analyzeCrmLead(lead.id, actor, { requestId: randomUUID() })),
+            );
+            for (const i of [5, 6, 7]) assert.equal(results[i].analysis.status, "denied");
+            for (const i of [0, 1, 2, 3, 4]) assert.notEqual(results[i].analysis.status, "denied");
+            const [profile] = await query(
+              "SELECT r.actor_staff_id FROM crm_ai_profiles p JOIN crm_ai_analysis_runs r ON r.id=p.analysis_run_id WHERE p.lead_id=$1",
+              [lead.id],
+            );
+            assert.ok(actors.slice(0, 5).some((actor) => actor.staffId === profile.actor_staff_id));
+          },
+        );
+        await t.test(
+          "owned pg_dump restore preserves receipts, FK, provenance and replay identity without overwriting recent live writes",
+          async () => {
+            const tables = [
+              "app_migrations",
+              "whatsapp_inbound_receipts",
+              "whatsapp_enquiry_events",
+              "inquiries",
+              "crm_ai_analysis_runs",
+              "crm_ai_profiles",
+              "crm_ai_tags",
+              "whatsapp_outbound_intents",
+            ];
+            const counts = Object.fromEntries(
+              await Promise.all(
+                tables.map(async (table) => [
+                  table,
+                  (await query(`SELECT count(*)::int n FROM ${table}`))[0].n,
+                ]),
+              ),
+            );
+            await withRestoredOwnedSnapshot({ containerId, pool }, async (restored) => {
+              for (const table of tables)
+                assert.equal(
+                  (await restored.query(`SELECT count(*)::int n FROM ${table}`))[0].n,
+                  counts[table],
+                  table,
+                );
+              assert.equal(
+                (
+                  await restored.query(
+                    "SELECT count(*)::int n FROM pg_constraint WHERE contype='f' AND NOT convalidated",
+                  )
+                )[0].n,
+                0,
+              );
+              const { storeInboundReceipt } =
+                await import("../src/lib/whatsapp-enquiries/inbound-receipts.server.ts");
+              const replay = await storeInboundReceipt(
+                {
+                  tenantKey: receipt.tenant_key,
+                  appId: receipt.app_id,
+                  channelId: receipt.channel_id,
+                  eventKind: receipt.event_kind,
+                  origin: receipt.origin,
+                  event: receipt.normalized_event,
+                  bodyDigest: receipt.body_digest,
+                  receivedAt: new Date(receipt.received_at),
+                  providerOccurredAt: receipt.provider_occurred_at,
+                  providerEventId: null,
+                  capture: {
+                    mode: receipt.capture_mode,
+                    activationId: receipt.activation_id,
+                    effectsEligible: receipt.effects_eligible,
+                  },
+                },
+                { query: restored.query },
+              );
+              assert.equal(replay.receiptId, receipt.id);
+              assert.equal(replay.disposition, "duplicate");
+              assert.equal(
+                (await restored.query("SELECT count(*)::int n FROM whatsapp_inbound_receipts"))[0]
+                  .n,
+                counts.whatsapp_inbound_receipts,
+              );
+              // Restore goes into a new DB. The current source continues accepting new data.
+              const [recent] = await query(
+                "INSERT INTO crm_leads(source,note) VALUES('test','合成還原後新寫入') RETURNING id",
+              );
+              assert.equal(
+                (await query("SELECT count(*)::int n FROM crm_leads WHERE id=$1", [recent.id]))[0]
+                  .n,
+                1,
+              );
+              assert.equal(
+                (
+                  await restored.query("SELECT count(*)::int n FROM crm_leads WHERE id=$1", [
+                    recent.id,
+                  ])
+                )[0].n,
+                0,
+              );
+              t.diagnostic(
+                `Owned restored clone: ${restored.dumpBytes} dump bytes; original recent write retained; restored receipt replay creates zero duplicates`,
+              );
+            });
           },
         );
         assert.equal(networkCalls, 0, "no portal, LLM, provider or external network request");

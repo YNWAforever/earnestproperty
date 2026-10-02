@@ -133,9 +133,14 @@ jobs:
       # fake provider ports. No DATABASE_URL or provider secret is supplied.
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
       - run: npm run test:no-link:local-postgres
+      - run: npm run test:admin-golden:db
       - run: npm run test:ai-knowledge:db
       - run: npm run test:crm-analysis:db
       - run: npm run test:conversation-assist:db
+      - run: npm run test:whatsapp-setup:db
+      - run: npm run test:propertyhk-reconciliation:owned:db
+      - run: npm run test:property-withdrawal:owned:db
+      - run: npm run test:property-maintenance:owned:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:
