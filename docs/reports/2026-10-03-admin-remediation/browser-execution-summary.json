@@ -2,27 +2,27 @@
   "environment": "real-route-synthetic-auth-api",
   "providerSend": false,
   "database": false,
-  "collected": 107,
-  "passed": 107,
+  "collected": 115,
+  "passed": 115,
   "failed": 0,
   "skipped": 0,
-  "codeShaAtBrowserRun": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
-  "sourceWorktreeWasModified": true,
+  "codeShaAtBrowserRun": "523a636c3c68bbd262cd67d2c2a5904d43270b99",
+  "sourceWorktreeWasModified": false,
   "actorCounts": {
     "agent-a": 69,
     "agent-b": 2,
     "viewer": 1,
     "guest": 1,
-    "manager": 34
+    "manager": 42
   },
   "viewportCounts": {
-    "390": 48,
-    "1280": 39,
+    "390": 50,
+    "1280": 41,
     "360": 8,
-    "768": 8,
-    "1440": 4
+    "768": 10,
+    "1440": 6
   },
-  "renderedObservationCount": 357,
+  "renderedObservationCount": 408,
   "actionCount": 1400,
   "businessActions": 68,
   "sourceCandidates": 1332,
@@ -693,6 +693,62 @@
       "width": 768,
       "height": 844,
       "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics disabled capability is explicit and obtains no performance report",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics disabled capability is explicit and obtains no performance report",
+      "width": 768,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
+      "width": 768,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics disabled capability is explicit and obtains no performance report",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics disabled capability is explicit and obtains no performance report",
+      "width": 1440,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
+      "width": 1440,
+      "height": 844,
+      "actor": "manager",
       "status": "PASS"
     },
     {

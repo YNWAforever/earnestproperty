@@ -128,5 +128,43 @@
     "reviewedSourceSha": "4c5863ce00ed883cc2ff4a8109e211d2043aff1b",
     "resolution": "independent-review-resolution.md",
     "newOverviewSliceIndependentRereview": false
+  },
+  "followupVerifiedCodeSha": "523a636c3c68bbd262cd67d2c2a5904d43270b99",
+  "followup": {
+    "tasks": [
+      "EP-16",
+      "EP-17"
+    ],
+    "sourceChanges": [
+      "CSV confirmed failure export",
+      "restored subset counts",
+      "disabled report availability"
+    ],
+    "sqlSchemaProviderConfigChanges": false,
+    "batchBrowser": {
+      "pass": 14,
+      "fail": 0,
+      "skipped": 0,
+      "sourceSha": "523a636c3c68bbd262cd67d2c2a5904d43270b99",
+      "evidence": "batch-browser-execution-summary.json"
+    },
+    "realRouteBrowser": {
+      "pass": 115,
+      "fail": 0,
+      "skipped": 0,
+      "sourceSha": "523a636c3c68bbd262cd67d2c2a5904d43270b99",
+      "evidence": "browser-execution-summary.json"
+    },
+    "staticChecks": {
+      "typecheck": "PASS",
+      "lint": "PASS 0 errors 3 baseline warnings",
+      "build": "PASS"
+    },
+    "tests": {
+      "adminProperties": "Node29+Bun27 PASS",
+      "analytics": "Node65+Bun3 PASS"
+    },
+    "review": "Focused self review; prior independent review evidence unchanged; no new independent review claim",
+    "realAuthProviderModel": "BLOCKED as separate layer"
   }
 }
