@@ -381,3 +381,11 @@ See docs/reports/2026-10-02-homepage-stale-recovery.md: T5/A06 fresh mapping and
 PR212明確授權合併後，main CI及正式部署通過；T2受管私有evidence已實際核對，replay-shadow及single hosted canary的private recovery、receipt、publication、public browser、preservation及metadata驗收通過。每日同步已啟用，manualapply已關閉。完整敏感bindings保留在私有release紀錄；公開摘要見docs/reports/2026-10-02-hosted-canary-daily-activation.md。
 
 T11三scheduledcycles checkbox仍未勾：MONITORING0/3，manual/replay不算。T5 public photos已驗；authenticated roles與其他未證項仍保留分母。T11-B Property.hk及T11-C後台憑證／真角色仍BLOCKED。沒有新migration、bulkwithdrawal、真messages或其他cron變更；舊PAUSED/pending是歷史snapshot。
+
+
+### 2026-10-02 T3 performance follow-up
+
+- [x] 重現281 promotion offers逐筆SQL的282次往返；有界parameterized batching、duplicate validation及partial升級保護已RED→GREEN，程式commit21c7cc9。完整disposable DB47/47及相關MLS／sync／daily／priority／Python／typecheck通過；source policy、schema、locks及各job／publication限制不變。
+- [ ] 新performance fix的獲准合併、部署及hosted／scheduled耗時驗證。局部3requests／161–601ms不代表整段production驗收；詳見reports/2026-10-02-sync-promotion-batching.md。
+
+T11 scheduled仍MONITORING0/3；T11-B／C外部gate仍保留。沒有production apply、migration、withdrawal或messages。
