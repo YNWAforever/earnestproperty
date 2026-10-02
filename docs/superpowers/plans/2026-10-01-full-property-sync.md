@@ -130,7 +130,7 @@
 **Consumes:** RunManifest v1、已接受 receipt。**Produces:** 有 hash 的私有 evidence handoff，正確恢復 baseline。
 
 - [x] 先加失敗測試：公開 destination 被拒；缺 request／raw／錯 hash／錯 scope／過期 parser／偽造 receipt baseline 被拒；private evidence token 無權限回報明確 code。
-- [ ] 保留 PR #207 的 `PROPERTY_SYNC_EVIDENCE_REPO`／`PROPERTY_SYNC_EVIDENCE_TOKEN` 支援；確認 destination private、release 存在、必要 read/write 權限可用。使用最小權限服務憑證，不輸出值。
+- [x] 保留 PR #207 的 `PROPERTY_SYNC_EVIDENCE_REPO`／`PROPERTY_SYNC_EVIDENCE_TOKEN` 支援；確認 destination private、release 存在、必要 read/write 權限可用。使用最小權限服務憑證，不輸出值。Managed hosted shadow/canary private read/write/hash已實際核對。
 - [x] metadata 包含精確 request/raw bytes hash；凍結前不允許 ingestion。archive 暫存寫完 fsync／rename 後才標 ready；upload 後驗 object hash／size，不把半檔當成功。
 - [x] latest baseline 必須與 DB current full receipt 的 source/scope/policy/parser/hash 一致；若 DB 已有 baseline 而私有檔案遺失，進 recovery，不可 bootstrap 蓋過它。
 - [x] 保留 current baseline／未解決 request receipts；raw 7 日、compact 90 日作為起始 retention，另對 release assets 實作清理及 pinned exception，不能誤以為 Actions retention 會刪 release。
@@ -375,3 +375,9 @@ T5 offline three-mapping/query tests PASS; its live detail/mobile-photo checks r
 ### 2026-10-02 fresh manual recovery evidence
 
 See docs/reports/2026-10-02-homepage-stale-recovery.md: T5/A06 fresh mapping and current held decisions verified; T11-A manual same-request full chain PASS. Native daily remains PAUSED/MONITORING0/3; managed token, PR211 reviewed merge and hosted shadow remain gates. T11-B/C and authenticated role checks remain BLOCKED; no production withdrawal/messages or new migration.
+
+### 2026-10-02 hosted／daily checkpoint
+
+PR212明確授權合併後，main CI及正式部署通過；T2受管私有evidence已實際核對，replay-shadow及single hosted canary的private recovery、receipt、publication、public browser、preservation及metadata驗收通過。每日同步已啟用，manualapply已關閉。完整敏感bindings保留在私有release紀錄；公開摘要見docs/reports/2026-10-02-hosted-canary-daily-activation.md。
+
+T11三scheduledcycles checkbox仍未勾：MONITORING0/3，manual/replay不算。T5 public photos已驗；authenticated roles與其他未證項仍保留分母。T11-B Property.hk及T11-C後台憑證／真角色仍BLOCKED。沒有新migration、bulkwithdrawal、真messages或其他cron變更；舊PAUSED/pending是歷史snapshot。
